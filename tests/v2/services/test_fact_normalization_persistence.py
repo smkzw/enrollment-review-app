@@ -99,6 +99,10 @@ def _seed_chain(
     include_metadata: bool = True,
     metadata_is_auto_suggestion: bool = False,
     mark_normalizer_model: bool = True,
+    source_text: str | None = None,
+    first_excerpt: str = "ALT 5",
+    document_type: str = "检验报告",
+    source_party: str = "研究者所在机构",
 ) -> dict[str, str]:
     from app.domain.contracts.enums import (
         DisambiguationOutcome,
@@ -168,7 +172,7 @@ def _seed_chain(
     from tests.v2.storage.test_slice44_repositories import RAW_TEXT
 
     fixture = FIXTURES[fixture_index]
-    raw_text = RAW_TEXT
+    raw_text = RAW_TEXT if source_text is None else source_text
     if session.get(ProjectRecord, fixture.project.project_id) is None:
         persist_fixture(session, fixture)
     else:
@@ -289,9 +293,9 @@ def _seed_chain(
             source_text_sha256=source_hash,
             target_id=f"{prefix}-target-alt",
             precision=LocatorPrecision.TEXT_RANGE,
-            text_start=0,
-            text_end=5,
-            excerpt="ALT 5",
+            text_start=raw_text.index(first_excerpt),
+            text_end=raw_text.index(first_excerpt) + len(first_excerpt),
+            excerpt=first_excerpt,
             disambiguation=DisambiguationOutcome.UNIQUE_MATCH,
             locator_algorithm_version="v1",
             authenticity=LocatorAuthenticity.DEGRADED,
@@ -308,8 +312,8 @@ def _seed_chain(
             source_text_sha256=source_hash,
             target_id=f"{prefix}-target-ast",
             precision=LocatorPrecision.TEXT_RANGE,
-            text_start=17,
-            text_end=22,
+            text_start=raw_text.index("AST 3"),
+            text_end=raw_text.index("AST 3") + len("AST 3"),
             excerpt="AST 3",
             disambiguation=DisambiguationOutcome.UNIQUE_MATCH,
             locator_algorithm_version="v1",
@@ -327,8 +331,8 @@ def _seed_chain(
             SourceDocumentMetadataRevision(
                 metadata_revision_id=metadata_id,
                 source_document_version_id=doc_id,
-                document_type="检验报告",
-                source_party="研究者所在机构",
+                document_type=document_type,
+                source_party=source_party,
                 reason="测试资料类型已确认",
                 is_auto_suggestion=metadata_is_auto_suggestion,
                 revision=1,
@@ -1162,11 +1166,9 @@ def test_executor_maps_text_transport_empty_json_to_empty_output(session_factory
         def start(self, *, prompt):
             call = job_payload["calls"][0]
             body = {
-                "schema_version": "phase5/v1",
-                "run_id": created.run_id,
-                "call_id": call["call_id"],
-                "logical_document_id": call["logical_document_id"],
-                "page_numbers": call["page_numbers"],
+                "schema_version": "phase5/normalizer-draft/v5",
+                "actual_exposure_fact_refs": [],
+                "non_exposure_medication_fact_refs": [],
                 "fact_candidates": [],
                 "event_candidates": [],
                 "exposure_candidates": [],
@@ -1204,8 +1206,9 @@ def test_executor_maps_text_transport_empty_json_to_empty_output(session_factory
     assert exc.value.error_code == "EMPTY_OUTPUT"
 
 
+@pytest.mark.parametrize("separate_context", [False, True])
 def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
-    session_factory,
+    session_factory, separate_context, data_paths,
 ):
     from app.workflow.runner import JobRunner
 
@@ -1218,10 +1221,11 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
     class DraftTransport:
         def start(self, *, prompt):
             body = {
-                "schema_version": "phase5/normalizer-draft/v3",
+                "schema_version": "phase5/normalizer-draft/v5",
                 "fact_candidates": [
                     {
                         "candidate_ref": "f1",
+                        "assertion_scope": "observed_state",
                         "fact_type": "检验结果",
                         "profile_lane": "test_exam_score",
                         "polarity": "affirmed",
@@ -1237,6 +1241,9 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
                             "asserted_object": "ALT",
                             "assertion_text": "ALT 5",
                             "locator_id": chain["locator_id"],
+                            "contextual_qualifiers": ([{"kind": "assessment", "label": "ALT",
+                                "source": {"locator_id": chain["locator_id"], "excerpt": "ALT"}}]
+                                if separate_context else []),
                         },
                         "model_uncertainty": 0.05,
                     }
@@ -1279,7 +1286,7 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
                 FactNormalizationCandidateRecord.run_id == created.run_id
             )
         ).scalars().all()
-        assert run.status.value == "succeeded"
+        assert run.status.value == ("partial" if separate_context else "succeeded")
         assert len(candidates) == 1
         candidate = decode_contract(
             ClinicalFactCandidateV2,
@@ -1289,6 +1296,103 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
         assert candidate.candidate_id != "f1"
         assert candidate.assertion_basis is not None
         assert candidate.assertion_basis.source_text_sha256 == _sha(SOURCE_TEXT)
+        if separate_context:
+            from app.domain.gates.fact_candidate_gates import gate_fact_candidate
+            from app.domain.contracts.enums import FactGate, GateOutcome
+            source = candidate.assertion_basis.contextual_qualifiers[0].source
+            assert source.excerpt == "ALT" and source.source_text_sha256 == _sha(SOURCE_TEXT)
+            assert gate_fact_candidate(candidate)[FactGate.POLARITY_AND_ASSERTED_OBJECT].outcome == GateOutcome.BLOCKED
+
+    if separate_context:
+        from app.services.evidence_api_read_service import EvidenceApiReadService
+        from app.api.v2.fact_normalization_schemas import NormalizationUnresolvedPageDTO
+        from app.evidence.artifacts import ArtifactStore
+        view = EvidenceApiReadService(session_factory, ArtifactStore(data_paths)).normalization_unresolved(
+            chain["subject_id"], chain["episode_id"], created.job_id)
+        decoded = NormalizationUnresolvedPageDTO.model_validate(view)
+        relations = [item for item in decoded.items if "归属关系尚待核实" in item.message]
+        assert len(relations) == 1
+        assert relations[0].kind == "reading_uncertainty"
+        assert "不是患者资料缺失" in relations[0].reason
+        assert {item.source_document_version_id for item in relations[0].sources} == {chain["doc_id"]}
+        assert decoded.is_current
+
+
+@pytest.mark.parametrize("record", ["2025-04-12处方：示例药甲，每次一片", "2025-04-12购药记录：示例药乙一盒"])
+def test_medication_history_record_is_published_without_fabricating_exposure(
+    session_factory, record,
+):
+    from app.domain.contracts.enums import ProfileLane, ReviewStage, SourceStrength
+    from app.storage.fact_repositories import ClinicalFactV2Repository, MedicationExposureV2Repository
+    from app.projections.patient_profile import project_patient_profile
+    from app.domain.contracts.patient_profile_v2 import ProfileLaneAssignment
+
+    recorded_date = {"precision": "day", "lower_bound": "2025-04-12", "upper_bound": "2025-04-12"}
+
+    with session_factory() as session:
+        chain = _seed_chain(session, prefix="history-record", source_text=f"{record}\nAST 3.5 mmol/L",
+                            first_excerpt=record, document_type="既往病历", source_party="外院")
+        session.commit()
+    created = _create_job_from_source(FactNormalizationJobService(session_factory), chain)
+
+    class RecordTransport:
+        def start(self, *, prompt):
+            body = {
+                "schema_version": "phase5/normalizer-draft/v5",
+                "fact_candidates": [{
+                    "candidate_ref": "f1", "assertion_scope": "observed_state",
+                    "fact_type": "用药史记录", "profile_lane": "medication",
+                    "supported_requirement_ids": [], "polarity": "affirmed",
+                    "asserted_object": record, "raw_value": record, "canonical_value": record,
+                    "unit": None, "date_range": recorded_date, "record_time": None,
+                    "locator_ids": [chain["locator_id"]],
+                    "candidate_source_semantics": "既往原始资料",
+                    "assertion_basis": {"asserted_object": record, "assertion_text": record,
+                                        "locator_id": chain["locator_id"], "contextual_qualifiers": []},
+                    "model_uncertainty": 0.05,
+                }],
+                "event_candidates": [], "exposure_candidates": [],
+                "actual_exposure_fact_refs": [], "non_exposure_medication_fact_refs": ["f1"],
+                "unresolved_items": [],
+            }
+            return type("Response", (), {"session_id": "history-record-session",
+                                          "text": json.dumps(body, ensure_ascii=False)})()
+
+        def continue_session(self, **kwargs):
+            raise AssertionError("有源处方/购药记录不应被要求补造实际服药")
+
+    runner = JobRunner(session_factory, {"fact_normalization": create_fact_normalization_executor(
+        FactNormalizationExecutorConfig(session_factory=session_factory, transport=RecordTransport()))})
+    assert runner.run_job(created.job_id) is True
+    with session_factory() as session:
+        assert JobStore(session).job_status(created.job_id).state == "completed"
+        calls = FactNormalizationCallRepository(session).list_by_run(created.run_id)
+        assert len(calls) == 1 and calls[0].reading_method == "model_response"
+        from app.services.fact_normalization_executor import _rebuild_call_checkpoint_from_persisted
+        call_spec = {"call_id": calls[0].call_id, "logical_document_id": calls[0].logical_document_id,
+                     "page_numbers": calls[0].page_numbers, "input_sha256": calls[0].input_sha256}
+        recovered = _rebuild_call_checkpoint_from_persisted(session, run_id=created.run_id, call=call_spec)
+        assert recovered["reading_method"] == "model_response"
+        assert recovered["raw_output_sha256"] == calls[0].raw_output_sha256
+        facts = ClinicalFactV2Repository(session).list_by_episode(chain["episode_id"])
+        assert len(facts) == 1
+        fact = facts[0]
+        assert fact.asserted_object == record and fact.assertion_basis.assertion_text == record
+        assert fact.source_strength == SourceStrength.HISTORICAL_PRIMARY
+        assert fact.profile_lane == ProfileLane.MEDICATION
+        assert fact.date_range.model_dump(mode="json", exclude_none=True) == recorded_date
+        assert fact.record_time is None
+        assert MedicationExposureV2Repository(session).list_by_episode(chain["episode_id"]) == []
+        profile = project_patient_profile(authority=fact.authority, review_stage=ReviewStage.SCREENING,
+            facts=facts, events=[], exposures=[], conflicts=[], expectations=[],
+            lane_assignments=[ProfileLaneAssignment(kind="fact", source_id=fact.fact_id, lane=ProfileLane.MEDICATION)],
+            created_at=NOW, generated_at=NOW)
+        items = next(section.items for section in profile.lanes if section.lane == ProfileLane.MEDICATION)
+        assert len(items) == 1 and items[0].source_id == fact.fact_id
+        assert items[0].locator_ids == [chain["locator_id"]]
+        assert items[0].source_strength == SourceStrength.HISTORICAL_PRIMARY
+        assert items[0].start_range == fact.date_range
+        assert items[0].title == record
 
 
 def test_finalize_atomically_publishes_rule_links_and_expectations(session_factory):
@@ -2012,9 +2116,11 @@ def test_gate_rejected_candidate_marks_run_partial(session_factory):
         assert run.status == "partial"
 
 
-@pytest.mark.parametrize("reject_sources", [False, True])
-@pytest.mark.parametrize("with_checkpoint", [False, True])
-def test_duplicate_candidate_not_duplicated_on_retry(session_factory, monkeypatch, reject_sources, with_checkpoint):
+@pytest.mark.parametrize("reject_sources,with_checkpoint,checkpoint_tamper", [
+    (False, False, None), (False, True, None), (True, False, None), (True, True, None),
+    (False, True, "reading_method"), (False, True, "raw_output_sha256"),
+])
+def test_duplicate_candidate_not_duplicated_on_retry(session_factory, monkeypatch, reject_sources, with_checkpoint, checkpoint_tamper):
     with session_factory() as session:
         chain = _seed_chain(session, prefix="dup1")
         session.commit()
@@ -2034,6 +2140,7 @@ def test_duplicate_candidate_not_duplicated_on_retry(session_factory, monkeypatc
     executor = create_fact_normalization_executor(cfg)
     ctx = StepContext(job_id=result.job_id, job_type="fact_normalization", job_payload=job_payload, step_id="normalize_000_"+chain["logical_document_id"], name="test", attempt=1, last_checkpoint_id=None, last_checkpoint=None, max_attempts=3)
     first = executor(ctx)
+    assert first.checkpoint["reading_method"] == "adapter_response"
     with session_factory() as session, session.begin():
         first.apply(session)
     # 检查点缺失但同身份成功调用已持久化：重试必须从持久记录恢复检查点，
@@ -2041,8 +2148,15 @@ def test_duplicate_candidate_not_duplicated_on_retry(session_factory, monkeypatc
     ctx2 = StepContext(job_id=result.job_id, job_type="fact_normalization", job_payload=job_payload, step_id="normalize_000_"+chain["logical_document_id"], name="test", attempt=2, last_checkpoint_id=None, last_checkpoint=None, max_attempts=3)
     if with_checkpoint:
         from dataclasses import replace
-        ctx2 = replace(ctx2, last_checkpoint_id="saved", last_checkpoint=first.checkpoint)
-    if reject_sources:
+        checkpoint = dict(first.checkpoint)
+        if checkpoint_tamper:
+            checkpoint[checkpoint_tamper] = (
+                "model_response" if checkpoint_tamper == "reading_method" else "0" * 64)
+        ctx2 = replace(ctx2, last_checkpoint_id="saved", last_checkpoint=checkpoint)
+    if checkpoint_tamper:
+        with pytest.raises(StepFailure, match="读取方式或原答身份"):
+            executor(ctx2)
+    elif reject_sources:
         from app.services import fact_normalization_replay_sources
         def invalid_source(*args, **kwargs):
             assert kwargs["payload"] == job_payload
@@ -2142,6 +2256,7 @@ def test_lost_step_checkpoint_recovers_from_persisted_call_without_model_recall(
         assert checkpoint is not None
         assert checkpoint[1]["candidate_ids"] == prepared.checkpoint["candidate_ids"]
         assert checkpoint[1]["raw_output_sha256"] == prepared.checkpoint["raw_output_sha256"]
+        assert checkpoint[1]["reading_method"] == prepared.checkpoint["reading_method"] == "adapter_response"
         assert JobStore(session).job_status(created.job_id).state == "completed"
         run = session.get(FactNormalizationRunRecord, created.run_id)
         assert run is not None

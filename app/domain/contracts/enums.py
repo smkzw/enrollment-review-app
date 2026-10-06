@@ -125,6 +125,7 @@ class ComponentDecision(StableEnum):
 
 
 class GapType(StableEnum):
+    CALCULATION_CAPABILITY_UNAVAILABLE = "calculation_capability_unavailable"
     OBSERVATION_UNVERIFIED = "observation_unverified"
     RECORD_INCOMPLETE = "record_incomplete"
     DESCRIPTION_INSUFFICIENT = "description_insufficient"

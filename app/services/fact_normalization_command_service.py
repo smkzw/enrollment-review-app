@@ -54,7 +54,7 @@ from app.storage.repositories import (
 from app.workflow.errors import InvalidJobDefinitionError
 
 _FACT_NORMALIZATION_CONTRACT_VERSION = "phase5/facts/v1"
-_NORMALIZATION_POLICY_VERSION = "phase5/normalization-policy/v9"
+_NORMALIZATION_POLICY_VERSION = "phase5/normalization-policy/v10"
 _DEFAULT_CREATED_BY = "local-reviewer"
 class AppFactNormalizationRejectedError(EvidenceAppError):
     """当前审核节点无法发起个例档案整理。"""
@@ -517,12 +517,17 @@ class FactNormalizationCommandService:
         require_source_readiness: bool = False,
         page_reader_identity=None,
         verified_scope_prompt: bool = False,
+        compact_text_references: bool | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.require_page_review = require_page_review
         self.require_source_readiness = require_source_readiness
         self.page_reader_identity = page_reader_identity
         self.verified_scope_prompt = verified_scope_prompt
+        self.compact_text_references = (
+            runtime_config.EVIDENCE_NORMALIZER_COMPACT_TEXT_REFERENCES
+            if compact_text_references is None else compact_text_references
+        )
         self.prompt_template = prompt_template
         self.registered_config = registered_config
         self.max_pages_per_call = (
@@ -638,6 +643,8 @@ class FactNormalizationCommandService:
                 page_review_coverage_id=coverage_id,
                 include_visual_sources=coverage_id is not None,
                 **({"verified_scope_prompt": True} if self.verified_scope_prompt else {}),
+                **({"compact_text_references": True} if self.compact_text_references else {}),
+                account_source_text=coverage_id is None,
             )
         except UnconfirmedDocumentMetadataError as exc:
             raise AppFactNormalizationRejectedError(

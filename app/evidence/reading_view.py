@@ -9,12 +9,13 @@ from hashlib import sha256
 import io
 from typing import Literal
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app.domain.contracts.evidence import BoundingBox
 from app.domain.publication import canonical_hash
 
 READING_VIEW_VERSION = "reading-view/quarter-turn/v1"
+FOCUS_READING_IMAGE_VERSION = "reading-focus/outer-frame/v1"
 
 
 @dataclass(frozen=True)
@@ -171,3 +172,24 @@ def make_reading_region(view: ReadingView, box: BoundingBox) -> ReadingRegion:
         buffer = io.BytesIO()
         cropped.save(buffer, format="PNG")
     return ReadingRegion(view, box, buffer.getvalue())
+
+
+def make_focus_reading_image(image_bytes: bytes, focus: BoundingBox) -> bytes:
+    """Mark outside a crop-relative target; never repaint its source pixels."""
+    edges = (focus.x0, focus.y0, focus.x1, focus.y1)
+    if any(not float(value).is_integer() for value in edges):
+        raise ValueError("阅读目标框须使用整数像素边界")
+    x0, y0, x1, y1 = map(int, edges)
+    with Image.open(io.BytesIO(image_bytes)) as image:
+        if x1 > image.width or y1 > image.height or getattr(image, "n_frames", 1) != 1:
+            raise ValueError("阅读目标框超出单张图片")
+        if (x0, y0, x1, y1) == (0, 0, image.width, image.height):
+            raise ValueError("整张阅读图片没有可显示外框的边缘")
+        marked = image.convert("RGBA" if "A" in image.getbands() or "transparency" in image.info else "RGB")
+        # Pillow clips the outer frame at image edges. Its inner edge remains
+        # outside [x0,x1) x [y0,y1), including a target touching an image edge.
+        color = (220, 30, 30, 255) if marked.mode == "RGBA" else (220, 30, 30)
+        ImageDraw.Draw(marked).rectangle((x0 - 2, y0 - 2, x1 + 1, y1 + 1), outline=color, width=2)
+        output = io.BytesIO()
+        marked.save(output, format="PNG")
+    return output.getvalue()

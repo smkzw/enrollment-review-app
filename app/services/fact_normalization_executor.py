@@ -187,6 +187,7 @@ def _profile_lane_conflict_reasons(
             value=value,
             unit=item.unit,
             date_range=item.date_range,
+            assertion_basis=item.assertion_basis,
         )
 
     superseded = {
@@ -415,6 +416,7 @@ def _load_frozen_agent_config(
     if (
         prompt_version_id != run.prompt_version_id
         or model_config_id != run.model_config_id
+        or payload.get("input_scope_sha256") != run.input_scope_sha256
     ):
         raise StepFailure(
             retryable=False,
@@ -750,6 +752,10 @@ def _validate_call_checkpoint_replay(
             error_code=PARTIAL_OUTPUT_CODE,
             detail="任务检查点与已持久化的规范化调用不一致。",
         )
+    if (checkpoint.get("reading_method") != persisted_call.reading_method
+            or checkpoint.get("raw_output_sha256") != persisted_call.raw_output_sha256):
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                          detail="读取方式或原答身份与持久记录不一致，不能复用为已读资料依据。")
     persisted_candidate_ids = sorted(
         session.execute(
             select(FactNormalizationCandidateRecord.candidate_id).where(
@@ -785,6 +791,43 @@ def _validate_call_checkpoint_replay(
     except Exception as exc:
         raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
                           detail=f"已保存候选的来源未通过复验：{exc}") from exc
+    _validate_saved_text_accounting(session, payload, authority, run_id, [persisted_call])
+
+
+def _validate_saved_text_accounting(session, payload, authority, run_id, calls):
+    if payload.get("text_accounting_policy") is None:
+        return
+    from app.projections.normalizer_text_accounting import (
+        UNACCOUNTED_TEXT_CODE, unaccounted_source_text, validate_text_accounting_items,
+    )
+    candidates = FactNormalizationCandidateRepository(session).list_by_run(run_id)
+    unresolved = FactNormalizationUnresolvedItemRepository(session).list_by_run(run_id)
+    for call in calls:
+        evidence_input = _build_input(
+            session, authority, run_id, {
+                "call_id": call.call_id, "logical_document_id": call.logical_document_id,
+                "page_numbers": call.page_numbers, "input_sha256": call.input_sha256,
+            }, max_pages_per_call=int(payload.get("max_pages_per_call", 20)),
+            created_at=FactNormalizationRunRepository(session).get(run_id).created_at,
+        )
+        items = [saved.item for saved in unresolved if saved.call_id == call.call_id]
+        output = EvidenceNormalizerOutput(
+            run_id=run_id, call_id=call.call_id,
+            logical_document_id=call.logical_document_id, page_numbers=call.page_numbers,
+            fact_candidates=[item for item in candidates
+                             if isinstance(item, ClinicalFactCandidateV2) and item.call_id == call.call_id],
+            unresolved_items=[item for item in items if item.code != UNACCOUNTED_TEXT_CODE],
+        )
+        try:
+            validate_text_accounting_items(evidence_input, items)
+            expected = unaccounted_source_text(evidence_input, output)
+            actual = [item for item in items if item.code == UNACCOUNTED_TEXT_CODE]
+            if canonical_hash([item.model_dump(mode="json") for item in actual]) != canonical_hash(
+                    [item.model_dump(mode="json") for item in expected]):
+                raise ValueError("已保存的来源文字核对范围不完整或与当前方法不一致")
+        except ValueError as exc:
+            raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                              detail=f"已保存来源文字核对未通过复验：{exc}") from exc
 
 
 
@@ -860,7 +903,7 @@ def _rebuild_call_checkpoint_from_persisted(
     canonical = json.dumps(
         unresolved_items, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     )
-    return {
+    checkpoint = {
         "call_id": call_id,
         "logical_document_id": str(call["logical_document_id"]),
         "page_numbers": list(call["page_numbers"]),
@@ -872,6 +915,9 @@ def _rebuild_call_checkpoint_from_persisted(
         "raw_output_sha256": persisted_call.raw_output_sha256,
         "completed_at": persisted_call.created_at.isoformat(),
     }
+    if persisted_call.reading_method is not None:
+        checkpoint["reading_method"] = persisted_call.reading_method
+    return checkpoint
 
 
 def _verify_finalize_checkpoint_profile(
@@ -945,6 +991,17 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
     def execute_call(context: StepContext):
         payload = dict(context.job_payload or {})
         strategy = payload.get("verified_evidence_strategy")
+        text_strategy = payload.get("text_reference_strategy")
+        from app.projections.normalizer_text_accounting import (
+            TEXT_ACCOUNTING_POLICY, unaccounted_source_text, validate_text_accounting_items,
+        )
+        accounting_policy = payload.get("text_accounting_policy")
+        if accounting_policy not in (None, TEXT_ACCOUNTING_POLICY):
+            raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                              detail="本次来源文字核对方式不受支持，不能借用旧结果。")
+        if accounting_policy is not None and payload.get("page_review_coverage_id") is not None:
+            raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                              detail="文字核对不能替代原件观察核对。")
         call = _get_call_for_step(payload, context.step_id)
         run_id = str(payload.get("run_id") or "")
         if not run_id:
@@ -1033,12 +1090,22 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             )
 
         receipt_hashes = []
+        reference_aliases = None
+        if strategy is not None or text_strategy is not None:
+            from app.agents.evidence_normalizer import evidence_normalizer_reference_aliases
+            reference_aliases = evidence_normalizer_reference_aliases(
+                evidence_input, pending_details_retained=strategy is not None,
+            )
 
         def record_completion(receipt):
             if config.artifact_store is None:
                 return
             envelope = {"job_id": context.job_id, "step_id": context.step_id,
                         "call_id": call["call_id"], "run_id": run_id, **receipt}
+            if reference_aliases is not None:
+                envelope["reference_aliases"] = reference_aliases.aliases
+            if text_strategy is not None:
+                envelope["text_reference_strategy"] = text_strategy
             artifact = config.artifact_store.put("raw_response", json.dumps(
                 envelope, ensure_ascii=False, sort_keys=True).encode("utf-8"))
             receipt_hashes.append(artifact.sha256)
@@ -1054,9 +1121,11 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                               detail="本次资料整理方式无法识别，请保留作业并检查版本。")
         pending_output = pending_only_output(evidence_input) if policy is not None else None
         if pending_output is not None:
+            reading_method = "retained_pending"
             output = validate_evidence_normalizer_output(pending_output, evidence_input)
             raw_sha = _sha256(json.dumps(output.model_dump(mode="json"), ensure_ascii=False, sort_keys=True))
         elif config.transport_fn is not None:
+            reading_method = "adapter_response"
             try:
                 raw_output = config.transport_fn(evidence_input)
                 if not (
@@ -1079,6 +1148,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             except Exception as exc:
                 raise StepFailure(retryable=True, error_code="TRANSPORT_FAILED", detail=f"模型调用失败：{exc}") from exc
         else:
+            reading_method = "model_response"
             transport = config.transport
             if transport is None:
                 transport_factory = (
@@ -1100,8 +1170,10 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 transport,
                 prompt_template=config.prompt_template,
                 visual_observations=visual_observations or None,
+                require_current_draft=True,
                 **({"pending_details_retained": True, "compact_references": True,
                     "verified_scope_prompt": True} if strategy is not None else {}),
+                **({"compact_references": True} if text_strategy is not None else {}),
             )
             if result.final_output is None:
                 last_attempt = result.attempts[-1] if result.attempts else None
@@ -1131,6 +1203,17 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
         candidate_count = len(output.fact_candidates) + len(output.event_candidates) + len(output.exposure_candidates)
         if candidate_count == 0 and not output.unresolved_items:
             raise StepFailure(retryable=False, error_code=EMPTY_OUTPUT_CODE, detail="模型未返回候选，也未逐页说明无可提取内容。")
+        if accounting_policy is not None:
+            try:
+                remainders = unaccounted_source_text(evidence_input, output)
+                output = output.model_copy(update={
+                    "unresolved_items": [*output.unresolved_items, *remainders],
+                })
+                validate_text_accounting_items(evidence_input, output.unresolved_items)
+                output = validate_evidence_normalizer_output(output, evidence_input)
+            except ValueError as exc:
+                raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                                  detail=f"来源文字核对未通过：{exc}") from exc
         completed_at = run_created_at
         facts, events, exposures = _hydrate_candidate_ids(output, completed_at)
         candidates = [*facts, *events, *exposures]
@@ -1150,6 +1233,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             "unresolved_items_sha256": unresolved_sha256,
             "input_sha256": call["input_sha256"],
             "raw_output_sha256": raw_sha,
+            "reading_method": reading_method,
             "completed_at": completed_at.isoformat(),
         }
         if receipt_hashes:
@@ -1165,6 +1249,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 logical_document_id=str(call["logical_document_id"]),
                 page_numbers=list(call["page_numbers"]), status=FactCallStatus.SUCCEEDED,
                 input_sha256=str(call["input_sha256"]), raw_output_sha256=raw_sha,
+                reading_method=reading_method,
                 created_at=completed_at,
             )
             call_repository = FactNormalizationCallRepository(session)
@@ -1258,6 +1343,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 candidates=all_candidates,
                 unresolved_items=unresolved_items,
             )
+            _validate_saved_text_accounting(session, payload, authority, run_id, calls)
             final_status = FactNormalizationRunStatus.SUCCEEDED
             if facts or events or exposures:
                 run_result = orchestrate_run_gates(
@@ -1378,6 +1464,8 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 checkpoint.update(gate_result_count=0, conflict_group_count=0, rejected_candidate_count=0)
                 final_status = FactNormalizationRunStatus.PARTIAL
             checkpoint["unresolved_item_count"] = len(unresolved_items)
+            if payload.get("text_accounting_policy") is not None and unresolved_items:
+                final_status = FactNormalizationRunStatus.PARTIAL
             checkpoint["status"] = final_status.value
             FactNormalizationRunRepository(session).set_status(run_id, final_status)
 
@@ -1385,6 +1473,21 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
 
     def execute(context: StepContext):
         payload = dict(context.job_payload or {})
+        from app.projections.normalizer_text_accounting import TEXT_ACCOUNTING_POLICY
+        if (payload.get("text_accounting_policy") not in (None, TEXT_ACCOUNTING_POLICY)
+                or (payload.get("text_accounting_policy") is not None
+                    and payload.get("page_review_coverage_id") is not None)):
+            raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                              detail="本次来源文字核对方式与冻结范围不一致，请保留已有记录。")
+        if payload.get("text_reference_strategy") is not None:
+            from app.projections.normalizer_reference_aliases import text_reference_strategy
+            if (payload["text_reference_strategy"] != text_reference_strategy()
+                or any(payload.get(key) is not None for key in (
+                    "verified_evidence_strategy", "page_review_coverage_id",
+                    "pending_normalization_policy", "visual_source_policy",
+                ))):
+                raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                                  detail="文字主读的引用配置与冻结版本不一致，请保留已有记录。")
         if payload.get("verified_evidence_strategy") is not None:
             from app.agents.verified_evidence_prompt import verified_evidence_strategy
             from app.projections.page_review_pending_normalization import PENDING_NORMALIZATION_POLICY

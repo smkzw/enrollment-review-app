@@ -10,6 +10,55 @@ from fastapi.testclient import TestClient
 from app.api.v2.desktop import create_desktop_app
 
 
+def test_browse_reads_saved_local_job_without_execution_or_writes(data_paths, session_factory, monkeypatch):
+    from app.api.v2.browse import create_browse_app
+    from app.evidence.artifacts import ArtifactStore
+    from app.llm.independent_vlm import IndependentVlmChatResult
+    from app.services.local_visual_verification import (
+        LOCAL_VISUAL_JOB_TYPE, LocalVisualRegionRequest,
+        LocalVisualVerificationService, create_local_visual_executor,
+    )
+    from app.workflow.runner import JobRunner
+    from tests.v2.services.test_local_visual_job import _seed
+
+    seeded = _seed(session_factory, data_paths)
+    store = ArtifactStore(data_paths)
+    service = LocalVisualVerificationService(session_factory, store)
+    calls = []
+
+    async def read(prompt, pages, **kwargs):
+        calls.append(1)
+        return IndependentVlmChatResult(text=f"source_ref={pages[0].source_ref}\n字迹清楚，尚未采用。",
+                                       model="fixture-model", finish_reason="stop", usage={})
+
+    monkeypatch.setattr("app.llm.independent_vlm.independent_vlm_page_chat", read)
+    job = service.enqueue(seeded["revision_id"], seeded["page_artifact_id"],
+                          LocalVisualRegionRequest(x0=3, y0=4, x1=30, y1=40))
+    assert JobRunner(session_factory, {
+        LOCAL_VISUAL_JOB_TYPE: create_local_visual_executor(session_factory, store),
+    }).run_job(job["job_id"])
+    before = hashlib.sha256(data_paths.db_path.read_bytes()).hexdigest()
+
+    def no_model(*args, **kwargs):
+        raise AssertionError("Browsing must not call a model")
+
+    monkeypatch.setattr("app.llm.independent_vlm.independent_vlm_page_chat", no_model)
+    monkeypatch.setattr("app.llm.independent_vlm.get_independent_vlm_client", no_model)
+    path = f"/api/v2/evidence-processing-revisions/{seeded['revision_id']}/pages/{seeded['page_artifact_id']}/local-verification"
+    with TestClient(create_browse_app(data_paths=data_paths)) as client:
+        result = client.get(path, params={"job_id": job["job_id"]})
+        assert result.status_code == 200
+        body = result.json()
+        assert body["state"] == "completed" and body["candidate_only"] is True
+        assert body["observation_text"] == "字迹清楚，尚未采用。"
+        assert client.post(path, json={"x0": 3, "y0": 4, "x1": 30, "y1": 40}).status_code == 403
+        assert client.post(f"/api/v2/jobs/{job['job_id']}/retry").status_code == 403
+        assert client.post(f"/api/v2/jobs/{job['job_id']}/cancel").status_code == 403
+        assert client.get(path, params={"job_id": "wrong-job"}).status_code == 409
+    assert hashlib.sha256(data_paths.db_path.read_bytes()).hexdigest() == before
+    assert calls == [1]
+
+
 def test_desktop_serves_product_and_identifies_its_worktree(data_paths, tmp_path):
     frontend = tmp_path / "frontend"
     frontend.mkdir()

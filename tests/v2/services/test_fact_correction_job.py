@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 import hashlib
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import update
@@ -398,9 +399,39 @@ def _publish_exposure(
 
 
 def test_submit_atomically_appends_entity_correction_and_profile(session_factory):
+    from app.services.review_context_assembly import (
+        frozen_review_clinical_material_sha256,
+        require_current_review_clinical_material,
+    )
+    from app.storage.fact_rule_link_repository import FactRuleLinkV2Repository
+    from app.storage.repositories import ScopeViolationError
+
+    def current_material(session, authority):
+        # Real repository heads, not a persisted/approved clinical review context.
+        profile = PatientProfileService()
+        facts = tuple(sorted(profile._published_facts(session, authority), key=lambda item: item.fact_id))
+        links = FactRuleLinkV2Repository(session).list_for_facts(
+            [item.fact_id for item in facts], facts=facts,
+        )
+        return SimpleNamespace(
+            authority=authority, facts=facts,
+            fact_rule_links=tuple(sorted((link for values in links.values() for link in values),
+                                         key=lambda item: item.link_id)),
+            events=tuple(sorted(profile._published_events(session, authority), key=lambda item: item.event_id)),
+            medication_exposures=tuple(sorted(profile._published_exposures(session, authority),
+                                              key=lambda item: item.exposure_id)),
+            expectations=tuple(sorted(profile._latest_expectations(session, authority),
+                                      key=lambda item: item.template_id)),
+            conflict_groups=tuple(sorted(profile._published_conflicts(session, authority),
+                                        key=lambda item: item.conflict_group_id)),
+            judgment_search_results=(),
+        )
+
     with session_factory() as session, session.begin():
         chain = _seed_valid_chain(session, "corr-ok")
         fact = _publish_fact(session, chain)
+        unrelated = _publish_fact(session, chain, suffix="same-page-diastolic",
+                                  value="80", asserted_object="舒张压")
         old_profile = PatientProfileService().generate(
             session, authority=_authority(chain), created_at=NOW, generated_at=NOW
         )
@@ -409,6 +440,15 @@ def test_submit_atomically_appends_entity_correction_and_profile(session_factory
         fact_id = fact.fact_id
         locator_id = chain["locator_id"]
         fact_copy = fact
+        frozen_material = current_material(session, _authority(chain))
+        frozen_hash = frozen_review_clinical_material_sha256(frozen_material)
+        require_current_review_clinical_material(session, frozen_material)
+        preserved_facts = {
+            item.fact_id: item.model_dump(mode="json")
+            for item in frozen_material.facts if item.fact_id != fact_id
+        }
+        assert unrelated.fact_id in preserved_facts
+        assert set(unrelated.locator_ids) == set(fact.locator_ids)
 
     created = _submit(session_factory, chain, fact_copy)
     assert created.created is True
@@ -445,6 +485,18 @@ def test_submit_atomically_appends_entity_correction_and_profile(session_factory
         assert latest is not None
         assert latest.patient_profile_revision_id != old_profile_id
         assert latest.revision == old.revision + 1
+        # The correction changes current input; it does not rewrite the old
+        # material or unrelated facts that happen to share its source locator.
+        assert frozen_review_clinical_material_sha256(frozen_material) == frozen_hash
+        with pytest.raises(ScopeViolationError, match="当前病史.*已经更新"):
+            require_current_review_clinical_material(session, frozen_material)
+        current = current_material(session, _authority(chain))
+        require_current_review_clinical_material(session, current)
+        current_ids = {item.fact_id for item in current.facts}
+        assert correction.new_entity_id in current_ids
+        assert fact_id not in current_ids
+        for preserved_id, payload in preserved_facts.items():
+            assert ClinicalFactV2Repository(session).get(preserved_id).model_dump(mode="json") == payload
         plan_ckpt = store.get_last_checkpoint(created.job_id, "plan")
         apply_ckpt = store.get_last_checkpoint(created.job_id, "apply")
         assert plan_ckpt is not None and apply_ckpt is not None

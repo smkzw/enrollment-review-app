@@ -24,7 +24,12 @@ export interface ControlRequirementView {
   triggers: ControlGroupView[];
   obligations: ControlGroupView[];
   exceptions: ControlGroupView[];
-  nodes: { label: string; role: string; guidance: string | null }[];
+  nodes: {
+    label: string; role: string; guidance: string | null;
+    scopeSource: {
+      structureUnitId: string; sourceSpanIds: string[]; excerpt: string; sourceHash: string;
+    } | null;
+  }[];
   evidence: {
     description: string; dueStage: string; sourcePolicy: string[]; excerpts: string[];
     purposes: { label: string; statement: string }[];
@@ -39,6 +44,12 @@ export interface ProtocolControlRequirements {
   requirements: ControlRequirementView[];
   calculationGaps: { id: string; sourceQuote: string; linkedOfficialCode: string | null;
     reviewDecision: string | null; unresolvedAspects: string[] }[];
+  restrictedStatements: {
+    id: string; sourceUnitId: string; sourceSpanIds: string[]; statementIndex: number;
+    sourceQuote: string; limitationKind: "interpretation_unresolved" | "consumer_unavailable";
+    unresolvedDimensions: string[]; scopeQuote: string | null; timeWords: string[];
+    exceptionWords: string | null; affectedStage: string | null; dependencyLabels: string[];
+  }[];
 }
 
 function invalid(): never {
@@ -57,6 +68,19 @@ function array(value: unknown): unknown[] { return Array.isArray(value) ? value 
 function string(value: unknown): string { return typeof value === "string" && value.trim() ? value : invalid(); }
 function optionalString(value: unknown): string | null { return value === null ? null : string(value); }
 function strings(value: unknown): string[] { return array(value).map(string); }
+
+function scopeSource(raw: unknown): ControlRequirementView["nodes"][number]["scopeSource"] {
+  if (raw === undefined || raw === null) return null;
+  const source = object(raw);
+  const sourceSpanIds = strings(source.source_span_ids);
+  const sourceHash = string(source.source_unit_sha256);
+  if (!sourceSpanIds.length || new Set(sourceSpanIds).size !== sourceSpanIds.length ||
+      !/^[0-9a-f]{64}$/.test(sourceHash)) return invalid();
+  return {
+    structureUnitId: string(source.structure_unit_id), sourceSpanIds,
+    excerpt: string(source.source_excerpt), sourceHash,
+  };
+}
 
 const stages: Record<string, string> = {
   pre_screening: "预筛选", screening: "筛选期", run_in: "导入期", baseline: "基线期",
@@ -225,6 +249,7 @@ export function normalizeProtocolControlRequirements(raw: unknown): ProtocolCont
         return {
           label: nodeLabels.get(string(node.workflow_stage_id)) ?? invalid(),
           role: label(roles, node.role), guidance: optionalString(node.guidance),
+          scopeSource: scopeSource(node.scope_citation),
         };
       }),
       evidence: array(semantics.minimum_evidence).map((rawEvidence) => {
@@ -288,9 +313,36 @@ export function normalizeProtocolControlRequirements(raw: unknown): ProtocolCont
       }),
     };
   });
+  const restrictedRows = array(payload.restricted_statements).map(object);
+  const restrictedNames = new Map<string, string>();
+  restrictedRows.forEach((row, index) => {
+    const id = string(row.restricted_statement_id);
+    if (restrictedNames.has(id) || ids.has(id)) invalid();
+    restrictedNames.set(id, `待核原文${index + 1}`);
+  });
+  const restrictedStatements = restrictedRows.map((row): ProtocolControlRequirements["restrictedStatements"][number] => {
+    const id = string(row.restricted_statement_id);
+    const sourceSpanIds = strings(row.source_span_ids);
+    const unresolvedDimensions = strings(row.unresolved_dimensions);
+    const refs = strings(row.dependency_refs);
+    const statementIndex = row.source_statement_index;
+    const kind = row.limitation_kind;
+    if (!sourceSpanIds.length || new Set(sourceSpanIds).size !== sourceSpanIds.length ||
+        !unresolvedDimensions.length || new Set(refs).size !== refs.length || refs.includes(id) ||
+        typeof statementIndex !== "number" || !Number.isSafeInteger(statementIndex) || statementIndex < 0 ||
+        (kind !== "interpretation_unresolved" && kind !== "consumer_unavailable")) invalid();
+    const optionalExcerpt = (value: unknown) => value === undefined ? null : optionalString(value);
+    return {
+      id, sourceUnitId: string(row.source_structure_unit_id), sourceSpanIds, statementIndex,
+      sourceQuote: string(row.source_quote), limitationKind: kind, unresolvedDimensions,
+      scopeQuote: optionalExcerpt(row.scope_quote), timeWords: row.time_words === undefined ? [] : strings(row.time_words),
+      exceptionWords: optionalExcerpt(row.exception_words), affectedStage: optionalExcerpt(row.affected_stage),
+      dependencyLabels: refs.map((ref) => restrictedNames.get(ref) ?? invalid()),
+    };
+  });
   return {
     jobId: string(payload.job_id), sourceJobId: string(payload.source_job_id),
-    checkpointId: string(payload.checkpoint_id), requirements,
+    checkpointId: string(payload.checkpoint_id), requirements, restrictedStatements,
     calculationGaps: array(payload.calculation_gaps).map((rawGap) => {
       const gap = object(rawGap);
       const target = optionalString(gap.linked_official_code);

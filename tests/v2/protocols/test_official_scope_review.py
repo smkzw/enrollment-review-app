@@ -155,6 +155,128 @@ def test_two_reads_store_relationship_without_changing_clinical_fields(tmp_path)
         review_official_source_scope(source, draft, official_code="EX-01", transport=reader, store=store)
 
 
+class NonduplicatedHeadingReader(ScopeReader):
+    def start(self, **kwargs):
+        response = super().start(**kwargs)
+        reading = OfficialScopeReading.model_validate_json(response.text)
+        for item in reading.items:
+            for disposition in item.heading_dispositions:
+                disposition.supporting_citations = [cite for cite in item.citations
+                    if not (cite.source_span_id == disposition.source_span_id
+                            and disposition.excerpt in cite.excerpt)]
+        return response.model_copy(update={"text": reading.model_dump_json()})
+
+
+def test_heading_witness_is_shared_within_the_verified_item_not_duplicated(tmp_path):
+    from app.protocols.official_scope_review import SCOPE_VALIDATION_POLICY
+    source, draft, spans = scope_fixture()
+    before = draft.model_dump_json()
+    store = ArtifactStore(resolve_data_paths(str(tmp_path / "data")))
+    reviewed = review_official_source_scope(source, draft, official_code="IN-01",
+                                            transport=NonduplicatedHeadingReader(), store=store)
+    proof = json.loads(store.read(reviewed.proposed_rules[0].components[0].source_scope_review_ref))
+    assert proof["validation_policy"] == SCOPE_VALIDATION_POLICY
+    raw_refs = [receipt["response_ref"] for receipt in proof["receipts"]]
+    raw_bytes = {ref: store.read(ref) for ref in raw_refs}
+    for ref in raw_refs:
+        reading = OfficialScopeReading.model_validate_json(json.loads(raw_bytes[ref])["text"])
+        for item in reading.items:
+            for disposition in item.heading_dispositions:
+                assert not any(cite.source_span_id == disposition.source_span_id
+                               and disposition.excerpt in cite.excerpt
+                               for cite in disposition.supporting_citations)
+    assert ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, reviewed, source_spans=spans).publishable
+    assert draft.model_dump_json() == before
+    # Historical policy still rejects the same raw answers. It is not rewritten.
+    legacy = {**proof, "validation_policy": "component-local/v1"}
+    legacy_ref = store.put("evaluation_manifest", json.dumps(legacy).encode()).storage_ref
+    historical = reviewed.model_copy(deep=True)
+    for component in historical.proposed_rules[0].components:
+        component.source_scope_review_ref = legacy_ref
+        next(binding for binding in historical.component_drafts
+             if binding.proposed_component.rule_component_id == component.rule_component_id
+             ).proposed_component.source_scope_review_ref = legacy_ref
+    result = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, historical, source_spans=spans)
+    assert not result.publishable
+    assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_REJECTED" for check in result.checks for issue in check.issues)
+    assert all(store.read(ref) == content for ref, content in raw_bytes.items())
+
+
+def test_heading_explanation_still_requires_its_own_nonempty_support(tmp_path):
+    from pydantic import ValidationError
+    source, draft, _ = scope_fixture()
+    class EmptySupportReader(NonduplicatedHeadingReader):
+        def start(self, **kwargs):
+            response = super().start(**kwargs)
+            reading = json.loads(response.text)
+            reading["items"][0]["heading_dispositions"][0]["supporting_citations"] = []
+            return response.model_copy(update={"text": json.dumps(reading, ensure_ascii=False)})
+    store, reader = ArtifactStore(resolve_data_paths(str(tmp_path / "data"))), EmptySupportReader()
+    before = draft.model_dump_json()
+    with pytest.raises(ValidationError, match="supporting_citations"):
+        review_official_source_scope(source, draft, official_code="IN-01", transport=reader, store=store)
+    assert len(reader.prompts) == 1 and draft.model_dump_json() == before
+    responses = [json.loads(path.read_bytes()) for path in
+                 (store.data_paths.root / "artifacts/raw_response").iterdir()]
+    assert len(responses) == 1
+    assert json.loads(responses[0]["text"])["items"][0]["heading_dispositions"][0]["supporting_citations"] == []
+
+
+def test_two_heading_witnesses_are_pinned_to_this_item_and_each_disposition(tmp_path):
+    from app.protocols.official_scope_review import SCOPE_VALIDATION_POLICY, validate_scope_reading
+    source, draft, _ = scope_fixture()
+    store, reader = ArtifactStore(resolve_data_paths(str(tmp_path / "data"))), NonduplicatedHeadingReader()
+    reviewed = review_official_source_scope(source, draft, official_code="IN-01", transport=reader, store=store)
+    proof = json.loads(store.read(reviewed.proposed_rules[0].components[0].source_scope_review_ref))
+    first = proof["receipts"][0]
+    reading = OfficialScopeReading.model_validate_json(json.loads(store.read(first["response_ref"]))["text"])
+    basis = json.loads(reader.prompts[0].split("\n冻结输入：\n", 1)[1])
+    second_heading = {**basis["headings"][0], "source_span_id": "synthetic-second-heading"}
+    basis["headings"].append(second_heading)
+    basis["materials"].append({"source_span_id": second_heading["source_span_id"],
+                               "text": second_heading["excerpt"]})
+    for item in reading.items:
+        item.citations.append(item.citations[0].model_copy(update=second_heading))
+        second = item.heading_dispositions[0].model_copy(deep=True)
+        second.source_span_id = second_heading["source_span_id"]
+        item.heading_dispositions.append(second)
+    validate_scope_reading(reading, basis, proposal=False, validation_policy=SCOPE_VALIDATION_POLICY)
+    bad = reading.model_copy(deep=True)
+    bad.items[0].heading_dispositions[1].source_span_id = "neighbor-source"
+    with pytest.raises(OfficialScopeReviewError, match="SOURCE_SCOPE_REVIEW_HEADING_MISSING"):
+        validate_scope_reading(bad, basis, proposal=False, validation_policy=SCOPE_VALIDATION_POLICY)
+
+
+@pytest.mark.parametrize("fault", ["missing", "foreign_ref", "wrong_excerpt", "neighbor_only", "wrong_disposition", "changed_source"])
+def test_shared_heading_witness_does_not_remove_source_or_scope_boundaries(tmp_path, fault):
+    source, draft, spans = scope_fixture()
+    class InvalidReader(NonduplicatedHeadingReader):
+        def start(self, **kwargs):
+            response = super().start(**kwargs)
+            reading = OfficialScopeReading.model_validate_json(response.text)
+            selected = reading.items[0]
+            heading = selected.heading_dispositions[0]
+            index = next(i for i, cite in enumerate(selected.citations)
+                         if cite.source_span_id == heading.source_span_id and heading.excerpt in cite.excerpt)
+            if fault in {"missing", "neighbor_only"}:
+                selected.citations.pop(index)
+            elif fault == "foreign_ref":
+                selected.citations[index].source_span_id = "foreign-source"
+            elif fault == "wrong_excerpt":
+                selected.citations[index].excerpt = "这个标题并不在冻结原文中"
+            elif fault == "wrong_disposition":
+                heading.disposition = "context_only"
+            return response.model_copy(update={"text": reading.model_dump_json()})
+    store = ArtifactStore(resolve_data_paths(str(tmp_path / "data")))
+    reviewed = review_official_source_scope(source, draft, official_code="IN-01", transport=InvalidReader(), store=store)
+    if fault == "changed_source":
+        source.source_materials[0].text += "来源修订"
+    result = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, reviewed, source_spans=spans)
+    assert not result.publishable
+    assert any(issue.issue_code in {"SOURCE_SCOPE_REVIEW_REJECTED", "SOURCE_SCOPE_REVIEW_INVALID"}
+               for check in result.checks for issue in check.issues)
+
+
 @pytest.mark.parametrize("change", ["source", "threshold", "stage", "citation", "missing_store", "raw_corruption"])
 def test_old_relationship_cannot_release_changed_or_unverifiable_scope(tmp_path, change):
     source, draft, spans = scope_fixture()
@@ -491,6 +613,58 @@ class PartiallyRejectedScopeReader(ScopeReader):
         for assignment in wrong.predicate_assignments:
             assignment.required_stages = [ReviewStage.SCREENING]
         return response.model_copy(update={"text": reading.model_dump_json()})
+
+
+class JointVisitScopeReader(ScopeReader):
+    def start(self, **kwargs):
+        response = super().start(**kwargs)
+        reading = OfficialScopeReading.model_validate_json(response.text)
+        for item in reading.items:
+            item.required_stages = [ReviewStage.RUN_IN if stage == ReviewStage.SCREENING else stage
+                                    for stage in item.required_stages]
+            for assignment in item.predicate_assignments:
+                assignment.required_stages = [ReviewStage.RUN_IN if stage == ReviewStage.SCREENING else stage
+                                             for stage in assignment.required_stages]
+        return response.model_copy(update={"text": reading.model_dump_json()})
+
+
+def joint_scope_fixture():
+    from tests.v2.protocols.test_deconstruction_gate_slice3 import _joint_visit_fixture
+    source, draft, spans = scope_fixture()
+    joint, _, _ = _joint_visit_fixture()
+    source.required_procedure_catalog = joint.required_procedure_catalog
+    headers = [item for item in joint.source_materials if item.source_span_id.startswith("span-joint")]
+    source.source_materials.extend(headers)
+    source.allowed_source_span_ids.extend(item.source_span_id for item in headers)
+    return source, draft, spans
+
+
+def test_source_node_equivalence_diagnoses_a_real_binding_error_without_clearing_it(tmp_path):
+    source, draft, spans = joint_scope_fixture()
+    store = ArtifactStore(resolve_data_paths(str(tmp_path / "data")))
+    reader = JointVisitScopeReader()
+    reviewed = review_official_source_scope(source, draft, official_code="IN-01", transport=reader, store=store)
+    gate = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, reviewed, source_spans=spans)
+    assert not gate.publishable
+    assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_NODE_BINDING_MISMATCH"
+               and issue.affected_refs == [draft.proposed_rules[0].components[0].rule_component_id]
+               for check in gate.checks for issue in check.issues)
+    assert reviewed.proposed_rules[0].components[0].evidence_requirements[0].due_stage == ReviewStage.SCREENING
+    assert len(reader.prompts) == 2
+
+
+def test_correcting_a_joint_node_cannot_relabel_old_proof_as_a_current_proposal(tmp_path):
+    source, draft, spans = joint_scope_fixture()
+    store = ArtifactStore(resolve_data_paths(str(tmp_path / "data")))
+    reviewed = review_official_source_scope(source, draft, official_code="IN-01", transport=JointVisitScopeReader(), store=store)
+    old_ref = reviewed.proposed_rules[0].components[0].source_scope_review_ref
+    old_bytes = store.read(old_ref)
+    component = reviewed.proposed_rules[0].components[0]
+    component.evidence_requirements[0].due_stage = ReviewStage.RUN_IN
+    reviewed.component_drafts[0].proposed_component = component.model_copy(deep=True)
+    result = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, reviewed, source_spans=spans)
+    assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_INVALID" for check in result.checks for issue in check.issues)
+    assert store.read(old_ref) == old_bytes
 
 
 def test_rejected_source_assignment_does_not_clear_itself_or_block_verified_sibling(tmp_path):

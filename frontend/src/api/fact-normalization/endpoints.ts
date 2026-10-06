@@ -21,6 +21,10 @@ export function factNormalizationJobRetryPath(jobId: string): string {
   return `/api/v2/jobs/${encodeURIComponent(jobId)}/retry`;
 }
 
+export function factNormalizationUnresolvedPath(subjectId: string, episodeId: string, jobId: string, offset: number, expectedContentSha256?: string): string {
+  return `${factNormalizationCommandPath(subjectId, episodeId)}/${encodeURIComponent(jobId)}/unresolved?offset=${offset}&limit=50${expectedContentSha256 ? `&expected_content_sha256=${encodeURIComponent(expectedContentSha256)}` : ""}`;
+}
+
 /** 本机持久化 job id，供刷新后恢复；不保存进度本身。 */
 export function factNormalizationJobStorageKey(reviewEpisodeId: string): string {
   return `fact-normalization-job:${reviewEpisodeId}`;

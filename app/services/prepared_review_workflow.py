@@ -17,6 +17,7 @@ from app.services.review_runtime_ownership import OWNER, OWNED_TYPES, WORKFLOW_J
 from app.services.review_context_assembly import (
     current_review_clinical_material_sha256,
     frozen_review_clinical_material_sha256,
+    require_current_review_method,
 )
 from app.storage.codecs import PersistedContractInvalid, verify_payload_sha256
 from app.storage.fact_authority import FactAuthorityError, FactAuthorityValidator
@@ -28,8 +29,12 @@ from app.workflow.jobstore import JobStore
 from app.workflow.recovery import recover_expired_jobs
 
 logger = logging.getLogger(__name__)
-CONTRACT = "prepared-review-workflow/v7"
-READABLE_CONTRACTS = {"prepared-review-workflow/v1", "prepared-review-workflow/v2", "prepared-review-workflow/v3", "prepared-review-workflow/v4", "prepared-review-workflow/v5", "prepared-review-workflow/v6", CONTRACT}
+CONTRACT = "prepared-review-workflow/v9"
+READABLE_CONTRACTS = {"prepared-review-workflow/v1", "prepared-review-workflow/v2", "prepared-review-workflow/v3", "prepared-review-workflow/v4", "prepared-review-workflow/v5", "prepared-review-workflow/v6", "prepared-review-workflow/v7", "prepared-review-workflow/v8", CONTRACT}
+PROPOSITION_CONTRACTS = {"prepared-review-workflow/v5", "prepared-review-workflow/v6", "prepared-review-workflow/v7", "prepared-review-workflow/v8", CONTRACT}
+OBSERVATION_CONTRACTS = {"prepared-review-workflow/v6", "prepared-review-workflow/v7", "prepared-review-workflow/v8", CONTRACT}
+FREQUENCY_CONTRACTS = {"prepared-review-workflow/v7", "prepared-review-workflow/v8", CONTRACT}
+COMPUTATION_CONTRACTS = {"prepared-review-workflow/v8", CONTRACT}
 CHILD_TYPES = {
     "predicate": "predicate_binding_candidates", "control": "control_binding_candidates",
     "predicate_qualification": "binding_qualification", "control_qualification": "binding_qualification",
@@ -41,6 +46,8 @@ CHILD_TYPES = {
     "control_observation_relation": "observation_relation",
     "predicate_frequency_evidence": "frequency_evidence",
     "control_frequency_evidence": "frequency_evidence",
+    "predicate_computation_input": "computation_input",
+    "control_computation_input": "computation_input",
 }
 
 
@@ -56,10 +63,12 @@ def current_review_task_versions():
     from app.services.proposition_evidence_job import PropositionEvidenceJobExecutor
     from app.services.observation_relation_job import ObservationRelationJobExecutor
     from app.services.frequency_evidence_job import FrequencyEvidenceJobExecutor
+    from app.services.computation_input_job import ComputationInputJobExecutor
     return {task.job_type: {"contract": task.contract, "prompt_version": task.prompt_version}
             for task in (PredicateBindingJobExecutor, ControlBindingJobExecutor,
                          BindingQualificationJobExecutor, JudgmentContentJobExecutor,
-                         PropositionEvidenceJobExecutor, ObservationRelationJobExecutor, FrequencyEvidenceJobExecutor)}
+                         PropositionEvidenceJobExecutor, ObservationRelationJobExecutor,
+                         FrequencyEvidenceJobExecutor, ComputationInputJobExecutor)}
 
 
 def require_current_review_tasks(payload):
@@ -221,6 +230,7 @@ class PreparedReviewContinuation:
                     step_id = step.step_id
                 _, payload, context = self._material(session, workflow_id)
                 require_current_review_tasks(payload)
+                require_current_review_method(context)
                 steps = store.list_steps(workflow_id)
                 if {item.step_id for item in steps} != {"candidates", "verification", "ready"}:
                     raise ScopeViolationError("本次审核的步骤记录不完整")
@@ -289,22 +299,26 @@ class PreparedReviewContinuation:
         if not isinstance(children, dict) or not children:
             raise ScopeViolationError("前一步审核未保存核对任务清单")
         expected = {"predicate"} if step_id == "verification" else {"predicate_qualification", "judgment_content"}
-        if step_id == "ready" and payload["contract"] in {"prepared-review-workflow/v5", "prepared-review-workflow/v6", CONTRACT}:
+        if step_id == "ready" and payload["contract"] in PROPOSITION_CONTRACTS:
             expected.add("predicate_proposition_evidence")
-        if step_id == "ready" and payload["contract"] in {"prepared-review-workflow/v6", CONTRACT}:
+        if step_id == "ready" and payload["contract"] in OBSERVATION_CONTRACTS:
             expected.add("predicate_observation_relation")
-        if step_id == "ready" and payload["contract"] == CONTRACT:
+        if step_id == "ready" and payload["contract"] in FREQUENCY_CONTRACTS:
             expected.add("predicate_frequency_evidence")
+        if step_id == "ready" and payload["contract"] in COMPUTATION_CONTRACTS:
+            expected.add("predicate_computation_input")
         if payload["includes_controls"]:
             expected.add("control" if step_id == "verification" else "control_qualification")
             if step_id == "ready" and payload["contract"] != "prepared-review-workflow/v1":
                 expected.add("control_judgment_content")
             if step_id == "ready" and payload["contract"] not in {"prepared-review-workflow/v1", "prepared-review-workflow/v2"}:
                 expected.add("control_proposition_evidence")
-            if step_id == "ready" and payload["contract"] in {"prepared-review-workflow/v6", CONTRACT}:
+            if step_id == "ready" and payload["contract"] in OBSERVATION_CONTRACTS:
                 expected.add("control_observation_relation")
-            if step_id == "ready" and payload["contract"] == CONTRACT:
+            if step_id == "ready" and payload["contract"] in FREQUENCY_CONTRACTS:
                 expected.add("control_frequency_evidence")
+            if step_id == "ready" and payload["contract"] in COMPUTATION_CONTRACTS:
+                expected.add("control_computation_input")
         if set(children) != expected or checkpoint.get("review_context_sha256") != payload["review_context_sha256"]:
             raise ScopeViolationError("本次审核的核对范围或资料记录不完整")
         owned = {row.job_id: row for row in cls._children(session, workflow_id, payload)}
@@ -317,7 +331,7 @@ class PreparedReviewContinuation:
                 raise ScopeViolationError("本次审核的前一步记录不对应")
             if step_id == "ready":
                 origin = JobStore(session).get_last_checkpoint(workflow_id, "candidates")
-                candidate_name = "control" if name in {"control_qualification", "control_judgment_content", "control_proposition_evidence", "control_observation_relation", "control_frequency_evidence"} else "predicate"
+                candidate_name = "control" if name.startswith("control_") else "predicate"
                 child_payload = verify_payload_sha256(row.payload_json, row.payload_sha256)
                 if (origin is None or child_payload.get("candidate_job_id")
                         != origin[1].get("children", {}).get(candidate_name)):
@@ -356,7 +370,7 @@ class PreparedReviewContinuation:
                 self.session_factory, candidate_job_id=candidates["predicate"],
                 context_id=context.context_id, routes=routes, artifact_store=self.artifact_store,
                 product_runtime=True).job_id
-            if payload["contract"] in {"prepared-review-workflow/v5", "prepared-review-workflow/v6", CONTRACT}:
+            if payload["contract"] in PROPOSITION_CONTRACTS:
                 from app.services.proposition_evidence_job import enqueue_proposition_evidence
                 children["predicate_proposition_evidence"] = enqueue_proposition_evidence(
                     self.session_factory, candidate_job_id=candidates["predicate"],
@@ -373,17 +387,24 @@ class PreparedReviewContinuation:
                     self.session_factory, candidate_job_id=candidates["control"],
                     context_id=context.context_id, routes=routes, artifact_store=self.artifact_store,
                     product_runtime=True).job_id
-            if payload["contract"] in {"prepared-review-workflow/v6", CONTRACT}:
+            if payload["contract"] in OBSERVATION_CONTRACTS:
                 from app.services.observation_relation_job import enqueue_observation_relation
                 for family, candidate_id in candidates.items():
                     children[f"{family}_observation_relation"] = enqueue_observation_relation(
                         self.session_factory, candidate_job_id=candidate_id, context_id=context.context_id,
                         routes=routes, artifact_store=self.artifact_store, product_runtime=True,
                     ).job_id
-            if payload["contract"] == CONTRACT:
+            if payload["contract"] in FREQUENCY_CONTRACTS:
                 from app.services.frequency_evidence_job import enqueue_frequency_evidence
                 for family, candidate_id in candidates.items():
                     children[f"{family}_frequency_evidence"] = enqueue_frequency_evidence(
+                        self.session_factory, candidate_job_id=candidate_id, context_id=context.context_id,
+                        routes=routes, artifact_store=self.artifact_store, product_runtime=True,
+                    ).job_id
+            if payload["contract"] == CONTRACT:
+                from app.services.computation_input_job import enqueue_computation_input
+                for family, candidate_id in candidates.items():
+                    children[f"{family}_computation_input"] = enqueue_computation_input(
                         self.session_factory, candidate_job_id=candidate_id, context_id=context.context_id,
                         routes=routes, artifact_store=self.artifact_store, product_runtime=True,
                     ).job_id
@@ -438,6 +459,7 @@ def change_review_workflow(session_factory, *, subject_id, review_episode_id, wo
             result = store.request_cancel(workflow_id)
             PreparedReviewContinuation._cancel_owned(store, workflow_id, payload)
             return result
+        require_current_review_method(context)
         children = PreparedReviewContinuation._children(session, workflow_id, payload)
         if operation != "retry":
             raise ScopeViolationError("不支持该审核操作")

@@ -52,6 +52,7 @@ export const REVIEW_HISTORY_DECISIONS = [
 export type ReviewHistoryDecision = (typeof REVIEW_HISTORY_DECISIONS)[number];
 
 export const REVIEW_HISTORY_GAP_TYPES = [
+  "calculation_capability_unavailable",
   "observation_unverified",
   "record_incomplete",
   "description_insufficient",
@@ -248,7 +249,27 @@ export interface ReviewHistoryControlView {
   unverifiedEvidence: { locatorId: string; reasonCodes: string[] }[];
 }
 
+export interface ReviewHistoryRestrictedRequirementView {
+  origin: "official" | "control";
+  requirementId: string;
+  displayLabel: string;
+  title: string;
+  sourceText: string;
+  sourceSpanIds: string[];
+  sourceExcerpts: string[];
+  scopeQuote: string | null;
+  timeWords: string[];
+  exceptionWords: string | null;
+  affectedStage: string | null;
+  decisionFunctions: string[];
+  sourceForce: "required" | "prohibited" | "recommended" | "descriptive" | "unclear" | null;
+  limitationKind: "interpretation_unresolved" | "consumer_unavailable";
+  unresolvedDimensions: string[];
+  dependencyRefs: string[];
+}
+
 export interface ReviewHistoryRunDetailView {
+  restrictedRequirements: ReviewHistoryRestrictedRequirementView[];
   controlSelectionRecords: {
     identity: string; protocolControlId: string; displayLabel: string;
     conditionRole: string; conditionText: string; selectionNote: string;

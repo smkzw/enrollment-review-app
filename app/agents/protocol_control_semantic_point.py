@@ -12,6 +12,11 @@ from pydantic import Field, model_validator
 
 from app.domain.contracts.common import ContractModel
 from app.domain.contracts.protocol_controls import ProtocolControlDispositionBatch
+from app.domain.contracts.source_computation import (
+    SourceQuote, SourceCount, SourceComputation,
+    count_from_text as _count_from_text, count_is_quoted as _count_is_quoted,
+    input_selection_references, validate_input_selection_scope, validate_computation_count_scope,
+)
 from app.protocols.procedure_catalog import schedule_column_scope, schedule_row_values
 
 from .protocol_control_source_interpretation import (
@@ -29,67 +34,6 @@ ReviewScope = Literal[
     "patient_eligibility", "supporting_definition", "patient_study_procedure",
     "study_level_background", "unresolved",
 ]
-
-
-class SourceQuote(ContractModel):
-    statement_index: int = Field(ge=0)
-    quote: str = Field(min_length=1)
-
-
-class SourceCount(ContractModel):
-    value: int = Field(ge=0)
-    number_text: str = Field(min_length=1)
-    source: SourceQuote
-
-
-def _count_from_text(text: str) -> int | None:
-    token = unicodedata.normalize("NFKC", text.strip())
-    if re.fullmatch(r"\d{1,5}", token):
-        return int(token)
-    digits = {"零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
-              "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
-    if token in digits:
-        return digits[token]
-    if token == "十":
-        return 10
-    match = re.fullmatch(r"([一二三四五六七八九])?十([一二三四五六七八九])?", token)
-    if match:
-        return 10 * digits[match[1]] if match[2] is None and match[1] else (
-            10 * (digits[match[1]] if match[1] else 1) + (digits[match[2]] if match[2] else 0)
-        )
-    return None
-
-
-def _count_is_quoted(number_text: str, quote: str) -> bool:
-    wanted = unicodedata.normalize("NFKC", number_text.strip())
-    source = unicodedata.normalize("NFKC", quote)
-    return wanted in re.findall(r"\d+|[零一二两三四五六七八九十百千]+", source)
-
-
-class SourceComputation(ContractModel):
-    operator: Literal[
-        "mean", "sum", "minimum", "maximum", "count", "ratio", "other", "unresolved",
-    ]
-    operator_ref: SourceQuote
-    input_refs: list[SourceQuote] = Field(default_factory=list)
-    missing_policy: Literal["exclude", "impute", "not_specified", "unresolved"]
-    missing_ref: SourceQuote | None = None
-    declared_input_count: SourceCount | None = None
-    max_missing_count: SourceCount | None = None
-
-    @model_validator(mode="after")
-    def require_source_for_missing_policy(self):
-        if self.missing_policy == "unresolved" and (
-            self.missing_ref is not None or self.max_missing_count is not None
-        ):
-            raise ValueError("缺失规则适用范围未核清时不得填写已适用的处理依据或次数")
-        if self.missing_policy in {"exclude", "impute"} and self.missing_ref is None:
-            raise ValueError("缺失值处理方式须有逐字来源")
-        if self.missing_policy == "not_specified" and self.missing_ref is not None:
-            raise ValueError("原文未规定缺失处理时不能附加处理依据")
-        if self.max_missing_count is not None and self.missing_ref is None:
-            raise ValueError("允许缺失的次数须与缺失处理原文一起核对")
-        return self
 
 
 class SourcePointDependency(ContractModel):
@@ -320,6 +264,11 @@ def build_semantic_point_prompt(
         "原文若明确给出输入总次数或允许缺失次数，分别填 declared_input_count、max_missing_count；"
         "number_text 只摘录数词本身，value 填其确切整数，source.quote 摘录含数词的原文短句。"
         "没有明确次数时填 null，不能用经验补数。"
+        "input_selection按原文保留all/single/latest_n/earliest_n/unresolved选取方式；没有核清时填null或unresolved。"
+        "single/latest_n/earliest_n须有declared_input_count，不能用患者资料数代替方案规定数。"
+        "latest_n/earliest_n的ordering_basis仅在原文明示时区分collection_time/report_time/record_time/source_sequence，"
+        "未明示日期角色用unresolved且ordering_ref填null，不默认报告日或上传顺序。"
+        "source、ordering_ref及window_refs逐字对应input_refs；窗口不推断锚点，跨句依据保留真实依赖。"
         "仅本次所给来源均未规定时才写 not_specified。适用关系不清写 unresolved，"
         "此时 missing_ref 和 max_missing_count 均填 null；共用政策来源可作为独立约束点，"
         "用 dependencies 明确关联，不能当作已经适用于本计算。"
@@ -422,7 +371,7 @@ def bind_semantic_packet(
                 count = computation.max_missing_count
                 shared_missing_counts.setdefault((count.source.statement_index,
                     count.source.quote, count.value), []).append(point)
-            refs = [computation.operator_ref, *computation.input_refs]
+            refs = [computation.operator_ref, *computation.input_refs, *input_selection_references(computation)]
             if computation.missing_ref is not None:
                 refs.append(computation.missing_ref)
             for count in (computation.declared_input_count, computation.max_missing_count):
@@ -522,7 +471,11 @@ def bind_semantic_packet(
         if calculation is not None:
             if calculation.operator_ref.statement_index != item.statement_index:
                 _reject_point(item, "计算操作须由本条来源直接支持")
-            refs = [calculation.operator_ref, *calculation.input_refs]
+            try:
+                validate_input_selection_scope(calculation)
+            except ValueError as error:
+                _reject_point(item, str(error))
+            refs = [calculation.operator_ref, *calculation.input_refs, *input_selection_references(calculation)]
             if calculation.missing_ref is not None:
                 refs.append(calculation.missing_ref)
             for count in (calculation.declared_input_count, calculation.max_missing_count):
@@ -533,20 +486,10 @@ def bind_semantic_packet(
                 if not _count_is_quoted(count.number_text, count.source.quote):
                     _reject_point(item, "次数必须逐字出现在所引原文中")
                 refs.append(count.source)
-            if (calculation.declared_input_count is not None
-                    and calculation.declared_input_count.source.statement_index not in {
-                        ref.statement_index for ref in calculation.input_refs
-                    }):
-                _reject_point(item, "输入次数须引用该计算的输入选择原文")
-            if (calculation.max_missing_count is not None
-                    and calculation.missing_ref is not None
-                    and calculation.max_missing_count.source.statement_index
-                    != calculation.missing_ref.statement_index):
-                _reject_point(item, "允许缺失次数须引用该计算的缺失处理原文")
-            if (calculation.declared_input_count is not None
-                    and calculation.max_missing_count is not None
-                    and calculation.max_missing_count.value > calculation.declared_input_count.value):
-                _reject_point(item, "允许缺失次数不能超过原文输入总次数")
+            try:
+                validate_computation_count_scope(calculation)
+            except ValueError as error:
+                _reject_point(item, str(error))
             for ref in refs:
                 if ref.statement_index not in visible_indexes:
                     _reject_point(item, "计算引用了本次未提供的来源陈述")

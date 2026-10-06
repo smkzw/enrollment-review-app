@@ -7,7 +7,7 @@
 
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EvidenceApiError,
   decodeCommitResponse,
@@ -22,6 +22,12 @@ import {
 } from "../api/evidence";
 import { setFactNormalizationRepository } from "../api/fact-normalization";
 import { canSupplementEvidence, EvidencePage } from "./EvidencePage";
+import { getLocalVisualTask } from "../api/evidence/localVisualHttp";
+
+vi.mock("../api/evidence/localVisualHttp", async (original) => ({
+  ...await original<typeof import("../api/evidence/localVisualHttp")>(),
+  getLocalVisualTask: vi.fn(),
+}));
 
 const SUBJECT_ID = "subject-uat-01-clear";
 const EPISODE_ID = "episode-uat-01-screening-clear";
@@ -476,6 +482,9 @@ let fns: {
 };
 
 beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+  vi.mocked(getLocalVisualTask).mockResolvedValue({ found: false, jobId: null,
+    state: null, text: null, region: null, configurationCurrent: true, canRetry: false });
   setFactNormalizationRepository({
     kind: "http",
     startFactNormalization: vi.fn(async () => ({
@@ -596,6 +605,7 @@ beforeEach(() => {
   window.localStorage.clear();
   window.location.hash = "";
 });
+afterEach(() => Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"));
 
 async function openValid(user: ReturnType<typeof userEvent.setup>) {
   window.location.hash = `#/subjects/${SUBJECT_ID}/evidence?episode=${EPISODE}`;
@@ -644,6 +654,53 @@ async function confirmCriticalCorrectionWhenShown(
 }
 
 describe("证据工作台", () => {
+  it("局部摘录转入本页校对稿；切页清除提案且不保存或采用", async () => {
+    const user = userEvent.setup();
+    fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({
+      subject_id: SUBJECT_ID, review_episode_id: EPISODE_ID,
+      active_evidence_snapshot_id: "snap-active",
+      active_evidence_processing_revision_id: "processing-revision-1",
+      items: [makeSnapshotWire("snap-active", "active")],
+    }));
+    const wire = makeProcessingRevisionWire();
+    wire.pages[1] = { entry_id: "entry-2", position: 2, source_document_version_id: "version-1",
+      page_number: 2, original_frame: "frame-2", page_artifact_id: "artifact-2", ocr_page_id: "ocr-page-2",
+      status: "succeeded", status_label: "页面已就绪", failure_reason: null,
+      image_available: true, page_width: 1240, page_height: 1754 };
+    fns.getProcessingRevision.mockResolvedValue(decodeProcessingRevision(wire));
+    fns.getOcrPage.mockImplementation((id) => Promise.resolve(decodeOcrPage({
+      ...makeOcrPageWire(), ocr_page_id: id,
+      page_artifact_id: id === "ocr-page-2" ? "artifact-2" : "artifact-1",
+      page_number: id === "ocr-page-2" ? 2 : 1,
+    })));
+    const excerpt = "接收时间：2026-02-03 10:12";
+    const region = { x0: 20, y0: 20, x1: 80, y1: 80, clockwise_degrees: 0 as const };
+    vi.mocked(getLocalVisualTask).mockImplementation(async (_revision, pageId) => pageId === "artifact-1" ? {
+      found: true, jobId: "read-1", state: "completed", text: "逐项摘录", region,
+      readingRegion: region, configurationCurrent: true, canRetry: false,
+      structuredRead: { items: [{ label: "接收时间", raw_value: "2026-02-03 10:12",
+        raw_unit: null, reference_text: null, time_label: "接收时间", annotation_target: null,
+        excerpt, position: "页底", script: "printed", legibility: "clear",
+        proposed_bbox: { x0: 0, y0: 0, x1: 1000, y1: 1000 } }], unresolved: [] },
+    } : { found: false, jobId: null, state: null, text: null, region: null,
+      configurationCurrent: true, canRetry: false });
+    await openValid(user);
+    await user.click(await screen.findByText("查看本次读取结果（尚未采用）"));
+    await user.click(screen.getByRole("button", { name: "将第1项接收时间转到文字校对" }));
+    await user.click(await screen.findByRole("button", { name: "补入校对稿" }));
+    expect(screen.getByRole("textbox", { name: "补入的漏识别文字" })).toHaveValue(`\n${excerpt}`);
+    expect(screen.getByRole("checkbox", { name: /逐字核对这项关键变化/ })).not.toBeChecked();
+    await user.click(within(screen.getByLabelText("识别页清单")).getByRole("button", { name: /第 2 页/ }));
+    await waitFor(() => expect(fns.getOcrPage).toHaveBeenCalledWith("ocr-page-2", "processing-revision-1", expect.anything()));
+    expect(screen.queryByRole("button", { name: "补入校对稿" })).not.toBeInTheDocument();
+    await user.click(within(screen.getByLabelText("识别页清单")).getByRole("button", { name: /第 1 页/ }));
+    await screen.findByText("查看本次读取结果（尚未采用）");
+    expect(screen.queryByRole("button", { name: "补入校对稿" })).not.toBeInTheDocument();
+    expect(fns.createCorrection).not.toHaveBeenCalled();
+    expect(fns.buildProcessingRevision).not.toHaveBeenCalled();
+    expect(fns.activateProcessingRevision).not.toHaveBeenCalled();
+  });
+
   it("深链显示固定上下文带：项目、受试者、审核节点、方案版本", async () => {
     const user = userEvent.setup();
     await openValid(user);
@@ -812,6 +869,81 @@ describe("证据工作台", () => {
       expect.anything(),
       expect.anything(),
     );
+  });
+
+  it("文件、识别页与原件共用来源版本选择，失败文件不回退另一份原件", async () => {
+    const user = userEvent.setup();
+    const snapshot = makeSnapshotWire("snap-active", "active");
+    const members = snapshot.members as Array<Record<string, unknown>>;
+    const firstMember = members[0];
+    const metadata = firstMember.metadata_head as Record<string, unknown>;
+    snapshot.members = [firstMember, ...[2, 3].map((index) => ({
+      ...firstMember,
+      member_id: `member-active-${index}`,
+      logical_document_id: `logical-${index}`,
+      source_document_version_id: `version-${index}`,
+      file_name: index === 2 ? "复查检验.pdf" : "未读取报告.pdf",
+      metadata_head: {
+        ...metadata,
+        metadata_revision_id: `metadata-active-${index}`,
+        source_document_version_id: `version-${index}`,
+      },
+    }))];
+    fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({
+      subject_id: SUBJECT_ID,
+      review_episode_id: EPISODE_ID,
+      active_evidence_snapshot_id: "snap-active",
+      active_evidence_processing_revision_id: "processing-revision-1",
+      items: [snapshot],
+    }));
+    const revision = makeProcessingRevisionWire();
+    revision.pages = [revision.pages[0], {
+      ...revision.pages[0],
+      entry_id: "entry-review",
+      position: 2,
+      source_document_version_id: "version-2",
+      page_artifact_id: "artifact-review",
+      ocr_page_id: "ocr-page-review",
+      original_frame: "frame-review",
+      status: "succeeded",
+      failure_reason: null,
+      image_available: true,
+      page_width: 1240,
+      page_height: 1754,
+    }, {
+      ...revision.pages[1],
+      entry_id: "entry-failed",
+      position: 3,
+      source_document_version_id: "version-3",
+      page_number: 1,
+      page_artifact_id: "artifact-failed",
+    }];
+    fns.getProcessingRevision.mockResolvedValue(decodeProcessingRevision(revision));
+    fns.getOcrPage.mockImplementation((id) => Promise.resolve(decodeOcrPage(
+      id === "ocr-page-review" ? {
+        ...makeOcrPageWire(),
+        ocr_page_id: id,
+        page_artifact_id: "artifact-review",
+        source_document_version_id: "version-2",
+        effective_text: "复查原件内容。",
+        locators: [],
+      } : makeOcrPageWire(),
+    )));
+    await openValid(user);
+    await screen.findByText("原始识别");
+    const files = within(screen.getByLabelText("文件清单"));
+    const pages = within(screen.getByLabelText("识别页清单"));
+    await user.click(files.getByRole("button", { name: /复查检验/ }));
+    await waitFor(() => expect(fns.getOcrPage).toHaveBeenCalledWith(
+      "ocr-page-review", "processing-revision-1", expect.anything(),
+    ));
+    expect(pages.getByRole("button", { name: /复查检验/ })).toHaveAttribute("aria-pressed", "true");
+    await user.click(pages.getByRole("button", { name: /筛选病历/ }));
+    expect(files.getByRole("button", { name: /筛选病历/ })).toHaveAttribute("aria-pressed", "true");
+    await user.click(files.getByRole("button", { name: /未读取报告/ }));
+    expect(pages.getByRole("button", { name: /未读取报告/ })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByText("这一页尚未形成可核对的识别文本。")).toBeInTheDocument();
+    expect(fns.getOcrPage.mock.calls.every(([id]) => id !== "entry-failed")).toBe(true);
   });
 
   it("待启用快照与基础处理版本严格配对时允许先核对原文", async () => {
@@ -1115,6 +1247,8 @@ describe("证据工作台", () => {
     fns.getProcessingCandidate.mockResolvedValue(
       decodeProcessingCandidateStatus({
         candidate_id: "candidate-1",
+        evidence_snapshot_id: "snap-active",
+        base_processing_revision_id: "base-revision-1",
         job_id: "job-1",
         candidate_status: "needs_attention",
         candidate_status_label: "需要关注",
@@ -1184,6 +1318,8 @@ describe("证据工作台", () => {
       .mockResolvedValueOnce(
         decodeProcessingCandidateStatus({
           candidate_id: "candidate-1",
+          evidence_snapshot_id: "snap-active",
+          base_processing_revision_id: "base-revision-1",
           job_id: "job-1",
           candidate_status: "staged",
           candidate_status_label: "待处理",
@@ -1194,6 +1330,8 @@ describe("证据工作台", () => {
       .mockResolvedValue(
         decodeProcessingCandidateStatus({
           candidate_id: "candidate-1",
+          evidence_snapshot_id: "snap-active",
+          base_processing_revision_id: "base-revision-1",
           job_id: "job-1",
           candidate_status: "needs_attention",
           candidate_status_label: "需要关注",
@@ -1259,6 +1397,8 @@ describe("证据工作台", () => {
       .mockResolvedValue(
         decodeProcessingCandidateStatus({
           candidate_id: "candidate-1",
+          evidence_snapshot_id: "snap-active",
+          base_processing_revision_id: "base-revision-1",
           job_id: "job-1",
           candidate_status: "needs_attention",
           candidate_status_label: "需要关注",
@@ -1396,6 +1536,8 @@ describe("证据工作台", () => {
         resolveRestore(
           decodeProcessingCandidateStatus({
             candidate_id: "candidate-old",
+            evidence_snapshot_id: "snap-active",
+            base_processing_revision_id: "base-revision-1",
             job_id: "job-old",
             candidate_status: "ready",
             candidate_status_label: "已生成",
@@ -1595,6 +1737,88 @@ describe("证据工作台", () => {
       ).toBe("candidate-persisted"),
     );
     expect(fns.buildProcessingRevision).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("资料上传")).toHaveClass("evidence-upload--status");
+    expect(screen.getByLabelText("当前资料上下文")).toHaveTextContent("尚未启用");
+  });
+
+  it.each(["snap-active", "wrong-snapshot"])("待启用校对按来源查看与返回，不改变有效版本：%s", async (candidateSnapshot) => {
+    const user = userEvent.setup();
+    fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({
+      subject_id: SUBJECT_ID, review_episode_id: EPISODE_ID,
+      active_evidence_snapshot_id: "snap-active",
+      active_evidence_processing_revision_id: "processing-revision-1",
+      items: [withLatestCandidate(makeSnapshotWire("snap-active", "active"), "needs_attention", 2)],
+    }));
+    fns.getProcessingCandidate.mockResolvedValue(decodeProcessingCandidateStatus({
+      candidate_id: "candidate-1", evidence_snapshot_id: candidateSnapshot,
+      base_processing_revision_id: "base-revision-1", job_id: "job-1",
+      candidate_status: "needs_attention", candidate_status_label: "需要关注",
+      candidate_event_seq: 2, complete_revision_id: null,
+    }));
+    fns.getProcessingRevision.mockImplementation(async (id) => decodeProcessingRevision({
+      ...makeProcessingRevisionWire(), evidence_processing_revision_id: id,
+      revision_kind: id === "base-revision-1" ? "base" : "complete",
+      is_current: id === "processing-revision-1",
+    }));
+    fns.getOcrPage.mockImplementation(async (_id, revisionId) => decodeOcrPage({
+      ...makeOcrPageWire(),
+      processing_revision_id: revisionId,
+      is_current_revision: revisionId === "processing-revision-1",
+      effective_text: revisionId === "base-revision-1" ? "已保存的日期校对" : "患者否认发热。",
+    }));
+    await openValid(user);
+    await user.click(await screen.findByRole("button", { name: "查看待启用的校对内容" }));
+    if (candidateSnapshot === "wrong-snapshot") {
+      expect(await screen.findByText("待核对资料已变化，请刷新后查看本次更正。")).toBeInTheDocument();
+      expect(fns.getProcessingRevision).not.toHaveBeenCalledWith("base-revision-1");
+    } else {
+      expect(await screen.findByText("正在查看已保存、尚未启用的校对内容；当前有效资料和原报告未改变。")).toBeInTheDocument();
+      await waitFor(() => expect(fns.getOcrPage).toHaveBeenCalledWith("ocr-page-1",
+        "base-revision-1", expect.objectContaining({ signal: expect.any(AbortSignal) })));
+      expect(await screen.findByText("已保存的日期校对")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "返回已启用资料" }));
+      await waitFor(() => expect(window.location.hash).not.toContain("ocrRevision"));
+      await waitFor(() => expect(fns.getOcrPage).toHaveBeenLastCalledWith("ocr-page-1",
+        "processing-revision-1", expect.objectContaining({ signal: expect.any(AbortSignal) })));
+    }
+    expect(fns.activateProcessingRevision).not.toHaveBeenCalled();
+    expect(fns.buildProcessingRevision).not.toHaveBeenCalled();
+    expect(fns.createCorrection).not.toHaveBeenCalled();
+  });
+
+  it("待启用校对回读晚到时不能把已切换资料带回旧来源", async () => {
+    const user = userEvent.setup();
+    const active = withLatestCandidate(makeSnapshotWire("snap-active", "active"), "needs_attention", 2);
+    const history = { ...makeSnapshotWire("snap-history", "active"), is_current: false,
+      base_processing_revision_id: "history-base", members: active.members };
+    fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({
+      subject_id: SUBJECT_ID, review_episode_id: EPISODE_ID,
+      active_evidence_snapshot_id: "snap-active",
+      active_evidence_processing_revision_id: "processing-revision-1", items: [active, history],
+    }));
+    fns.getProcessingRevision.mockImplementation(async (id) => decodeProcessingRevision({
+      ...makeProcessingRevisionWire(), evidence_processing_revision_id: id,
+      evidence_snapshot_id: id === "history-base" ? "snap-history" : "snap-active",
+      is_current: id === "processing-revision-1",
+    }));
+    fns.getOcrPage.mockResolvedValue(decodeOcrPage(makeOcrPageWire()));
+    let resolveDetail!: (value: ReturnType<typeof decodeProcessingCandidateStatus>) => void;
+    fns.getProcessingCandidate.mockImplementation(() => new Promise(resolve => { resolveDetail = resolve; }));
+    await openValid(user);
+    await user.click(await screen.findByRole("button", { name: "查看待启用的校对内容" }));
+    await waitFor(() => expect(fns.getProcessingCandidate).toHaveBeenCalled());
+    const historyLabel = screen.getByText("历史资料");
+    await user.click(historyLabel.closest("button")!);
+    await waitFor(() => expect(fns.getProcessingRevision).toHaveBeenCalledWith("history-base"));
+    resolveDetail(decodeProcessingCandidateStatus({
+      candidate_id: "candidate-1", evidence_snapshot_id: "snap-active",
+      base_processing_revision_id: "base-revision-1", job_id: "job-1",
+      candidate_status: "needs_attention", candidate_status_label: "需要关注",
+      candidate_event_seq: 2, complete_revision_id: null,
+    }));
+    await waitFor(() => expect(fns.getProcessingRevision).toHaveBeenLastCalledWith("history-base"));
+    expect(window.location.hash).not.toContain("ocrRevision");
+    expect(fns.activateProcessingRevision).not.toHaveBeenCalled();
   });
 
   it("快照读取失败时资料版本显示诚实未知状态", async () => {

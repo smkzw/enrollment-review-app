@@ -5,11 +5,12 @@ from app.domain.contracts.binding_qualification import BindingQualificationPairC
 from app.domain.contracts.control_evidence_dependency import control_atom_reference_key
 from app.domain.publication import canonical_hash
 from app.services.binding_qualification_support import load_completed_candidate_qualification_input
-from app.services.judgment_fact_linkage import load_prepared_judgment_links
+from app.services.judgment_fact_linkage import load_prepared_judgment_links, judgment_content_input_version
 from app.services.control_judgment_fact_linkage import load_prepared_control_judgment_links
 
 
-def load_judgment_content_input(session, artifact_store, *, candidate_job_id: str, context_id: str):
+def load_judgment_content_input(session, artifact_store, *, candidate_job_id: str, context_id: str,
+                                input_version: str | None = None):
     """Retain unlinked excerpts; source matching never authorizes fact adoption."""
     material = load_completed_candidate_qualification_input(
         session, artifact_store, candidate_job_id, require_route_receipts=True,
@@ -19,9 +20,16 @@ def load_judgment_content_input(session, artifact_store, *, candidate_job_id: st
     family = material.get("family")
     if family not in {"predicate", "control"}:
         raise ValueError("判断内容核实不支持当前要求类型")
-    links = (load_prepared_judgment_links(session, artifact_store, context_id=context_id)
+    version = judgment_content_input_version(family) if input_version is None else input_version
+    versions = {judgment_content_input_version(family, value): value for value in (1, 2)}
+    if version not in versions:
+        raise ValueError("判断内容输入版本不适用于当前要求类型")
+    linkage_version = versions[version]
+    links = (load_prepared_judgment_links(session, artifact_store, context_id=context_id,
+                                        linkage_version=linkage_version)
              if family == "predicate" else load_prepared_control_judgment_links(
-                 session, artifact_store, context_id=context_id, source=material["frozen_input"]))
+                 session, artifact_store, context_id=context_id, source=material["frozen_input"],
+                 linkage_version=linkage_version))
     pairs = [BindingQualificationPairContext.model_validate(item) for item in material["pairs"]]
     selected = {}
     coverage = []
@@ -67,7 +75,7 @@ def load_judgment_content_input(session, artifact_store, *, candidate_job_id: st
                if family == "control" else {}),
         })
     payload = {
-        "version": "judgment-content-input/v1" if family == "predicate" else "judgment-content-input/control-v1",
+        "version": version,
         "candidate_job_id": candidate_job_id,
         "review_context_id": context_id,
         "review_context_sha256": material["review_context_sha256"],

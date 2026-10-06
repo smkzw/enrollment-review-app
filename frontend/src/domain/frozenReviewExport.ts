@@ -1,10 +1,22 @@
-import type { ReviewHistoryRunDetailView } from "../api/review-history/reviewHistoryTypes";
+import type { ReviewHistoryRunDetailView, ReviewHistoryRestrictedRequirementView } from "../api/review-history/reviewHistoryTypes";
 import { actionStateLabel, actionTargetLabel, decisionLabel, gapTypeLabel, stageLabel } from "./labels";
 import { reviewConditionNotes } from "./reviewConditionNotes";
 import type { LocatorView } from "../api/evidence";
 
 interface ReportSection { title: string; paragraphs: string[] }
 export const reviewEvidenceScopeNote = "本次审核仅依据本次已提供的资料及其核对结果。已知缺失和待核实事项另列；未提供的情况不作推断。";
+export const reviewLimitationLabel = {
+  interpretation_unresolved: "方案含义尚待澄清，不能判为符合或不符合",
+  consumer_unavailable: "系统暂不能完成本项计算，不能判为符合或不符合",
+};
+export function reviewLimitationContext(item: ReviewHistoryRestrictedRequirementView): string[] {
+  return [
+    ...(item.scopeQuote ? [`适用范围原文：${item.scopeQuote}`] : []),
+    ...item.timeWords.map((text) => `时间限定原文：${text}`),
+    ...(item.exceptionWords ? [`例外原文：${item.exceptionWords}`] : []),
+    ...(item.affectedStage ? [`涉及阶段：${item.affectedStage}`] : []),
+  ];
+}
 const controlLabels = { fulfilled: "已满足", unfulfilled: "未满足", unverified: "尚无法判定", not_applicable: "本次不适用" };
 const locatorText = (locator: LocatorView) => `资料版本 ${locator.sourceDocumentVersionId}，第 ${locator.pageNumber} 页，${locator.precisionLabel}：${locator.excerpt ?? "未保存文字摘录，请在系统中查看原件。"}`;
 const time = (value: string) => new Intl.DateTimeFormat("zh-CN", {
@@ -28,6 +40,7 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
     `审核完成时间：${time(run.completedAt)}`, `导出时间：${time(exportedAt.toISOString())}`,
     reviewEvidenceScopeNote,
     "本报告保留该次审核的结论，不代替研究者最终入组决定。办理情况截至本次读取报告时；事项关闭不改变原审核结论。",
+    ...(report.restrictedRequirements.length ? ["方案仍有尚不能判定的要求，不能据此认为受试者符合全部要求。"] : []),
   ] }];
   for (const item of report.assessments) {
     result.push({ title: `${item.clause.ruleDisplayCode} · ${item.clause.ruleTitle}`, paragraphs: [
@@ -73,6 +86,20 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
       ]),
     ] });
   }
+  for (const item of report.restrictedRequirements) {
+    result.push({ title: `${item.displayLabel} · ${item.title}`, paragraphs: [
+      reviewLimitationLabel[item.limitationKind],
+      ...item.unresolvedDimensions,
+      `方案原文：${item.sourceText}`,
+      ...item.sourceExcerpts.map((text) => `依据摘录：${text}`),
+      ...reviewLimitationContext(item),
+      ...item.dependencyRefs.map((id) => {
+        const dependency = report.restrictedRequirements.find((entry) => entry.requirementId === id);
+        if (!dependency) throw new Error("报告中的相关方案要求未列明，请刷新后重试。");
+        return `还需核清相关要求：${dependency.displayLabel} · ${dependency.title}`;
+      }),
+    ] });
+  }
   result.push({ title: "补充资料与核实事项", paragraphs: report.actions.length ? report.actions.flatMap((action) => [
     `${action.clause?.ruleDisplayCode ?? action.control?.displayLabel ?? "对应要求未列明"}：${action.requestedAction}`,
     `应提供资料：${action.acceptableEvidence}`,
@@ -82,7 +109,7 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
       `${time(transition.occurredAt)} · ${actionStateLabel[transition.toState]}：${transition.reason}`,
       ...(transition.responseEvidence?.locators.map((locator) => `回应资料：${locatorText(locator)}`) ?? []),
     ]),
-  ]) : [report.controls.some((item) => item.status === "unverified")
+  ]) : [report.restrictedRequirements.length ? "方案仍有待澄清或暂不能计算的要求，详见上述内容；不能据此认为受试者符合全部要求。" : report.controls.some((item) => item.status === "unverified")
     ? "其他章节仍有尚无法判定的要求，详见对应核对情况；本次尚未保存对应办理事项。" : "本次审核未记录补充事项。"] });
   result.push({ title: "报告追溯信息", paragraphs: [
     `审核记录编号：${run.reviewRunId}`, `资料版本编号：${run.evidenceSnapshotV2Id}`,

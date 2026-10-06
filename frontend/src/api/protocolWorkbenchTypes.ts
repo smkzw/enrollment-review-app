@@ -154,6 +154,7 @@ export interface DraftRevisionView {
   statusLabel: string;
   reason: string;
   reasonLabel: string;
+  importedUnpublishedProposal?: boolean;
   actor: string;
   createdAt: string;
   studyPhase: StudyPhase;
@@ -193,6 +194,28 @@ export type ProtocolJsonValue =
 
 export type ProtocolPredicateValue = string | number | boolean | Array<string | number | boolean>;
 
+export interface ProtocolSourceQuote {
+  statement_index: number;
+  quote: string;
+}
+
+export interface ProtocolSourceComputation {
+  operator: "mean" | "sum" | "minimum" | "maximum" | "count" | "ratio" | "other" | "unresolved";
+  operator_ref: ProtocolSourceQuote;
+  input_refs: ProtocolSourceQuote[];
+  missing_policy: "exclude" | "impute" | "not_specified" | "unresolved";
+  missing_ref: ProtocolSourceQuote | null;
+  declared_input_count: { value: number; number_text: string; source: ProtocolSourceQuote } | null;
+  max_missing_count: { value: number; number_text: string; source: ProtocolSourceQuote } | null;
+  input_selection?: {
+    mode: "all" | "single" | "latest_n" | "earliest_n" | "unresolved";
+    source: ProtocolSourceQuote;
+    ordering_basis: "collection_time" | "report_time" | "record_time" | "source_sequence" | "unresolved" | null;
+    ordering_ref: ProtocolSourceQuote | null;
+    window_refs: ProtocolSourceQuote[];
+  };
+}
+
 export type ProtocolLogicPayload =
   | {
       kind: "predicate";
@@ -205,6 +228,13 @@ export type ProtocolLogicPayload =
         applicable_population?: string | null;
         requires_professional_judgment?: boolean;
         unit_match_policy?: string;
+        source_computation?: ProtocolSourceComputation;
+        record_semantics?: {
+          target_kind: "event_history" | "other" | "unresolved";
+          record_obligation: "required" | "not_required_by_source" | "unresolved";
+          proposition_direction: "event_present" | "event_absent" | "unresolved";
+          source_excerpts: string[];
+        };
       };
     }
   | {
@@ -240,6 +270,9 @@ export interface ProtocolTimeEntryPayload {
   };
   prospective_period: null | {
     period: "treatment_period" | "study_period";
+  } | {
+    kind: "source_defined";
+    source_excerpts: string[];
   };
 }
 

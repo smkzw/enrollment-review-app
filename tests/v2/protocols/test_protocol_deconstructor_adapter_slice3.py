@@ -968,6 +968,89 @@ def test_hydration_neutralizes_evidence_description_that_prejudges_result():
     assert actual.description == "筛选期审核：核对既往病史记录"
 
 
+@pytest.mark.parametrize("label", ["筛选/导入期 / V1", "导入/筛选期 / V1", "筛选／导入期 / V1"])
+def test_joint_visit_hydration_binds_requirements_and_runtime_templates_without_mutating_author(label, tmp_path):
+    from datetime import datetime, timezone
+    from app.domain.contracts.agent_io import ProtocolDeconstructionDraft
+    from app.domain.contracts.rules import RuleSet
+    from app.evidence.artifacts import ArtifactStore
+    from app.projections.evidence_expectation_templates import project_evidence_expectation_templates
+    from app.storage.config import resolve_data_paths
+    from tests.v2.protocols.test_deconstruction_gate_slice3 import _joint_visit_fixture
+
+    source, draft, _ = _joint_visit_fixture(label)
+    candidate = semantic_candidate_from_draft(draft)
+    requirement = candidate.proposed_rules[0].components[0].evidence_requirements[0]
+    requirement.due_stage = ReviewStage.SCREENING
+    original = candidate.model_dump_json()
+    hydrated = _hydrate_semantic_candidate(source, candidate)
+    assert candidate.model_dump_json() == original
+    actual = hydrated.proposed_rules[0].components[0].evidence_requirements[0]
+    assert actual.due_stage == ReviewStage.RUN_IN
+    assert all(stage.stage != ReviewStage.SCREENING for stage in hydrated.proposed_workflow_stages)
+    owner = next(stage for stage in hydrated.proposed_workflow_stages if actual.requirement_id in stage.due_requirement_ids)
+    assert owner.stage == ReviewStage.RUN_IN and owner.visit_instance == label
+    assert hydrated.proposed_rules[0].components[0].expression == candidate.proposed_rules[0].components[0].expression
+    assert len(hydrated.proposed_rules[0].components[0].evidence_requirements) == 1
+    store = ArtifactStore(resolve_data_paths(str(tmp_path / "data")))
+    ref = store.put("evaluation_manifest", hydrated.model_dump_json().encode()).storage_ref
+    restored = ProtocolDeconstructionDraft.model_validate_json(store.read(ref))
+    rule_set = RuleSet(rule_set_id="synthetic-joint", revision=1, protocol_version_id=restored.protocol_version_id,
+                       study_phase=restored.selected_phase, rules=restored.proposed_rules)
+    templates = project_evidence_expectation_templates(rule_set=rule_set, workflow_stages=restored.proposed_workflow_stages,
+        procedure_requirements=[item.proposed_requirement for item in restored.evidence_requirement_drafts
+                                if item.procedure_catalog_item_id], created_at=datetime.now(timezone.utc))
+    template = next(item for item in templates if item.requirement_id == actual.requirement_id)
+    assert template.due_stage == ReviewStage.RUN_IN and template.workflow_stage_id == owner.workflow_stage_id
+
+
+def test_source_defined_prospective_period_uses_current_wire_and_restores_same_candidate():
+    from jsonschema import Draft202012Validator
+    from app.domain.contracts.rules import AtomicExpression, AtomicPredicate
+
+    source, draft, _ = _fixture()
+    text = "计划在准备阶段及干预阶段（第六次访视之前）接受专项评估"
+    candidate = _semantic_candidate(source, draft)
+    component = candidate.proposed_rules[0].components[0]
+    component.source_excerpts = [text]
+    component.expression = AtomicExpression(predicate=AtomicPredicate(
+        predicate_id="planned", subject="受试者", attribute="计划接受专项评估", comparator="exists",
+        source_clause=text, semantic_proposition=text,
+        prospective_period={"kind": "source_defined", "source_excerpts": [text]},
+    ))
+    wire = _wire_candidate(candidate)
+    atom = wire["proposed_rules"][0]["components"][0]["expression"][0]["existence_atoms"][0]
+    atom["observation_policy"] = None
+    parsed = _parse_semantic_candidate(json.dumps(wire, ensure_ascii=False), compact=True, expected_batch_id="1/1")
+    period = parsed.proposed_rules[0].components[0].expression.predicate.prospective_period
+    assert period.model_dump(mode="json") == atom["prospective_period"]
+    assert ProtocolSemanticDeconstructionCandidate.model_validate_json(parsed.model_dump_json()) == parsed
+    schema = protocol_output_response_format("semantic_candidate", compact=True)["json_schema"]["schema"]
+    period_schema = schema["$defs"]["wire_dnf_group"]["properties"]["existence_atoms"]["items"]["properties"]["prospective_period"]
+    Draft202012Validator(period_schema).validate(atom["prospective_period"])
+    for invalid in ({**atom["prospective_period"], "period": "study_period"},
+                    {**atom["prospective_period"], "source_excerpts": []}):
+        assert list(Draft202012Validator(period_schema).iter_errors(invalid))
+        atom["prospective_period"] = invalid
+        with pytest.raises(ValueError):
+            _parse_semantic_candidate(json.dumps(wire, ensure_ascii=False), compact=True, expected_batch_id="1/1")
+
+
+@pytest.mark.parametrize("failure", ["legacy", "damaged_header", "independent_screening"])
+def test_hydration_never_guesses_a_joint_node_when_frozen_alias_is_not_proved(failure):
+    from tests.v2.protocols.test_deconstruction_gate_slice3 import _joint_visit_fixture
+    source, draft, _ = _joint_visit_fixture()
+    if failure == "legacy":
+        source.required_procedure_catalog = _catalog(CatalogKind.REQUIRED_PROCEDURES, source.required_procedure_catalog.items)
+    else:
+        header = next(item for item in source.source_materials if item.source_span_id == "span-joint-header")
+        header.text = "筛选期 / V0" if failure == "independent_screening" else "无法读清的表头"
+    candidate = semantic_candidate_from_draft(draft)
+    candidate.proposed_rules[0].components[0].evidence_requirements[0].due_stage = ReviewStage.SCREENING
+    hydrated = _hydrate_semantic_candidate(source, candidate)
+    assert hydrated.proposed_rules[0].components[0].evidence_requirements[0].due_stage == ReviewStage.SCREENING
+
+
 @pytest.mark.parametrize("compact", [False, True])
 def test_initial_prompt_allows_exact_branch_objects_without_requiring_every_term(compact):
     source_input, _draft, _spans = _fixture()
@@ -1010,9 +1093,59 @@ def test_feedback_revision_replaces_only_selected_parent_rule():
     assert "replacement_rules 必须且只能包含 EX-01" in transport.start_prompts[0]
     assert "每项 affected_scope 必须明确包含 EX-01" in transport.start_prompts[0]
     assert "可以仅把本子项谓词的来源片段缩窄" in transport.start_prompts[0]
+    assert "组件级 source_excerpts 也须同步保留完整适用分支" in transport.start_prompts[0]
+    assert "归属未核清时不得缩窄" in transport.start_prompts[0]
     assert "不能通过截掉本子项真正适用的限定词" in transport.start_prompts[0]
     assert "非数值谓词也可用 source_term" in transport.start_prompts[0]
     assert "定位修订不授权改变 ALL/ANY/NOT" in transport.start_prompts[0]
+
+
+@pytest.mark.parametrize("own_window", [False, True])
+def test_local_source_binding_correction_preserves_parent_and_checks_own_window(own_window):
+    from app.domain.contracts.rules import AtomicPredicate, AtomicExpression, Comparator
+
+    source, draft, spans = _fixture()
+    lead = "正在使用或有以下治疗史："
+    history = "随机前9天内使用过某类制剂"
+    own = "随机前5天内正在使用某类制剂" if own_window else lead
+    text = own + "\n" + history
+    material = next(item for item in source.source_materials if item.source_span_id == "span-ex")
+    material.text = text
+    rule = draft.proposed_rules[1]
+    rule.source_text = text
+    selected = rule.components[0]
+    selected.expression = AtomicExpression(predicate=AtomicPredicate(
+        predicate_id="current-use", subject="受试者", attribute="制剂使用状态",
+        comparator=Comparator.EQ, value="正在使用", unit="unitless", source_clause=lead,
+    ))
+    binding = draft.component_drafts[1]
+    binding.proposed_component = selected
+    binding.source_excerpts = [text]
+    previous = draft.model_copy(deep=True)
+    candidate = semantic_candidate_from_draft(draft)
+    replacement = candidate.proposed_rules[1].model_copy(deep=True)
+    replacement.components[0].source_excerpts = [own]
+    transport = FakeTransport([ProtocolAgentResponse(session_id="local-source", text=ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id, replacement_rules=[replacement],
+    ).model_dump_json())])
+    revised = revise_protocol_draft_from_feedback(
+        source, draft, target_rule_code="EX-01", target_component_id=selected.rule_component_id,
+        feedback_note="只核对选中子项的来源归属，不改变条件、时间或其他规则。",
+        transport=transport, preserve_review_items=True,
+    )
+    assert revised.proposed_rules[0] == previous.proposed_rules[0]
+    assert revised.proposed_rules[1].source_text == previous.proposed_rules[1].source_text
+    actual = revised.proposed_rules[1].components[0]
+    original = previous.proposed_rules[1].components[0]
+    assert actual.rule_component_id == original.rule_component_id
+    assert actual.expression.predicate.model_dump(exclude={"predicate_id"}) == original.expression.predicate.model_dump(exclude={"predicate_id"})
+    assert actual.expression.time_constraint == original.expression.time_constraint
+    assert [item.model_dump(exclude={"requirement_id", "predicate_ids"}) for item in actual.evidence_requirements] == [item.model_dump(exclude={"requirement_id", "predicate_ids"}) for item in original.evidence_requirements]
+    assert draft == previous
+    result = ProtocolDeconstructionGate().evaluate(source, revised, source_spans=spans)
+    missing = [issue for check in result.checks if check.check_name == "temporal_semantics"
+               for issue in check.issues if issue.issue_code == "TIME_QUALIFIER_DROPPED"]
+    assert bool(missing) is own_window
 
 
 def test_feedback_prospective_guidance_survives_format_recovery_without_changing_initial_identity():
@@ -2447,6 +2580,57 @@ def test_feedback_revision_rejects_wrong_rule_then_repairs_in_same_session():
     assert "无该条事项时两个数组均为空" in transport.repair_prompts[0][1]
 
 
+@pytest.mark.parametrize("failure", ["CALL_BUDGET_EXHAUSTED", "TRANSPORT_CONNECTION_FAILED"])
+def test_feedback_recovery_failure_preserves_first_rejected_answer(failure):
+    source, draft, _ = _fixture()
+    candidate = semantic_candidate_from_draft(draft)
+    wrong = ProtocolSemanticRuleRepair(candidate_id=candidate.candidate_id,
+                                       replacement_rules=[candidate.proposed_rules[0]])
+    response = ProtocolAgentResponse(session_id="feedback-source", text=wrong.model_dump_json())
+
+    class FailedRecovery(FakeTransport):
+        def continue_session(self, **kwargs):
+            self.repair_prompts.append((kwargs["session_id"], kwargs["prompt"]))
+            raise ProtocolAgentCallError("feedback-source", "恢复未执行", error_code=failure,
+                                         error_metadata={"requests_used": 1})
+
+    transport = FailedRecovery([response])
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        revise_protocol_draft_from_feedback(source, draft, target_rule_code="EX-01",
+            feedback_note="只核对目标来源", transport=transport)
+    error = caught.value
+    assert error.error_code == failure and error.session_id == "feedback-source"
+    assert error.error_metadata["requests_used"] == 1
+    trigger = error.error_metadata["local_repair_trigger"]
+    assert trigger["phase"] == "validate_scope"
+    assert trigger["exception_type"] == "ValueError"
+    assert trigger["response_sha256"] == hashlib.sha256(response.original_text.encode()).hexdigest()
+    assert trigger["repair_prompt_sha256"] == hashlib.sha256(transport.repair_prompts[0][1].encode()).hexdigest()
+    assert "目标" in trigger["message"] or "父规则" in trigger["message"]
+    assert isinstance(error.__cause__, ValueError)
+    assert len(transport.start_prompts) == len(transport.repair_prompts) == 1
+
+
+def test_feedback_rejected_recovery_keeps_final_cause_without_third_call():
+    source, draft, _ = _fixture()
+    candidate = semantic_candidate_from_draft(draft)
+    wrong = ProtocolSemanticRuleRepair(candidate_id=candidate.candidate_id,
+                                      replacement_rules=[candidate.proposed_rules[0]])
+    first = ProtocolAgentResponse(session_id="feedback-source", text=wrong.model_dump_json())
+    second = ProtocolAgentResponse(session_id="feedback-source", text="{invalid recovery}")
+    transport = FakeTransport([first, second])
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        revise_protocol_draft_from_feedback(source, draft, target_rule_code="EX-01",
+            feedback_note="只核对目标来源", transport=transport)
+    error = caught.value
+    trigger = error.error_metadata["local_repair_trigger"]
+    assert trigger["phase"] == "parse"
+    assert trigger["response_sha256"] == hashlib.sha256(second.original_text.encode()).hexdigest()
+    assert isinstance(error.__cause__, ValueError)
+    assert error.error_code == "SEMANTIC_CALL_FAILED"
+    assert len(transport.start_prompts) == len(transport.repair_prompts) == 1
+
+
 def test_valid_json_passes_without_repair(whole_draft_fixture_budget):
     source_input, draft, spans = _fixture()
     template = "按正式方案原文进行结构化解构。"
@@ -3452,6 +3636,38 @@ def test_compact_wire_candidate_and_local_repair_keep_domain_gate_path():
     ]
     assert "batch_id 必须为 repair:EX-01" in transport.repair_prompts[0][1]
     assert transport.compact_contexts
+
+
+@pytest.mark.parametrize("backend,model", [
+    ("cms-router", "glm-5.3-flash"), ("ollama-cloud", "deepseek-v4.1-flash"),
+])
+def test_remote_compact_transport_runs_existing_assembly_and_gate(
+    tmp_path, monkeypatch, whole_draft_fixture_budget, backend, model,
+):
+    from app.agents import protocol_semantic_transport as module
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    from app.storage.config import resolve_data_paths
+    from tests.v2.protocols.test_deepseek_protocol_transport_slice3 import _client
+
+    source_input, draft, spans = _fixture()
+    wire = _wire_candidate(_semantic_candidate(source_input, draft))
+    client, calls = _client([json.dumps(wire, ensure_ascii=False)])
+    monkeypatch.setattr(module, "DECONSTRUCT_WIRE_CONTRACT", "compact")
+    transport = module.DeepSeekProtocolAgentTransport(
+        client=client, backend=backend, model=model, max_tokens=65536,
+    )
+    cache = _ProtocolSemanticBatchFileCache(resolve_data_paths(str(tmp_path / "data")), "synthetic-job")
+    result = ProtocolDeconstructorRunner().run(
+        source_input, prompt_version=_prompt_version("按正式方案原文进行结构化解构。"),
+        prompt_template="按正式方案原文进行结构化解构。", transport=transport,
+        source_spans=spans, batch_cache=cache,
+    )
+    assert result.status == "可以进入审阅"
+    assert result.final_gate_result.publishable
+    assert len(calls.calls) == 1
+    assert calls.calls[0]["model"] == model
+    assert "简化输出结构" in calls.calls[0]["messages"][0]["content"]
+    assert result.final_draft.proposed_rules[1].components[0].expression.operator == draft.proposed_rules[1].components[0].expression.operator
 
 
 def test_empty_schema_defs_and_singleton_identity_logic_are_normalized():

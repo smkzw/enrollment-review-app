@@ -47,6 +47,7 @@ import { EvidenceWorkspace } from "../components/evidence-workspace/EvidenceWork
 import { OcrReviewPanel } from "../components/evidence-workspace/OcrReviewPanel";
 import { ReferencedDocumentsPanel } from "../components/evidence-workspace/ReferencedDocumentsPanel";
 import { OriginalEvidenceViewer } from "../components/evidence-workspace/OriginalEvidenceViewer";
+import type { LocalVisualExcerpt } from "../components/evidence-workspace/LocalVisualVerificationPanel";
 import { SelectiveVisionTaskPanel } from "../components/evidence-workspace/SelectiveVisionTaskPanel";
 import { OcrReprocessingPanel } from "../components/evidence-workspace/OcrReprocessingPanel";
 import { SourceMetadataEditor } from "../components/evidence-workspace/SourceMetadataEditor";
@@ -71,6 +72,7 @@ import {
 } from "../api/evidence/evidenceProcessingViewModels";
 import { useFactNormalizationJob } from "../features/fact-normalization/useFactNormalizationJob";
 import { ProfileNormalizationStatus } from "../components/profile/ProfileNormalizationStatus";
+import { NormalizationUnresolvedPanel } from "../components/evidence-workspace/NormalizationUnresolvedPanel";
 
 function toActionError(error: unknown): string {
   if (error instanceof EvidenceApiError) return error.message;
@@ -90,9 +92,9 @@ function processingCandidateNotice(candidate: ProcessingCandidateView): string {
     case "terminal_failure":
       return "已保存，但核对后的资料版本未能生成，请重新核对后再试。";
     case "ready":
-      return "核对后的资料版本已生成，尚未启用。";
+      return "资料版本已生成，尚未启用；各项核实情况请查看具体记录。";
     case "active":
-      return "核对后的资料版本已生成并已启用。";
+      return "资料版本已启用；各项核实情况请查看具体记录。";
     case "revision_conflict":
       return "资料版本发生变化，请刷新后重新核对。";
     case "cancelled":
@@ -245,11 +247,14 @@ export function EvidencePage() {
   const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(
     null,
   );
+  const selectedSnapshotRef = useRef(selectedSnapshotId);
+  selectedSnapshotRef.current = selectedSnapshotId;
   const [snapshotsKey, setSnapshotsKey] = useState(0);
   const reprocessedView = params.get("ocrSnapshot") && params.get("ocrRevision")
     ? { episodeId: episodeParam, snapshotId: params.get("ocrSnapshot")!, revisionId: params.get("ocrRevision")! } : null;
-  function setReprocessedView(value: { episodeId: string; snapshotId: string; revisionId: string } | null) {
-    updateParams({ ocrSnapshot: value?.snapshotId ?? null, ocrRevision: value?.revisionId ?? null });
+  function setReprocessedView(value: { episodeId: string; snapshotId: string; revisionId: string } | null, corrections = false) {
+    updateParams({ ocrSnapshot: value?.snapshotId ?? null, ocrRevision: value?.revisionId ?? null,
+      ocrView: value && corrections ? "correction" : null });
   }
   /** 幂等键随预览生命周期：从首次确认尝试到成功/取消/被替换复用同一键，不显示给用户。 */
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
@@ -337,6 +342,7 @@ export function EvidencePage() {
       : null;
   const viewingReprocessed = reprocessedView !== null && reprocessedView.episodeId === reviewEpisodeId
     && reprocessedView.snapshotId === selectedSnapshotId;
+  const viewingPendingCorrections = viewingReprocessed && params.get("ocrView") === "correction";
   const viewedProcessingRevisionId = viewingReprocessed ? reprocessedView.revisionId :
     selectedSnapshotId === activeSnapshotId
       ? activeProcessingRevisionId
@@ -397,6 +403,8 @@ export function EvidencePage() {
     null,
   );
   const [pageDetailsKey, setPageDetailsKey] = useState(0);
+  const [localExcerpt, setLocalExcerpt] = useState<LocalVisualExcerpt | null>(null);
+  useEffect(() => setLocalExcerpt(null), [viewedProcessingRevisionId, selectedPageEntryId]);
   const [referencedDocumentsKey, setReferencedDocumentsKey] = useState(0);
   const [ocrConflict, setOcrConflict] = useState<EvidenceApiError | null>(null);
   const [referencedConflict, setReferencedConflict] =
@@ -574,6 +582,15 @@ export function EvidencePage() {
     processingCandidate?.candidateStatus,
   ]);
 
+  const selectedMember =
+    selectedSnapshot?.members.find(
+      (member) => member.memberId === selectedFileId,
+    ) ??
+    commitResult?.snapshot.members.find(
+      (member) => member.memberId === selectedFileId,
+    ) ??
+    null;
+
   useEffect(() => {
     if (revisionPageEntries.length === 0) {
       setSelectedPageEntryId(null);
@@ -582,10 +599,13 @@ export function EvidencePage() {
     if (
       !revisionPageEntries.some((page) => page.entryId === selectedPageEntryId)
     ) {
+      const pages = selectedFileId === null
+        ? revisionPageEntries
+        : revisionPageEntries.filter(
+            (page) => page.sourceDocumentVersionId === selectedMember?.sourceDocumentVersionId,
+          );
       setSelectedPageEntryId(
-        openablePageEntries[0]?.entryId ??
-          revisionPageEntries[0]?.entryId ??
-          null,
+        pages.find((page) => page.ocrPageId !== null)?.entryId ?? pages[0]?.entryId ?? null,
       );
     }
   }, [
@@ -593,6 +613,8 @@ export function EvidencePage() {
     openablePageEntries,
     revisionPageEntries,
     selectedPageEntryId,
+    selectedFileId,
+    selectedMember?.sourceDocumentVersionId,
   ]);
 
   useEffect(() => {
@@ -609,6 +631,17 @@ export function EvidencePage() {
       revisionPageEntries.find((page) => page.entryId === selectedPageEntryId),
     [revisionPageEntries, selectedPageEntryId],
   );
+  const requestedSourcePage = params.get("sourcePage");
+  useEffect(() => {
+    if (!requestedSourcePage || revisionPageEntries.length === 0) return;
+    const page = revisionPageEntries.find((item) => item.pageArtifactId === requestedSourcePage);
+    if (!page) return;
+    const member = selectedSnapshot?.members.find((item) =>
+      item.sourceDocumentVersionId === page.sourceDocumentVersionId);
+    setSelectedFileId(member?.memberId ?? null);
+    setSelectedPageEntryId(page.entryId);
+    setSelectedLocatorId(null);
+  }, [requestedSourcePage, revisionPageEntries, selectedSnapshot]);
 
   const pageDetails = useLoad(
     async (signal) => {
@@ -830,14 +863,30 @@ export function EvidencePage() {
     }
     return [];
   }, [commitResult, preview, processingRevision.state, selectedSnapshot]);
-  const selectedMember =
-    selectedSnapshot?.members.find(
-      (member) => member.memberId === selectedFileId,
-    ) ??
-    commitResult?.snapshot.members.find(
-      (member) => member.memberId === selectedFileId,
-    ) ??
-    null;
+
+  function selectEvidencePage(entryId: string): void {
+    const page = revisionPageEntries.find((item) => item.entryId === entryId);
+    if (page === undefined) return;
+    const member = [...(selectedSnapshot?.members ?? []), ...(commitResult?.snapshot.members ?? [])]
+      .find((item) => item.sourceDocumentVersionId === page.sourceDocumentVersionId);
+    setSelectedPageEntryId(entryId);
+    setSelectedFileId(member?.memberId ?? null);
+    setSelectedLocatorId(null);
+  }
+
+  function selectEvidenceFile(memberId: string): void {
+    const member = [...(selectedSnapshot?.members ?? []), ...(commitResult?.snapshot.members ?? [])]
+      .find((item) => item.memberId === memberId);
+    const pages = revisionPageEntries.filter(
+      (page) => page.sourceDocumentVersionId === member?.sourceDocumentVersionId,
+    );
+    const page = pages.find((item) => item.entryId === selectedPageEntryId)
+      ?? pages.find((item) => item.ocrPageId !== null)
+      ?? pages[0];
+    setSelectedFileId(memberId);
+    setSelectedPageEntryId(page?.entryId ?? null);
+    setSelectedLocatorId(null);
+  }
 
   async function saveSourceMetadata(values: {
     documentType: string;
@@ -967,6 +1016,29 @@ export function EvidencePage() {
       handleProcessingError(error, "ocr");
     } finally {
       setBuildBusy(false);
+    }
+  }
+
+  async function viewPendingCorrections() {
+    if (!processingCandidate || !reviewEpisodeId || !selectedSnapshotId) return;
+    const candidateId = processingCandidate.candidateId;
+    const scope = candidateScope.current;
+    const snapshotId = selectedSnapshotId;
+    try {
+      const detail = await getEvidenceRepository().getProcessingCandidate(candidateId);
+      if (candidateScope.current !== scope || currentCandidateId.current !== candidateId
+        || selectedSnapshotRef.current !== snapshotId) return;
+      if (detail.candidateId !== candidateId || detail.evidenceSnapshotId !== snapshotId
+        || detail.candidateStatus !== "needs_attention") {
+        setProcessingActionError("待核对资料已变化，请刷新后查看本次更正。");
+        return;
+      }
+      setReprocessedView({ episodeId: reviewEpisodeId, snapshotId,
+        revisionId: detail.baseProcessingRevisionId }, true);
+    } catch (error) {
+      if (candidateScope.current !== scope || currentCandidateId.current !== candidateId
+        || selectedSnapshotRef.current !== snapshotId) return;
+      setProcessingActionError(toActionError(error));
     }
   }
 
@@ -1454,7 +1526,7 @@ export function EvidencePage() {
                 type="button"
                 className={`evidence-files__row evidence-files__row--${entry.tone}${selectedFileId === entry.id ? " evidence-files__row--selected" : ""}`}
                 aria-pressed={selectedFileId === entry.id}
-                onClick={() => setSelectedFileId(entry.id)}
+                onClick={() => selectEvidenceFile(entry.id)}
               >
                 <span className="evidence-files__name" title={entry.fileName}>
                   {entry.fileName}
@@ -1525,7 +1597,7 @@ export function EvidencePage() {
                   type="button"
                   className={`evidence-page-index__row${selectedPageEntryId === page.entryId ? " evidence-page-index__row--selected" : ""}${!page.canOpen ? " evidence-page-index__row--disabled" : ""}`}
                   aria-pressed={selectedPageEntryId === page.entryId}
-                  onClick={() => setSelectedPageEntryId(page.entryId)}
+                  onClick={() => selectEvidencePage(page.entryId)}
                 >
                   <span
                     className="evidence-page-index__document"
@@ -1611,6 +1683,10 @@ export function EvidencePage() {
           window.location.hash = `#/subjects?subject=${encodeURIComponent(subjectId)}&episode=${encodeURIComponent(reviewEpisodeId)}`;
         }}
       />
+      {subjectId && reviewEpisodeId && factNormalization.state.status === "active" &&
+        (factNormalization.state.phase === "succeeded" || factNormalization.state.phase === "failed") &&
+        <NormalizationUnresolvedPanel key={`${subjectId}:${reviewEpisodeId}:${factNormalization.state.jobId}`}
+          subjectId={subjectId} episodeId={reviewEpisodeId} jobId={factNormalization.state.jobId} />}
       {factNormalization.completedReview && <RouteLink className="button" to="/tasks" params={{
         job: factNormalization.completedReview.jobId, subject: factNormalization.completedReview.subjectId,
         episode: factNormalization.completedReview.reviewEpisodeId,
@@ -1704,6 +1780,10 @@ export function EvidencePage() {
             revision={processingRevision.state.data}
             isCurrentRevision={processingRevision.state.data.isCurrent}
             conflict={ocrConflict}
+            excerptProposal={localExcerpt?.revisionId === processingRevision.state.data.revisionId
+              && localExcerpt.pageId === selectedPageEntry.pageArtifactId
+              ? { proposalId: `${localExcerpt.jobId}:${localExcerpt.itemIndex}`, excerpt: localExcerpt.excerpt }
+              : null}
             editingDisabledReason={
               buildBusy ||
               (processingCandidate != null &&
@@ -1776,6 +1856,13 @@ export function EvidencePage() {
     processingRevision.state.status === "success" && viewedPairConsistent ? (
       <OriginalEvidenceViewer
         allowLocalVerification
+        onPrepareCorrection={(excerpt) => {
+          if (processingRevision.state.status !== "success"
+            || excerpt.revisionId !== processingRevision.state.data.revisionId
+            || excerpt.pageId !== selectedPageEntry?.pageArtifactId
+            || selectedPageResult?.data == null) return;
+          setLocalExcerpt(excerpt);
+        }}
         revisionId={processingRevision.state.data.revisionId}
         pages={revisionPageEntries}
         documentNames={
@@ -1788,10 +1875,7 @@ export function EvidencePage() {
         selectedEntryId={selectedPageEntryId}
         selectedLocatorId={selectedLocatorId}
         selectedPageLocators={actualLocators}
-        onSelectPage={(entryId) => {
-          setSelectedPageEntryId(entryId);
-          setSelectedLocatorId(null);
-        }}
+        onSelectPage={selectEvidencePage}
         onReadingRotationChange={(pageArtifactId, degrees) => {
           setReadingRotations((previous) => ({
             ...previous,
@@ -1810,13 +1894,13 @@ export function EvidencePage() {
       </div>
     );
 
+  const compactReading = preview === null && commitResult === null && mode === null
+    && !uploadPanelExpanded && (unfinishedSnapshot !== null || activeSnapshotId !== null);
+
   return (
-    <div className="evidence-page">
+    <div className={`evidence-page${compactReading ? " evidence-page--reading" : ""}`}>
       <header className="evidence-page__head">
         <h1 className="evidence-page__title">证据工作台</h1>
-        <p className="evidence-page__note">
-          查看当前审核节点的有效资料、识别文字与原件依据。
-        </p>
       </header>
       <ContextBand
         projectLabel={projectLabel}
@@ -1824,7 +1908,7 @@ export function EvidencePage() {
         subjectCode={subjectCode}
         centerLabel={centerLabel}
         nodeLabel={episode.workflowStageLabel ?? episode.stageLabel}
-        snapshotVersion={currentSnapshotVersionLabel(snapshots)}
+        snapshotVersion={viewingPendingCorrections ? "待启用校对" : currentSnapshotVersionLabel(snapshots)}
         pendingCount={pendingCount}
         backSubjectId={subjectId as SubjectId}
       />
@@ -1844,12 +1928,17 @@ export function EvidencePage() {
         }}
       />}
       {viewingReprocessed && <div className="evidence-notice" role="status">
-        <strong>正在查看所选识别结果，原报告未改变。</strong>
+        <strong>{viewingPendingCorrections
+          ? "正在查看已保存、尚未启用的校对内容；当前有效资料和原报告未改变。"
+          : "正在查看所选识别结果，原报告未改变。"}</strong>
         <button type="button" className="button" disabled={buildBusy} onClick={() => setReprocessedView(null)}>返回已启用资料</button>
         {selectedSnapshot && viewedRevisionConsistent && processingCandidate === null && <button type="button" className="button button--primary" disabled={buildBusy}
           onClick={() => void buildReviewableRevision(selectedSnapshot, viewedProcessingRevisionId!)}>检查核对结果并生成资料版本</button>}
       </div>}
-      <section className="evidence-upload" aria-label="资料上传">
+      {!viewingReprocessed && processingCandidate?.candidateStatus === "needs_attention" &&
+        selectedSnapshotId === activeSnapshotId && <button type="button" className="button"
+          onClick={() => void viewPendingCorrections()}>查看待启用的校对内容</button>}
+      <section className={`evidence-upload${compactReading ? " evidence-upload--status" : ""}`} aria-label="资料上传">
         <div className="evidence-upload__head">
           <h2 className="evidence-upload__title">
             {unfinishedSnapshot !== null
@@ -1923,7 +2012,7 @@ export function EvidencePage() {
           commitResult === null ? (
           <div className="evidence-commit">
             <p className="evidence-commit__message">
-              当前有效资料可在下方查看。
+              {viewingPendingCorrections ? "下方为待启用的校对内容，当前有效资料仍保留。" : "当前有效资料可在下方查看。"}
             </p>
             <div className="evidence-commit__actions">
               <button

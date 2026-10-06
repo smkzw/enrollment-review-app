@@ -143,6 +143,18 @@ def _parse_canonical_snapshot(text: str, *, target_kind: str, label: str) -> dic
     if expected_keys is None:
         raise ValueError(f"不支持的修订目标类型 {target_kind}")
     actual_keys = frozenset(value)
+    if target_kind == "fact" and "contextual_qualifiers" in value:
+        from .fact_context import FactContextQualifier, validate_context_excerpt
+        if not isinstance(value["contextual_qualifiers"], list):
+            raise ValueError("背景限定须为列表")
+        qualifiers = [FactContextQualifier.model_validate(item)
+                      for item in value["contextual_qualifiers"]]
+        if not qualifiers:
+            raise ValueError("背景限定为空时须保持原历史快照格式")
+        validate_context_excerpt(qualifiers, value.get("assertion_text") or "")
+        if any(item.source is not None for item in qualifiers):
+            raise ValueError("未核实跨位置关系不得作为正式事实的更正快照")
+        actual_keys -= {"contextual_qualifiers"}
     if actual_keys != expected_keys:
         missing = sorted(expected_keys - actual_keys)
         extra = sorted(actual_keys - expected_keys)
@@ -158,7 +170,7 @@ def _parse_canonical_snapshot(text: str, *, target_kind: str, label: str) -> dic
 
 
 def fact_semantic_snapshot(fact: ClinicalFactV2) -> dict:
-    return {
+    snapshot = {
         "kind": "fact",
         "fact_type": fact.fact_type,
         "profile_lane": fact.profile_lane.value if hasattr(fact.profile_lane, "value") else str(fact.profile_lane),
@@ -172,6 +184,10 @@ def fact_semantic_snapshot(fact: ClinicalFactV2) -> dict:
         "assertion_text": fact.assertion_basis.assertion_text if fact.assertion_basis else None,
         "supported_requirement_ids": list(fact.supported_requirement_ids),
     }
+    if fact.assertion_basis and fact.assertion_basis.contextual_qualifiers:
+        snapshot["contextual_qualifiers"] = [item.model_dump(mode="json")
+                                             for item in fact.assertion_basis.contextual_qualifiers]
+    return snapshot
 
 
 def event_semantic_snapshot(event: ClinicalEventV2) -> dict:

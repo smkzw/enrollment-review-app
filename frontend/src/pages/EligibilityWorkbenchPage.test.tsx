@@ -169,6 +169,19 @@ describe("入排审核工作台", () => {
     const sourceHref = screen.getByRole("link", { name: /的资料页$/ }).getAttribute("href");
     expect(href?.split("?")[1]).toBe(sourceHref?.split("?")[1]);
   });
+  it("核对方法更新不假称资料更正，保留原稿并回到同一节点重新准备", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review, workDraftState: "method_changed",
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const reminder = await screen.findByRole("status", { name: "审核方式已更新" });
+    expect(within(reminder).getByText(/先前的工作稿仍保留.*未按当前方式核对/)).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "审核资料已变化" })).not.toBeInTheDocument();
+    const href = within(reminder).getByRole("link", { name: "前往重新审核" }).getAttribute("href");
+    expect(href).toContain("/reports");
+    const sourceHref = screen.getByRole("link", { name: /的资料页$/ }).getAttribute("href");
+    expect(href?.split("?")[1]).toBe(sourceHref?.split("?")[1]);
+  });
   it("单独提示未确定影响范围的争议，不改变条款并可打开同节点病史", async () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
       ...review, unassignedConflicts: [{ conflictGroupId: "private-conflict", memberKind: "event", memberIds: ["private-a", "private-b"] }],

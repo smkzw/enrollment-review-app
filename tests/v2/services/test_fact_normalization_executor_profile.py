@@ -209,8 +209,9 @@ def _run(session_factory, chain, requirement_id):
     return service, created
 
 
+@pytest.mark.parametrize("compact", [False, True])
 def test_failed_transport_retains_bound_receipt(
-    session_factory, data_paths, monkeypatch,
+    session_factory, data_paths, monkeypatch, compact,
 ):
     from app.evidence.artifacts import ArtifactStore
     import app.services.fact_normalization_executor as executor_module
@@ -219,7 +220,11 @@ def test_failed_transport_retains_bound_receipt(
         session_factory, prefix="receipt-failure", requirement_id="receipt-rule"
     )
     service = FactNormalizationJobService(session_factory)
-    created = _create_job_from_source(service, chain)
+    created = service.create_or_reuse_from_source(
+        authority=chain["authority"], prompt_version_id=chain["prompt_version_id"],
+        model_config_id=chain["model_config_id"], created_by="test",
+        compact_text_references=compact,
+    )
     artifacts = ArtifactStore(data_paths)
 
     def failed_factory(model_config, *, receipt_callback):
@@ -245,6 +250,11 @@ def test_failed_transport_retains_bound_receipt(
         assert receipt["job_id"] == created.job_id
         assert receipt["call_id"] and receipt["run_id"] and receipt["step_id"]
         assert receipt["error_type"] == "TimeoutError"
+        if compact:
+            assert receipt["text_reference_strategy"]["version"] == "text-reference-aliases/v1"
+            assert receipt["reference_aliases"]["locator"]
+        else:
+            assert "reference_aliases" not in receipt
     with session_factory() as session:
         assert not PatientProfileRevisionRepository(session).list_by_episode(
             chain["episode_id"]

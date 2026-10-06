@@ -112,6 +112,71 @@ def _packet():
     })
 
 
+def test_computation_selection_binds_in_existing_semantic_producer_and_artifact(tmp_path):
+    from app.agents.protocol_control_semantic_point import BoundSemanticPoint
+    from app.evidence.artifacts import ArtifactStore
+    from app.storage.config import resolve_data_paths
+    batch, interpretation = _source()
+    raw = _packet().model_dump(mode="json")
+    raw["items"][0]["computation"].update({
+        "declared_input_count": {"value": 3, "number_text": "三", "source": {"statement_index": 0, "quote": "最近三次记录"}},
+        "input_selection": {"mode": "latest_n", "source": {"statement_index": 0, "quote": "最近三次记录"},
+            "ordering_basis": "unresolved", "ordering_ref": None, "window_refs": []},
+    })
+    packet = SourceSemanticPacket.model_validate(raw)
+    bound = bind_semantic_packet(batch, interpretation, [0, 1, 2], packet)
+    assert bound[0].computation.input_selection.ordering_basis == "unresolved"
+    store = ArtifactStore(resolve_data_paths(tmp_path / "data"))
+    saved = store.put("evaluation_manifest", bound[0].model_dump_json().encode())
+    restored = BoundSemanticPoint.model_validate_json(store.read(saved.storage_ref))
+    assert restored == bound[0]
+    assert restored.computation.input_selection.model_dump(mode="json") == raw["items"][0]["computation"]["input_selection"]
+    # Valid text elsewhere in this batch is not this calculation's input scope.
+    raw["items"][0]["computation"]["input_selection"]["window_refs"] = [
+        {"statement_index": 2, "quote": interpretation.statements[2].quoted_text},
+    ]
+    with pytest.raises(ValueError):
+        bind_semantic_packet(batch, interpretation, [0, 1, 2], SourceSemanticPacket.model_validate(raw))
+
+
+@pytest.mark.parametrize("kind", ["threshold", "missing_count"])
+def test_same_statement_count_from_another_short_clause_is_not_input_policy(kind):
+    batch, interpretation = _source()
+    raw = _packet().model_dump(mode="json")
+    if kind == "threshold":
+        text = batch.owned_units[0].excerpt + "本次审核值至少为7分。"
+        batch.owned_units[0].excerpt = text
+        interpretation.statements[0].quoted_text = text
+        raw["items"][0]["computation"]["declared_input_count"] = {
+            "value": 7, "number_text": "7", "source": {"statement_index": 0, "quote": "至少为7分"},
+        }
+    else:
+        text = batch.owned_units[1].excerpt + "最多允许缺失一次。"
+        batch.owned_units[1].excerpt = text
+        interpretation.statements[1].quoted_text = text
+        raw["items"][0]["computation"]["max_missing_count"] = {
+            "value": 1, "number_text": "一", "source": {"statement_index": 1, "quote": "最多允许缺失一次"},
+        }
+    with pytest.raises(ValueError):
+        bind_semantic_packet(batch, interpretation, [0, 1, 2], SourceSemanticPacket.model_validate(raw))
+
+
+def test_semantic_point_identity_preserves_omission_and_changes_with_selection():
+    batch, interpretation = _source()
+    raw = _packet().model_dump(mode="json")
+    legacy = bind_semantic_packet(batch, interpretation, [0, 1, 2], SourceSemanticPacket.model_validate(raw))
+    raw["items"][0]["computation"]["input_selection"] = None
+    absent = bind_semantic_packet(batch, interpretation, [0, 1, 2], SourceSemanticPacket.model_validate(raw))
+    assert [item.semantic_id for item in absent] == [item.semantic_id for item in legacy]
+    raw["items"][0]["computation"]["input_selection"] = {
+        "mode": "unresolved", "source": {"statement_index": 0, "quote": "最近三次记录"},
+        "ordering_basis": None, "ordering_ref": None, "window_refs": [],
+    }
+    selected = bind_semantic_packet(batch, interpretation, [0, 1, 2], SourceSemanticPacket.model_validate(raw))
+    assert selected[0].semantic_id != legacy[0].semantic_id
+    assert [item.semantic_id for item in selected[1:]] == [item.semantic_id for item in legacy[1:]]
+
+
 def _publication_source_store(batch, interpretation):
     unit_ids = batch.owned_structure_unit_ids
     plan = ProtocolControlDiscoveryToDeepPlan(
@@ -479,7 +544,7 @@ def test_one_missing_count_shared_by_distinct_series_stays_unresolved() -> None:
     first["computation"]["input_refs"] = [{
         "statement_index": 0, "quote": "甲的最近三次记录",
     }]
-    first["computation"]["missing_ref"]["quote"] = "缺失记录不填补"
+    first["computation"]["missing_ref"]["quote"] = "最多允许缺失1次，缺失记录不填补"
     first["computation"]["max_missing_count"] = {
         "value": 1, "number_text": "1",
         "source": {"statement_index": 1, "quote": "最多允许缺失1次"},
@@ -515,7 +580,7 @@ def test_shared_missing_count_in_same_statement_stays_unresolved() -> None:
     first["dependencies"] = [{"statement_index": 0, "point_key": "policy"}]
     first["computation"]["operator_ref"]["quote"] = "取均值"
     first["computation"]["input_refs"] = [{"statement_index": 0, "quote": "甲的最近三次记录"}]
-    first["computation"]["missing_ref"] = {"statement_index": 0, "quote": "缺失记录不填补"}
+    first["computation"]["missing_ref"] = {"statement_index": 0, "quote": "最多允许缺失1次，缺失记录不填补"}
     first["computation"]["max_missing_count"] = {
         "value": 1, "number_text": "1",
         "source": {"statement_index": 0, "quote": "最多允许缺失1次"},
@@ -877,6 +942,7 @@ def test_background_cannot_supply_only_the_missing_count_quote() -> None:
     batch.owned_units[1].excerpt = "缺失记录不填补，最多缺失1次。"
     interpretation.statements[1].quoted_text = batch.owned_units[1].excerpt
     packet = _packet().model_dump(mode="json")
+    packet["items"][0]["computation"]["missing_ref"]["quote"] = batch.owned_units[1].excerpt
     packet["items"][0]["computation"]["max_missing_count"] = {
         "value": 1, "number_text": "1",
         "source": {"statement_index": 1, "quote": "最多缺失1次"},
@@ -1297,7 +1363,7 @@ def test_declared_counts_need_matching_numeral_and_source() -> None:
         bind_semantic_packet(batch, interpretation, [0, 1, 2], SourceSemanticPacket.model_validate(packet))
     calculation["declared_input_count"]["value"] = 3
     calculation["declared_input_count"]["source"]["statement_index"] = 1
-    with pytest.raises(ValueError, match="输入次数须引用"):
+    with pytest.raises(ValueError, match="输入次数须属于"):
         bind_semantic_packet(batch, interpretation, [0, 1, 2], SourceSemanticPacket.model_validate(packet))
 
 
@@ -1307,6 +1373,7 @@ def test_shared_missing_allowance_has_own_source_and_cannot_exceed_total() -> No
     batch.owned_units[1].excerpt = interpretation.statements[1].quoted_text
     packet = _packet().model_dump(mode="json")
     calculation = packet["items"][0]["computation"]
+    calculation["missing_ref"]["quote"] = interpretation.statements[1].quoted_text
     calculation["declared_input_count"] = {
         "value": 3, "number_text": "三",
         "source": {"statement_index": 0, "quote": "最近三次记录"},

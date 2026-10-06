@@ -10,7 +10,7 @@ from PIL import Image
 
 from app.domain.contracts.evidence import BoundingBox
 from app.evidence.artifacts import ArtifactStore
-from app.evidence.reading_view import ReadingRegion, make_reading_region, make_reading_view
+from app.evidence.reading_view import ReadingRegion, make_focus_reading_image, make_reading_region, make_reading_view
 from app.llm.independent_vlm import IndependentVlmChatResult, IndependentVlmSourceFidelityError
 from app.services.selective_vision_observation_service import SelectiveVisionObservationService
 from app.services.selective_vision_postprocess_executor import load_selective_vision_page_materials_for_revision
@@ -55,6 +55,29 @@ def test_region_rejects_fractional_edges_outside_page_and_forged_pixels():
         ReadingRegion(view, box, forged.image_bytes)
 
 
+@pytest.mark.parametrize("mode", ["RGB", "RGBA", "L", "LA"])
+@pytest.mark.parametrize("edges", [(10, 5, 40, 25), (0, 0, 40, 25), (10, 5, 80, 60)])
+def test_focus_frame_preserves_target_and_size(mode, edges):
+    source = Image.new(mode, (80, 60), {"RGB": (41, 61, 91), "RGBA": (41, 61, 91, 127), "L": 91, "LA": (91, 127)}[mode])
+    raw = io.BytesIO()
+    source.save(raw, "PNG")
+    original = raw.getvalue()
+    marked = make_focus_reading_image(original, BoundingBox(**dict(zip(("x0", "y0", "x1", "y1"), edges))))
+    with Image.open(io.BytesIO(marked)) as actual:
+        assert actual.size == source.size
+        assert actual.crop(edges).tobytes() == source.convert(actual.mode).crop(edges).tobytes()
+        color = (220, 30, 30, 255) if actual.mode == "RGBA" else (220, 30, 30)
+        assert any(actual.getpixel((x, y)) == color for x in range(actual.width) for y in range(actual.height))
+    assert raw.getvalue() == original
+    assert marked == make_focus_reading_image(original, BoundingBox(**dict(zip(("x0", "y0", "x1", "y1"), edges))))
+
+
+def test_focus_frame_rejects_fractional_or_outside_target():
+    for box in (BoundingBox(x0=1.5, y0=1, x1=20, y1=20), BoundingBox(x0=1, y0=1, x1=81, y1=20), BoundingBox(x0=0, y0=0, x1=80, y1=60)):
+        with pytest.raises(ValueError):
+            make_focus_reading_image(_image(), box)
+
+
 @pytest.mark.parametrize("finish,source_error,status", [
     ("stop", False, "read"), ("length", False, "failed"), ("stop", True, "failed"),
 ])
@@ -76,6 +99,7 @@ def test_local_receipt_is_not_page_observation_or_human_approval(
             model="fixture-model", finish_reason=finish,
             usage={"completion_tokens": 21, "api_key": "not-stored"},
             reasoning_content="private-thought-not-stored",
+            reported_model="provider-fixture", response_id="response-fixture", request_id="request-fixture",
         )
         if source_error:
             raise IndependentVlmSourceFidelityError("wrong source", rejected_response=response)
@@ -93,6 +117,9 @@ def test_local_receipt_is_not_page_observation_or_human_approval(
     assert payload["region_source_ref"] != page.source_ref
     assert payload["requested_max_tokens"] == 65536
     assert payload["usage"] == {"completion_tokens": 21}
+    assert payload["reported_model"] == "provider-fixture"
+    assert payload["response_id"] == "response-fixture"
+    assert payload["request_id"] == "request-fixture"
     assert "private-thought" not in json.dumps(payload)
     assert "api_key" not in json.dumps(payload)
     assert "没有研究者判断" in calls[0][0]

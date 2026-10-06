@@ -20,6 +20,58 @@ def test_v2_app_registers_fact_correction_executor(client):
     assert FACT_CORRECTION_JOB_TYPE in client.app.state.job_executors
 
 
+def test_unknown_correction_clears_assertion_but_preserves_source_and_history(client):
+    from app.workflow.runner import JobRunner
+
+    factory = client.app.state.session_factory
+    with factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "api-corr-unknown")
+        fact = _create_fact_with_candidate(
+            session, chain, fact_id=f"{chain['run_id']}-fact",
+            run_id=f"{chain['run_id']}-source", call_id=f"{chain['call_id']}-source",
+            gate_id=f"{chain['run_id']}-gate", cand_id=f"{chain['run_id']}-candidate",
+        )
+        original = PatientProfileService().generate(
+            session, authority=chain["authority"], created_at=NOW, generated_at=NOW,
+        )
+        subject, episode = chain["subject_id"], chain["review_episode_id"]
+        target, locator = fact.fact_id, chain["locator_id"]
+    profile_path = f"/api/v2/subjects/{subject}/patient-profile-revisions/"
+    old_response = client.get(profile_path + original.patient_profile_revision_id)
+    assert old_response.status_code == 200
+    old_profile = old_response.json()
+    base = f"/api/v2/subjects/{subject}/review-episodes/{episode}/fact-corrections"
+    body = {
+        "target_kind": "fact", "target_id": target, "locator_ids": [locator],
+        "polarity": "unknown", "value": None, "unit": None,
+        "supported_requirement_ids": [], "reason": "原记录不足以证明该断言",
+        "operator_id": "隔离核对人员",
+    }
+    preview = client.post(base + "/preview", json=body)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["new_snapshot"]["polarity"] == "unknown"
+    assert preview.json()["new_snapshot"]["value"] is None
+    assert preview.json()["new_snapshot"]["unit"] is None
+    submit = client.post(base, json=body)
+    assert submit.status_code == 201, submit.text
+    runner = JobRunner(factory, client.app.state.job_executors, worker_id="unknown-correction")
+    assert runner.run_job(submit.json()["job_id"])
+    history = client.get(base)
+    assert history.status_code == 200, history.text
+    correction = history.json()["items"][0]
+    assert correction["old_snapshot"]["value"] == "120/80"
+    assert correction["new_snapshot"]["value"] is None
+    assert correction["locator_ids"] == [locator]
+    current = client.get(profile_path + correction["patient_profile_revision_id"])
+    assert current.status_code == 200, current.text
+    items = [item for lane in current.json()["lanes"] for item in lane["items"]]
+    updated = next(item for item in items if item["source_id"] == correction["new_entity_id"])
+    assert updated["polarity"] == "unknown" and updated["value"] is None
+    assert updated["locator_ids"] == [locator] and updated["requirement_ids"] == []
+    assert not any(item["source_id"] == target for item in items)
+    assert client.get(profile_path + original.patient_profile_revision_id).json() == old_profile
+
+
 def test_preview_and_submit_and_history_are_chinese_and_idempotent(client):
     factory = client.app.state.session_factory
     with factory() as session, session.begin():

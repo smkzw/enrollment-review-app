@@ -21,7 +21,7 @@ from app.domain.contracts.enums import (
     TruthValue,
 )
 from app.domain.contracts.evidence import ClinicalFact
-from app.domain.contracts.evaluation_result import EvaluationResult, RepeatAtomEvaluation, FrequencyAtomEvaluation
+from app.domain.contracts.evaluation_result import EvaluationResult, RepeatAtomEvaluation, FrequencyAtomEvaluation, ComputationAtomEvaluation
 from app.domain.contracts.rules import (
     AtomicExpression,
     AtomicPredicate,
@@ -108,6 +108,13 @@ def _merge(results: list[EvaluationResult], truth: TruthValue) -> EvaluationResu
     )
 
 
+def _pending_source_computation(predicate: AtomicPredicate) -> EvaluationResult:
+    reason = ("computation_period_quantity_unsupported"
+              if predicate.source_computation.quantity_basis is not None
+              else "source_computation_operands_unverified")
+    return _result(TruthValue.UNKNOWN, reason)
+
+
 def _evaluate_logical(operator: LogicalOperator, results: list[EvaluationResult]) -> EvaluationResult:
     truths = [item.truth for item in results]
     if operator == LogicalOperator.ALL:
@@ -184,6 +191,8 @@ def compare_values(comparator: Comparator, observed: Any, expected: Any) -> Trut
 
 def evaluate_calculated_numeric_value(predicate: AtomicPredicate, *, value: Fraction, unit: str | None):
     """Compare exact arithmetic without putting a synthetic value in a source field."""
+    if predicate.source_computation is not None:
+        return _pending_source_computation(predicate)
     if not isinstance(value, Fraction):
         raise TypeError("计算结果须保留精确数值")
     if predicate.unit is not None and _canonical_unit(predicate.unit) != _canonical_unit(unit):
@@ -496,8 +505,27 @@ def evaluate_observed_value(
     unit: str | None, polarity: FactPolarity,
 ) -> EvaluationResult:
     """Value arithmetic only; callers own source, object and temporal selection."""
+    if predicate.semantic_proposition is not None:
+        return _result(TruthValue.UNKNOWN, "semantic_evidence_unverified")
     if polarity == FactPolarity.UNKNOWN:
         return _result(TruthValue.UNKNOWN, "fact_polarity_unknown")
+    if polarity == FactPolarity.NEGATED:
+        if value is False:
+            return _result(TruthValue.UNKNOWN, "negated_boolean_value_ambiguous")
+    if predicate.comparator != Comparator.EXISTS:
+        expected = predicate.value if predicate.comparator in {Comparator.IN, Comparator.NOT_IN} else [predicate.value]
+        def operand_kind(item):
+            if isinstance(item, bool):
+                return "boolean"
+            if isinstance(item, (int, float, Decimal, Fraction)):
+                return "number"
+            if isinstance(item, str):
+                return "text"
+            return None
+        kind = operand_kind(value)
+        if not isinstance(expected, list) or kind is None or any(operand_kind(item) != kind for item in expected):
+            reason = "negated_operand_type_unverified" if polarity == FactPolarity.NEGATED else "observed_operand_type_unverified"
+            return _result(TruthValue.UNKNOWN, reason)
     if predicate.unit is not None and _canonical_unit(predicate.unit) != _canonical_unit(unit):
         return _result(TruthValue.UNKNOWN, "unit_mismatch", observed_value=value, observed_unit=unit)
     comparison = _compare(predicate, value)
@@ -513,6 +541,8 @@ def evaluate_observed_value(
 def _evaluate_atomic(expression: AtomicExpression, context: EvaluationContext,
                      fact_ids: Sequence[str] | None = None) -> EvaluationResult:
     predicate = expression.predicate
+    if predicate.source_computation is not None:
+        return _pending_source_computation(predicate)
     if predicate.applicable_population is not None:
         return _result(TruthValue.UNKNOWN, "applicable_population_unverified")
     if predicate.repeat_scheme is not None:
@@ -626,6 +656,7 @@ def _evaluate_atomic(expression: AtomicExpression, context: EvaluationContext,
         )
     return _result(
         value_result.truth,
+        *value_result.reason_codes,
         used_fact_ids=[fact.fact_id for fact in matching],
         observed_value=fact.value,
         observed_unit=fact.unit,
@@ -648,6 +679,7 @@ def _evaluate_bound_predicates(
     proposition_evaluations: Mapping[str, EvaluationResult] | None = None,
     repeat_evaluations: Mapping[str, RepeatAtomEvaluation] | None = None,
     frequency_evaluations: Mapping[str, FrequencyAtomEvaluation] | None = None,
+    computation_evaluations: Mapping[str, ComputationAtomEvaluation] | None = None,
 ) -> dict[str, EvaluationResult]:
     """Calculate explicit selections when supplied; never fill their missing keys.
 
@@ -730,8 +762,31 @@ def _evaluate_bound_predicates(
                     or (key in unverified_predicate_ids | missing_judgment_predicate_ids
                         and item.result.truth != TruthValue.UNKNOWN)):
                 raise ValueError("频次计算不能跨越方案、原件或未核实状态")
+    computation_evaluations = dict(computation_evaluations or {})
+    computation_atoms = {atom.predicate.predicate_id: atom for atom in atoms
+                         if atom.predicate.source_computation is not None}
+    if computation_evaluations:
+        if (selections is None or not set(computation_evaluations) <= set(computation_atoms)
+                or set(computation_evaluations) & (
+                    set(frequency_evaluations) | set(repeat_evaluations) | set(proposition_evaluations))):
+            raise ValueError("计算结果须单独对应本次有来源的计算条件")
+        context_hash = canonical_hash(context.model_dump(mode="json"))
+        for key, item in computation_evaluations.items():
+            if (not isinstance(item, ComputationAtomEvaluation) or item.context_sha256 != context_hash
+                    or item.atom_sha256 != canonical_hash(computation_atoms[key].model_dump(mode="json"))
+                    or not set(item.source_fact_ids) <= set(context.accepted_fact_ids)
+                    or set(item.result.used_fact_ids) != set(selections[key])
+                    or (computation_atoms[key].predicate.source_computation.quantity_basis is not None
+                        and item.result.truth != TruthValue.UNKNOWN)
+                    or (key in unverified_predicate_ids | missing_judgment_predicate_ids
+                        and item.result.truth != TruthValue.UNKNOWN)):
+                raise ValueError("计算结果不能跨越方案、输入来源或未核实状态")
     predicate_evaluations = {
         atom.predicate.predicate_id: (
+            computation_evaluations[atom.predicate.predicate_id].result
+            if atom.predicate.predicate_id in computation_evaluations else
+            _pending_source_computation(atom.predicate)
+            if atom.predicate.source_computation is not None else
             _result(TruthValue.UNKNOWN, "applicable_population_unverified")
             if atom.predicate.applicable_population is not None else
             frequency_evaluations[atom.predicate.predicate_id].result
@@ -791,6 +846,7 @@ def evaluate_component(
     proposition_evaluations: Mapping[str, EvaluationResult] | None = None,
     repeat_evaluations: Mapping[str, RepeatAtomEvaluation] | None = None,
     frequency_evaluations: Mapping[str, FrequencyAtomEvaluation] | None = None,
+    computation_evaluations: Mapping[str, ComputationAtomEvaluation] | None = None,
 ) -> ComponentEvaluation:
     """Keep eligibility composition limited to the original trigger and exception."""
     expressions = [component.expression]
@@ -803,6 +859,7 @@ def evaluate_component(
         proposition_evaluations=proposition_evaluations,
         repeat_evaluations=repeat_evaluations,
         frequency_evaluations=frequency_evaluations,
+        computation_evaluations=computation_evaluations,
     )
 
     return ComponentEvaluation(

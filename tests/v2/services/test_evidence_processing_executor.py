@@ -40,7 +40,7 @@ from app.domain.contracts.evidence_ingestion import (
     SourceDocumentVersion,
 )
 from app.domain.contracts.evidence_processing import OCRRun
-from app.domain.contracts.evidence_upload import EVIDENCE_PROCESSING_JOB_TYPE
+from app.domain.contracts.evidence_upload import DIRECT_VISION_PREPARATION, EVIDENCE_PROCESSING_JOB_TYPE
 from app.domain.publication import (
     evidence_processing_manifest_hash,
     evidence_snapshot_collection_hash,
@@ -282,7 +282,7 @@ def make_snapshot(env, *, snapshot_id: str, members: list[tuple[str, str, Snapsh
     return snapshot
 
 
-def create_job(env, snapshot_id: str, *, key: str) -> str:
+def create_job(env, snapshot_id: str, *, key: str, preparation_policy=None) -> str:
     project_id, subject_id, episode_id = env["scope"]
     service = JobService(env["factory"])
     result = service.create_job(
@@ -294,6 +294,7 @@ def create_job(env, snapshot_id: str, *, key: str) -> str:
             "subject_id": subject_id,
             "review_episode_id": episode_id,
             "upload_mode": "full",
+            **({"preparation_policy": preparation_policy} if preparation_policy is not None else {}),
         },
         steps=[
             StepSpec(
@@ -370,7 +371,8 @@ def _expire_job_lease(env, job_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_txt_file_creates_cached_source_text_page_without_external_ocr(env):
+@pytest.mark.parametrize("preparation_policy", [None, DIRECT_VISION_PREPARATION])
+def test_txt_file_creates_cached_source_text_page_without_external_ocr(env, preparation_policy):
     source_text = "受试者化验单\nGLUCOSE 5.6 mmol/L\n"
     add_file(
         env,
@@ -382,7 +384,7 @@ def test_txt_file_creates_cached_source_text_page_without_external_ocr(env):
     snapshot = make_snapshot(
         env, snapshot_id="snap-txt", members=[("logical-txt", "doc-txt", SnapshotMemberOrigin.ADDED)]
     )
-    job_id = create_job(env, snapshot.evidence_snapshot_id, key="k-txt")
+    job_id = create_job(env, snapshot.evidence_snapshot_id, key="k-txt", preparation_policy=preparation_policy)
     inference = FakeInference()
     runner = build_runner(env, inference=inference, gate=ForbiddenGate())
     assert runner.run_job(job_id) is True
@@ -421,10 +423,11 @@ def test_txt_file_creates_cached_source_text_page_without_external_ocr(env):
     assert profile.extraction_route == ExtractionRoute.SOURCE_TEXT
     assert profile.layout_parser_version is None
     assert revision.is_activatable is False
+    assert revision.preparation_policy == (preparation_policy or "legacy-text/v1")
 
     first_page_id = page.ocr_page_id
     first_profile_count = count(env, OCRProfileRecord)
-    job_id_2 = create_job(env, snapshot.evidence_snapshot_id, key="k-txt-2")
+    job_id_2 = create_job(env, snapshot.evidence_snapshot_id, key="k-txt-2", preparation_policy=preparation_policy)
     assert build_runner(env, inference=inference, gate=ForbiddenGate()).run_job(job_id_2) is True
     assert inference.calls == []
     assert ocr_runs(env, job_id_2) == []
@@ -438,7 +441,8 @@ def test_txt_file_creates_cached_source_text_page_without_external_ocr(env):
     assert replayed.manifest[0].ocr_page_id == first_page_id
 
 
-def test_native_pdf_creates_replayable_pages_without_external_ocr(env):
+@pytest.mark.parametrize("preparation_policy", [None, DIRECT_VISION_PREPARATION])
+def test_native_pdf_creates_replayable_pages_without_external_ocr(env, preparation_policy):
     content = native_pdf_bytes()
     add_file(
         env,
@@ -452,7 +456,7 @@ def test_native_pdf_creates_replayable_pages_without_external_ocr(env):
         snapshot_id="snap-native-pdf",
         members=[("logical-native-pdf", "doc-native-pdf", SnapshotMemberOrigin.ADDED)],
     )
-    job_id = create_job(env, snapshot.evidence_snapshot_id, key="k-native-pdf")
+    job_id = create_job(env, snapshot.evidence_snapshot_id, key="k-native-pdf", preparation_policy=preparation_policy)
     inference = FakeInference()
 
     assert build_runner(env, inference=inference, gate=ForbiddenGate()).run_job(job_id) is True
@@ -488,6 +492,7 @@ def test_native_pdf_creates_replayable_pages_without_external_ocr(env):
     assert len(entries) == 2
     assert all(entry.ocr_page_id is not None for entry in entries)
     assert revision.is_activatable is False
+    assert revision.preparation_policy == (preparation_policy or "legacy-text/v1")
     assert locators
     source_lines = [locator for locator in locators if locator.target_id.startswith("source-line:")]
     native_locators = [locator for locator in locators if locator not in source_lines]
@@ -515,7 +520,7 @@ def test_native_pdf_creates_replayable_pages_without_external_ocr(env):
     first_page_ids = [page.ocr_page_id for page in pages]
     first_profile_count = count(env, OCRProfileRecord)
     first_locator_count = count(env, EvidenceLocatorArtifactRecord)
-    job_id_2 = create_job(env, snapshot.evidence_snapshot_id, key="k-native-pdf-2")
+    job_id_2 = create_job(env, snapshot.evidence_snapshot_id, key="k-native-pdf-2", preparation_policy=preparation_policy)
     assert build_runner(env, inference=inference, gate=ForbiddenGate()).run_job(job_id_2) is True
     assert inference.calls == []
     assert ocr_runs(env, job_id_2) == []
@@ -565,7 +570,8 @@ def test_processing_revision_preserves_confirmed_document_order(env):
     ]
 
 
-def test_visual_page_ocr_through_gate_and_cache_dedup(env):
+@pytest.mark.parametrize("preparation_policy", [None, DIRECT_VISION_PREPARATION])
+def test_visual_page_ocr_through_gate_and_cache_dedup(env, preparation_policy):
     content = png_bytes()
     add_file(
         env, content=content, media_type="image/png", file_name="photo.png", version_id="doc-img"
@@ -573,7 +579,7 @@ def test_visual_page_ocr_through_gate_and_cache_dedup(env):
     snapshot = make_snapshot(
         env, snapshot_id="snap-img", members=[("logical-img", "doc-img", SnapshotMemberOrigin.ADDED)]
     )
-    job_id = create_job(env, snapshot.evidence_snapshot_id, key="k-img")
+    job_id = create_job(env, snapshot.evidence_snapshot_id, key="k-img", preparation_policy=preparation_policy)
     inference = FakeInference(text="GLUCOSE 5.6 mmol/L")
     runner = build_runner(env, inference=inference)
     assert runner.run_job(job_id) is True
@@ -585,12 +591,51 @@ def test_visual_page_ocr_through_gate_and_cache_dedup(env):
     assert len(runs) == 1
     assert runs[0].status == OcrRunStatus.SUCCEEDED
     assert runs[0].page_succeeded == 1
+    with env["factory"]() as session:
+        revision = EvidenceProcessingRevisionRepository(session).list_by_snapshot(snapshot.evidence_snapshot_id)[0]
+        assert revision.preparation_policy == (preparation_policy or "legacy-text/v1")
+        assert revision.manifest[0].ocr_page_id is not None
+        assert revision.is_activatable is False
     # 第二次运行（新任务同一快照）：缓存命中，不再推理。
-    job_id2 = create_job(env, snapshot.evidence_snapshot_id, key="k-img-2")
+    job_id2 = create_job(env, snapshot.evidence_snapshot_id, key="k-img-2", preparation_policy=preparation_policy)
     runner2 = build_runner(env, inference=inference)
     assert runner2.run_job(job_id2) is True
     assert inference.calls == [1]
     assert succeeded_pages(env) == 1
+
+
+@pytest.mark.parametrize("preparation_policy", [None, DIRECT_VISION_PREPARATION])
+@pytest.mark.parametrize("reading_status", [None, OCRPageStatus.PROCESSING])
+def test_render_success_without_completed_primary_reading_cannot_freeze(
+    env, monkeypatch, preparation_policy, reading_status,
+):
+    from dataclasses import replace
+    from app.services import evidence_processing_executor as module
+
+    add_file(env, content=png_bytes(), media_type="image/png", file_name="source.png", version_id="doc-incomplete")
+    snapshot = make_snapshot(env, snapshot_id="snap-incomplete", members=[
+        ("logical-incomplete", "doc-incomplete", SnapshotMemberOrigin.ADDED),
+    ])
+    job_id = create_job(env, snapshot.evidence_snapshot_id, key="k-incomplete", preparation_policy=preparation_policy)
+    process = module._process_visual_page
+
+    def incomplete_result(**kwargs):
+        outcome = process(**kwargs)
+        page = (outcome.ocr_page.model_copy(update={"status": reading_status})
+                if reading_status is not None else None)
+        return replace(outcome, ocr_page=page)
+
+    monkeypatch.setattr(module, "_process_visual_page", incomplete_result)
+    assert build_runner(env).run_job(job_id) is True
+    assert job_state(env, job_id) == "failed_final"
+    assert snapshot_state(env, snapshot.evidence_snapshot_id) == SnapshotStatus.TERMINAL_FAILURE
+    # The successful underlying response stays saved; the incomplete handoff is
+    # not a complete revision and cannot erase a reusable primary reading.
+    assert succeeded_pages(env) == 1
+    assert count(env, EvidenceProcessingRevisionRecord) == 0
+    with env["factory"]() as session:
+        step = JobStore(session).list_steps(job_id)[0]
+        assert step.error_code == "PAGE_PROCESSING_FAILED"
 
 
 def test_same_content_new_version_reuses_inference_and_owns_success_page(env):
@@ -804,7 +849,8 @@ def test_two_frame_tiff_processes_both_pages_ordered(env):
 # ---------------------------------------------------------------------------
 
 
-def test_retry_only_reruns_failed_pages(env):
+@pytest.mark.parametrize("preparation_policy", [None, DIRECT_VISION_PREPARATION])
+def test_retry_only_reruns_failed_pages(env, preparation_policy):
     content = tiff_bytes(2)
     add_file(
         env, content=content, media_type="image/tiff", file_name="scan.tif", version_id="doc-tif2"
@@ -812,7 +858,7 @@ def test_retry_only_reruns_failed_pages(env):
     snapshot = make_snapshot(
         env, snapshot_id="snap-r", members=[("logical-r", "doc-tif2", SnapshotMemberOrigin.ADDED)]
     )
-    job_id = create_job(env, snapshot.evidence_snapshot_id, key="k-r")
+    job_id = create_job(env, snapshot.evidence_snapshot_id, key="k-r", preparation_policy=preparation_policy)
     inference = FakeInference(fail_pages={2})
     runner = build_runner(env, inference=inference)
 

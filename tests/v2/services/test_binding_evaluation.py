@@ -11,6 +11,7 @@ from app.services.binding_evaluation import (
     _evaluated_route,
     _score_entries,
     _validated_gold_split,
+    _selected_fact_ids_by_identity,
 )
 
 
@@ -44,6 +45,11 @@ def _verified():
             [_Fact("fact:1"), _Fact("fact:2"), _Fact("fact:3")],
         ),
     }
+
+
+def test_scoring_refuses_handmade_pair_agreement_as_usable_identity():
+    with pytest.raises(BindingEvaluationError, match="实际工作稿选择"):
+        _selected_fact_ids_by_identity({"summary": {"dual_agreement": True}})
 
 
 def _gold():

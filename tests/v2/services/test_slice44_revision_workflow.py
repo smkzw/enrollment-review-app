@@ -19,6 +19,7 @@ from app.domain.contracts.enums import (
     SnapshotStatus,
 )
 from app.domain.contracts.evidence_locator import OCRRiskReview
+from app.domain.contracts.evidence_locator import ProcessingCandidateAttemptManifest
 from app.services.evidence_activation_service import EvidenceActivationService
 from app.services.evidence_revision_workflow import (
     BuildNeedsAttentionError,
@@ -94,6 +95,58 @@ def test_workflow_start_creates_processing_candidate(stack, session_factory):
     candidate = workflow.start(_request(keys))
     assert candidate.status == EvidenceProcessingCandidateStatus.PROCESSING
     assert candidate.base_processing_revision_id == "rev-1"
+
+
+def test_scoped_source_freezes_unresolved_flags_but_blocks_affected_candidate(stack, session_factory):
+    from types import SimpleNamespace
+    from app.domain.contracts.enums import GateOutcome
+    from app.domain.gates.fact_evidence_closure import validate_blocking_ocr_for_candidate
+
+    _session, _fixture, keys = stack
+    scan = _prepare_reviewed_closure(session_factory, keys, review=False)
+    with session_factory() as session, session.begin():
+        repo = EvidenceLocatorRepository(session, keys["artifact_store"])
+        repo.create(_locator(keys, locator_id="loc-text", text_start=0, text_end=3, excerpt="ALT"))
+        repo.create(_locator(keys, locator_id="loc-number", text_start=4, text_end=7, excerpt="5.6"))
+    workflow = EvidenceRevisionWorkflow(session_factory, keys["artifact_store"])
+    candidate = workflow.start(_request(keys,
+        selected_locator_ids=["loc-number", "loc-text"],
+        attempt_manifest=ProcessingCandidateAttemptManifest(source_qualification_mode="scoped_text_v1"),
+    ))
+    ready = workflow.run_build(candidate.candidate_id)
+    assert ready.status == EvidenceProcessingCandidateStatus.READY
+    with session_factory() as session:
+        revision = CompleteEvidenceProcessingRevisionRepository(session, keys["artifact_store"]).get(ready.complete_revision_id)
+        assert revision.unresolved_blocking_risk_ids == sorted(
+            f"{scan.scan_id}:{flag.risk_id}" for flag in scan.flags if flag.level == OcrRiskLevel.BLOCKING
+        )
+        for locator_id, expected in (("loc-text", GateOutcome.ACCEPTED), ("loc-number", GateOutcome.BLOCKED)):
+            observation = SimpleNamespace(locator_ids=[locator_id], canonical_value=True)
+            assert validate_blocking_ocr_for_candidate(session, observation, revision)[0] == expected
+        numeric = SimpleNamespace(locator_ids=["loc-text"], canonical_value=5.6, unit="mmol/L")
+        assert validate_blocking_ocr_for_candidate(session, numeric, revision)[0] == GateOutcome.BLOCKED
+        with pytest.raises(Exception, match="未核实风险集合"):
+            CompleteEvidenceProcessingRevisionRepository(session, keys["artifact_store"])._verify_risk_closure(
+                revision.model_copy(update={"unresolved_blocking_risk_ids": []}), require_current_heads=False,
+            )
+
+
+def test_strict_attempt_serialization_and_hash_remain_compatible():
+    from app.domain.contracts.evidence_locator import processing_candidate_input_hash
+    from app.domain.publication import canonical_hash
+
+    old_manifest = {"schema_version": "fixture/v1", "metadata_revision_ids": [], "risk_scan_ids": [], "risk_review_ids": [],
+        "correction_ids": [], "locator_ids": [], "referenced_document_revision_ids": [],
+        "resolution_revision_ids": [], "trigger_sidecar_id": None}
+    strict = ProcessingCandidateAttemptManifest.model_validate(old_manifest)
+    assert strict.model_dump(mode="json") == old_manifest
+    inputs = dict(evidence_snapshot_id="snap", base_processing_revision_id="base",
+        expected_revision=1, scanner_rule_version="v", selected_locator_ids=[])
+    old_hash = canonical_hash({"snapshot": "snap", "base": "base", "expected_revision": 1,
+        "scanner_rule_version": "v", "locators": [], "attempt_manifest": old_manifest})
+    assert processing_candidate_input_hash(**inputs, attempt_manifest=strict) == old_hash
+    scoped = strict.model_copy(update={"source_qualification_mode": "scoped_text_v1"})
+    assert processing_candidate_input_hash(**inputs, attempt_manifest=scoped) != old_hash
 
 def test_workflow_run_build_freeze_closure_ready(stack, session_factory):
     _session, _fixture, keys = stack

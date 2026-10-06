@@ -100,6 +100,12 @@ export function ProtocolDraftWorkbench({
         </p>
       </header>
 
+      {draft.importedUnpublishedProposal && (
+        <p className="protocol-draft-actions__status" role="status">
+          本草稿由保留的未发布提案导入，不是本次重新读取的结果。请对照原文继续核对；正式规则尚未改变。
+        </p>
+      )}
+
       <section className="protocol-draft-meta" aria-label="草稿摘要">
         <div className="protocol-draft-meta__item">
           <span className="protocol-draft-meta__label">规则条目</span>

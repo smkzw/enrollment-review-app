@@ -1009,9 +1009,12 @@ export function EligibilityWorkbenchPage() {
           打开报告
         </RouteLink>
       </div>
-      {reviewData.workDraftState === "source_changed" && (
-        <section className="eligibility-context-bar" role="status" aria-label="审核资料已变化">
-          <p>资料已更正，先前的审核工作稿不再适用于本次资料。请重新核对后再查看结果。</p>
+      {(reviewData.workDraftState === "source_changed" || reviewData.workDraftState === "method_changed") && (
+        <section className="eligibility-context-bar" role="status"
+          aria-label={reviewData.workDraftState === "method_changed" ? "审核方式已更新" : "审核资料已变化"}>
+          <p>{reviewData.workDraftState === "method_changed"
+            ? "审核方式已更新，先前的工作稿仍保留，但未按当前方式核对。请重新准备审核后再查看本次结果。"
+            : "资料已更正，先前的审核工作稿不再适用于本次资料。请重新核对后再查看结果。"}</p>
           <RouteLink to="/reports"
             params={{ project: selectedProject.projectId, subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId }}
             className="button button--quiet" ariaLabel="前往重新审核">

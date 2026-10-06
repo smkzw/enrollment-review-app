@@ -12,6 +12,7 @@ from app.domain.contracts.enums import ReviewStage
 from app.protocols.source_time_fragments import frozen_review_stage_aliases
 
 SCOPE_REVIEW_VERSION = "official-source-scope-review/v3"
+SCOPE_VALIDATION_POLICY = "component-local/v2"
 
 
 class OfficialScopeReviewError(ValueError):
@@ -136,7 +137,10 @@ def scope_review_prompt(basis: dict, *, source_reading: OfficialScopeReading | N
 
 
 def validate_scope_reading(reading: OfficialScopeReading, basis: dict, *, proposal: bool,
-                           component_id: str | None = None) -> None:
+                           component_id: str | None = None,
+                           validation_policy: str = "component-local/v1") -> None:
+    if validation_policy not in {"component-local/v1", SCOPE_VALIDATION_POLICY}:
+        raise OfficialScopeReviewError("SOURCE_SCOPE_REVIEW_INVALID")
     expected = {child["component_id"]: child for child in basis["children"]}
     if {item.component_id for item in reading.items} != set(expected):
         raise OfficialScopeReviewError("SOURCE_SCOPE_REVIEW_TARGET_MISMATCH")
@@ -170,6 +174,9 @@ def validate_scope_reading(reading: OfficialScopeReading, basis: dict, *, propos
         if proposal and item.proposal_agreement is True:
             actual = {value["due_stage"] for value in child["component"]["evidence_requirements"]}
             if actual != {stage.value for stage in item.required_stages}:
+                aliases = basis.get("review_stage_aliases", {})
+                if {aliases.get(stage, stage) for stage in actual} == {stage.value for stage in item.required_stages}:
+                    raise OfficialScopeReviewError("SOURCE_SCOPE_REVIEW_NODE_BINDING_MISMATCH")
                 raise OfficialScopeReviewError("SOURCE_SCOPE_REVIEW_PROPOSAL_MISMATCH")
         expected_predicates = {predicate["predicate_id"]: predicate for predicate in child["predicates"]}
         assignments = {assignment.predicate_id: assignment for assignment in item.predicate_assignments}
@@ -203,8 +210,13 @@ def validate_scope_reading(reading: OfficialScopeReading, basis: dict, *, propos
         for disposition in dispositions.values():
             if disposition.disposition != expected_disposition or not valid_citations(disposition.supporting_citations):
                 raise OfficialScopeReviewError("SOURCE_SCOPE_REVIEW_DISPOSITION_INVALID")
+            # Both citation collections have already been checked against the
+            # frozen source. A heading witness need not be duplicated in v2.
+            witnesses = (disposition.supporting_citations + item.citations
+                         if validation_policy == SCOPE_VALIDATION_POLICY
+                         else disposition.supporting_citations)
             if not any(cite.source_span_id == disposition.source_span_id and disposition.excerpt in cite.excerpt
-                       for cite in disposition.supporting_citations):
+                       for cite in witnesses):
                 raise OfficialScopeReviewError("SOURCE_SCOPE_REVIEW_HEADING_MISSING")
         if item.relation == "context_only" and not set(basis["heading_stages"]) <= {stage.value for stage in item.required_stages}:
             raise OfficialScopeReviewError("SOURCE_SCOPE_REVIEW_NARROWING_UNVERIFIED")
@@ -264,14 +276,16 @@ def read_scope_receipt(basis, stage, receipt, read, *, source_reading=None):
     return OfficialScopeReading.model_validate_json(response["text"]), response["session_id"], options
 
 
-def scope_item_rejections(reading, basis, *, proposal):
+def scope_item_rejections(reading, basis, *, proposal,
+                          validation_policy: str = "component-local/v1"):
     # Missing/foreign targets and Schema errors remain whole-receipt failures.
     if {item.component_id for item in reading.items} != {item["component_id"] for item in basis["children"]}:
         raise OfficialScopeReviewError("SOURCE_SCOPE_REVIEW_TARGET_MISMATCH")
     rejected = {}
     for item in reading.items:
         try:
-            validate_scope_reading(reading, basis, proposal=proposal, component_id=item.component_id)
+            validate_scope_reading(reading, basis, proposal=proposal, component_id=item.component_id,
+                                   validation_policy=validation_policy)
         except OfficialScopeReviewError as exc:
             rejected[item.component_id] = exc.code
     return rejected
@@ -288,7 +302,7 @@ def reviewed_scope_stages(source, draft, rule, component, headings, read: Callab
         basis = scope_review_basis(source, draft, rule, headings, heading_stages=heading_stages)
         if (record["version"] != SCOPE_REVIEW_VERSION
                 or record["basis_sha256"] != canonical_hash(basis)
-                or record.get("validation_policy") not in (None, "component-local/v1")):
+                or record.get("validation_policy") not in (None, "component-local/v1", SCOPE_VALIDATION_POLICY)):
             raise ValueError("stale scope review")
         readings, sessions = [], []
         rejection_code = None
@@ -296,8 +310,9 @@ def reviewed_scope_stages(source, draft, rule, component, headings, read: Callab
             reading, session_id, _options = read_scope_receipt(
                 basis, stage, receipt, read, source_reading=readings[0] if readings else None)
             sessions.append(session_id)
-            if record.get("validation_policy") == "component-local/v1":
-                rejected = scope_item_rejections(reading, basis, proposal=stage == "proposal")
+            if record.get("validation_policy") in {"component-local/v1", SCOPE_VALIDATION_POLICY}:
+                rejected = scope_item_rejections(reading, basis, proposal=stage == "proposal",
+                                                validation_policy=record["validation_policy"])
                 if component.rule_component_id in rejected:
                     rejection_code = rejection_code or rejected[component.rule_component_id]
             else:

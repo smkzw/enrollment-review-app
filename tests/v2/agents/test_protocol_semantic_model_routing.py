@@ -25,6 +25,7 @@ from app.agents.protocol_deconstructor import (
     _semantic_batch_cache_key,
 )
 from app.agents.protocol_semantic_model_router import (
+    NON_REPLAYABLE_ROUTE_ERRORS,
     GRADE_COMPLEX,
     GRADE_SHORT,
     ProtocolSemanticGradeDecision,
@@ -52,6 +53,16 @@ from app.workflow.runner import StepContext
 
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.mark.parametrize("code", sorted(NON_REPLAYABLE_ROUTE_ERRORS))
+def test_terminal_last_call_cannot_be_hidden_by_retained_success_status(code):
+    result = SimpleNamespace(
+        status="可以进入审阅", same_session_id="retained-prior-session",
+        final_draft=object(), final_gate_result=SimpleNamespace(publishable=True),
+        attempts=[SimpleNamespace(outcome="会话异常", call_metadata={"error_code": code})],
+    )
+    assert summarize_run_result_for_route(result) == ("failed", code, "retained-prior-session")
 ROUTER_SOURCE = ROOT / "app" / "agents" / "protocol_semantic_model_router.py"
 EXECUTOR_SOURCE = ROOT / "app" / "services" / "protocol_deconstruction_executor.py"
 
@@ -179,6 +190,7 @@ def test_explicit_route_spec_keeps_ordered_fallback_chain(monkeypatch):
 
 def test_short_prompt_task_defaults_to_glm_high_without_third_model(monkeypatch):
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_MODE", "graded")
+    monkeypatch.setattr(router, "DECONSTRUCT_GLM_PROVIDER", "cms-router")
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_SHORT", "")
     monkeypatch.setattr(router, "DECONSTRUCT_SHORT_PROMPT_MAX_INPUT_TOKENS", 4096)
     monkeypatch.setattr(router, "DECONSTRUCT_GLM_MODEL", "glm-5.3-flash")
@@ -195,7 +207,7 @@ def test_short_prompt_task_defaults_to_glm_high_without_third_model(monkeypatch)
     assert "all_short_gates_passed" in decision.reasons
     # 默认短提示路由同样只选 GLM high，不隐式切换 MTPLX/DeepSeek。
     assert [item.identity for item in candidates] == [
-        "zhipu-coding-plan:glm-5.3-flash:high",
+        "cms-router:glm-5.3-flash:high",
     ]
 
 
@@ -560,7 +572,9 @@ def test_route_continues_after_non_publishable_draft(monkeypatch, data_paths):
     assert audit["final_identity"] == "deepseek:deepseek-v4-flash:high"
 
 
-def test_semantic_cache_identity_and_batch_keys_do_not_reuse_across_models():
+def test_semantic_cache_identity_and_batch_keys_do_not_reuse_across_models(monkeypatch):
+    monkeypatch.setattr("app.llm.mtplx_model_lifecycle.mtplx_deployment_identity",
+                        lambda *args: {"model": args[2]} if args[0] == "mtplx" else None)
     glm = transport_module.DeepSeekProtocolAgentTransport(
         client=object(),
         backend="zhipu-coding-plan",

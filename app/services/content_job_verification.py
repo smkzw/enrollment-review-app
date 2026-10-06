@@ -26,6 +26,9 @@ def verify_completed_content_job(session, artifact_store, job_id, *, definition)
     )
     if payload.get("batches") != [batch.model_dump(mode="json") for batch in batches]:
         raise InvalidJobDefinitionError("原文核实分批与本次材料不一致")
+    request_fields = definition.request_identity_fields(pairs, batches)
+    if any(payload.get(key) != value for key, value in request_fields.items()):
+        raise InvalidJobDefinitionError("原文核实的实际请求已变化，不能复用旧结果")
     checkpoint = store.get_last_checkpoint(job_id, "summary")
     if checkpoint is None:
         raise InvalidJobDefinitionError("原文核实尚未保存完整结果")

@@ -19,6 +19,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.domain.contracts.review_method_adoption import (
+    BINDING_SCORING_REPORT_VERSION,
     BindingEvaluationManifest,
     EvaluatedBindingMethod,
     EvaluatedRoute,
@@ -28,6 +29,9 @@ from app.domain.publication import canonical_hash
 from app.services.binding_qualification_support import (
     verify_completed_binding_qualification,
 )
+from app.services.qualified_binding_selection import (
+    ReceiptVerifiedWorkDraftSelections, build_receipt_verified_work_draft_selections,
+)
 from app.services.frozen_review_calculation import EVALUATOR_VERSION
 from app.services.frozen_review_publication import PUBLICATION_VERSION
 from app.domain.contracts.qualified_binding_selection import (
@@ -35,7 +39,7 @@ from app.domain.contracts.qualified_binding_selection import (
 )
 
 GOLD_SPLIT_VERSION = "binding-gold-split/v1"
-SCORING_REPORT_VERSION = "binding-evaluation-scoring-report/v1"
+SCORING_REPORT_VERSION = BINDING_SCORING_REPORT_VERSION
 
 _REQUIRED_ROUTE_FIELDS = (
     "provider", "base_url", "model", "reasoning_effort",
@@ -98,12 +102,14 @@ def _validated_gold_split(gold_split: dict[str, Any], verified: dict[str, Any]) 
     return gold_split
 
 
-def _selected_fact_ids_by_identity(verified: dict[str, Any]) -> dict[str, set[str]]:
+def _selected_fact_ids_by_identity(selection: ReceiptVerifiedWorkDraftSelections) -> dict[str, set[str]]:
+    if not isinstance(selection, ReceiptVerifiedWorkDraftSelections):
+        raise BindingEvaluationError("评测须消费回执核实后的实际工作稿选择")
+    selection.require_unchanged()
     selections: dict[str, set[str]] = {}
-    for record in verified["summary"].pair_records:
-        if not (record.structurally_valid and record.dual_agreement):
-            continue
-        selections.setdefault(record.identity_sha256, set()).add(record.fact_id)
+    for outcome in selection.identity_outcomes:
+        if outcome.status == "usable":
+            selections[outcome.identity_sha256] = set(outcome.fact_ids)
     return selections
 
 
@@ -171,7 +177,10 @@ def build_binding_evaluation_manifest(
         require_candidate_route_receipts=True,
     )
     gold_split = _validated_gold_split(gold_split, verified)
-    selections = _selected_fact_ids_by_identity(verified)
+    selection = build_receipt_verified_work_draft_selections(
+        session, artifact_store, qualification_job_id=qualification_job_id,
+    )
+    selections = _selected_fact_ids_by_identity(selection)
     per_entry, recall, precision, silent_missing, forbidden_hits = _score_entries(
         gold_split, selections,
     )

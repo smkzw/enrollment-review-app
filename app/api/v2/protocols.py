@@ -40,6 +40,7 @@ from app.api.v2.protocol_schemas import (
     SourcesResponse,
     StartDeconstructionResponse,
     StartFeedbackRevisionRequest,
+    StartSavedCandidateRecoveryRequest,
 )
 from app.api.v2.vocabulary import (
     DRAFT_REASON_LABELS,
@@ -295,6 +296,7 @@ def _draft_dto(view) -> DraftRevisionResponse:
         reason_label=DRAFT_REASON_LABELS.get(
             revision.reason.value, revision.reason.value
         ),
+        imported_unpublished_proposal=(revision.reason.value == "initial_save" and revision.feedback_note is not None),
         actor=revision.actor,
         created_at=_as_utc(revision.created_at),
         study_phase=revision.study_phase.value,
@@ -342,6 +344,22 @@ def _integrity_dto(view) -> IntegrityResponse:
         summary=summary,
         checks=[IntegrityCheckDTO(**item) for item in view.checks],
         issues=[IntegrityIssueDTO(**item) for item in view.issues],
+    )
+
+
+@router.post("/{job_id}/recover-saved-candidate", response_model=StartDeconstructionResponse,
+             status_code=http_status.HTTP_201_CREATED)
+def recover_saved_candidate(
+    job_id: str, body: StartSavedCandidateRecoveryRequest, request: Request, response: Response,
+) -> StartDeconstructionResponse:
+    result = _service(request).start_saved_candidate_recovery(source_job_id=job_id, **body.model_dump())
+    from app.api.v2.vocabulary import JOB_STATE_LABELS
+
+    if not result.created:
+        response.status_code = http_status.HTTP_200_OK
+    return StartDeconstructionResponse(
+        job_id=result.job_id, state=result.state, state_label=JOB_STATE_LABELS[result.state],
+        created=result.created, source_artifact_id=result.source_artifact_id, file_name=result.file_name,
     )
 
 

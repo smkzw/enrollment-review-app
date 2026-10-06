@@ -31,7 +31,7 @@ SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
 SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v20"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
-SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v3"
+SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v5"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -1406,6 +1406,7 @@ def validate_source_target_review(
             basis = normalize_source_excerpt(item.non_control_basis_excerpt or "")
             if (statement.decision_functions != ["background"]
                     or statement.force not in {"descriptive", "unclear"}
+                    or statement.unresolved
                     or not basis or basis not in quoted
                     or entry.action_candidate_indexes or entry.candidate_indexes
                     or entry.exact_official_excerpt_matches
@@ -1657,6 +1658,43 @@ def validate_source_target_review(
                 reject(item, "TIME_INVENTED", "source_time_excerpt", "无明确时间措辞的陈述不得凭空补时间")
 
 
+def validated_source_review_seed(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    coverage: list[SourceStatementCoverage],
+    review: SourceTargetReview,
+) -> SourceTargetReview | None:
+    """Retain individually current decisions for recovery, never final adoption.
+
+    Missing items are allowed in a recovery seed. Duplicate or foreign indexes
+    invalidate its scope; a semantically invalid item cannot discard a valid
+    sibling. The full-review validator remains mandatory at final consumption.
+    """
+    expected = set(target_review_indexes(interpretation, coverage, batch))
+    indexes = [item.statement_index for item in review.items]
+    coverage_indexes = [entry.statement_index for entry in coverage]
+    if (len(coverage_indexes) != len(set(coverage_indexes))
+            or len(indexes) != len(set(indexes))
+            or not set(indexes).issubset(expected)):
+        raise SourceTargetReviewValidationError(
+            "恢复用来源核对含重复或本次范围外的陈述",
+            code="REVIEW_SCOPE_INVALID", statement_index=None, json_path="/items",
+        )
+    coverage_by_index = {entry.statement_index: entry for entry in coverage}
+    kept = []
+    for item in review.items:
+        single = SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[item])
+        try:
+            validate_source_target_review(
+                batch, interpretation, [coverage_by_index[item.statement_index]], single,
+            )
+        except SourceTargetReviewValidationError:
+            continue
+        kept.append(item)
+    return (SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=kept)
+            if kept else None)
+
+
 def validate_source_definition_consumers(
     batch: ProtocolControlDispositionBatch,
     interpretation: SourceInterpretation,
@@ -1794,9 +1832,13 @@ def normalize_source_excerpt(value: str) -> str:
 
 def target_action_established(batch, statement, target) -> bool:
     """Proof for a label-only link, not a general semantic equivalence test."""
+    from app.protocols.protocol_control_planning import detect_required_action_kinds
+
     source = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
     required = set(batch.owned_required_action_kinds_by_structure_unit_id.get(
         statement.structure_unit_id, []))
+    # A whole paragraph's action kinds cannot prove a different point in it.
+    required &= set(detect_required_action_kinds(statement.quoted_text))
     supported = set(getattr(target, "covered_action_kinds", []))
     return any(source and source in normalize_source_excerpt(excerpt or "")
                for excerpt in target.source_excerpts) or bool(required and required <= supported)

@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import INDEPENDENT_VLM_MODEL
 from app.domain.contracts.reading_view import ReadingViewBinding
-from app.domain.contracts.local_region_read import LocalReadFormat, local_region_read_model, parse_local_region_read
+from app.domain.contracts.local_region_read import LocalReadFormat, LocalRegionFocusScopeError, local_region_read_model, parse_local_region_read
 from app.domain.contracts.selective_vision_observation import (
     SELECTIVE_VISION_PROMPT_VERSION,
     SelectiveVisionObservationRecord,
@@ -48,7 +48,9 @@ from app.evidence.selective_vision_review import (
 )
 from app.domain.contracts.evidence import BoundingBox
 from app.evidence.artifacts import ArtifactStore, StoredArtifact
-from app.evidence.reading_view import make_reading_region, make_reading_view
+from app.evidence.reading_view import (
+    FOCUS_READING_IMAGE_VERSION, make_focus_reading_image, make_reading_region, make_reading_view,
+)
 from app.storage.ocr_models import OCRPageRecord, PageArtifactRecord
 from app.storage.ocr_repositories import EvidenceProcessingRevisionRepository, OcrPageRepository
 from app.domain.publication import canonical_hash
@@ -75,7 +77,8 @@ ReviewRunner = Callable[..., Awaitable[SelectiveVisionReviewOutcome]]
 
 _ROUTE_WIDE_FAILURE_KINDS = frozenset({
     "auth", "balance_insufficient", "config_error", "independent_vlm_error",
-    "quota", "remote_error",
+    "quota", "remote_error", "transport_timeout", "transport_connection",
+    "provider_response_invalid",
 })
 
 
@@ -235,6 +238,7 @@ def local_visual_focus_coordinates(context_bbox: BoundingBox, focus_bbox: Boundi
 def local_visual_prompts(
     region_ref: str, read_format: LocalReadFormat = "transcript", *,
     focus_coordinates: dict[str, int] | None = None,
+    mark_focus: bool = False,
 ) -> tuple[str, str]:
     focus_instruction = ""
     if focus_coordinates is not None:
@@ -253,6 +257,14 @@ def local_visual_prompts(
             focus_instruction += "日期标题与日期值分开记录：time_label抄日期标题，不抄日期或时刻。"
         if read_format == "localized_candidate":
             focus_instruction += "proposed_bbox仍相对于整个所附图片，不是相对于核实框。"
+        if mark_focus:
+            focus_instruction = (
+                "\n图片的红色外框由系统绘制，仅指示本次目标，不是原件批注，不能作为原文摘录。"
+                "只列红框内项目，框外文字仅用于理解，不另列为本次读取结果。"
+                + focus_instruction
+            )
+    elif mark_focus:
+        raise ValueError("阅读目标标记须有明确圈选范围")
     if read_format in {"structured_candidate", "localized_candidate"}:
         schema = json.dumps(local_region_read_model(read_format).model_json_schema(), ensure_ascii=False)
         location_instruction = (
@@ -263,7 +275,8 @@ def local_visual_prompts(
             if read_format == "localized_candidate" else ""
         )
         return (
-            "你只逐项记录所附局部原图中可见内容，不批准事实、不推断临床含义。",
+            "你只逐项记录所附局部原图中可见内容，不批准事实、不推断临床含义。"
+            + ("只输出系统红框内的目标项目；框外仅为参考，红框不是原件批注。" if mark_focus else ""),
             "图片只是原始页面中明确选定的局部区域。第一行原样输出 source_ref=" + region_ref
             + "\n其后只输出符合以下结构的JSON，不加解释：" + schema
             + "\n每个可见项目独立记录。label为原图项目名，raw_value为原始值或字迹，"
@@ -294,9 +307,10 @@ def local_visual_prompts(
 
 def local_visual_prompt_identity(
     read_format: LocalReadFormat = "transcript", *, focus_coordinates: dict[str, int] | None = None,
+    mark_focus: bool = False,
 ) -> str:
     return canonical_hash(local_visual_prompts(
-        "{region_source_ref}", read_format, focus_coordinates=focus_coordinates,
+        "{region_source_ref}", read_format, focus_coordinates=focus_coordinates, mark_focus=mark_focus,
     ))
 
 
@@ -324,6 +338,7 @@ class SelectiveVisionObservationService:
         read_format: LocalReadFormat = "transcript",
         focus_bbox: BoundingBox | None = None,
         requested_processing_revision_id: str | None = None,
+        model_image_policy: str | None = None,
     ) -> StoredArtifact:
         """Read an explicitly selected region without qualifying a page or fact.
 
@@ -355,7 +370,10 @@ class SelectiveVisionObservationService:
         focus_coordinates = (
             local_visual_focus_coordinates(view_bbox, focus_bbox) if focus_bbox is not None else None
         )
-        system, prompt = local_visual_prompts(region_ref, read_format, focus_coordinates=focus_coordinates)
+        if model_image_policy not in {None, FOCUS_READING_IMAGE_VERSION} or model_image_policy is not None and focus_bbox is None:
+            raise ValueError("局部阅读图像方式与圈选范围不符")
+        marked = model_image_policy == FOCUS_READING_IMAGE_VERSION
+        system, prompt = local_visual_prompts(region_ref, read_format, focus_coordinates=focus_coordinates, mark_focus=marked)
         request_options = vlm.independent_vlm_completion_kwargs(
             messages=[], model=self.default_model_id, max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
@@ -373,7 +391,7 @@ class SelectiveVisionObservationService:
             "region_source_ref": region_ref, "region": binding,
             "image_artifact_ref": image_artifact.storage_ref,
             "prompt": prompt, "system_prompt": system,
-            "prompt_sha256": local_visual_prompt_identity(read_format, focus_coordinates=focus_coordinates),
+            "prompt_sha256": local_visual_prompt_identity(read_format, focus_coordinates=focus_coordinates, mark_focus=marked),
             "read_format": read_format,
             "requested_model": request_options["model"],
             "requested_max_tokens": request_options["max_tokens"],
@@ -382,13 +400,25 @@ class SelectiveVisionObservationService:
         }
         if focus_bbox is not None:
             payload["focus_bbox"] = focus_bbox.model_dump(mode="json")
+        model_image = region.image_bytes
+        if marked:
+            relative_focus = BoundingBox(
+                x0=focus_bbox.x0 - view_bbox.x0, y0=focus_bbox.y0 - view_bbox.y0,
+                x1=focus_bbox.x1 - view_bbox.x0, y1=focus_bbox.y1 - view_bbox.y0,
+            )
+            model_image = make_focus_reading_image(region.image_bytes, relative_focus)
+            payload.update({
+                "model_image_policy": model_image_policy,
+                "model_image_artifact_ref": artifact_store.put("reading_view_image", model_image).storage_ref,
+                "model_image_sha256": sha256(model_image).hexdigest(),
+            })
         if requested_processing_revision_id is not None:
             payload["requested_processing_revision_id"] = requested_processing_revision_id
         try:
             result = await vlm.independent_vlm_page_chat(
                 prompt, [vlm.PageVisionInput(
                     source_ref=region_ref, page_ordinal=page.page_ordinal,
-                    image_bytes=region.image_bytes,
+                    image_bytes=model_image,
                 )], system_prompt=system, model=self.default_model_id,
                 max_tokens=max_tokens, reasoning_effort=reasoning_effort,
             )
@@ -398,9 +428,15 @@ class SelectiveVisionObservationService:
                     for line in result.text.splitlines()
                 ) else "failed",
                 "model": result.model, "finish_reason": result.finish_reason,
+                "reported_model": result.reported_model,
+                "response_id": result.response_id, "request_id": result.request_id,
                 "usage": sanitize_observation_usage(dict(result.usage)),
                 "observation_text": result.text,
             })
+            if payload["status"] != "read":
+                payload["failure_kind"] = (
+                    "response_length" if result.finish_reason == "length" else "response_incomplete"
+                )
             if read_format in {"structured_candidate", "localized_candidate"} and payload["status"] == "read":
                 try:
                     candidate = parse_local_region_read(result.text, source_ref=region_ref, read_format=read_format)
@@ -409,17 +445,28 @@ class SelectiveVisionObservationService:
 
                         require_localized_focus_scope(candidate, LocalRegionRelativeBox.model_validate(focus_coordinates))
                     payload["structured_read"] = candidate.model_dump(mode="json")
+                except LocalRegionFocusScopeError as exc:
+                    payload.update({"status": "failed", "failure_kind": "local_focus_scope_mismatch",
+                                    "focus_rejected_item_indices": exc.item_indices})
                 except (ValueError, TypeError):
                     payload.update({"status": "failed", "failure_kind": "local_structure_invalid"})
         except vlm.IndependentVlmError as exc:
             rejected = getattr(exc, "rejected_response", None)
             payload.update({
-                "status": "failed", "failure_kind": getattr(exc, "failure_kind", "source_fidelity"),
+                "status": "failed", "failure_kind": (
+                    "config_error" if isinstance(exc, vlm.IndependentVlmConfigError)
+                    else getattr(exc, "failure_kind", "source_fidelity")
+                ),
                 "observation_text": rejected.text if rejected is not None else None,
                 "model": rejected.model if rejected is not None else None,
+                "reported_model": rejected.reported_model if rejected is not None else getattr(exc, "reported_model", None),
+                "response_id": rejected.response_id if rejected is not None else getattr(exc, "response_id", None),
+                "request_id": rejected.request_id if rejected is not None else getattr(exc, "request_id", None),
                 "finish_reason": rejected.finish_reason if rejected is not None else None,
                 "usage": sanitize_observation_usage(dict(rejected.usage)) if rejected is not None else {},
             })
+            if isinstance(exc, vlm.IndependentVlmRemoteError) and exc.status_code is not None:
+                payload["remote_status_code"] = exc.status_code
         with self.session_factory() as session:
             _assert_ocr_unchanged(session, page.ocr_page_id, before)
         return artifact_store.put("evaluation_manifest", json.dumps(

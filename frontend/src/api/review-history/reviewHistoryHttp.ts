@@ -45,6 +45,7 @@ import {
   type ReviewHistoryGapType,
   type ReviewHistoryRuleKind,
   type ReviewHistoryRunDetailView,
+  type ReviewHistoryRestrictedRequirementView,
   type ReviewHistoryRunListView,
   type ReviewHistoryRunStatus,
   type ReviewHistoryRunSummaryView,
@@ -757,7 +758,7 @@ export function decodeReviewHistoryRunDetail(value: unknown): ReviewHistoryRunDe
   const row = objectValue(value, "review_history");
   exactKeys(
     row,
-    ["run", "context", "assessments", "actions", "missing_rule_component_ids", "evidence_locators", "controls", "missing_protocol_control_ids", "control_selection_records"],
+    ["run", "context", "assessments", "actions", "missing_rule_component_ids", "evidence_locators", "controls", "missing_protocol_control_ids", "control_selection_records", "restricted_requirements"],
     "review_history",
   );
   const run = decodeRunSummary(field(row, "run", "review_history"), "review_history.run");
@@ -940,7 +941,42 @@ export function decodeReviewHistoryRunDetail(value: unknown): ReviewHistoryRunDe
         || item.notSelected.some((record) => record.locatorIds.some((id) => !evidenceLocators.some((locator) => locator.locatorId === id))))) {
     throw new ReviewHistoryDecodeError("检查选择记录与本次报告的要求或原件不一致");
   }
-  return { run, context, assessments, actions, missingRuleComponentIds, evidenceLocators, controls, missingProtocolControlIds, controlSelectionRecords };
+  const restrictedRequirements = arrayValue(field(row, "restricted_requirements", "review_history"), "restricted_requirements").map((value, index): ReviewHistoryRestrictedRequirementView => {
+    const path = `restricted_requirements[${index}]`;
+    const item = objectValue(value, path);
+    exactKeys(item, ["origin", "requirement_id", "display_label", "title", "source_text", "source_span_ids", "source_excerpts", "scope_quote", "time_words", "exception_words", "affected_stage", "decision_functions", "source_force", "limitation_kind", "unresolved_dimensions", "dependency_refs"], path);
+    const sourceSpanIds = uniqueStringArray(field(item, "source_span_ids", path), path);
+    const sourceExcerpts = stringArray(field(item, "source_excerpts", path), path);
+    const unresolvedDimensions = stringArray(field(item, "unresolved_dimensions", path), path);
+    if (!sourceSpanIds.length || !sourceExcerpts.length || !unresolvedDimensions.length) {
+      throw new ReviewHistoryDecodeError("方案待澄清的内容缺少原文或具体原因。");
+    }
+    return {
+      origin: enumValue(field(item, "origin", path), ["official", "control"] as const, path),
+      requirementId: requiredString(field(item, "requirement_id", path), path),
+      displayLabel: requiredString(field(item, "display_label", path), path),
+      title: requiredString(field(item, "title", path), path),
+      sourceText: requiredString(field(item, "source_text", path), path),
+      sourceSpanIds, sourceExcerpts, unresolvedDimensions,
+      scopeQuote: nullableString(field(item, "scope_quote", path), path),
+      timeWords: stringArray(field(item, "time_words", path), path),
+      exceptionWords: nullableString(field(item, "exception_words", path), path),
+      affectedStage: nullableString(field(item, "affected_stage", path), path),
+      decisionFunctions: stringArray(field(item, "decision_functions", path), path),
+      sourceForce: field(item, "source_force", path) === null ? null : enumValue(field(item, "source_force", path), ["required", "prohibited", "recommended", "descriptive", "unclear"] as const, path),
+      limitationKind: enumValue(field(item, "limitation_kind", path), ["interpretation_unresolved", "consumer_unavailable"] as const, path),
+      dependencyRefs: uniqueStringArray(field(item, "dependency_refs", path), path),
+    };
+  });
+  const restrictedIds = new Set(restrictedRequirements.map((item) => item.requirementId));
+  const restrictedControlIds = new Set(restrictedRequirements.filter((item) => item.origin === "control").map((item) => item.requirementId));
+  if (restrictedIds.size !== restrictedRequirements.length
+      || assessments.some((item) => restrictedIds.has(item.clause.ruleComponentId))
+      || controls.some((item) => restrictedIds.has(item.protocolControlId))
+      || restrictedRequirements.some((item) => item.dependencyRefs.some((id) => !restrictedControlIds.has(id)))) {
+    throw new ReviewHistoryDecodeError("方案待澄清或暂不能计算的要求身份不一致。");
+  }
+  return { run, context, assessments, actions, missingRuleComponentIds, evidenceLocators, controls, missingProtocolControlIds, controlSelectionRecords, restrictedRequirements };
 }
 
 function reviewRunsPath(subjectId: string, reviewEpisodeId: string): string {

@@ -259,6 +259,48 @@ def test_retryable_failure_reruns_only_failed_step_after_backoff(session_factory
     assert kinds.count("step_failed") == 1
 
 
+def test_retry_receives_persisted_failure_checkpoint_without_replaying_success(session_factory, clock):
+    create_job_with_steps(session_factory, clock, job_id="saved-partial", steps=[
+        {"step_id": "deep", "max_attempts": 2, "retryable": True},
+        {"step_id": "consume", "depends_on": ("deep",)},
+    ])
+    partial = {"stage": "deep_failure_diagnostic", "partial_wire": {"candidate_drafts": [{"id": "kept"}]},
+               "source_interpretation": {"frozen": "source"}, "remaining": ["missing"]}
+    read_calls = []
+    restored_ids = []
+
+    def executor(ctx):
+        if ctx.step_id == "consume":
+            return {"consumed": True}
+        if ctx.attempt == 1:
+            assert ctx.last_checkpoint is None
+            read_calls.extend(["kept", "missing"])
+            raise StepFailure(retryable=True, error_code="SOURCE_REQUIREMENT_TRANSPORT_FAILED",
+                              diagnostic_checkpoint=partial)
+        assert ctx.last_checkpoint == {"attempt": 1, **partial}
+        assert ctx.last_checkpoint_is_diagnostic is True
+        restored_ids.append(ctx.last_checkpoint_id)
+        read_calls.extend(ctx.last_checkpoint["remaining"])
+        return {"adopted": False, "source_checked": True}
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("saved-partial")
+    assert job_state(session_factory, "saved-partial") == "failed_retryable"
+    with _store(session_factory, clock) as store:
+        original_id, original_payload = store.get_last_checkpoint("saved-partial", "deep")
+    clock.advance(0.6)
+    assert _requeue_due(session_factory, clock) == ["saved-partial"]
+    assert runner.run_job("saved-partial")
+    assert read_calls == ["kept", "missing", "missing"]
+    assert restored_ids == [original_id]
+    assert job_state(session_factory, "saved-partial") == "completed"
+    with _store(session_factory, clock) as store:
+        checkpoints = store.list_checkpoints("saved-partial", "deep")
+    assert checkpoints[0] == (original_id, original_payload)
+    assert checkpoints[1][1]["source_checked"] is True
+    assert checkpoints[1][1]["adopted"] is False
+
+
 def test_runner_releases_abnormally_queued_deferred_step_without_running_it(
     session_factory, clock
 ):

@@ -44,6 +44,11 @@ class FakeCompletions:
         output = next(self.outputs)
         if isinstance(output, Exception):
             raise output
+        if kwargs.get("stream"):
+            return iter([SimpleNamespace(choices=[SimpleNamespace(
+                finish_reason="stop",
+                delta=SimpleNamespace(content=output, reasoning_content=""),
+            )])])
         return SimpleNamespace(
             choices=[
                 SimpleNamespace(

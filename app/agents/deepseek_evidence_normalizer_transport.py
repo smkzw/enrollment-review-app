@@ -329,7 +329,8 @@ class DeepSeekEvidenceNormalizerTransport:
                 resolved_base_url = selected_base_url
             else:
                 resolved_base_url = selected_base_url
-            client_options: dict[str, Any] = {}
+            # The product runner owns retries; SDK retries would bypass its receipts and budget.
+            client_options: dict[str, Any] = {"max_retries": 0}
             if selected_backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS:
                 # Match the approved protocol-semantic GLM route: do not inherit
                 # ambient HTTP_PROXY for BigModel Coding Plan calls, and keep

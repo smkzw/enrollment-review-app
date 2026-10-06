@@ -41,6 +41,7 @@ def start_protocol_control_execution(
         draft_revision_id=body.draft_revision_id,
         idempotency_key=body.idempotency_key,
         discovery_source_job_id=body.discovery_source_job_id,
+        deep_source_job_id=body.deep_source_job_id,
     )
     if not result.created:
         response.status_code = http_status.HTTP_200_OK

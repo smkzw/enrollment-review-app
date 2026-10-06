@@ -12,6 +12,8 @@ from __future__ import annotations
 import copy
 import json
 
+import pytest
+
 from app.domain.contracts.enums import (
     AnchorType,
     LogicalOperator,
@@ -22,6 +24,7 @@ from app.domain.contracts.protocol_drafts import ProtocolDraftRevisionDiff
 from app.domain.contracts.rules import (
     AtomicExpression,
     EvidenceRequirement,
+    RestrictedRuleComponent,
     RuleComponent,
     TimeConstraint,
 )
@@ -33,6 +36,7 @@ from app.services.protocol_draft_service import compute_draft_diff
 
 from tests.v2.protocols.slice4_helpers import confirmed_fixture
 from tests.v2.protocols.test_deconstruction_gate_slice3 import _fixture, _predicate
+from tests.v2.protocols.test_draft_revision_service import _draft_with_restricted_component
 
 CATEGORY_FIELDS = (
     "original_text_changes",
@@ -72,6 +76,110 @@ def _component(draft, code: str, display_code: str) -> RuleComponent:
 
 def _rule_of(draft, code: str):
     return next(rule for rule in draft.proposed_rules if rule.official_code == code)
+
+
+@pytest.mark.parametrize("field,value,category", [
+    ("title", "核对后的标题", "original_text_changes"),
+    ("source_excerpts", ["核对后的原文"], "original_text_changes"),
+    ("source_span_ids", ["span-in"], "original_text_changes"),
+    ("limitation_kind", "consumer_unavailable", "logic_changes"),
+    ("unresolved_dimensions", ["时间尚待核清"], "logic_changes"),
+])
+def test_restricted_changes_are_visible_without_changing_siblings(field, value, category):
+    previous = _draft_with_restricted_component()
+    current = previous.model_copy(deep=True)
+    item = current.proposed_rules[1].restricted_components[0]
+    current.proposed_rules[1].restricted_components[0] = item.model_copy(
+        update={field: value},
+    )
+    diff = compute_draft_diff(previous, current)
+    assert diff.modified_rule_codes == ["EX-01"]
+    assert diff.changed_component_ids == ["restricted-ex"]
+    detail = _rule_diff(diff, "EX-01")
+    _assert_only_category(detail, category)
+    assert getattr(detail, category)[0].stable_ref == "EX-01b"
+    assert current.proposed_rules[0] == previous.proposed_rules[0]
+    assert current.proposed_rules[1].components == previous.proposed_rules[1].components
+
+
+def test_restricted_add_remove_are_not_silent_and_source_order_is_stable():
+    previous = _draft_with_restricted_component()
+    current = previous.model_copy(deep=True)
+    current.proposed_rules[1].restricted_components = []
+    assert _rule_diff(compute_draft_diff(previous, current), "EX-01").removed_component_refs == [
+        "EX-01b",
+    ]
+    assert _rule_diff(compute_draft_diff(current, previous), "EX-01").added_component_refs == [
+        "EX-01b",
+    ]
+    second = previous.proposed_rules[1].restricted_components[0].model_copy(update={
+        "rule_component_id": "restricted-second", "display_code": "EX-01c",
+        "source_excerpts": ["另一个独立来源"], "unresolved_dimensions": ["对象待核清"],
+    })
+    previous.proposed_rules[1].restricted_components.append(second)
+    current = previous.model_copy(deep=True)
+    current.proposed_rules[1].restricted_components.reverse()
+    for index, item in enumerate(current.proposed_rules[1].restricted_components):
+        current.proposed_rules[1].restricted_components[index] = item.model_copy(update={
+            "rule_component_id": f"regenerated-{index}",
+            "display_code": "EX-01b" if item.display_code == "EX-01c" else "EX-01c",
+        })
+    diff = compute_draft_diff(previous, current)
+    assert not diff.modified_rule_codes
+    assert not diff.clarification_semantics_changed
+
+
+def test_executable_to_restricted_conversion_has_real_diff_not_empty_semantics():
+    _, previous, _ = confirmed_fixture()
+    current = previous.model_copy(deep=True)
+    rule = current.proposed_rules[0]
+    component = rule.components[0]
+    binding = next(x for x in current.component_drafts if (
+        x.proposed_component.rule_component_id == component.rule_component_id
+    ))
+    rule.components = []
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id=component.rule_component_id,
+        display_code=component.display_code, title=component.title,
+        source_span_ids=binding.source_refs, source_excerpts=binding.source_excerpts,
+        limitation_kind="interpretation_unresolved",
+        unresolved_dimensions=["尚未核清适用范围"],
+    )]
+    current.component_drafts = [x for x in current.component_drafts if (
+        x.proposed_component.rule_component_id != component.rule_component_id
+    )]
+    diff = compute_draft_diff(previous, current)
+    assert diff.modified_rule_codes == ["IN-01"]
+    assert diff.changed_component_ids == [component.rule_component_id]
+    detail = _rule_diff(diff, "IN-01")
+    assert detail.logic_changes[0].current["kind"] == "restricted"
+    assert detail.evidence_changes
+    assert diff.clarification_semantics_changed
+
+
+def test_restricted_diff_declaration_is_checked_by_actual_gate():
+    source, _, spans = confirmed_fixture()
+    previous = _draft_with_restricted_component()
+    current = previous.model_copy(deep=True)
+    current.proposed_rules[1].restricted_components[0].unresolved_dimensions = ["时间待核清"]
+    payload = compute_draft_diff(previous, current).model_dump(mode="python")
+    gate = ProtocolDeconstructionGate()
+    declared = ProtocolDraftDiffDeclaration(**payload)
+    report = gate.evaluate(
+        source, current, source_spans=spans,
+        previous_draft=previous, declared_diff=declared,
+    )
+    assert not [issue for check in report.checks if check.check_name == "diff_integrity"
+                for issue in check.issues]
+    for detail in payload["rule_diffs"]:
+        if detail["official_code"] == "EX-01":
+            detail["logic_changes"] = []
+    report = gate.evaluate(
+        source, current, source_spans=spans, previous_draft=previous,
+        declared_diff=ProtocolDraftDiffDeclaration(**payload),
+    )
+    assert [issue for check in report.checks if check.check_name == "diff_integrity"
+            for issue in check.issues]
 
 
 def test_original_text_change_rule_source_text() -> None:

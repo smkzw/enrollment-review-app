@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewHistoryRunDetailView } from "../api/review-history/reviewHistoryTypes";
 import { ReportsPage } from "./ReportsPage";
+import { frozenReviewExport } from "../domain/frozenReviewExport";
 
 const mocks = vi.hoisted(() => ({ listRuns: vi.fn(), getRun: vi.fn(), canModify: true }));
 vi.mock("../api/review-history/reviewHistoryHttp", () => ({
@@ -48,7 +49,7 @@ function frozenReport(subjectId: string, reviewEpisodeId: string): ReviewHistory
       decision: "not_due", gapTypes: ["future_stage_not_due"], blockingLevel: "none",
       usedFactIds: [], locatorIds: [], gateResultId: "gate-2", publicationFingerprint: "d".repeat(64), conditions: [],
     }],
-    actions: [], controls: [], controlSelectionRecords: [], evidenceLocators: [],
+    actions: [], controls: [], controlSelectionRecords: [], restrictedRequirements: [], evidenceLocators: [],
     missingRuleComponentIds: [], missingProtocolControlIds: [],
   };
 }
@@ -63,6 +64,69 @@ beforeEach(() => {
 });
 
 describe("报告", () => {
+  it("报告与导出保留方案未决和计算限制，不改成病例缺失或合格", async () => {
+    const report = frozenReport("subject-uat-01-clear", "episode-uat-01-screening-clear");
+    report.restrictedRequirements = [{
+      origin: "official", requirementId: "limited-official", displayLabel: "IN-02-b",
+      title: "适用范围要求", sourceText: "适用范围需按相关定义核清。",
+      sourceSpanIds: ["source-official"], sourceExcerpts: ["适用范围需按相关定义核清。"],
+      scopeQuote: null, timeWords: [], exceptionWords: null, affectedStage: null,
+      decisionFunctions: [], sourceForce: null, limitationKind: "interpretation_unresolved",
+      unresolvedDimensions: ["该定义适用对象尚待澄清"], dependencyRefs: [],
+    }, {
+      origin: "control", requirementId: "limited-control", displayLabel: "方案补充要求",
+      title: "连续期间计算", sourceText: "需核实连续期间。",
+      sourceSpanIds: ["source-control"], sourceExcerpts: ["需核实连续期间。"],
+      scopeQuote: "符合相应定义时", timeWords: ["筛选时"], exceptionWords: "特殊情况不适用",
+      affectedStage: "筛选期至治疗结束", decisionFunctions: ["time_validity"],
+      sourceForce: "prohibited", limitationKind: "consumer_unavailable",
+      unresolvedDimensions: ["连续期间计算尚未支持"], dependencyRefs: [],
+    }];
+    const before = JSON.stringify(report);
+    mocks.getRun.mockResolvedValue(report);
+    render(<ReportsPage />);
+    await screen.findByRole("heading", { name: "尚不能判定的方案要求（2）" });
+    expect(screen.getByText("方案含义尚待澄清，不能判为符合或不符合")).toBeInTheDocument();
+    expect(screen.getByText("系统暂不能完成本项计算，不能判为符合或不符合")).toBeInTheDocument();
+    expect(screen.getByText("以下是方案含义或系统计算能力的限制，不等于病例缺少资料，也不能据此认为受试者符合全部要求。")).toBeInTheDocument();
+    expect(screen.getByText("方案仍有待澄清或暂不能计算的要求，详见上表；不能据此认为受试者符合全部要求。")).toBeInTheDocument();
+    for (const format of ["html", "md"] as const) {
+      const content = frozenReviewExport(report, format, new Date(timestamp));
+      expect(content).toContain("该定义适用对象尚待澄清");
+      expect(content).toContain("连续期间计算尚未支持");
+      expect(content).toContain("特殊情况不适用");
+      expect(content).toContain("例外原文：特殊情况不适用");
+      expect(content).toContain("涉及阶段：筛选期至治疗结束");
+      expect(content).not.toContain("time_validity");
+      expect(content).not.toContain("prohibited");
+      expect(content).not.toContain("本次审核未记录补充事项");
+    }
+    expect(JSON.stringify(report)).toBe(before);
+    const reportWithAction: ReviewHistoryRunDetailView = {
+      ...report,
+      actions: [{
+        actionId: "action-1", assessmentId: "assessment-1", clause: report.assessments[0].clause,
+        control: null, gapType: "professional_judgment", targetParty: "investigator",
+        requestedAction: "补充本节点的书面判断", acceptableEvidence: "对应节点病历分析",
+        dueStage: "screening", blockingLevel: "blocking", state: "open",
+        recomputeScope: ["component-1"], triggerLocatorId: null, recordRevision: 1,
+        gateResultId: "gate-1", publicationFingerprint: "c".repeat(64), transitions: [],
+      }],
+    };
+    const withActionBefore = JSON.stringify(reportWithAction);
+    for (const format of ["html", "md"] as const) {
+      const content = frozenReviewExport(reportWithAction, format, new Date(timestamp));
+      expect(content).toContain("补充本节点的书面判断");
+      expect(content).toContain("方案仍有尚不能判定的要求，不能据此认为受试者符合全部要求。");
+      expect(content).toContain("连续期间计算尚未支持");
+      expect(content).not.toContain("time_validity");
+      expect(content).not.toContain("prohibited");
+      expect(content).not.toContain("source-control");
+      expect(content).not.toContain("source-official");
+    }
+    expect(JSON.stringify(reportWithAction)).toBe(withActionBefore);
+  });
+
   it("读取保存的审核记录，显示冻结登记信息而非当前目录内容", async () => {
     render(<ReportsPage />);
     await screen.findByRole("heading", { name: "逐项审核结果" });

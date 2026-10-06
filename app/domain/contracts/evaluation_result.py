@@ -17,6 +17,29 @@ class EvaluationResult(ContractModel):
     evidence_span_ids: list[str] = Field(default_factory=list)
 
 
+class ComputationAtomEvaluation(ContractModel):
+    context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    atom_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    resolution_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_fact_ids: list[str]
+    result: EvaluationResult
+    resolution: dict[str, Any]
+
+    @model_validator(mode="after")
+    def validate_material(self):
+        qualification = self.resolution["input_qualification"]
+        if (self.resolution_sha256 != canonical_hash(self.resolution)
+                or self.result != EvaluationResult.model_validate(self.resolution["result"])
+                or len(self.source_fact_ids) != len(set(self.source_fact_ids))
+                or set(self.source_fact_ids) != set(qualification["fact_ids"])
+                or not set(self.result.used_fact_ids) <= set(self.source_fact_ids)
+                or (self.result.truth != TruthValue.UNKNOWN and (
+                    not qualification["input_set_qualified"] or qualification["reason_codes"]
+                    or self.resolution["exact_value"] is None))):
+            raise ValueError("计算结果与输入集合、来源或实际计算依据不一致")
+        return self
+
+
 class FrequencyAtomEvaluation(ContractModel):
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     atom_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")

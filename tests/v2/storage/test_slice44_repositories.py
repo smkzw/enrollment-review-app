@@ -1704,12 +1704,16 @@ def test_locator_bbox_raw_ocr_rejected(revision_stack):
         )
 
 
-def test_locator_bbox_native_requires_artifact_store(revision_stack):
-    """native bbox 需要内容寻址 ArtifactStore 证明；无 store 拒绝。"""
+def test_locator_bbox_native_requires_artifact_store(revision_stack, monkeypatch, tmp_path):
+    """隐式工件库同样必须读取真实字节；空库不得认证原生定位。"""
+    from app.services import evidence_app_bootstrap
+    from app.storage.config import resolve_data_paths
+    missing_store = resolve_data_paths(tmp_path / "missing-artifacts")
+    monkeypatch.setattr(evidence_app_bootstrap, "resolve_data_paths", lambda: missing_store)
     session, _fixture, keys = revision_stack
     # 直接构造带 native_text 哈希的 locator（页产物无 native 哈希），证明必须注入 store。
     repo = EvidenceLocatorRepository(session)  # 未注入 artifact_store
-    with pytest.raises(LocatorIdentityError, match="ArtifactStore"):
+    with pytest.raises(LocatorIdentityError, match="原生文本工件读取失败"):
         repo.create(
             _locator(
                 keys,
@@ -2653,7 +2657,7 @@ def test_locator_native_text_range_artifact_proof(revision_stack, artifact_store
 
 
 def test_candidate_with_native_locator_uses_artifact_store_proof(
-    revision_stack, artifact_store
+    revision_stack, artifact_store, monkeypatch, tmp_path
 ):
     """候选冻结原生定位时必须沿用上层工件库完成真实性回验。"""
     session, _fixture, keys = revision_stack
@@ -2702,7 +2706,11 @@ def test_candidate_with_native_locator_uses_artifact_store_proof(
         base_processing_revision_id="rev-native",
         selected_locator_ids=[locator.locator_id],
     )
-    with pytest.raises(LocatorIdentityError, match="ArtifactStore"):
+    from app.services import evidence_app_bootstrap
+    from app.storage.config import resolve_data_paths
+    missing_store = resolve_data_paths(tmp_path / "missing-artifacts")
+    monkeypatch.setattr(evidence_app_bootstrap, "resolve_data_paths", lambda: missing_store)
+    with pytest.raises(LocatorIdentityError, match="原生文本工件读取失败"):
         EvidenceProcessingCandidateRepository(session).create(candidate)
 
     created = EvidenceProcessingCandidateRepository(

@@ -82,6 +82,24 @@ def _candidate_count(client) -> int:
         )
 
 
+def test_scoped_source_build_is_explicit_versioned_and_reports_pending(client):
+    keys = _seed_api_stack(client)
+    _seed_metadata_helper(client, keys)
+    body = _build_body(client, keys, source_qualification_mode="scoped_text_v1")
+    response = client.post("/api/v2/evidence-processing-revisions/build", json=body)
+    assert response.status_code == 201, response.text
+    _run_revision_job(client, response.json()["job_id"])
+    candidate = client.get("/api/v2/evidence-processing-candidates/" + response.json()["candidate_id"]).json()
+    assert candidate["candidate_status"] == "ready", candidate
+    revision = client.get("/api/v2/evidence-processing-revisions/" + candidate["complete_revision_id"]).json()
+    assert revision["source_qualification_mode"] == "scoped_text_v1"
+    assert revision["pending_risk_flag_count"] > 0
+    assert next(g for g in revision["gates"] if g["gate"] == "risk")["status"] == "pending"
+    strict_body = dict(body, source_qualification_mode="strict")
+    conflict = client.post("/api/v2/evidence-processing-revisions/build", json=strict_body)
+    assert conflict.status_code == 409
+
+
 def test_build_same_key_same_command_replays_after_advance(client) -> None:
     """同键同命令：即使审核节点修订号已前进也回放原候选（READY）。"""
     keys = _seed_api_stack(client)

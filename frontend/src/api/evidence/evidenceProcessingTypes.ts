@@ -76,6 +76,8 @@ export interface ProcessingRevisionWire {
   pages: ProcessingRevisionPageWire[];
   risk_flag_count: number;
   pending_risk_flag_count: number;
+  source_qualification_mode?: "strict" | "scoped_text_v1";
+  source_qualification_label?: string;
   locator_ids: string[];
   risk_scan_ids: string[];
   risk_review_ids: string[];

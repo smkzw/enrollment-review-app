@@ -1078,6 +1078,7 @@ class ProtocolDraftService:
         actor: str,
         created_at: datetime,
         baseline: ProtocolDeconstructionDraft | None = None,
+        origin_note: str | None = None,
     ) -> ProtocolDraftRevision:
         if draft.draft_revision != 1:
             raise ValueError("初始保存的草稿必须是首稿（draft_revision=1）")
@@ -1094,6 +1095,7 @@ class ProtocolDraftService:
             study_phase=draft.selected_phase,
             status=DraftRevisionStatus.SAVED,
             reason=DraftRevisionReason.INITIAL_SAVE,
+            feedback_note=origin_note,
             actor=actor,
             content=draft,
             content_sha256=canonical_hash(draft.model_dump(mode="json")),

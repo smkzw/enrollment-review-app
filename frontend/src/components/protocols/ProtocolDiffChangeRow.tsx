@@ -88,6 +88,14 @@ const UNIT_LABELS: Record<string, string> = {
   unitless: "",
 };
 
+const COMPUTATION_LABELS: Record<string, string> = {
+  mean: "均值", sum: "合计", minimum: "最小值", maximum: "最大值",
+  count: "计数", ratio: "比值", other: "原文另有规定", unresolved: "计算方式待核对",
+};
+const MISSING_POLICY_LABELS: Record<string, string> = {
+  exclude: "不计入缺失记录", impute: "按原文补值", not_specified: "原文未规定", unresolved: "适用范围待核对",
+};
+
 function recordOf(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -121,7 +129,42 @@ function formatPredicate(raw: Record<string, unknown>): string | null {
 
 function formatLogic(raw: Record<string, unknown>, depth = 0): string[] {
   const predicate = formatPredicate(raw);
-  if (predicate !== null) return [`${"  ".repeat(depth)}${predicate}`];
+  if (predicate !== null) {
+    const computation = recordOf(recordOf(raw.predicate)?.source_computation);
+    const purpose = recordOf(recordOf(raw.predicate)?.record_semantics);
+    const purposeLines = purpose === null ? [] : [
+      `核对对象：${purpose.target_kind === "event_history" ? "既往事件或病史" : purpose.target_kind === "other" ? "其他条件" : "尚未核清"}`,
+      `方案记录要求：${purpose.record_obligation === "required" ? "需要规定的记录或书面判断" : purpose.record_obligation === "not_required_by_source" ? "未要求专门记录，仍须核对本次资料" : "尚未核清"}`,
+      ...(Array.isArray(purpose.source_excerpts) ? purpose.source_excerpts.map((text) => `用途依据：${text}`) : []),
+    ];
+    if (computation === null) return [`${"  ".repeat(depth)}${predicate}`, ...purposeLines];
+    const operation = COMPUTATION_LABELS[String(computation.operator)] ?? "计算方式待核对";
+    const missing = MISSING_POLICY_LABELS[String(computation.missing_policy)] ?? "待核对";
+    const inputs = Array.isArray(computation.input_refs) ? computation.input_refs : [];
+    const selection = recordOf(computation.input_selection);
+    const windows = Array.isArray(selection?.window_refs) ? selection.window_refs : [];
+    const inputCount = recordOf(computation.declared_input_count);
+    const missingCount = recordOf(computation.max_missing_count);
+    const sources = [computation.operator_ref, ...inputs, computation.missing_ref, selection?.source,
+      selection?.ordering_ref, ...windows, inputCount?.source, missingCount?.source];
+    const quotes = [...new Set(sources.flatMap((ref) => {
+      const text = recordOf(ref)?.quote;
+      return typeof text === "string" ? [text] : [];
+    }))];
+    const selectionLabels: Record<string, string> = { all: "所规定范围内的全部记录", single: "单次记录", latest_n: "按原文规定取最近若干次", earliest_n: "按原文规定取最早若干次", unresolved: "选取方式尚未核清" };
+    const orderingLabels: Record<string, string> = { collection_time: "采集时间", report_time: "报告时间", record_time: "记录时间", source_sequence: "原文明确规定的顺序", unresolved: "排序日期尚未核清" };
+    const selectionLines = selection === null ? [] : [
+      `记录选取（待核对）：${selectionLabels[String(selection.mode)] ?? "尚未核清"}`,
+      ...(selection.ordering_basis == null ? [] : [
+        `排序依据（待核对）：${orderingLabels[String(selection.ordering_basis)] ?? "尚未核清"}`,
+      ]),
+    ];
+    return [`${"  ".repeat(depth)}${predicate}`, ...purposeLines, `计算方法：${operation}`, `缺失处理：${missing}`,
+      ...selectionLines,
+      ...(inputCount == null ? [] : [`原文规定输入数量：${inputCount.value}（${inputCount.number_text}）`]),
+      ...(missingCount == null ? [] : [`原文规定最多缺失数量：${missingCount.value}（${missingCount.number_text}）`]),
+      ...quotes.map((text) => `计算依据：${text}`), "原文方法已保存；所用记录与计算结果尚未核实，不能据此作出结论。"];
+  }
   const operator = raw.operator === "any"
     ? "任一条件满足"
     : raw.operator === "not"
@@ -214,12 +257,23 @@ function formatTimePayload(raw: Record<string, unknown>): string[] {
 
   const period = recordOf(raw.prospective_period);
   if (period !== null) {
-    const periodLabel = period.period === "treatment_period"
-      ? "治疗期间"
-      : period.period === "study_period"
-        ? "研究期间"
-        : "方案规定期间";
-    lines.push(`${scope}：${periodLabel}`);
+    if (period.kind === "source_defined" && Array.isArray(period.source_excerpts)) {
+      const excerpts = period.source_excerpts.filter(
+        (text): text is string => typeof text === "string" && text.trim().length > 0,
+      );
+      if (excerpts.length > 0) {
+        lines.push(`${scope}：按原文限定期间核对：${excerpts.join("；")}`);
+      } else {
+        lines.push(`${scope}：期间依据尚不完整`);
+      }
+    } else {
+      const periodLabel = period.period === "treatment_period"
+        ? "治疗期间"
+        : period.period === "study_period"
+          ? "研究期间"
+          : "方案规定期间";
+      lines.push(`${scope}：${periodLabel}`);
+    }
   }
 
   return lines.length > 0 ? lines : [`${scope}：未设置时间要求`];

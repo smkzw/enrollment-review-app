@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from io import BytesIO
 
+import pytest
 from PIL import Image
 
 from app.api.v2.vocabulary import (
@@ -560,6 +561,133 @@ def test_source_anchored_insertion_create_and_read_keeps_raw_ocr(client) -> None
     assert page["raw_text"] == RAW_TEXT
 
 
+@pytest.mark.parametrize("command", ["corrections", "risk-reviews", "risk-page-reviews"])
+def test_current_complete_revision_accepts_its_base_sidecar(client, command) -> None:
+    keys = _seed_ready_complete(client)
+    active = client.post(
+        f"/api/v2/evidence-processing-revisions/{COMPLETE1}/activate",
+        json=_activate_body(client, keys),
+    )
+    assert active.status_code == 201, active.text
+    current = client.get(f"/api/v2/evidence-processing-revisions/{COMPLETE1}").json()
+    assert current["is_current"] is True
+    assert current["base_processing_revision_id"] == REV1
+    expected = _episode_revision(client, keys["episode_id"])
+    body = {
+        "base_processing_revision_id": current["base_processing_revision_id"],
+        "expected_revision": expected,
+        "idempotency_key": f"current-base-{command}",
+        "reason": "对照原件继续核对，旧版本保留",
+    }
+    if command == "corrections":
+        body.update(raw_text_sha256=sha(RAW_TEXT.encode()), text_start=len(RAW_TEXT),
+                    text_end=len(RAW_TEXT), original_text="", corrected_text=" 漏识别原文",
+                    change_kind="other_text")
+    else:
+        page = client.get(f"/api/v2/ocr-pages/{OCR_PAGE_ID}",
+                          params={"processing_revision_id": COMPLETE1}).json()
+        if command == "risk-reviews":
+            scan = page["risk_scans"][0]
+            body.update(risk_flag_id=f"{scan['scan_id']}:{scan['flags'][0]['risk_id']}",
+                        decision="not_applicable")
+        else:
+            scan = EvidenceRiskScanService(client.app.state.session_factory).scan_page(OCR_PAGE_ID)
+            body.update(scan_id=scan.scan_id, decision="confirmed_as_read")
+    response = client.post(f"/api/v2/ocr-pages/{OCR_PAGE_ID}/{command}", json=body)
+    assert response.status_code == 201, response.text
+    saved = response.json()
+    assert saved["candidate_status"] == "staged"
+    assert saved["complete_revision_id"] is None
+    detail = client.get(f"/api/v2/evidence-processing-candidates/{saved['candidate_id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["evidence_snapshot_id"] == current["evidence_snapshot_id"]
+    assert detail.json()["base_processing_revision_id"] == REV1
+    assert client.app.state.job_service.get_job_state(saved["job_id"]) == "queued"
+    replay = client.post(f"/api/v2/ocr-pages/{OCR_PAGE_ID}/{command}", json=body)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["candidate_id"] == saved["candidate_id"]
+    with client.app.state.session_factory() as session:
+        episode = EpisodeRepository(session).get(keys["episode_id"])
+        assert episode.active_evidence_processing_revision_id == COMPLETE1
+        assert episode.revision == expected
+    page = client.get(f"/api/v2/ocr-pages/{OCR_PAGE_ID}",
+                      params={"processing_revision_id": COMPLETE1}).json()
+    assert page["raw_text"] == RAW_TEXT
+    if command == "corrections":
+        assert saved["correction"]["correction_id"] not in {
+            item["correction_id"] for item in page["selected_corrections"]}
+
+
+@pytest.mark.parametrize("bad_base, stale", [("different-base", False), (REV1, True)])
+def test_current_complete_rejects_wrong_base_or_stale_correction(client, bad_base, stale) -> None:
+    keys = _seed_ready_complete(client)
+    before = _episode_revision(client, keys["episode_id"])
+    activated = client.post(f"/api/v2/evidence-processing-revisions/{COMPLETE1}/activate",
+                            json=_activate_body(client, keys))
+    assert activated.status_code == 201, activated.text
+    if not stale:
+        with client.app.state.session_factory() as session, session.begin():
+            base = EvidenceProcessingRevisionRepository(session).get(REV1)
+            EvidenceProcessingRevisionRepository(session).create(base.model_copy(
+                update={"evidence_processing_revision_id": bad_base}))
+    body = {
+        "raw_text_sha256": sha(RAW_TEXT.encode()), "text_start": len(RAW_TEXT),
+        "text_end": len(RAW_TEXT), "original_text": "", "corrected_text": " 补入",
+        "change_kind": "other_text", "reason": "验证旧版本不能串入",
+        "base_processing_revision_id": bad_base,
+        "expected_revision": before if stale else _episode_revision(client, keys["episode_id"]),
+        "idempotency_key": "wrong-current-base",
+    }
+    with client.app.state.session_factory() as session:
+        corrections_before = CorrectionRepository(session).list_by_page(OCR_PAGE_ID)
+    response = client.post(f"/api/v2/ocr-pages/{OCR_PAGE_ID}/corrections", json=body)
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == ("STALE_REVISION" if stale else "SCOPE_MISMATCH")
+    with client.app.state.session_factory() as session:
+        assert CorrectionRepository(session).list_by_page(OCR_PAGE_ID) == corrections_before
+        assert EpisodeRepository(session).get(keys["episode_id"]).active_evidence_processing_revision_id == COMPLETE1
+
+
+@pytest.mark.parametrize("foreign_episode", [False, True])
+def test_first_pass_correction_rejects_base_without_this_page(client, foreign_episode) -> None:
+    from app.domain.contracts.evidence_ingestion import EvidenceSnapshot
+    from app.domain.publication import evidence_snapshot_collection_hash
+
+    keys = _seed_api_stack(client)
+    with client.app.state.session_factory() as session, session.begin():
+        scope = EpisodeRepository(session).get(keys["episode_id"])
+        if foreign_episode:
+            scope = scope.model_copy(update={"review_episode_id": "episode-other-node"})
+            EpisodeRepository(session).save(scope)
+        snapshot = EvidenceSnapshot(
+            evidence_snapshot_id="empty-snapshot", project_id=scope.project_id,
+            subject_id=scope.subject_id, review_episode_id=scope.review_episode_id,
+            upload_mode=UploadMode.FULL, members=[], status=SnapshotStatus.STAGED,
+            collection_sha256=evidence_snapshot_collection_hash(members=[]),
+            created_at=FIXED_UTC, created_by="tester",
+        )
+        EvidenceSnapshotRepository(session).create_full(snapshot)
+        base = EvidenceProcessingRevisionRepository(session).get(REV1).model_copy(update={
+            "evidence_processing_revision_id": "different-base", "evidence_snapshot_id": snapshot.evidence_snapshot_id,
+            "review_episode_id": scope.review_episode_id, "manifest": [],
+            "manifest_sha256": evidence_processing_manifest_hash(entries=[]),
+        })
+        EvidenceProcessingRevisionRepository(session).create(base)
+        corrections_before = CorrectionRepository(session).list_by_page(OCR_PAGE_ID)
+    response = client.post(f"/api/v2/ocr-pages/{OCR_PAGE_ID}/corrections", json={
+        "raw_text_sha256": sha(RAW_TEXT.encode()), "text_start": len(RAW_TEXT),
+        "text_end": len(RAW_TEXT), "original_text": "", "corrected_text": " 补入",
+        "change_kind": "other_text", "reason": "不同来源不能串入校对",
+        "base_processing_revision_id": "different-base",
+        "expected_revision": _episode_revision(client, keys["episode_id"]),
+        "idempotency_key": "wrong-first-pass-base",
+    })
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "REVISION_BUILD_FAILED"
+    with client.app.state.session_factory() as session:
+        assert CorrectionRepository(session).list_by_page(OCR_PAGE_ID) == corrections_before
+
+
 def test_correction_blocking_kind_requires_confirmation(client) -> None:
     """关键语义变化（数值/小数点/单位/日期/极性/连接词）缺二次确认 -> 422。"""
     keys = _seed_api_stack(client)
@@ -882,6 +1010,8 @@ def test_build_revision_ready_and_replay(client) -> None:
     assert candidate_status.status_code == 200
     assert candidate_status.json() == {
         "candidate_id": created["candidate_id"],
+        "evidence_snapshot_id": SNAP1,
+        "base_processing_revision_id": REV1,
         "job_id": created["job_id"],
         "candidate_status": "staged",
         "candidate_status_label": "待处理",

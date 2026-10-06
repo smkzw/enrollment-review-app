@@ -154,6 +154,104 @@ class _ProtocolSemanticBatchFileCache(ProtocolSemanticBatchCache):
             raise ValueError("方案语义批次缓存标识无效")
         return self._root / f"{cache_key}.json"
 
+    def store_response_recovery(self, *, raw_text: str, original_text: str,
+                                recovered_text: str, proof: dict[str, Any]) -> dict[str, str]:
+        for name, text in (("provider_content_sha256", raw_text),
+                           ("original_sha256", original_text),
+                           ("recovered_sha256", recovered_text)):
+            if hashlib.sha256(text.encode()).hexdigest() != proof[name]:
+                raise ValueError("格式恢复内容与原答身份不一致")
+        position, token = proof["insert_position"], proof["insert_token"]
+        if (type(position) is not int or not 0 <= position < len(original_text)
+                or token not in ("]", "}")
+                or original_text[:position] + token + original_text[position:] != recovered_text):
+            raise ValueError("格式恢复超出单括号范围")
+        store = ArtifactStore(self._data_paths)
+        refs = {
+            "raw_response_ref": store.put("raw_response", raw_text.encode()).storage_ref,
+            "recovered_response_ref": store.put("evaluation_manifest", recovered_text.encode()).storage_ref,
+        }
+        refs["recovery_proof_ref"] = store.put("evaluation_manifest", json.dumps(
+            {**proof, **refs}, ensure_ascii=False, sort_keys=True).encode()).storage_ref
+        return refs
+
+    def store_source_reference_assembly(self, *, previous_text: str, raw_text: str,
+                                         assembled_text: str, proof: dict[str, Any]) -> dict[str, str]:
+        from app.agents.protocol_schema_repair import assemble_declared_input_references, assemble_unresolved_observation_sources
+
+        assembler = (assemble_unresolved_observation_sources
+                     if proof.get("version") == "protocol-unresolved-source-pair-assembly/v1"
+                     else assemble_declared_input_references)
+        checked, checked_proof = assembler(previous_text,
+            candidate_id=proof["candidate_id"], official_code=proof["official_code"])
+        if checked != assembled_text or checked_proof != proof:
+            raise ValueError("已声明引用的连接内容与原答不一致")
+        store = ArtifactStore(self._data_paths)
+        refs = {
+            "previous_raw_response_ref": store.put("raw_response", raw_text.encode()).storage_ref,
+            "previous_proposal_ref": store.put("raw_response", previous_text.encode()).storage_ref,
+            "assembled_proposal_ref": store.put("evaluation_manifest", assembled_text.encode()).storage_ref,
+        }
+        refs["reference_assembly_proof_ref"] = store.put("evaluation_manifest", json.dumps(
+            {**proof, **refs}, ensure_ascii=False, sort_keys=True).encode()).storage_ref
+        return refs
+
+    def store_source_field_input(self, *, raw_text: str, previous_text: str,
+                                 plan: dict[str, Any]) -> dict[str, str]:
+        """Preserve the failed answer before bounded recovery changes history."""
+        if hashlib.sha256(previous_text.encode()).hexdigest() != plan["precondition_sha256"]:
+            raise ValueError("来源字段修复与原答身份不一致")
+        store = ArtifactStore(self._data_paths)
+        return {
+            "previous_raw_response_ref": store.put("raw_response", raw_text.encode()).storage_ref,
+            "previous_proposal_ref": store.put("raw_response", previous_text.encode()).storage_ref,
+            "field_plan_ref": store.put("evaluation_manifest", json.dumps(
+                plan, ensure_ascii=False, sort_keys=True).encode()).storage_ref,
+        }
+
+    def store_source_field_result(self, *, previous_text: str, proposal_text: str,
+                                  raw_text: str, assembled_text: str, plan: dict[str, Any],
+                                  input_refs: dict[str, str]) -> dict[str, str]:
+        from app.agents.protocol_schema_repair import apply_source_field_repair
+
+        checked, proof = apply_source_field_repair(previous_text, proposal_text, plan=plan)
+        if checked != assembled_text:
+            raise ValueError("来源字段修复保存内容与装配结果不一致")
+        store = ArtifactStore(self._data_paths)
+        refs = {**input_refs,
+            "field_raw_response_ref": store.put("raw_response", raw_text.encode()).storage_ref,
+            "field_proposal_ref": store.put("raw_response", proposal_text.encode()).storage_ref,
+            "assembled_proposal_ref": store.put("evaluation_manifest", assembled_text.encode()).storage_ref}
+        refs["field_repair_proof_ref"] = store.put("evaluation_manifest", json.dumps(
+            {**proof, **refs}, ensure_ascii=False, sort_keys=True).encode()).storage_ref
+        return refs
+
+    def store_source_field_response(self, *, response, requested_session_id: str,
+                                     plan: dict[str, Any], input_refs: dict[str, str]) -> dict[str, str]:
+        """Freeze even an invalid answer; this receipt conveys no repair approval."""
+        store = ArtifactStore(self._data_paths)
+        original = store.read(input_refs["previous_proposal_ref"])
+        saved_plan = json.loads(store.read(input_refs["field_plan_ref"]))
+        if (hashlib.sha256(original).hexdigest() != plan["precondition_sha256"]
+                or saved_plan != plan):
+            raise ValueError("来源字段回答与已保存原答或计划不一致")
+        refs = {
+            "field_raw_response_ref": store.put("raw_response", response.original_text.encode()).storage_ref,
+            "field_proposal_ref": store.put("raw_response", response.text.encode()).storage_ref,
+        }
+        receipt = {
+            "contract": "protocol-source-field-response/v1", "validation_completed": False,
+            "adoption_checked": False, "requested_session_id": requested_session_id,
+            "response_session_id": response.session_id,
+            "previous_output_sha256": plan["precondition_sha256"],
+            "field_raw_response_sha256": hashlib.sha256(response.original_text.encode()).hexdigest(),
+            "field_output_sha256": hashlib.sha256(response.text.encode()).hexdigest(),
+            "call_metadata": response.call_metadata, **input_refs, **refs,
+        }
+        refs["field_response_receipt_ref"] = store.put("evaluation_manifest", json.dumps(
+            receipt, ensure_ascii=False, sort_keys=True).encode()).storage_ref
+        return refs
+
     def load(self, cache_key: str) -> str | None:
         path = self._path(cache_key)
         if path.is_symlink() or (path.exists() and not path.is_file()):
@@ -1058,9 +1156,11 @@ def _semantic_failure_detail(result: ProtocolDeconstructionRunResult) -> str:
 
 
 def _assemble_input_package(
-    context: StepContext,
+    context: StepContext | None,
     config: ProtocolDeconstructionExecutorConfig,
     merged: dict[str, Any],
+    *,
+    source_identity: ProtocolDeconstructionInput | None = None,
 ) -> ProtocolDeconstructionInputPackage:
     artifact = _artifact_from_checkpoint(merged)
     snapshot = _snapshot_from_checkpoint(merged)
@@ -1069,11 +1169,17 @@ def _assemble_input_package(
     identity = ProtocolIdentityDecision.model_validate(merged["identity_decision"])
     phase_selection = StudyPhaseSelection.model_validate(merged["phase_selection"])
     phase_graph = PhaseApplicabilityGraph.model_validate(merged["phase_graph"])
-    project_id = f"draft-project-{context.job_id[:12]}"
-    protocol_version_id = f"draft-version-{context.job_id[:12]}"
-    return ProtocolDeconstructionInputAssembler(
-        frozen_at=datetime.now(timezone.utc)
-    ).assemble(
+    if context is None and source_identity is None:
+        raise ValueError("重建来源必须提供原身份或当前任务上下文。")
+    project_id = source_identity.project_id if source_identity else f"draft-project-{context.job_id[:12]}"
+    protocol_version_id = source_identity.protocol_version_id if source_identity else f"draft-version-{context.job_id[:12]}"
+    frozen_at = datetime.now(timezone.utc)
+    if source_identity is not None:
+        if source_identity.parent_rule_catalog.frozen_at != source_identity.required_procedure_catalog.frozen_at:
+            raise StepFailure(retryable=False, error_code="SAVED_DRAFT_RECOVERY_INVALID",
+                              detail="原来源目录的冻结时间不一致，不能复用核对依据。")
+        frozen_at = source_identity.parent_rule_catalog.frozen_at
+    return ProtocolDeconstructionInputAssembler(frozen_at=frozen_at).assemble(
         project_id=project_id,
         protocol_version_id=protocol_version_id,
         source_artifact=artifact,
@@ -1092,8 +1198,29 @@ def _handle_freeze(
 ) -> dict[str, Any]:
     """Persist deterministic single-phase catalogs before any model call."""
     merged = _merged_prior_checkpoints(config, context.job_id, before_step=STEP_FREEZE)
-    package = _assemble_input_package(context, config, merged)
+    recovery = context.job_payload.get("saved_candidate_recovery")
+    source_identity = None
+    if recovery is not None:
+        from app.services.protocol_saved_draft_recovery import load_saved_draft_recovery
+        from app.services.protocol_workbench_service import _CHECKPOINT_STEP_ORDER
+
+        if (not isinstance(recovery, dict) or recovery.get("version") != "saved-draft-recovery/v2"
+                or recovery.get("candidate_origin") != "operator_imported_unpublished"):
+            raise StepFailure(retryable=False, error_code="SAVED_DRAFT_RECOVERY_INVALID", detail="保存提案的恢复版本不受支持。")
+        try:
+            with config.session_factory() as session:
+                merged, _ = load_saved_draft_recovery(
+                    JobStore(session, now=config.now), config.data_paths,
+                    source_job_id=recovery["source_job_id"], candidate_ref=recovery["candidate_ref"],
+                    expected_freeze_sha256=recovery["expected_freeze_sha256"],
+                    source_steps=_CHECKPOINT_STEP_ORDER[:_CHECKPOINT_STEP_ORDER.index(STEP_GENERATE)],
+                )
+            source_identity = ProtocolDeconstructionInput.model_validate(merged["source_input"])
+        except (ValueError, KeyError) as exc:
+            raise StepFailure(retryable=False, error_code="SAVED_DRAFT_RECOVERY_INVALID", detail=str(exc)) from exc
+    package = _assemble_input_package(context, config, merged, source_identity=source_identity)
     return {
+        **({key: value for key, value in merged.items() if key not in {"attempt", "awaiting_user"}} if recovery else {}),
         "source_input": package.source_input.model_dump(mode="json"),
         "source_spans": {
             key: span.model_dump(mode="json")
@@ -1183,7 +1310,28 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
                 config, context.job_id, batch_index, batch_total, candidate
             )
         )
-        if config.draft_response_builder is not None:
+        recovery = context.job_payload.get("saved_candidate_recovery")
+        if recovery is not None:
+            # This is a retained proposal, not a new or successful model reading.
+            from app.domain.contracts.agent_io import ProtocolDeconstructionDraft
+            final_draft = ProtocolDeconstructionDraft.model_validate_json(
+                ArtifactStore(config.data_paths).read(recovery["candidate_ref"])
+            )
+            if (final_draft.project_id != project_id or final_draft.protocol_version_id != protocol_version_id
+                    or final_draft.selected_phase != source_input.selected_phase):
+                raise StepFailure(retryable=False, error_code="SAVED_DRAFT_RECOVERY_INVALID", detail="保存提案与本次冻结来源身份不一致。")
+            gate = (config.gate or ProtocolDeconstructionGate(artifact_reader=ArtifactStore(config.data_paths).read)).evaluate(
+                source_input, final_draft, source_spans=source_spans,
+            )
+            with config.session_factory() as session, session.begin():
+                revision = ProtocolDraftService(session).save_initial_draft(
+                    final_draft, actor=actor, created_at=config.now(),
+                    origin_note=("导入保留的未发布候选提案；不是本任务的新模型读取，"
+                        "也不证明提案来自原任务的直接输出。须按当前来源和门禁继续核对。"
+                        f" 原来源任务：{recovery['source_job_id']}；候选：{recovery['candidate_ref']}；"
+                        f"来源冻结哈希：{recovery['expected_freeze_sha256']}。"),
+                )
+        elif config.draft_response_builder is not None:
             draft_json = config.draft_response_builder(package)
             transport = _FakeSingleResponseTransport(draft_json)
             runner = ProtocolDeconstructorRunner(gate=config.gate)
@@ -1224,8 +1372,8 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
                     detail=f"方案语义解构调用未完成，请稍后重试。（{exc}）",
                 ) from exc
 
-        _, failure_code, _ = summarize_run_result_for_route(result)
-        if failure_code in NON_REPLAYABLE_ROUTE_ERRORS:
+        _, failure_code, _ = summarize_run_result_for_route(result) if result is not None else (None, None, None)
+        if result is not None and failure_code in NON_REPLAYABLE_ROUTE_ERRORS:
             # A retained earlier candidate is recovery material, not a successful
             # generation step after an uncertain or identity-invalid new call.
             raise StepFailure(
@@ -1236,7 +1384,7 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
                     mode="json", exclude={"attempts": {"__all__": {"call_metadata"}}},
                 )},
             )
-        if result.final_draft is None:
+        if result is not None and result.final_draft is None:
             _, failure_code, _ = summarize_run_result_for_route(result)
             detail = _semantic_failure_detail(result)
             if route_audit_payload is not None:
@@ -1266,16 +1414,15 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
                 error_code=failure_code or "SEMANTIC_DRAFT_MISSING",
                 detail=detail,
             )
-        final_draft = result.final_draft
-        gate = result.final_gate_result
-        with config.session_factory() as session:
-            with session.begin():
-                revision = ProtocolDraftService(session).save_initial_draft(
-                    final_draft,
-                    actor=actor,
-                    created_at=config.now(),
-                    baseline=baseline_draft,
-                )
+        if result is not None:
+            final_draft = result.final_draft
+            gate = result.final_gate_result
+        if revision is None:
+            with config.session_factory() as session:
+                with session.begin():
+                    revision = ProtocolDraftService(session).save_initial_draft(
+                        final_draft, actor=actor, created_at=config.now(), baseline=baseline_draft,
+                    )
 
     assert revision is not None
     assert final_draft is not None
@@ -1316,6 +1463,11 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
     }
     if route_audit_payload is not None:
         payload["semantic_route_audit"] = route_audit_payload
+    if context.job_payload.get("saved_candidate_recovery") is not None:
+        payload["saved_candidate_recovery"] = {
+            **context.job_payload["saved_candidate_recovery"],
+            "new_model_reading": False, "current_gate_checked": True,
+        }
     if result is not None:
         payload["semantic_call_metadata"] = [
             {

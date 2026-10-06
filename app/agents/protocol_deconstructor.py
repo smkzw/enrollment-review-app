@@ -14,6 +14,7 @@ from typing import Any, Literal, Protocol
 from pydantic import Field, ValidationError
 from app.agents.protocol_generation_schema import predicate_generation_schema
 from app.agents.protocol_source_scope import constrain_source_schema, source_references
+from app.domain.contracts.record_semantics import RecordSemantics, RECORD_SEMANTICS_GUIDANCE
 
 from app.domain.contracts.agent_io import (
     EvidenceRequirementDraft,
@@ -41,6 +42,7 @@ from app.domain.contracts.rules import (
     Rule,
     RuleComponent,
     RestrictedRuleComponent,
+    SourceDefinedProspectivePeriod,
     WorkflowStage,
     iter_atomic_predicates,
 )
@@ -50,6 +52,7 @@ from app.protocols.deconstruction_gate import (
     ProtocolGateIssue,
 )
 from app.protocols.adaptive_batch_budget import estimate_text_tokens
+from app.protocols.source_time_fragments import frozen_review_stage_aliases
 from app.protocols.parent_rule_semantic_segmentation import (
     ParentRuleSegment,
     ParentSegmentationThresholds,
@@ -81,6 +84,11 @@ class ProtocolAgentResponse(VersionedModel):
     session_id: str = Field(min_length=1)
     text: str = Field(min_length=1)
     call_metadata: dict[str, object] = Field(default_factory=dict)
+    raw_text: str | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @property
+    def original_text(self) -> str:
+        return self.text if self.raw_text is None else self.raw_text
 
 
 class ProtocolAgentCallError(RuntimeError):
@@ -109,7 +117,7 @@ class ProtocolParentSegmentError(RuntimeError):
         self.error_code = error_code
 
 
-ProtocolOutputKind = Literal["semantic_candidate", "semantic_rule_repair", "official_source_scope_review"]
+ProtocolOutputKind = Literal["semantic_candidate", "semantic_rule_repair", "official_source_scope_review", "semantic_source_fields"]
 
 
 class ProtocolWireError(ValueError):
@@ -350,7 +358,10 @@ _SYSTEM_CONTRACT = (
     "子类可另有完整group，频次只在对应子类group内计算，不要求其他上位情形满足该频次。"
     "‘计划在治疗期间或研究完成后"
     "N周内’等未来计划应拆分并列分支；治疗期间或研究期间的分支分别用 prospective_period "
-    "保存 treatment_period 或 study_period；研究完成后或末次给药后的分支分别用 "
+    "保存 treatment_period 或 study_period；多个期间、带访视边界或不能由这两个标签完整表达的"
+    "计划，用 prospective_period 的 kind=source_defined 和 source_excerpts 保留本条件全部逐字"
+    "原文，并显式填写 semantic_proposition；不把较窄期间写成整个研究期，也不猜日期。"
+    "真正含义未清仍走已有受限子项，不以逐字保存冒充含义已核实。研究完成后或末次给药后的分支分别用 "
     "prospective_window 保存 study_completion_date、last_dose_date 或 "
     "study_drug_administration_date 及原文时长，其中原文未指明首次或末次、"
     "仅写‘研究药物给药后’时才用 study_drug_administration_date，不得误写成"
@@ -396,6 +407,8 @@ _SYSTEM_CONTRACT = (
     "‘研究期间计划/需要’凭空添加天数或日期锚点。时间窗必须使用 upper_bound/lower_bound 并保留原文的 day/week/month/year"
     "单位，不得把周、月、年换算成 *_days；‘前N周/月内’不要额外输出原文未写的零日下界。"
     "exception_expression 只能作为子组件字段，不得放入 expression 内；逻辑操作符只用 all/any/not。"
+    "冻结流程唯一合并访视的阶段别名由宿主在装配资料要求与到期节点时统一，"
+    "不改变日期锚点、原文条件或核查次数，不将真实分开的访视合并。"
     "资料要求的 due_stage 必须依据当前条款逐字可见的审核时点或冻结流程确定，不得为了"
     "‘再次确认’而把每个条件惯性复制到筛选、导入和基线；原文只要求一个节点时只建立一个"
     "资料要求。只读required_procedure_catalog提供方案既有流程上下文，不要求重新生成其中的项目；"
@@ -457,6 +470,35 @@ _INTERPRETATION_ANCHOR_CONTRACT = (
     "解释澄清区不存在、当前父规则未被解析绑定、或解析声明的 ambiguous_source_refs 与该"
     "原子条件的来源定位不符时：不得使用 review_node_date，必须把未命名回溯锚点保留在 "
     "unresolved_items，也不得改用任何命名锚点猜测。"
+)
+
+
+_SOURCE_COMPUTATION_CONTRACT = (
+    "原文定义数值的计算方式时，将source_computation附在实际使用该数值的数值条件"
+    "（简化输出为scalar_atom），不另造‘已计算’的患者义务，也不把均值或求和改成semantic_proposition。"
+    "operator、input_refs、missing_policy分别记录操作、输入选取与缺失处理；每个引用的"
+    "statement_index是该条件自身source_clause/source_clauses从零开始的位置（单段为零），"
+    "quote必须逐字属于对应片段。未知操作或范围保持unresolved；未规定缺失处理用not_specified，"
+    "不推断补值。declared_input_count与max_missing_count只有原文明确给出该计算的总输入数或"
+    "允许缺失数时才填，number_text保留原文数词，source引用其依据；不把几个分项数自行相加"
+    "冒充原文声明总数。input_selection记录有源输入选取方式all/single/latest_n/earliest_n/unresolved；"
+    "没有核清时填null或unresolved，不得仅因引文存在就推定已可计算。single/latest_n/earliest_n"
+    "须同时给出declared_input_count；latest_n/earliest_n的ordering_basis区分collection_time/"
+    "report_time/record_time/source_sequence，原文没有明确日期角色时填unresolved，不能默认用"
+    "报告时间或上传顺序。ordering_ref逐字引用排序依据；未核清或不排序时不填该依据。"
+    "window_refs保留选取窗口的逐字引用，不从审核日期猜锚点；选取方式、排序和窗口引用必须属于"
+    "input_refs已声明的输入依据。该字段仅保存方案方法，不证明病历输入已核实或已完成计算；"
+    "occurrence_window只表达发生次数或发生天数，不表达每期间的用量、金额、剂量或比率。"
+    "source_computation不得与occurrence_window、repeat_scheme、prospective_window、"
+    "prospective_period、semantic_proposition或研究者判断混用；这些字段在本计算条件中须为空。"
+    "每期间数量须用source_computation.quantity_basis保留period_ref逐字周期依据；"
+    "期间如何划分未说明时period_partition=unresolved、partition_ref=null，明确规定才引用"
+    "partition_ref并填source_defined。unit_equivalence_refs逐项保留本对象的换算定义，"
+    "不把这些引文当成已可执行的换算，不把‘或’改成相加，也不创造单位或计算系数。"
+    "没有每期间数量时quantity_basis=null。每期间数值的计算或选取依据保留在"
+    "source_computation及有源观察政策中，未明确的期间口径"
+    "保持unresolved；外层time_constraint仍只表达原文命名的回溯锚点与范围，不能充当计算分母。"
+    "没有计算定义时省略或填null。"
 )
 
 
@@ -549,6 +591,7 @@ _COMPACT_WIRE_COMPONENT_CONTRACT = (
     "prospective_window 同时保留原文期间和时长。该字段只声明‘这里有一个需要按方案"
     "来源核实含义的命题’，不表示命题已被核实，也不能用它替代原文未命名的回溯锚点、"
     "观察采用范围待核实或研究者专业判断的既有处理。"
+    + _SOURCE_COMPUTATION_CONTRACT + RECORD_SEMANTICS_GUIDANCE +
     "资料要求的 predicate_refs 是允许的局部位置引用，不是系统身份：role 指 trigger、exception 或 repeat_trigger。"
     "repeat_trigger 必须同时填写其旁置条件的 condition_id，其他角色不得填写 condition_id；"
     "复查条件的资料归属须独立核实，不得继承原入排条件的来源要求。"
@@ -563,7 +606,8 @@ _COMPACT_WIRE_COMPONENT_CONTRACT = (
 
 
 def protocol_prompt_template_sha256(prompt_template: str) -> str:
-    """Hash every behavioral instruction, not only the caller's prefix."""
+    """Hash author/shared contracts; targeted requests also bind their full messages."""
+    from .protocol_schema_repair import SOURCE_FIELD_REPAIR_VERSION
     return _sha256(
         prompt_template.strip()
         + "\n\n"
@@ -573,7 +617,10 @@ def protocol_prompt_template_sha256(prompt_template: str) -> str:
         + "\n\n"
         + _FORMAL_DOMAIN_ID_CONTRACT
         + "\n\n"
+        + _SOURCE_COMPUTATION_CONTRACT
+        + "\n\n"
         + _COMPACT_WIRE_COMPONENT_CONTRACT
+        + "\n\n" + SOURCE_FIELD_REPAIR_VERSION
     )
 
 
@@ -590,6 +637,11 @@ def _semantic_generation_schema(
         if field not in requirement["required"]:
             requirement["required"].append(field)
         requirement["properties"][field].pop("default", None)
+    computation = schema["$defs"].get("SourceComputation")
+    if computation is not None:
+        if "input_refs" not in computation["required"]:
+            computation["required"].append("input_refs")
+        computation["properties"]["input_refs"].pop("default", None)
     return constrain_source_schema(schema, allowed_source_span_ids)
 
 
@@ -842,6 +894,13 @@ def _wire_repeat_scheme_schema():
     return {"anyOf": [_inline_required_contract_schema(schema), {"type": "null"}]}
 
 
+def _wire_source_computation_schema():
+    # New provider outputs declare nullable selection explicitly. Hydration of
+    # legacy saved atoms keeps omission unqualified and preserves their bytes.
+    from app.domain.contracts.source_computation import SourceComputation
+    return {"anyOf": [_inline_required_contract_schema(SourceComputation.model_json_schema()), {"type": "null"}]}
+
+
 def _wire_occurrence_scope_schema():
     from app.domain.contracts.occurrence_scope import OccurrenceScope
     schema = OccurrenceScope.model_json_schema()
@@ -924,21 +983,26 @@ def _wire_atom_common_properties(
             },
             "required": ["anchor_type", "upper_bound"],
         },
-        "prospective_period": {
-            "type": ["object", "null"],
-            "additionalProperties": False,
-            "properties": {
-                "period": {
-                    "type": "string",
-                    "enum": ["treatment_period", "study_period"],
-                }
-            },
-            "required": ["period"],
-        },
+        "prospective_period": {"anyOf": [
+            {"type": "null"},
+            {"type": "object", "additionalProperties": False,
+             "properties": {"period": {"type": "string", "enum": ["treatment_period", "study_period"]}},
+             "required": ["period"]},
+            {"type": "object", "additionalProperties": False,
+             "properties": {"kind": {"type": "string", "enum": ["source_defined"]},
+                            "source_excerpts": {"type": "array", "minItems": 1,
+                                                "items": {"type": "string", "minLength": 1}}},
+             "required": ["kind", "source_excerpts"]},
+        ]},
         "time_constraint": {"$ref": "#/$defs/wire_time_constraint"},
         "semantic_proposition": _wire_semantic_proposition_schema(),
         "repeat_scheme": _wire_repeat_scheme_schema(),
         "observation_policy": _wire_observation_policy_schema(),
+        "source_computation": _wire_source_computation_schema(),
+        "record_semantics": {"anyOf": [
+            _inline_required_contract_schema(RecordSemantics.model_json_schema()),
+            {"type": "null"},
+        ]},
         "negated": {"type": "boolean"},
     }
 
@@ -1376,6 +1440,12 @@ def protocol_output_response_format(
     requirement_limit: int = DNF_WIRE_MAX_REQUIREMENTS_PER_COMPONENT,
 ) -> dict[str, object]:
     """Return the strict provider schema for one semantic response kind."""
+    if output_kind == "semantic_source_fields":
+        from .protocol_schema_repair import source_field_repair_schema
+        return {"type": "json_schema", "json_schema": {
+            "name": "protocol_semantic_source_fields", "strict": True,
+            "schema": source_field_repair_schema(),
+        }}
     if output_kind == "official_source_scope_review":
         from app.domain.contracts.protocol_scope_review import OfficialScopeReading
         return {"type": "json_schema", "json_schema": {
@@ -1718,6 +1788,7 @@ def build_protocol_deconstruction_prompt(
     return (
         f"{prompt_template.strip()}\n\n"
         f"{_SYSTEM_CONTRACT}\n\n"
+        f"{'' if compact else _SOURCE_COMPUTATION_CONTRACT + chr(10) + chr(10)}"
         f"{_INTERPRETATION_ANCHOR_CONTRACT}\n\n"
         f"{'' if compact else _FORMAL_DOMAIN_ID_CONTRACT + chr(10) + chr(10)}"
         f"{batch_instruction}"
@@ -1771,6 +1842,7 @@ def _next_batch_prompt(
         f"candidate_id 必须继续使用 {candidate_id!r}；proposed_rules 必须且只能"
         f"按顺序返回 {list(rule_codes)}。不得重复前批，不得提前返回后批，不得省略本批父规则。"
         "输出完整 JSON 对象，不要附加说明。输出结构："
+        + _SOURCE_COMPUTATION_CONTRACT
         + _compact_schema()
     )
 
@@ -1807,7 +1879,7 @@ def _batch_schema_repair_prompt(
             "每个 atom 的 source_locator 只能包含 source_clause 或 source_clauses 其中一个字段；不要附加解释。"
         )
         if compact
-        else "输出结构：" + _compact_schema(allowed_source_span_ids, repair=True)
+        else _SOURCE_COMPUTATION_CONTRACT + "输出结构：" + _compact_schema(allowed_source_span_ids, repair=True)
     )
     return (
         "本批输出无法按冻结目录合并。"
@@ -1962,6 +2034,7 @@ def _repair_prompt(
         )
     return (
         (_SYSTEM_CONTRACT + "\n" if include_frozen_context else "")
+        + (_SOURCE_COMPUTATION_CONTRACT + "\n" if not compact else "")
         + f"这是同一会话的第 {attempt} 次定向修正。"
         + instruction
         + "不得通过删除目录项、改官方编号、改来源或改访视实例规避问题。"
@@ -2236,6 +2309,8 @@ def _wire_prospective_period(value: Any) -> dict[str, object] | None:
         return None
     if not isinstance(value, Mapping):
         raise ValueError("wire prospective_period 必须是对象或 null")
+    if "kind" in value or "source_excerpts" in value:
+        return SourceDefinedProspectivePeriod.model_validate(value).model_dump(mode="json")
     unknown_keys = set(value) - {"period"}
     if unknown_keys:
         raise ValueError(f"wire prospective_period 含未知字段：{sorted(unknown_keys)}")
@@ -2297,6 +2372,8 @@ def _wire_atom(
     }
     common_keys.add("observation_policy")
     common_keys.add("repeat_scheme")
+    common_keys.add("source_computation")
+    common_keys.add("record_semantics")
     shape_keys = {
         "scalar": {"comparator", "value"},
         "set": {"comparator", "values"},
@@ -2506,6 +2583,21 @@ def _wire_atom(
             policy_payload["source_excerpts"] = excerpts
     policy = ObservationPolicy.model_validate(policy_payload) if policy_payload is not None else None
     result["observation_policy"] = policy.model_dump(mode="json") if policy is not None else None
+    if value.get("record_semantics") is not None:
+        purpose = RecordSemantics.model_validate(value["record_semantics"])
+        if any(not any(excerpt in clause for clause in observation_clauses)
+               for excerpt in purpose.source_excerpts):
+            raise ValueError("记录用途须属于本条件逐字原文")
+        if professional and purpose.record_obligation == "not_required_by_source":
+            raise ValueError("研究者判断要求不能声明无需方案书面判断")
+        result["record_semantics"] = purpose.model_dump(mode="json")
+    if value.get("source_computation") is not None:
+        from app.domain.contracts.source_computation import SourceComputation, validate_computation_quotes
+        computation = SourceComputation.model_validate(value["source_computation"])
+        validate_computation_quotes(computation, observation_clauses)
+        if shape != "scalar" or raw_proposition is not None or professional:
+            raise ValueError("计算定义须属于数值比较，不得以语义命题或专业判断替代")
+        result["source_computation"] = computation.model_dump(mode="json")
     if value["repeat_scheme"] is not None:
         from app.domain.contracts.repeat_scheme import RepeatScheme
         scheme = RepeatScheme.model_validate(value["repeat_scheme"])
@@ -3391,6 +3483,7 @@ def _hydrate_semantic_candidate(
     component_drafts: list[RuleComponentDraft] = []
     requirement_drafts: list[EvidenceRequirementDraft] = []
     stage_requirements: dict[ReviewStage, list[str]] = {}
+    stage_aliases = frozen_review_stage_aliases(source_input)
     used_predicate_ids: set[str] = set()
     for item in sorted(
         source_input.parent_rule_catalog.items, key=lambda value: value.position
@@ -3495,12 +3588,12 @@ def _hydrate_semantic_candidate(
                     requires_contemporaneous_objective_source=(
                         requirement.requires_contemporaneous_objective_source
                     ),
-                    due_stage=requirement.due_stage,
+                    due_stage=stage_aliases.get(requirement.due_stage, requirement.due_stage),
                     source_validity_window=requirement.source_validity_window,
                     description=_neutral_evidence_description(
                         requirement.description,
                         fact_type=requirement.fact_type,
-                        due_stage=requirement.due_stage,
+                        due_stage=stage_aliases.get(requirement.due_stage, requirement.due_stage),
                     ),
                     predicate_ids=[
                         predicate_id_remap[predicate_id]
@@ -3839,7 +3932,9 @@ _PROSPECTIVE_FEEDBACK_CONTRACT = (
     "未来期间局部核对：当前同意或计划仍是当前声明，不是未来行为已经履行。"
     "仅当反馈指出本子项遗漏时间范围且自身逐字来源支持时，补齐现有 prospective_period 或 "
     "prospective_window；这项有源补齐属于目标修订，不属于需要撤回的无关改动。"
-    "prospective_period 以 treatment_period 或 study_period 保存原文期间；prospective_window "
+    "prospective_period 以 treatment_period 或 study_period 保存能完整对应的原文期间；"
+    "多个期间或带边界的计划改用 kind=source_defined、source_excerpts 保留本条件全部逐字原文，"
+    "并声明 semantic_proposition；不省略期间、不扩大范围，也不把原文歧义当已核清。prospective_window "
     "以 study_completion_date、last_dose_date 或 study_drug_administration_date 加原文时长保存截止范围。"
     "原文只写研究药物给药后、未指明首次或末次时用 study_drug_administration_date，"
     "不得猜首次或末次给药。原文没有明确期间、锚点或时长时不能补造。"
@@ -3970,6 +4065,9 @@ def revise_protocol_draft_from_feedback(
         "例外、资料要求、应完成阶段和来源片段都必须逐字段原样保留；但反馈明确指出共享原文中的"
         "例外、时间或限定词被错误归给本子项时，可以仅把本子项谓词的来源片段缩窄为原文中"
         "连续且逐字存在的完整适用分支，同时保留父规则原文、来源编号和未选中兄弟子项。"
+        "同一反馈明确授权修正本子项来源归属时，组件级 source_excerpts 也须同步保留完整适用分支，"
+        "不能仍把仅用于识别兄弟对象的上下文当成本子项时间义务；完整父项上下文仍保留供对象核对。"
+        "这不是允许删去本子项真正适用的共同定义、连接语、时间或例外；归属未核清时不得缩窄。"
         "不能通过截掉本子项真正适用的限定词、例外或连接语来消除检查问题；不确定归属时保持待核。"
         "若确需将整个独立子项改为"
         "有源能力缺口，只能返回该子项的原字摘录及具体未决维度，不能以待核掩盖已明确的阈值或移动"
@@ -4007,6 +4105,7 @@ def revise_protocol_draft_from_feedback(
             f"每项 affected_scope 必须明确包含 {target_rule_code} 或其子项定位，"
             "不得填写其他父规则、无父规则编号的范围或全方案事项；没有则返回空数组。\n\n"
         )
+        + (_SOURCE_COMPUTATION_CONTRACT + "\n\n" if not compact else "")
         + _PROSPECTIVE_FEEDBACK_CONTRACT + "\n\n"
         + f"用户指出的问题：{note}\n\n"
         f"当前目标规则：{prompt_rule.model_dump_json()}\n\n"
@@ -4018,9 +4117,48 @@ def revise_protocol_draft_from_feedback(
         prompt=prompt,
         output_kind="semantic_rule_repair",
     )
+    if not compact:
+        from .protocol_schema_repair import assemble_declared_input_references
+        assembled, reference_proof = assemble_declared_input_references(response.text,
+            candidate_id=current.candidate_id, official_code=target_rule_code)
+        if reference_proof is not None:
+            store = getattr(transport, "_call_budget_store", None)
+            save = getattr(store, "store_source_reference_assembly", None)
+            if callable(save):
+                try:
+                    reference_proof.update(save(previous_text=response.text,
+                        raw_text=response.original_text, assembled_text=assembled, proof=reference_proof))
+                except (ValueError, OSError, KeyError, TypeError) as exc:
+                    raise ProtocolAgentCallError(response.session_id,
+                        "已声明引用的连接记录未能保存；原答未改变。",
+                        error_code="SOURCE_REFERENCE_ASSEMBLY_PERSISTENCE_FAILED",
+                        error_metadata={**response.call_metadata,
+                            "source_reference_assembly": reference_proof}) from exc
+                response = response.model_copy(update={"text": assembled,
+                    "raw_text": response.original_text,
+                    "call_metadata": {**response.call_metadata,
+                        "source_reference_assembly": reference_proof}})
     last_error: Exception | None = None
     for attempt in range(2):
+        repair_phase = "parse"
         try:
+            if not compact:
+                from .protocol_schema_repair import assemble_unresolved_observation_sources
+                assembled, pair_proof = assemble_unresolved_observation_sources(response.text,
+                    candidate_id=current.candidate_id, official_code=target_rule_code)
+                store = getattr(transport, "_call_budget_store", None)
+                save = getattr(store, "store_source_reference_assembly", None)
+                if pair_proof is not None and callable(save):
+                    try:
+                        pair_proof.update(save(previous_text=response.text, raw_text=response.original_text,
+                                               assembled_text=assembled, proof=pair_proof))
+                    except (ValueError, OSError, KeyError, TypeError) as exc:
+                        raise ProtocolAgentCallError(response.session_id, "未决观察引用的连接记录未保存；原答不变。",
+                            error_code="SOURCE_REFERENCE_ASSEMBLY_PERSISTENCE_FAILED",
+                            error_metadata={**response.call_metadata,
+                                "unresolved_source_pair_assembly": pair_proof}) from exc
+                    response = response.model_copy(update={"text": assembled, "raw_text": response.original_text,
+                        "call_metadata": {**response.call_metadata, "unresolved_source_pair_assembly": pair_proof}})
             repair = _parse_semantic_repair(
                 response.text,
                 compact=compact,
@@ -4052,6 +4190,7 @@ def revise_protocol_draft_from_feedback(
                     repair, target, component_index, target_component_id,
                     restricted_index=restricted_index,
                 )
+            repair_phase = "validate_scope"
             _validate_semantic_repair(
                 repair,
                 expected_codes=[target_rule_code],
@@ -4059,6 +4198,7 @@ def revise_protocol_draft_from_feedback(
                 expected_batch_id=repair_batch_id if compact else None,
                 source_input=source_input,
             )
+            repair_phase = "apply"
             revised = _apply_semantic_repair(
                 current,
                 repair,
@@ -4116,22 +4256,31 @@ def revise_protocol_draft_from_feedback(
                         suffix += 1
                     original_restricted.append((new_id, new_display))
                 preserved = {target_rule_code: tuple(original_executable + original_restricted)}
+            repair_phase = "hydrate"
             hydrated = _hydrate_semantic_candidate(
                 source_input, revised, component_identity_overrides=preserved,
             )
+            repair_phase = "merge_feedback"
             return _merge_feedback_hydration(
                 current_draft, hydrated, target_rule_code,
                 target_component_id=target_component_id,
             )
         except ProtocolRequirementIdentityError:
             raise
+        except ProtocolAgentCallError:
+            raise
         except Exception as exc:
             last_error = exc
             if attempt == 1:
                 break
-            response = transport.continue_session(
-                session_id=response.session_id,
-                prompt=(
+            from .protocol_schema_repair import (
+                plan_source_field_repair, source_field_repair_prompt,
+                recover_source_fields,
+            )
+            field_plan = (plan_source_field_repair(response.text,
+                candidate_id=current.candidate_id, official_code=target_rule_code)
+                if repair_phase == "parse" and not compact else None)
+            repair_prompt = (
                     "上一响应无法作为指定父规则的局部修订读取。"
                     f"问题：{str(exc)[:12000]}。请只返回符合下列结构的 JSON："
                     "每个谓词只能使用 source_clause 或 source_clauses 其中一种原文定位；"
@@ -4156,13 +4305,45 @@ def revise_protocol_draft_from_feedback(
                             _batch_source_span_ids(source_input, [target_rule_code])
                         )
                     )
-                ),
-                output_kind="semantic_rule_repair",
             )
+            if field_plan is not None:
+                repair_prompt = source_field_repair_prompt(field_plan)
+            try:
+                if field_plan is not None:
+                    response = recover_source_fields(previous_response=response,
+                        plan=field_plan, transport=transport)
+                else:
+                    response = transport.continue_session(
+                        session_id=response.session_id, prompt=repair_prompt,
+                        output_kind="semantic_rule_repair",
+                    )
+            except ProtocolAgentCallError as recovery_error:
+                metadata = dict(recovery_error.error_metadata)
+                metadata["local_repair_trigger"] = {
+                    "phase": repair_phase, "exception_type": type(exc).__name__,
+                    "error_code": getattr(exc, "error_code", "LOCAL_REPAIR_INVALID"),
+                    "message": str(exc)[:12000],
+                    "response_sha256": _sha256(response.original_text),
+                    "repair_prompt_sha256": _sha256(repair_prompt),
+                }
+                raise ProtocolAgentCallError(
+                    recovery_error.session_id, str(recovery_error),
+                    error_code=recovery_error.error_code, error_metadata=metadata,
+                ) from exc
     raise ProtocolAgentCallError(
         response.session_id,
         f"反馈修订经过一次结构纠正后仍无法读取：{last_error}",
-    )
+        error_metadata={
+            **({"source_field_repair": response.call_metadata["source_field_repair"]}
+               if "source_field_repair" in response.call_metadata else {}),
+            "local_repair_trigger": {
+            "phase": repair_phase, "exception_type": type(last_error).__name__,
+            "error_code": getattr(last_error, "error_code", "LOCAL_REPAIR_INVALID"),
+            "message": str(last_error)[:12000],
+            "response_sha256": _sha256(response.original_text),
+            "assembled_response_sha256": _sha256(response.text),
+        }},
+    ) from last_error
 
 
 def _merge_component_only_repair(
@@ -4437,7 +4618,8 @@ def _parse_semantic_candidate(
     compact: bool = False,
     expected_batch_id: str | None = None,
 ) -> ProtocolSemanticDeconstructionCandidate:
-    payload = json.loads(text)
+    from app.llm.json_container_recovery import strict_json_loads
+    payload = strict_json_loads(text)
     if compact:
         try:
             candidate, _batch_id = _parse_wire_semantic_candidate(
@@ -4636,7 +4818,8 @@ def _parse_semantic_repair(
     compact: bool = False,
     expected_batch_id: str | None = None,
 ) -> ProtocolSemanticRuleRepair:
-    payload = json.loads(text)
+    from app.llm.json_container_recovery import strict_json_loads
+    payload = strict_json_loads(text)
     if compact:
         try:
             repair, _batch_id = _parse_wire_semantic_repair(
@@ -5121,7 +5304,8 @@ def _parse_protocol_draft(
     text: str,
     source_input: ProtocolDeconstructionInput | None = None,
 ) -> ProtocolDeconstructionDraft:
-    payload = json.loads(text)
+    from app.llm.json_container_recovery import strict_json_loads
+    payload = strict_json_loads(text)
     normalized = _normalize_model_json(payload)
     if "candidate_id" in normalized:
         if source_input is None:
@@ -6223,7 +6407,7 @@ class ProtocolDeconstructorRunner:
                     ProtocolDeconstructionAttempt(
                         attempt=1,
                         session_id=session_id,
-                        raw_output_sha256=_sha256(response.text),
+                        raw_output_sha256=_sha256(response.original_text),
                         outcome="输出格式无效",
                         issues=[issue],
                         call_metadata=response.call_metadata,
@@ -6237,7 +6421,7 @@ class ProtocolDeconstructorRunner:
         local_schema_repairs = 0
         while True:
             attempt_number += 1
-            raw_hash = _sha256(response.text)
+            raw_hash = _sha256(response.original_text)
             candidate_for_attempt: ProtocolSemanticDeconstructionCandidate | None = None
             parsed_response = False
             repair_batch_id = (
@@ -6535,7 +6719,7 @@ class ProtocolDeconstructorRunner:
                     ProtocolDeconstructionAttempt(
                         attempt=attempt_number + 1,
                         session_id=response.session_id,
-                        raw_output_sha256=_sha256(response.text),
+                        raw_output_sha256=_sha256(response.original_text),
                         outcome="会话异常",
                         issues=[
                             _format_issue(

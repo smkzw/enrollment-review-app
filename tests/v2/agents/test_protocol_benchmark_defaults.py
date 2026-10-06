@@ -65,6 +65,23 @@ def _kwargs(transport: DeepSeekProtocolAgentTransport) -> dict:
     return transport._completion_kwargs(list(USER_MESSAGE))
 
 
+@pytest.mark.parametrize("backend", ["cms-router", "ollama-cloud", "mtplx", "omlx"])
+def test_source_field_output_uses_same_provider_and_budget_with_small_contract(backend):
+    transport = _build(backend, model="frozen-test-model")
+    kwargs = transport._completion_kwargs(USER_MESSAGE, output_kind="semantic_source_fields")
+    assert kwargs["model"] == "frozen-test-model"
+    assert kwargs["max_tokens"] == 8192
+    assert "temperature" not in kwargs
+    if backend == "omlx":
+        schema = kwargs["response_format"]["json_schema"]["schema"]
+        assert set(schema["properties"]) == {"version", "precondition_sha256", "fields"}
+    if backend == "mtplx":
+        assert kwargs["response_format"] == {"type": "json_object"}
+    if backend == "ollama-cloud":
+        assert "response_format" not in kwargs
+    assert transport._wire_contract_prompt("冻结局部来源与schema", "semantic_source_fields") == "冻结局部来源与schema"
+
+
 def test_ollama_cloud_semantic_route_uses_its_own_key_and_text_mode(monkeypatch):
     monkeypatch.setenv("DECONSTRUCT_API_KEY", "wrong-provider-key")
     monkeypatch.setenv("DECONSTRUCT_BASE_URL", "http://wrong-provider.invalid/v1")
@@ -187,11 +204,13 @@ def test_default_keeps_provider_sampling_and_explicit_false_keeps_legacy(
     assert "extra_body" not in mlx
     assert "temperature" not in mtplx
     assert mtplx["extra_body"] == {"generation_mode": "ar"}
-    # 严格输出 Schema 与提示词在默认路径下保持不变。
-    for kwargs in (omlx, mlx, mtplx):
+    # 可用语法后端保持严格Schema；MTPLX使用已批准的JSON兼容通道。
+    for kwargs in (omlx, mlx):
         assert kwargs["response_format"]["type"] == "json_schema"
         assert kwargs["response_format"]["json_schema"]["strict"] is True
         assert kwargs["messages"] == USER_MESSAGE
+    assert mtplx["response_format"] == {"type": "json_object"}
+    assert mtplx["messages"] == USER_MESSAGE
 
     legacy_omlx = _kwargs(_build("omlx", model="omlx-model", provider_defaults=False))
     legacy_mtplx = _kwargs(
@@ -219,10 +238,11 @@ def test_provider_defaults_true_removes_local_sampling_but_keeps_schema(monkeypa
 
     for kwargs in (omlx, mlx, mtplx):
         assert "temperature" not in kwargs
-        # 提示词与严格 Schema 不受采样开关影响。
         assert kwargs["messages"] == USER_MESSAGE
+    for kwargs in (omlx, mlx):
         assert kwargs["response_format"]["type"] == "json_schema"
         assert kwargs["response_format"]["json_schema"]["strict"] is True
+    assert mtplx["response_format"] == {"type": "json_object"}
     assert mlx["reasoning_effort"] == "xhigh"
     assert "extra_body" not in omlx
     assert "extra_body" not in mlx
@@ -255,7 +275,11 @@ def test_glm_branch_honors_provider_defaults_flag():
 
 
 def test_provider_defaults_changes_semantic_cache_identity(monkeypatch):
+    from app.llm import mtplx_model_lifecycle
+
     monkeypatch.setattr(transport_module, "MLX_SERVE_MODEL", "hub/qwen3-xhigh-test")
+    monkeypatch.setattr(mtplx_model_lifecycle, "mtplx_deployment_identity",
+                        lambda *args: {"fixture": "frozen-deployment"})
     legacy = _build("mtplx", model="mtplx-model", provider_defaults=False)
     platform = _build("mtplx", model="mtplx-model", provider_defaults=True)
 

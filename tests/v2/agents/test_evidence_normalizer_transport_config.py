@@ -43,6 +43,7 @@ def test_cms_normalizer_uses_provider_route_before_stale_role_route(monkeypatch)
     )
     assert _FakeOpenAI.calls[-1]["api_key"] == "cms-key"
     assert _FakeOpenAI.calls[-1]["base_url"] == "http://127.0.0.1:20128/v1"
+    assert _FakeOpenAI.calls[-1]["max_retries"] == 0
 
 
 def test_ollama_normalizer_never_reuses_old_role_credentials(monkeypatch):
@@ -61,6 +62,7 @@ def test_ollama_normalizer_never_reuses_old_role_credentials(monkeypatch):
     )
     assert _FakeOpenAI.calls[-1]["api_key"] == "ollama-only-key"
     assert _FakeOpenAI.calls[-1]["base_url"] == "https://ollama.com/v1"
+    assert _FakeOpenAI.calls[-1]["max_retries"] == 0
     assert "response_format" not in transport._completion_kwargs([{"role": "user", "content": "诊断"}])
 
 
@@ -182,7 +184,7 @@ def test_deepseek_factory_uses_frozen_model_and_reasoning_without_substitution(m
     )
 
     assert _FakeOpenAI.calls == [
-        {"api_key": "configured", "base_url": "https://example.invalid"}
+        {"api_key": "configured", "base_url": "https://example.invalid", "max_retries": 0}
     ]
     kwargs = transport._completion_kwargs([{"role": "user", "content": "测试"}])
     assert kwargs["model"] == "deepseek-v4-flash"
@@ -204,7 +206,7 @@ def test_omlx_factory_uses_frozen_model_and_normalizes_v1_url_once(monkeypatch):
     )
 
     assert _FakeOpenAI.calls == [
-        {"api_key": "local-omlx", "base_url": "http://127.0.0.1:8000/v1"}
+        {"api_key": "local-omlx", "base_url": "http://127.0.0.1:8000/v1", "max_retries": 0}
     ]
     kwargs = transport._completion_kwargs([{"role": "user", "content": "测试"}])
     assert kwargs["model"] == "local-evidence-model"

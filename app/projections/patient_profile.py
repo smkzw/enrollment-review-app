@@ -104,6 +104,12 @@ _WEAK_HISTORY_HIGHLIGHT_DETAIL = "覆盖证据为较弱来源，需加强溯源�
 # 事实引用、日期/记录时间、来源强度、极性/值/单位与修订号全部原样保留。
 
 
+def _fact_title(fact: ClinicalFactV2) -> str:
+    labels = list(dict.fromkeys(item.label for item in
+        (fact.assertion_basis.contextual_qualifiers if fact.assertion_basis else [])))
+    return f"{'、'.join(labels)}：{fact.asserted_object}" if labels else fact.asserted_object
+
+
 def _fact_item(fact: ClinicalFactV2, lane: ProfileLane) -> ProfileItem:
     return ProfileItem(
         item_id=profile_item_identity(ProfileItemKind.FACT, fact.fact_id),
@@ -111,7 +117,7 @@ def _fact_item(fact: ClinicalFactV2, lane: ProfileLane) -> ProfileItem:
         kind=ProfileItemKind.FACT,
         source_id=fact.fact_id,
         source_revision=fact.revision,
-        title=fact.asserted_object,
+        title=_fact_title(fact),
         subtitle=_POLARITY_LABELS[fact.polarity.value],
         start_range=fact.date_range,
         record_time=fact.record_time,
@@ -136,7 +142,7 @@ def _event_item(
             f"事件 {event.event_id} 引用了未进入本次档案的事实：{', '.join(missing_fact_ids)}"
         )
     title = "、".join(
-        sorted({facts_by_id[fact_id].asserted_object for fact_id in event.fact_ids})
+        sorted({_fact_title(facts_by_id[fact_id]) for fact_id in event.fact_ids})
     )
     return ProfileItem(
         item_id=profile_item_identity(ProfileItemKind.EVENT, event.event_id),

@@ -22,6 +22,18 @@ from app.storage.repositories import (
 )
 
 
+def review_method_is_current(context: ReviewContextSnapshotV2) -> bool:
+    from app.services.frozen_review_calculation import EVALUATOR_VERSION
+
+    return (context.evaluator_version == EVALUATOR_VERSION
+            and context.requirements_scope_version == "review-requirements-scope/v1")
+
+
+def require_current_review_method(context: ReviewContextSnapshotV2) -> None:
+    if not review_method_is_current(context):
+        raise ScopeViolationError("审核方式已更新，请保留原记录并重新准备本次审核")
+
+
 def review_clinical_material_sha256(
     *,
     facts,

@@ -12,8 +12,379 @@ from app.domain.contracts.agent_io import (
     ProtocolSemanticDeconstructionCandidate, SemanticRestrictedComponent, SemanticRuleComponent,
 )
 from app.domain.contracts.normalization import UnresolvedItem
+from app.domain.contracts.source_computation import (
+    SourceComputation, SourceQuote, input_selection_references, validate_computation_quotes,
+)
 
 SCHEMA_REPAIR_CONTRACT_VERSION = "protocol-schema-repair/v1"
+SOURCE_FIELD_REPAIR_VERSION = "protocol-source-fields/v3"
+
+
+class SourceFieldRepairDeclined(ValueError):
+    """The author explicitly could not supply the requested source references."""
+
+
+def source_field_repair_schema(*, version: str = SOURCE_FIELD_REPAIR_VERSION) -> dict:
+    if version not in {"protocol-source-fields/v2", SOURCE_FIELD_REPAIR_VERSION}:
+        raise ValueError("未知来源字段修复版本")
+    return {
+        "type": "object", "additionalProperties": False,
+        "required": ["version", "precondition_sha256", "fields"],
+        "properties": {
+            "version": {"const": version},
+            "precondition_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            "fields": {"type": "array", "maxItems": 8,
+                "items": {"type": "object", "additionalProperties": False,
+                    "required": ["path", "input_refs"], "properties": {
+                        "path": {"type": "array", "minItems": 1, "items": {
+                            "anyOf": [{"type": "string"}, {"type": "integer", "minimum": 0}]}},
+                        "input_refs": {"type": "array", "minItems": 1,
+                            "items": SourceQuote.model_json_schema()},
+                    }}},
+        },
+    }
+
+
+def _unique_json(text: str) -> dict:
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("来源字段修复不能选择重复JSON字段")
+            result[key] = value
+        return result
+
+    def reject_constant(value):
+        raise ValueError("来源字段修复不能接受非JSON数值")
+
+    value = json.loads(text, object_pairs_hook=unique, parse_constant=reject_constant)
+    if not isinstance(value, dict):
+        raise ValueError("来源字段修复只接受一个完整对象")
+    return value
+
+
+def _input_reference_repairable(calculation: dict, clauses: list[str]) -> bool:
+    """Diagnose reference containment only; never supply the author's new field."""
+    refs = calculation.get("input_refs")
+    if not isinstance(refs, list) or not refs:
+        return False
+    try:
+        computation = SourceComputation.model_validate(calculation)
+        try:
+            validate_computation_quotes(computation, clauses)
+        except ValueError:
+            pass
+        else:
+            return False
+        # Retain every original reference. Invented indices/quotes, count or
+        # policy errors still fail; only explicitly authored dependencies help.
+        dependencies = input_selection_references(computation)
+        if computation.declared_input_count is not None:
+            dependencies.append(computation.declared_input_count.source)
+        checked = computation.model_copy(update={"input_refs": [*computation.input_refs, *dependencies]})
+        validate_computation_quotes(checked, clauses)
+    except (ValueError, TypeError):
+        return False
+    return True
+
+
+def plan_source_field_repair(previous_text: str, *, candidate_id: str,
+                             official_code: str, include_disconnected: bool = False) -> dict | None:
+    """Recover absent references or disconnected, literal authored dependencies.
+
+    Existing semantic parsing and source/scope gates still validate the assembled
+    proposal. This plan neither supplies references nor declares meaning correct.
+    """
+    try:
+        previous = _unique_json(previous_text)
+    except ValueError:
+        return None
+    rules = previous.get("replacement_rules")
+    if (previous.get("candidate_id") != candidate_id or not isinstance(rules, list)
+            or len(rules) != 1 or not isinstance(rules[0], dict)
+            or rules[0].get("official_code") != official_code):
+        return None
+    targets = []
+
+    def visit(value, path):
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, [*path, index])
+        elif isinstance(value, dict):
+            calculation = value.get("source_computation")
+            if isinstance(calculation, dict):
+                single = value.get("source_clause")
+                clauses = value.get("source_clauses", [])
+                if isinstance(single, str) and single.strip() and clauses == []:
+                    clauses = [single]
+                elif single is not None or not isinstance(clauses, list) or not clauses:
+                    return
+                if not all(isinstance(item, str) and item.strip() for item in clauses):
+                    return
+                if "input_refs" not in calculation or (include_disconnected and _input_reference_repairable(calculation, clauses)):
+                    targets.append({"path": [*path, "source_computation", "input_refs"],
+                                    "source_clauses": clauses, "calculation": calculation})
+            for key, item in value.items():
+                if key != "source_computation":
+                    visit(item, [*path, key])
+
+    visit(rules, ["replacement_rules"])
+    if not 1 <= len(targets) <= 8:
+        return None
+    plan = {"version": SOURCE_FIELD_REPAIR_VERSION,
+            "precondition_sha256": hashlib.sha256(previous_text.encode()).hexdigest(),
+            "targets": targets}
+    # Existing bounded-history admission must not truncate a source quote.
+    return plan if len(json.dumps(plan, ensure_ascii=False)) <= 8000 else None
+
+
+def assemble_declared_input_references(previous_text: str, *, candidate_id: str,
+                                       official_code: str) -> tuple[str, dict | None]:
+    """Append exact references already authored in this same computation.
+
+    No text is selected from the protocol, no source index is inferred, and no
+    missing field is filled. Original references, including order, stay intact.
+    """
+    plan = plan_source_field_repair(previous_text, candidate_id=candidate_id,
+        official_code=official_code, include_disconnected=True)
+    if plan is None:
+        return previous_text, None
+    assembled = _unique_json(previous_text)
+    changes = []
+    for target in plan["targets"]:
+        calculation = target["calculation"]
+        if "input_refs" not in calculation:
+            continue
+        computation = SourceComputation.model_validate(calculation)
+        dependencies = input_selection_references(computation)
+        if computation.declared_input_count is not None:
+            dependencies.append(computation.declared_input_count.source)
+        references = copy.deepcopy(calculation["input_refs"])
+        for ref in dependencies:
+            item = ref.model_dump(mode="json")
+            if item not in references:
+                references.append(item)
+        checked = computation.model_copy(update={"input_refs": [SourceQuote.model_validate(ref) for ref in references]})
+        validate_computation_quotes(checked, target["source_clauses"])
+        owner = assembled
+        for step in target["path"][:-1]:
+            owner = owner[step]
+        owner["input_refs"] = references
+        changes.append({"path": target["path"], "original_refs": calculation["input_refs"],
+                        "appended_refs": references[len(calculation["input_refs"]):]})
+    if not changes:
+        return previous_text, None
+    text = json.dumps(assembled, ensure_ascii=False, sort_keys=True)
+    return text, {"version": "protocol-source-reference-assembly/v1",
+        "candidate_id": candidate_id, "official_code": official_code,
+        "previous_output_sha256": plan["precondition_sha256"],
+        "assembled_output_sha256": hashlib.sha256(text.encode()).hexdigest(),
+        "changes": changes, "model_calls": 0, "adoption_checked": False}
+
+
+def assemble_unresolved_observation_sources(previous_text: str, *, candidate_id: str,
+                                            official_code: str) -> tuple[str, dict | None]:
+    """Bind unfinished-policy fragments to one already-authored component quote.
+
+    No protocol text is selected or concatenated, no known policy is changed,
+    and no qualification follows from this source-list packaging operation.
+    """
+    try:
+        previous = _unique_json(previous_text)
+    except ValueError:
+        return previous_text, None
+    rules = previous.get("replacement_rules")
+    if (previous.get("candidate_id") != candidate_id or not isinstance(rules, list)
+            or len(rules) != 1 or not isinstance(rules[0], dict)
+            or rules[0].get("official_code") != official_code):
+        return previous_text, None
+    components = rules[0].get("components")
+    if not isinstance(components, list) or len(components) != 1:
+        return previous_text, None
+    component = components[0]
+    if not isinstance(component, dict):
+        return previous_text, None
+    ids, quotes = component.get("source_span_ids"), component.get("source_excerpts")
+    if (not isinstance(ids, list) or len(ids) != 1 or not isinstance(quotes, list)
+            or not isinstance(ids[0], str) or not ids[0].strip()
+            or len(quotes) != 1 or not isinstance(quotes[0], str) or not quotes[0].strip()):
+        return previous_text, None
+    assembled = copy.deepcopy(previous)
+    changes = []
+
+    def visit(value, path):
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, [*path, index])
+        elif isinstance(value, dict):
+            policy = value.get("observation_policy")
+            if isinstance(policy, dict) and policy.get("mode") == "unresolved" and policy.get("selection") is None:
+                fragments = policy.get("source_excerpts")
+                clauses = value.get("source_clauses", [])
+                if isinstance(value.get("source_clause"), str) and not clauses:
+                    clauses = [value["source_clause"]]
+                if (policy.get("source_span_ids") == ids and isinstance(fragments, list)
+                        and 2 <= len(fragments) <= 8
+                        and all(isinstance(q, str) and q.strip() and q in quotes[0] for q in fragments)
+                        and len(set(fragments)) == len(fragments)
+                        and isinstance(clauses, list) and any(isinstance(q, str) and quotes[0] in q for q in clauses)):
+                    policy["source_excerpts"] = list(quotes)
+                    changes.append({"path": [*path, "observation_policy", "source_excerpts"],
+                                    "original_refs": fragments, "authored_component_refs": quotes})
+            for key, item in value.items():
+                if key != "observation_policy":
+                    visit(item, [*path, key])
+
+    visit(assembled["replacement_rules"][0]["components"][0], ["replacement_rules", 0, "components", 0])
+    if len(changes) != 1:
+        return previous_text, None
+    text = json.dumps(assembled, ensure_ascii=False, sort_keys=True)
+    return text, {"version": "protocol-unresolved-source-pair-assembly/v1",
+        "candidate_id": candidate_id, "official_code": official_code,
+        "previous_output_sha256": hashlib.sha256(previous_text.encode()).hexdigest(),
+        "assembled_output_sha256": hashlib.sha256(text.encode()).hexdigest(),
+        "changes": changes, "model_calls": 0, "adoption_checked": False}
+
+
+def source_field_repair_prompt(plan: dict) -> str:
+    return (
+        "上一提案的计算输入引用遗漏或未完整连接已声明依据。本次仅修复targets中列出的input_refs字段，"
+        "不重写任何规则、算子、数值、日期、选择方式、窗口、例外或未决事项。"
+        "每个path逐项原样返回；statement_index只指该目标source_clauses从零开始的位置，"
+        "quote须为对应片段的逐字子串，并完整覆盖已声明输入范围及其次数来源。"
+        "既有calculation.input_selection的source、window_refs及非空ordering_ref须分别被同一局部"
+        "statement_index的某个input_refs.quote完整包含；declared_input_count.source也须如此。"
+        "仅摘时间窗中的部分词、拆成若干不能完整包含原引用的短词均不够；"
+        "其他既有引用不改；已有input_refs的每个引用须保留或被同位置的完整引用包含。"
+        "不由宿主把这些字段自动当作input_refs。"
+        "若不能有据填写，返回fields=[]表示修复失败，不猜来源；这不是研究者缺资料。"
+        "仅输出下列合同JSON，不返回全规则。提案仍由原门禁检查，不表示可计算或采用。\n"
+        + json.dumps({"frozen_plan": plan, "output_schema": source_field_repair_schema(version=plan["version"])},
+                     ensure_ascii=False, sort_keys=True)
+    )
+
+
+def apply_source_field_repair(previous_text: str, proposal_text: str, *, plan: dict) -> tuple[str, dict]:
+    """Repair exactly the admitted reference fields; all other bytes' meaning is frozen."""
+    from jsonschema import validate, ValidationError
+
+    if hashlib.sha256(previous_text.encode()).hexdigest() != plan["precondition_sha256"]:
+        raise ValueError("来源字段修复的原答已变化")
+    proposal = _unique_json(proposal_text)
+    try:
+        validate(proposal, source_field_repair_schema(version=plan["version"]))
+    except ValidationError as exc:
+        raise ValueError("来源字段修复未遵守只补字段合同") from exc
+    if proposal["precondition_sha256"] != plan["precondition_sha256"]:
+        raise ValueError("来源字段修复不能替换原答身份")
+    if not proposal["fields"]:
+        raise SourceFieldRepairDeclined("未能有据补齐计算输入引用；未判断受试者资料是否缺失")
+    expected = {tuple(target["path"]): target for target in plan["targets"]}
+    fields = {tuple(field["path"]): field["input_refs"] for field in proposal["fields"]}
+    if len(fields) != len(proposal["fields"]) or fields.keys() != expected.keys():
+        raise ValueError("来源字段修复缺项、重复或超出原缺失范围")
+    assembled = _unique_json(previous_text)
+    for path, references in fields.items():
+        target = expected[path]
+        for reference in references:
+            ref = SourceQuote.model_validate(reference)
+            if ref.statement_index >= len(target["source_clauses"]) or ref.quote not in target["source_clauses"][ref.statement_index]:
+                raise ValueError("来源字段修复引用了其他条件或改写原文")
+        owner = assembled
+        predicate_owner = assembled
+        for step in path[:-2]:
+            predicate_owner = predicate_owner[step]
+        clauses = predicate_owner.get("source_clauses", [])
+        if predicate_owner.get("source_clause") is not None and clauses == []:
+            clauses = [predicate_owner["source_clause"]]
+        if clauses != target["source_clauses"]:
+            raise ValueError("来源字段修复的原文范围已变化")
+        for step in path[:-1]:
+            owner = owner[step]
+        if not isinstance(owner, dict) or path[-1] != "input_refs":
+            raise ValueError("来源字段修复不得替换其他字段")
+        if owner != target["calculation"]:
+            raise ValueError("来源字段修复的计算声明已变化")
+        if path[-1] in owner:
+            if (plan["version"] != SOURCE_FIELD_REPAIR_VERSION
+                    or not _input_reference_repairable(owner, target["source_clauses"])):
+                raise ValueError("来源字段修复不得替换已有效或不合法的字段")
+            if any(not any(old["statement_index"] == new["statement_index"]
+                           and old["quote"] in new["quote"] for new in references)
+                   for old in owner[path[-1]]):
+                raise ValueError("来源字段修复不得撤下已有输入依据")
+        owner[path[-1]] = copy.deepcopy(references)
+    text = json.dumps(assembled, ensure_ascii=False, sort_keys=True)
+    proof = {"version": plan["version"],
+        "previous_output_sha256": plan["precondition_sha256"],
+        "field_output_sha256": hashlib.sha256(proposal_text.encode()).hexdigest(),
+        "assembled_output_sha256": hashlib.sha256(text.encode()).hexdigest(),
+        "added_paths": [target["path"] for target in plan["targets"] if "input_refs" not in target["calculation"]],
+        "adoption_checked": False}
+    if plan["version"] == SOURCE_FIELD_REPAIR_VERSION:
+        proof["repaired_paths"] = [target["path"] for target in plan["targets"] if "input_refs" in target["calculation"]]
+    return text, proof
+
+
+def recover_source_fields(*, previous_response, plan: dict, transport):
+    """One same-model/session recovery; the caller owns the existing persisted budget."""
+    from app.agents.protocol_deconstructor import (
+        ProtocolAgentCallError, _compact_transport_history,
+    )
+
+    history = getattr(transport, "history", None)
+    if callable(history):
+        messages = history(previous_response.session_id)
+        if not messages or messages[-1] != {
+            "role": "assistant", "content": previous_response.original_text
+        }:
+            raise ProtocolAgentCallError(previous_response.session_id,
+                "来源字段修复的原答与会话不一致", error_code="MODEL_IDENTITY_MISMATCH")
+    prompt = source_field_repair_prompt(plan)
+    store = getattr(transport, "_call_budget_store", None)
+    save_input = getattr(store, "store_source_field_input", None)
+    save_result = getattr(store, "store_source_field_result", None)
+    save_response = getattr(store, "store_source_field_response", None)
+    input_refs = {}
+    response_refs = {}
+    response = previous_response
+    try:
+        if callable(save_input) and callable(save_result):
+            input_refs = save_input(raw_text=previous_response.original_text,
+                                    previous_text=previous_response.text, plan=plan)
+            _compact_transport_history(transport, previous_response.session_id,
+                context=json.dumps(plan, ensure_ascii=False, sort_keys=True))
+        response = transport.continue_session(session_id=previous_response.session_id,
+            prompt=prompt, output_kind="semantic_source_fields")
+        if input_refs and callable(save_response):
+            response_refs = save_response(response=response, requested_session_id=previous_response.session_id,
+                                          plan=plan, input_refs=input_refs)
+        if response.session_id != previous_response.session_id:
+            raise ValueError("来源字段修复不得更换原会话")
+        assembled, proof = apply_source_field_repair(previous_response.text, response.text, plan=plan)
+        if input_refs:
+            proof.update(save_result(previous_text=previous_response.text,
+                proposal_text=response.text, raw_text=response.original_text,
+                assembled_text=assembled, plan=plan, input_refs=input_refs))
+        proof.update(response_refs)
+        proof["previous_raw_output_sha256"] = hashlib.sha256(previous_response.original_text.encode()).hexdigest()
+        return response.model_copy(update={"text": assembled, "raw_text": response.original_text,
+            "call_metadata": {**response.call_metadata, "source_field_repair": proof}})
+    except ProtocolAgentCallError as exc:
+        raise ProtocolAgentCallError(exc.session_id, str(exc), error_code=exc.error_code,
+            error_metadata={**exc.error_metadata, "source_field_input": input_refs,
+                            "source_field_response": response_refs}) from exc
+    except (ValueError, OSError, KeyError, TypeError, IndexError, AttributeError) as exc:
+        raise ProtocolAgentCallError(response.session_id, str(exc),
+            error_code=("SOURCE_FIELD_REPAIR_PERSISTENCE_FAILED" if isinstance(exc, OSError)
+                        else "SOURCE_FIELD_REPAIR_DECLINED" if isinstance(exc, SourceFieldRepairDeclined)
+                        else "SOURCE_FIELD_REPAIR_INVALID"), error_metadata={
+                **(response.call_metadata if response is not previous_response else {}),
+                "source_field_input": input_refs,
+                "source_field_response": response_refs,
+                **({"field_repair_response_sha256": hashlib.sha256(response.original_text.encode()).hexdigest()}
+                   if response is not previous_response else {}),
+            }) from exc
 
 _RESTRICTED_REPAIR_BOUNDARY = (
     "consumer_unavailable只允许当前来源核验可证明的三类结构：列举项括号内专属频次、"

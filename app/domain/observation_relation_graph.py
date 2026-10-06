@@ -1,7 +1,53 @@
 """Structural relationship checks; a well-formed graph does not prove permission."""
 from graphlib import CycleError, TopologicalSorter
+from itertools import combinations
 
 from app.domain.publication import canonical_hash
+
+
+def analyze_computation_acquisitions(members, relationships):
+    """Absence of an edge never proves independent acquisition."""
+    members = {item.pair_id: item for item in members}
+    parents = {key: key for key in members}
+
+    def root(key):
+        while parents[key] != key:
+            parents[key] = parents[parents[key]]
+            key = parents[key]
+        return key
+
+    def merge(left, right):
+        a, b = sorted((root(left), root(right)))
+        parents[b] = a
+
+    appearances = {}
+    for key, item in members.items():
+        appearance = item.fact_id, item.locator_id
+        if appearance in appearances:
+            merge(key, appearances[appearance])
+        appearances[appearance] = key
+    for relation, left, right in relationships:
+        if left not in members or right not in members or left == right:
+            raise ValueError("采集关系包含本次计算范围外的原文")
+        if relation == "same_acquisition":
+            merge(left, right)
+        elif relation != "distinct_acquisition":
+            raise ValueError("当前计算不接受其他类型的采集关系")
+    distinct = set()
+    for relation, left, right in relationships:
+        if relation == "distinct_acquisition":
+            ends = tuple(sorted((root(left), root(right))))
+            if ends[0] == ends[1]:
+                raise ValueError("同一采集被同时声明为不同采集，不能计数")
+            distinct.add(ends)
+    groups = {}
+    for key in members:
+        groups.setdefault(root(key), []).append(key)
+    numeric_groups = {key: sorted(values) for key, values in groups.items()
+                      if any(members[item].fact_attribute == "value" for item in values)}
+    unproven = [list(ends) for ends in combinations(sorted(numeric_groups), 2) if ends not in distinct]
+    return {"groups": [numeric_groups[key] for key in sorted(numeric_groups)],
+            "unproven_distinct_groups": unproven}
 
 
 def analyze_observation_relationships(fact_ids, relationships, *, origins=None):

@@ -71,6 +71,11 @@ def publish_prepared_review(session, artifact_store, *, subject_id: str,
             evidence = verify_completed_frequency_evidence(session, artifact_store, children[frequency_name])
             if evidence["payload"]["identity_coverage"]:
                 frequency_jobs[children[f"{family}_qualification"]] = children[frequency_name]
+        computation_name = f"{family}_computation_input"
+        if computation_name in children:
+            from app.services.computation_input_job import verify_completed_computation_input
+            # Source descriptions are diagnostics, not a calculation or adoption proof.
+            verify_completed_computation_input(session, artifact_store, children[computation_name])
     return submit_qualified_review(
         session, artifact_store, subject_id=subject_id, review_episode_id=review_episode_id,
         context_id=context.context_id, qualification_job_ids=qualifications,

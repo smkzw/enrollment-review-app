@@ -90,6 +90,42 @@ function locator(overrides: Partial<LocatorView> = {}): LocatorView {
 }
 
 describe("OriginalEvidenceViewer", () => {
+  it("回到当前核对页只重新定位，不换核对对象或清除阅读旋转", () => {
+    const onSelectPage = vi.fn();
+    const props = { revisionId: "revision-1", pages: [readyPage, failedPage],
+      documentNames: new Map<string, string>(), selectedEntryId: "entry-1",
+      selectedLocatorId: null, selectedPageLocators: [], onSelectPage };
+    const { container, rerender } = render(<OriginalEvidenceViewer {...props} />);
+    fireEvent.click(screen.getByLabelText("本页向右旋转"));
+    const viewer = screen.getByLabelText("原始资料查看区");
+    const scrollTo = vi.fn();
+    Object.defineProperty(viewer, "scrollTo", { configurable: true, value: scrollTo });
+    viewer.scrollTop = 900;
+    vi.spyOn(viewer, "getBoundingClientRect").mockReturnValue({ top: 100 } as DOMRect);
+    const pages = container.querySelectorAll(".original-evidence-page");
+    vi.spyOn(pages[0], "getBoundingClientRect").mockReturnValue({ top: -800, bottom: 0 } as DOMRect);
+    fireEvent.wheel(viewer);
+    fireEvent.click(screen.getByLabelText("回到当前核对页"));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
+    expect(onSelectPage).not.toHaveBeenCalled();
+    expect(container.querySelector(".original-evidence-page__canvas > div")?.getAttribute("style")).toContain("rotate(90deg)");
+    rerender(<OriginalEvidenceViewer {...props} />);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByLabelText("回到当前核对页"));
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+  });
+
+  it("缺页图时仍能回到真实失败页，没有选中页时不可定位", () => {
+    const props = { revisionId: "revision-1", pages: [failedPage],
+      documentNames: new Map<string, string>(), selectedEntryId: "entry-2",
+      selectedLocatorId: null, selectedPageLocators: [], onSelectPage: vi.fn() };
+    const { rerender } = render(<OriginalEvidenceViewer {...props} />);
+    expect(screen.getByLabelText("回到当前核对页")).toBeEnabled();
+    expect(screen.queryByAltText("第 2 页原始资料")).not.toBeInTheDocument();
+    rerender(<OriginalEvidenceViewer {...props} selectedEntryId="missing-entry" />);
+    expect(screen.getByLabelText("回到当前核对页")).toBeDisabled();
+  });
+
   it("结果区展开引起的自动滚动不换原件页，手动滚动仍联动", () => {
     const onSelectPage = vi.fn();
     const { container } = render(<OriginalEvidenceViewer revisionId="revision-1" pages={[readyPage, failedPage]}

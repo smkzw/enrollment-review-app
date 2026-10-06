@@ -15,7 +15,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Literal, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -667,6 +667,74 @@ class ProtocolWorkbenchService:
             created=True,
             source_artifact_id=artifact.source_artifact_id,
             file_name=display_name,
+        )
+
+    def start_saved_candidate_recovery(
+        self,
+        *,
+        source_job_id: str,
+        candidate_ref: str,
+        candidate_origin: Literal["operator_imported_unpublished"],
+        expected_freeze_sha256: str,
+        idempotency_key: str,
+        actor: str = "用户",
+    ) -> StartDeconstructionResult:
+        """导入保留提案供重新核对，不追认其为原失败任务的直接输出。"""
+        from app.services.protocol_saved_draft_recovery import SavedDraftRecoveryError, load_saved_draft_recovery
+        from app.evidence.artifacts import ArtifactStoreError
+        from app.storage.codecs import PersistedContractInvalid
+
+        if candidate_origin != "operator_imported_unpublished":
+            raise ValueError("导入候选必须明确标为外部保留的未发布提案，不冒称原任务的模型输出。")
+        source_steps = _CHECKPOINT_STEP_ORDER[:_CHECKPOINT_STEP_ORDER.index(STEP_GENERATE)]
+        with self.session_factory() as session, session.begin():
+            try:
+                source, draft = load_saved_draft_recovery(
+                    JobStore(session, now=self.now), self.data_paths,
+                    source_job_id=source_job_id, candidate_ref=candidate_ref,
+                    expected_freeze_sha256=expected_freeze_sha256, source_steps=source_steps,
+                )
+            except (SavedDraftRecoveryError, ArtifactStoreError, PersistedContractInvalid, ValueError) as exc:
+                raise ProtocolWorkbenchError(
+                    "SAVED_DRAFT_RECOVERY_INVALID", title="保存提案无法恢复",
+                    detail=str(exc), recovery="请核对原任务、原件与保存提案，不要覆盖原记录。",
+                ) from exc
+            result = self.jobs.create_job_in_session(
+                session, idempotency_key=idempotency_key,
+                job_type=PROTOCOL_DECONSTRUCTION_JOB_TYPE,
+                payload={
+                    "session_kind": "first_deconstruction",
+                    **local_deployment_job_fields(),
+                    "source_artifact_id": source["source_artifact_id"],
+                    "file_name": source["file_name"],
+                    "actor": actor,
+                    "awaiting_user": None,
+                    "saved_candidate_recovery": {
+                        "version": "saved-draft-recovery/v2",
+                        "source_job_id": source_job_id,
+                        "candidate_ref": candidate_ref,
+                        "candidate_origin": candidate_origin,
+                        "expected_freeze_sha256": expected_freeze_sha256,
+                    },
+                },
+                steps=[
+                    StepSpec(STEP_FREEZE, "复核已存来源与目录"),
+                    StepSpec(STEP_GENERATE, "保存恢复提案", depends_on=(STEP_FREEZE,)),
+                    StepSpec(STEP_INTEGRITY, "完整性检查", depends_on=(STEP_GENERATE,)),
+                    StepSpec(STEP_AWAIT_REVIEW, "等待审阅", depends_on=(STEP_INTEGRITY,), waiting_user_kind="review"),
+                    StepSpec(STEP_PUBLISH, "发布", depends_on=(STEP_AWAIT_REVIEW,), waiting_user_kind="publish"),
+                ],
+            )
+            if result.created and ProtocolDraftRevisionRepository(session).find_by_generation_scope(
+                    project_id=draft.project_id, protocol_version_id=draft.protocol_version_id):
+                raise ProtocolWorkbenchError(
+                    "SAVED_DRAFT_ALREADY_REGISTERED", title="该来源已有正式保存草稿",
+                    detail="不能为同一草稿另建首稿；原有草稿和本次请求均未被覆盖。",
+                    recovery="请在现有草稿中继续核对或修订。",
+                )
+        return StartDeconstructionResult(
+            job_id=result.job_id, state=result.state, created=result.created,
+            source_artifact_id=source["source_artifact_id"], file_name=source["file_name"],
         )
 
     def start_re_deconstruction(
@@ -1408,6 +1476,9 @@ class ProtocolWorkbenchService:
                             )
 
                         source_input = self._load_source_input(merged)
+                        source_renewal = None
+                        if merged.get("saved_candidate_recovery") is not None:
+                            _budget_owner, source_input, source_renewal = self._validated_saved_recovery_context(merged)
                         source_by_id = {
                             item.interpretation_source_id: item
                             for item in source_input.interpretation_sources
@@ -1455,6 +1526,8 @@ class ProtocolWorkbenchService:
                             waiting_step_id,
                             checkpoint_payload={
                                 "source_input": updated_input.model_dump(mode="json"),
+                                **({"saved_source_identity_revalidation": source_renewal}
+                                   if source_renewal is not None else {}),
                                 "interpretation_source_registration": {
                                     "actor": actor,
                                     "source_ids": [
@@ -1874,7 +1947,16 @@ class ProtocolWorkbenchService:
                 retry_guidance = ""
                 if self._uses_default_feedback_reviser:
                     from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
-                    feedback_budget_store = _ProtocolSemanticBatchFileCache(self.data_paths, job_id)
+                    budget_owner = job_id
+                    if merged.get("saved_candidate_recovery") is not None:
+                        budget_owner, _validated_source, renewal = self._validated_saved_recovery_context(merged)
+                        if renewal is not None:
+                            raise ProtocolWorkbenchError(
+                                "SAVED_SOURCE_REVALIDATION_REQUIRED", title="恢复来源的核对身份需要更新",
+                                detail="目录内容未变，但恢复时的冻结记录不一致。系统尚未调用模型。",
+                                recovery="请先在当前草稿登记来源核对，再继续局部修订。",
+                            )
+                    feedback_budget_store = _ProtocolSemanticBatchFileCache(self.data_paths, budget_owner)
                 for attempt in range(attempt_count):
                     attempts_made += 1
                     regressing = False
@@ -2014,6 +2096,24 @@ class ProtocolWorkbenchService:
                 identity_error = isinstance(exc, ProtocolRequirementIdentityError)
                 if structured_call_error:
                     rejected_issue_codes = [exc.error_code]
+                call_failure_ref = None
+                first_completion_failure = None
+                if isinstance(exc, ProtocolAgentCallError):
+                    first_completion_failure = exc.error_metadata.get("first_completion_failure")
+                    try:
+                        call_failure_ref = ArtifactStore(self.data_paths).put("evaluation_manifest", json.dumps({
+                            "version": "protocol-feedback-call-failure/v1", "job_id": job_id,
+                            "expected_revision_id": expected_revision_id,
+                            "target_rule_code": target_rule_code, "target_component_id": target_component_id,
+                            "error_code": exc.error_code, "call_metadata": exc.error_metadata,
+                            "accepted": False,
+                        }, ensure_ascii=False, sort_keys=True).encode()).storage_ref
+                    except Exception as save_exc:
+                        raise ProtocolWorkbenchError(
+                            "FEEDBACK_FAILURE_RECORD_PERSISTENCE_FAILED", title="本次读取记录未能完整保存",
+                            detail="系统未能保存本次失败的核对依据；原草稿保持不变，不会自行再读。",
+                            recovery="请由维护人员检查保存位置及剩余空间，保留现有读取记录。",
+                        ) from save_exc
                 if identity_error and exc.candidate_draft is not None:
                     attempted_candidates.append(exc.candidate_draft)
                     rejected_issue_codes = [exc.error_code]
@@ -2073,6 +2173,13 @@ class ProtocolWorkbenchService:
                         "请先核对已保存的读取记录，系统不会自行重复读取。",
                     ),
                 }.get(exc.error_code) if structured_call_error else None
+                if (structured_call_error and exc.error_code == "LOGICAL_BUDGET_EXHAUSTED"
+                        and isinstance(first_completion_failure, dict)
+                        and first_completion_failure.get("error_code") == "SCHEMA_INVALID"):
+                    call_failure_copy = (
+                        "本次回答的格式无法读取，后续核对次数也已用完；原草稿保持不变。",
+                        "请先检查已保存回答的格式问题，不要把它当作方案含义不清或反复重新读取。",
+                    )
                 raise ProtocolWorkbenchError(
                     exc.error_code if identity_error or structured_call_error else "FEEDBACK_REVISION_FAILED",
                     title="未能完成本次反馈修订",
@@ -2098,6 +2205,7 @@ class ProtocolWorkbenchService:
                         "unchanged_revision_id": expected_revision_id,
                         "attempts": attempts_made,
                         "issue_codes": rejected_issue_codes,
+                        **({"call_failure_ref": call_failure_ref} if call_failure_ref is not None else {}),
                         **({"affected_requirement_ids": list(exc.affected_requirement_ids),
                             "candidate_hashes": candidate_hashes} if identity_error else {}),
                     },
@@ -3090,6 +3198,32 @@ class ProtocolWorkbenchService:
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
         return merged.get("session_kind") == "re_deconstruction"
+
+    def _validated_saved_recovery_context(self, merged: dict[str, Any]):
+        from app.services.protocol_saved_draft_recovery import load_saved_draft_recovery, reconcile_saved_source_identity
+        from app.services.protocol_deconstruction_executor import ProtocolDeconstructionExecutorConfig, _assemble_input_package
+        recovery = merged["saved_candidate_recovery"]
+        if (not isinstance(recovery, dict) or recovery.get("version") != "saved-draft-recovery/v2"
+                or recovery.get("candidate_origin") != "operator_imported_unpublished"):
+            raise ProtocolWorkbenchError("SAVED_DRAFT_RECOVERY_INVALID", title="恢复提案身份不完整",
+                detail="恢复记录版本或提案来源身份不受支持。", recovery="请保留原记录并核对恢复请求。")
+        try:
+            with self.session_factory() as session:
+                original, _draft = load_saved_draft_recovery(
+                    JobStore(session, now=self.now), self.data_paths,
+                    source_job_id=recovery["source_job_id"], candidate_ref=recovery["candidate_ref"],
+                    expected_freeze_sha256=recovery["expected_freeze_sha256"],
+                    source_steps=_CHECKPOINT_STEP_ORDER[:_CHECKPOINT_STEP_ORDER.index(STEP_GENERATE)],
+                )
+            original_identity = ProtocolDeconstructionInput.model_validate(original["source_input"])
+            rebuilt = _assemble_input_package(None, ProtocolDeconstructionExecutorConfig(
+                data_paths=self.data_paths, session_factory=self.session_factory, now=self.now,
+            ), original, source_identity=original_identity)
+            source, proof = reconcile_saved_source_identity(self._load_source_input(merged), rebuilt.source_input)
+        except (ValueError, KeyError) as exc:
+            raise ProtocolWorkbenchError("SAVED_DRAFT_RECOVERY_INVALID", title="恢复来源无法复核",
+                detail=str(exc), recovery="请核对原件、结构块和来源记录，不要重置读取额度。") from exc
+        return recovery["source_job_id"], source, proof
 
     def _merged_payload(self, job_id: str) -> dict[str, Any]:
         with self.session_factory() as session:

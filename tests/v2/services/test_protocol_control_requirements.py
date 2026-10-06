@@ -13,13 +13,18 @@ from app.domain.contracts.protocol_controls import (
 )
 from app.services import protocol_control_status as module
 from app.services.protocol_control_catalog_publication import SourceCalculationGap
+from tests.v2.domain.test_control_catalog_restricted_contract import _restricted_statement
 
 
 @pytest.mark.parametrize("scope_complete,source_unit", [
     (False, "source-unit"), (True, "source-unit"), (True, "other-unit"),
 ])
+@pytest.mark.parametrize("preview_case", [
+    "body", "heading", "repeated_quote", "foreign_quote", "foreign_span",
+    "duplicate_statement", "foreign_dependency",
+])
 def test_requirements_read_only_unresolved_source_gaps(
-    monkeypatch, scope_complete: bool, source_unit: str,
+    monkeypatch, scope_complete: bool, source_unit: str, preview_case: str,
 ) -> None:
     control_id = "control-job"
     source_id = "source-job"
@@ -41,6 +46,23 @@ def test_requirements_read_only_unresolved_source_gaps(
     checkpoint = SimpleNamespace(payload_json={
         "source_definition_consumers": [record.model_dump(mode="json")],
     }, payload_sha256="checkpoint-hash")
+    restricted = _restricted_statement(
+        "restricted:preview", unit_id="source-unit", quote="定义原文",
+        spans=("source-span",), dimensions=("适用范围尚未核清",),
+    ).model_copy(update={"scope_quote": "筛选期", "time_words": ["本次访视"]})
+    invalid_preview = preview_case in {
+        "foreign_quote", "foreign_span", "duplicate_statement", "foreign_dependency",
+    }
+    if preview_case == "foreign_quote":
+        restricted = restricted.model_copy(update={"source_quote": "来源没有这句话"})
+    elif preview_case == "foreign_span":
+        restricted = restricted.model_copy(update={"source_span_ids": ["foreign-span"]})
+    elif preview_case == "foreign_dependency":
+        restricted = restricted.model_copy(update={"dependency_refs": ["foreign-statement"]})
+    statements = [restricted, restricted] if preview_case == "duplicate_statement" else [restricted]
+    excerpt = {"heading": "正文另有内容", "repeated_quote": "定义原文；定义原文"}.get(
+        preview_case, "定义原文",
+    )
     session = SimpleNamespace(get=lambda _model, _id: checkpoint)
 
     @contextmanager
@@ -58,10 +80,13 @@ def test_requirements_read_only_unresolved_source_gaps(
                         (SimpleNamespace(batches=[SimpleNamespace(
                             batch_id="batch-a", batch_number=1,
                             known_procedure_targets=[],
-                        )]), []))
+                        )]), [SimpleNamespace(candidates=[], restricted_statements=statements)]))
     monkeypatch.setattr(module, "ProtocolSectionCoverageManifest", SimpleNamespace(
         model_validate=lambda _value: SimpleNamespace(
-            units=[], protocol_version_id="protocol-a", study_phase="phase_ii",
+            units=[SimpleNamespace(structure_unit_id="source-unit", source_order=1,
+                                   source_span_ids=["source-span"], excerpt=excerpt,
+                                   heading_path=["定义原文"] if preview_case == "heading" else [])],
+            protocol_version_id="protocol-a", study_phase="phase_ii",
         ),
     ))
     monkeypatch.setattr(module, "ProtocolDraftRevisionRepository", lambda _session:
@@ -88,6 +113,11 @@ def test_requirements_read_only_unresolved_source_gaps(
         return frozenset({(1, 0)}) if scope_complete else frozenset()
 
     monkeypatch.setattr(module, "_verified_calculation_release", release)
+    if invalid_preview:
+        with pytest.raises(module.ProtocolControlCheckpointInvalidError):
+            module.protocol_control_requirements(session_factory, job_id=control_id)
+        assert called == []
+        return
     if scope_complete and source_unit != gap.structure_unit_id:
         with pytest.raises(module.ProtocolControlCheckpointInvalidError):
             module.protocol_control_requirements(session_factory, job_id=control_id)
@@ -98,3 +128,6 @@ def test_requirements_read_only_unresolved_source_gaps(
     assert view.source_job_id == source_id
     assert called == [control_id]
     assert view.calculation_gaps == (() if scope_complete else (gap,))
+    assert view.restricted_statements == (restricted,)
+    assert view.restricted_statements[0].scope_quote == "筛选期"
+    assert view.restricted_statements[0].time_words == ["本次访视"]

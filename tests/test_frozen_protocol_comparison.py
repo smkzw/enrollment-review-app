@@ -24,6 +24,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.agents.protocol_semantic_transport import DeepSeekProtocolAgentTransport
+from app.agents.protocol_deconstructor import ProtocolAgentCallError
 from app.domain.contracts.enums import StudyPhase
 from scripts import run_frozen_protocol_comparison as comparison
 from tests.v2.api.protocol_e2e_helpers import (
@@ -172,6 +173,39 @@ def test_execute_requires_prepared_run_dir(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.parametrize("code,expected_state", [
+    ("STREAM_INTERRUPTED", "failed_final"),
+    ("TRANSPORT_TIMEOUT", "failed_final"),
+    ("MODEL_IDENTITY_MISMATCH", "failed_final"),
+    ("LOGICAL_BUDGET_EXHAUSTED", "failed_final"),
+    ("SCHEMA_INVALID", "failed_final"),
+])
+def test_product_generation_and_driver_preserve_failure_reason(tmp_path, protocol_docx, code, expected_state):
+    class FailedTransport:
+        def start(self, **kwargs):
+            raise ProtocolAgentCallError("frozen-session", "provider failure", error_code=code)
+
+        def history(self, session_id):
+            return []
+
+    run_dir = tmp_path / "failed-run"
+    _prepare(run_dir, protocol_docx)
+    record = comparison.execute(
+        run_dir=run_dir, backend="deepseek", max_tokens=65536,
+        now=lambda: NAIVE_NOW, transport=FailedTransport(),
+        executor_overrides={"page_texts_builder": page_texts_from_blocks},
+    )
+    assert record["state"] == "failed"
+    assert record["outcome"]["job_state"] == expected_state
+    failure = next(item for item in record["outcome"]["failed_steps"] if item["step_id"] == "generate_draft")
+    assert failure["error_code"] == code
+    # Preparation deliberately failed once; the bounded second Job attempt
+    # can be recoverable in cause but terminal because its step limit is used.
+    assert failure["attempt"] == 2
+    assert failure["error_classification"] == ("retryable" if code in {"STREAM_INTERRUPTED", "TRANSPORT_TIMEOUT"} else "fatal")
+    assert record["outcome"]["draft_id"] is None
+
+
 def test_prepare_then_execute_offline_end_to_end(
     tmp_path: Path, protocol_docx: Path
 ) -> None:
@@ -249,6 +283,10 @@ def test_history_receipt_dump_uses_product_history_hook(tmp_path: Path) -> None:
         client.chat.completions.last_kwargs = kwargs
         message = SimpleNamespace(content='{"ok": true}', reasoning_content="")
         choice = SimpleNamespace(message=message, finish_reason="stop")
+        if kwargs.get("stream"):
+            return iter([SimpleNamespace(choices=[SimpleNamespace(
+                finish_reason="stop", delta=SimpleNamespace(content=message.content),
+            )])])
         return SimpleNamespace(choices=[choice])
 
     client.chat.completions.create = create

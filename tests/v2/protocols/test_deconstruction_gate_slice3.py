@@ -56,6 +56,7 @@ from app.domain.contracts.rules import (
     OccurrenceWindow,
     ProspectiveWindow,
     ProspectivePeriod,
+    SourceDefinedProspectivePeriod,
     Rule,
     RuleComponent,
     RestrictedRuleComponent,
@@ -131,6 +132,154 @@ def test_quoted_sibling_window_in_attribute_does_not_override_source_scope():
     temporal_text = _predicate_temporal_text(general)
     assert _time_bound_matches_source(2, TimeUnit.WEEK, temporal_text)
     assert not _time_bound_matches_source(4, TimeUnit.WEEK, temporal_text)
+
+
+@pytest.mark.parametrize("subject_prefix", ["", "受试者"])
+def test_exact_period_proposition_does_not_borrow_context_washout(subject_prefix):
+    history = "随机前12周内接受以下治疗者：甲类制剂（定义见附录）"
+    plan = "计划在研究期间接受上述药物治疗"
+    predicate = AtomicPredicate(
+        predicate_id="planned-treatment", subject="受试者",
+        attribute="上述药物治疗计划", comparator=Comparator.EXISTS,
+        semantic_proposition=subject_prefix + plan, source_clauses=[history, plan],
+        prospective_period=ProspectivePeriod(period=ProtocolPeriod.STUDY_PERIOD),
+    )
+    temporal = _predicate_temporal_text(predicate, history + "；" + plan)
+    assert temporal == plan
+    assert not _time_bound_matches_source(12, TimeUnit.WEEK, temporal)
+    assert _shared_named_anchor_lead_in(predicate, history + "；" + plan) == ""
+    assert predicate.exact_source_clauses == [history, plan]
+
+
+def test_paraphrased_period_cannot_override_a_quoted_window():
+    predicate = AtomicPredicate(
+        predicate_id="unverified-plan", subject="受试者",
+        attribute="治疗计划", comparator=Comparator.EXISTS,
+        semantic_proposition="受试者计划在研究期间接受治疗",
+        source_clause="随机前4周内计划接受治疗",
+    )
+    assert _time_bound_matches_source(4, TimeUnit.WEEK, _predicate_temporal_text(predicate))
+
+
+def test_period_proposition_cannot_drop_punctuation_or_negation_to_claim_ownership():
+    history = "随机前8周内接受治疗"
+    clause = "计划在研究期间接受甲、乙治疗"
+    predicate = AtomicPredicate(
+        predicate_id="altered-plan", subject="受试者", attribute="治疗计划",
+        comparator=Comparator.EXISTS, source_clauses=[history, clause],
+        semantic_proposition="受试者计划在研究期间接受甲乙治疗",
+    )
+    assert _time_bound_matches_source(8, TimeUnit.WEEK, _predicate_temporal_text(predicate))
+    predicate.source_clauses = [history, "不计划在研究期间接受治疗"]
+    predicate.semantic_proposition = "受试者计划在研究期间接受治疗"
+    assert _time_bound_matches_source(8, TimeUnit.WEEK, _predicate_temporal_text(predicate))
+
+
+def test_exact_period_clause_cannot_discard_a_separate_shared_anchor_header():
+    lead = "随机前4周内以下任一计划："
+    plan = "计划在研究期间接受治疗"
+    predicate = AtomicPredicate(
+        predicate_id="shared-plan", subject="受试者", attribute="治疗计划",
+        comparator=Comparator.EXISTS, semantic_proposition="受试者" + plan,
+        source_clauses=[lead, plan],
+    )
+    temporal = _predicate_temporal_text(predicate, lead + plan)
+    assert _time_bound_matches_source(4, TimeUnit.WEEK, temporal)
+    assert _shared_named_anchor_lead_in(predicate, lead + plan) == lead
+
+
+@pytest.mark.parametrize("layout", ["definition", "shared_lead"])
+def test_exact_period_plan_preserves_cocited_boundary_in_real_gate(layout):
+    source, draft, spans = _fixture()
+    lead = ("研究期间定义为自首次给药至末次给药后30天" if layout == "definition"
+            else "整个研究期间（自首次给药至末次给药后30天）")
+    plan = "在研究期间无捐献配子的计划"
+    text = lead + "，" + plan
+    component = draft.proposed_rules[0].components[0]
+    predicate = AtomicPredicate(
+        predicate_id="period-boundary", subject="受试者", attribute="配子捐献计划",
+        comparator=Comparator.EXISTS, semantic_proposition="受试者" + plan,
+        source_clauses=[lead, plan],
+        prospective_period=ProspectivePeriod(period=ProtocolPeriod.STUDY_PERIOD),
+    )
+    component.expression = AtomicExpression(predicate=predicate)
+    predicate = component.expression.predicate
+    draft.component_drafts[0].proposed_component = component
+    draft.component_drafts[0].source_excerpts = [text]
+    next(item for item in source.source_materials if item.source_span_id == "span-in").text = text
+    assert _time_bound_matches_source(30, TimeUnit.DAY, _predicate_temporal_text(predicate, text))
+    missing = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(issue.issue_code == "PROSPECTIVE_WINDOW_NOT_STRUCTURED"
+               for issue in _issues(missing, "temporal_semantics"))
+    predicate.prospective_window = ProspectiveWindow(
+        anchor_type=AnchorType.LAST_DOSE_DATE,
+        upper_bound=TimeQuantity(value=30, unit=TimeUnit.DAY),
+    )
+    accepted = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert not _issues(accepted, "temporal_semantics")
+    predicate.prospective_window.upper_bound.value = 31
+    changed = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(issue.issue_code == "PROSPECTIVE_WINDOW_NOT_STRUCTURED"
+               for issue in _issues(changed, "temporal_semantics"))
+
+
+def test_exact_period_plan_does_not_allow_an_invented_future_window():
+    source, draft, spans = _fixture()
+    text = "计划在研究期间接受治疗"
+    component = draft.proposed_rules[1].components[0]
+    component.expression = AtomicExpression(predicate=AtomicPredicate(
+        predicate_id="future-without-window", subject="受试者", attribute="治疗计划",
+        comparator=Comparator.EXISTS, semantic_proposition="受试者" + text,
+        source_clause=text, prospective_period=ProspectivePeriod(period=ProtocolPeriod.STUDY_PERIOD),
+        prospective_window=ProspectiveWindow(anchor_type=AnchorType.LAST_DOSE_DATE,
+            upper_bound=TimeQuantity(value=4, unit=TimeUnit.WEEK)),
+    ))
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(item for item in source.source_materials if item.source_span_id == "span-ex").text = text
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(issue.issue_code == "PROSPECTIVE_WINDOW_NOT_IN_SOURCE"
+               for issue in _issues(result, "temporal_semantics"))
+
+
+def test_period_proposition_gate_accepts_own_period_and_rejects_borrowed_history_window():
+    source, draft, spans = _fixture()
+    history = "随机前12周内接受以下治疗者：甲类制剂（定义见附录）"
+    plan = "计划在研究期间接受上述药物治疗"
+    text = history + "；" + plan
+    component = draft.proposed_rules[1].components[0]
+    planned = AtomicExpression(predicate=AtomicPredicate(
+        predicate_id="planned-treatment", subject="受试者",
+        attribute="上述药物治疗计划", comparator=Comparator.EXISTS,
+        semantic_proposition="受试者" + plan, source_clauses=[history, plan],
+        prospective_period=ProspectivePeriod(period=ProtocolPeriod.STUDY_PERIOD),
+    ))
+    component.expression = LogicalExpression(operator=LogicalOperator.ANY, children=[
+        AtomicExpression(predicate=AtomicPredicate(
+            predicate_id="history-treatment", subject="受试者",
+            attribute="随机前12周内接受甲类制剂", comparator=Comparator.EXISTS,
+            source_clause=history,
+        ), time_constraint=TimeConstraint(
+            anchor_type=AnchorType.RANDOMIZATION_DATE, direction=TimeDirection.BEFORE,
+            upper_bound=TimeQuantity(value=12, unit=TimeUnit.WEEK),
+        )), planned,
+    ])
+    component.evidence_requirements.append(_requirement(
+        "requirement:baseline", component.rule_component_id, ReviewStage.BASELINE,
+    ))
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(item for item in source.source_materials if item.source_span_id == "span-ex").text = text
+    accepted = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert not _issues(accepted, "temporal_semantics")
+    component.expression.children[1].time_constraint = TimeConstraint(
+        anchor_type=AnchorType.RANDOMIZATION_DATE, direction=TimeDirection.BEFORE,
+        upper_bound=TimeQuantity(value=12, unit=TimeUnit.WEEK),
+    )
+    rejected = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(issue.issue_code == "TIME_CONSTRAINT_NOT_IN_SOURCE"
+               and "planned-treatment" in issue.affected_refs
+               for issue in _issues(rejected, "temporal_semantics"))
 
 
 def test_longer_washout_subclass_is_not_fabricated_disjunction():
@@ -2749,6 +2898,71 @@ def test_shared_source_period_cues_preserve_period_and_unknown_consumer(cue, per
                for issue in _issues(wrong, "temporal_semantics"))
 
 
+@pytest.mark.parametrize("text", [
+    "计划在准备阶段及治疗期间接受专项评估",
+    "计划在准备阶段及干预阶段（第六次访视之前）接受专项评估",
+    "计划在治疗期间（第六次访视之前）接受专项评估",
+    "计划在准备阶段、干预阶段及观察阶段接受专项评估",
+    "计划在run-in phase and treatment phase接受专项评估",
+])
+def test_source_defined_period_preserves_complete_scope_and_rejects_named_or_missing_scope(text, tmp_path):
+    from app.evidence.artifacts import ArtifactStore
+    from app.storage.config import resolve_data_paths
+
+    source, draft, spans = _fixture()
+    component = draft.proposed_rules[1].components[0]
+    component.expression = AtomicExpression(predicate=AtomicPredicate(
+        predicate_id="planned-assessment", subject="受试者", attribute="计划接受专项评估",
+        comparator=Comparator.EXISTS, source_clause=text, semantic_proposition=text,
+        prospective_period=SourceDefinedProspectivePeriod(source_excerpts=[text]),
+    ))
+    draft.proposed_rules[1].source_text = text
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(item for item in source.source_materials if item.source_span_id == "span-ex").text = text
+    items = list(source.parent_rule_catalog.items)
+    items[1] = items[1].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    original = draft.model_dump_json()
+    store = ArtifactStore(resolve_data_paths(str(tmp_path / "data")))
+    ref = store.put("evaluation_manifest", original.encode()).storage_ref
+    restored = ProtocolDeconstructionDraft.model_validate_json(store.read(ref))
+    assert restored.model_dump_json() == original
+    checked = ProtocolDeconstructionGate().evaluate(source, restored, source_spans=spans)
+    assert not [issue for issue in _issues(checked, "temporal_semantics")
+                if issue.issue_code.startswith("PROSPECTIVE_PERIOD")]
+    evaluated = evaluate_expression(restored.proposed_rules[1].components[0].expression, EvaluationContext(
+        project_id="project", subject_id="subject", review_episode_id="episode", evidence_snapshot_id="snapshot",
+    ))
+    assert evaluated.truth == TruthValue.UNKNOWN
+    assert "semantic_evidence_unverified" in evaluated.reason_codes
+    predicate = restored.proposed_rules[1].components[0].expression.predicate
+    for replacement in (None, ProspectivePeriod(period="study_period"), ProspectivePeriod(period="treatment_period")):
+        predicate.prospective_period = replacement
+        rejected = ProtocolDeconstructionGate().evaluate(source, restored, source_spans=spans)
+        assert any(issue.issue_code.startswith("PROSPECTIVE_PERIOD")
+                   for issue in _issues(rejected, "temporal_semantics"))
+    assert draft.model_dump_json() == original
+
+
+def test_source_defined_period_cannot_borrow_or_shorten_quote_or_become_numeric():
+    text = "计划在准备阶段及干预阶段接受专项评估"
+    material = dict(predicate_id="planned", subject="受试者", attribute="计划接受专项评估",
+                    comparator="exists", source_clause=text, semantic_proposition=text)
+    for quote in ("准备阶段", "另一个条件的期间"):
+        with pytest.raises(ValueError, match="全部逐字来源"):
+            AtomicPredicate(**material, prospective_period={"kind": "source_defined", "source_excerpts": [quote]})
+    with pytest.raises(ValueError, match="显式语义计划"):
+        AtomicPredicate(**{**material, "semantic_proposition": None},
+                        prospective_period={"kind": "source_defined", "source_excerpts": [text]})
+    with pytest.raises(ValueError):
+        AtomicPredicate(**{**material, "comparator": "gte", "value": 3, "unit": "天"},
+                        prospective_period={"kind": "source_defined", "source_excerpts": [text]})
+    assert ProspectivePeriod(period="study_period").model_dump(mode="json") == {"period": "study_period"}
+    with pytest.raises(ValueError):
+        ProspectivePeriod.model_validate({"kind": "source_defined", "source_excerpts": [text]})
+
+
 def test_future_plan_protocol_period_cannot_be_omitted():
     source_input, draft, spans = _fixture()
     text = "计划在治疗期间接种活疫苗"
@@ -3239,6 +3453,31 @@ def test_same_frozen_joint_visit_is_not_two_distinct_review_nodes(label):
                                     related_procedures_only=True, compact_unrelated_procedures=True)
     assert (label, "run_in") in payload["review_visit_nodes"]
     assert payload["required_procedure_catalog"] == []
+
+
+def test_joint_visit_wrong_due_stage_is_a_binding_problem_not_a_missing_extra_assessment():
+    source, draft, spans = _joint_visit_fixture()
+    draft.proposed_rules[0].components[0].evidence_requirements[0].due_stage = ReviewStage.SCREENING
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    issues = _issues(result, "temporal_semantics")
+    assert any(issue.issue_code == "MERGED_VISIT_STAGE_BINDING_MISMATCH" for issue in issues)
+    assert not any(issue.issue_code in {"REVIEW_STAGE_REQUIREMENT_MISSING", "REVIEW_STAGE_ADDITIONAL_SCOPE_UNVERIFIED"}
+                   for issue in issues)
+    assert not result.publishable
+
+
+def test_shared_qualifier_uses_frozen_joint_identity_but_still_requires_each_node():
+    from app.protocols.deconstruction_gate import _qualifier_is_structured
+    from app.protocols.source_time_fragments import frozen_review_stage_aliases
+    source, draft, _ = _joint_visit_fixture()
+    rule = draft.proposed_rules[0]
+    component = rule.components[0]
+    component.expression.predicate.source_clause = "筛选和基线时年龄≥18岁"
+    component.evidence_requirements.append(_requirement("req-final", "component-in", ReviewStage.BASELINE))
+    assert _qualifier_is_structured(rule, "筛选和基线时", stage_aliases=frozen_review_stage_aliases(source))
+    assert not _qualifier_is_structured(rule, "筛选和基线时")
+    component.evidence_requirements.pop()
+    assert not _qualifier_is_structured(rule, "筛选和基线时", stage_aliases=frozen_review_stage_aliases(source))
 
 
 @pytest.mark.parametrize("failure", ["missing_source", "legacy_no_inventory", "same_line_screening", "uncatalogued_screening", "separate_screening", "conflicting_stage", "two_joint_visits"])
@@ -4808,9 +5047,10 @@ def test_future_plan_window_preserves_unspecified_study_drug_administration_anch
     assert not prospective_issues, prospective_issues
 
 
+@pytest.mark.parametrize("with_proposition", [False, True])
 @pytest.mark.parametrize("duration", [3, 9])
 @pytest.mark.parametrize("segmented", [False, True])
-def test_shared_period_window_is_preserved_in_contiguous_or_segmented_source(duration, segmented):
+def test_shared_period_window_is_preserved_in_contiguous_or_segmented_source(duration, segmented, with_proposition):
     source, draft, spans = _fixture()
     lead = f"整个研究期间（从签署ICF到研究药物给药后{duration}个月）"
     action = "无捐献配子的计划"
@@ -4823,6 +5063,8 @@ def test_shared_period_window_is_preserved_in_contiguous_or_segmented_source(dur
     predicate = component.expression.predicate
     if segmented:
         predicate.source_clauses = [lead, action]
+    if with_proposition:
+        predicate.semantic_proposition = "受试者在研究期间无捐献配子的计划"
     predicate.prospective_period = ProspectivePeriod(period=ProtocolPeriod.STUDY_PERIOD)
     predicate.prospective_window = ProspectiveWindow(
         anchor_type=AnchorType.STUDY_DRUG_ADMINISTRATION_DATE,

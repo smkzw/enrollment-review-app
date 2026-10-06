@@ -1698,6 +1698,71 @@ def test_negated_fact_and_unrecorded_fact_are_distinct() -> None:
     assert evaluate_expression(expression, evaluation_context(facts=[unrecorded])).truth == TruthValue.UNKNOWN
 
 
+@pytest.mark.parametrize("comparator,expected", [
+    ("exists", None), ("eq", True), ("ne", True), ("gt", 0.5), ("gte", 0.5),
+    ("lt", 0.5), ("lte", 0.5), ("in", ["阴性"]), ("not_in", [0]),
+])
+def test_legacy_negated_false_is_unknown_for_every_comparator_and_keeps_history(comparator, expected):
+    fact = clinical_fact(fact_id="legacy", fact_type="history.condition",
+        value=False, polarity=FactPolarity.NEGATED, certainty=1, evidence_span_ids=["span-1"])
+    before = fact.model_dump_json()
+    expression = AtomicExpression(predicate=AtomicPredicate(
+        subject="history", attribute="condition", comparator=comparator, value=expected,
+        unit="unitless" if comparator in {"gt", "gte", "lt", "lte", "not_in"} else None))
+    result = evaluate_expression(expression, evaluation_context(facts=[fact]))
+    assert result.truth == TruthValue.UNKNOWN
+    assert "negated_boolean_value_ambiguous" in result.reason_codes
+    assert fact.model_dump_json() == before
+
+
+@pytest.mark.parametrize("value,comparator,expected", [
+    (True, "eq", "条件甲"), ("条件甲", "eq", True),
+    (True, "gte", 1), (True, "in", [1]), ("条件甲", "in", [True]),
+])
+def test_negated_incompatible_operand_types_cannot_invert_into_support(value, comparator, expected):
+    from app.domain.expression import evaluate_observed_value
+    result = evaluate_observed_value(
+        AtomicPredicate(subject="history", attribute="condition", comparator=comparator, value=expected,
+                        unit="unitless" if comparator == "gte" or expected == [1] else None),
+        value=value, unit=None, polarity=FactPolarity.NEGATED)
+    assert result.truth == TruthValue.UNKNOWN
+    assert "negated_operand_type_unverified" in result.reason_codes
+
+
+@pytest.mark.parametrize("polarity,value,comparator,expected,truth", [
+    (FactPolarity.NEGATED, True, "eq", True, TruthValue.FALSE),
+    (FactPolarity.NEGATED, True, "eq", False, TruthValue.TRUE),
+    (FactPolarity.NEGATED, True, "exists", None, TruthValue.FALSE),
+    (FactPolarity.NEGATED, "条件甲", "eq", "条件甲", TruthValue.FALSE),
+    (FactPolarity.NEGATED, "条件甲", "in", ["条件甲"], TruthValue.FALSE),
+    (FactPolarity.AFFIRMED, "阴性", "exists", None, TruthValue.TRUE),
+    (FactPolarity.AFFIRMED, "阴性", "eq", "阴性", TruthValue.TRUE),
+    (FactPolarity.AFFIRMED, "阳性", "eq", "阴性", TruthValue.FALSE),
+    (FactPolarity.UNKNOWN, None, "exists", None, TruthValue.UNKNOWN),
+])
+def test_negative_observations_keep_meaning_and_counterfactuals(polarity, value, comparator, expected, truth):
+    from app.domain.expression import evaluate_observed_value
+    result = evaluate_observed_value(
+        AtomicPredicate(subject="observation", attribute="condition", comparator=comparator, value=expected),
+        value=value, unit=None, polarity=polarity)
+    assert result.truth == truth
+
+
+@pytest.mark.parametrize("value,comparator,expected", [
+    ("未显示异常", "eq", True), ("未显示异常", "ne", False),
+    ("未显示异常", "in", [True]), ("未显示异常", "not_in", [False]),
+    (True, "eq", 1), (1, "eq", True), (2, "gte", "1"),
+])
+def test_affirmed_incompatible_operand_types_are_unknown_not_false_or_true(value, comparator, expected):
+    from app.domain.expression import evaluate_observed_value
+    result = evaluate_observed_value(
+        AtomicPredicate(subject="observation", attribute="property", comparator=comparator, value=expected,
+                        unit="unitless" if isinstance(expected, (int, float)) and not isinstance(expected, bool) else None),
+        value=value, unit=None, polarity=FactPolarity.AFFIRMED)
+    assert result.truth == TruthValue.UNKNOWN
+    assert result.reason_codes == ["observed_operand_type_unverified"]
+
+
 def test_fact_polarity_cannot_contradict_normalized_value() -> None:
     base = {
         "fact_id": "fact-contradiction",

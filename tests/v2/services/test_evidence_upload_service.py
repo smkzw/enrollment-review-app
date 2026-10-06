@@ -24,6 +24,7 @@ from app.domain.contracts.enums import (
     UploadPreviewStatus,
 )
 from app.domain.contracts.evidence_upload import (
+    DIRECT_VISION_PREPARATION,
     EvidenceUploadConfirmInput,
 )
 from app.services.evidence_app_errors import (
@@ -541,6 +542,14 @@ def test_confirm_full_creates_snapshot_commit_job_in_one_transaction(env):
         assert row.status == UploadPreviewStatus.COMMITTED.value
         commit_row = session.get(EvidenceUploadCommitRecord, result.commit_id)
         assert commit_row.job_id == result.job_id
+        from app.storage.codecs import verify_payload_sha256
+        from app.workflow.jobstore import JobStore
+
+        job = JobStore(session).get_job(result.job_id)
+        payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+        assert payload["preparation_policy"] == DIRECT_VISION_PREPARATION
+        assert payload["ocr_inheritance_contract"] == "confirmed-ocr/v1"
+        assert payload["inherited_processing_revision_id"] is None
 
 
 def test_confirm_duplicate_collection_is_noop_without_new_job(env):

@@ -14,6 +14,7 @@ from app.llm.predicate_binding_candidates import (
     read_predicate_candidates, PredicateCandidateReadError,
     predicate_binding_prompt_input,
     candidate_value_shape,
+    SOURCE_COMPUTATION_BINDING_GUIDANCE,
 )
 from app.llm.page_review_harness import PageReaderRoute, PageCompletion
 from app.domain.contracts.page_review import PageReviewLane
@@ -61,6 +62,15 @@ def test_one_fact_can_be_a_candidate_for_multiple_predicates():
     assert len(result.results) == 2
     assert all(item.candidates[0].fact_id == "fact-a" for item in result.results)
     assert "truth" not in result.model_dump()
+
+
+def test_history_records_are_not_globally_excluded_by_correspondence_prompt():
+    from app.llm.medication_history_guidance import MEDICATION_HISTORY_GUIDANCE
+
+    frozen, _ = _case()
+    messages = build_predicate_binding_messages(frozen)
+    assert MEDICATION_HISTORY_GUIDANCE in messages[0]["content"]
+    assert "补日期、把处方当服药" not in messages[0]["content"]
 
 
 def test_only_one_trailing_result_closer_can_be_repaired_without_changing_fields():
@@ -112,6 +122,41 @@ def test_numeric_shape_is_not_semantic_or_unit_acceptance():
     assert result["operand_shape"] == "numeric_value"
     assert "unit_equivalence_unverified" in result["pending_checks"]
     assert result["accepted"] is False
+
+
+def test_calculation_inputs_are_retained_without_becoming_direct_values():
+    from tests.v2.services.test_receipt_verified_work_draft_consumer import _synthetic_material
+
+    _, _, frozen, _, _, response = _synthetic_material(computation=True)
+    atom = frozen.components[0].trigger_predicates[0].predicate
+    shape = candidate_value_shape(atom, frozen.facts[0], "value")
+    assert shape["operand_shape"] == "source_computation_input"
+    assert "source_computation_input_set_unverified" in shape["pending_checks"]
+    assert shape["accepted"] is False
+    response["results"][0]["candidates"][0]["attribute_correspondence"] = "derivation_operand"
+    parsed = validate_predicate_candidates(frozen, json.dumps(response))
+    assert parsed.results[0].candidates[0].fact_id == frozen.facts[0].fact_id
+    assert parsed.results[0].candidates[0].attribute_correspondence == "derivation_operand"
+    assert build_predicate_binding_messages(frozen)[0]["content"].endswith(SOURCE_COMPUTATION_BINDING_GUIDANCE)
+
+
+def test_computation_guidance_is_scoped_to_current_batch_not_siblings():
+    from app.llm.predicate_binding_batches import _batch
+    from tests.v2.services.test_receipt_verified_work_draft_consumer import _synthetic_material
+
+    _, _, frozen, _, _, _ = _synthetic_material(computation=True)
+    ordinary, _ = _case()
+    # The ordinary request must keep its historical prompt and receipt identity.
+    ordinary_messages = build_predicate_binding_messages(ordinary)
+    assert SOURCE_COMPUTATION_BINDING_GUIDANCE not in ordinary_messages[0]["content"]
+    ordinary_component = _component_contract(["ordinary"], "ordinary-component", source_clause="合成排除原文")
+    mixed = _frozen_input([*frozen.components, ordinary_component], frozen.facts, frozen.locators)
+    computation_batch = _batch(mixed, [item.fact_id for item in mixed.facts],
+                               [frozen.components[0].rule_component_id])
+    ordinary_batch = _batch(mixed, [item.fact_id for item in mixed.facts],
+                            [ordinary_component.rule_component_id])
+    assert SOURCE_COMPUTATION_BINDING_GUIDANCE in build_predicate_binding_messages(mixed, batch=computation_batch)[0]["content"]
+    assert SOURCE_COMPUTATION_BINDING_GUIDANCE not in build_predicate_binding_messages(mixed, batch=ordinary_batch)[0]["content"]
 
 
 @pytest.mark.parametrize("field,value", [
@@ -409,3 +454,17 @@ def test_markdown_fenced_json_is_stripped_before_parsing():
     truncated = "```json\n" + json.dumps(payload, ensure_ascii=False)[:50]
     with pytest.raises(ValueError):
         validate_predicate_candidates(frozen, truncated)
+
+
+def test_computation_request_fingerprint_is_scoped_to_host_guidance_and_full_request():
+    from app.llm.predicate_binding_candidates import (
+        SOURCE_COMPUTATION_BINDING_GUIDANCE, computation_request_hashes,
+    )
+    ordinary = [{"role": "system", "content": "unchanged ordinary recipe"},
+                {"role": "user", "content": SOURCE_COMPUTATION_BINDING_GUIDANCE}]
+    affected = [{"role": "system", "content": SOURCE_COMPUTATION_BINDING_GUIDANCE},
+                {"role": "user", "content": "frozen input one"}]
+    changed = [affected[0], {"role": "user", "content": "frozen input two"}]
+    hashes = computation_request_hashes({"ordinary": ordinary, "affected": affected, "changed": changed})
+    assert set(hashes) == {"affected", "changed"}
+    assert hashes["affected"] != hashes["changed"]

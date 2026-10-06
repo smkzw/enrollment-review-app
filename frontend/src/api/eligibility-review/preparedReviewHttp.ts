@@ -1,7 +1,7 @@
 import { decodeEligibilityReviewError } from "./eligibilityReviewViewModels";
 import { getProtocolApiBase } from "../protocolApiConfig";
 
-const kinds = ["predicate_candidates", "control_candidates", "qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence"] as const;
+const kinds = ["predicate_candidates", "control_candidates", "qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence", "computation_input"] as const;
 const states = ["queued", "running", "completed", "failed_retryable", "failed_final",
   "cancel_requested", "cancelled", "recovering", "waiting_user"] as const;
 export type PreparedReviewKind = typeof kinds[number];
@@ -75,7 +75,7 @@ function taskItems(value: unknown): PreparedReviewTask[] {
     seen.add(jobId);
     const kind = choice(item.kind, kinds);
     const candidateJobId = nullableText(item.candidate_job_id);
-    if ((kind === "qualification" || kind === "judgment_content" || kind === "proposition_evidence" || kind === "observation_relation" || kind === "frequency_evidence") !== (candidateJobId !== null)) return invalid();
+    if ((kind === "qualification" || kind === "judgment_content" || kind === "proposition_evidence" || kind === "observation_relation" || kind === "frequency_evidence" || kind === "computation_input") !== (candidateJobId !== null)) return invalid();
     return { jobId, kind, candidateJobId, state: choice(item.state, states), stateLabel: text(item.state_label),
       progressCompleted: count(item.progress_completed), progressTotal: count(item.progress_total) };
   });
@@ -148,7 +148,7 @@ export function createPreparedReviewHttp(fetchImpl: typeof fetch = fetch.bind(gl
     },
     async start(subjectId: string, episodeId: string, contextId: string, kind: PreparedReviewKind,
       candidateJobId: string | null = null, signal?: AbortSignal) {
-      const followsCandidate = kind === "qualification" || kind === "judgment_content" || kind === "proposition_evidence" || kind === "observation_relation" || kind === "frequency_evidence";
+      const followsCandidate = kind === "qualification" || kind === "judgment_content" || kind === "proposition_evidence" || kind === "observation_relation" || kind === "frequency_evidence" || kind === "computation_input";
       if (followsCandidate !== (candidateJobId !== null)) return invalid();
       const payload = await request(subjectId, episodeId, "", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal,

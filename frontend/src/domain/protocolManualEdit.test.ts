@@ -41,4 +41,32 @@ describe("方案草稿手工修订", () => {
     });
     expect(missing).toBe(candidateContent);
   });
+
+  it("修订正常子项时完整保留未决要求和来源，不改旧稿", () => {
+    const content = structuredClone(candidateContent);
+    const rules = content.proposed_rules as Record<string, unknown>[];
+    const restricted = [{
+      rule_component_id: "restricted-extra", display_code: "IN-01b",
+      title: "另项要求", source_span_ids: ["span-in"],
+      source_excerpts: ["另须完成专项评估"],
+      limitation_kind: "interpretation_unresolved",
+      unresolved_dimensions: ["适用范围尚待核清"],
+    }];
+    rules[0]!.restricted_components = restricted;
+    const before = JSON.stringify(content);
+    const age = getEditableProtocolComponents(content).find(
+      (item) => item.componentId === "component-in",
+    )!;
+    const patched = patchComponentSemantics(content, age.componentId, {
+      title: "核对后的标题", mainOperator: age.mainOperator,
+      exceptionOperator: age.exceptionOperator, predicate: age.predicates[0]!,
+      requirements: age.requirements,
+    });
+    expect((patched.proposed_rules as Record<string, unknown>[])[0]!
+      .restricted_components).toEqual(restricted);
+    expect(JSON.stringify(content)).toBe(before);
+    expect(getEditableProtocolComponents(content).some(
+      (item) => item.componentId === "restricted-extra",
+    )).toBe(false);
+  });
 });

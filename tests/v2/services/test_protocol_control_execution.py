@@ -1245,7 +1245,7 @@ class _Seed:
     workflow_stages: tuple[WorkflowStage, ...]
 
 
-def _seed_frozen_source(data_paths, session_factory, *, key: str) -> _Seed:
+def _seed_frozen_source(data_paths, session_factory, *, key: str, waiting_at: str | None = None) -> _Seed:
     fixture = _synthetic_fixture()
     blocks = fixture.extraction.blocks
     serialized = serialize_blocks(blocks)
@@ -1283,6 +1283,8 @@ def _seed_frozen_source(data_paths, session_factory, *, key: str) -> _Seed:
             )
         )
         previous = step_id
+    if waiting_at is not None:
+        steps.append(StepSpec(waiting_at, waiting_at, depends_on=(previous,), waiting_user_kind="review"))
     source = JobService(session_factory, now=_now).create_job(
         idempotency_key=key,
         job_type=PROTOCOL_DECONSTRUCTION_JOB_TYPE,
@@ -1305,9 +1307,13 @@ def _seed_frozen_source(data_paths, session_factory, *, key: str) -> _Seed:
         lease = store.claim_job(source.job_id, "source-seed")
         assert lease is not None
         for step in steps:
+            if step.step_id == waiting_at:
+                store.enter_user_wait(lease, step.step_id, awaiting_user="review")
+                break
             store.start_step(lease, step.step_id)
             store.complete_step(lease, step.step_id, checkpoint_payload=checkpoint)
-        store.finish_success(lease)
+        if waiting_at is None:
+            store.finish_success(lease)
 
     workflow_stages = tuple(
         WorkflowStage(
@@ -1373,6 +1379,12 @@ def test_fixed_flow_is_frozen_in_job_prompt_and_requires_explicit_budget(data_pa
     )
     config = ProtocolControlExecutorConfig(data_paths=data_paths, session_factory=session_factory)
     assert protocol_control_execution_module._prompt_from_payload(context, "deep", config) == payload["prompt_templates"]["deep"]
+    current_template = payload["prompt_templates"]["deep"]
+    payload["prompt_templates"]["deep"] = current_template.removesuffix(FIXED_FLOW_VERSION) + "rv1001/front-stage-flow/v12"
+    with pytest.raises(StepFailure) as old_flow:
+        protocol_control_execution_module._prompt_from_payload(context, "deep", config)
+    assert old_flow.value.error_code == "PROTOCOL_CONTROL_WORKFLOW_IDENTITY_INVALID"
+    payload["prompt_templates"]["deep"] = current_template
     payload["deep_workflow_variant"] = "RV1001-BASELINE"
     with pytest.raises(StepFailure) as caught:
         protocol_control_execution_module._prompt_from_payload(context, "deep", config)
@@ -1408,6 +1420,65 @@ def test_service_derives_unique_workflow_nodes_from_frozen_source(
     assert len(stages) == len(stage_keys)
     assert len({item["workflow_stage_id"] for item in stages}) == len(stages)
     assert all(item["display_name"] == item["visit_instance"] for item in stages)
+
+
+@pytest.mark.parametrize("waiting_at", ["await_review", "publish"])
+def test_control_creation_freezes_registered_review_source_not_initial_input(
+    data_paths, session_factory, waiting_at,
+):
+    from app.domain.contracts.agent_io import ProtocolDeconstructionInput
+    from app.domain.contracts.enums import InterpretationSourceType
+    from app.domain.contracts.protocol_metadata import InterpretationSource
+    from app.domain.publication import canonical_hash
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+
+    seed = _seed_frozen_source(data_paths, session_factory, key=f"registered-{waiting_at}", waiting_at=waiting_at)
+    with session_factory() as session, session.begin():
+        store = JobStore(session, now=_now)
+        original = store.get_last_checkpoint(seed.source_job_id, "freeze_deconstruction_input")
+        before_sha = canonical_hash(original[1])
+        source = ProtocolDeconstructionInput.model_validate(original[1]["source_input"])
+        clarification = InterpretationSource(
+            interpretation_source_id="registered-clarification", protocol_version_id=source.protocol_version_id,
+            source_type=InterpretationSourceType.MEDICAL_INTERPRETATION,
+            file_sha256="8" * 64, source_ref="clarification:1",
+            excerpt="未命名的回溯时间从当前审核节点计算。", explanation="逐节点核对，不更改阈值。",
+            clarifies_ambiguity=True, applies_to_rule_refs=["IN-01"],
+        )
+        updated = ProtocolDeconstructionInput.model_validate(source.model_dump(mode="json") | {
+            "interpretation_source_ids": [clarification.interpretation_source_id],
+            "interpretation_sources": [clarification.model_dump(mode="json")],
+        })
+        store.record_user_update(seed.source_job_id, waiting_at,
+            checkpoint_payload={"source_input": updated.model_dump(mode="json")})
+    workbench = ProtocolWorkbenchService(session_factory, data_paths=data_paths, now=_now)
+    expected = workbench._merged_payload(seed.source_job_id)["source_input"]
+    assert expected == updated.model_dump(mode="json")
+    service = _build_service(data_paths, session_factory, seed)
+    created = service.create_from_deconstruction(source_job_id=seed.source_job_id,
+        idempotency_key=f"controls-{waiting_at}")
+    _, payload = _job_snapshot_and_payload(session_factory, created.job_id)
+    assert payload["source_input"] == expected
+    assert payload["source_input"]["interpretation_sources"][0]["authority"] == "clarification_only"
+    with session_factory() as session:
+        assert canonical_hash(JobStore(session, now=_now).get_last_checkpoint(
+            seed.source_job_id, "freeze_deconstruction_input")[1]) == before_sha
+
+
+def test_invalid_review_source_is_rejected_instead_of_falling_back_to_old_freeze(data_paths, session_factory):
+    seed = _seed_frozen_source(data_paths, session_factory, key="invalid-review-source", waiting_at="await_review")
+    with session_factory() as session, session.begin():
+        store = JobStore(session, now=_now)
+        source = dict(store.get_last_checkpoint(seed.source_job_id, "freeze_deconstruction_input")[1]["source_input"])
+        source["protocol_file_sha256"] = "9" * 64
+        store.record_user_update(seed.source_job_id, "await_review", checkpoint_payload={"source_input": source})
+        before = session.connection().exec_driver_sql("select count(*) from jobs").scalar()
+    with pytest.raises(ProtocolControlExecutionError) as rejected:
+        _build_service(data_paths, session_factory, seed).create_from_deconstruction(
+            source_job_id=seed.source_job_id, idempotency_key="reject-invalid-review-source")
+    assert rejected.value.code == "PROTOCOL_CONTROL_SOURCE_HASH_MISMATCH"
+    with session_factory() as session:
+        assert session.connection().exec_driver_sql("select count(*) from jobs").scalar() == before
 
 
 def test_control_job_freezes_current_draft_and_rejects_stale_request(
@@ -2439,7 +2510,7 @@ def test_manual_retry_reexecutes_failed_deep_instead_of_replaying_diagnostic(
 
 @pytest.mark.parametrize("new_job, reuse_change", [
     (False, None), (True, None), (True, "repair_expired"),
-    (True, "repair_corrupt"), (True, "compiler_old"),
+    (True, "repair_corrupt"), (True, "compiler_old"), (True, "wire_corrupt"),
 ])
 def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     data_paths, session_factory, monkeypatch, new_job: bool, reuse_change: str | None,
@@ -2519,10 +2590,13 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
                 component["compiler_versions"] = [version for version in component["compiler_versions"]
                                                    if version != protocol_control_execution_module.SOURCE_FUNCTION_RECHECK_VERSION]
                 record = dict(record, component_identity=component)
+            elif reuse_change == "wire_corrupt":
+                record = dict(record, partial_wire={"unknown": "broken"},
+                              repair_contract_sha256=hashlib.sha256(b"old repair").hexdigest())
             return checkpoint_id, record
 
         monkeypatch.setattr(JobStore, "get_last_checkpoint", changed)
-        if reuse_change == "repair_corrupt":
+        if reuse_change in {"repair_corrupt", "wire_corrupt"}:
             with pytest.raises(protocol_control_execution_module.ProtocolControlExecutionError) as error:
                 service.create_from_deconstruction(
                     source_job_id=seed.source_job_id, deep_source_job_id=job.job_id,
@@ -2556,9 +2630,9 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     assert deep.start_calls == (2 if reuse_change else 1)
 
 
-@pytest.mark.parametrize("new_job", [False, True])
+@pytest.mark.parametrize("new_job, repair_changed", [(False, False), (True, False), (True, True)])
 def test_manual_retry_reuses_verified_source_without_partial_wire(
-    data_paths, session_factory, monkeypatch, new_job: bool,
+    data_paths, session_factory, monkeypatch, new_job: bool, repair_changed: bool,
 ) -> None:
     from app.agents.protocol_control_deconstructor import (
         ProtocolControlAgentAttempt, ProtocolControlAgentRunResult,
@@ -2591,8 +2665,8 @@ def test_manual_retry_reuses_verified_source_without_partial_wire(
                 status="需要核对", batch_id=batch.batch_id, session_id="source-only",
                 attempts=[ProtocolControlAgentAttempt(
                     attempt=1, session_id="source-only",
-                    raw_output_sha256=hashlib.sha256(b"source-only").hexdigest(),
-                    outcome="publication_invalid",
+                    raw_output_sha256=hashlib.sha256(inventory.model_dump_json().encode()).hexdigest(),
+                    raw_output_text=inventory.model_dump_json(), outcome="parsed",
                 )], source_interpretation=inventory,
             )
         resumed.append(kwargs.get("resume_source_interpretation"))
@@ -2602,6 +2676,10 @@ def test_manual_retry_reuses_verified_source_without_partial_wire(
     monkeypatch.setattr(ProtocolControlAgentRunner, "run", fail_then_resume)
     assert runner.run_job(job.job_id)
     assert _job_snapshot_and_payload(session_factory, job.job_id)[0].state == "failed_final"
+    source_history = _job_checkpoint_fingerprint(session_factory, job.job_id)
+    if repair_changed:
+        monkeypatch.setattr(protocol_control_execution_module, "protocol_control_agent_repair_contract_sha256",
+                            lambda **_: hashlib.sha256(b"new downstream repair guidance").hexdigest())
     if new_job:
         continued = service.create_from_deconstruction(
             source_job_id=seed.source_job_id,
@@ -2609,9 +2687,16 @@ def test_manual_retry_reuses_verified_source_without_partial_wire(
             idempotency_key="deep-source-only-resume-new-job",
         )
         _, payload = _job_snapshot_and_payload(session_factory, continued.job_id)
-        assert "verified_source_interpretation" in {
+        expected_reason = ("verified_source_interpretation_repair_material_changed" if repair_changed
+                           else "verified_source_interpretation")
+        assert expected_reason in {
             item["reason"] for item in payload["deep_reuse_plan"]["decisions"].values()
         }
+        if repair_changed:
+            entry = next(item for item in payload["deep_reuse_plan"]["decisions"].values()
+                         if item["step_id"] == "deep_0001")
+            assert entry["decision"] == "resume_partial"
+            assert entry["source_seed_proof"]["source_job_id"] == job.job_id
         target_job_id = continued.job_id
     else:
         with session_factory() as session, session.begin():
@@ -2620,6 +2705,57 @@ def test_manual_retry_reuses_verified_source_without_partial_wire(
     assert runner.run_job(target_job_id)
     assert _job_snapshot_and_payload(session_factory, target_job_id)[0].state == "completed"
     assert any(item is not None for item in resumed)
+    if repair_changed:
+        with session_factory() as session:
+            saved = JobStore(session, now=_now).get_last_checkpoint(target_job_id, "deep_0001")[1]
+        assert saved["source_review_reuse"]["proof_scope"] == "unrepaired_source_interpretation"
+        assert saved["source_review_reuse"]["source_seed_proof"] == entry["source_seed_proof"]
+        assert _job_checkpoint_fingerprint(session_factory, job.job_id) == source_history
+
+
+@pytest.mark.parametrize("change", ["same", "checkpoint_session", "missing_session", "changed_source", "missing_raw", "not_parsed", "wire_present", "bad_hash"])
+def test_source_only_repair_change_proof_is_content_bound_and_corruption_is_not_a_miss(change):
+    from tests.v2.protocols.test_slice58c_control_deconstructor import (
+        _two_independent_candidate_linked_alignment_material,
+    )
+    from copy import deepcopy
+    module = protocol_control_execution_module
+    batch, inventory, _, wire, _ = _two_independent_candidate_linked_alignment_material()
+    raw = inventory.model_dump_json()
+    saved = dict(partial_wire=None, source_interpretation=inventory.model_dump(mode="json"),
+                 prompt_template_sha256="a" * 64, component_identity={},
+                 attempts=[dict(attempt=1, outcome="parsed", session_id="source-session",
+                                error_classes=[], raw_output_text=raw,
+                                raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest())])
+    if change == "checkpoint_session":
+        saved["attempts"][0].pop("session_id")
+        saved["session_id"] = "historical-checkpoint-session"
+    elif change == "missing_session":
+        saved["attempts"][0].pop("session_id")
+    elif change == "changed_source":
+        saved["source_interpretation"]["statements"][0]["unresolved"] = ["有待核对的范围"]
+    elif change == "missing_raw":
+        saved["attempts"][0]["raw_output_text"] = None
+    elif change == "not_parsed":
+        saved["attempts"][0]["outcome"] = "schema_invalid"
+    elif change == "wire_present":
+        saved["partial_wire"] = wire.model_dump(mode="json")
+    elif change == "bad_hash":
+        saved["attempts"][0]["raw_output_sha256"] = "0" * 64
+    before = deepcopy(saved)
+    args = dict(source_job_id="source-job", step_id="deep_0001", checkpoint_id="source-checkpoint")
+    if change == "bad_hash":
+        with pytest.raises(ValueError, match="摘要不一致"):
+            module._unrepaired_source_seed_proof(batch, saved, **args)
+    else:
+        proof = module._unrepaired_source_seed_proof(batch, saved, **args)
+        assert bool(proof) is (change in {"same", "checkpoint_session"})
+        if proof is not None:
+            assert proof["checkpoint_id"] == "source-checkpoint"
+            assert proof["reused"] == ["source_interpretation"]
+            assert "session_id" in proof["discarded"]
+            assert proof["session_record_scope"] == ("checkpoint" if change == "checkpoint_session" else "attempt")
+    assert saved == before
 
 
 @pytest.mark.parametrize("new_job", [False, True])
@@ -2778,7 +2914,7 @@ def _job_checkpoint_fingerprint(session_factory, job_id: str) -> list[tuple[str,
             (
                 step.step_id,
                 json.dumps(
-                    store.get_last_checkpoint(job_id, step.step_id)[1],
+                    (checkpoint[1] if (checkpoint := store.get_last_checkpoint(job_id, step.step_id)) else None),
                     ensure_ascii=False, sort_keys=True, default=str,
                 ),
             )
@@ -2800,7 +2936,8 @@ def _step_with_saved_review(session_factory, job_id: str) -> str | None:
     return None
 
 
-def _fail_with_saved_review(monkeypatch, deep, *, keep_partial_wire: bool = True):
+def _fail_with_saved_review(monkeypatch, deep, *, keep_partial_wire: bool = True,
+                            invalid_success: bool = False):
     """Record a validated source review beside a gate-valid draft, then fail.
 
     Batches whose frozen units contain no official-target excerpt keep their
@@ -2814,6 +2951,7 @@ def _fail_with_saved_review(monkeypatch, deep, *, keep_partial_wire: bool = True
         ProtocolControlAgentAttempt,
         ProtocolControlAgentRunner,
         build_protocol_control_agent_prompt,
+        hydrate_protocol_control_agent_output,
         parse_protocol_control_agent_wire,
     )
 
@@ -2833,7 +2971,7 @@ def _fail_with_saved_review(monkeypatch, deep, *, keep_partial_wire: bool = True
             interpretation, coverage, review = fabricated
             state["saved"] = (interpretation, coverage, review)
             return ProtocolControlAgentRunResult(
-                status="需要核对", batch_id=batch.batch_id,
+                status="已解析" if invalid_success else "需要核对", batch_id=batch.batch_id,
                 session_id="saved-review-session",
                 attempts=[ProtocolControlAgentAttempt(
                     attempt=1, session_id="saved-review-session",
@@ -2842,13 +2980,41 @@ def _fail_with_saved_review(monkeypatch, deep, *, keep_partial_wire: bool = True
                 )],
                 source_interpretation=interpretation,
                 source_statement_coverage=coverage,
-                source_target_review=review,
+                source_target_review=None if invalid_success else review,
+                final_output=(hydrate_protocol_control_agent_output(wire, batch)
+                              if invalid_success else None),
                 partial_wire=wire if keep_partial_wire else None,
             )
         return original_run(self, batch, transport, **kwargs)
 
     monkeypatch.setattr(ProtocolControlAgentRunner, "run", fail_then_resume)
     return original_run, state
+
+
+def test_deep_step_rejects_missing_review_before_completing_without_alignment(
+    data_paths, session_factory, monkeypatch,
+) -> None:
+    seed = _seed_frozen_source(data_paths, session_factory, key="deep-final-review-gate")
+    discovery = _DiscoveryTransport()
+    deep = _ReviewRecordingDeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    job = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="deep-final-review-gate-job",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+    _original, state = _fail_with_saved_review(monkeypatch, deep, invalid_success=True)
+    assert runner.run_job(job.job_id)
+    assert state["failed_once"] is True
+    snapshot, _payload = _job_snapshot_and_payload(session_factory, job.job_id)
+    failed = [step for step in snapshot.steps
+              if step.state == "failed_final" and step.error_code != "DEPENDENCY_FAILED"]
+    assert len(failed) == 1
+    assert failed[0].step_id.startswith("deep_")
+    assert failed[0].error_code == "PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID"
+    with session_factory() as session:
+        checkpoint = JobStore(session, now=_now).get_last_checkpoint(job.job_id, failed[0].step_id)
+    assert checkpoint[1]["stage"] == "deep_failure_diagnostic"
+    assert checkpoint[1]["source_target_review"] is None
 
 
 def test_partial_resume_reuses_saved_source_review_and_keeps_source_history(

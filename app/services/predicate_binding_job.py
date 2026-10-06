@@ -15,6 +15,7 @@ from app.llm.predicate_binding_candidates import (
     _candidate_json_object,
     validate_predicate_candidates,
     build_predicate_binding_messages,
+    computation_request_hashes,
 )
 from app.services.binding_candidate_comparison import PREDICATE_COMPARISON_VERSION, compare_candidate_declarations
 from app.llm.predicate_binding_batches import PredicateBindingBatch, plan_binding_batches
@@ -74,6 +75,15 @@ def enqueue_predicate_candidates(session_factory, *, review_episode_id, componen
         if batch_max_characters is not None:
             payload["batches"] = [batch.model_dump(mode="json") for batch in plan_binding_batches(
                 frozen, predicate_binding_prompt_input(frozen), max_characters=batch_max_characters)]
+        persisted_frozen = PredicateBindingFrozenInput.model_validate(json.loads(json.dumps(
+            payload["frozen_input"], ensure_ascii=False, sort_keys=True,
+        )))
+        request_hashes = computation_request_hashes({
+            step_id: build_predicate_binding_messages(persisted_frozen, batch=batch)
+            for step_id, _, batch in _reads(payload)
+        })
+        if request_hashes:
+            payload["request_messages_sha256s"] = request_hashes
         steps = []
         previous = {}
         for step_id, lane, _ in _reads(payload):
@@ -104,6 +114,7 @@ class PredicateBindingJobExecutor:
     frozen_input_type = PredicateBindingFrozenInput
     error_prefix = "PREDICATE"
     candidate_identity_field = "predicate_identity_sha256"
+    comparison_version = PREDICATE_COMPARISON_VERSION
 
     def __init__(self, session_factory, artifact_store, routes, *, completion=direct_completion):
         self.session_factory = session_factory
@@ -203,7 +214,7 @@ class PredicateBindingJobExecutor:
                 ),
             })
         return {
-            "version": PREDICATE_COMPARISON_VERSION, "accepted": False,
+            "version": self.comparison_version, "accepted": False,
             "frozen_input_sha256": frozen.frozen_input_sha256, "batches": comparisons,
         }
 
@@ -243,6 +254,13 @@ class PredicateBindingJobExecutor:
             raise StepFailure(retryable=False, error_code=f"{self.error_prefix}_ROUTE_CHANGED")
         frozen = self.frozen_input_type.model_validate(payload["frozen_input"])
         self._validate_batches(payload, frozen)
+        expected_requests = computation_request_hashes({
+            step_id: self._build_messages(frozen, batch)
+            for step_id, _, batch in _reads(payload)
+        })
+        if payload.get("request_messages_sha256s") != (expected_requests or None):
+            raise StepFailure(retryable=False, error_code=f"{self.error_prefix}_REQUEST_CHANGED",
+                              detail="本次核对内容与保存的请求不一致，请保留旧结果并新建核对")
         with self.session_factory() as session:
             self._verify_current(session, frozen)
             from app.services.review_candidate_scope import verify_candidate_preparation

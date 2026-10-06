@@ -8,12 +8,14 @@ import {
   factNormalizationCommandPath,
   factNormalizationJobPath,
   factNormalizationJobRetryPath,
+  factNormalizationUnresolvedPath,
 } from "./endpoints";
 import {
   decodeFactNormalizationCommand,
   decodeFactNormalizationError,
   decodeFactNormalizationJobAction,
   decodeFactNormalizationJobStatus,
+  decodeNormalizationUnresolved,
   FactNormalizationApiError,
   type FactNormalizationCommandView,
   type FactNormalizationJobActionView,
@@ -68,6 +70,11 @@ export function createFactNormalizationHttp(
 
   return {
     kind: "http",
+
+    async getNormalizationUnresolved(subjectId, episodeId, jobId, offset, options) {
+      return request(factNormalizationUnresolvedPath(subjectId, episodeId, jobId, offset, options?.expectedContentSha256),
+        { method: "GET", signal: options?.signal }, decodeNormalizationUnresolved);
+    },
 
     async startFactNormalization(
       subjectId: string,

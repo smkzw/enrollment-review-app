@@ -88,6 +88,13 @@ class AppNotFoundError(EvidenceAppError):
     recovery = "请检查编号，或返回列表重新选择。"
 
 
+class AppNormalizationReadPendingError(EvidenceAppError):
+    status_code = 409
+    code = "NORMALIZATION_READ_PENDING"
+    title = "整理记录尚未固定"
+    recovery = "请等待这次整理结束；若已经续读，请重新读取整份清单。已保存内容不会丢失。"
+
+
 class AppReviewSourceIncompleteError(EvidenceAppError):
     status_code = 409
     code = "REVIEW_SOURCE_INCOMPLETE"

@@ -7,6 +7,7 @@ import { createProtocolWorkbenchHttp } from "./protocolWorkbenchHttp";
 import {
   encodeFeedback,
   normalizeIdentityReview,
+  normalizeDraftRevision,
   normalizeSession,
   normalizeSources,
 } from "./protocolWorkbenchNormalize";
@@ -48,6 +49,18 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe("protocolWorkbenchHttp", () => {
+  it("保留提案提示使用真实布尔标记，旧响应不虚构提示", () => {
+    const wire = {
+      job_id: "review-job", revision_id: "revision-1", draft_id: "draft-1",
+      revision_number: 1, status: "saved", status_label: "已保存",
+      reason: "initial_save", reason_label: "保存首稿", actor: "用户",
+      created_at: "2026-10-06T00:00:00Z", study_phase: "phase_ii", study_phase_label: "II 期",
+      rule_count: 2, workflow_stage_count: 1, content: { proposed_rules: [] }, diff: null,
+    };
+    expect(normalizeDraftRevision(wire).importedUnpublishedProposal).toBe(false);
+    expect(normalizeDraftRevision({ ...wire, imported_unpublished_proposal: true }).importedUnpublishedProposal).toBe(true);
+    expect(() => normalizeDraftRevision({ ...wire, imported_unpublished_proposal: "true" })).toThrow();
+  });
   it("getSession 归一化 snake_case 响应", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, SESSION_WIRE));
     const repo = createProtocolWorkbenchHttp({ fetchImpl });

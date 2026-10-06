@@ -105,6 +105,45 @@ def _discovery_steps(count: int = 3):
     return discovery
 
 
+def test_parallel_retry_keeps_diagnostics_distinct_from_completed_results(session_factory, clock):
+    steps = _discovery_steps(2)
+    for step in steps[:2]:
+        step.update(retryable=True, max_attempts=2)
+    create_job_with_steps(session_factory, clock, job_id="parallel-diagnostics", steps=steps)
+    restored = []
+
+    def executor(ctx):
+        if ctx.step_id == "closure":
+            return {"closed": True}
+        if ctx.attempt == 1:
+            raise StepFailure(
+                retryable=True, error_code="STREAM_INTERRUPTED",
+                diagnostic_checkpoint={"partial": ctx.step_id},
+            )
+        assert ctx.last_checkpoint_is_diagnostic is True
+        assert ctx.last_checkpoint["partial"] == ctx.step_id
+        restored.append(ctx.step_id)
+        return {"step": ctx.step_id, "recovered": True}
+
+    runner = JobRunner(session_factory, {"demo": executor}, now=clock.now, max_parallel_steps=2)
+    assert runner.run_job("parallel-diagnostics")
+    with _store(session_factory, clock) as store:
+        originals = {step["step_id"]: store.get_last_checkpoint("parallel-diagnostics", step["step_id"])
+                     for step in steps[:2]}
+        store.retry_failed("parallel-diagnostics")
+    clock.advance(0.1)
+    assert runner.run_job("parallel-diagnostics")
+    assert sorted(restored) == ["discovery_0001", "discovery_0002"]
+    assert _snapshot(session_factory, clock, "parallel-diagnostics").state == "completed"
+    with _store(session_factory, clock) as store:
+        for step_id, original in originals.items():
+            assert original in store.list_checkpoints("parallel-diagnostics", step_id)
+            assert store.checkpoint_is_diagnostic("parallel-diagnostics", original[0])
+            latest = store.get_last_checkpoint("parallel-diagnostics", step_id)
+            assert latest[1]["recovered"] is True
+            assert not store.checkpoint_is_diagnostic("parallel-diagnostics", latest[0])
+
+
 def test_default_runner_remains_serial_without_parallel_capability(session_factory, clock):
     create_job_with_steps(
         session_factory,

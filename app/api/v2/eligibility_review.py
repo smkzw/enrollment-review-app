@@ -124,7 +124,7 @@ class EligibilityReviewResponse(BaseModel):
     clauses: list[EligibilityClauseDTO] = Field(default_factory=list)
     controls: list[EligibilityControlDTO] = Field(default_factory=list)
     unassigned_conflicts: list[EligibilityUnassignedConflictDTO] = Field(default_factory=list)
-    work_draft_state: Literal["not_started", "current", "source_changed"] = "not_started"
+    work_draft_state: Literal["not_started", "current", "source_changed", "method_changed"] = "not_started"
 
     @model_validator(mode="after")
     def validate_component_identity(self) -> "EligibilityReviewResponse":

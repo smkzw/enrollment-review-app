@@ -48,6 +48,8 @@ describe("SourceMetadataEditor", () => {
     );
 
     expect(screen.getByText("系统建议，待核对")).toBeInTheDocument();
+    expect(screen.getByText("核对资料信息").closest("details")).not.toHaveAttribute("open");
+    await user.click(screen.getByText("核对资料信息"));
     expect(screen.getByText("上传者：上传者甲 · 资料归属由上传者核对")).toBeInTheDocument();
     const save = screen.getByRole("button", { name: "保存核对结果" });
     expect(save).toBeDisabled();
@@ -79,6 +81,7 @@ describe("SourceMetadataEditor", () => {
       />,
     );
 
+    await user.click(screen.getByText("核对资料信息"));
     const documentName = screen.getByRole("textbox", { name: "原件所写资料名称" });
     const issuer = screen.getByRole("textbox", { name: "原件所写出具方" });
     await user.clear(documentName);
@@ -112,6 +115,7 @@ describe("SourceMetadataEditor", () => {
       />,
     );
 
+    await user.click(screen.getByText("核对资料信息"));
     await user.selectOptions(screen.getByRole("combobox", { name: "出具方类别" }), "unknown");
     await user.type(screen.getByRole("textbox", { name: "核对说明" }), "原件未见出具机构");
     await user.click(screen.getByRole("button", { name: "保存核对结果" }));
@@ -136,6 +140,26 @@ describe("SourceMetadataEditor", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "资料信息已被更新，请重新核对后保存。",
     );
+  });
+
+  it("收起资料信息不丢输入，切换资料修订后默认收起并重置字段", async () => {
+    const user = userEvent.setup();
+    const props = { busy: false, error: null, notice: null, onSave: vi.fn() };
+    const { rerender } = render(<SourceMetadataEditor member={member()} {...props} />);
+    await user.click(screen.getByText("核对资料信息"));
+    await user.type(screen.getByRole("textbox", { name: "核对说明" }), "尚未提交的核对说明");
+    await user.click(screen.getByText("核对资料信息"));
+    expect(screen.getByText("核对资料信息").closest("details")).not.toHaveAttribute("open");
+    await user.click(screen.getByText("核对资料信息"));
+    expect(screen.getByRole("textbox", { name: "核对说明" })).toHaveValue("尚未提交的核对说明");
+    const next = member();
+    next.metadataHead.metadataRevisionId = "metadata-2";
+    next.metadataHead.documentType = "复查报告";
+    rerender(<SourceMetadataEditor member={next} {...props} />);
+    expect(screen.getByText("核对资料信息").closest("details")).not.toHaveAttribute("open");
+    await user.click(screen.getByText("核对资料信息"));
+    expect(screen.getByRole("textbox", { name: "原件所写资料名称" })).toHaveValue("复查报告");
+    expect(screen.getByRole("textbox", { name: "核对说明" })).toHaveValue("");
   });
 
   it("保存成功反馈在资料信息区域内呈现", () => {

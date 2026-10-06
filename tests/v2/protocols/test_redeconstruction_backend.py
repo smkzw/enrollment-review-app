@@ -149,6 +149,7 @@ from app.storage.repositories import (
 )
 
 from tests.v2.protocols.slice4_helpers import confirmed_fixture
+from tests.v2.protocols.joint_publication_helpers import seed_joint_control_publication
 
 # JobStore 持久化列使用 UTC naive；测试服务时间必须与运行时一致。
 NAIVE_NOW = datetime(2026, 8, 17, tzinfo=timezone.utc).replace(tzinfo=None)
@@ -239,8 +240,29 @@ def _revised_fixture(
             }
         )
     if phase is not None:
-        # 交叉期别只改变草稿侧所选期别与规则期别；source_input 保持目标项目
-        # 期别不变，与既有发布测试一致（由 AlwaysPublishableGate 隔离谱系检查）。
+        # 输入自身期别一致；与已有正式项目的期别冲突留给发布事务核验。
+        from app.domain.contracts.protocol_ingestion import frozen_catalog_content_hash
+
+        catalogs = {}
+        for name in ("parent_rule_catalog", "required_procedure_catalog"):
+            catalog = getattr(source_input, name).model_copy(update={"study_phase": phase})
+            catalog = catalog.model_copy(update={
+                "catalog_sha256": frozen_catalog_content_hash(catalog)
+            })
+            catalogs[name] = catalog
+        source_input = source_input.model_copy(update={
+            "selected_phase": phase,
+            "phase_selection": source_input.phase_selection.model_copy(
+                update={"selected_phase": phase}
+            ),
+            "identity_decision": source_input.identity_decision.model_copy(
+                update={"study_phase": phase}
+            ),
+            **catalogs,
+        })
+        source_input = ProtocolDeconstructionInput.model_validate(
+            source_input.model_dump(mode="json")
+        )
         draft = draft.model_copy(
             update={
                 "selected_phase": phase,
@@ -280,6 +302,21 @@ def _seed_review(service, job_id, source_input, draft, spans, *, wait_at="publis
     )
 
 
+def _control_refs(service, data_paths, job_id):
+    """Complete same-revision synthetic controls, including publication replays."""
+    merged = service._merged_payload(job_id)
+    revision = service._load_draft_revision(merged)
+    key = (job_id, revision.revision_id)
+    cache = service.__dict__.setdefault("_test_control_publication_refs", {})
+    if key not in cache:
+        cache[key] = seed_joint_control_publication(
+            service.session_factory, data_paths, service._load_source_input(merged),
+            revision.content, service._load_source_spans(merged), revision.revision_id,
+        )
+    control_job_id, control_checkpoint_id = cache[key]
+    return {"control_job_id": control_job_id, "control_checkpoint_id": control_checkpoint_id}
+
+
 def _publish_first_with_source_context(
     service, data_paths, source_input, draft, spans
 ):
@@ -301,6 +338,7 @@ def _publish_first_with_source_context(
         started.job_id,
         idempotency_key="publish-with-source-context-helper",
         actor="医学监查员",
+        **_control_refs(service, data_paths, started.job_id),
     )
 
 
@@ -403,6 +441,7 @@ def test_redeconstruction_rejects_publish_when_formal_baseline_has_advanced(
         task_b.job_id,
         idempotency_key="parallel-publish-b",
         actor="医学监查员",
+        **_control_refs(service, data_paths, task_b.job_id),
     )
 
     with pytest.raises(ProtocolWorkbenchError) as exc_info:
@@ -410,6 +449,7 @@ def test_redeconstruction_rejects_publish_when_formal_baseline_has_advanced(
             task_a.job_id,
             idempotency_key="parallel-publish-a",
             actor="医学监查员",
+            **_control_refs(service, data_paths, task_a.job_id),
         )
     assert exc_info.value.code == "PUBLICATION_LINEAGE_REJECTED"
     assert "当前正式规则版本已被" in exc_info.value.detail
@@ -441,6 +481,7 @@ def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
         started.job_id,
         idempotency_key="publish-with-source-context",
         actor="医学监查员",
+        **_control_refs(service, data_paths, started.job_id),
     )
     interpretation = InterpretationSource(
         interpretation_source_id="source-node-relative",
@@ -504,6 +545,7 @@ def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
         result.job_id,
         idempotency_key="feedback-from-formal-publish",
         actor="医学监查员",
+        **_control_refs(service, data_paths, result.job_id),
     )
     assert republished.project_id == published.project_id
     assert republished.rule_set_revision == 2
@@ -736,6 +778,7 @@ def test_active_draft_interpretation_registration_revises_and_publishes(
         started.job_id,
         idempotency_key="active-source-registration-publish",
         actor="医学监查员",
+        **_control_refs(service, data_paths, started.job_id),
     )
     with factory() as session:
         stored = list_interpretation_sources(
@@ -834,8 +877,9 @@ def test_default_feedback_reviser_retries_one_rejected_candidate(
     source_input, draft, spans = confirmed_fixture()
     notes: list[str] = []
 
-    def revise(_source_input, current_draft, _target_rule_code, feedback_note, _target_component_id=None, *, joint_source_repair=False):
+    def revise(_source_input, current_draft, _target_rule_code, feedback_note, _target_component_id=None, *, joint_source_repair=False, budget_store=None):
         assert joint_source_repair is False
+        assert budget_store is not None
         notes.append(feedback_note)
         revised = current_draft.model_copy(deep=True)
         title = "引入无关变化" if len(notes) == 1 else "按原文完成局部修订"
@@ -901,8 +945,9 @@ def test_default_feedback_reviser_does_not_retry_new_core_semantics_regression(
     source_input, draft, spans = confirmed_fixture()
     notes: list[str] = []
 
-    def revise(_source_input, current_draft, _target_rule_code, note, _component_id=None, *, joint_source_repair=False):
+    def revise(_source_input, current_draft, _target_rule_code, note, _component_id=None, *, joint_source_repair=False, budget_store=None):
         assert joint_source_repair is False
+        assert budget_store is not None
         notes.append(note)
         revised = current_draft.model_copy(deep=True)
         revised.proposed_rules[1].components[0].title = "引入无关变化"
@@ -1506,6 +1551,93 @@ def test_failed_source_error_feedback_keeps_current_revision(
     assert current.revision.revision_id == before.revision.revision_id
 
 
+def test_feedback_identity_failure_keeps_candidate_and_specific_recovery(slice4_env, data_paths):
+    from app.agents.protocol_deconstructor import ProtocolRequirementIdentityError
+    from app.evidence.artifacts import ArtifactStore
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    target = draft.proposed_rules[1].components[0]
+    calls = []
+    candidate = draft.model_dump(mode="json")
+    def fail_identity(*args):
+        calls.append(args)
+        raise ProtocolRequirementIdentityError(
+            target.rule_component_id,
+            [item.requirement_id for item in target.evidence_requirements],
+            candidate_draft=candidate,
+        )
+    service = _make_service(factory, data_paths, feedback_reviser=fail_identity)
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "identity-failure.docx"),
+        original_name="identity-failure.docx", idempotency_key="identity-failure-first", actor="医学监查员",
+    )
+    service.seed_review_session(started.job_id, source_input=source_input, draft=draft,
+                               source_spans=spans, wait_at="await_review")
+    before = service.get_draft_detail(started.job_id)
+    with pytest.raises(ProtocolWorkbenchError) as failure:
+        service.apply_feedback(
+            started.job_id, expected_revision_id=before.revision.revision_id,
+            feedback_kind=DraftFeedbackKind.SOURCE_ERROR, target_rule_code="EX-01",
+            target_component_id=target.rule_component_id, feedback_note="仅核对资料要求删减。", actor="医学监查员",
+        )
+    error = failure.value
+    assert error.code == "REQUIREMENT_IDENTITY_AMBIGUOUS"
+    assert "逐项对应" in error.detail and "分开核对" in error.recovery
+    assert error.context["component_id"] == target.rule_component_id
+    assert error.context["issue_codes"] == [error.code]
+    assert error.context["affected_requirement_ids"] == [item.requirement_id for item in target.evidence_requirements]
+    assert len(calls) == error.context["attempts"] == 1
+    assert len(error.context["candidate_hashes"]) == 1
+    record = json.loads(ArtifactStore(data_paths).read("artifacts/raw_response/" + error.context["candidate_hashes"][0]))
+    assert record["accepted"] is False and record["candidate"] == candidate
+    current = service.get_draft_detail(started.job_id)
+    assert current.revision.revision_id == before.revision.revision_id
+    assert current.revision.content == before.revision.content
+
+
+@pytest.mark.parametrize("code, phrase", [
+    ("BUDGET_RECORD_MISSING", "次数记录未保留"),
+    ("BUDGET_RECORD_INVALID", "次数记录无法核实"),
+    ("LOGICAL_BUDGET_EXHAUSTED", "允许的次数已用完"),
+    ("MODEL_IDENTITY_MISMATCH", "指定模型不一致"),
+    ("STREAM_INTERRUPTED", "回答中途断开"),
+    ("TRANSPORT_TIMEOUT", "回答超时"),
+])
+def test_feedback_call_failure_is_specific_and_keeps_draft(slice4_env, data_paths, code, phrase):
+    from app.agents.protocol_deconstructor import ProtocolAgentCallError
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    calls = []
+
+    def fail_call(*args):
+        calls.append(args)
+        raise ProtocolAgentCallError("synthetic-failed-read", "合成连接故障", error_code=code)
+
+    service = _make_service(factory, data_paths, feedback_reviser=fail_call)
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "call-failure.docx"),
+        original_name="call-failure.docx", idempotency_key="call-failure-first", actor="医学监查员",
+    )
+    service.seed_review_session(started.job_id, source_input=source_input, draft=draft,
+                               source_spans=spans, wait_at="await_review")
+    before = service.get_draft_detail(started.job_id)
+    with pytest.raises(ProtocolWorkbenchError) as failure:
+        service.apply_feedback(
+            started.job_id, expected_revision_id=before.revision.revision_id,
+            feedback_kind=DraftFeedbackKind.SOURCE_ERROR, target_rule_code="EX-01",
+            target_component_id=draft.proposed_rules[1].components[0].rule_component_id,
+            feedback_note="只核对该子项。", actor="医学监查员",
+        )
+    error = failure.value
+    assert error.code == code and phrase in error.detail
+    assert error.context["issue_codes"] == [code]
+    assert "原草稿保持不变" in error.detail
+    assert len(calls) == error.context["attempts"] == 1
+    assert error.context["unchanged_revision_id"] == before.revision.revision_id
+    current = service.get_draft_detail(started.job_id)
+    assert current.revision == before.revision
+
+
 def test_source_error_feedback_rejects_noop_or_changes_outside_selected_rule(
     slice4_env, data_paths
 ) -> None:
@@ -1746,6 +1878,7 @@ def test_redeconstruction_publish_appends_new_immutable_rule_version(
         result.job_id,
         idempotency_key="redo-pub-v2",
         actor="医学监查员",
+        **_control_refs(service, data_paths, result.job_id),
     )
     assert view.replay is False
     assert view.project_id == "project-1"
@@ -1768,6 +1901,7 @@ def test_redeconstruction_publish_appends_new_immutable_rule_version(
         result.job_id,
         idempotency_key="redo-pub-v2",
         actor="医学监查员",
+        **_control_refs(service, data_paths, result.job_id),
     )
     assert replay_view.replay is True
     assert replay_view.rule_set_revision == 2
@@ -1791,6 +1925,7 @@ def test_redeconstruction_cross_protocol_rejected_chinese_next_step(
             result.job_id,
             idempotency_key="redo-cross-protocol",
             actor="医学监查员",
+            **_control_refs(service, data_paths, result.job_id),
         )
     assert exc_info.value.code == "PUBLICATION_LINEAGE_REJECTED"
     assert "方案谱系或期别与目标项目不一致" in exc_info.value.title
@@ -1817,6 +1952,7 @@ def test_redeconstruction_cross_phase_rejected(slice4_env, data_paths) -> None:
             result.job_id,
             idempotency_key="redo-cross-phase",
             actor="医学监查员",
+            **_control_refs(service, data_paths, result.job_id),
         )
     assert exc_info.value.code == "PUBLICATION_LINEAGE_REJECTED"
     assert "同一方案" in exc_info.value.recovery
@@ -1865,6 +2001,7 @@ def test_redeconstruction_save_and_cancel_do_not_change_formal_version(
         result2.job_id,
         idempotency_key="redo-pub-save-cancel",
         actor="医学监查员",
+        **_control_refs(service, data_paths, result2.job_id),
     )
     assert view.rule_set_revision == 2
     with factory() as session:
@@ -2183,6 +2320,7 @@ def test_redeconstruction_uses_latest_formal_revision_after_republish(
         result.job_id,
         idempotency_key="redo-pub-v2",
         actor="医学监查员",
+        **_control_refs(service, data_paths, result.job_id),
     )
     assert v2_view.rule_set_revision == 2
 

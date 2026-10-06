@@ -38,6 +38,7 @@ export interface OcrReviewPanelProps {
   conflict: EvidenceApiError | null;
   isCurrentRevision?: boolean;
   editingDisabledReason?: string | null;
+  excerptProposal?: { proposalId: string; excerpt: string } | null;
   onSubmitCorrection: (draft: CorrectionDraft) => Promise<void>;
   onSubmitRiskReview: (
     flag: OcrRiskFlagView,
@@ -189,7 +190,9 @@ function LocatorList({
           <div className="evidence-locator-list__head">
             <strong>{locator.excerpt === null ? "本页定位" : `“${locator.excerpt}”`}</strong>
             <span className="chip">
-              {clinicalLocatorPrecisionLabel(locator.precision)}
+              {locator.targetId.startsWith("local-transcript:")
+                ? "原文查找 · 项目归属待核实"
+                : clinicalLocatorPrecisionLabel(locator.precision)}
             </span>
           </div>
           {locator.precision !== "bbox" &&
@@ -223,6 +226,7 @@ export function OcrReviewPanel({
   conflict,
   isCurrentRevision = false,
   editingDisabledReason = null,
+  excerptProposal = null,
   onSubmitCorrection,
   onSubmitRiskReview,
   onSubmitPageRiskReview = async () => undefined,
@@ -303,6 +307,11 @@ export function OcrReviewPanel({
   );
   const [showLocatorDetails, setShowLocatorDetails] =
     useState(!isCurrentRevision);
+  useEffect(() => {
+    if (excerptProposal === null) return;
+    setShowCorrectionTools(true);
+    openSection("evidence-correction");
+  }, [excerptProposal?.proposalId]);
   const pageReviewStatus =
     pendingRiskCount > 0
       ? `文字已识别 · ${pendingRiskCount} 项待核对`
@@ -625,6 +634,30 @@ export function OcrReviewPanel({
             )}
           </div>
         </div>
+        {excerptProposal !== null && (
+          <div className="evidence-notice evidence-notice--info">
+            <strong>局部读取摘录，尚未保存或采用</strong>
+            <p>{excerptProposal.excerpt}</p>
+            <p>请对照原件确认内容和插入位置；保存后仍须重新生成资料版本。</p>
+            <button type="button" className="button"
+              disabled={editingDisabledReason !== null || correctionBusy
+                || page.rawText.includes(excerptProposal.excerpt)
+                || Boolean(page.effectiveText?.includes(excerptProposal.excerpt))}
+              onClick={() => {
+                if (hasUnsavedChanges && !window.confirm("当前有尚未提交的校对内容，是否改用这段摘录？")) return;
+                setCorrection({ operation: "insert", textStart: page.rawText.length,
+                  textEnd: page.rawText.length, originalText: "",
+                  correctedText: `\n${excerptProposal.excerpt}`, changeKind: "other_text",
+                  reason: "", criticalConfirmed: false });
+              }}>
+              补入校对稿
+            </button>
+            {(page.rawText.includes(excerptProposal.excerpt)
+              || page.effectiveText?.includes(excerptProposal.excerpt)) && (
+              <p>现有文字已包含这段摘录，不重复补入；如需修正，请选择实际原文范围。</p>
+            )}
+          </div>
+        )}
         {showCorrectionTools && (
           <>
             {editingDisabledReason !== null && (
@@ -804,6 +837,9 @@ export function OcrReviewPanel({
         aria-label="识别风险核对"
       >
         <div className="evidence-review-context" role="note">
+          {revision.sourceQualificationMode === "scoped_text_v1" && (
+            <p>本版本逐项核实使用，未核实内容继续保留，不代表全部资料已确认。后续核对将生成新的资料版本，本次记录不会被覆盖。</p>
+          )}
           <p>
             本资料版本共 {revision.pages.length} 页，当前为第{" "}
             {currentPagePosition > 0 ? currentPagePosition : page.pageNumber} 页。
@@ -994,7 +1030,11 @@ export function OcrReviewPanel({
             <h4>实际定位精度</h4>
           </div>
           <div className="evidence-panel-heading__actions">
-            <span className="evidence-subtle">仅展示已核验的真实定位</span>
+            <span className="evidence-subtle">
+              {reviewableLocators.some((locator) => locator.targetId.startsWith("local-transcript:"))
+                ? "原文可查找，相关读数尚未采用"
+                : "仅展示已核验的真实定位"}
+            </span>
             {isCurrentRevision && reviewableLocators.length > 0 && (
               <button
                 type="button"
@@ -1013,7 +1053,9 @@ export function OcrReviewPanel({
           <LocatorList locators={reviewableLocators} onOpenLocator={onOpenLocator} />
         ) : (
           <p className="evidence-section-summary">
-            原件定位已保存；展开后可逐项跳转并核对红框位置。
+            {reviewableLocators.some((locator) => locator.targetId.startsWith("local-transcript:"))
+              ? "原文位置已保存；项目与读数的对应关系仍待核实。"
+              : "原件定位已保存；展开后可逐项跳转并核对红框位置。"}
           </p>
         )}
       </section>

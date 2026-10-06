@@ -15,6 +15,7 @@ import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from hashlib import sha256
+from collections.abc import Iterable
 
 from app.domain.contracts.enums import OcrRiskKind, OcrRiskLevel
 from app.domain.contracts.ocr import OcrRiskFlag
@@ -317,6 +318,13 @@ def allows_risk_review(flag: OcrRiskFlag) -> bool:
     return flag.kind != OcrRiskKind.OUTPUT_REPETITION
 
 
+def can_defer_blocking_risk(flag: OcrRiskFlag) -> bool:
+    return flag.kind in {
+        OcrRiskKind.NEGATION_POLARITY, OcrRiskKind.NUMERIC_VALUE,
+        OcrRiskKind.DECIMAL_POINT, OcrRiskKind.UNIT, OcrRiskKind.DATE,
+    }
+
+
 def correction_covers_risk(
     flag: OcrRiskFlag,
     *,
@@ -338,6 +346,25 @@ def correction_covers_risk(
         return flag.text_start < correction_text_start < flag.text_end
     return max(correction_text_start, flag.text_start) < min(
         correction_text_end, flag.text_end
+    )
+
+
+def blocking_risk_is_resolved(
+    flag: OcrRiskFlag,
+    *,
+    reviewed: bool,
+    correction_ranges: Iterable[tuple[int, int]],
+    page_text_length: int,
+) -> bool:
+    """One resolution predicate for freezing, readback and candidate consumption."""
+    return (reviewed and allows_risk_review(flag)) or any(
+        correction_covers_risk(
+            flag,
+            correction_text_start=start,
+            correction_text_end=end,
+            page_text_length=page_text_length,
+        )
+        for start, end in correction_ranges
     )
 
 

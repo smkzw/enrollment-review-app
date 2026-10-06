@@ -56,7 +56,7 @@ import type {
   ActivationEventView,
   CorrectionCreateResponseView,
   OcrPageView,
-  ProcessingCandidateView,
+  ProcessingCandidateDetailView,
   ProcessingRevisionView,
   ReferencedDocumentListView,
   ReferencedDocumentResolutionView,
@@ -260,8 +260,8 @@ export function createEvidenceHttp(
     async getProcessingCandidate(
       candidateId: string,
       options?: { signal?: AbortSignal },
-    ): Promise<ProcessingCandidateView> {
-      return request<ProcessingCandidateView>(
+    ): Promise<ProcessingCandidateDetailView> {
+      return request<ProcessingCandidateDetailView>(
         `/api/v2/evidence-processing-candidates/${encodeURIComponent(candidateId)}`,
         { method: "GET", signal: options?.signal },
         decodeProcessingCandidateStatus,

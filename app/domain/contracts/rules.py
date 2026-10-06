@@ -12,6 +12,8 @@ from .occurrence_scope import OccurrenceScope
 from .frequency_source_date import FrequencySourceDate
 from .repeat_scheme import RepeatScheme, RepeatEvidenceRole, validate_repeat_evidence_roles
 from .observation_selection import ObservationPolicy, validate_observation_window_order
+from .source_computation import SourceComputation, validate_computation_quotes
+from .record_semantics import RecordSemantics
 from .enums import (
     AnchorType,
     CombinedWindowSelection,
@@ -275,6 +277,21 @@ class ProspectivePeriod(ContractModel):
     period: ProtocolPeriod
 
 
+class SourceDefinedProspectivePeriod(ContractModel):
+    """Verbatim period context, not an inferred date range or a new phase label."""
+
+    kind: Literal["source_defined"] = "source_defined"
+    source_excerpts: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_excerpts(self):
+        if any(not text.strip() for text in self.source_excerpts):
+            raise ValueError("原文限定期间须保留非空逐字依据")
+        if len(self.source_excerpts) != len(set(self.source_excerpts)):
+            raise ValueError("原文限定期间不能重复来源片段")
+        return self
+
+
 class AtomicPredicate(ContractModel):
     predicate_id: str = Field(min_length=1)
     subject: str = Field(min_length=1)
@@ -289,7 +306,7 @@ class AtomicPredicate(ContractModel):
     requires_professional_judgment: bool = False
     occurrence_window: OccurrenceWindow | None = None
     prospective_window: ProspectiveWindow | None = None
-    prospective_period: ProspectivePeriod | None = None
+    prospective_period: ProspectivePeriod | SourceDefinedProspectivePeriod | None = None
     # 显式原文命题（来源含义核实）：条件本身是非确定性的语义判断，只能保留
     # 方案原文的原方向含义及其限定条件，不能伪装成数值、分类或日期比较。
     # 该字段不得由旧字段推断；为空时序列化省略，旧内容身份保持不变。
@@ -304,6 +321,8 @@ class AtomicPredicate(ContractModel):
     unit_match_policy: Literal["exact_canonical_label"] = "exact_canonical_label"
     observation_policy: ObservationPolicy | None = None
     repeat_scheme: RepeatScheme | None = None
+    source_computation: SourceComputation | None = None
+    record_semantics: RecordSemantics | None = None
 
     @model_serializer(mode="wrap")
     def serialize_optional_fields(self, handler):
@@ -315,6 +334,10 @@ class AtomicPredicate(ContractModel):
             value.pop("semantic_proposition", None)
         if self.repeat_scheme is None:
             value.pop("repeat_scheme", None)
+        if self.source_computation is None:
+            value.pop("source_computation", None)
+        if self.record_semantics is None:
+            value.pop("record_semantics", None)
         return value
 
     @model_validator(mode="after")
@@ -376,9 +399,27 @@ class AtomicPredicate(ContractModel):
         return self
 
     @model_validator(mode="after")
+    def validate_record_semantics(self) -> "AtomicPredicate":
+        purpose = self.record_semantics
+        if purpose is None:
+            return self
+        if any(not any(excerpt in clause for clause in self.exact_source_clauses)
+               for excerpt in purpose.source_excerpts):
+            raise ValueError("记录用途须属于本条件逐字来源，关联依据须列入原文片段")
+        if (self.requires_professional_judgment
+                and purpose.record_obligation == "not_required_by_source"):
+            raise ValueError("研究者判断要求不能声明无需方案书面判断")
+        return self
+
+    @model_validator(mode="after")
     def validate_semantic_proposition(self) -> "AtomicPredicate":
         """语义命题只声明来源含义待核实，不能承载或替代确定性计算。"""
 
+        if isinstance(self.prospective_period, SourceDefinedProspectivePeriod):
+            if self.semantic_proposition is None:
+                raise ValueError("原文限定期间只能用于显式语义计划核对，不能替代确定性日期计算")
+            if self.prospective_period.source_excerpts != self.exact_source_clauses:
+                raise ValueError("原文限定期间须保留本条件全部逐字来源，不能选取较短片段")
         if self.semantic_proposition is None:
             return self
         if not self.semantic_proposition.strip():
@@ -400,6 +441,19 @@ class AtomicPredicate(ContractModel):
             raise ValueError(
                 "语义命题不接受发生频次窗口；频次仍须用数值谓词或最小次数结构保留"
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_source_computation(self) -> "AtomicPredicate":
+        if self.source_computation is None:
+            return self
+        if (self.semantic_proposition is not None or self.requires_professional_judgment
+                or self.occurrence_window is not None or self.repeat_scheme is not None
+                or self.prospective_window is not None or self.prospective_period is not None):
+            raise ValueError("来源计算不能与语义投票、研究者判断、频次或复查路径混用")
+        if self.comparator not in {"eq", "ne", "gt", "gte", "lt", "lte"} or isinstance(self.value, bool) or not isinstance(self.value, (int, float)):
+            raise ValueError("来源计算须绑定确定的数值比较条件，不新增完成计算的患者义务")
+        validate_computation_quotes(self.source_computation, self.exact_source_clauses)
         return self
 
     @property

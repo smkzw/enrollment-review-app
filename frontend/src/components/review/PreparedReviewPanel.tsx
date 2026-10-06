@@ -18,6 +18,7 @@ function taskName(task: PreparedReviewTask, tasks: PreparedReviewTask[]): string
   if (task.kind === "control_candidates") return "核对方案补充要求";
   if (task.kind === "observation_relation") return "核实初查、复查与重复记录";
   if (task.kind === "frequency_evidence") return "核实发生次数、天数与统计期间";
+  if (task.kind === "computation_input") return "核实计算所用记录及采集时间";
   if (task.kind === "proposition_evidence") return tasks.find((item) => item.jobId === task.candidateJobId)?.kind === "control_candidates"
     ? "核实原文对补充要求的说明" : "核实原文对入排条款的说明";
   if (task.kind === "judgment_content") return tasks.find((item) => item.jobId === task.candidateJobId)?.kind === "control_candidates"

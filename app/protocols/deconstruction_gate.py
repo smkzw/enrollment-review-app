@@ -73,7 +73,7 @@ CHECK_NAMES = (
 
 # 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
 # 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
-DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-10-04.51"
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-10-05.55"
 
 
 class ProtocolGateIssue(VersionedModel):
@@ -301,6 +301,43 @@ def _shared_period_lead_in(predicate, component_source: str) -> str:
     return ""
 
 
+def _source_bound_temporal_proposition(predicate) -> str:
+    """Use a complete quoted period clause, never a paraphrased time scope."""
+    proposition = re.sub(r"\s+", "", predicate.semantic_proposition or "")
+    if not proposition:
+        return ""
+    subject = re.sub(r"\s+", "", predicate.subject)
+    for clause in predicate.exact_source_clauses:
+        compact = re.sub(r"\s+", "", clause)
+        # A separately cited header can constrain every following item. Without
+        # an explicit relation it must not be discarded as sibling context.
+        if compact.endswith(("：", ":")) and re.match(
+            r"^(?:随机|筛选|基线|知情同意|首次给药|首剂|研究药物给药)"
+            r"(?:前|后|时)", compact,
+        ):
+            return ""
+    for clause in predicate.exact_source_clauses:
+        quoted = re.sub(r"\s+", "", clause)
+        if proposition not in {quoted, subject + quoted}:
+            continue
+        period_patterns = (
+            STUDY_PERIOD_SOURCE_PATTERN, TREATMENT_PERIOD_SOURCE_PATTERN,
+        )
+        owned_patterns = [pattern for pattern in period_patterns if pattern.search(clause)]
+        if not owned_patterns:
+            continue
+        if any(
+            other != clause and _source_time_quantities(other)
+            and any(pattern.search(other) for pattern in owned_patterns)
+            for other in predicate.exact_source_clauses
+        ):
+            # A co-cited definition of the same period may carry its boundary.
+            # Without explicit source roles, retain it rather than infer scope.
+            return ""
+        return clause
+    return ""
+
+
 def _predicate_temporal_text(predicate, component_source: str = "") -> str:
     """Return the temporal meaning owned by one atomic predicate.
 
@@ -314,6 +351,9 @@ def _predicate_temporal_text(predicate, component_source: str = "") -> str:
 
     text = _predicate_text(predicate)
     shared_period = _shared_period_lead_in(predicate, component_source)
+    quoted_proposition = _source_bound_temporal_proposition(predicate)
+    if quoted_proposition:
+        return (shared_period + "\n" if shared_period else "") + quoted_proposition
     identity = "\n".join(
         dict.fromkeys(
             part.strip()
@@ -595,6 +635,8 @@ def _any_is_source_scoped_longer_washout(expression, source: str) -> bool:
 def _shared_named_anchor_lead_in(predicate, component_text: str) -> str:
     """Use an exact shared lead-in for the anchor, never sibling durations."""
 
+    if _source_bound_temporal_proposition(predicate):
+        return ""
     pattern = re.compile(
         r"^(?:随机|筛选|基线|知情同意|首次给药|首剂|研究药物给药)"
         r"(?:前|后|时)[^。；;\n]{0,60}?(?:以下|下列|任一|任何一种)"
@@ -1252,7 +1294,7 @@ def _predicate_binds_obligation(predicate, segment: str) -> bool:
     )
 
 
-def _qualifier_is_structured(rule: Rule, segment: str) -> bool:
+def _qualifier_is_structured(rule: Rule, segment: str, *, stage_aliases=None) -> bool:
     """A cited qualifier is covered only when its corresponding rule field exists."""
 
     normalized = _normalized(segment)
@@ -1277,8 +1319,9 @@ def _qualifier_is_structured(rule: Rule, segment: str) -> bool:
         if len(cited) != len(rule.components):
             return False
         required = {
-            ReviewStage.SCREENING if name == "筛选" else ReviewStage.BASELINE
+            (stage_aliases or {}).get(stage, stage)
             for name in stage.groups() if name in {"筛选", "基线"}
+            for stage in [ReviewStage.SCREENING if name == "筛选" else ReviewStage.BASELINE]
         }
         return all(
             required <= {item.due_stage for item in component.evidence_requirements}
@@ -2879,12 +2922,15 @@ class ProtocolDeconstructionGate:
                 except OfficialScopeReviewError as exc:
                     reviewed_stages = None
                     unresolved_scope = isinstance(exc, OfficialScopeUnresolvedError)
+                    node_binding_mismatch = getattr(exc, "rejection_code", None) == "SOURCE_SCOPE_REVIEW_NODE_BINDING_MISMATCH"
                     issues.append(_issue(
-                        "temporal_semantics", exc.code,
-                        (f"{component.display_code} 的总标题作用范围仍有待核实：" + "；".join(exc.dimensions)
+                        "temporal_semantics", ("SOURCE_SCOPE_REVIEW_NODE_BINDING_MISMATCH" if node_binding_mismatch else exc.code),
+                        (f"{component.display_code} 的资料要求与已核实的合并访视接线不一致，尚不能采用。" if node_binding_mismatch else
+                         f"{component.display_code} 的总标题作用范围仍有待核实：" + "；".join(exc.dimensions)
                          if unresolved_scope else f"{component.display_code} 的总标题核对记录与当前原文或条件不一致，不能采用。"),
                         [component.rule_component_id],
-                        action=("请核对所列具体作用范围；当前疑问不能沿用旧版已核清结果。" if unresolved_scope
+                        action=("请将资料要求接到流程表中的同一次合并访视，再核对修改后的草稿；不要添加一项重复要求或改动日期锚点。" if node_binding_mismatch else
+                                "请核对所列具体作用范围；当前疑问不能沿用旧版已核清结果。" if unresolved_scope
                                 else "请核对本次原文、条件和原始核对回答；旧记录不能替代当前核对。"),
                     ))
                 if reviewed_stages is not None:
@@ -2921,6 +2967,7 @@ class ProtocolDeconstructionGate:
                     for requirement in component.evidence_requirements
                 }
                 missing_stages = required_stages - actual_stages
+                alias_binding_mismatch = bool(missing_stages) and {stage_aliases.get(stage, stage) for stage in actual_stages} == required_stages
                 unsupported_stages = (
                     (actual_stages & {
                         ReviewStage.SCREENING, ReviewStage.RUN_IN, ReviewStage.BASELINE,
@@ -2937,6 +2984,14 @@ class ProtocolDeconstructionGate:
                             "真正统辖本子项的限定语须与条件分别逐字绑定，只有上下文作用的文字不得作为本项义务。"
                             "核清前不要仅为消除提示新增审核节点，也不要删除实际共同要求；测量时点不等于审核节点。"
                         ),
+                    ))
+                elif alias_binding_mismatch:
+                    issues.append(_issue(
+                        "temporal_semantics", "MERGED_VISIT_STAGE_BINDING_MISMATCH",
+                        f"{component.display_code} 的资料要求没有接到方案规定的合并访视。",
+                        [component.rule_component_id],
+                        action="请按已核实的流程表将资料要求接到同一次合并访视，并保持到期节点一致；"
+                        "不要复制要求、添加访视或改动日期锚点。修改后的草稿须重新核对，旧记录不能自动沿用。",
                     ))
                 elif missing_stages:
                     stage_names = {
@@ -2960,7 +3015,7 @@ class ProtocolDeconstructionGate:
                             action="请保留一个原子条件，并为原文明确要求的每个审核阶段分别建立 due_stage 资料要求；以基线、随机或首次给药为锚点的前置条件必须在基线节点完成最终复核，筛选期提前关注不能替代该节点；不要复制原子条件或添加日期约束。",
                         )
                     )
-                if unsupported_stages and not unbound_shared_stages:
+                if unsupported_stages and not unbound_shared_stages and not alias_binding_mismatch:
                     issues.append(_issue(
                         "temporal_semantics", "REVIEW_STAGE_ADDITIONAL_SCOPE_UNVERIFIED",
                         f"{component.display_code} 的部分资料核对节点尚无本子项来源支持。",
@@ -3345,9 +3400,28 @@ class ProtocolDeconstructionGate:
                         expected_periods.add(ProtocolPeriod.TREATMENT_PERIOD)
                     if STUDY_PERIOD_SOURCE_PATTERN.search(predicate_text):
                         expected_periods.add(ProtocolPeriod.STUDY_PERIOD)
-                    if expected_periods:
+                    source_defined_period = getattr(prospective_period, "kind", None) == "source_defined"
+                    complex_period = bool(re.search(
+                        r"(?:期间|过程中|期|阶段|period|phase)\s*(?:及|和|与|、|/|and\b|or\b)|"
+                        r"(?:访视|visit)\s*[A-Za-z0-9]+|第[0-9一二三四五六七八九十]+(?:次)?访视",
+                        predicate_text, flags=re.IGNORECASE,
+                    ))
+                    source_period_needed = is_future_plan_window and bool(re.search(
+                        r"(?:期|阶段|period\b|phase\b|during\b|run[- ]in)",
+                        predicate_text, flags=re.IGNORECASE,
+                    ))
+                    if source_defined_period:
+                        if (predicate.semantic_proposition is None
+                                or prospective_period.source_excerpts != predicate.exact_source_clauses):
+                            issues.append(_issue(
+                                "temporal_semantics", "PROSPECTIVE_PERIOD_NOT_IN_SOURCE",
+                                f"{component.display_code} 的计划期间未保留本条件全部逐字依据。",
+                                [predicate.predicate_id],
+                            ))
+                    elif expected_periods:
                         period_valid = (
                             prospective_period is not None
+                            and len(expected_periods) == 1 and not complex_period
                             and prospective_period.period in expected_periods
                         )
                         if not period_valid:
@@ -3357,7 +3431,7 @@ class ProtocolDeconstructionGate:
                                     "PROSPECTIVE_PERIOD_NOT_STRUCTURED",
                                     f"{component.display_code} 的未来计划适用期间没有形成明确结构。",
                                     [predicate.predicate_id],
-                                    action="请拆分未来计划分支，并用 prospective_period 保存 treatment_period 或 study_period。",
+                                    action="请保留完整期间及边界；两个固定期间不能完整表达时，以 source_defined 保存本条件全部原文并核实计划含义，不扩大或删去范围。",
                                 )
                             )
                     elif prospective_period is not None:
@@ -3369,6 +3443,13 @@ class ProtocolDeconstructionGate:
                                 [predicate.predicate_id],
                             )
                         )
+                    elif source_period_needed:
+                        issues.append(_issue(
+                            "temporal_semantics", "PROSPECTIVE_PERIOD_NOT_STRUCTURED",
+                            f"{component.display_code} 的未来计划期间尚未完整保存。",
+                            [predicate.predicate_id],
+                            action="保留本条件全部逐字期间及边界；含义不明须列为具体待核，不能省略期间或猜成整个研究期。",
+                        ))
                     if (
                         (has_before or has_after)
                         and has_explicit_window
@@ -3461,6 +3542,7 @@ class ProtocolDeconstructionGate:
                             constraint.anchor_type in component_expected
                             and constraint.anchor_type != AnchorType.EVENT_DATE
                             and shared_direction_matches
+                            and not _source_bound_temporal_proposition(predicate)
                         ):
                             issues.append(
                                 _issue(
@@ -4147,6 +4229,7 @@ class ProtocolDeconstructionGate:
 
     @staticmethod
     def _source_coverage(source_input, draft, source_spans, issues):
+        stage_aliases = frozen_review_stage_aliases(source_input)
         allowed = set(source_input.allowed_source_span_ids)
         formal_ids = formal_source_span_ids(source_spans.values())
         catalog_items = (
@@ -4378,7 +4461,7 @@ class ProtocolDeconstructionGate:
                         for predicate in predicates
                     )
                 else:
-                    covered = _qualifier_is_structured(rule, segment) or any(
+                    covered = _qualifier_is_structured(rule, segment, stage_aliases=stage_aliases) or any(
                         _predicate_binds_obligation(predicate, segment)
                         for predicate in predicates
                     )
@@ -4397,7 +4480,7 @@ class ProtocolDeconstructionGate:
                         and all(
                             other == segment
                             or other in covered_by_restriction
-                            or _qualifier_is_structured(rule, other)
+                            or _qualifier_is_structured(rule, other, stage_aliases=stage_aliases)
                             or any(_predicate_binds_obligation(predicate, other)
                                    for predicate in predicates)
                             for other in obligations

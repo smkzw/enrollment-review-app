@@ -5,6 +5,7 @@ from typing import Literal
 
 from app.domain.contracts.judgment_search import JudgmentSearchCoverageSummary
 from app.domain.contracts.predicate_binding import PredicateBindingFrozenInput
+from app.domain.contracts.enums import LocatorPrecision
 from app.domain.publication import canonical_hash
 
 
@@ -21,7 +22,7 @@ class JudgmentExcerptLink:
                     "requirement_outside_binding_scope"]
 
 
-def load_prepared_judgment_links(session, artifact_store, *, context_id: str):
+def load_prepared_judgment_links(session, artifact_store, *, context_id: str, linkage_version: int = 2):
     """Rebuild source links from persisted preparation and original search receipts."""
     from app.services.predicate_binding_input import build_predicate_binding_frozen_input
     from app.services.review_candidate_scope import require_prepared_candidate_scope
@@ -36,12 +37,20 @@ def load_prepared_judgment_links(session, artifact_store, *, context_id: str):
         verify_frozen_judgment_search_result(
             session, artifact_store, authority=context.authority, frozen=search,
         )
-        links.extend(link_judgment_excerpts(search.summary, source))
+        links.extend(link_judgment_excerpts(search.summary, source, linkage_version=linkage_version))
     return tuple(links)
 
 
-def judgment_source_index(source: PredicateBindingFrozenInput):
+def judgment_content_input_version(family: str, linkage_version: int = 2) -> str:
+    if family not in {"predicate", "control"} or type(linkage_version) is not int or linkage_version not in {1, 2}:
+        raise ValueError("书面判断来源关联方式或要求类型不受支持")
+    prefix = "control-" if family == "control" else ""
+    return f"judgment-content-input/{prefix}v{linkage_version}"
+
+
+def judgment_source_index(source: PredicateBindingFrozenInput, *, linkage_version: int = 2):
     """Index exact existing assertion sources; no semantic matching or correction."""
+    judgment_content_input_version("predicate", linkage_version)
     locators = {item.locator_id: item for item in source.locators}
     index: dict[tuple[str, str, int, str], list[tuple[str, str]]] = {}
     for fact in source.facts:
@@ -50,17 +59,27 @@ def judgment_source_index(source: PredicateBindingFrozenInput):
             continue
         locator = locators.get(basis.locator_id)
         if (locator is None or basis.asserted_object != fact.asserted_object
-                or basis.source_text_sha256 != locator.source_text_sha256
-                or basis.assertion_text != locator.excerpt):
+                or basis.source_text_sha256 != locator.source_text_sha256):
+            continue
+        if linkage_version == 1:
+            # Historical receipt reconstruction retains its exact old algorithm.
+            if basis.assertion_text != locator.excerpt:
+                continue
+        elif (locator.precision == LocatorPrecision.PAGE_ONLY or not locator.excerpt
+              or not basis.assertion_text
+              or basis.asserted_object not in basis.assertion_text
+              or locator.excerpt.find(basis.assertion_text) < 0
+              or locator.excerpt.find(basis.assertion_text) != locator.excerpt.rfind(basis.assertion_text)):
             continue
         key = (locator.source_document_version_id, locator.page_artifact_id,
-               locator.page_number, locator.excerpt)
+               locator.page_number, basis.assertion_text)
         index.setdefault(key, []).append((fact.fact_id, locator.locator_id))
     return index
 
 
 def link_judgment_excerpts(
     summary: JudgmentSearchCoverageSummary, source: PredicateBindingFrozenInput,
+    *, linkage_version: int = 2,
 ) -> tuple[JudgmentExcerptLink, ...]:
     """Call after receipt/source verification; exact linkage is not clinical truth."""
     summary = JudgmentSearchCoverageSummary.model_validate(summary.model_dump(mode="json"))
@@ -70,7 +89,7 @@ def link_judgment_excerpts(
                     if requirement.requirement_id == summary.requirement_id]
     if len(requirements) > 1:
         raise ValueError("判断摘录未对应到本次审核唯一的资料要求")
-    index = judgment_source_index(source)
+    index = judgment_source_index(source, linkage_version=linkage_version)
     rows = []
     for found_index, found in enumerate(summary.found_candidates):
         for excerpt_index, excerpt in enumerate(found.candidates):
@@ -81,7 +100,7 @@ def link_judgment_excerpts(
                                             "excerpt_index": excerpt_index})
             rows.append(JudgmentExcerptLink(
                 linkage_id=canonical_hash({
-                    "version": "judgment-fact-linkage/v1", "scope": summary.scope_sha256,
+                    "version": f"judgment-fact-linkage/v{linkage_version}", "scope": summary.scope_sha256,
                     "requirement": summary.requirement_id, "source": source.frozen_input_sha256,
                     "found_index": found_index, "candidate": candidate_sha,
                     "excerpt_sha256": sha256(excerpt.text.encode("utf-8")).hexdigest(),

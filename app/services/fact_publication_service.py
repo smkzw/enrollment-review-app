@@ -24,6 +24,7 @@ from app.domain.contracts.facts import (
     MedicationExposureV2,
     clinical_event_stable_identity,
     clinical_fact_stable_identity,
+    clinical_fact_object_key,
     medication_exposure_stable_identity,
 )
 from app.domain.gates.fact_evidence_closure import resolve_source_strength_for_candidate
@@ -404,6 +405,7 @@ class FactPublicationService:
                 value=candidate.canonical_value,
                 unit=candidate.unit,
                 date_range=candidate.date_range,
+                assertion_basis=candidate.assertion_basis,
             )
         _reject_profile_lane_conflicts(
             candidates,
@@ -419,6 +421,7 @@ class FactPublicationService:
                 value=fact.value,
                 unit=fact.unit,
                 date_range=fact.date_range,
+                assertion_basis=fact.assertion_basis,
             ),
             "事实",
         )
@@ -433,6 +436,7 @@ class FactPublicationService:
                 value=candidate.canonical_value,
                 unit=candidate.unit,
                 date_range=candidate.date_range,
+                assertion_basis=candidate.assertion_basis,
             ),
         )
         published: list[ClinicalFactV2] = []
@@ -499,7 +503,8 @@ class FactPublicationService:
         def identity(candidate):
             fact_ids = self._resolved_fact_ids(candidate, candidate_to_fact)
             objects = sorted(
-                {f"{facts_by_id[item].fact_type}:{facts_by_id[item].asserted_object}" for item in fact_ids}
+                {clinical_fact_object_key(facts_by_id[item].fact_type, facts_by_id[item].asserted_object,
+                                          facts_by_id[item].assertion_basis) for item in fact_ids}
             )
             return clinical_event_stable_identity(
                 authority=authority,
@@ -515,7 +520,8 @@ class FactPublicationService:
             fact_ids = self._resolved_fact_ids(candidate, candidate_to_fact)
             objects = sorted(
                 {
-                    f"{facts_by_id[item].fact_type}:{facts_by_id[item].asserted_object}"
+                    clinical_fact_object_key(facts_by_id[item].fact_type, facts_by_id[item].asserted_object,
+                                             facts_by_id[item].assertion_basis)
                     for item in fact_ids
                 }
             )
@@ -559,7 +565,8 @@ class FactPublicationService:
                 }
             )
             objects = sorted(
-                {f"{facts_by_id[item].fact_type}:{facts_by_id[item].asserted_object}" for item in fact_ids}
+                {clinical_fact_object_key(facts_by_id[item].fact_type, facts_by_id[item].asserted_object,
+                                          facts_by_id[item].assertion_basis) for item in fact_ids}
             )
             entity_revision = _next_revision(existing, stable_identity)
             event = ClinicalEventV2(

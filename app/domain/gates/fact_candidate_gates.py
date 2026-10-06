@@ -528,12 +528,16 @@ def gate_fact_candidate(
 
     # 极性/断言
     pol_errors = validate_fact_polarity_assertion(candidate)
+    pending_context = bool(candidate.assertion_basis and any(
+        item.source is not None for item in candidate.assertion_basis.contextual_qualifiers))
     verdicts[FactGate.POLARITY_AND_ASSERTED_OBJECT] = GateVerdict(
         candidate_id=candidate.candidate_id,
         gate=FactGate.POLARITY_AND_ASSERTED_OBJECT,
-        outcome=GateOutcome.ACCEPTED if not pol_errors else GateOutcome.REJECTED,
-        reasons=pol_errors,
-        affected_scope=_affected_locators(candidate) if pol_errors else [],
+        outcome=(GateOutcome.REJECTED if pol_errors else
+                 GateOutcome.BLOCKED if pending_context else GateOutcome.ACCEPTED),
+        reasons=pol_errors or (["背景标题与本项结果不在同一原句，归属关系尚待核实；保留两处原件，不作为已核实病史"]
+                              if pending_context else []),
+        affected_scope=_affected_locators(candidate) if pol_errors or pending_context else [],
     )
 
     # 值/单位 + 日期 + 记录时间 + 来源

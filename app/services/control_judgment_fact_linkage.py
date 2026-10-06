@@ -15,7 +15,7 @@ class ControlJudgmentExcerptLink(JudgmentExcerptLink):
     atom_refs: tuple[tuple, ...]
 
 
-def load_prepared_control_judgment_links(session, artifact_store, *, context_id, source):
+def load_prepared_control_judgment_links(session, artifact_store, *, context_id, source, linkage_version=2):
     from app.services.review_candidate_scope import require_prepared_candidate_scope
     from app.services.review_judgment_provenance import verify_frozen_judgment_search_result
     from app.storage.review_context_repository import ReviewContextV2Repository
@@ -27,11 +27,11 @@ def load_prepared_control_judgment_links(session, artifact_store, *, context_id,
     for search in context.judgment_search_results:
         verify_frozen_judgment_search_result(session, artifact_store,
                                             authority=context.authority, frozen=search)
-        links.extend(link_control_judgment_excerpts(search.summary, source))
+        links.extend(link_control_judgment_excerpts(search.summary, source, linkage_version=linkage_version))
     return tuple(links)
 
 
-def link_control_judgment_excerpts(summary, source):
+def link_control_judgment_excerpts(summary, source, *, linkage_version=2):
     """Requires receipt-verified sources; missing atom references remain unassigned."""
     summary = JudgmentSearchCoverageSummary.model_validate(summary.model_dump(mode="json"))
     source = ControlBindingFrozenInput.model_validate(source.model_dump(mode="json"))
@@ -43,7 +43,7 @@ def link_control_judgment_excerpts(summary, source):
     requirement = requirements[0] if requirements else None
     refs = (() if requirement is None else tuple(sorted(
         item.key for item in requirement.atom_refs)))
-    index = judgment_source_index(source.evidence_input)
+    index = judgment_source_index(source.evidence_input, linkage_version=linkage_version)
     rows = []
     for found_index, found in enumerate(summary.found_candidates):
         for excerpt_index, excerpt in enumerate(found.candidates):
@@ -52,7 +52,7 @@ def link_control_judgment_excerpts(summary, source):
             matches = tuple(sorted(set(index.get(key, ())))) if requirement is not None else ()
             candidate_sha = canonical_hash({"found": found.model_dump(mode="json"), "excerpt_index": excerpt_index})
             rows.append(ControlJudgmentExcerptLink(
-                linkage_id=canonical_hash({"version": "control-judgment-fact-linkage/v1",
+                linkage_id=canonical_hash({"version": f"control-judgment-fact-linkage/v{linkage_version}",
                     "scope": summary.scope_sha256, "requirement": summary.requirement_id,
                     "source": source.frozen_input_sha256, "candidate": candidate_sha,
                     "found_index": found_index, "matches": matches, "atom_refs": refs}),

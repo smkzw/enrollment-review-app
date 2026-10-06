@@ -1,5 +1,7 @@
 """Explicit, source-bound propositions shared by official and control readers."""
 
+from app.domain.contracts.rules import AtomicPredicate
+
 
 def proposition_context(pair):
     if pair.candidate_family == "control":
@@ -14,7 +16,14 @@ def proposition_context(pair):
     if not isinstance(predicate, dict):
         raise ValueError("缺少正式条件的原文命题")
     proposition = predicate.get("semantic_proposition")
-    excerpts = predicate.get("exact_source_clauses")
+    # The frozen producer serializes source_clause/source_clauses, not this
+    # derived property. Rebuild only from that same typed source material.
+    declared = predicate.get("exact_source_clauses")
+    typed = AtomicPredicate.model_validate({key: value for key, value in predicate.items()
+                                           if key != "exact_source_clauses"})
+    excerpts = typed.exact_source_clauses
+    if declared is not None and declared != excerpts:
+        raise ValueError("命题摘录与冻结条件的逐字原文不一致")
     if (not isinstance(proposition, str) or not proposition.strip()
             or not isinstance(excerpts, list) or not excerpts
             or any(not isinstance(text, str) or not text.strip() for text in excerpts)
@@ -31,6 +40,8 @@ def proposition_context(pair):
         "observation_policy": predicate.get("observation_policy"),
         "time_purpose": None,
     }
+    if typed.record_semantics is not None:
+        spec["record_semantics"] = typed.record_semantics.model_dump(mode="json")
     return spec, {**predicate, "time_constraint": pair.condition.get("time_constraint")}
 
 

@@ -18,6 +18,7 @@ from app.domain.contracts.evidence import BoundingBox
 from app.domain.contracts.local_region_read import LocalReadFormat, local_region_read_model, parse_local_region_read, render_local_region_read
 from app.domain.publication import canonical_hash
 from app.evidence.artifacts import ArtifactStore, ArtifactStoreError
+from app.evidence.reading_view import FOCUS_READING_IMAGE_VERSION, ReadingRegion, make_focus_reading_image, make_reading_view
 from app.services.evidence_app_errors import AppScopeMismatchError, app_error_boundary
 from app.services.job_service import JobService, StepSpec
 from app.services.selective_vision_observation_service import (
@@ -36,6 +37,22 @@ from app.workflow.jobstore import JobStore
 LOCAL_VISUAL_JOB_TYPE = "local_visual_verification"
 LOCAL_VISUAL_STEP = "read_region"
 LOCAL_VISUAL_CONTRACT = "local-visual-verification-job/v1"
+
+_LOCAL_VISUAL_FAILURES = {
+    "response_length": (True, "LOCAL_VISUAL_RESPONSE_LENGTH", "本次回答在完成前被截断，圈选内容尚未核实。已收到的回答保留，未采用其中的读数。"),
+    "response_incomplete": (True, "LOCAL_VISUAL_RESPONSE_INCOMPLETE", "本次未取得完整的文字回答，不能据此判断原件是否清楚。原件与原有核对结果不变。"),
+    "local_structure_invalid": (True, "LOCAL_VISUAL_STRUCTURE_INVALID", "本次回答未能按项目完整整理，圈选内容尚未核实。原始回答保留，未采用其中的读数。"),
+    "source_fidelity": (False, "LOCAL_VISUAL_SOURCE_FIDELITY", "本次回答的来源标记与圈选原件不符，不能作为核对依据。请重新检查圈选原件；原件与原有核对结果不变。"),
+    "local_focus_scope_mismatch": (True, "LOCAL_VISUAL_FOCUS_SCOPE_MISMATCH", "回答混入了圈选范围外的项目，本次圈选内容尚未独立核实。周边资料仍保留为参考，未采用其中的读数。"),
+    "transport_timeout": (True, "LOCAL_VISUAL_TIMEOUT", "视觉模型未在限定时间内返回，尚未取得可核实的回答。原件与原有核对结果不变。"),
+    "transport_connection": (True, "LOCAL_VISUAL_CONNECTION_FAILED", "视觉模型连接中断，尚未取得可核实的回答。原件与原有核对结果不变。"),
+    "remote_error": (True, "LOCAL_VISUAL_PROVIDER_FAILED", "视觉模型服务未完成本次请求，不能据此判断原件是否清楚。原件与原有核对结果不变。"),
+    "provider_response_invalid": (True, "LOCAL_VISUAL_PROVIDER_RESPONSE_INVALID", "视觉模型服务本次未返回完整的回答，请检查连接后再试。不能据此判断原件是否清楚；原件与原有核对结果不变。"),
+    "auth": (False, "LOCAL_VISUAL_AUTH_FAILED", "视觉模型访问凭据未获通过，请先修复连接配置。本次未取得可核实的回答。"),
+    "balance_insufficient": (False, "LOCAL_VISUAL_BALANCE_INSUFFICIENT", "视觉模型账户余额不足，本次未取得可核实的回答。"),
+    "quota": (True, "LOCAL_VISUAL_QUOTA", "视觉模型暂时限制请求，本次未取得可核实的回答。请稍后再试。"),
+    "config_error": (False, "LOCAL_VISUAL_CONFIG_INVALID", "视觉模型连接配置不完整，本次未取得可核实的回答。"),
+}
 
 
 def _receipt_matches(payload: dict, receipt: dict) -> bool:
@@ -63,6 +80,7 @@ def _receipt_matches(payload: dict, receipt: dict) -> bool:
         and view.get("clockwise_degrees") == payload["region"]["clockwise_degrees"]
         and region.get("view_bbox") == {key: payload["region"][key] for key in ("x0", "y0", "x1", "y1")}
         and receipt.get("focus_bbox") == payload.get("focus_bbox")
+        and receipt.get("model_image_policy") == payload.get("model_image_policy")
         and _payload_scope_matches(payload)
         and _read_contents_match(receipt, payload["region"].get("read_format", "transcript"))
     )
@@ -91,7 +109,10 @@ def _read_contents_match(receipt: dict, read_format: LocalReadFormat) -> bool:
                 BoundingBox.model_validate(receipt["region"]["view_bbox"]),
                 BoundingBox.model_validate(receipt["focus_bbox"]),
             )
-            system, prompt = local_visual_prompts(region_ref, read_format, focus_coordinates=coordinates)
+            system, prompt = local_visual_prompts(
+                region_ref, read_format, focus_coordinates=coordinates,
+                mark_focus=receipt.get("model_image_policy") == FOCUS_READING_IMAGE_VERSION,
+            )
             if receipt.get("prompt") != prompt or receipt.get("system_prompt") != system:
                 return False
         if read_format in {"structured_candidate", "localized_candidate"}:
@@ -103,6 +124,42 @@ def _read_contents_match(receipt: dict, read_format: LocalReadFormat) -> bool:
             return candidate.model_dump(mode="json") == receipt.get("structured_read")
         return read_format == "transcript" and "structured_read" not in receipt
     except (ValueError, TypeError, KeyError, IndependentVlmSourceFidelityError):
+        return False
+
+
+def _model_image_matches(receipt: dict, artifact_store: ArtifactStore) -> bool:
+    """Rebuild the actual model view from the preserved raw crop, not a flag."""
+    try:
+        raw = artifact_store.read(receipt["image_artifact_ref"])
+        if sha256(raw).hexdigest() != receipt["region"]["region_image_sha256"]:
+            return False
+        binding = receipt["region"]["reading_view"]
+        page = artifact_store.read_by_sha("page_image", binding["source_image_sha256"])
+        view = make_reading_view(page, source_page_artifact_id=binding["source_page_artifact_id"],
+                                 source_image_sha256=binding["source_image_sha256"],
+                                 clockwise_degrees=binding["clockwise_degrees"])
+        if view.identity() != binding:
+            return False
+        source_region = ReadingRegion(view, BoundingBox.model_validate(receipt["region"]["view_bbox"]), raw)
+        if source_region.identity() != receipt["region"]:
+            return False
+        if receipt.get("model_image_policy") is None:
+            return not any(key in receipt for key in ("model_image_artifact_ref", "model_image_sha256"))
+        if receipt["model_image_policy"] != FOCUS_READING_IMAGE_VERSION:
+            return False
+        context = BoundingBox.model_validate(receipt["region"]["view_bbox"])
+        focus = BoundingBox.model_validate(receipt["focus_bbox"])
+        local_visual_focus_coordinates(context, focus)
+        relative = BoundingBox(x0=focus.x0-context.x0, y0=focus.y0-context.y0,
+                               x1=focus.x1-context.x0, y1=focus.y1-context.y0)
+        expected = make_focus_reading_image(raw, relative)
+        actual = artifact_store.read(receipt["model_image_artifact_ref"])
+        if sha256(actual).hexdigest() != receipt["model_image_sha256"]:
+            return False
+        with Image.open(io.BytesIO(actual)) as saved, Image.open(io.BytesIO(expected)) as generated:
+            return (getattr(saved, "n_frames", 1) == 1 and saved.size == generated.size
+                    and saved.mode == generated.mode and saved.tobytes() == generated.tobytes())
+    except (ArtifactStoreError, ValueError, TypeError, KeyError, OSError):
         return False
 
 
@@ -132,7 +189,7 @@ def _payload_scope_matches(payload: dict) -> bool:
         focus = payload.get("focus_bbox")
         requested = payload.get("requested_region")
         if focus is None:
-            return requested is None and not context.include_context
+            return requested is None and not context.include_context and payload.get("model_image_policy") is None
         original = LocalVisualRegionRequest.model_validate(requested)
         return (
             original.include_context and not context.include_context
@@ -140,6 +197,8 @@ def _payload_scope_matches(payload: dict) -> bool:
             and original.read_format == context.read_format
             and original.bbox() == BoundingBox.model_validate(focus)
             and bool(local_visual_focus_coordinates(context.bbox(), original.bbox()))
+            and payload.get("model_image_policy") in {None, FOCUS_READING_IMAGE_VERSION}
+            and (payload.get("model_image_policy") is None or original.bbox() != context.bbox())
         )
     except (ValueError, TypeError, KeyError):
         return False
@@ -152,7 +211,8 @@ def _payload_prompt_identity(payload: dict) -> str:
     ) if focus is not None else None
     read_format = payload["region"].get("read_format", "transcript")
     return (local_visual_prompt_identity(read_format) if coordinates is None
-            else local_visual_prompt_identity(read_format, focus_coordinates=coordinates))
+            else local_visual_prompt_identity(read_format, focus_coordinates=coordinates,
+                                             mark_focus=payload.get("model_image_policy") == FOCUS_READING_IMAGE_VERSION))
 
 
 class LocalVisualVerificationService:
@@ -214,6 +274,8 @@ class LocalVisualVerificationService:
                 payload["base_processing_revision_id"] = base_id
             if focus is not None:
                 payload["focus_bbox"] = focus
+                if focus != {key: reading_region[key] for key in ("x0", "y0", "x1", "y1")}:
+                    payload["model_image_policy"] = FOCUS_READING_IMAGE_VERSION
                 payload["requested_region"] = region.model_dump(mode="json", exclude=excluded - {"include_context"})
             payload["prompt_sha256"] = _payload_prompt_identity(payload)
             # Explicit rereads after cancellation or a missing saved reading get
@@ -242,6 +304,7 @@ class LocalVisualVerificationService:
             page, base_id = self._page(session, revision_id, page_id)
             query = select(JobRecord).where(
                 JobRecord.job_type == LOCAL_VISUAL_JOB_TYPE,
+                func.json_extract(JobRecord.payload_json, "$.contract") == LOCAL_VISUAL_CONTRACT,
                 func.json_extract(JobRecord.payload_json, "$.evidence_processing_revision_id") == revision_id,
                 func.json_extract(JobRecord.payload_json, "$.page_artifact_id") == page_id,
             )
@@ -268,14 +331,24 @@ class LocalVisualVerificationService:
                     "candidate_only": True, "coverage_scope": "region_only",
                     "configuration_current": configuration_current,
                     "can_retry": configuration_current and job.state in {"failed_final", "failed_retryable"}
-                        and job.error_code not in {"LOCAL_VISUAL_SOURCE_INVALID", "LOCAL_VISUAL_RECEIPT_INVALID", "LOCAL_VISUAL_CONTRACT_INVALID", "LOCAL_VISUAL_ROUTE_CHANGED"},
+                        and job.error_code not in {"LOCAL_VISUAL_SOURCE_INVALID", "LOCAL_VISUAL_RECEIPT_INVALID", "LOCAL_VISUAL_CONTRACT_INVALID", "LOCAL_VISUAL_ROUTE_CHANGED", "LOCAL_VISUAL_AUTH_FAILED", "LOCAL_VISUAL_BALANCE_INSUFFICIENT", "LOCAL_VISUAL_CONFIG_INVALID", "LOCAL_VISUAL_SOURCE_FIDELITY"},
                 }
+                if job.state in {"failed_final", "failed_retryable"}:
+                    # Never expose a provider exception or an old raw error
+                    # through the source viewer; display only known messages.
+                    result["failure_message"] = next((
+                        detail for _, code, detail in _LOCAL_VISUAL_FAILURES.values()
+                        if code == job.error_code
+                    ), "本次局部读取未完成，原件与原有核对结果不变。")
                 if job.state == "completed" and checkpoint is None:
                     raise AppScopeMismatchError("这次读取缺少保存记录，不能展示为已完成核实，请重新圈选或核对原件。")
                 # Failed and cancelled tasks retain their receipts, not an accepted reading.
                 if job.state == "completed" and checkpoint is not None:
-                    receipt = json.loads(self.artifact_store.read(checkpoint[1]["receipt_ref"]))
-                    if (not _receipt_matches(payload, receipt)
+                    try:
+                        receipt = json.loads(self.artifact_store.read(checkpoint[1]["receipt_ref"]))
+                    except (ArtifactStoreError, OSError, ValueError, TypeError, KeyError) as exc:
+                        raise AppScopeMismatchError("这次读取的保存依据缺失或损坏，不能作为已完成核实。原件和原记录未改动。") from exc
+                    if (not _receipt_matches(payload, receipt) or not _model_image_matches(receipt, self.artifact_store)
                             or page.page_image_sha256 != payload["source_image_sha256"]):
                         raise AppScopeMismatchError("局部核实记录与原件不一致。")
                     lines = receipt["observation_text"].splitlines()
@@ -296,11 +369,16 @@ class LocalVisualVerificationService:
         return {"found": False, "candidate_only": True, "coverage_scope": "region_only"}
 
 
-def create_local_visual_executor(session_factory, artifact_store: ArtifactStore, *, service=None):
+def create_local_visual_executor(session_factory, artifact_store: ArtifactStore, *, service=None, comparison_executor=None):
     reader = service or SelectiveVisionObservationService(session_factory)
+    from app.services.local_visual_comparison_job import COMPARISON_CONTRACT, create_local_comparison_executor
+
+    compare = comparison_executor or create_local_comparison_executor(session_factory, artifact_store)
 
     def execute(context):
         payload = context.job_payload
+        if payload.get("contract") == COMPARISON_CONTRACT:
+            return compare(context)
         if context.step_id != LOCAL_VISUAL_STEP or payload.get("contract") != LOCAL_VISUAL_CONTRACT:
             raise StepFailure(retryable=False, error_code="LOCAL_VISUAL_CONTRACT_INVALID",
                               detail="这次局部核实任务格式无法确认。")
@@ -335,7 +413,7 @@ def create_local_visual_executor(session_factory, artifact_store: ArtifactStore,
             except (ArtifactStoreError, OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
                 raise StepFailure(retryable=False, error_code="LOCAL_VISUAL_RECEIPT_INVALID",
                                   detail="已保存的局部读取无法核对，未重新读取原件。") from exc
-            if _receipt_matches(payload, saved):
+            if _receipt_matches(payload, saved) and _model_image_matches(saved, artifact_store):
                 return dict(checkpoint)
             raise StepFailure(retryable=False, error_code="LOCAL_VISUAL_RECEIPT_INVALID",
                               detail="已保存的局部读取与本次来源范围不符。")
@@ -349,6 +427,7 @@ def create_local_visual_executor(session_factory, artifact_store: ArtifactStore,
                 artifact_store=artifact_store,
                 **({"read_format": region.read_format} if region.read_format != "transcript" else {}),
                 **({"focus_bbox": BoundingBox.model_validate(payload["focus_bbox"])} if "focus_bbox" in payload else {}),
+                **({"model_image_policy": payload["model_image_policy"]} if "model_image_policy" in payload else {}),
                 **({"requested_processing_revision_id": payload["evidence_processing_revision_id"]} if "base_processing_revision_id" in payload else {}),
             ))
         except Exception as exc:
@@ -364,10 +443,14 @@ def create_local_visual_executor(session_factory, artifact_store: ArtifactStore,
         checkpoint = {"receipt_ref": receipt.storage_ref, "candidate_only": True,
                       "coverage_scope": "region_only", "status": result["status"]}
         if result["status"] != "read":
-            raise StepFailure(retryable=True, error_code="LOCAL_VISUAL_RESPONSE_UNVERIFIED",
-                              detail="本次局部读取未通过完整性核对，请重试或直接核对原件。",
+            failure_kind = result.get("failure_kind")
+            retryable, error_code, detail = _LOCAL_VISUAL_FAILURES.get(failure_kind, (
+                True, "LOCAL_VISUAL_RESPONSE_UNVERIFIED",
+                "本次局部读取未通过完整性核对，请重试或直接核对原件。",
+            ))
+            raise StepFailure(retryable=retryable, error_code=error_code, detail=detail,
                               diagnostic_checkpoint=checkpoint)
-        if not _receipt_matches(payload, result):
+        if not _receipt_matches(payload, result) or not _model_image_matches(result, artifact_store):
             raise StepFailure(retryable=False, error_code="LOCAL_VISUAL_RECEIPT_INVALID",
                               detail="本次局部读取与原件范围不能对应，未采用读取结果。",
                               diagnostic_checkpoint=checkpoint)

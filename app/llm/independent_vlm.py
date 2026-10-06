@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
 import httpx
-from openai import APIStatusError, AsyncOpenAI, AuthenticationError
+from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI, AuthenticationError
 
 from app.config import (
     INDEPENDENT_VLM_API_KEY,
@@ -103,6 +103,9 @@ class IndependentVlmRemoteError(IndependentVlmError):
         self.disabled = disabled
         self.provider_code = provider_code
         self.status_code = status_code
+        self.request_id: str | None = None
+        self.response_id: str | None = None
+        self.reported_model: str | None = None
 
 
 class IndependentVlmBalanceError(IndependentVlmRemoteError):
@@ -166,6 +169,10 @@ class IndependentVlmChatResult:
     reasoning_content: str | None = None
     raw_message: Mapping[str, Any] = field(default_factory=dict)
     allowed_source_refs: tuple[str, ...] = ()
+    requested_model: str | None = None
+    reported_model: str | None = None
+    response_id: str | None = None
+    request_id: str | None = None
 
 
 _client: Optional[AsyncOpenAI] = None
@@ -465,6 +472,16 @@ def _message_blob(payload: Mapping[str, Any]) -> str:
 
 def classify_remote_failure(exc: BaseException) -> IndependentVlmRemoteError:
     """Classify remote failures; balance insufficient forces disabled=True."""
+    if isinstance(exc, (APITimeoutError, httpx.TimeoutException)):
+        return IndependentVlmRemoteError(
+            "视觉模型未在限定时间内返回，尚未取得可核实的回答。",
+            failure_kind="transport_timeout", disabled=True,
+        )
+    if isinstance(exc, (APIConnectionError, httpx.TransportError)):
+        return IndependentVlmRemoteError(
+            "视觉模型连接中断，尚未取得可核实的回答。",
+            failure_kind="transport_connection", disabled=True,
+        )
     payload = _extract_error_payload(exc)
     code = str(payload.get("code") or "").strip()
     status_code = payload.get("status_code")
@@ -547,6 +564,32 @@ def assert_source_locator_fidelity(
         )
 
 
+def _response_identifier(value: object) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _completion_choice(response):
+    """Reject a gateway's non-completion envelope, not an empty model answer."""
+    choices = getattr(response, "choices", None)
+    extra = getattr(response, "model_extra", None) or {}
+    error = extra.get("error") if isinstance(extra, Mapping) else None
+    if error is not None:
+        envelope = RuntimeError("Provider returned an error envelope")
+        envelope.body = {"error": error}
+        failure = classify_remote_failure(envelope)
+    elif not choices or getattr(choices[0], "message", None) is None:
+        failure = IndependentVlmRemoteError(
+            "视觉模型服务未返回完整的回答结构，尚未取得可核实的回答。",
+            failure_kind="provider_response_invalid", disabled=True,
+        )
+    else:
+        return choices[0]
+    failure.request_id = _response_identifier(getattr(response, "_request_id", None))
+    failure.response_id = _response_identifier(getattr(response, "id", None))
+    failure.reported_model = _response_identifier(getattr(response, "model", None))
+    raise failure
+
+
 async def independent_vlm_chat(
     messages: list[dict[str, Any]],
     *,
@@ -573,19 +616,12 @@ async def independent_vlm_chat(
         resp = await client.chat.completions.create(**kwargs)
     except IndependentVlmError:
         raise
-    except (APIStatusError, AuthenticationError) as exc:
-        raise classify_remote_failure(exc) from exc
     except Exception as exc:  # noqa: BLE001 - classify remote transport failures
         classified = classify_remote_failure(exc)
-        if classified.failure_kind == "balance_insufficient":
-            raise classified from exc
-        raise IndependentVlmRemoteError(
-            f"Independent VLM unavailable: {exc}",
-            failure_kind="remote_error",
-            disabled=True,
-        ) from exc
+        classified.request_id = _response_identifier(getattr(exc, "request_id", None))
+        raise classified from exc
 
-    choice = resp.choices[0] if resp.choices else None
+    choice = _completion_choice(resp)
     message = choice.message if choice is not None else None
     text = (getattr(message, "content", None) or "") if message is not None else ""
     reasoning = (
@@ -621,6 +657,10 @@ async def independent_vlm_chat(
         reasoning_content=reasoning,
         raw_message=raw_message,
         allowed_source_refs=allowed,
+        requested_model=kwargs["model"],
+        reported_model=_response_identifier(getattr(resp, "model", None)),
+        response_id=_response_identifier(getattr(resp, "id", None)),
+        request_id=_response_identifier(getattr(resp, "_request_id", None)),
     )
     if enforce_source_fidelity and allowed:
         try:

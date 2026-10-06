@@ -68,6 +68,7 @@ __all__ = [
 ]
 
 _STALE_WORK_DRAFT = object()
+_STALE_METHOD_WORK_DRAFT = object()
 
 
 # 按临床安全优先级选取单值 gap_type。完整缺口集合仍由 evaluator/仓储确定，
@@ -75,6 +76,7 @@ _STALE_WORK_DRAFT = object()
 _GAP_PRIORITY: tuple[GapType, ...] = (
     GapType.SOURCE_CONFLICT,
     GapType.INTERPRETATION_CONFLICT,
+    GapType.CALCULATION_CAPABILITY_UNAVAILABLE,
     GapType.PROFESSIONAL_JUDGMENT,
     GapType.APPLICABLE_POPULATION_UNVERIFIED,
     GapType.REFERENCED_FILE_MISSING,
@@ -91,6 +93,7 @@ _GAP_PRIORITY: tuple[GapType, ...] = (
 )
 
 _GAP_LABELS: dict[GapType, str] = {
+    GapType.CALCULATION_CAPABILITY_UNAVAILABLE: "系统尚不能按方案完成计算",
     GapType.APPLICABLE_POPULATION_UNVERIFIED: "适用人群尚未核实",
     GapType.OBSERVATION_UNVERIFIED: "资料尚待核实",
     GapType.RECORD_INCOMPLETE: "本次资料未见相关记录",
@@ -200,7 +203,7 @@ class EligibilityReviewProjection:
     clauses: tuple[EligibilityClauseProjection, ...]
     controls: tuple[EligibilityControlProjection, ...] = ()
     unassigned_conflicts: tuple[EligibilityUnassignedConflict, ...] = ()
-    work_draft_state: Literal["not_started", "current", "source_changed"] = "not_started"
+    work_draft_state: Literal["not_started", "current", "source_changed", "method_changed"] = "not_started"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -721,6 +724,8 @@ def _reason(
         return "本次提交的资料中存在相互冲突的事实，尚未完成核对，因此无法判定。"
     if gap == GapType.APPLICABLE_POPULATION_UNVERIFIED:
         return "方案对该条件限定了适用人群，本例是否属于该范围尚未完成有源核对，因此不能据现有结果判定本条。"
+    if gap == GapType.CALCULATION_CAPABILITY_UNAVAILABLE:
+        return "方案的计算方法已有来源，但系统尚未完成所用记录的核实与计算，目前不能判定；这不表示患者缺少记录或研究者判断。"
 
     # 终局判定优先给结论文案；缺口转"附带提醒"，避免"未触发排除标准"却配
     # "无法判定"理由的决策-文案矛盾（C 桥接激活确定性判定后暴露）。
@@ -874,7 +879,8 @@ class EligibilityReviewProjectionService:
         frozen_work_draft = self._completed_work_draft(
             session, authority=authority, rule_set=rule_set,
         )
-        if frozen_work_draft is not None and frozen_work_draft is not _STALE_WORK_DRAFT:
+        if (frozen_work_draft is not None and frozen_work_draft is not _STALE_WORK_DRAFT
+                and frozen_work_draft is not _STALE_METHOD_WORK_DRAFT):
             frozen, selections = frozen_work_draft
             return self._project_frozen_work_draft(
                 session, frozen=frozen, rule_set=rule_set, selections=selections,
@@ -1031,7 +1037,9 @@ class EligibilityReviewProjectionService:
             controls=_unverified_control_projections(clause_pack),
             unassigned_conflicts=_unassigned_conflict_projections(unassigned_groups),
             work_draft_state=(
-                "source_changed" if frozen_work_draft is _STALE_WORK_DRAFT else "not_started"
+                "source_changed" if frozen_work_draft is _STALE_WORK_DRAFT
+                else "method_changed" if frozen_work_draft is _STALE_METHOD_WORK_DRAFT
+                else "not_started"
             ),
         )
 
@@ -1046,6 +1054,7 @@ class EligibilityReviewProjectionService:
         from app.services.review_context_assembly import (
             current_review_clinical_material_sha256,
             frozen_review_clinical_material_sha256,
+            review_method_is_current,
         )
         from app.services.qualified_binding_selection import (
             build_receipt_verified_work_draft_selections,
@@ -1085,6 +1094,12 @@ class EligibilityReviewProjectionService:
             # workflow is still running, failed or cancelled.
             if row.state != "completed":
                 return None
+            from app.services.prepared_review_workflow import CONTRACT, READABLE_CONTRACTS
+            if payload.get("contract") in READABLE_CONTRACTS - {CONTRACT}:
+                # History remains readable; never borrow it as a current-method draft.
+                return None
+            if not review_method_is_current(frozen):
+                return _STALE_METHOD_WORK_DRAFT
             require_current_review_tasks(payload)
             if frozen.rule_set_sha256 != canonical_hash(rule_set.model_dump(mode="json")):
                 raise EligibilityReviewProjectionError("工作稿对应的方案规则版本与当前节点不一致")
@@ -1124,6 +1139,9 @@ class EligibilityReviewProjectionService:
                     frequency_evidence_job_id=children.get(
                         f"{family}_frequency_evidence",
                     ),
+                    computation_input_job_id=children.get(
+                        f"{family}_computation_input",
+                    ),
                 )
                 for family in families
             )
@@ -1139,6 +1157,16 @@ class EligibilityReviewProjectionService:
             rule_set,
             work_draft_selections=selections,
         )
+        from app.services.computation_atom_calculation import computation_result_note
+        predicate_computations = calculation.computation_atom_evaluations.get("predicate", {})
+        predicate_input = next((item.predicate_frozen_input for item in selections
+                                if item.candidate_family == "predicate"), None)
+        computation_notes = {
+            component.rule_component_id: " ".join(filter(None, (
+                computation_result_note(predicate_computations.get(entry.predicate_identity_sha256))
+                for entry in (*component.trigger_predicates, *component.exception_predicates))))
+            for component in (() if predicate_input is None else predicate_input.components)
+        }
         clauses = {item.rule_component_id: item for item in frozen.clause_pack.clauses}
         facts_by_id = {item.fact_id: item for item in frozen.facts}
         summaries = {
@@ -1170,7 +1198,8 @@ class EligibilityReviewProjectionService:
                     gap=gap,
                     summaries=summaries,
                     judgment_gaps=dict(result.judgment_gaps),
-                ),
+                ) + ((" " + computation_notes[clause.rule_component_id])
+                     if computation_notes.get(clause.rule_component_id) else ""),
                 fact_refs=_fact_refs(
                     session,
                     _used_fact_ids(result.evaluation),
@@ -1222,6 +1251,10 @@ class EligibilityReviewProjectionService:
                         reason = "当前已核实资料支持该补充要求已满足。"
                     else:
                         reason = "当前已核实资料显示该补充要求尚未满足。"
+                    computation_note = computation_result_note(
+                        calculation.computation_atom_evaluations.get("control", {}).get(obligation.identity_sha256))
+                    if computation_note:
+                        reason += " " + computation_note
                     obligations.append(EligibilityControlObligationProjection(
                         obligation_id=obligation.obligation_id,
                         obligation_group_id=obligation.obligation_group_id,

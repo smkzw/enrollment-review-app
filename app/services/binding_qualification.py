@@ -24,6 +24,7 @@ from app.llm.binding_qualification import (
     PROMPT_VERSION,
     build_binding_qualification_messages,
     plan_qualification_batches,
+    qualification_request_hashes,
     read_binding_qualification,
     validate_binding_qualification_payload,
 )
@@ -108,6 +109,11 @@ def enqueue_binding_qualification(
             "batches": batches,
             "routes": {lane.value: route_identity(routes[lane]) for lane in LANES},
         }
+        request_hashes = qualification_request_hashes(
+            pairs, [BindingQualificationBatch.model_validate(batch) for batch in batches],
+        )
+        if request_hashes:
+            payload["request_messages_sha256s"] = request_hashes
         for key in ("review_context_id", "review_context_sha256"):
             if key in material:
                 payload[key] = material[key]
@@ -263,6 +269,10 @@ class BindingQualificationJobExecutor:
         frozen = self._frozen(payload)
         pairs = self._pairs(payload)
         batches = self._batches(payload, pairs)
+        expected_requests = qualification_request_hashes(pairs, batches)
+        if payload.get("request_messages_sha256s") != (expected_requests or None):
+            raise StepFailure(retryable=False, error_code="BINDING_QUALIFICATION_REQUEST_CHANGED",
+                              detail="本次资格核对内容与保存的请求不一致，请保留旧结果并新建核对")
         with self.session_factory() as session:
             self._verify_current(session, payload)
 

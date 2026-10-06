@@ -296,6 +296,9 @@ DECONSTRUCT_REASONING_EFFORT = os.getenv(
     "DECONSTRUCT_REASONING_EFFORT", "high"
 ).strip().lower()
 DECONSTRUCT_MAX_TOKENS = int(os.getenv("DECONSTRUCT_MAX_TOKENS", "65536"))
+DECONSTRUCT_WIRE_CONTRACT = os.getenv(
+    "DECONSTRUCT_WIRE_CONTRACT", "auto"
+).strip().lower()
 DECONSTRUCT_BASE_URL = os.getenv("DECONSTRUCT_BASE_URL", "").strip()
 DECONSTRUCT_API_KEY = os.getenv("DECONSTRUCT_API_KEY", "").strip()
 # Explicit platform limits remain separate; new defaults must not silently cap
@@ -380,6 +383,10 @@ EVIDENCE_NORMALIZER_MAX_TOKENS = int(
 )
 EVIDENCE_NORMALIZER_MAX_PAGES_PER_CALL = int(
     os.getenv("EVIDENCE_NORMALIZER_MAX_PAGES_PER_CALL", "2")
+)
+EVIDENCE_NORMALIZER_COMPACT_TEXT_REFERENCES = (
+    os.getenv("EVIDENCE_NORMALIZER_COMPACT_TEXT_REFERENCES", "false").strip().lower()
+    == "true"
 )
 _evidence_normalizer_temperature = os.getenv(
     "EVIDENCE_NORMALIZER_TEMPERATURE", ""

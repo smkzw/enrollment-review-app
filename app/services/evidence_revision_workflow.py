@@ -598,7 +598,8 @@ class EvidenceRevisionWorkflow:
                 ),
                 resolution_revision_ids=manifest.resolution_revision_ids,
             )
-        builder.assert_blocking_resolved(session, closure)
+        mode = candidate.attempt_manifest.source_qualification_mode
+        builder.assert_blocking_resolved(session, closure, source_qualification_mode=mode)
         return builder.build(
             session,
             closure=closure,
@@ -609,6 +610,7 @@ class EvidenceRevisionWorkflow:
             created_by=candidate.created_by,
             producer_candidate_id=candidate.candidate_id,
             candidate_input_sha256=candidate.candidate_input_sha256,
+            source_qualification_mode=mode,
             # 持久任务严格消费排队时冻结的清单；其后合法新增的旁路记录不能
             # 使旧任务吸收新输入，也不能反向破坏已冻结尝试。
             require_current_heads=candidate.job_id is None,

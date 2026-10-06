@@ -68,6 +68,19 @@ def test_authority_rejects_inactive_episode(session_factory):
             authority_from_active_episode(session, chain["episode_id"])
 
 
+def test_command_freezes_explicit_text_reference_strategy(session_factory):
+    registered = register_evidence_normalizer_runtime_config(session_factory)
+    with session_factory() as session, session.begin():
+        chain = _seed_chain(session, prefix="cmd-text-refs")
+    service = FactNormalizationCommandService(
+        session_factory, registered_config=registered, compact_text_references=True,
+    )
+    created = service.create_or_reuse(subject_id=chain["subject_id"], review_episode_id=chain["episode_id"])
+    payload = service.job_service.get_job(created.job_id)["payload"]
+    assert payload["text_reference_strategy"]["version"] == "text-reference-aliases/v1"
+    assert "verified_evidence_strategy" not in payload
+
+
 def test_authority_rejects_mismatched_active_revision(session_factory):
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="cmd-mismatch")

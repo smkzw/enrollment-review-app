@@ -28,6 +28,7 @@ from app.llm.binding_qualification import (
     PROMPT_VERSION,
     build_binding_qualification_messages,
     plan_qualification_batches,
+    qualification_request_hashes,
     read_binding_qualification,
     validate_binding_qualification_payload,
 )
@@ -44,6 +45,7 @@ from app.llm.predicate_binding_candidates import (
     _candidate_json_object,
     build_predicate_binding_messages,
     candidate_value_shape,
+    computation_request_hashes,
     validate_predicate_candidates,
 )
 from app.projections.control_atom_binding_input import project_control_atom_identities
@@ -77,7 +79,7 @@ _PREDICATE = {
 }
 _CONTROL = {
     "job_type": "control_binding_candidates",
-    "contract": "control-binding-candidate-job/v6",
+    "contract": "control-binding-candidate-job/v7",
     "prompt_version": CONTROL_PROMPT_VERSION,
     "batch_prompt_version": None,
     "comparison_version": COMPARISON_VERSION,
@@ -398,6 +400,13 @@ def verify_completed_candidate_comparison(
     family = spec["family"]
     frozen_type = PredicateBindingFrozenInput if family == "predicate" else ControlBindingFrozenInput
     frozen = frozen_type.model_validate(payload["frozen_input"])
+    request_hashes = computation_request_hashes({
+        step_id: (build_predicate_binding_messages(frozen, batch=batch)
+                  if family == "predicate" else build_control_binding_messages(frozen))
+        for step_id, _, batch in _candidate_reads(payload)
+    })
+    if payload.get("request_messages_sha256s") != (request_hashes or None):
+        raise InvalidJobDefinitionError("候选核对内容与保存的请求不一致，不能复用旧结果")
     if (
         summary[1].get("frozen_input_sha256") != frozen.frozen_input_sha256
         or stored_comparison.get("frozen_input_sha256") != frozen.frozen_input_sha256
@@ -646,7 +655,10 @@ def validate_binding_qualification_structure(
                 if spec is not None and spec.time_purpose == "source_validity":
                     pending.append("source_validity_requires_policy_evaluation")
                 if spec is not None and spec.predicate is not None:
-                    pending.extend(candidate_value_shape(spec.predicate, fact, pair.fact_attribute)["pending_checks"])
+                    shape = candidate_value_shape(spec.predicate, fact, pair.fact_attribute)
+                    pending.extend(shape["pending_checks"])
+                    if shape["operand_shape"] == "source_computation_input":
+                        operand_shape = shape["operand_shape"]
         if pair.fact_attribute == "value":
             referenced_value = fact.value
             referenced_unit = fact.unit
@@ -1081,6 +1093,9 @@ def verify_completed_binding_qualification(
     if payload.get("batches") != expected_batches:
         raise InvalidJobDefinitionError("资格分批与配对材料不一致")
     batches = [BindingQualificationBatch.model_validate(item) for item in expected_batches]
+    request_hashes = qualification_request_hashes(pairs, batches)
+    if payload.get("request_messages_sha256s") != (request_hashes or None):
+        raise InvalidJobDefinitionError("资格核对内容与保存的请求不一致，不能复用旧结果")
     summary_checkpoint = store.get_last_checkpoint(qualification_job_id, "summary")
     if summary_checkpoint is None or summary_checkpoint[1].get("accepted") is not False:
         raise InvalidJobDefinitionError("资格任务缺少未采信的汇总检查点")

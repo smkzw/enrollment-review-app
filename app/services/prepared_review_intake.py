@@ -5,6 +5,7 @@ from app.services.review_runtime_ownership import OWNER
 from app.services.review_context_assembly import (
     current_review_clinical_material_sha256,
     frozen_review_clinical_material_sha256,
+    require_current_review_method,
 )
 from app.storage.codecs import verify_payload_sha256
 from app.storage.fact_authority import FactAuthorityValidator
@@ -12,14 +13,14 @@ from app.storage.repositories import ScopeViolationError
 from app.storage.review_context_repository import ReviewContextV2Repository
 from app.workflow.jobstore import JobStore
 
-ReviewTaskKind = Literal["predicate_candidates", "control_candidates", "qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence"]
+ReviewTaskKind = Literal["predicate_candidates", "control_candidates", "qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence", "computation_input"]
 
 
 def require_prepared_review_intent(session_factory, *, subject_id, review_episode_id,
                                    context_id, kind, candidate_job_id=None):
-    if kind not in {"predicate_candidates", "control_candidates", "qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence"}:
+    if kind not in {"predicate_candidates", "control_candidates", "qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence", "computation_input"}:
         raise ScopeViolationError("所选审核步骤不存在")
-    follows_candidate = kind in {"qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence"}
+    follows_candidate = kind in {"qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence", "computation_input"}
     if follows_candidate != (candidate_job_id is not None):
         raise ScopeViolationError("请使用本次审核对应的前一步记录")
     with session_factory() as session:
@@ -27,6 +28,7 @@ def require_prepared_review_intent(session_factory, *, subject_id, review_episod
         if (context.authority.subject_id != subject_id
                 or context.authority.review_episode_id != review_episode_id):
             raise ScopeViolationError("审核准备记录不属于当前受试者及节点")
+        require_current_review_method(context)
         FactAuthorityValidator(session).validate(context.authority)
         if (
             current_review_clinical_material_sha256(session, context.authority)
@@ -39,7 +41,7 @@ def require_prepared_review_intent(session_factory, *, subject_id, review_episod
                 raise ScopeViolationError("前一步核对尚未完成，请完成后再继续")
             payload = verify_payload_sha256(parent.payload_json, parent.payload_sha256)
             allowed = {"predicate_binding_candidates"}
-            if kind in {"qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence"}:
+            if kind in {"qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence", "computation_input"}:
                 allowed.add("control_binding_candidates")
             if (parent.job_type not in allowed or payload.get("execution_owner") != OWNER
                     or payload.get("review_context_id") != context_id
@@ -72,6 +74,12 @@ def enqueue_prepared_review_task(session_factory, artifact_store, routes, *, sub
         return enqueue_binding_qualification(
             session_factory, candidate_job_id=candidate_job_id, routes=routes,
             artifact_store=artifact_store, product_runtime=True,
+        )
+    if kind == "computation_input":
+        from app.services.computation_input_job import enqueue_computation_input
+        return enqueue_computation_input(
+            session_factory, candidate_job_id=candidate_job_id, context_id=context_id,
+            routes=routes, artifact_store=artifact_store, product_runtime=True,
         )
     if kind == "frequency_evidence":
         from app.services.frequency_evidence_job import enqueue_frequency_evidence

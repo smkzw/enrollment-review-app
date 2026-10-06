@@ -27,6 +27,7 @@ from app.domain.contracts.agent_io import (
     ProtocolSemanticDeconstructionCandidate,
     SemanticRule,
 )
+from app.domain.contracts.rules import AtomicExpression, AtomicPredicate
 from app.protocols.parent_rule_semantic_segmentation import (
     ParentRuleSegment,
     clamp_parent_segment_concurrency,
@@ -59,6 +60,110 @@ _PROJECT_SPECIFIC_LITERALS = (
     "阿帕替尼",
     "卡瑞利珠",
 )
+
+
+@pytest.mark.parametrize("damage", ["malformed", "wrong_hash", "wrong_key", "bad_type"])
+def test_corrupt_saved_segment_stops_before_another_generation(tmp_path, damage):
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    from app.storage.config import resolve_data_paths
+    from app.workflow.runner import StepFailure
+
+    source_input, parent, base = _segmented_collection_input()
+    rule = next(item for item in base.proposed_rules if item.official_code == parent.official_code)
+    body_id, body = parent.source_span_ids[0], parent.source_excerpts[0]
+    segment = ParentRuleSegment(parent_official_code=parent.official_code,
+        segment_id="synthetic-segment", source_span_ids=(body_id,), body_source_span_ids=(body_id,))
+    store = _ProtocolSemanticBatchFileCache(resolve_data_paths(str(tmp_path / "data")), "job")
+    calls = []
+
+    class Transport:
+        supports_parent_rule_segmentation = True
+        uses_compact_wire_contract = False
+
+        def semantic_cache_identity(self, *, output_kind):
+            return "synthetic-frozen-route"
+
+        def start(self, **kwargs):
+            calls.append(kwargs)
+            candidate = _segment_candidate(base_candidate=base, base_rule=rule, body_id=body_id,
+                body=body, official_code=parent.official_code)
+            return ProtocolAgentResponse(session_id="synthetic-session", text=candidate.model_dump_json())
+
+    kwargs = dict(prompt_template="按完整来源解构", segment=segment,
+                  transport_factory=Transport, batch_cache=store)
+    _collect_parent_segment(source_input, **kwargs)
+    path, = list(store._root.glob("*.json"))
+    saved = json.loads(path.read_text())
+    if damage == "malformed":
+        corrupt = b'{"unfinished":'
+    else:
+        saved.update({"wrong_hash": {"response_sha256": "0" * 64},
+                      "wrong_key": {"cache_key": "0" * 64},
+                      "bad_type": {"response_text": []}}[damage])
+        corrupt = json.dumps(saved).encode()
+    path.write_bytes(corrupt)
+    with pytest.raises(StepFailure) as error:
+        _collect_parent_segment(source_input, **kwargs)
+    assert error.value.error_code == "SEMANTIC_CACHE_INVALID"
+    assert error.value.retryable is False
+    assert len(calls) == 1
+    assert path.read_bytes() == corrupt
+
+
+def test_saved_segment_cache_keeps_true_miss_and_valid_result_distinct(tmp_path):
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    from app.storage.config import resolve_data_paths
+
+    store = _ProtocolSemanticBatchFileCache(resolve_data_paths(str(tmp_path / "data")), "job")
+    key = "a" * 64
+    assert store.load(key) is None
+    store.store(key, '{"synthetic":true}')
+    assert store.load(key) == '{"synthetic":true}'
+    assert store.load("b" * 64) is None
+
+
+def test_parent_collection_preserves_cache_damage_instead_of_merge_error(monkeypatch):
+    from app.agents import protocol_deconstructor as module
+    from app.protocols.parent_rule_semantic_segmentation import ParentRuleSegmentPlan
+    from app.workflow.runner import StepFailure
+
+    source, parent, _base = _segmented_collection_input()
+    segment = ParentRuleSegment(parent_official_code=parent.official_code,
+        segment_id="synthetic-segment", source_span_ids=(parent.source_span_ids[0],),
+        body_source_span_ids=(parent.source_span_ids[0],))
+    monkeypatch.setattr(module, "plan_parent_rule_segments", lambda *args, **kwargs:
+                        ParentRuleSegmentPlan(parent.official_code, (segment,)))
+    failure = StepFailure(retryable=False, error_code="SEMANTIC_CACHE_INVALID", detail="保存结果损坏")
+    def damaged(*args, **kwargs):
+        raise failure
+    monkeypatch.setattr(module, "_collect_parent_segment", damaged)
+    with pytest.raises(StepFailure) as caught:
+        module._try_collect_parent_segments(source, prompt_template="冻结来源", parent_prompt="冻结完整父规则",
+            rule_codes=[parent.official_code], transport_factory=lambda: None, batch_cache=None,
+            candidate_id=None, agent_call_id=None)
+    assert caught.value is failure
+
+
+def test_official_runner_passes_cache_damage_to_job_without_generation():
+    from app.agents.protocol_deconstructor import ProtocolDeconstructorRunner
+    from app.workflow.runner import StepFailure
+    from tests.v2.protocols.test_protocol_deconstructor_adapter_slice3 import FakeTransport, _prompt_version
+
+    source, _draft, spans = _fixture()
+    failure = StepFailure(retryable=False, error_code="SEMANTIC_CACHE_INVALID", detail="保存结果损坏")
+    class DamagedCache:
+        def load(self, key):
+            raise failure
+    class Transport(FakeTransport):
+        def semantic_cache_identity(self, *, output_kind):
+            return "synthetic-route"
+    transport = Transport([])
+    with pytest.raises(StepFailure) as caught:
+        ProtocolDeconstructorRunner().run(source, prompt_version=_prompt_version("冻结完整来源"),
+            prompt_template="冻结完整来源", transport=transport, source_spans=spans, batch_cache=DamagedCache())
+    assert caught.value is failure
+    assert transport.start_prompts == []
+    assert transport.repair_prompts == []
 
 
 def _segmented_collection_input():
@@ -111,7 +216,13 @@ def _segment_candidate(
     official_code: str,
 ) -> ProtocolSemanticDeconstructionCandidate:
     component = base_rule.components[0].model_copy(
-        update={"source_span_ids": [body_id], "source_excerpts": [body]},
+        update={
+            "expression": AtomicExpression(predicate=AtomicPredicate(
+                predicate_id=f"predicate:{body_id}", subject="受试者", attribute="条件块",
+                comparator="exists", source_clause=body,
+            )),
+            "source_span_ids": [body_id], "source_excerpts": [body],
+        },
         deep=True,
     )
     return base_candidate.model_copy(
@@ -704,7 +815,8 @@ def test_segment_collection_respects_concurrency_hard_cap(monkeypatch):
     assert len(_parse_semantic_candidate(response.text).proposed_rules[0].components) == 4
 
 
-def test_partial_segment_failure_does_not_publish_merged_parent(monkeypatch):
+@pytest.mark.parametrize("failure_code", ["SEMANTIC_CALL_FAILED", "STREAM_INTERRUPTED", "MODEL_IDENTITY_MISMATCH"])
+def test_partial_segment_failure_does_not_publish_merged_parent(monkeypatch, failure_code):
     source_input, parent, base_candidate = _segmented_collection_input()
     base_rule = next(
         rule for rule in base_candidate.proposed_rules if rule.official_code == parent.official_code
@@ -737,7 +849,7 @@ def test_partial_segment_failure_does_not_publish_merged_parent(monkeypatch):
             raise ProtocolAgentCallError(
                 "hard-fail",
                 "segment permanently unavailable",
-                error_code="SEMANTIC_CALL_FAILED",
+                error_code=failure_code,
             )
 
     primary = CompactFakeTransport(
@@ -748,17 +860,43 @@ def test_partial_segment_failure_does_not_publish_merged_parent(monkeypatch):
             )
         ]
     )
-    response, error = _collect_initial_semantic_response(
-        source_input,
-        prompt_template="按正式方案原文进行结构化解构。",
-        transport=primary,
-        transport_factory=HardFailTransport,
-        batch_size=3,
-    )
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        _collect_initial_semantic_response(
+            source_input,
+            prompt_template="按正式方案原文进行结构化解构。",
+            transport=primary,
+            transport_factory=HardFailTransport,
+            batch_size=3,
+        )
+    assert caught.value.error_code == failure_code
+    assert primary.start_prompts == []
 
-    assert error is None
-    assert response.session_id == "whole-parent-fallback"
-    assert len(primary.start_prompts) == 1
+
+def test_budget_failure_before_segment_dispatch_preserves_first_cause(monkeypatch):
+    source_input, _parent, _candidate = _segmented_collection_input()
+    _enable_segmentation_config(monkeypatch)
+
+    class InvalidLedgerTransport:
+        supports_parent_rule_segmentation = True
+        uses_compact_wire_contract = False
+
+        def configure_output_scope(self, **kwargs):
+            pass
+
+        def configure_logical_task(self, **kwargs):
+            raise ProtocolAgentCallError("ledger", "记录损坏", error_code="BUDGET_RECORD_INVALID")
+
+        def start(self, **kwargs):
+            pytest.fail("记录损坏时不得派发")
+
+    primary = CompactFakeTransport([])
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        _collect_initial_semantic_response(
+            source_input, prompt_template="按来源读取。", transport=primary,
+            transport_factory=InvalidLedgerTransport, batch_size=3,
+        )
+    assert caught.value.error_code == "BUDGET_RECORD_INVALID"
+    assert primary.start_prompts == []
 
 
 def test_segmentation_recovery_modules_contain_no_project_specific_hardcoding():

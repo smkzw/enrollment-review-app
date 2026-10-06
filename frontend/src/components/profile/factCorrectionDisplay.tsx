@@ -22,7 +22,8 @@ function isRecord(value: FactCorrectionJsonValue | undefined): value is FactCorr
 function textValue(value: FactCorrectionJsonValue | undefined): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (typeof value === "number") return String(value);
   return null;
 }
 

@@ -45,6 +45,7 @@ from app.domain.contracts.facts import (
     MedicationExposureCandidateV2,
     clinical_event_stable_identity,
     clinical_fact_stable_identity,
+    clinical_fact_object_key,
     medication_exposure_stable_identity,
 )
 # ---------------------------------------------------------------------------
@@ -111,6 +112,7 @@ def _fact_stable_identity(candidate: ClinicalFactCandidateV2, authority: FactAut
         value=candidate.canonical_value,
         unit=candidate.unit,
         date_range=candidate.date_range,
+        assertion_basis=candidate.assertion_basis,
     )
 
 
@@ -120,7 +122,8 @@ def _event_stable_identity(
     facts_by_id: dict[str, ClinicalFactCandidateV2],
 ) -> str:
     referenced_objects = sorted({
-        f"{facts_by_id[fact_id].fact_type}:{facts_by_id[fact_id].asserted_object}"
+        clinical_fact_object_key(facts_by_id[fact_id].fact_type, facts_by_id[fact_id].asserted_object,
+                                 facts_by_id[fact_id].assertion_basis)
         if fact_id in facts_by_id
         else f"missing:{fact_id}"
         for fact_id in candidate.fact_candidate_ids
@@ -240,7 +243,8 @@ def group_exact_duplicates(
 
 def _fact_semantic_key(candidate: ClinicalFactCandidateV2) -> str:
     # 同一被断言对象在不同极性/值/单位/日期下冲突；按 fact_type:asserted_object
-    return f"fact:{candidate.fact_type}:{candidate.asserted_object}"
+    return "fact:" + clinical_fact_object_key(candidate.fact_type, candidate.asserted_object,
+                                               candidate.assertion_basis)
 
 
 def _event_semantic_key(
@@ -249,7 +253,8 @@ def _event_semantic_key(
 ) -> str:
     objects = sorted(
         {
-            f"{facts_by_id[fid].fact_type}:{facts_by_id[fid].asserted_object}"
+            clinical_fact_object_key(facts_by_id[fid].fact_type, facts_by_id[fid].asserted_object,
+                                     facts_by_id[fid].assertion_basis)
             for fid in candidate.fact_candidate_ids
             if fid in facts_by_id
         }

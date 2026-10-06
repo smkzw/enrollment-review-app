@@ -14,6 +14,7 @@ from pydantic import Field, model_serializer, model_validator
 from app.domain.contracts.common import ContractModel
 from app.domain.contracts.predicate_binding import PredicateBindingFrozenInput
 from app.domain.publication import canonical_hash
+from app.llm.medication_history_guidance import MEDICATION_HISTORY_GUIDANCE
 from app.llm.page_review_harness import Completion, PageCompletion, PageReaderRoute, direct_completion, _status_code
 from app.llm.page_reader_capabilities import (
     MAX_SEMANTIC_OUTPUT_TOKENS,
@@ -198,6 +199,32 @@ class PredicateCandidatePayload(ContractModel):
     results: list[PredicateCandidateResult]
 
 
+SOURCE_COMPUTATION_BINDING_GUIDANCE = (
+    "带source_computation的条件要求由代码按声明的选取和缺失政策计算，不能拿某一次记录代替计算结果。"
+    "与所需对象相符的原始读数仍须保留为候选，不因需要计算就丢弃；"
+    "其value对应derivation_operand，不是直接可用的条件值。"
+    "逐项核实原始读数、单位、采集或事件日期和出处；报告日期、记录日期和页数不证明独立采集。"
+    "已印在报告上的汇总值也不凭文字或双路同意获得输入选取及计算资格。"
+    "尚未核实所选输入和计算时，保留具体原因，不把系统计算功能未完成写成受试者缺记录或研究者未判断。"
+)
+
+
+def computation_request_hashes(messages_by_step: dict[str, list[dict]]) -> dict[str, str]:
+    """Version affected requests without invalidating unchanged ordinary jobs.
+
+    Only the host-generated system guidance selects this migration boundary;
+    source excerpts and model answers cannot grant qualification through it.
+    The fingerprint covers the full request messages, not just the guidance.
+    """
+    return {
+        step_id: canonical_hash(messages)
+        for step_id, messages in messages_by_step.items()
+        if any(message.get("role") == "system"
+               and SOURCE_COMPUTATION_BINDING_GUIDANCE in message.get("content", "")
+               for message in messages)
+    }
+
+
 def candidate_value_shape(predicate, fact, attribute: str) -> dict:
     """Describe operand shape, never validate a clinical correspondence.
 
@@ -225,6 +252,10 @@ def candidate_value_shape(predicate, fact, attribute: str) -> dict:
             pending.append("unit_equivalence_unverified")
     else:
         shape = "semantic_only"
+    if getattr(predicate, "source_computation", None) is not None:
+        pending.append("source_computation_input_set_unverified")
+        if shape == "numeric_value":
+            shape = "source_computation_input"
     return {"operand_shape": shape, "pending_checks": pending, "accepted": False}
 
 
@@ -279,7 +310,8 @@ def build_predicate_binding_messages(frozen: PredicateBindingFrozenInput, *, bat
             "attribute_correspondence区分直接提供所需属性的direct、仍需推导的derivation_operand、"
             "仅相关背景的context_only及uncertain。时间起点不是时长，诊断名称不是其摘录中的年数；"
             "不因找到同页相关文字就声称所选字段已直接提供所需值。"
-            "不得创建事实、改数值或单位、补日期、把处方当服药，或输出满足、排除等最终结论。"
+            + MEDICATION_HISTORY_GUIDANCE +
+            "不得创建事实、改数值或单位、补日期、把处方当作精确的实际给药记录，或输出满足、排除等最终结论。"
             "只解释对象与属性是否对应，不计算年龄、时长或阈值方向；计算由后续代码完成。"
             "同一来源的不同表述不构成独立印证，不用记录条数宣称证据一致。"
             "对于研究者判断，普通检查结果、异常箭头或签字本身不构成书面判断。"
@@ -317,6 +349,9 @@ def build_predicate_binding_messages(frozen: PredicateBindingFrozenInput, *, bat
     ]
     if batch is not None:
         messages[0]["content"] += "本次仅提供冻结规则与事实的一个分包；逐个所列条件检查本批事实，不引用其他批次，不将本批未对应解释为全部规则或资料未见。逐事实考虑记录仅覆盖本批提供的事实。跨来源时间或对象尚不足时保留不确定，不能猜测补齐。"
+    if any(item.predicate.source_computation is not None
+           for component in components for item in component.binding_predicates):
+        messages[0]["content"] += SOURCE_COMPUTATION_BINDING_GUIDANCE
     return messages
 
 

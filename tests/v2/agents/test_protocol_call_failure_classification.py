@@ -13,7 +13,7 @@ from tests.v2.protocols.test_protocol_deconstructor_adapter_slice3 import _promp
 
 
 @pytest.mark.parametrize("during_repair", [False, True])
-@pytest.mark.parametrize("code", ["TRANSPORT_TIMEOUT", "SEMANTIC_CALL_FAILED", "QUOTA_EXHAUSTED"])
+@pytest.mark.parametrize("code", ["TRANSPORT_TIMEOUT", "SEMANTIC_CALL_FAILED", "QUOTA_EXHAUSTED", "STREAM_INTERRUPTED", "MODEL_IDENTITY_MISMATCH", "LOGICAL_BUDGET_EXHAUSTED", "SCHEMA_INVALID"])
 def test_typed_call_failure_retains_classification_without_another_repair(code, during_repair):
     class Transport:
         calls = 0

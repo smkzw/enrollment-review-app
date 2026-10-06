@@ -256,7 +256,8 @@ class EvidenceSidecarPreparationService:
                 start += len(line) - len(left_trimmed)
                 excerpt = left_trimmed.rstrip()
                 end = start + len(excerpt)
-                existing = session.execute(
+                # Different targets/locator versions may share one source range.
+                existing = session.scalar(
                     select(EvidenceLocatorArtifactRecord.locator_id).where(
                         EvidenceLocatorArtifactRecord.page_artifact_id
                         == entry.page_artifact_id,
@@ -266,9 +267,9 @@ class EvidenceSidecarPreparationService:
                         == ocr_page.raw_text_sha256,
                         EvidenceLocatorArtifactRecord.text_start == start,
                         EvidenceLocatorArtifactRecord.text_end == end,
-                    )
-                ).scalar_one_or_none()
-                if existing is not None:
+                    ).exists().select()
+                )
+                if existing:
                     continue
                 locator_service.create_locator_in_session(
                     session,

@@ -181,6 +181,83 @@ class EvidenceApiReadService:
         self.artifact_store = artifact_store
 
     @app_error_boundary
+    def normalization_unresolved(self, subject_id, review_episode_id, job_id, *, offset=0, limit=50,
+                                 expected_content_sha256=None):
+        """Read the frozen run's retained issues; never infer patient missingness."""
+        from app.domain.publication import canonical_hash
+        from app.storage.codecs import verify_payload_sha256
+        from app.services.evidence_app_errors import AppNormalizationReadPendingError
+        from app.storage.models import JobRecord
+        from app.storage.fact_repositories import (
+            FactNormalizationRunRepository, FactNormalizationUnresolvedItemRepository,
+        )
+        from app.services.fact_normalization_source_adapter import build_doc_version_to_logical_map
+
+        with self.session_factory() as session:
+            episode = self._require_subject_episode(session, subject_id, review_episode_id)
+            job = session.get(JobRecord, job_id)
+            if job is None or job.job_type != "fact_normalization":
+                raise AppNotFoundError("未找到本次个例档案整理任务。")
+            payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+            run = FactNormalizationRunRepository(session).get(payload["run_id"])
+            authority = run.authority
+            if (payload.get("authority") != authority.model_dump(mode="json")
+                    or payload.get("input_scope_sha256") != run.input_scope_sha256):
+                raise AppInternalError("整理任务与其保存的资料范围不一致。")
+            if (authority.subject_id != subject_id or authority.review_episode_id != review_episode_id):
+                raise AppNotFoundError("本次整理任务不属于该受试者审核节点。")
+            if job.state not in {"completed", "failed_final", "failed_retryable", "cancelled"}:
+                raise AppNormalizationReadPendingError("这次整理仍在进行，暂不分页展示尚在变化的记录。")
+            revision = CompleteEvidenceProcessingRevisionRepository(session).get(
+                authority.complete_processing_revision_id)
+            doc_to_logical, _ = build_doc_version_to_logical_map(session, revision)
+            items = FactNormalizationUnresolvedItemRepository(session).list_by_run(run.run_id)
+            content_sha256 = canonical_hash([item.model_dump(mode="json") for item in items])
+            if ((offset > 0 or expected_content_sha256 is not None)
+                    and expected_content_sha256 != content_sha256):
+                raise AppNormalizationReadPendingError("清单在续读后已经更新，请从第一页重新读取。")
+            rows = []
+            documents = SourceDocumentRepository(session)
+            for saved in items[offset:offset + limit]:
+                item = saved.item
+                pages = [entry for entry in revision.manifest
+                         if doc_to_logical.get(entry.source_document_version_id) == saved.logical_document_id
+                         and entry.page_number in item.affected_pages]
+                if item.affected_locator_ids:
+                    linked = [EvidenceLocatorRepository(session).get(key) for key in item.affected_locator_ids]
+                    pages.extend(entry for entry in revision.manifest if any(
+                        locator.source_document_version_id == entry.source_document_version_id
+                        and locator.page_number == entry.page_number for locator in linked))
+                page_by_id = {entry.page_artifact_id: entry for entry in pages}
+                source_range = item.source_text_range
+                if source_range is not None and not any(
+                    entry.page_artifact_id == source_range.page_artifact_id
+                    and entry.source_document_version_id == source_range.source_document_version_id
+                    and entry.page_number == source_range.page_number for entry in pages
+                ):
+                    raise AppInternalError("待核对文字与冻结资料页面不一致。")
+                rows.append({
+                    "item_id": saved.unresolved_item_id, "message": item.message,
+                    "kind": "unquoted_text" if item.source_text_range is not None else "reading_uncertainty",
+                    "reason": item.reason, "source_text_range": item.source_text_range,
+                    "sources": [{"source_document_version_id": entry.source_document_version_id,
+                                 "page_artifact_id": entry.page_artifact_id, "page_number": entry.page_number,
+                                 "file_name": documents.get(entry.source_document_version_id).file_name}
+                                for entry in sorted(page_by_id.values(), key=lambda value: (
+                                    value.source_document_version_id, value.page_number))],
+                })
+            return {
+                "job_id": job_id, "run_id": run.run_id, "total": len(items), "offset": offset,
+                "content_sha256": content_sha256,
+                "items": rows, "has_more": offset + len(rows) < len(items),
+                "evidence_snapshot_id": authority.evidence_snapshot_v2_id,
+                "processing_revision_id": authority.complete_processing_revision_id,
+                "is_current": (episode.active_evidence_snapshot_id == authority.evidence_snapshot_v2_id
+                               and episode.active_evidence_processing_revision_id == authority.complete_processing_revision_id),
+                "text_accounting_applied": payload.get("text_accounting_policy") is not None,
+            }
+
+    @app_error_boundary
     def processing_candidate(self, candidate_id: str) -> ProcessingCandidateView:
         """读取候选当前投影；页面刷新后仍可据此恢复核对任务。"""
         with self.session_factory() as session:
@@ -767,7 +844,7 @@ class EvidenceApiReadService:
         gates.append(
             GateSummary(
                 "risk",
-                "passed" if risk_ok else "not_applicable",
+                "passed" if risk_ok else "pending",
                 f"{len(scans)}/{len(ocr_page_ids)} 页有风险扫描，"
                 f"{blocking_covered}/{blocking_total} 条阻断风险已核对",
             )

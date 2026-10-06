@@ -58,6 +58,15 @@ def validate_accepted_candidate_sources(output, attachment, *, locator_inputs=()
         if not candidate.source_observation_refs or not set(candidate.source_observation_refs) <= accepted.keys():
             raise ValueError("事实候选必须引用本次已采信观察，不得引用待核对或其他资料")
         source_pages = {accepted[ref][0] for ref in candidate.source_observation_refs}
+        if candidate.assertion_basis is not None:
+            for item in candidate.assertion_basis.contextual_qualifiers:
+                source = item.source
+                if source is not None and not any(
+                    accepted[ref][0] == locator_pages.get(source.locator_id)
+                    and _literal_text(source.excerpt) in accepted[ref][1]
+                    for ref in candidate.source_observation_refs
+                ):
+                    raise ValueError("背景独立摘录必须来自所引用的已采信观察，不能借OCR侧车补充")
         if (any(key not in locator_pages for key in candidate.locator_ids)
                 or {locator_pages[key] for key in candidate.locator_ids} != source_pages):
             raise ValueError("事实候选的原件定位页必须与所引用观察的来源页一致")

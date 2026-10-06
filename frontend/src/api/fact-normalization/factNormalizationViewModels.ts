@@ -72,6 +72,26 @@ export interface FactNormalizationJobActionView {
   changed: boolean;
 }
 
+export interface NormalizationSourceView {
+  sourceDocumentVersionId: string;
+  pageArtifactId: string;
+  pageNumber: number;
+  fileName: string;
+}
+
+export interface NormalizationUnresolvedPageView {
+  jobId: string;
+  contentSha256: string;
+  total: number;
+  offset: number;
+  hasMore: boolean;
+  isCurrent: boolean;
+  textAccountingApplied: boolean;
+  evidenceSnapshotId: string;
+  processingRevisionId: string;
+  items: { itemId: string; kind: "unquoted_text" | "reading_uncertainty"; message: string; reason: string; sources: NormalizationSourceView[] }[];
+}
+
 /** 前端展示用精简相位（不向用户暴露内部枚举名）。 */
 export type FactNormalizationDisplayPhase =
   | "queued"
@@ -151,6 +171,40 @@ export function decodeFactNormalizationCommand(payload: unknown): FactNormalizat
       "command.recovery_action",
     ),
   };
+}
+
+export function decodeNormalizationUnresolved(payload: unknown): NormalizationUnresolvedPageView {
+  const row = record(payload, "unresolved");
+  if (!Array.isArray(row.items)) throw new FactNormalizationDecodeError("待核对内容应为列表。");
+  const result = {
+    jobId: requiredString(row.job_id, "job_id"),
+    contentSha256: requiredString(row.content_sha256, "content_sha256"),
+    total: nonNegativeInteger(row.total, "total"), offset: nonNegativeInteger(row.offset, "offset"),
+    hasMore: requiredBoolean(row.has_more, "has_more"), isCurrent: requiredBoolean(row.is_current, "is_current"),
+    textAccountingApplied: requiredBoolean(row.text_accounting_applied, "text_accounting_applied"),
+    evidenceSnapshotId: requiredString(row.evidence_snapshot_id, "evidence_snapshot_id"),
+    processingRevisionId: requiredString(row.processing_revision_id, "processing_revision_id"),
+    items: row.items.map((value: unknown) => {
+      const item = record(value, "item");
+      if (!Array.isArray(item.sources)) throw new FactNormalizationDecodeError("待核对内容缺少来源列表。");
+      if (item.kind !== "unquoted_text" && item.kind !== "reading_uncertainty")
+        throw new FactNormalizationDecodeError("待核对内容类型不明确。");
+      return { itemId: requiredString(item.item_id, "item_id"), kind: item.kind as "unquoted_text" | "reading_uncertainty", message: requiredString(item.message, "message"),
+        reason: requiredString(item.reason, "reason"), sources: item.sources.map((value: unknown) => {
+          const source = record(value, "source");
+          const pageNumber = nonNegativeInteger(source.page_number, "page_number");
+          if (pageNumber < 1) throw new FactNormalizationDecodeError("来源页码必须从1起。");
+          return { pageNumber, pageArtifactId: requiredString(source.page_artifact_id, "page_artifact_id"),
+            sourceDocumentVersionId: requiredString(source.source_document_version_id, "source_document_version_id"),
+            fileName: requiredString(source.file_name, "file_name") };
+        }) };
+    }),
+  };
+  if (!/^[0-9a-f]{64}$/.test(result.contentSha256) || result.offset + result.items.length > result.total ||
+      result.hasMore !== (result.offset + result.items.length < result.total) ||
+      new Set(result.items.map((item) => item.itemId)).size !== result.items.length)
+    throw new FactNormalizationDecodeError("待核对内容的范围不一致。");
+  return result;
 }
 
 export function decodeFactNormalizationJobStatus(

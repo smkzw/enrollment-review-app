@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from app.domain.contracts.binding_qualification import BindingQualificationBatch, BindingQualificationPairContext
 from app.domain.publication import canonical_hash
+from app.llm.medication_history_guidance import MEDICATION_HISTORY_GUIDANCE
 from app.domain.contracts.proposition_evidence import (
     PROPOSITION_EVIDENCE_VERSION, PropositionEvidencePayload,
 )
@@ -55,6 +56,8 @@ def build_proposition_evidence_messages(pairs, batch):
             "time_purpose": spec.get("time_purpose"),
             "prospective_requirement": prospective_requirement(pair),
             "prospective_requirement_sources": _prospective_sources(pair),
+            **({"record_semantics": spec["record_semantics"]}
+               if spec.get("record_semantics") is not None else {}),
         }
     schema = PropositionEvidencePayload.model_json_schema()
     schema["properties"]["results"].update(minItems=len(pairs), maxItems=len(pairs))
@@ -100,6 +103,10 @@ def build_proposition_evidence_messages(pairs, batch):
             "scope_population另核原文是否明确存在该范围内的实际观察nonempty、明确为空empty，"
             "否则unresolved；确认时population_quote须逐字引用，不能仅从‘全部’推断确有观察。"
             "记录者和自述能否作为依据仍按对应方案来源要求核实，不自行规定某类来源永远可用或不可用。"
+            "record_semantics如已给出，只说明方案条件的对象、记录要求及命题方向；"
+            "不证明患者资料已读全或未发生。即使是既往事件且未要求专门记录，"
+            "本配对核对仍不能从本段没有提及推断反面；本次资料范围内未见记录由宿主另核。"
+            + MEDICATION_HISTORY_GUIDANCE +
             "仅any/all政策允许universal；single、未声明或unresolved政策不得填universal。"
             "当observation_policy.mode为action_completion时，仅核原文是否明确记载本节点规定的操作已完成、"
             "明确未做，或尚无法证实，分别填写action_witness.status为completed、explicit_not_completed、"

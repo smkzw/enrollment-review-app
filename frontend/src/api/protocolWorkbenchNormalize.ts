@@ -31,6 +31,8 @@ import type {
   ProtocolLogicPayload,
   ProtocolOriginalTextPayload,
   ProtocolPredicateValue,
+  ProtocolSourceComputation,
+  ProtocolSourceQuote,
   ProtocolRuleDiffWire,
   ProtocolTimeEntryPayload,
   PublishResultView,
@@ -215,6 +217,91 @@ function normalizePredicateValue(value: unknown, field: string): ProtocolPredica
   return invalidDiff(field, "判断值只允许文字、数字、是/否或其列表");
 }
 
+function normalizeSourceComputation(value: unknown, field: string): ProtocolSourceComputation {
+  const row = requireRecord(value, field);
+  const keys = ["operator", "operator_ref", "input_refs", "missing_policy", "missing_ref", "declared_input_count", "max_missing_count", "input_selection"];
+  if (Object.keys(row).some((key) => !keys.includes(key))) invalidDiff(field, "计算依据混入了未知字段");
+  const integer = (value: unknown, path: string) => {
+    const count = requireFiniteNumber(value, path);
+    if (!Number.isSafeInteger(count) || count < 0) invalidDiff(path, "应为非负整数");
+    return count;
+  };
+  const quote = (value: unknown, path: string): ProtocolSourceQuote => {
+    const ref = requireRecord(value, path);
+    if (Object.keys(ref).some((key) => key !== "statement_index" && key !== "quote")) invalidDiff(path, "原文引用混入了未知字段");
+    const text = requireString(ref.quote, `${path}.quote`);
+    if (!text.trim()) invalidDiff(`${path}.quote`, "原文引用不能只含空白");
+    return { statement_index: integer(ref.statement_index, `${path}.statement_index`), quote: text };
+  };
+  const count = (value: unknown, path: string): ProtocolSourceComputation["declared_input_count"] => {
+    if (value == null) return null;
+    const ref = requireRecord(value, path);
+    if (Object.keys(ref).some((key) => !["value", "number_text", "source"].includes(key))) invalidDiff(path, "原文次数混入了未知字段");
+    const text = requireString(ref.number_text, `${path}.number_text`);
+    if (!text.trim()) invalidDiff(`${path}.number_text`, "原文次数不能只含空白");
+    return { value: integer(ref.value, `${path}.value`), number_text: text, source: quote(ref.source, `${path}.source`) };
+  };
+  const result: ProtocolSourceComputation = {
+    operator: requireOneOf(row.operator, ["mean", "sum", "minimum", "maximum", "count", "ratio", "other", "unresolved"] as const, `${field}.operator`),
+    operator_ref: quote(row.operator_ref, `${field}.operator_ref`),
+    input_refs: requireArray<unknown>(row.input_refs, `${field}.input_refs`).map((ref, index) => quote(ref, `${field}.input_refs[${index}]`)),
+    missing_policy: requireOneOf(row.missing_policy, ["exclude", "impute", "not_specified", "unresolved"] as const, `${field}.missing_policy`),
+    missing_ref: row.missing_ref == null ? null : quote(row.missing_ref, `${field}.missing_ref`),
+    declared_input_count: count(row.declared_input_count, `${field}.declared_input_count`),
+    max_missing_count: count(row.max_missing_count, `${field}.max_missing_count`),
+  };
+  if ((result.missing_policy === "exclude" || result.missing_policy === "impute") && result.missing_ref === null) invalidDiff(field, "缺失处理须有原文依据");
+  if ((result.missing_policy === "not_specified" || result.missing_policy === "unresolved") && result.missing_ref !== null) invalidDiff(field, "未明确的缺失处理不能附加已适用依据");
+  if (result.max_missing_count !== null && result.missing_ref === null) invalidDiff(field, "允许缺失次数须有处理依据");
+  if (!["other", "unresolved"].includes(result.operator) && !result.input_refs.length) invalidDiff(field, "计算操作须有输入选择依据");
+  const declaredCount = result.declared_input_count;
+  if (declaredCount !== null && !result.input_refs.some((ref) =>
+    ref.statement_index === declaredCount.source.statement_index && ref.quote.includes(declaredCount.source.quote))) invalidDiff(field, "输入数量须属于本计算的输入依据");
+  if (result.max_missing_count !== null && (result.missing_ref?.statement_index !== result.max_missing_count.source.statement_index
+    || !result.missing_ref.quote.includes(result.max_missing_count.source.quote))) invalidDiff(field, "缺失数量须属于本计算的处理依据");
+  if (result.declared_input_count !== null && result.max_missing_count !== null
+    && result.max_missing_count.value > result.declared_input_count.value) invalidDiff(field, "允许缺失数量不能超过输入数量");
+  if (row.input_selection != null) {
+    const path = `${field}.input_selection`;
+    const selection = requireRecord(row.input_selection, path);
+    if (Object.keys(selection).some((key) => !["mode", "source", "ordering_basis", "ordering_ref", "window_refs"].includes(key))) invalidDiff(path, "记录选取混入了未知字段");
+    result.input_selection = {
+      mode: requireOneOf(selection.mode, ["all", "single", "latest_n", "earliest_n", "unresolved"] as const, `${path}.mode`),
+      source: quote(selection.source, `${path}.source`),
+      ordering_basis: selection.ordering_basis == null ? null : requireOneOf(selection.ordering_basis, ["collection_time", "report_time", "record_time", "source_sequence", "unresolved"] as const, `${path}.ordering_basis`),
+      ordering_ref: selection.ordering_ref == null ? null : quote(selection.ordering_ref, `${path}.ordering_ref`),
+      window_refs: requireArray<unknown>(selection.window_refs, `${path}.window_refs`).map((ref, index) => quote(ref, `${path}.window_refs[${index}]`)),
+    };
+    const input = result.input_selection;
+    const ordered = input.mode === "latest_n" || input.mode === "earliest_n";
+    if (!ordered && (input.ordering_basis !== null || input.ordering_ref !== null)) invalidDiff(path, "未声明先后选取时不得附加排序方式");
+    if (ordered && input.ordering_basis === null) invalidDiff(path, "按先后选取须保留日期角色");
+    if (input.ordering_basis === "unresolved" && input.ordering_ref !== null) invalidDiff(path, "日期角色未核清时不能附加已确定的依据");
+    if (ordered && input.ordering_basis !== "unresolved" && input.ordering_ref === null) invalidDiff(path, "排序须有原文依据");
+    if ((ordered || input.mode === "single") && (result.declared_input_count === null || result.declared_input_count.value < 1)) invalidDiff(path, "限定记录数须有原文数量");
+    if (input.mode === "single" && result.declared_input_count?.value !== 1) invalidDiff(path, "单次输入不能代替多次记录");
+    const refs = [input.source, ...input.window_refs, ...(input.ordering_ref === null ? [] : [input.ordering_ref])];
+    if (refs.some((ref) => !result.input_refs.some((parent) => ref.statement_index === parent.statement_index && parent.quote.includes(ref.quote)))) invalidDiff(path, "记录选取须属于本计算的输入依据");
+  }
+  return result;
+}
+
+function normalizeRecordSemantics(value: unknown, field: string) {
+  const row = requireRecord(value, field);
+  if (Object.keys(row).some((key) => !["target_kind", "record_obligation", "proposition_direction", "source_excerpts"].includes(key))) {
+    invalidDiff(field, "记录用途混入了核实或采用标记");
+  }
+  const target_kind = requireOneOf(row.target_kind, ["event_history", "other", "unresolved"] as const, field);
+  const record_obligation = requireOneOf(row.record_obligation, ["required", "not_required_by_source", "unresolved"] as const, field);
+  const proposition_direction = requireOneOf(row.proposition_direction, ["event_present", "event_absent", "unresolved"] as const, field);
+  const source_excerpts = requireStringList(row.source_excerpts, `${field}.source_excerpts`);
+  if (!source_excerpts.length || source_excerpts.some((text) => !text.trim()) || new Set(source_excerpts).size !== source_excerpts.length) {
+    invalidDiff(field, "记录用途须有非空且不重复的逐字来源");
+  }
+  if (target_kind !== "event_history" && proposition_direction !== "unresolved") invalidDiff(field, "非既往事件不能声明发生方向");
+  return { target_kind, record_obligation, proposition_direction, source_excerpts };
+}
+
 function normalizeLogicPayload(value: unknown, field: string): ProtocolLogicPayload {
   const row = requireRecord(value, field);
   const kind = requireOneOf(row.kind, ["predicate", "logical"] as const, `${field}.kind`);
@@ -246,6 +333,15 @@ function normalizeLogicPayload(value: unknown, field: string): ProtocolLogicPayl
     const valuePayload = hasValue && predicate.value !== null
       ? normalizePredicateValue(predicate.value, `${field}.predicate.value`)
       : undefined;
+    if (predicate.source_computation != null && (!['eq', 'ne', 'gt', 'gte', 'lt', 'lte'].includes(comparator)
+        || typeof valuePayload !== "number" || predicate.requires_professional_judgment === true)) {
+      invalidDiff(`${field}.predicate.source_computation`, "计算方法须绑定数值比较，不能替代研究者判断");
+    }
+    const purpose = predicate.record_semantics == null ? undefined
+      : normalizeRecordSemantics(predicate.record_semantics, `${field}.predicate.record_semantics`);
+    if (purpose?.record_obligation === "not_required_by_source" && predicate.requires_professional_judgment === true) {
+      invalidDiff(field, "研究者判断要求不能声明无需书面判断");
+    }
     return {
       kind: "predicate",
       predicate: {
@@ -263,6 +359,10 @@ function normalizeLogicPayload(value: unknown, field: string): ProtocolLogicPayl
         ...(predicate.unit_match_policy === undefined
           ? {}
           : { unit_match_policy: requireString(predicate.unit_match_policy, `${field}.predicate.unit_match_policy`) }),
+        ...(predicate.source_computation == null ? {} : {
+          source_computation: normalizeSourceComputation(predicate.source_computation, `${field}.predicate.source_computation`),
+        }),
+        ...(purpose === undefined ? {} : { record_semantics: purpose }),
       },
     };
   }
@@ -355,9 +455,24 @@ function normalizeTimeEntry(value: unknown, field: string): ProtocolTimeEntryPay
   let prospectivePeriod: ProtocolTimeEntryPayload["prospective_period"] = null;
   if (row.prospective_period !== null) {
     const period = requireRecord(row.prospective_period, `${field}.prospective_period`);
-    prospectivePeriod = {
-      period: requireOneOf(period.period, ["treatment_period", "study_period"] as const, `${field}.prospective_period.period`),
-    };
+    if (period.kind === "source_defined") {
+      if (Object.keys(period).some((key) => key !== "kind" && key !== "source_excerpts")) {
+        invalidDiff(`${field}.prospective_period`, "按原文限定的期间混入了其他范围");
+      }
+      const excerpts = requireStringList(period.source_excerpts, `${field}.prospective_period.source_excerpts`);
+      if (excerpts.length === 0 || excerpts.some((quote) => quote.trim().length === 0)
+          || new Set(excerpts).size !== excerpts.length) {
+        invalidDiff(`${field}.prospective_period`, "期间原文依据缺失或重复");
+      }
+      prospectivePeriod = { kind: "source_defined", source_excerpts: excerpts };
+    } else {
+      if (Object.keys(period).some((key) => key !== "period")) {
+        invalidDiff(`${field}.prospective_period`, "期间表达无法核对");
+      }
+      prospectivePeriod = {
+        period: requireOneOf(period.period, ["treatment_period", "study_period"] as const, `${field}.prospective_period.period`),
+      };
+    }
   }
   return {
     scope: requireOneOf(row.scope, ["main", "exception"] as const, `${field}.scope`),
@@ -752,6 +867,8 @@ export function normalizeDraftRevision(wire: unknown): DraftRevisionView {
     statusLabel: requireString(row.status_label, "status_label"),
     reason: requireString(row.reason, "reason"),
     reasonLabel: requireString(row.reason_label, "reason_label"),
+    importedUnpublishedProposal: row.imported_unpublished_proposal === undefined
+      ? false : requireBoolean(row.imported_unpublished_proposal, "imported_unpublished_proposal"),
     actor: requireString(row.actor, "actor"),
     createdAt: requireString(row.created_at, "created_at"),
     studyPhase: requireStudyPhase(row.study_phase, "study_phase"),

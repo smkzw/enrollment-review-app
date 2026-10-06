@@ -8,6 +8,7 @@ import type {
   FactNormalizationCommandView,
   FactNormalizationJobActionView,
   FactNormalizationJobStatusView,
+  NormalizationUnresolvedPageView,
 } from "./factNormalizationViewModels";
 
 export {
@@ -26,6 +27,10 @@ export interface FactNormalizationStartInput {
 
 export interface FactNormalizationRepository {
   readonly kind: "http";
+  getNormalizationUnresolved?(
+    subjectId: string, episodeId: string, jobId: string, offset: number,
+    options?: FactNormalizationRequestOptions & { expectedContentSha256?: string },
+  ): Promise<NormalizationUnresolvedPageView>;
   /** POST …/fact-normalization-jobs：创建或幂等复用持久整理任务。 */
   startFactNormalization(
     subjectId: string,

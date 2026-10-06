@@ -72,12 +72,14 @@ class PageReviewRuntime:
                 from app.services.proposition_evidence_job import PropositionEvidenceJobExecutor
                 from app.services.observation_relation_job import ObservationRelationJobExecutor
                 from app.services.frequency_evidence_job import FrequencyEvidenceJobExecutor
+                from app.services.computation_input_job import ComputationInputJobExecutor
                 self._prepared_review_executors = {
                     executor.job_type: executor(self.session_factory, self.artifact_store, routes,
                                                 completion=admission)
                     for executor in (PredicateBindingJobExecutor, ControlBindingJobExecutor,
                                      BindingQualificationJobExecutor, JudgmentContentJobExecutor,
-                                     PropositionEvidenceJobExecutor, ObservationRelationJobExecutor, FrequencyEvidenceJobExecutor)
+                                     PropositionEvidenceJobExecutor, ObservationRelationJobExecutor, FrequencyEvidenceJobExecutor,
+                                     ComputationInputJobExecutor)
                 }
                 self._targeted_executor = TargetedPageReviewExecutor(
                     self.session_factory, self.artifact_store, routes, completion=admission)
@@ -129,8 +131,10 @@ class PageReviewRuntime:
         from app.services.prepared_review_workflow import (
             change_review_workflow, require_workflow_scope, require_workflow_retryable_policy,
         )
+        from app.services.review_context_assembly import require_current_review_method
         with self.session_factory() as session:
-            require_workflow_scope(session, **kwargs)
+            _, _, context = require_workflow_scope(session, **kwargs)
+            require_current_review_method(context)
             require_workflow_retryable_policy(session, kwargs["workflow_id"])
         self._prepare()
         return change_review_workflow(self.session_factory, **kwargs, operation="retry", routes=self._routes)

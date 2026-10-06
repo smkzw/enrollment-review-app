@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app.api.v2.errors import register_error_handlers
 from app.api.v2.evidence import router as evidence_router
 from app.api.v2.evidence_processing import router as processing_router
+from app.api.v2.local_visual_verification import router as local_visual_router
 from app.api.v2.patient_profiles import router as profiles_router
 from app.api.v2.protocols import projects_router
 from app.api.v2.review_history import router as history_router
@@ -18,6 +19,7 @@ from app.services.evidence_app_bootstrap import DataPaths, open_read_only
 from app.services.evidence_api_read_service import EvidenceApiReadService
 from app.services.evidence_upload_service import EvidenceUploadService
 from app.services.patient_profile_service import PatientProfileService
+from app.services.local_visual_verification import LocalVisualVerificationService
 from app.services.protocol_workbench_service import ProtocolWorkbenchService
 from app.services.selective_vision_postprocess_job_service import SelectiveVisionPostprocessJobService
 
@@ -34,6 +36,7 @@ def create_browse_app(*, data_paths: DataPaths | None = None) -> FastAPI:
             app.state.evidence_upload_service = EvidenceUploadService(sessions, paths)
             app.state.protocol_workbench_service = ProtocolWorkbenchService(sessions, data_paths=paths)
             app.state.patient_profile_service = PatientProfileService()
+            app.state.local_visual_verification_service = LocalVisualVerificationService(sessions, store)
             app.state.selective_vision_postprocess_job_service = SelectiveVisionPostprocessJobService(sessions)
             yield
         finally:
@@ -56,9 +59,9 @@ def create_browse_app(*, data_paths: DataPaths | None = None) -> FastAPI:
     def application_status():
         return {"mode": "browse_only", "can_modify": False}
 
-    # Only record-reading surfaces: no live calculation, queue or model routes.
+    # Only saved-record reading: local verification POSTs remain excluded.
     for router in (projects_router, subjects_router, evidence_router, processing_router,
-                   profiles_router, history_router):
+                   profiles_router, history_router, local_visual_router):
         app.include_router(APIRouter(routes=[
             route for route in router.routes
             if isinstance(route, APIRoute) and route.methods <= {"GET", "HEAD", "OPTIONS"}

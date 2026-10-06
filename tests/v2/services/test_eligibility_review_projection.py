@@ -11,6 +11,7 @@ from app.domain.contracts.enums import (
     FactGate,
     FactPolarity,
     GateOutcome,
+    GapType,
     SourceStrength,
 )
 from app.domain.contracts.facts import (
@@ -25,10 +26,12 @@ from app.domain.contracts.facts import (
 )
 from app.services.eligibility_review_projection import (
     EligibilityReviewProjectionService,
+    EligibilityReviewProjectionError,
     _continuing_obligation_note,
     _fact_refs,
     _restricted_clause_projection,
     _selected_predicate_locators,
+    _selected_control_locators,
     adapt_clinical_fact_v2,
     fold_fact_chain_heads,
 )
@@ -84,6 +87,53 @@ def test_work_draft_source_navigation_uses_only_proven_pair_location(monkeypatch
         _fact_refs(object(), {"fact-1"}, {"fact-1": fact}, {"fact-1": {"another"}})
 
 
+def test_control_work_draft_navigation_uses_its_own_verified_pairs(monkeypatch) -> None:
+    from app.services import eligibility_review_projection as module
+
+    selection = SimpleNamespace(
+        identity_outcomes=[SimpleNamespace(
+            identity_sha256="obligation", status="usable", usable_pair_ids=["pair"],
+        )],
+        source_pair_locations=[
+            ("obligation", "pair", "fact", "chosen"),
+            ("sibling", "sibling-pair", "fact", "other"),
+        ],
+    )
+    chosen = _selected_control_locators(selection, "obligation", {"fact"})
+    assert chosen == {"fact": {"chosen"}}
+    fact = SimpleNamespace(fact_id="fact", locator_ids=["chosen", "other"])
+    locators = [SimpleNamespace(
+        locator_id=value, page_number=index + 1, source_document_version_id="document",
+        page_artifact_id=f"page-{index}", excerpt=value,
+    ) for index, value in enumerate(fact.locator_ids)]
+    monkeypatch.setattr(module, "EvidenceLocatorRepository", lambda _session: SimpleNamespace(
+        get_many=lambda _ids: locators,
+    ))
+    refs = _fact_refs(None, {"fact"}, {"fact": fact}, chosen)
+    assert [(item.locator_id, item.page_number) for item in refs] == [("chosen", 1)]
+    assert _selected_control_locators(selection, "obligation", set()) == {}
+
+
+@pytest.mark.parametrize("failure", ["unusable", "missing", "wrong_pair", "sibling_only"])
+def test_control_work_draft_does_not_guess_missing_source_pair(failure) -> None:
+    selection = SimpleNamespace(
+        identity_outcomes=[SimpleNamespace(
+            identity_sha256="obligation", status="usable", usable_pair_ids=["pair"],
+        )],
+        source_pair_locations=[("obligation", "pair", "fact", "chosen")],
+    )
+    if failure == "unusable":
+        selection.identity_outcomes[0].status = "unresolved"
+    elif failure == "missing":
+        selection.source_pair_locations = []
+    elif failure == "wrong_pair":
+        selection.identity_outcomes[0].usable_pair_ids = ["another-pair"]
+    else:
+        selection.source_pair_locations = [("sibling", "pair", "fact", "other")]
+    with pytest.raises(EligibilityReviewProjectionError):
+        _selected_control_locators(selection, "obligation", {"fact"})
+
+
 def test_repeat_or_unproven_source_does_not_guess_selected_location() -> None:
     predicate = SimpleNamespace(
         predicate_id="predicate-1", predicate_identity_sha256="identity-1",
@@ -102,6 +152,137 @@ def test_repeat_or_unproven_source_does_not_guess_selected_location() -> None:
         "predicate-1": SimpleNamespace(used_fact_ids=["fact-1"]),
     })
     assert _selected_predicate_locators(selection, "component-1", evaluation, {"fact-1"}) == {}
+
+
+@pytest.mark.parametrize("gap,confirmed", [
+    (GapType.PROFESSIONAL_JUDGMENT, True),
+    (GapType.OBSERVATION_UNVERIFIED, False),
+])
+def test_frozen_work_draft_displays_the_calculated_judgment_gap(
+    session, monkeypatch, gap, confirmed,
+) -> None:
+    from app.domain.contracts.enums import BlockingLevel, ComponentDecision, TruthValue
+    from app.projections.clause_pack import project_clause_pack
+    from app.services.component_review import ComponentReviewResult
+    from app.services import frozen_review_calculation as calculation_module
+    from app.storage.repositories import get_rule_set
+
+    chain = _seed_chain(session, f"frozen-judgment-{gap.value}")
+    authority = chain["authority"]
+    rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
+    pack = project_clause_pack(rule_set)
+    clause = next(item for item in pack.clauses if item.official_code == "EX-02")
+    evaluation = SimpleNamespace(
+        trigger=SimpleNamespace(truth=TruthValue.UNKNOWN, used_fact_ids=[]),
+        exception=None, predicate_evaluations={},
+    )
+    result = ComponentReviewResult(
+        evaluation=evaluation, gaps=frozenset({gap}),
+        decision=ComponentDecision.PROFESSIONAL_JUDGMENT if confirmed else ComponentDecision.INDETERMINATE,
+        blocking_level=BlockingLevel.BLOCKING,
+        judgment_gaps=((clause.evidence_requirements[0].requirement_id, gap),),
+    )
+    # This isolates projection consumption, not workflow receipt validation.
+    monkeypatch.setattr(calculation_module, "calculate_frozen_review", lambda *_args, **_kw: SimpleNamespace(
+        components=[SimpleNamespace(rule_component_id=clause.rule_component_id, result=result)],
+        control_outcomes=[], computation_atom_evaluations={},
+    ))
+    frozen = SimpleNamespace(
+        authority=authority, clause_pack=pack, facts=[], judgment_search_results=[],
+        conflict_groups=(),
+    )
+    projected = EligibilityReviewProjectionService()._project_frozen_work_draft(
+        session, frozen=frozen, rule_set=rule_set, selections=(),
+    )
+    rendered = projected.clauses[0]
+    assert rendered.gap_type == gap.value
+    if confirmed:
+        assert "未见本条所需的研究者书面判断" in rendered.reason
+        assert "尚未完成" not in rendered.reason
+    else:
+        assert "尚未完成" in rendered.reason
+        assert "未见本条所需的研究者书面判断" not in rendered.reason
+    assert not rendered.fact_refs
+    assert projected.work_draft_state == "current"
+
+
+@pytest.mark.parametrize("has_selection", [True, False])
+def test_frozen_work_draft_control_consumer_keeps_verified_location(
+    session, monkeypatch, has_selection,
+) -> None:
+    from app.domain.contracts.control_evaluation_spec import ControlAtomEvaluationSpec
+    from app.services import eligibility_review_projection as projection
+    from app.services import frozen_review_calculation as calculation_module
+
+    chain = _seed_chain(session, f"frozen-control-{has_selection}")
+    atom = SimpleNamespace(
+        obligation_id="obligation", continuing_obligation=None,
+        source_excerpts=["记录过敏史。"],
+        evaluation=ControlAtomEvaluationSpec(
+            determination_mode="semantic", proposition="记录过敏史。",
+            time_purpose="not_applicable", source_span_ids=["span"],
+            source_excerpts=["记录过敏史。"],
+        ),
+    )
+    source = SimpleNamespace(
+        protocol_control_id="control", display_label="方案补充要求", title="记录过敏史",
+        source_span_ids=["span"], obligation_expression=SimpleNamespace(
+            groups=[SimpleNamespace(atoms=[atom])],
+        ),
+    )
+    publication = SimpleNamespace(catalog=SimpleNamespace(
+        controls=[source], restricted_statements=[],
+    ))
+    frozen = SimpleNamespace(
+        authority=chain["authority"], judgment_search_results=[],
+        conflict_groups=[
+            SimpleNamespace(conflict_group_id="event-conflict", member_kind="event", event_ids=["event-1", "event-2"], exposure_ids=[]),
+            SimpleNamespace(conflict_group_id="exposure-conflict", member_kind="exposure", event_ids=[], exposure_ids=["exposure-1", "exposure-2"]),
+            SimpleNamespace(conflict_group_id="fact-conflict", member_kind="fact"),
+        ],
+        clause_pack=SimpleNamespace(clauses=[], restricted_clauses=[], control_publication=publication),
+        facts=[SimpleNamespace(fact_id="fact", locator_ids=["chosen", "other"])],
+    )
+    selection = SimpleNamespace(
+        candidate_family="control",
+        identity_outcomes=[SimpleNamespace(
+            identity_sha256="identity", status="usable", usable_pair_ids=["pair"],
+        )],
+        source_pair_locations=[("identity", "pair", "fact", "chosen")],
+    )
+    outcome = SimpleNamespace(
+        protocol_control_id="control", obligations=[SimpleNamespace(
+            obligation_id="obligation", obligation_group_id="group", identity_sha256="identity",
+            statement="记录过敏史。", status="fulfilled", observation_reason_codes=[],
+            used_fact_ids=["fact"],
+        )],
+    )
+    # Calculator output is frozen here to test the real projection consumer.
+    monkeypatch.setattr(calculation_module, "calculate_frozen_review", lambda *_args, **_kw: SimpleNamespace(
+        components=[], control_outcomes=[outcome], computation_atom_evaluations={},
+    ))
+    locators = [SimpleNamespace(
+        locator_id=value, page_number=index + 1, source_document_version_id="document",
+        page_artifact_id=f"page-{index}", excerpt=value,
+    ) for index, value in enumerate(["chosen", "other"])]
+    monkeypatch.setattr(projection, "EvidenceLocatorRepository", lambda _session: SimpleNamespace(
+        get_many=lambda _ids: locators,
+    ))
+    service = EligibilityReviewProjectionService()
+    if not has_selection:
+        with pytest.raises(EligibilityReviewProjectionError, match="缺少本次核对依据"):
+            service._project_frozen_work_draft(session, frozen=frozen, rule_set=object(), selections=())
+        return
+    projected = service._project_frozen_work_draft(
+        session, frozen=frozen, rule_set=object(), selections=(selection,),
+    )
+    rendered = projected.controls[0].obligations[0]
+    assert rendered.status == "fulfilled"
+    assert [(item.locator_id, item.page_number) for item in rendered.fact_refs] == [("chosen", 1)]
+    assert [(item.conflict_group_id, item.member_kind, item.member_ids) for item in projected.unassigned_conflicts] == [
+        ("event-conflict", "event", ("event-1", "event-2")),
+        ("exposure-conflict", "exposure", ("exposure-1", "exposure-2")),
+    ]
 
 
 @pytest.mark.parametrize("limitation,owner", [
@@ -423,6 +604,30 @@ def test_v2_adapter_preserves_fact_scope_and_locator_ids():
     assert adapted.effective_date.value == date(2026, 3, 1)
 
 
+@pytest.mark.parametrize("value,polarity,expected", [
+    (False, FactPolarity.NEGATED, "unknown"),
+    (True, FactPolarity.NEGATED, "false"),
+    (True, FactPolarity.AFFIRMED, "true"),
+])
+def test_real_v2_adapter_keeps_negative_history_and_consumer_does_not_double_invert(value, polarity, expected):
+    from app.domain.contracts.rules import AtomicExpression, AtomicPredicate
+    from app.domain.expression import EvaluationContext, evaluate_expression
+    authority = FactAuthority(project_id="project", subject_id="subject", review_episode_id="episode",
+        episode_revision=1, protocol_version_id="protocol", rule_set_id="rules", rule_set_revision=1,
+        evidence_snapshot_v2_id="snapshot", complete_processing_revision_id="complete")
+    fact = _standalone_fact(fact_id="fact-1", revision=1, authority=authority).model_copy(update={
+        "fact_type": "history.condition", "value": value, "unit": None, "polarity": polarity})
+    frozen = fact.model_dump_json()
+    adapted = adapt_clinical_fact_v2(fact)
+    context = EvaluationContext(project_id="project", subject_id="subject", review_episode_id="episode",
+        evidence_snapshot_id="snapshot", accepted_fact_ids=[adapted.fact_id], facts=[adapted])
+    result = evaluate_expression(AtomicExpression(predicate=AtomicPredicate(
+        predicate_id="condition", subject="history", attribute="condition", comparator="eq", value=True)), context)
+    assert result.truth.value == expected
+    assert adapted.value is value and adapted.polarity == polarity
+    assert fact.model_dump_json() == frozen
+
+
 def test_fact_chain_heads_keep_highest_revision_and_adapter_sets_are_equal():
     authority = FactAuthority(
         project_id="project",
@@ -455,17 +660,21 @@ def test_projection_without_published_fact_is_unknown_not_negative(session):
     assert "未见" not in by_code["EX-02"].reason
 
 
-def test_changed_source_is_visible_without_reusing_old_work_draft(session, monkeypatch):
-    from app.services.eligibility_review_projection import _STALE_WORK_DRAFT
+@pytest.mark.parametrize("state", ["source_changed", "method_changed"])
+def test_changed_source_or_method_is_visible_without_reusing_old_work_draft(session, monkeypatch, state):
+    from app.services.eligibility_review_projection import _STALE_WORK_DRAFT, _STALE_METHOD_WORK_DRAFT
+    from app.api.v2.eligibility_review import EligibilityReviewResponse
 
     chain = _seed_chain(session, "eligibility-source-changed")
     service = EligibilityReviewProjectionService(artifact_store=object())
     monkeypatch.setattr(
         service, "_completed_work_draft",
-        lambda _session, *, authority, rule_set: _STALE_WORK_DRAFT,
+        lambda _session, *, authority, rule_set: (
+            _STALE_WORK_DRAFT if state == "source_changed" else _STALE_METHOD_WORK_DRAFT),
     )
     projection = service.project(session, chain["episode_id"])
-    assert projection.work_draft_state == "source_changed"
+    assert projection.work_draft_state == state
+    assert EligibilityReviewResponse.model_validate(projection.to_dict()).work_draft_state == state
     assert all(not clause.fact_refs for clause in projection.clauses)
 
 

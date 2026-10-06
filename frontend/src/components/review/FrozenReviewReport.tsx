@@ -6,7 +6,7 @@ import type { ReviewHistoryRunDetailView } from "../../api/review-history/review
 import { actionStateLabel, actionTargetLabel, decisionLabel, gapTypeLabel, stageLabel } from "../../domain/labels";
 import { useApplicationMode } from "../../app/applicationMode";
 import { reviewConditionNotes } from "../../domain/reviewConditionNotes";
-import { frozenReviewExport, reviewEvidenceScopeNote } from "../../domain/frozenReviewExport";
+import { frozenReviewExport, reviewEvidenceScopeNote, reviewLimitationLabel, reviewLimitationContext } from "../../domain/frozenReviewExport";
 
 export function reviewTime(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -100,6 +100,23 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
             <th scope="row">审核情况</th><td>{complete ? "已完成，逐项结果见下表" : "尚未完成，不作为正式报告"}</td></tr>
         </tbody></table>
       </section>
+      {report.restrictedRequirements.length > 0 && <section className="reports-print__section" aria-label="尚不能判定的方案要求">
+        <h3>尚不能判定的方案要求（{report.restrictedRequirements.length}）</h3>
+        <p className="reports-print__reason">以下是方案含义或系统计算能力的限制，不等于病例缺少资料，也不能据此认为受试者符合全部要求。</p>
+        <table className="reports-print__table"><thead><tr><th scope="col">方案要求</th><th scope="col">尚未解决的问题</th><th scope="col">本次保存的方案原文</th></tr></thead>
+          <tbody>{report.restrictedRequirements.map((item) => <tr key={item.requirementId}>
+            <th scope="row">{item.displayLabel}<small>{item.title}</small></th>
+            <td>{reviewLimitationLabel[item.limitationKind]}{item.unresolvedDimensions.map((text, index) => <small key={index}>{text}</small>)}</td>
+            <td><p>{item.sourceText}</p>{item.sourceExcerpts.map((text, index) => <small key={index}>依据摘录：{text}</small>)}
+              {reviewLimitationContext(item).map((text, index) => <small key={index}>{text}</small>)}
+              {item.dependencyRefs.map((id) => {
+                const dependency = report.restrictedRequirements.find((entry) => entry.requirementId === id);
+                return <small key={id}>还需核清相关要求：{dependency?.displayLabel} · {dependency?.title}</small>;
+              })}
+            </td>
+          </tr>)}</tbody>
+        </table>
+      </section>}
       <section className="reports-print__section" aria-labelledby="reports-decisions-title">
         <h3 id="reports-decisions-title">逐项审核结果</h3>
         <table className="reports-print__table reports-print__decision-table">
@@ -198,7 +215,8 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
         {focusActionId !== null && !actions.some((item) => item.actionId === focusActionId)
           && <p role="status">未在本次审核中找到所选办理事项，请返回待办清单重新选择。</p>}
         <p className="reports-print__reason">以下为当前办理情况。事项关闭不改变上述审核结论；补充资料后的结论另行审核。</p>
-        {actions.length === 0 ? <p>{report.controls.some((item) => item.status === "unverified")
+        {actions.length === 0 ? <p>{report.restrictedRequirements.length
+          ? "方案仍有待澄清或暂不能计算的要求，详见上表；不能据此认为受试者符合全部要求。" : report.controls.some((item) => item.status === "unverified")
           ? "其他章节仍有尚无法判定的要求，详见上表；本次尚未保存对应办理事项。" : "本次审核未记录补充事项。"}</p> : (
           <table className="reports-print__table"><thead><tr>
             <th scope="col">对应要求</th><th scope="col">需要办理</th><th scope="col">应提供资料</th><th scope="col">负责方及节点</th><th scope="col">当前情况</th>

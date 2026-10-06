@@ -2,6 +2,19 @@ import { describe, expect, it } from "vitest";
 import { reviewConditionNotes } from "./reviewConditionNotes";
 
 describe("方案采用要求与病例资料分开说明", () => {
+  it("检查表现不能直接当作对象存在或不存在", () => {
+    const text = reviewConditionNotes(["observed_operand_type_unverified"]).join(" ");
+    expect(text).toContain("结果形式");
+    expect(text).toContain("不表示检查未做或结果异常");
+    expect(text).not.toMatch(/observed|operand|unverified/);
+  });
+  it("否认记录表达歧义不写成阳性风险或要求补研究者判断", () => {
+    const text = reviewConditionNotes(["negated_boolean_value_ambiguous", "negated_operand_type_unverified"]).join(" ");
+    expect(text).toContain("整理方式有歧义");
+    expect(text).toContain("不表示受试者存在该情况");
+    expect(text).toContain("不需要因此补研究者判断");
+    expect(text).not.toMatch(/negated|operand|boolean/);
+  });
   it("持续期计算未支持不伪装成缺少记录或研究者判断", () => {
     const text = reviewConditionNotes(["interval_calculation_unsupported"]).join(" ");
     expect(text).toContain("系统尚不能");

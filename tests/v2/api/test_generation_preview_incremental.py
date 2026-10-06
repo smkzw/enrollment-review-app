@@ -300,6 +300,22 @@ def test_generation_preview_endpoint_serves_partial_then_yields_to_final(
         ]
         assert semantic_events, "逐批进度事件未写入任务事件流"
 
+        # 放错任务位置的记录不得展示，即便其候选结构仍可水合。
+        import json
+        preview_path = _semantic_preview_path(app.state.data_paths, job_id)
+        original = preview_path.read_bytes()
+        record = json.loads(original)
+        record["job_id"] = "different-protocol-job"
+        preview_path.write_text(json.dumps(record), encoding="utf-8")
+        mismatched = client.get(
+            f"/api/v2/protocol/deconstructions/{job_id}/draft/generation-preview"
+        )
+        assert mismatched.status_code == 200
+        assert mismatched.json()["available"] is False
+        assert mismatched.json()["reason"] == "unreadable"
+        assert mismatched.json()["content"] == {}
+        preview_path.write_bytes(original)
+
 
 def test_generation_preview_yields_after_final_draft(build_app) -> None:
     """生成完成、正式草稿 revision 存在后，预览端点让位给正式草稿视图。

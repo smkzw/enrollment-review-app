@@ -104,6 +104,7 @@ def _enqueue_content_job(
             "pair_batch_max_characters": pair_batch_max_characters,
             "batches": batches,
             "routes": {lane.value: route_identity(routes[lane]) for lane in LANES},
+            **definition.request_identity_fields(pairs, batches),
         }
         from app.services.review_runtime_ownership import mark_prepared_review_job
         mark_prepared_review_job(payload, enabled=product_runtime, session=session,
@@ -164,6 +165,11 @@ class JudgmentContentJobExecutor:
     reconstruct = staticmethod(_reconstruct_judgment_content_lane_state)
     compose_summary = staticmethod(compose_judgment_content_summary)
     read_content = staticmethod(read_judgment_content)
+
+    @staticmethod
+    def request_identity_fields(pairs, batches):
+        # Existing jobs retain their identity; new source readers may pin requests.
+        return {}
 
     def __init__(self, session_factory, artifact_store, routes, *, completion=direct_completion):
         self.session_factory = session_factory
@@ -234,6 +240,9 @@ class JudgmentContentJobExecutor:
             )
         pairs = self._pairs(payload)
         batches = self._batches(payload, pairs)
+        request_fields = self.request_identity_fields(pairs, batches)
+        if any(payload.get(key) != value for key, value in request_fields.items()):
+            raise StepFailure(retryable=False, error_code=f"{self.error_prefix}_REQUEST_CHANGED")
         with self.session_factory() as session:
             self._verify_current(session, payload)
 

@@ -21,6 +21,7 @@ from app.services.predicate_binding_job import (
     JOB_TYPE, PredicateBindingJobExecutor, enqueue_predicate_candidates,
 )
 from app.services.prepared_review_workflow import PreparedReviewContinuation
+from app.services.frozen_review_calculation import EVALUATOR_VERSION
 from app.storage.models import JobRecord
 from app.workflow.jobstore import JobStore
 from app.workflow.runner import JobRunner
@@ -128,7 +129,8 @@ def test_continuation_persists_specific_policy_failure_and_preserves_previous_st
         lease = JobStore(session).claim_job(job.job_id, "synthetic-owner")
     continuation = PreparedReviewContinuation(session_factory, None, lambda: {}, worker_id="synthetic-owner")
     monkeypatch.setattr(continuation, "_material", lambda *args: (
-        None, {}, SimpleNamespace(authority=object()),
+        None, {}, SimpleNamespace(authority=object(), evaluator_version=EVALUATOR_VERSION,
+                                  requirements_scope_version="review-requirements-scope/v1"),
     ))
     monkeypatch.setattr(module, "require_current_review_tasks", lambda *args: None)
     monkeypatch.setattr(module, "FactAuthorityValidator", lambda *args: SimpleNamespace(validate=lambda *args: None))
@@ -161,7 +163,8 @@ def test_continuation_persists_specific_policy_failure_and_preserves_previous_st
     from app.storage.repositories import ScopeViolationError
 
     context = SimpleNamespace(context_id="synthetic-context", context_sha256="a" * 64,
-                              review_run_id="synthetic-run")
+                              review_run_id="synthetic-run", evaluator_version=EVALUATOR_VERSION,
+                              requirements_scope_version="review-requirements-scope/v1")
     def scoped(session, *, subject_id, review_episode_id, workflow_id):
         if (subject_id, review_episode_id, workflow_id) != ("synthetic", "screen", job.job_id):
             raise ScopeViolationError("本次审核不属于所选受试者及节点")

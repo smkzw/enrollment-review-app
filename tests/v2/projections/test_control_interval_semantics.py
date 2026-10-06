@@ -122,6 +122,29 @@ def test_deterministic_consumer_rejects_legacy_point_result_as_duration(truth):
 
 def test_new_calculation_identity_preserves_readable_old_receipts():
     material = dict(frozen_input_sha256="a" * 64, selections_sha256="b" * 64, layers=[], calculations=[])
-    assert ControlCalculationExperiment(**material).version == "control-calculation-experiment/v16"
+    assert ControlCalculationExperiment(**material).version == "control-calculation-experiment/v19"
     old = ControlCalculationExperiment(version="control-calculation-experiment/v15", **material)
     assert old.model_dump(mode="json")["version"] == "control-calculation-experiment/v15"
+
+
+def test_recorded_finding_cannot_bypass_semantic_review_through_control_value_calculation():
+    from app.domain.contracts.enums import FactPolarity
+    from app.domain.contracts.rules import AtomicPredicate
+    quote = "确认对象甲是否存在"
+    predicate = AtomicPredicate(predicate_id="p1", subject="检查", attribute="对象甲", comparator="exists",
+                                semantic_proposition=quote, source_clause=quote)
+    spec = ControlAtomEvaluationSpec(
+        determination_mode="deterministic", proposition=quote, operation="value_comparison",
+        predicate=predicate, operand_attribute="value", time_purpose="not_applicable",
+        source_span_ids=["s1"], source_excerpts=[quote])
+    atom = ControlConditionAtom(condition_atom_id="a1", statement=quote, evaluation=spec,
+                                source_span_ids=["s1"], source_excerpts=[quote])
+    frozen = SimpleNamespace(frozen_input_sha256="a" * 64,
+                             evidence_input=SimpleNamespace(episode=SimpleNamespace(anchor_dates={})))
+    fact = SimpleNamespace(fact_id="f1", locator_ids=["l1"], value="对象甲局部未及", unit=None,
+                           polarity=FactPolarity.AFFIRMED)
+    result = _calculate_operand(frozen, identity=SimpleNamespace(identity_sha256="b" * 64, atom=atom),
+                                fact=fact, anchors_sha256="c" * 64)
+    assert result.accepted is False
+    assert result.value_result.truth == TruthValue.UNKNOWN
+    assert result.value_result.reason_codes == ["semantic_evidence_unverified"]

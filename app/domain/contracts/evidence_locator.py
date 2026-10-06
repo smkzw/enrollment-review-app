@@ -62,6 +62,7 @@ __all__ = [
     "BLOCKING_CORRECTION_KINDS",
     "CANDIDATE_TRANSITIONS",
     "SOURCE_LINE_TARGET_PREFIX",
+    "TRANSCRIPT_NAVIGATION_TARGET_PREFIX",
     "CompleteEvidenceProcessingRevision",
     "CorrectionRecord",
     "EvidenceActivationEvent",
@@ -82,6 +83,7 @@ __all__ = [
 ]
 
 SOURCE_LINE_TARGET_PREFIX = "source-line:"
+TRANSCRIPT_NAVIGATION_TARGET_PREFIX = "local-transcript:"
 
 _SHA256 = r"^[0-9a-f]{64}$"
 
@@ -775,6 +777,9 @@ class ProcessingCandidateAttemptManifest(VersionedModel):
     referenced_document_revision_ids: list[str] = Field(default_factory=list)
     resolution_revision_ids: list[str] = Field(default_factory=list)
     trigger_sidecar_id: str | None = None
+    source_qualification_mode: Literal["strict", "scoped_text_v1"] = Field(
+        default="strict", exclude_if=lambda value: value == "strict"
+    )
 
     @model_validator(mode="after")
     def validate_manifest(self) -> ProcessingCandidateAttemptManifest:
@@ -1049,6 +1054,12 @@ class CompleteEvidenceProcessingRevision(VersionedModel):
     referenced_document_revision_ids: list[str] = Field(default_factory=list)
     resolution_revision_ids: list[str] = Field(default_factory=list)
     completion_manifest_sha256: str = Field(pattern=_SHA256)
+    source_qualification_mode: Literal["strict", "scoped_text_v1"] = Field(
+        default="strict", exclude_if=lambda value: value == "strict"
+    )
+    unresolved_blocking_risk_ids: list[str] = Field(
+        default_factory=list, exclude_if=lambda value: not value
+    )
     status: ProcessingRevisionStatus = ProcessingRevisionStatus.READY
     is_activatable: bool = True
     created_at: datetime
@@ -1063,6 +1074,10 @@ class CompleteEvidenceProcessingRevision(VersionedModel):
             raise ValueError("完整处理修订只能处于 READY 状态")
         if not self.is_activatable:
             raise ValueError("冻结的完整处理修订必须为可激活候选")
+        if self.unresolved_blocking_risk_ids != sorted(set(self.unresolved_blocking_risk_ids)):
+            raise ValueError("未核实风险必须排序且不得重复")
+        if self.source_qualification_mode == "strict" and self.unresolved_blocking_risk_ids:
+            raise ValueError("严格修订不得保留未核实阻断风险")
 
         _validate_page_manifest(self.manifest, self.manifest_sha256)
 

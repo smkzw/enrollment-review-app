@@ -938,16 +938,12 @@ def _count_file_outcomes(result: FileProcessingResult) -> None:
             result.page_failed += 1
         elif outcome.retryable or outcome.deferred:
             result.retryable_failures += 1
-        elif outcome.ocr_page is not None and outcome.ocr_page.status in {
-            OCRPageStatus.FAILED,
-            OCRPageStatus.CANCELLED,
-        }:
-            result.page_failed += 1
-        elif (
-            outcome.ocr_page is None
-            or outcome.ocr_page.status == OCRPageStatus.SUCCEEDED
-        ):
+        elif outcome.ocr_page is not None and outcome.ocr_page.status == OCRPageStatus.SUCCEEDED:
             result.page_succeeded += 1
+        else:
+            # A rendered page is not a completed primary reading. Retry/defer was
+            # handled above; a missing or nonterminal reading must not freeze.
+            result.page_failed += 1
 
 
 def _finalize_interrupted_ocr_run(

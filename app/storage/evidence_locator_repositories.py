@@ -59,6 +59,7 @@ from app.evidence.effective_text import (
     correction_anchors_conflict,
     project_effective_text,
 )
+from app.evidence.risk import blocking_risk_is_resolved, can_defer_blocking_risk
 from app.evidence.locator_proof import (
     NATIVE_COORDINATES_SCHEMA,
     LocatorProofError,
@@ -3044,25 +3045,34 @@ class CompleteEvidenceProcessingRevisionRepository:
                         f"{a.correction_id} 与 {b.correction_id} 范围重叠；只选有效校对"
                     )
 
-        # 每个 blocking flag 必须被选中核对或覆盖校对解除。
+        unresolved = []
+        page_lengths = {
+            page.ocr_page_id: len(page.raw_text)
+            for page in OcrPageRepository(self.session).get_many(list(pages_by_ocr))
+        }
         for scan_id in revision.risk_scan_ids:
             scan = scan_repo.get(scan_id)
             for flag in scan.flags:
                 flag_id = f"{scan_id}:{flag.risk_id}"
                 if flag.level != OcrRiskLevel.BLOCKING:
                     continue
-                if flag_id in selected_reviews:
-                    continue
-                covered = any(
-                    c.ocr_page_id == scan.ocr_page_id
-                    and c.text_start <= flag.text_start
-                    and c.text_end >= flag.text_end
-                    for c in selected_corrections
+                covered = blocking_risk_is_resolved(
+                    flag,
+                    reviewed=flag_id in selected_reviews,
+                    correction_ranges=(
+                        (c.text_start, c.text_end) for c in selected_corrections
+                        if c.ocr_page_id == scan.ocr_page_id
+                    ),
+                    page_text_length=page_lengths[scan.ocr_page_id],
                 )
                 if not covered:
-                    raise RevisionClosureError(
-                        f"blocking 风险 {flag_id} 未由选中的有效核对或覆盖校对解除"
-                    )
+                    if revision.source_qualification_mode == "strict" or not can_defer_blocking_risk(flag):
+                        raise RevisionClosureError(
+                            f"blocking 风险 {flag_id} 未由选中的有效核对或覆盖校对解除"
+                        )
+                    unresolved.append(flag_id)
+        if sorted(unresolved) != revision.unresolved_blocking_risk_ids:
+            raise RevisionClosureError("冻结的未核实风险集合与实际来源不一致")
 
     def _verify_flag_ocr_page_in_base_manifest(
         self, flag_id: str, base_ocr_pages: set[str]
@@ -3321,6 +3331,7 @@ class CompleteEvidenceProcessingRevisionRepository:
             raise RevisionClosureError("完整修订只能由正在构建的处理候选生成")
         if (
             candidate.candidate_input_sha256 != revision.candidate_input_sha256
+            or candidate.attempt_manifest.source_qualification_mode != revision.source_qualification_mode
             or candidate.evidence_snapshot_id != revision.evidence_snapshot_id
             or candidate.base_processing_revision_id
             != revision.base_processing_revision_id

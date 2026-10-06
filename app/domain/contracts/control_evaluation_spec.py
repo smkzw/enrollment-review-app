@@ -8,6 +8,7 @@ from .common import ContractModel
 from .rules import AtomicPredicate
 from .repeat_scheme import RepeatScheme, validate_repeat_source
 from .observation_selection import ObservationPolicy, validate_observation_window_order
+from .record_semantics import RecordSemantics
 
 ControlTimePurpose = Literal[
     "not_applicable", "event_membership", "interval_condition", "source_validity", "unresolved"
@@ -40,6 +41,7 @@ class ControlAtomEvaluationSpec(ContractModel):
     repeat_scheme: RepeatScheme | None = None
     source_span_ids: list[str] = Field(min_length=1)
     source_excerpts: list[str] = Field(min_length=1)
+    record_semantics: RecordSemantics | None = None
 
     @model_serializer(mode="wrap")
     def serialize_optional_policy(self, handler):
@@ -48,6 +50,8 @@ class ControlAtomEvaluationSpec(ContractModel):
             value.pop("observation_policy", None)
         if self.repeat_scheme is None and self.version != "control-atom-evaluation/v4":
             value.pop("repeat_scheme", None)
+        if self.record_semantics is None:
+            value.pop("record_semantics", None)
         return value
 
     @model_validator(mode="after")
@@ -70,11 +74,20 @@ class ControlAtomEvaluationSpec(ContractModel):
             raise ValueError("求值规格来源与摘录不得成对重复")
         if any(not value.strip() for value in (*self.source_span_ids, *self.source_excerpts)):
             raise ValueError("求值规格不得使用空白原文或来源")
+        if self.record_semantics is not None:
+            if any(not any(quote in excerpt for excerpt in self.source_excerpts)
+                   for quote in self.record_semantics.source_excerpts):
+                raise ValueError("记录用途须属于本求值规格逐字原文")
+            if (self.determination_mode == "investigator_judgment"
+                    and self.record_semantics.record_obligation == "not_required_by_source"):
+                raise ValueError("研究者判断要求不能声明无需方案书面判断")
         if self.predicate is not None:
             if self.predicate.observation_policy is not None:
                 raise ValueError("补充要求的观察政策只能由所在求值规格声明，不得在比较条件内重复")
             if self.predicate.repeat_scheme is not None:
                 raise ValueError("补充要求的复查规则只能由所在求值规格声明，不得在比较条件内重复")
+            if self.predicate.record_semantics is not None:
+                raise ValueError("补充要求的记录用途只能由所在求值规格声明，不得在比较条件内重复")
             if (self.predicate.occurrence_window is not None
                     and self.predicate.occurrence_window.scope is not None
                     and (self.repeat_scheme is not None or self.observation_policy is not None)):

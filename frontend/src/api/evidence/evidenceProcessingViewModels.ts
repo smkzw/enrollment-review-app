@@ -94,6 +94,8 @@ export interface ProcessingRevisionView {
   pages: ProcessingRevisionPageView[];
   riskFlagCount: number;
   pendingRiskFlagCount: number;
+  sourceQualificationMode?: "strict" | "scoped_text_v1";
+  sourceQualificationLabel?: string;
   locatorIds: string[];
   riskScanIds: string[];
   riskReviewIds: string[];
@@ -298,6 +300,11 @@ export interface ProcessingCandidateView {
 export interface CorrectionCreateResponseView extends ProcessingCandidateView {
   correction: CorrectionView;
   created: boolean;
+}
+
+export interface ProcessingCandidateDetailView extends ProcessingCandidateView {
+  evidenceSnapshotId: string;
+  baseProcessingRevisionId: string;
 }
 
 export interface RiskReviewCreateResponseView extends ProcessingCandidateView {
@@ -513,7 +520,15 @@ export function decodeProcessingRevision(
     field(row, "gates", "revision.gates"),
     "revision.gates",
   ).map(decodeGate);
+  const sourceQualificationMode = enumValue(
+    row.source_qualification_mode === undefined ? "strict" : row.source_qualification_mode,
+    ["strict", "scoped_text_v1"], "revision.source_qualification_mode", "资料核实方式",
+  );
   return {
+    sourceQualificationMode,
+    sourceQualificationLabel: row.source_qualification_label === undefined
+      ? (sourceQualificationMode === "scoped_text_v1" ? "逐项采用，未核实内容继续保留" : "资料核对完成后使用")
+      : nonEmptyLabel(row.source_qualification_label, "revision.source_qualification_label", "资料核实方式待核对"),
     revisionId: requiredString(
       field(
         row,
@@ -1585,8 +1600,15 @@ function decodeProcessingCandidate(
 
 export function decodeProcessingCandidateStatus(
   wire: unknown,
-): ProcessingCandidateView {
-  return decodeProcessingCandidate(wire, "processing_candidate");
+): ProcessingCandidateDetailView {
+  const row = record(wire, "processing_candidate");
+  return {
+    ...decodeProcessingCandidate(row, "processing_candidate"),
+    evidenceSnapshotId: requiredString(field(row, "evidence_snapshot_id", "processing_candidate.evidence_snapshot_id"),
+      "processing_candidate.evidence_snapshot_id"),
+    baseProcessingRevisionId: requiredString(field(row, "base_processing_revision_id", "processing_candidate.base_processing_revision_id"),
+      "processing_candidate.base_processing_revision_id"),
+  };
 }
 
 export function decodeCorrectionResponse(

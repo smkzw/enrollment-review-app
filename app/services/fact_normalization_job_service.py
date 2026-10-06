@@ -300,6 +300,8 @@ class FactNormalizationJobService:
         page_review_coverage_id: str | None = None,
         include_visual_sources: bool = False,
         verified_scope_prompt: bool = False,
+        compact_text_references: bool = False,
+        account_source_text: bool = False,
     ) -> CreateNormalizationJobResult:
         """从活动完整处理修订生成计划，避免调用方自行拼接页组或输入哈希。
 
@@ -322,6 +324,8 @@ class FactNormalizationJobService:
             PatientProfileService,
         )
 
+        if account_source_text and page_review_coverage_id is not None:
+            raise InvalidJobDefinitionError("文字整理覆盖不能代替原件观察核对")
         verified_vision_scope = (
             None if page_review_coverage_id is not None else
             SelectiveVisionPostprocessJobService(self.session_factory).verified_observation_scope(
@@ -444,6 +448,8 @@ class FactNormalizationJobService:
                 page_review_coverage_id=page_review_coverage_id,
                 include_visual_sources=include_visual_sources,
                 verified_scope_prompt=verified_scope_prompt,
+                compact_text_references=compact_text_references,
+                account_source_text=account_source_text,
             )
         stitched_scope = _compute_input_scope_sha256(
             authority,
@@ -462,6 +468,8 @@ class FactNormalizationJobService:
             max_pages_per_call=max_pages_per_call,
             page_review_coverage_id=page_review_coverage_id,
             verified_scope_prompt=verified_scope_prompt,
+            compact_text_references=compact_text_references,
+            account_source_text=account_source_text,
         )
 
     @app_error_boundary
@@ -480,6 +488,8 @@ class FactNormalizationJobService:
         page_review_coverage_id: str | None = None,
         include_visual_sources: bool = False,
         verified_scope_prompt: bool = False,
+        compact_text_references: bool = False,
+        account_source_text: bool = False,
     ) -> CreateNormalizationJobResult:
         """幂等创建规范化 Job 与冻结的 FactNormalizationRun。
 
@@ -512,10 +522,26 @@ class FactNormalizationJobService:
         if input_scope_sha256 is not None and input_scope_sha256 != computed_scope:
             raise InvalidJobDefinitionError("input_scope_sha256 与调用切片的冻结内容不一致")
         effective_scope = computed_scope
+        text_accounting_policy = None
+        if account_source_text:
+            from app.projections.normalizer_text_accounting import TEXT_ACCOUNTING_POLICY
+            if page_review_coverage_id is not None:
+                raise InvalidJobDefinitionError("文字整理覆盖不能代替原件观察核对")
+            text_accounting_policy = TEXT_ACCOUNTING_POLICY
+            effective_scope = canonical_hash({"input_scope_sha256": effective_scope,
+                                              "text_accounting_policy": text_accounting_policy})
         if include_visual_sources and page_review_coverage_id is None:
             raise InvalidJobDefinitionError("视觉来源必须绑定双模型判读结果")
         if verified_scope_prompt and not include_visual_sources:
             raise InvalidJobDefinitionError("已核实观察整理必须绑定原件双读来源")
+        if compact_text_references and (page_review_coverage_id is not None or verified_scope_prompt):
+            raise InvalidJobDefinitionError("文字主读短引用不能与双读整理策略混用")
+        text_strategy = None
+        if compact_text_references:
+            from app.projections.normalizer_reference_aliases import text_reference_strategy
+            text_strategy = text_reference_strategy()
+            effective_scope = canonical_hash({"input_scope_sha256": effective_scope,
+                                              "text_reference_strategy": text_strategy})
         strategy = None
         if page_review_coverage_id is not None:
             from app.projections.page_review_pending_normalization import PENDING_NORMALIZATION_POLICY
@@ -570,6 +596,12 @@ class FactNormalizationJobService:
             submitted_hash = _job_payload_hash(job_request_payload)
         if include_visual_sources:
             job_request_payload["visual_source_policy"] = VISUAL_SOURCE_POLICY
+            submitted_hash = _job_payload_hash(job_request_payload)
+        if text_strategy is not None:
+            job_request_payload["text_reference_strategy"] = text_strategy
+            submitted_hash = _job_payload_hash(job_request_payload)
+        if text_accounting_policy is not None:
+            job_request_payload["text_accounting_policy"] = text_accounting_policy
             submitted_hash = _job_payload_hash(job_request_payload)
 
         with self.session_factory() as session, session.begin():
@@ -652,6 +684,10 @@ class FactNormalizationJobService:
                 job_payload["verified_evidence_strategy"] = strategy
             if include_visual_sources:
                 job_payload["visual_source_policy"] = VISUAL_SOURCE_POLICY
+            if text_strategy is not None:
+                job_payload["text_reference_strategy"] = text_strategy
+            if text_accounting_policy is not None:
+                job_payload["text_accounting_policy"] = text_accounting_policy
             store = self._store(session)
             store.create_job(
                 job_id=job_id,

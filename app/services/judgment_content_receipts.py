@@ -156,6 +156,7 @@ def rebuild_judgment_content_input(session, artifact_store, payload: dict) -> di
         artifact_store,
         candidate_job_id=payload["candidate_job_id"],
         context_id=payload["review_context_id"],
+        input_version=payload["input_version"],
     )
     expected = expected_judgment_content_input(payload)
     actual = {key: rebuilt[key] for key in expected}

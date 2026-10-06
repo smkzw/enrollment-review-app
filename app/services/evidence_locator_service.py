@@ -32,6 +32,7 @@ from app.domain.contracts.enums import (
 from app.domain.contracts.evidence import BoundingBox
 from app.domain.contracts.evidence_locator import (
     EvidenceLocatorArtifact,
+    TRANSCRIPT_NAVIGATION_TARGET_PREFIX,
     locator_anchor_hash,
 )
 from app.domain.contracts.ocr import CoordinateFrame
@@ -127,6 +128,8 @@ class EvidenceLocatorService:
             else LocatorAuthenticity.DEGRADED
         )
         degradation_reason = decision.degradation_reason
+        if request.target_id.startswith(TRANSCRIPT_NAVIGATION_TARGET_PREFIX):
+            degradation_reason = "此记录仅用于寻找对应原文；项目与读数的归属尚待核实，不能据此采用病史内容。"
         if (
             precision in (LocatorPrecision.TEXT_RANGE, LocatorPrecision.PAGE_EXCERPT)
             and degradation_reason is None

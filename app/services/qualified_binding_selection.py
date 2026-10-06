@@ -391,6 +391,46 @@ def _semantic_ordering(*, frozen, family, identity, policy, relations, records,
     )
 
 
+def _select_control_semantic_evidence(
+    *, frozen, identity, meta, proposition_relations, records, usable, accounting, review_context,
+):
+    """Work drafts and authorized selections use the same source-selection rule."""
+    spec = meta.atom.evaluation
+    relations = [item for item in proposition_relations if item["identity_sha256"] == identity]
+    fact_ids = _sorted_unique([item["fact_id"] for item in relations])
+    pair_ids = _sorted_unique([item["pair_id"] for item in relations])
+    reasons = [] if relations else ["semantic_evidence_unverified"]
+    ordering = None
+    source_pairs = {
+        item.pair_id for item in records
+        if item.identity_sha256 == identity and item.fact_attribute in {"value", "assertion_basis"}
+    }
+    for relation in relations:
+        relation["scope_candidates_complete"] = source_pairs == set(pair_ids)
+    policy = spec.observation_policy
+    if policy is None or policy.mode == "unresolved":
+        reasons.append("observation_selection_unverified")
+    if policy is not None and policy.selection is not None:
+        selected = _semantic_ordering(
+            frozen=frozen, family="control", identity=identity, policy=policy,
+            relations=relations, records=records, usable=usable, accounting=accounting,
+            review_context=review_context, constraint=meta.atom.time_constraint, purpose=spec.time_purpose,
+        )
+        fact_ids, pair_ids = list(selected.fact_ids), list(selected.pair_ids)
+        reasons, ordering = list(selected.reasons), selected.ordering
+    elif policy is not None and policy.mode == "single" and source_pairs != set(pair_ids):
+        reasons.append("single_observation_relations_incomplete")
+    if meta.atom.time_constraint is not None:
+        dates = [item for item in usable if item.fact_attribute == spec.time_operand_attribute]
+        if (spec.version not in {"control-atom-evaluation/v2", "control-atom-evaluation/v3", "control-atom-evaluation/v4"}
+                or spec.time_operand_attribute != "date_range"
+                or not set(fact_ids) <= {item.fact_id for item in dates}):
+            reasons.append("declared_time_operand_not_qualified")
+        else:
+            pair_ids = _sorted_unique([*pair_ids, *(item.pair_id for item in dates if item.fact_id in fact_ids)])
+    return fact_ids, pair_ids, _sorted_unique(reasons), ordering
+
+
 @dataclass(frozen=True)
 class ReceiptVerifiedQualifiedBindingSelections:
     """Sealed alternative input for calculate_frozen_review; not a raw dict."""
@@ -457,12 +497,14 @@ class ReceiptVerifiedWorkDraftSelections:
     proposition_evidence: str | None = None
     observation_relation: str | None = None
     frequency_evidence: str | None = None
+    computation_input: str | None = None
     content_supported_pair_ids: tuple[str, ...] = ()
     verified_judgment_requirement_ids: tuple[str, ...] = ()
     proposition_relations: tuple[Mapping[str, Any], ...] = ()
     unresolved_proposition_pairs: tuple[Mapping[str, Any], ...] = ()
     observation_relations: tuple[Mapping[str, Any], ...] = ()
     frequency_statements: tuple[Mapping[str, Any], ...] = ()
+    computation_sources: tuple[Mapping[str, Any], ...] = ()
     source_pair_locations: tuple[tuple[str, str, str, str], ...] = ()
     _verified_digest: str = field(init=False, repr=False)
 
@@ -495,6 +537,9 @@ class ReceiptVerifiedWorkDraftSelections:
             "observation_relations": self.observation_relations,
             "frequency_statements": self.frequency_statements,
             "source_pair_locations": self.source_pair_locations,
+            **({"computation_input": self.computation_input,
+                "computation_sources": self.computation_sources}
+               if self.computation_input is not None or self.computation_sources else {}),
         })
 
     def require_unchanged(self) -> None:
@@ -560,6 +605,7 @@ def build_receipt_verified_work_draft_selections(
     proposition_evidence_job_id: str | None = None,
     observation_relation_job_id: str | None = None,
     frequency_evidence_job_id: str | None = None,
+    computation_input_job_id: str | None = None,
 ) -> ReceiptVerifiedWorkDraftSelections:
     """Build conservative work-draft selections from a completed qualification.
 
@@ -601,8 +647,8 @@ def build_receipt_verified_work_draft_selections(
             session, artifact_store, judgment_content_job_id,
         )
         _require_work_draft_companion_scope(content, verified, pair_kind="direct")
-        expected_version = ("judgment-content-input/v1" if family == "predicate"
-                            else "judgment-content-input/control-v1")
+        from app.services.judgment_fact_linkage import judgment_content_input_version
+        expected_version = judgment_content_input_version(family)
         if content["payload"].get("input_version") != expected_version:
             raise InvalidJobDefinitionError("工作稿书面判断核对输入版本不适用于当前要求")
         supported = frozenset(
@@ -676,6 +722,25 @@ def build_receipt_verified_work_draft_selections(
             ),
         )
 
+    computation_sources: list[dict] = []
+    if computation_input_job_id is not None:
+        from app.services.computation_input_job import verify_completed_computation_input
+
+        computation = verify_completed_computation_input(session, artifact_store, computation_input_job_id)
+        _require_work_draft_companion_scope(computation, verified, pair_kind="observation")
+        from app.services.qualified_computation_input import qualify_computation_inputs
+        qualified_inputs = {item["identity_sha256"]: item for item in qualify_computation_inputs(
+            computation, records,
+            frozen_facts=(frozen.facts if family == "predicate" else frozen.evidence_input.facts),
+            accounting=verified["candidate_fact_accounting"],
+        )}
+        computation_sources = [{
+            **item, "input_sha256": computation["payload"]["input_sha256"],
+            "summary_sha256": computation["summary_sha256"],
+            "summary_artifact_sha256": computation["summary_artifact_sha256"],
+            "input_qualification": qualified_inputs[item["identity_sha256"]],
+        } for item in computation["summary"]["comparisons"]]
+
     professional_identities = (
         {
             item.predicate_identity_sha256
@@ -738,6 +803,12 @@ def build_receipt_verified_work_draft_selections(
         )
 
     def finalize(identity: str, fact_ids, pair_ids, reasons, ordering):
+        inputs = next((item["input_qualification"] for item in computation_sources
+                       if item["identity_sha256"] == identity), None)
+        if inputs is not None and inputs["input_set_qualified"]:
+            # These are qualified calculation inputs, never directly observed aggregates.
+            # The expression evaluator still requires the separate typed calculation.
+            fact_ids, pair_ids, reasons, ordering = inputs["fact_ids"], inputs["pair_ids"], [], None
         rows = identity_records.get(identity) or []
         if not rows:
             reasons = _sorted_unique([*reasons, "identity_absent_from_qualification"])
@@ -866,56 +937,11 @@ def build_receipt_verified_work_draft_selections(
             spec = meta.atom.evaluation
             if (spec is not None and spec.repeat_scheme is None
                     and spec.determination_mode in {"semantic", "investigator_judgment"}):
-                relations = [item for item in proposition_relations
-                             if item["identity_sha256"] == identity]
-                fact_ids = _sorted_unique([item["fact_id"] for item in relations])
-                pair_ids = _sorted_unique([item["pair_id"] for item in relations])
-                reasons = [] if relations else ["semantic_evidence_unverified"]
-                ordering = None
-                source_pairs = {
-                    item.pair_id for item in records
-                    if item.identity_sha256 == identity
-                    and item.fact_attribute in {"value", "assertion_basis"}
-                }
-                for relation in relations:
-                    relation["scope_candidates_complete"] = source_pairs == set(pair_ids)
-                policy = spec.observation_policy
-                if policy is None or policy.mode == "unresolved":
-                    reasons.append("observation_selection_unverified")
-                if policy is not None and policy.selection is not None:
-                    selected = _semantic_ordering(
-                        frozen=frozen,
-                        family=family,
-                        identity=identity,
-                        policy=policy,
-                        relations=relations,
-                        records=records,
-                        usable=usable,
-                        accounting=verified["candidate_fact_accounting"],
-                        review_context=review_context,
-                        constraint=meta.atom.time_constraint,
-                        purpose=spec.time_purpose,
-                    )
-                    fact_ids, pair_ids = list(selected.fact_ids), list(selected.pair_ids)
-                    reasons, ordering = list(selected.reasons), selected.ordering
-                elif policy is not None and policy.mode == "single" and source_pairs != set(pair_ids):
-                    reasons.append("single_observation_relations_incomplete")
-                if meta.atom.time_constraint is not None:
-                    dates = [item for item in usable
-                             if item.fact_attribute == spec.time_operand_attribute]
-                    if (spec.version not in {"control-atom-evaluation/v2",
-                                             "control-atom-evaluation/v3",
-                                             "control-atom-evaluation/v4"}
-                            or spec.time_operand_attribute != "date_range"
-                            or not set(fact_ids) <= {item.fact_id for item in dates}):
-                        reasons = _sorted_unique([
-                            *reasons, "declared_time_operand_not_qualified",
-                        ])
-                    else:
-                        pair_ids = _sorted_unique([
-                            *pair_ids,
-                            *(item.pair_id for item in dates if item.fact_id in fact_ids),
-                        ])
+                fact_ids, pair_ids, reasons, ordering = _select_control_semantic_evidence(
+                    frozen=frozen, identity=identity, meta=meta, proposition_relations=proposition_relations,
+                    records=records, usable=usable, accounting=verified["candidate_fact_accounting"],
+                    review_context=review_context,
+                )
             if spec is not None and spec.repeat_scheme is not None:
                 reasons = _sorted_unique([*reasons, "repeat_relation_unverified"])
             status, fact_ids, pair_ids, reasons, ordering = finalize(
@@ -994,6 +1020,8 @@ def build_receipt_verified_work_draft_selections(
         "unresolved_proposition_pairs": unresolved_proposition_pairs,
         "observation_relations": observation_relations,
         "frequency_statements": frequency_statements,
+        **({"computation_input": computation_input_job_id, "computation_sources": computation_sources}
+           if computation_input_job_id is not None else {}),
     }
     selection_sha256 = canonical_hash(payload)
     selected_pair_ids = {
@@ -1023,12 +1051,14 @@ def build_receipt_verified_work_draft_selections(
         proposition_evidence=proposition_evidence_job_id,
         observation_relation=observation_relation_job_id,
         frequency_evidence=frequency_evidence_job_id,
+        computation_input=computation_input_job_id,
         content_supported_pair_ids=tuple(sorted(supported)),
         verified_judgment_requirement_ids=tuple(verified_requirements),
         proposition_relations=tuple(proposition_relations),
         unresolved_proposition_pairs=tuple(unresolved_proposition_pairs),
         observation_relations=tuple(observation_relations),
         frequency_statements=tuple(frequency_statements),
+        computation_sources=tuple(computation_sources),
         source_pair_locations=source_pair_locations,
     )
 
@@ -1308,54 +1338,11 @@ def build_receipt_verified_qualified_binding_selections(
             spec = meta.atom.evaluation
             if (spec is not None and spec.repeat_scheme is None
                     and spec.determination_mode in {"semantic", "investigator_judgment"}):
-                relations = [item for item in proposition_relations if item["identity_sha256"] == identity]
-                if not relations:
-                    fact_ids, pair_ids, ordering = [], [], None
-                    unresolved = ["semantic_evidence_unverified"]
-                    if spec.observation_policy is not None and spec.observation_policy.selection is not None:
-                        selected = _semantic_ordering(
-                            frozen=frozen, family=family, identity=identity, policy=spec.observation_policy,
-                            relations=relations, records=records, usable=usable,
-                            accounting=verified["candidate_fact_accounting"], review_context=review_context,
-                            constraint=meta.atom.time_constraint, purpose=spec.time_purpose,
-                        )
-                        unresolved, ordering = list(selected.reasons), selected.ordering
-                if relations:
-                    fact_ids = _sorted_unique([item["fact_id"] for item in relations])
-                    pair_ids = _sorted_unique([item["pair_id"] for item in relations])
-                    source_content_pairs = {item.pair_id for item in records
-                                            if item.identity_sha256 == identity
-                                            and item.fact_attribute in {"value", "assertion_basis"}}
-                    for relation in relations:
-                        relation["scope_candidates_complete"] = source_content_pairs == set(pair_ids)
-                    # These are selected source relations, not arithmetic values.
-                    # The combiner still checks policy, time and source conflicts.
-                    unresolved = []
-                    if spec.observation_policy is None or spec.observation_policy.mode == "unresolved":
-                        unresolved.append("observation_selection_unverified")
-                    if spec.observation_policy is not None and spec.observation_policy.selection is not None:
-                        selected = _semantic_ordering(
-                            frozen=frozen, family=family, identity=identity, policy=spec.observation_policy,
-                            relations=relations, records=records, usable=usable,
-                            accounting=verified["candidate_fact_accounting"], review_context=review_context,
-                            constraint=meta.atom.time_constraint, purpose=spec.time_purpose,
-                        )
-                        fact_ids, pair_ids = list(selected.fact_ids), list(selected.pair_ids)
-                        unresolved, ordering = list(selected.reasons), selected.ordering
-                    elif spec.observation_policy is not None and spec.observation_policy.mode == "single":
-                        eligible = {item.pair_id for item in usable
-                                    if item.fact_attribute in {"value", "assertion_basis"}}
-                        if eligible != set(pair_ids):
-                            unresolved = ["single_observation_relations_incomplete"]
-                    if meta.atom.time_constraint is not None:
-                        dates = [item for item in usable if item.fact_attribute == spec.time_operand_attribute]
-                        if (spec.version not in {"control-atom-evaluation/v2", "control-atom-evaluation/v3", "control-atom-evaluation/v4"}
-                                or spec.time_operand_attribute != "date_range"
-                                or not set(fact_ids) <= {item.fact_id for item in dates}):
-                            unresolved = _sorted_unique([*unresolved, "declared_time_operand_not_qualified"])
-                        else:
-                            pair_ids = _sorted_unique([*pair_ids, *(item.pair_id for item in dates
-                                                                  if item.fact_id in fact_ids)])
+                fact_ids, pair_ids, unresolved, ordering = _select_control_semantic_evidence(
+                    frozen=frozen, identity=identity, meta=meta, proposition_relations=proposition_relations,
+                    records=records, usable=usable, accounting=verified["candidate_fact_accounting"],
+                    review_context=review_context,
+                )
             if spec is not None and spec.repeat_scheme is not None:
                 unresolved = _sorted_unique([*unresolved, "repeat_relation_unverified"])
                 ordering = None

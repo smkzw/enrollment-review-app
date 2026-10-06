@@ -128,6 +128,7 @@ export interface WireDraftRevisionResponse {
   status_label: string;
   reason: string;
   reason_label: string;
+  imported_unpublished_proposal?: boolean;
   actor: string;
   created_at: string;
   study_phase: StudyPhase;

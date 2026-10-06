@@ -400,6 +400,28 @@ def evidence_normalizer_input_scope_hash(
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+class EvidenceNormalizerSourceTextRange(ContractModel):
+    """Host-produced remainder in frozen effective text, not image coordinates."""
+
+    source_document_version_id: str = Field(min_length=1)
+    page_artifact_id: str = Field(min_length=1)
+    page_number: int = Field(ge=1)
+    effective_text_sha256: str = Field(pattern=_SHA256)
+    text_start: int = Field(ge=0)
+    text_end: int = Field(ge=1)
+    excerpt: str = Field(min_length=1)
+    context_start: int = Field(ge=0)
+    context_end: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def validate_range(self) -> "EvidenceNormalizerSourceTextRange":
+        if not (self.context_start <= self.text_start < self.text_end <= self.context_end):
+            raise ValueError("来源文字范围必须位于保留的上下文内")
+        if len(self.excerpt) != self.text_end - self.text_start:
+            raise ValueError("来源文字长度与范围不一致")
+        return self
+
+
 class EvidenceNormalizerUnresolvedItem(ContractModel):
     """模型显式报告的未解决项：候选外的不确定性、缺口或风险线索。
 
@@ -419,6 +441,9 @@ class EvidenceNormalizerUnresolvedItem(ContractModel):
     gap_type: GapType | None = None
     referenced_file_id: str | None = None
     reason: str = Field(min_length=1, description="中文原因，需指向具体页/定位与原文缺口")
+    source_text_range: EvidenceNormalizerSourceTextRange | None = Field(
+        default=None, exclude_if=lambda value: value is None,
+    )
 
     @model_validator(mode="after")
     def validate_item(self) -> "EvidenceNormalizerUnresolvedItem":

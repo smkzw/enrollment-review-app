@@ -33,7 +33,7 @@ import type {
   ActivationEventView,
   CorrectionCreateResponseView,
   OcrPageView,
-  ProcessingCandidateView,
+  ProcessingCandidateDetailView,
   ProcessingRevisionView,
   ReferencedDocumentListView,
   ReferencedDocumentResolutionView,
@@ -97,7 +97,7 @@ export interface EvidenceRepository {
   getProcessingCandidate(
     candidateId: string,
     options?: EvidenceRequestOptions,
-  ): Promise<ProcessingCandidateView>;
+  ): Promise<ProcessingCandidateDetailView>;
   /** GET /ocr-pages/{ocr_page_id}?processing_revision_id=... */
   getOcrPage(
     ocrPageId: string,

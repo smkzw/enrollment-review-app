@@ -10,6 +10,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import httpx
+from openai import APITimeoutError, APIConnectionError
 from openai import APIStatusError, AuthenticationError
 
 from app.llm import independent_vlm as vlm
@@ -276,6 +278,89 @@ class _FakeResponse:
         return self._payload
 
 
+@pytest.mark.parametrize("exception,kind", [
+    (APITimeoutError(request=httpx.Request("POST", "https://example.invalid")), "transport_timeout"),
+    (APIConnectionError(request=httpx.Request("POST", "https://example.invalid")), "transport_connection"),
+    (httpx.ReadTimeout("secret must not be shown"), "transport_timeout"),
+    (httpx.ConnectError("secret must not be shown"), "transport_connection"),
+])
+def test_transport_failure_classification_survives_chat_wrapper(monkeypatch, exception, kind):
+    async def create(**kwargs):
+        raise exception
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    monkeypatch.setattr(vlm, "get_independent_vlm_client", lambda: client)
+    with pytest.raises(vlm.IndependentVlmRemoteError) as caught:
+        asyncio.run(vlm.independent_vlm_chat([], enforce_source_fidelity=False))
+    assert caught.value.failure_kind == kind
+    assert caught.value.__cause__ is exception
+    assert caught.value.disabled is True
+    assert "secret" not in str(caught.value)
+
+
+def test_chat_retains_remote_request_id_without_response_or_usage(monkeypatch):
+    response = _FakeResponse({}, status_code=503)
+    response.headers["x-request-id"] = "failed-request-fixture"
+    exception = APIStatusError("service unavailable", response=response, body={})
+
+    async def create(**kwargs):
+        raise exception
+
+    monkeypatch.setattr(vlm, "get_independent_vlm_client", lambda: SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+    ))
+    with pytest.raises(vlm.IndependentVlmRemoteError) as caught:
+        asyncio.run(vlm.independent_vlm_chat([], enforce_source_fidelity=False))
+    assert caught.value.request_id == "failed-request-fixture"
+    assert caught.value.status_code == 503
+
+
+@pytest.mark.parametrize("body,kind", [
+    ({"id": "empty-envelope", "choices": []}, "provider_response_invalid"),
+    ({"id": "missing-message", "choices": [{"index": 0, "message": None}]}, "provider_response_invalid"),
+    ({"error": {"code": "invalid_api_key", "message": "invalid api key"}}, "auth"),
+    ({"error": {"code": "rate_limit", "message": "rate limit"}}, "quota"),
+])
+def test_http_200_non_completion_is_a_remote_failure_not_an_empty_read(monkeypatch, body, kind):
+    from openai import AsyncOpenAI
+
+    async def run():
+        calls = []
+
+        def respond(request):
+            calls.append(request)
+            return httpx.Response(200, json=body, headers={"x-request-id": "envelope-request"})
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http_client:
+            async with AsyncOpenAI(api_key="synthetic-not-a-key", base_url="https://example.invalid/v1",
+                                   http_client=http_client, max_retries=0) as client:
+                monkeypatch.setattr(vlm, "get_independent_vlm_client", lambda: client)
+                with pytest.raises(vlm.IndependentVlmRemoteError) as caught:
+                    await vlm.independent_vlm_chat([], enforce_source_fidelity=False)
+                assert caught.value.failure_kind == kind
+                assert caught.value.request_id == "envelope-request"
+                assert caught.value.response_id == body.get("id")
+                assert caught.value.reported_model is None
+                assert len(calls) == 1
+
+    asyncio.run(run())
+
+
+def test_reasoning_only_completion_is_not_a_gateway_envelope_failure(monkeypatch):
+    async def create(**kwargs):
+        return SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content=None, reasoning_content="synthetic reasoning"),
+            finish_reason="length",
+        )], model="actual-model", usage=None)
+
+    monkeypatch.setattr(vlm, "get_independent_vlm_client", lambda: SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+    ))
+    result = asyncio.run(vlm.independent_vlm_chat([], enforce_source_fidelity=False))
+    assert result.text == "" and result.finish_reason == "length"
+    assert result.reasoning_content == "synthetic reasoning" and result.usage == {}
+
+
 def test_classify_remote_failure_balance_code_1113_disables_route():
     exc = APIStatusError(
         message="Error code: 1113",
@@ -416,6 +501,32 @@ def test_independent_vlm_page_chat_enforces_source_fidelity(monkeypatch):
     assert rejected.finish_reason == "stop"
     assert rejected.usage == {"completion_tokens": 3, "prompt_tokens": 5, "total_tokens": 8}
     assert rejected.allowed_source_refs == ("body.p803",)
+
+
+@pytest.mark.parametrize("reported", ["actual-provider-model", None, ""])
+def test_response_identity_distinguishes_request_alias_and_provider_report(monkeypatch, reported):
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="text", reasoning_content=None), finish_reason="stop")],
+        model=reported, usage=None, id="response-fixture", _request_id="request-fixture",
+    )
+
+    class Completions:
+        async def create(self, **kwargs):
+            assert kwargs["model"] == "request-alias"
+            return response
+
+    monkeypatch.setattr(vlm, "get_independent_vlm_client", lambda: SimpleNamespace(
+        chat=SimpleNamespace(completions=Completions()),
+    ))
+    result = asyncio.run(vlm.independent_vlm_chat(
+        [{"role": "user", "content": "synthetic"}], model="request-alias", enforce_source_fidelity=False,
+    ))
+    assert result.requested_model == "request-alias"
+    assert result.reported_model == (reported or None)
+    assert result.model == (reported or "request-alias")
+    assert result.response_id == "response-fixture"
+    assert result.request_id == "request-fixture"
+    assert result.usage == {}
 
 
 def test_independent_vlm_page_chat_requires_source_ref_claim(monkeypatch):

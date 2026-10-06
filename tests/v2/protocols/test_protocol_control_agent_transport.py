@@ -18,6 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import httpx
 
 from app.agents import protocol_control_agent_transport as transport_module
 from app.agents import protocol_control_discovery_transport as discovery_module
@@ -27,6 +28,7 @@ from app.agents.protocol_control_agent_transport import (
     OMLX_PROTOCOL_BATCH_MAX_TOKENS,
     OpenAICompatibleProtocolControlAgentTransport,
     ProtocolControlAgentCallError,
+    ProtocolControlModelIdentityError,
     protocol_control_transport_from_environment,
     protocol_control_transport_from_model_config,
 )
@@ -144,6 +146,172 @@ class FakeCompletions:
 def _client(outputs):
     completions = FakeCompletions(outputs)
     return SimpleNamespace(chat=SimpleNamespace(completions=completions)), completions
+
+
+def test_all_control_readers_share_physical_request_budget():
+    from app.llm.logical_call_budget import LogicalCallBudget
+
+    client, completions = _client(['{}', '{}', '{}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        reasoning_effort="high", max_tokens=16384,
+    )
+    budget = LogicalCallBudget("isolated-source-task", max_requests=2, max_output_tokens=32768)
+    transport.bind_logical_call_budget(budget)
+    transport.start_source_target_review(prompt="冻结来源核对")
+    transport.read_stage_bound_requirement(prompt="同一任务的单项解释")
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.read_stage_bound_requirement(prompt="不得重置额度继续发送")
+    assert len(completions.calls) == 2
+    assert budget.snapshot()["requests_used"] == 2
+    receipts = transport.take_call_receipts()
+    assert receipts[0]["logical_call_budget"]["requests_used"] == 1
+    assert receipts[1]["logical_call_budget"]["requests_used"] == 2
+    assert receipts[1]["budget_request_sha256"] == budget.snapshot()["requests"][1]["request_sha256"]
+    assert receipts[-1]["budget_request_sha256"] is None
+    assert receipts[-1]["request_reserved"] is False
+
+
+def test_stream_option_downgrade_consumes_same_physical_budget():
+    from app.llm.logical_call_budget import LogicalCallBudget, LogicalCallBudgetExhausted
+
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        from openai import BadRequestError
+        raise BadRequestError("unsupported stream_options",
+                              response=httpx.Response(400, request=httpx.Request("POST", "https://example.invalid")),
+                              body=None)
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    budget = LogicalCallBudget("compatibility", max_requests=1, max_output_tokens=16384)
+
+    def reserve(kwargs):
+        budget.reserve(request_sha256="a" * 64, max_tokens=kwargs["max_tokens"])
+
+    with pytest.raises(LogicalCallBudgetExhausted):
+        OpenAICompatibleProtocolControlAgentTransport._stream_completion(
+            client, {"model": "test-model", "messages": [], "max_tokens": 16384},
+            reserve_request=reserve,
+        )
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("kind", ["timeout", "server", "interrupted", "identity", "budget"])
+def test_stream_option_text_is_not_permission_to_replay_failure(kind):
+    from app.llm.logical_call_budget import LogicalCallBudgetExhausted
+
+    cause = {
+        "timeout": TimeoutError("timeout mentioning stream_options"),
+        "server": SimpleNamespace(),
+        "interrupted": ProtocolControlAgentCallError("call", "stream_options failed", uncertain_completion=True),
+        "identity": ProtocolControlModelIdentityError("stream_options wrong identity",
+                                                     configured_model="expected", reason="mismatch"),
+        "budget": LogicalCallBudgetExhausted("stream_options exhausted"),
+    }[kind]
+    if kind == "server":
+        cause = RuntimeError("503 stream_options error")
+        cause.status_code = 503
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        raise cause
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    with pytest.raises(type(cause)):
+        OpenAICompatibleProtocolControlAgentTransport._stream_completion(client, {"max_tokens": 16384})
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("status, parameter_named, expected_calls", [
+    (400, True, 2), (422, True, 2), (400, False, 1),
+])
+def test_explicit_stream_parameter_rejection_preserves_budgeted_compatible_success(status, parameter_named, expected_calls):
+    from openai import BadRequestError
+    from app.llm.logical_call_budget import LogicalCallBudget
+
+    calls = []
+    budget = LogicalCallBudget("compatibility-success", max_requests=2, max_output_tokens=32768)
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise BadRequestError("unsupported stream_options" if parameter_named else "invalid other parameter",
+                                  response=httpx.Response(status, request=httpx.Request("POST", "https://example.invalid")),
+                                  body=None)
+        return iter([SimpleNamespace(id="reply", model="test-model", usage=None, choices=[
+            SimpleNamespace(delta=SimpleNamespace(content="{}", reasoning_content=None), finish_reason="stop"),
+        ])])
+
+    def reserve(kwargs):
+        budget.reserve(request_sha256=str(len(calls) + 1) * 64, max_tokens=kwargs["max_tokens"])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    if parameter_named:
+        result = OpenAICompatibleProtocolControlAgentTransport._stream_completion(
+            client, {"max_tokens": 16384}, reserve_request=reserve,
+        )
+        assert result.choices[0].message.content == "{}"
+        assert result.choices[0].finish_reason == "stop"
+        assert "stream_options" in calls[0] and "stream_options" not in calls[1]
+    else:
+        with pytest.raises(BadRequestError):
+            OpenAICompatibleProtocolControlAgentTransport._stream_completion(
+                client, {"max_tokens": 16384}, reserve_request=reserve,
+            )
+    assert len(calls) == budget.snapshot()["requests_used"] == expected_calls
+
+
+def test_identity_generation_probe_consumes_shared_budget_and_has_receipt():
+    from app.llm.logical_call_budget import LogicalCallBudget
+
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(model="deepseek-latest-cloud", id="identity-request", usage=None)
+
+    client = SimpleNamespace(
+        models=SimpleNamespace(list=lambda: SimpleNamespace(data=[SimpleNamespace(id="gateway-alias")])),
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+    )
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        model_identity_check=True, max_tokens=16384,
+    )
+    budget = LogicalCallBudget("probe-included", max_requests=1, max_output_tokens=16384)
+    transport.bind_logical_call_budget(budget)
+    assert transport.verify_model_identity() == "deepseek-latest-cloud"
+    assert budget.snapshot()["requests_used"] == 1
+    receipt = transport.take_call_receipts()[0]
+    assert receipt["call_role"] == "identity_probe" and receipt["usage"] is None
+    assert receipt["request_id"] == "identity-request" and receipt["request_reserved"] is True
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.start_source_target_review(prompt="探测不能获得一份额外生成额度")
+    assert len(calls) == 1
+
+
+def test_budget_binding_rejects_sdk_retries_and_can_release_previous_job():
+    from app.llm.logical_call_budget import LogicalCallBudget
+    client, completions = _client(['{}', '{}'])
+    options = dict(client=client, backend="cms-router", model="deepseek-latest-cloud",
+                   reasoning_effort="high", max_tokens=16384)
+    implicit_retry = OpenAICompatibleProtocolControlAgentTransport(**options, max_retries=1)
+    budget = LogicalCallBudget("job-one", max_requests=1, max_output_tokens=16384)
+    with pytest.raises(ValueError, match="SDK"):
+        implicit_retry.bind_logical_call_budget(budget)
+    assert completions.calls == [] and budget.snapshot()["requests_used"] == 0
+    transport = OpenAICompatibleProtocolControlAgentTransport(**options)
+    transport.bind_logical_call_budget(budget)
+    transport.start_source_target_review(prompt="第一个有界任务")
+    transport.bind_logical_call_budget(None)
+    transport.start_source_target_review(prompt="不同任务不继承前一任务额度")
+    assert len(completions.calls) == 2 and budget.snapshot()["requests_used"] == 1
+    receipt = transport.take_call_receipts()[-1]
+    assert "logical_call_budget" not in receipt
+    assert "budget_request_sha256" not in receipt
 
 
 def _config_probe(overrides: dict[str, str] | None = None) -> list[str]:
@@ -393,12 +561,14 @@ def test_batch_author_schema_rejects_context_write_but_keeps_normal_result(bad_f
     # requires explicit null, independently of the new batch scope constraints.
     def explicit_ordering(value):
         if isinstance(value, dict):
+            if {"workflow_stage_id", "review_stage", "role", "guidance"}.issubset(value):
+                value.setdefault("scope_citation", None)
             policy = value.get("observation_policy")
             if isinstance(policy, dict):
                 policy.setdefault("selection", None)
             predicate = value.get("predicate")
             if isinstance(predicate, dict):
-                for field in ("semantic_proposition", "observation_policy", "repeat_scheme"):
+                for field in ("semantic_proposition", "observation_policy", "repeat_scheme", "source_computation"):
                     predicate.setdefault(field, None)
             refs = value.get("atom_refs")
             if isinstance(refs, list):
@@ -1012,9 +1182,9 @@ def test_text_mode_source_insert_includes_actual_candidate_schema(multiple: bool
 
 @pytest.mark.parametrize(
     ("reader", "version"), [
-        ("read_stage_bound_requirement", "phase5/control-stage-bound-requirement/v8"),
-        ("read_relative_stage_requirement", "phase5/control-relative-stage-requirement/v6"),
-        ("read_shared_prohibition_requirement", "phase5/control-shared-prohibition-requirement/v2"),
+        ("read_stage_bound_requirement", "phase5/control-stage-bound-requirement/v10"),
+        ("read_relative_stage_requirement", "phase5/control-relative-stage-requirement/v8"),
+        ("read_shared_prohibition_requirement", "phase5/control-shared-prohibition-requirement/v3"),
     ],
 )
 @pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])

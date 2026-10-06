@@ -17,14 +17,24 @@ export interface EvidenceWorkspaceProps {
 }
 
 const HANDLE_WIDTH = 8;
-const MIN_LEFT = 20;
-const MAX_LEFT = 55;
-const MIN_CENTER = 30;
-const MAX_CENTER = 65;
-const MIN_RIGHT = 18;
+const MIN_LEFT = 16;
+const MIN_CENTER = 24;
+const MIN_RIGHT = 24;
+
+interface ColumnSizes { left: number; center: number }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function resizeColumns(current: ColumnSizes, handle: 0 | 1, delta: number): ColumnSizes {
+  if (handle === 0) {
+    const adjacent = current.left + current.center;
+    const left = clamp(current.left + delta, MIN_LEFT, adjacent - MIN_CENTER);
+    return { left, center: adjacent - left };
+  }
+  return { left: current.left,
+    center: clamp(current.center + delta, MIN_CENTER, 100 - current.left - MIN_RIGHT) };
 }
 
 export function EvidenceWorkspace({
@@ -36,9 +46,9 @@ export function EvidenceWorkspace({
   rightContent,
 }: EvidenceWorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [cols, setCols] = useState<{ left: number; center: number }>({
-    left: 24,
-    center: 44,
+  const [cols, setCols] = useState<ColumnSizes>({
+    left: 20,
+    center: 32,
   });
 
   function beginResize(handle: 0 | 1) {
@@ -50,19 +60,7 @@ export function EvidenceWorkspace({
         const rect = containerRef.current?.getBoundingClientRect();
         if (rect === undefined || rect.width === 0) return;
         const delta = ((move.clientX - startX) / rect.width) * 100;
-        if (handle === 0) {
-          const left = clamp(startCols.left + delta, MIN_LEFT, MAX_LEFT);
-          const center = clamp(
-            startCols.center - delta * 0.5,
-            MIN_CENTER,
-            MAX_CENTER,
-          );
-          setCols({ left, center });
-        } else {
-          const center = clamp(startCols.center + delta, MIN_CENTER, MAX_CENTER);
-          const left = clamp(startCols.left - delta * 0.3, MIN_LEFT, MAX_LEFT);
-          setCols({ left, center });
-        }
+        setCols(resizeColumns(startCols, handle, delta));
       };
       const onUp = () => {
         window.removeEventListener("pointermove", onMove);
@@ -79,20 +77,11 @@ export function EvidenceWorkspace({
         event.key === "ArrowRight" || event.key === "ArrowDown" ? 2 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -2 : 0;
       if (step === 0) return;
       event.preventDefault();
-      setCols((current) => {
-        if (handle === 0) {
-          const left = clamp(current.left + step, MIN_LEFT, MAX_LEFT);
-          const center = clamp(current.center - step * 0.5, MIN_CENTER, MAX_CENTER);
-          return { left, center };
-        }
-        const center = clamp(current.center + step, MIN_CENTER, MAX_CENTER);
-        const left = clamp(current.left - step * 0.3, MIN_LEFT, MAX_LEFT);
-        return { left, center };
-      });
+      setCols((current) => resizeColumns(current, handle, step));
     };
   }
 
-  const right = clamp(100 - cols.left - cols.center, MIN_RIGHT, 100 - MIN_LEFT - MIN_CENTER);
+  const right = 100 - cols.left - cols.center;
 
   return (
     <div
@@ -111,6 +100,9 @@ export function EvidenceWorkspace({
         role="separator"
         aria-orientation="vertical"
         aria-label="调整左栏宽度"
+        aria-valuemin={MIN_LEFT}
+        aria-valuemax={cols.left + cols.center - MIN_CENTER}
+        aria-valuenow={cols.left}
         tabIndex={0}
         onPointerDown={beginResize(0)}
         onKeyDown={onResizeKey(0)}
@@ -124,6 +116,9 @@ export function EvidenceWorkspace({
         role="separator"
         aria-orientation="vertical"
         aria-label="调整中栏宽度"
+        aria-valuemin={MIN_CENTER}
+        aria-valuemax={100 - cols.left - MIN_RIGHT}
+        aria-valuenow={cols.center}
         tabIndex={0}
         onPointerDown={beginResize(1)}
         onKeyDown={onResizeKey(1)}

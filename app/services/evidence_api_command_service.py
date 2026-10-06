@@ -506,6 +506,7 @@ class EvidenceApiCommandService:
         scanner_rule_version: str,
         selected_locator_ids: list[str],
         trigger_sidecar_id: str | None,
+        source_qualification_mode: str = "strict",
     ):
         """原子创建 staged 候选与持久任务，并冻结完整尝试清单。"""
         from uuid import uuid4
@@ -519,6 +520,9 @@ class EvidenceApiCommandService:
             selected_locator_ids=selected_locator_ids,
             trigger_sidecar_id=trigger_sidecar_id,
         )
+        manifest = ProcessingCandidateAttemptManifest.model_validate({
+            **manifest.model_dump(), "source_qualification_mode": source_qualification_mode,
+        })
         job = JobService(self.session_factory).create_job_in_session(
             session,
             idempotency_key=f"evidence-revision-job:{idempotency_key}",
@@ -663,14 +667,18 @@ class EvidenceApiCommandService:
             )
             return resumed, resumed.job_id
 
-        if (
-            episode.active_evidence_processing_revision_id is not None
-            and episode.active_evidence_processing_revision_id
-            != base_processing_revision_id
-        ):
-            raise AppScopeMismatchError(
-                "当前核对不是从现行资料版本发起，请刷新后重新操作"
+        if episode.active_evidence_processing_revision_id is not None:
+            current = self._load_complete(
+                session, episode.active_evidence_processing_revision_id
             )
+            if (
+                current.base_processing_revision_id != base_processing_revision_id
+                or current.review_episode_id != episode_id
+                or current.evidence_snapshot_id != episode.active_evidence_snapshot_id
+            ):
+                raise AppScopeMismatchError(
+                    "当前核对不是从现行资料版本发起，请刷新后重新操作"
+                )
         open_row = session.execute(
             select(EvidenceProcessingCandidateRecord)
             .where(EvidenceProcessingCandidateRecord.review_episode_id == episode_id)
@@ -1319,9 +1327,12 @@ class EvidenceApiCommandService:
         actor: str,
         scanner_rule_version: str | None = None,
         selected_locator_ids: list[str] | None = None,
+        source_qualification_mode: str = "strict",
     ) -> BuildCommandResult:
         from app.evidence.risk import OCR_RISK_RULE_VERSION
         resolved_scanner_rule_version = scanner_rule_version or OCR_RISK_RULE_VERSION
+        if source_qualification_mode not in {"strict", "scoped_text_v1"}:
+            raise AppBuildConfigurationError("未知资料核实方式，本次未创建处理记录。")
         if resolved_scanner_rule_version != OCR_RISK_RULE_VERSION:
             raise AppBuildConfigurationError(
                 "页面提交的资料处理方式与当前服务不一致，本次未创建处理记录。"
@@ -1347,6 +1358,8 @@ class EvidenceApiCommandService:
                 "selected_locator_ids": sorted(selected_locator_ids or []),
                 "actor": actor,
             }
+            if source_qualification_mode != "strict":
+                submitted["source_qualification_mode"] = source_qualification_mode
             request_sha256 = self._request_hash(submitted)
             # 幂等主张按完整命令身份比较（scope/快照/base/扫描版本/定位/actor/
             # 预期修订号）：同键异命令 409 且不产生新历史；同键同命令回放。
@@ -1389,6 +1402,7 @@ class EvidenceApiCommandService:
                 scanner_rule_version=submitted["scanner_rule_version"],
                 selected_locator_ids=submitted["selected_locator_ids"],
                 trigger_sidecar_id=None,
+                source_qualification_mode=source_qualification_mode,
             )
             IdempotencyRepository(session).resolve(
                 scope=scope,

@@ -181,12 +181,13 @@ def test_system_contract_is_chinese_native_and_covers_required_terms():
 
 
 def test_schema_repair_contract_requires_verbatim_asserted_object_repair():
-    assert "直接截取最短连续临床名词" in _SCHEMA_REPAIR_CONTRACT
+    assert "截取连续且保持完整含义的临床对象或命题" in _SCHEMA_REPAIR_CONTRACT
     assert "两处必须填同一个字符串" in _SCHEMA_REPAIR_CONTRACT
     assert "连同虚词原样截取原句中的连续片段" in _SCHEMA_REPAIR_CONTRACT
     assert "不得删除该候选来规避修复" in _SCHEMA_REPAIR_CONTRACT
     assert "原句明确给出定量结果" in _SCHEMA_REPAIR_CONTRACT
-    assert "affirmed 的 raw_value" in _SCHEMA_REPAIR_CONTRACT
+    assert "否认由negated表达，不能填false重复否定" in _SCHEMA_REPAIR_CONTRACT
+    assert "negated 均填 false" not in _SCHEMA_REPAIR_CONTRACT
     assert "同一检验检查时点被拆成多条事件" in _SCHEMA_REPAIR_CONTRACT
 
 
@@ -296,7 +297,7 @@ def test_build_prompt_contains_input_and_schema_and_contract():
     assert "候选" in prompt
     assert "fact_candidates" in prompt
     assert "必须同时生成引用该事实的 event_candidate" in prompt
-    assert "肯定用药或治疗事实必须同时生成" in prompt
+    assert "明确实际用药或治疗事实必须同时生成" in prompt
     assert "逐条对账肯定用药事实、用药事件与药物暴露" in prompt
     assert "不得因药名相同而合并或漏掉" in prompt
     assert "不得按分析物、分项结果或单个指标" in prompt
@@ -694,10 +695,28 @@ def test_prompt_can_omit_embedded_schema_for_schema_enforcing_transports():
     assert "不得自创 locator" in prompt
 
 
-def test_prompt_layout_version_is_v24():
+def test_prompt_layout_version_is_v37():
     from app.agents.evidence_normalizer import _PROMPT_LAYOUT_VERSION
 
-    assert _PROMPT_LAYOUT_VERSION == "phase5/evidence-normalizer-prompt/v24"
+    assert _PROMPT_LAYOUT_VERSION == "phase5/evidence-normalizer-prompt/v37"
+
+
+def test_observation_modality_boundary_reaches_both_prompts_and_repairs():
+    from app.agents.verified_evidence_prompt import (
+        OBSERVATION_ASSERTION_BOUNDARY,
+        VERIFIED_EVIDENCE_REPAIR_CONTRACT,
+        VERIFIED_EVIDENCE_SYSTEM_CONTRACT,
+    )
+
+    for contract in (
+        _SYSTEM_CONTRACT, _SCHEMA_REPAIR_CONTRACT,
+        VERIFIED_EVIDENCE_SYSTEM_CONTRACT, VERIFIED_EVIDENCE_REPAIR_CONTRACT,
+    ):
+        assert OBSERVATION_ASSERTION_BOUNDARY in contract
+    prompt = build_evidence_normalizer_prompt(_input(), prompt_template="抽取候选")
+    assert OBSERVATION_ASSERTION_BOUNDARY in prompt
+    assert "完成不证明结果正常" in prompt
+    assert "不得改变本项已完成观察" in prompt
 
 
 def test_prompt_does_not_promote_page_context_to_exposure_dates():
@@ -705,6 +724,20 @@ def test_prompt_does_not_promote_page_context_to_exposure_dates():
     assert "context.time_text 仅是页读关联" in prompt
     assert "起止范围使用未知" in prompt
     assert "不得因两个主读都填写同一关联日期" in prompt
+
+
+def test_medication_history_policy_reaches_normalizer_and_recovery_prompts():
+    from app.agents.verified_evidence_prompt import (
+        VERIFIED_EVIDENCE_REPAIR_CONTRACT, VERIFIED_EVIDENCE_SYSTEM_CONTRACT,
+    )
+    from app.llm.medication_history_guidance import MEDICATION_HISTORY_GUIDANCE
+
+    for contract in (_SYSTEM_CONTRACT, _SCHEMA_REPAIR_CONTRACT,
+                     VERIFIED_EVIDENCE_SYSTEM_CONTRACT, VERIFIED_EVIDENCE_REPAIR_CONTRACT):
+        assert MEDICATION_HISTORY_GUIDANCE in contract
+        assert "接受给药或已有生效医嘱" not in contract
+        assert "已给药或已经生效医嘱" not in contract
+    assert "该清单不表示事实不能作为用药史依据" in _SYSTEM_CONTRACT
 
 
 def test_prompt_rejects_oversized_model_input_before_transport():
@@ -728,7 +761,7 @@ def test_compact_schema_is_strict_and_phase5():
     # Pydantic extra=forbid -> additionalProperties false at top
     assert schema.get("additionalProperties") is False or any(v.get("additionalProperties") is False for v in schema.get("$defs", {}).values())
     # 模型只输出语义草稿，系统身份在解码后补全
-    assert "phase5/normalizer-draft/v3" in schema_str
+    assert schema["properties"]["schema_version"]["const"] == "phase5/normalizer-draft/v5"
     # 紧凑：无换行与多余空格
     assert "\n" not in schema_str
     assert schema_str == json.dumps(json.loads(schema_str), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -795,7 +828,7 @@ def test_decoder_rejects_unclassified_affirmed_medication_fact():
 def test_generation_schema_rejects_unpaired_requirement_gap_fields():
     schema = evidence_normalizer_json_schema()
     payload = {
-        "schema_version": "phase5/normalizer-draft/v3",
+        "schema_version": "phase5/normalizer-draft/v5",
         "actual_exposure_fact_refs": [],
         "non_exposure_medication_fact_refs": [],
         "fact_candidates": [],
@@ -833,7 +866,7 @@ def test_generation_schema_accepts_valid_requirement_gap_combinations(
 ):
     schema = evidence_normalizer_json_schema()
     payload = {
-        "schema_version": "phase5/normalizer-draft/v3",
+        "schema_version": "phase5/normalizer-draft/v5",
         "actual_exposure_fact_refs": [],
         "non_exposure_medication_fact_refs": [],
         "fact_candidates": [],
@@ -959,6 +992,7 @@ def test_decoder_hydrates_model_draft_with_system_identity_and_locator_hash():
                     "asserted_object": "糖尿病病史",
                     "assertion_text": "患者无糖尿病病史",
                     "locator_id": "loc-1",
+                    "contextual_qualifiers": [],
                 },
                 "model_uncertainty": 0.05,
             }
@@ -1350,6 +1384,7 @@ def _bound_draft_payload(requirement_id: str) -> dict:
                     "asserted_object": "糖尿病病史",
                     "assertion_text": "患者无糖尿病病史",
                     "locator_id": "loc-1",
+                    "contextual_qualifiers": [],
                 },
                 "model_uncertainty": 0.05,
             }
@@ -1366,6 +1401,224 @@ def _bound_draft_payload(requirement_id: str) -> dict:
             }
         ],
     }
+
+
+def _parse_assertion_scope_payload(payload, *, current=True):
+    inp = _input()
+    return parse_evidence_normalizer_output(
+        json.dumps(payload, ensure_ascii=False),
+        expected_run_id=inp.run_id, expected_call_id=inp.call_id,
+        expected_logical_document_id=inp.logical_document_id,
+        expected_page_numbers=inp.page_numbers, created_at=inp.created_at,
+        available_locator_ids=set(inp.available_locator_ids),
+        locator_source_hashes={item.locator_id: item.source_text_sha256
+                              for item in inp.available_locators},
+        require_current_draft=current,
+    )
+
+
+@pytest.mark.parametrize("contexts", [("量表甲", "量表乙"), ("左侧", "右侧"), ("方法甲", "方法乙")])
+def test_source_context_objects_survive_decoding_and_contract_roundtrip(contexts):
+    from copy import deepcopy
+    from app.domain.contracts.facts import clinical_fact_stable_identity, ClinicalFactCandidateV2
+    from app.domain.gates.fact_batch_orchestration import _fact_stable_identity, _fact_semantic_key
+    from app.storage.codecs import encode_contract, decode_contract
+
+    payload = _bound_draft_payload("unused")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    template = payload["fact_candidates"][0]
+    template.update(assertion_scope="observed_state", fact_type="measurement",
+                    profile_lane="test_exam_score", polarity="affirmed",
+                    raw_value=2, canonical_value=2, unit="unitless", supported_requirement_ids=[])
+    payload["fact_candidates"] = []
+    for index, context in enumerate(contexts):
+        fact = deepcopy(template)
+        obj = f"{context}，项目"
+        fact.update(candidate_ref=f"f{index + 1}", asserted_object=obj)
+        fact["assertion_basis"].update(asserted_object=obj, assertion_text=f"{obj} 2")
+        payload["fact_candidates"].append(fact)
+    output = _parse_assertion_scope_payload(payload)
+    first, second = output.fact_candidates
+    assert _fact_stable_identity(first, _authority()) != _fact_stable_identity(second, _authority())
+    assert _fact_semantic_key(first) != _fact_semantic_key(second)
+    for fact in output.fact_candidates:
+        encoded, digest = encode_contract(fact)
+        restored = decode_contract(ClinicalFactCandidateV2, encoded, digest)
+        assert restored == fact
+        identity = clinical_fact_stable_identity(
+            authority=_authority(), fact_type=fact.fact_type, profile_lane=fact.profile_lane,
+            asserted_object=fact.asserted_object, polarity=fact.polarity,
+            value=fact.canonical_value, unit=fact.unit, date_range=fact.date_range)
+        assert identity == clinical_fact_stable_identity(
+            authority=_authority(), fact_type=restored.fact_type, profile_lane=restored.profile_lane,
+            asserted_object=restored.asserted_object, polarity=restored.polarity,
+            value=restored.canonical_value, unit=restored.unit, date_range=restored.date_range)
+    # A second reading with the same contextual object is not a new identity.
+    repeated = first.model_copy(update={"candidate_id": "rescan", "source_observation_refs": ["new-reading"]})
+    assert _fact_stable_identity(repeated, _authority()) == _fact_stable_identity(first, _authority())
+
+
+def test_context_prompt_is_shared_without_fabricated_scope_or_missingness():
+    from app.agents.verified_evidence_prompt import (
+        OBSERVATION_CONTEXT_BOUNDARY, VERIFIED_EVIDENCE_SYSTEM_CONTRACT, VERIFIED_EVIDENCE_REPAIR_CONTRACT,
+    )
+    for contract in (_SYSTEM_CONTRACT, _SCHEMA_REPAIR_CONTRACT,
+                     VERIFIED_EVIDENCE_SYSTEM_CONTRACT, VERIFIED_EVIDENCE_REPAIR_CONTRACT):
+        assert OBSERVATION_CONTEXT_BOUNDARY in contract
+    assert "不拼接造出原文没有的名称" in OBSERVATION_CONTEXT_BOUNDARY
+    assert "不据此断言整个资料包缺失" in OBSERVATION_CONTEXT_BOUNDARY
+
+
+@pytest.mark.parametrize("kind,labels", [
+    ("assessment", ("量表甲", "量表乙")),
+    ("specimen", ("标本甲", "标本乙")),
+    ("laterality", ("左侧", "右侧")),
+])
+def test_noncontiguous_context_retained_without_joining_object_or_inventing_acquisitions(kind, labels):
+    from copy import deepcopy
+    from app.domain.contracts.facts import ClinicalFactCandidateV2, clinical_fact_stable_identity
+    from app.domain.gates.fact_batch_orchestration import _fact_stable_identity, _fact_semantic_key
+    from app.storage.codecs import encode_contract, decode_contract
+
+    payload = _bound_draft_payload("unused")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    template = payload["fact_candidates"][0]
+    template.update(assertion_scope="observed_state", fact_type="measurement", polarity="affirmed",
+                    asserted_object="项目乙", raw_value=2, canonical_value=2, unit="unitless",
+                    supported_requirement_ids=[])
+    payload["fact_candidates"] = []
+    for index, label in enumerate(labels):
+        fact = deepcopy(template)
+        fact["candidate_ref"] = f"f{index + 1}"
+        fact["assertion_basis"].update(
+            asserted_object="项目乙", assertion_text=f"{label}：项目甲1，项目乙2",
+            contextual_qualifiers=[{"kind": kind, "label": label}],
+        )
+        payload["fact_candidates"].append(fact)
+    first, second = _parse_assertion_scope_payload(payload).fact_candidates
+    assert first.asserted_object == second.asserted_object == "项目乙"
+    assert first.canonical_value == second.canonical_value
+    assert _fact_stable_identity(first, _authority()) != _fact_stable_identity(second, _authority())
+    assert _fact_semantic_key(first) != _fact_semantic_key(second)
+    for fact in (first, second):
+        encoded, sha = encode_contract(fact)
+        restored = decode_contract(ClinicalFactCandidateV2, encoded, sha)
+        assert restored == fact
+        assert not restored.source_observation_refs  # No invented collection handles.
+        kwargs = dict(authority=_authority(), fact_type=fact.fact_type, asserted_object=fact.asserted_object,
+                      polarity=fact.polarity, value=fact.canonical_value, unit=fact.unit,
+                      date_range=fact.date_range, profile_lane=fact.profile_lane)
+        assert clinical_fact_stable_identity(**kwargs, assertion_basis=fact.assertion_basis) == \
+            clinical_fact_stable_identity(**kwargs, assertion_basis=restored.assertion_basis)
+    repeated = first.model_copy(update={"candidate_id": "another-reading"})
+    assert _fact_stable_identity(first, _authority()) == _fact_stable_identity(repeated, _authority())
+
+
+def test_new_context_declaration_cannot_be_omitted_or_borrowed_from_another_quote():
+    payload = _bound_draft_payload("unused")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    payload["fact_candidates"][0].update(assertion_scope="observed_state", raw_value=True, canonical_value=True)
+    basis = payload["fact_candidates"][0]["assertion_basis"]
+    basis.pop("contextual_qualifiers")
+    with pytest.raises(ValueError, match="显式声明背景限定"):
+        _parse_assertion_scope_payload(payload)
+    # Absence remains valid when reading history, but is never retroactively qualified.
+    historical = _parse_assertion_scope_payload(payload, current=False).fact_candidates[0]
+    assert "contextual_qualifiers" not in historical.assertion_basis.model_dump(mode="json")
+    basis["contextual_qualifiers"] = [{"kind": "assessment", "label": "另一页的量表"}]
+    with pytest.raises(ValueError, match="须逐字来自同一断言依据"):
+        _parse_assertion_scope_payload(payload)
+    basis["contextual_qualifiers"] = [{"kind": "other", "label": "病史", "verified": True}]
+    with pytest.raises(ValueError, match="verified"):
+        _parse_assertion_scope_payload(payload)
+
+
+@pytest.mark.parametrize("scope", ["observed_state", "completed_action"])
+def test_current_assertion_scope_keeps_supported_actual_facts(scope):
+    payload = _bound_draft_payload("req-history")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    payload["fact_candidates"][0].update(raw_value=True, canonical_value=True)
+    payload["fact_candidates"][0]["assertion_scope"] = scope
+    if scope == "completed_action":
+        payload["fact_candidates"][0].update(
+            asserted_object="给药方法培训", polarity="affirmed",
+            raw_value=True, canonical_value=True,
+            assertion_basis={"asserted_object": "给药方法培训",
+                "assertion_text": "已完成给药方法培训", "locator_id": "loc-1", "contextual_qualifiers": []})
+    output = _parse_assertion_scope_payload(payload)
+    assert len(output.fact_candidates) == 1
+    assert output.fact_candidates[0].canonical_value is True
+    assert output.fact_candidates[0].polarity.value == ("affirmed" if scope == "completed_action" else "negated")
+    assert output.exposure_candidates == []
+
+
+@pytest.mark.parametrize("scope", ["declared_intention", "prospective_or_conditional", "uncertain"])
+@pytest.mark.parametrize("polarity", ["affirmed", "negated"])
+def test_current_assertion_scope_rejects_future_target_as_actual(scope, polarity):
+    payload = _bound_draft_payload("req-history")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    payload["fact_candidates"][0].update(assertion_scope=scope, polarity=polarity)
+    with pytest.raises(ValueError, match="不能作为已发生"):
+        _parse_assertion_scope_payload(payload)
+
+
+def test_current_assertion_scope_keeps_unknown_without_inventing_negative():
+    payload = _bound_draft_payload("req-history")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    payload["fact_candidates"][0].update(
+        assertion_scope="prospective_or_conditional", polarity="unknown",
+        raw_value=None, canonical_value=None, unit=None, assertion_basis=None,
+        supported_requirement_ids=[])
+    fact = _parse_assertion_scope_payload(payload).fact_candidates[0]
+    assert fact.polarity.value == "unknown"
+    assert fact.canonical_value is None and fact.assertion_basis is None
+    assert fact.supported_requirement_ids == []
+
+
+def test_current_assertion_scope_rejects_missing_scope_and_legacy_generation():
+    from app.agents.evidence_normalizer import EvidenceNormalizerDraftOutput
+    payload = _bound_draft_payload("req-history")
+    assert EvidenceNormalizerDraftOutput.model_validate(payload).fact_candidates[0].assertion_scope is None
+    assert _parse_assertion_scope_payload(payload, current=False).fact_candidates
+    with pytest.raises(ValueError, match="旧输出仅可读取历史"):
+        _parse_assertion_scope_payload(payload)
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    with pytest.raises(ValueError, match="缺少断言"):
+        _parse_assertion_scope_payload(payload)
+
+
+def test_current_assertion_scope_rejects_future_event_dependency():
+    payload = _bound_draft_payload("req-history")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    payload["fact_candidates"][0].update(
+        assertion_scope="prospective_or_conditional", polarity="unknown",
+        raw_value=None, canonical_value=None, unit=None, assertion_basis=None,
+        supported_requirement_ids=[])
+    payload["event_candidates"] = [{
+        "candidate_ref": "e1", "event_type": "检查",
+        "profile_lane": "test_exam_score", "duration_status": "single",
+        "fact_candidate_refs": ["f1"], "locator_ids": ["loc-1"],
+        "candidate_source_semantics": "当前研究病历直接记录", "model_uncertainty": 0.1,
+    }]
+    with pytest.raises(ValueError, match="事件或暴露引用了尚未发生"):
+        _parse_assertion_scope_payload(payload)
+
+
+def test_current_assertion_scope_is_enforced_in_real_runner_recovery():
+    payload = _bound_draft_payload("req-history")
+    payload["fact_candidates"][0]["supported_requirement_ids"] = []
+    old = json.dumps(payload, ensure_ascii=False)
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    payload["fact_candidates"][0].update(assertion_scope="observed_state", raw_value=True, canonical_value=True)
+    transport = _FakeTransport([(old, "scope-session"),
+                               (json.dumps(payload), "scope-session")])
+    result = EvidenceNormalizerRunner(max_schema_repairs=1).run(
+        _input(), transport, prompt_template="抽取观察",
+        require_current_draft=True)
+    assert [item.outcome for item in result.attempts] == ["schema_invalid", "parsed"]
+    assert result.final_output is not None
+    assert len(transport.repair_prompts) == 1
+    assert "assertion_scope" in transport.repair_prompts[0][1]
 
 
 def test_requirement_binding_hydrates_and_validates_against_frozen_input():
@@ -1386,6 +1639,98 @@ def test_requirement_binding_hydrates_and_validates_against_frozen_input():
     )
     validated = validate_evidence_normalizer_output(output, inp)
     assert validated.fact_candidates[0].supported_requirement_ids == ["req-history"]
+
+
+def test_negative_value_boundary_reaches_all_product_prompts_and_repairs():
+    from app.agents.verified_evidence_prompt import (
+        OBSERVATION_VALUE_BOUNDARY, VERIFIED_EVIDENCE_SYSTEM_CONTRACT,
+        VERIFIED_EVIDENCE_REPAIR_CONTRACT,
+    )
+    for contract in (_SYSTEM_CONTRACT, _SCHEMA_REPAIR_CONTRACT,
+                     VERIFIED_EVIDENCE_SYSTEM_CONTRACT, VERIFIED_EVIDENCE_REPAIR_CONTRACT):
+        assert OBSERVATION_VALUE_BOUNDARY in contract
+        assert "不得用negated加false" in contract
+        assert "不能缩成对解剖结构或项目本身的否认" in contract
+        assert "不能删掉后半条件" in contract
+        assert "若原句不能逐字连续取出含义完整的正向命题" in contract
+        assert "affirmed肯定的是记录的表现" in contract
+
+
+@pytest.mark.parametrize("key", ["raw_value", "canonical_value"])
+def test_current_negative_boolean_false_is_rejected_not_rewritten(key):
+    payload = _bound_draft_payload("req-history")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    payload["fact_candidates"][0].update(assertion_scope="observed_state", raw_value=True, canonical_value=True)
+    payload["fact_candidates"][0][key] = False
+    frozen = json.dumps(payload, sort_keys=True)
+    with pytest.raises(ValueError, match="不能用布尔假值重复表达否定"):
+        _parse_assertion_scope_payload(payload)
+    assert json.dumps(payload, sort_keys=True) == frozen
+
+
+@pytest.mark.parametrize("version", ["v3", "v4"])
+def test_legacy_negative_false_remains_readable_but_not_current_generation(version):
+    payload = _bound_draft_payload("req-history")
+    payload["schema_version"] = f"phase5/normalizer-draft/{version}"
+    if version == "v4":
+        payload["fact_candidates"][0]["assertion_scope"] = "observed_state"
+    fact = _parse_assertion_scope_payload(payload, current=False).fact_candidates[0]
+    assert fact.canonical_value is False and fact.polarity.value == "negated"
+    with pytest.raises(ValueError, match="旧输出仅可读取历史"):
+        _parse_assertion_scope_payload(payload)
+
+
+@pytest.mark.parametrize("result", ["阴性", "未检出", "negative"])
+def test_current_negative_report_is_a_recorded_value_not_absence(result):
+    from app.domain.contracts.rules import AtomicPredicate
+    from app.domain.expression import evaluate_observed_value
+    payload = _bound_draft_payload("req-history")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    payload["fact_candidates"][0].update(
+        assertion_scope="observed_state", polarity="affirmed", asserted_object="项目甲",
+        raw_value=result, canonical_value=result, supported_requirement_ids=[],
+        assertion_basis={"asserted_object": "项目甲", "assertion_text": f"项目甲 {result}", "locator_id": "loc-1", "contextual_qualifiers": []},
+    )
+    fact = _parse_assertion_scope_payload(payload).fact_candidates[0]
+    for comparator, expected in (("exists", None), ("eq", result)):
+        evaluation = evaluate_observed_value(
+            AtomicPredicate(predicate_id="result", subject="检验", attribute="项目甲", comparator=comparator, value=expected),
+            value=fact.canonical_value, unit=fact.unit, polarity=fact.polarity,
+        )
+        assert evaluation.truth.value == "true"
+
+
+@pytest.mark.parametrize("finding", ["器官甲局部未及", "项目甲未显示异常", "区域甲未闻及特殊音"])
+def test_recorded_exam_finding_keeps_property_without_boolean_absence(finding):
+    from app.domain.contracts.rules import AtomicPredicate
+    from app.domain.expression import evaluate_observed_value
+
+    payload = _bound_draft_payload("req-history")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    subject = finding[:3]
+    payload["fact_candidates"][0].update(
+        assertion_scope="observed_state", polarity="affirmed", asserted_object=subject,
+        raw_value=finding, canonical_value=finding, supported_requirement_ids=[],
+        assertion_basis={"asserted_object": subject, "assertion_text": finding, "locator_id": "loc-1", "contextual_qualifiers": []})
+    frozen = json.dumps(payload, sort_keys=True)
+    fact = _parse_assertion_scope_payload(payload).fact_candidates[0]
+    assert fact.raw_value == fact.canonical_value == finding
+    assert fact.polarity.value == "affirmed" and fact.unit is None
+    assert json.dumps(payload, sort_keys=True) == frozen
+    exact = AtomicPredicate(predicate_id="finding", subject="检查", attribute=subject,
+                            comparator="eq", value=finding)
+    assert evaluate_observed_value(exact, value=fact.canonical_value, unit=None,
+                                   polarity=fact.polarity).truth.value == "true"
+    for expected in (True, False):
+        existence = exact.model_copy(update={"value": expected})
+        assert evaluate_observed_value(existence, value=fact.canonical_value, unit=None,
+                                       polarity=fact.polarity).truth.value == "unknown"
+    recorded = exact.model_copy(update={"comparator": "exists", "value": None})
+    assert evaluate_observed_value(recorded, value=fact.canonical_value, unit=None,
+                                   polarity=fact.polarity).truth.value == "true"
+    semantic = recorded.model_copy(update={"semantic_proposition": "对象确实存在"})
+    result = evaluate_observed_value(semantic, value=fact.canonical_value, unit=None, polarity=fact.polarity)
+    assert result.truth.value == "unknown" and result.reason_codes == ["semantic_evidence_unverified"]
 
 
 def test_decoder_rejects_model_draft_without_explicit_profile_lane():
@@ -2462,6 +2807,31 @@ def test_verified_scope_prompt_requires_retained_pending_and_page_review():
     assert "有效文本中的每条明确临床陈述均须进入对应候选" not in prompt
 
 
+@pytest.mark.parametrize("invalid", [False, True])
+def test_text_primary_aliases_restore_sources_through_bounded_repair(invalid):
+    from app.agents.evidence_normalizer import evidence_normalizer_reference_aliases
+    inp = _input()
+    payload = _valid_output_dict()
+    payload["unresolved_items"][0]["affected_locator_ids"] = ["loc-1", "loc-2"]
+    aliases = evidence_normalizer_reference_aliases(inp)
+    compact = aliases.transform(payload)
+    if invalid:
+        compact["unresolved_items"][0]["affected_locator_ids"] = ["@L99999"]
+    transport = _FakeTransport([("{}", "text-refs"), (json.dumps(compact), "text-refs")])
+    result = EvidenceNormalizerRunner(max_schema_repairs=1).run(
+        inp, transport, prompt_template="整理本次资料", compact_references=True)
+    assert inp.page_review is None
+    assert "唯一事实来源是 page_review" not in transport.start_prompts[0]
+    assert "调用内短引用" in transport.start_prompts[0]
+    assert len(transport.repair_prompts) == 1
+    if invalid:
+        assert result.final_output is None
+    else:
+        baseline = EvidenceNormalizerRunner(max_schema_repairs=0).run(
+            inp, _FakeTransport([(json.dumps(payload), "full-refs")]), prompt_template="整理本次资料")
+        assert result.final_output == baseline.final_output
+
+
 def test_verified_scope_repair_does_not_restore_ocr_only_facts():
     inp = _r3_input()
     transport = _FakeTransport([("{}", "verified-repair"), ("{}", "verified-repair")])
@@ -2610,6 +2980,89 @@ def test_runner_repairs_missing_numeric_unit_with_exact_candidate_context():
     assert "心率" in transport.repair_prompts[0][1]
 
 
+def _current_object_repair_payload():
+    payload = _bound_draft_payload("req-history")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    fact = payload["fact_candidates"][0]
+    fact.update(assertion_scope="observed_state", supported_requirement_ids=[],
+                asserted_object="部位甲检查", polarity="negated",
+                raw_value=True, canonical_value=True)
+    fact["assertion_basis"].update(asserted_object="部位甲检查", assertion_text="部位甲未检")
+    return payload
+
+
+def test_current_boolean_source_object_is_not_mechanically_shortened():
+    payload = _current_object_repair_payload()
+    with pytest.raises(ValueError, match="部位甲检查"):
+        _parse_assertion_scope_payload(payload)
+    assert payload["fact_candidates"][0]["asserted_object"] == "部位甲检查"
+
+
+@pytest.mark.parametrize("kind", ["literal", "shortened", "basis_only", "sibling_change", "bad_then_literal"])
+@pytest.mark.parametrize("compact", [False, True])
+def test_actual_runner_repair_freezes_scope_and_preserves_recorded_finding(kind, compact):
+    inp = _input()
+    old = _current_object_repair_payload()
+    sibling = json.loads(json.dumps(old["fact_candidates"][0]))
+    sibling.update(candidate_ref="f2", asserted_object="收缩压", polarity="affirmed",
+                   raw_value=120, canonical_value=120, unit="mmHg", locator_ids=["loc-2"])
+    sibling["assertion_basis"] = {"asserted_object": "收缩压",
+        "assertion_text": "收缩压 120 mmHg", "locator_id": "loc-2", "contextual_qualifiers": []}
+    old["fact_candidates"].append(sibling)
+    # Bind the synthetic excerpts to actual input locator text, not just IDs.
+    from app.domain.contracts.evidence_normalizer import evidence_normalizer_input_scope_hash
+    page = inp.pages[0].model_copy(update={"effective_text": "部位甲未检",
+        "effective_text_sha256": hashlib.sha256("部位甲未检".encode()).hexdigest()})
+    locator = inp.available_locators[0].model_copy(update={"localized_text": page.effective_text,
+        "source_text_sha256": page.effective_text_sha256})
+    changes = {"pages": [page, inp.pages[1]], "available_locators": [locator, inp.available_locators[1]]}
+    changed = inp.model_copy(update=changes)
+    changed = changed.model_copy(update={"input_scope_sha256": evidence_normalizer_input_scope_hash(
+        authority=changed.authority, logical_document_id=changed.logical_document_id,
+        manifest_sha256=changed.manifest_sha256, completion_manifest_sha256=changed.completion_manifest_sha256,
+        context=changed.context, related_requirements=changed.related_requirements,
+        page_numbers=changed.page_numbers, pages=changed.pages,
+        available_locator_ids=changed.available_locator_ids, available_locators=changed.available_locators,
+    )})
+    new = json.loads(json.dumps(old))
+    target = new["fact_candidates"][0]
+    target["asserted_object"] = target["assertion_basis"]["asserted_object"] = "部位甲"
+    if kind == "basis_only":
+        target["asserted_object"] = old["fact_candidates"][0]["asserted_object"]
+    if kind not in {"shortened", "basis_only"}:
+        target.update(polarity="affirmed", raw_value="部位甲未检", canonical_value="部位甲未检")
+    if kind == "sibling_change":
+        new["fact_candidates"][1]["canonical_value"] = 121
+    responses = [old, new]
+    if kind == "bad_then_literal":
+        bad = json.loads(json.dumps(new))
+        bad["fact_candidates"][1]["canonical_value"] = 121
+        responses = [old, bad, new]
+    if compact:
+        from app.agents.evidence_normalizer import evidence_normalizer_reference_aliases
+        aliases = evidence_normalizer_reference_aliases(changed)
+        responses = [aliases.transform(response) for response in responses]
+    transport = _FakeTransport([(json.dumps(response, ensure_ascii=False), "source-object")
+                                for response in responses])
+    repairs = 2 if kind == "bad_then_literal" else 1
+    result = EvidenceNormalizerRunner(max_schema_repairs=repairs, max_transport_retries=0).run(
+        changed, transport, prompt_template="整理本次资料", require_current_draft=True,
+        compact_references=compact)
+    assert len(result.attempts) == len(responses)
+    assert len(transport.repair_prompts) == repairs
+    assert "不重新提取整页" in transport.repair_prompts[0][1]
+    if kind in {"literal", "bad_then_literal"}:
+        assert result.status == "已解析"
+        assert result.final_output.fact_candidates[0].canonical_value == "部位甲未检"
+        assert result.final_output.fact_candidates[0].polarity.value == "affirmed"
+        assert result.final_output.fact_candidates[1].canonical_value == 120
+    else:
+        assert result.status == "需要核对"
+        assert result.final_output is None
+        assert "布尔命题" in str(result.attempts[-1].issues) if kind in {"shortened", "basis_only"} else (
+            "未授权" in str(result.attempts[-1].issues))
+
+
 def test_runner_respects_schema_repair_budget():
     inp = _input()
     invalid = json.dumps({**_valid_output_dict(), "page_numbers": [99]}, ensure_ascii=False)
@@ -2620,6 +3073,142 @@ def test_runner_respects_schema_repair_budget():
     assert result.status == "需要核对"
     assert result.final_output is None
     assert len([a for a in result.attempts if a.outcome == "schema_invalid"]) == 2
+
+
+def _context_repair_material():
+    from copy import deepcopy
+    from app.domain.contracts.evidence_normalizer import evidence_normalizer_input_scope_hash
+    inp = _input()
+    text = "量表甲：项目乙2；量表乙：项目乙3。"
+    page = inp.pages[0].model_copy(update={"effective_text": text,
+        "effective_text_sha256": hashlib.sha256(text.encode()).hexdigest()})
+    locator = inp.available_locators[0].model_copy(update={"localized_text": text,
+        "source_text_sha256": page.effective_text_sha256})
+    inp = inp.model_copy(update={"pages": [page, inp.pages[1]],
+        "available_locators": [locator, inp.available_locators[1]]})
+    inp = inp.model_copy(update={"input_scope_sha256": evidence_normalizer_input_scope_hash(
+        authority=inp.authority, logical_document_id=inp.logical_document_id,
+        manifest_sha256=inp.manifest_sha256, completion_manifest_sha256=inp.completion_manifest_sha256,
+        context=inp.context, related_requirements=inp.related_requirements,
+        page_numbers=inp.page_numbers, pages=inp.pages,
+        available_locator_ids=inp.available_locator_ids, available_locators=inp.available_locators)})
+    correct = _bound_draft_payload("unused")
+    correct["schema_version"] = "phase5/normalizer-draft/v5"
+    template = correct["fact_candidates"][0]
+    template.update(assertion_scope="observed_state", polarity="affirmed", asserted_object="项目乙",
+        raw_value=2, canonical_value=2, unit="unitless", supported_requirement_ids=[])
+    template["assertion_basis"].update(asserted_object="项目乙", assertion_text=text,
+        contextual_qualifiers=[{"kind": "assessment", "label": "量表甲"}])
+    sibling = deepcopy(template)
+    sibling.update(candidate_ref="f2", raw_value=3, canonical_value=3)
+    sibling["assertion_basis"]["contextual_qualifiers"] = [{"kind": "assessment", "label": "量表乙"}]
+    correct["fact_candidates"].append(sibling)
+    return inp, correct
+
+
+@pytest.mark.parametrize("invalid_kind", ["missing", "borrowed"])
+@pytest.mark.parametrize("change_sibling", [False, True])
+@pytest.mark.parametrize("compact", [False, True])
+def test_context_repair_freezes_valid_sibling_even_when_both_labels_are_in_quote(invalid_kind, change_sibling, compact):
+    from copy import deepcopy
+    inp, correct = _context_repair_material()
+    initial = deepcopy(correct)
+    if invalid_kind == "missing":
+        initial["fact_candidates"][0]["assertion_basis"].pop("contextual_qualifiers")
+    else:
+        initial["fact_candidates"][0]["assertion_basis"]["contextual_qualifiers"][0]["label"] = "来源不存在"
+    proposed = deepcopy(correct)
+    if change_sibling:
+        proposed["fact_candidates"][1]["assertion_basis"]["contextual_qualifiers"][0]["label"] = "量表甲"
+    responses = [initial, proposed]
+    if compact:
+        from app.agents.evidence_normalizer import evidence_normalizer_reference_aliases
+        aliases = evidence_normalizer_reference_aliases(inp)
+        responses = [aliases.transform(item) for item in responses]
+    transport = _FakeTransport([(json.dumps(item, ensure_ascii=False), "context-repair") for item in responses])
+    result = EvidenceNormalizerRunner(max_schema_repairs=1, max_transport_retries=0).run(
+        inp, transport, prompt_template="整理资料", require_current_draft=True, compact_references=compact)
+    assert len(result.attempts) == 2 and len(transport.repair_prompts) == 1
+    assert "只修目标断言的contextual_qualifiers" in transport.repair_prompts[0][1]
+    if change_sibling:
+        assert result.status == "需要核对" and result.final_output is None
+        assert "未授权" in str(result.attempts[-1].issues)
+    else:
+        assert result.status == "已解析"
+        facts = result.final_output.fact_candidates
+        assert facts[0].assertion_basis.contextual_qualifiers[0].label == "量表甲"
+        assert facts[1].assertion_basis.contextual_qualifiers[0].label == "量表乙"
+        assert [item.canonical_value for item in facts] == [2, 3]
+
+
+@pytest.mark.parametrize("kind", ["basis_list", "text_number", "missing_ref", "duplicate_ref", "nonstring_ref"])
+def test_unfreezable_initial_material_stops_before_generic_recovery(kind):
+    inp, raw = _context_repair_material()
+    target = raw["fact_candidates"][0]
+    if kind == "basis_list":
+        target["assertion_basis"] = []
+    elif kind == "text_number":
+        target["assertion_basis"]["assertion_text"] = 123
+    elif kind == "missing_ref":
+        target.pop("candidate_ref")
+    elif kind == "duplicate_ref":
+        target["candidate_ref"] = raw["fact_candidates"][1]["candidate_ref"]
+    else:
+        target["candidate_ref"] = 123
+    transport = _FakeTransport([(json.dumps(raw, ensure_ascii=False), "unfreezable")])
+    result = EvidenceNormalizerRunner(max_schema_repairs=2, max_transport_retries=0).run(
+        inp, transport, prompt_template="整理资料", require_current_draft=True)
+    assert result.status == "需要核对" and result.final_output is None
+    assert len(result.attempts) == 1 and not transport.repair_prompts
+
+
+def test_late_context_error_cannot_promote_generic_proposal_to_frozen_basis():
+    from copy import deepcopy
+    inp, correct = _context_repair_material()
+    first = deepcopy(correct)
+    first["fact_candidates"][0]["model_uncertainty"] = 1.2
+    proposal = deepcopy(correct)
+    proposal["fact_candidates"][0]["assertion_basis"].pop("contextual_qualifiers")
+    proposal["fact_candidates"][1]["assertion_basis"]["contextual_qualifiers"][0]["label"] = "量表甲"
+    transport = _FakeTransport([(json.dumps(item, ensure_ascii=False), "late-scope")
+                               for item in (first, proposal, correct)])
+    result = EvidenceNormalizerRunner(max_schema_repairs=2, max_transport_retries=0).run(
+        inp, transport, prompt_template="整理资料", require_current_draft=True)
+    assert result.status == "需要核对" and result.final_output is None
+    assert len(result.attempts) == 2 and len(transport.repair_prompts) == 1
+
+
+def test_context_multiple_recovery_keeps_original_sibling_and_scope():
+    from copy import deepcopy
+    inp, correct = _context_repair_material()
+    first = deepcopy(correct)
+    first["fact_candidates"][0]["assertion_basis"].pop("contextual_qualifiers")
+    invalid = deepcopy(correct)
+    invalid["fact_candidates"][0]["assertion_basis"]["contextual_qualifiers"][0]["label"] = "不存在"
+    corrupt = deepcopy(correct)
+    corrupt["fact_candidates"][1]["assertion_basis"]["contextual_qualifiers"][0]["label"] = "量表甲"
+    transport = _FakeTransport([(json.dumps(item, ensure_ascii=False), "multi-context")
+                               for item in (first, invalid, corrupt)])
+    result = EvidenceNormalizerRunner(max_schema_repairs=2, max_transport_retries=0).run(
+        inp, transport, prompt_template="整理资料", require_current_draft=True)
+    assert result.status == "需要核对" and result.final_output is None
+    assert len(result.attempts) == 3 and "未授权" in str(result.attempts[-1].issues)
+
+
+def test_mixed_context_and_object_errors_do_not_expand_authorized_repair():
+    from copy import deepcopy
+    inp, correct = _context_repair_material()
+    first = deepcopy(correct)
+    target = first["fact_candidates"][0]
+    target["asserted_object"] = target["assertion_basis"]["asserted_object"] = "检查"
+    target["assertion_basis"].pop("contextual_qualifiers")
+    proposal = deepcopy(first)
+    proposal["fact_candidates"][0]["assertion_basis"]["contextual_qualifiers"] = correct["fact_candidates"][0]["assertion_basis"]["contextual_qualifiers"]
+    transport = _FakeTransport([(json.dumps(item, ensure_ascii=False), "mixed-scope") for item in (first, proposal, correct)])
+    result = EvidenceNormalizerRunner(max_schema_repairs=2, max_transport_retries=0).run(
+        inp, transport, prompt_template="整理资料", require_current_draft=True)
+    assert result.status == "需要核对" and result.final_output is None
+    assert len(result.attempts) == 2 and len(transport.repair_prompts) == 1
 
 
 def test_runner_classifies_semantically_empty_json_as_empty_output():

@@ -1,5 +1,5 @@
-import { Crop, Maximize2, Minus, Plus, RefreshCw, RotateCcw, RotateCw, ScanSearch } from "lucide-react";
-import { LocalVisualVerificationPanel } from "./LocalVisualVerificationPanel";
+import { Crop, LocateFixed, Maximize2, Minus, Plus, RefreshCw, RotateCcw, RotateCw, ScanSearch } from "lucide-react";
+import { LocalVisualVerificationPanel, type LocalVisualExcerpt } from "./LocalVisualVerificationPanel";
 import type { LocalVisualRegion } from "../../api/evidence/localVisualHttp";
 import {
   evidencePageImageUrl,
@@ -21,6 +21,7 @@ interface OriginalEvidenceViewerProps {
   onReadingRotationChange?: (pageArtifactId: string, degrees: number) => void;
   unavailableRecoveryHint?: string;
   allowLocalVerification?: boolean;
+  onPrepareCorrection?: (excerpt: LocalVisualExcerpt) => void;
 }
 
 function authenticatedBoxes(locators: LocatorView[], page: ProcessingRevisionPageView): LocatorView[] {
@@ -53,15 +54,19 @@ export function OriginalEvidenceViewer({
   onReadingRotationChange,
   unavailableRecoveryHint,
   allowLocalVerification = false,
+  onPrepareCorrection,
 }: OriginalEvidenceViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef(new Map<string, HTMLElement>());
   const locatorRefs = useRef(new Map<string, HTMLElement>());
+  const regionRef = useRef<HTMLSpanElement>(null);
+  const regionNavigationPending = useRef(false);
   const userScrolling = useRef(false);
   const manualScrollUntil = useRef(0);
   const programmaticScrolling = useRef(false);
   const scrollTimer = useRef<number | null>(null);
   const previousNavigationKey = useRef(navigationKey);
+  const [pageNavigationSequence, setPageNavigationSequence] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [viewRotations, setViewRotations] = useState<Record<string, number>>({});
   const zoomAnchor = useRef<{ element: HTMLElement; fraction: number } | null>(null);
@@ -124,6 +129,22 @@ export function OriginalEvidenceViewer({
     scrollTimer.current = window.setTimeout(() => { programmaticScrolling.current = false; }, 500);
   }, [zoom, viewRotations]);
 
+  useLayoutEffect(() => {
+    const region = regionRef.current;
+    const container = scrollRef.current;
+    if (!regionNavigationPending.current || region === null || container === null) return;
+    regionNavigationPending.current = false;
+    userScrolling.current = false;
+    manualScrollUntil.current = 0;
+    programmaticScrolling.current = true;
+    const box = region.getBoundingClientRect();
+    container.scrollTop += box.top + box.height / 2 - container.getBoundingClientRect().top - container.clientHeight / 2;
+    const stage = region.closest<HTMLElement>(".original-evidence-page__stage");
+    if (stage !== null) stage.scrollLeft += box.left + box.width / 2 - stage.getBoundingClientRect().left - stage.clientWidth / 2;
+    if (scrollTimer.current !== null) window.clearTimeout(scrollTimer.current);
+    scrollTimer.current = window.setTimeout(() => { programmaticScrolling.current = false; }, 500);
+  }, [regionSelection]);
+
   useEffect(() => {
     if (navigationKey !== previousNavigationKey.current) {
       userScrolling.current = false;
@@ -146,7 +167,7 @@ export function OriginalEvidenceViewer({
     scrollTimer.current = window.setTimeout(() => {
       programmaticScrolling.current = false;
     }, 500);
-  }, [selectedEntryId, navigationKey]);
+  }, [selectedEntryId, navigationKey, pageNavigationSequence]);
 
   useEffect(() => {
     if (selectedLocatorId === null || highlightIdentity === null || userScrolling.current) return;
@@ -217,6 +238,14 @@ export function OriginalEvidenceViewer({
           <span>{pages.length} 页连续查看</span>
         </div>
         <div className="original-evidence-viewer__zoom">
+          <button type="button" aria-label="回到当前核对页" title="回到当前核对页"
+            disabled={selectedPage === undefined} onClick={() => {
+              userScrolling.current = false;
+              manualScrollUntil.current = 0;
+              setPageNavigationSequence((sequence) => sequence + 1);
+            }}>
+            <LocateFixed aria-hidden="true" />
+          </button>
           {allowLocalVerification && <button type="button" aria-label="圈选原件局部" title="圈选原件局部" aria-pressed={regionMode}
             disabled={!selectedPage?.imageAvailable} onClick={() => { setRegionMode(!regionMode); setRegionSelection(null); }}>
             <Crop aria-hidden="true" />
@@ -262,10 +291,12 @@ export function OriginalEvidenceViewer({
       {allowLocalVerification && selectedPage && <LocalVisualVerificationPanel
         key={JSON.stringify([revisionId, selectedPage.pageArtifactId])}
         revisionId={revisionId} pageId={selectedPage.pageArtifactId}
+        onPrepareCorrection={onPrepareCorrection}
         onLocateRegion={imageSizes.current.has(JSON.stringify([revisionId, selectedPage.entryId])) ? (box) => {
           const key = JSON.stringify([revisionId, selectedPage.entryId]);
           const size = imageSizes.current.get(key)!;
           const sideways = box.clockwise_degrees === 90 || box.clockwise_degrees === 270;
+          regionNavigationPending.current = true;
           setViewRotations((previous) => ({ ...previous, [key]: box.clockwise_degrees }));
           onReadingRotationChange?.(selectedPage.pageArtifactId, box.clockwise_degrees);
           setRegionSelection({ pageId: selectedPage.pageArtifactId, box,
@@ -442,6 +473,7 @@ export function OriginalEvidenceViewer({
                     })}
                     </div>
                     {regionSelection?.pageId === page.pageArtifactId && regionSelection.box.clockwise_degrees === rotation && <span
+                      ref={regionRef}
                       className="original-evidence-page__region" role="img" aria-label="待核实的圈选区域"
                       style={{ left: `${regionSelection.box.x0 / regionSelection.width * 100}%`,
                         top: `${regionSelection.box.y0 / regionSelection.height * 100}%`,

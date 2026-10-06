@@ -5,7 +5,7 @@ from pydantic import Field, model_validator
 
 from .common import ContractModel
 
-PROPOSITION_EVIDENCE_VERSION = "proposition-evidence/v7"
+PROPOSITION_EVIDENCE_VERSION = "proposition-evidence/v8"
 
 
 class ActionCompletionWitness(ContractModel):

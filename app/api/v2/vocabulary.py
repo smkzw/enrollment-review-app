@@ -415,11 +415,20 @@ def activation_event_kind_label(kind: str) -> str:
 GATE_STATUS_LABELS: dict[str, str] = {
     "passed": "通过",
     "not_applicable": "不适用",
+    "pending": "仍有内容待核实",
 }
 
 
 def gate_status_label(status: str) -> str:
     return GATE_STATUS_LABELS.get(status, status)
+
+
+def evidence_check_label(check: str) -> str:
+    return {
+        "scope": "个例与资料对应", "page_closure": "原件页数", "risk": "识别内容核实",
+        "correction": "文字校对", "metadata": "资料类型与来源", "referenced": "相关资料",
+        "locator": "原件位置", "manifest": "资料版本核对",
+    }.get(check, "资料核对")
 
 
 # ---------------------------------------------------------------------------

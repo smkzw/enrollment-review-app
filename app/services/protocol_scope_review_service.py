@@ -9,7 +9,7 @@ from app.protocols.deconstruction_gate import _source_review_stages, _substantiv
 from app.protocols.official_source_scope import frozen_parent_scope_fragments
 from app.protocols.source_time_fragments import frozen_review_stage_aliases
 from app.protocols.official_scope_review import (
-    SCOPE_REVIEW_VERSION, OfficialScopeReviewError, OfficialScopeUnresolvedError, OfficialScopeRejectedError,
+    SCOPE_REVIEW_VERSION, SCOPE_VALIDATION_POLICY, OfficialScopeReviewError, OfficialScopeUnresolvedError, OfficialScopeRejectedError,
     scope_review_basis, scope_review_prompt, reviewed_scope_stages,
     scope_item_rejections, read_scope_receipt,
 )
@@ -67,7 +67,7 @@ def review_official_source_scope(source, draft, *, official_code: str, transport
                                    for row in budget["requests"])
                                for budget in (saved_budget, current_budget))):
                 raise ValueError("saved source request is outside this allowance or model")
-            scope_item_rejections(reading, basis, proposal=False)
+            scope_item_rejections(reading, basis, proposal=False, validation_policy=SCOPE_VALIDATION_POLICY)
             readings.append(reading)
             receipts.append(dict(resume_source_receipt))
             sessions.append(session_id)
@@ -103,12 +103,12 @@ def review_official_source_scope(source, draft, *, official_code: str, transport
         receipts.append({"request_ref": request_ref, "response_ref": response_ref})
         sessions.append(response.session_id)
         reading = OfficialScopeReading.model_validate_json(response.text)
-        scope_item_rejections(reading, basis, proposal=stage == "proposal")
+        scope_item_rejections(reading, basis, proposal=stage == "proposal", validation_policy=SCOPE_VALIDATION_POLICY)
         readings.append(reading)
     if len(set(sessions)) != 2:
         raise OfficialScopeReviewError("SOURCE_SCOPE_REVIEW_DISAGREEMENT")
     proof = {"version": SCOPE_REVIEW_VERSION, "basis_sha256": canonical_hash(basis), "receipts": receipts,
-             "validation_policy": "component-local/v1"}
+             "validation_policy": SCOPE_VALIDATION_POLICY}
     review_ref = store.put("evaluation_manifest", json.dumps(proof, ensure_ascii=False).encode()).storage_ref
     result = draft.model_copy(deep=True)
     updated = next(item for item in result.proposed_rules if item.official_code == official_code)

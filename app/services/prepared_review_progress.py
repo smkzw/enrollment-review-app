@@ -16,6 +16,7 @@ TASK_KINDS = {
     "proposition_evidence": "proposition_evidence",
     "observation_relation": "observation_relation",
     "frequency_evidence": "frequency_evidence",
+    "computation_input": "computation_input",
 }
 
 
@@ -43,7 +44,7 @@ def read_prepared_review_progress(session, *, subject_id, review_episode_id, con
         if payload.get("review_context_sha256") != context.context_sha256:
             raise ScopeViolationError("审核进度与本次保存的资料不一致，请核对原记录")
         candidate_id = payload.get("candidate_job_id")
-        follows_candidate = row.job_type in {"binding_qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence"}
+        follows_candidate = row.job_type in {"binding_qualification", "judgment_content", "proposition_evidence", "observation_relation", "frequency_evidence", "computation_input"}
         if follows_candidate != (isinstance(candidate_id, str) and bool(candidate_id.strip())):
             raise ScopeViolationError("审核进度缺少对应的前一步记录，请核对原记录")
         items.append({

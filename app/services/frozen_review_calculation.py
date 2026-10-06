@@ -10,7 +10,7 @@ from app.domain.contracts.review_context_v2 import ReviewContextSnapshotV2
 from app.domain.contracts.rules import RuleSet, iter_atomic_predicates
 from app.domain.contracts.qualified_binding_selection import QualifiedBindingSelectionMaterial
 from app.domain.expression import EvaluationContext, RepeatAtomEvaluation
-from app.domain.contracts.evaluation_result import FrequencyAtomEvaluation
+from app.domain.contracts.evaluation_result import FrequencyAtomEvaluation, ComputationAtomEvaluation
 from app.domain.publication import canonical_hash
 from app.services.component_review import ComponentReviewResult, calculate_component_review
 from app.services.predicate_binding_input import _frozen_fact
@@ -30,7 +30,7 @@ from app.services.qualified_binding_selection import (
     assert_qualified_selections_match_review_context,
 )
 
-EVALUATOR_VERSION = "component-review/v35"
+EVALUATOR_VERSION = "component-review/v38"
 
 #: Reason attached to a consumer whose source definition has no proven
 #: consumer relation yet. It never replaces the evidence-based reason of an
@@ -71,13 +71,14 @@ class FrozenReviewCalculation:
     repeat_result_resolutions: tuple[dict, ...] = ()
     repeat_atom_evaluations: dict[str, dict[str, RepeatAtomEvaluation]] = field(default_factory=dict)
     frequency_atom_evaluations: dict[str, dict[str, FrequencyAtomEvaluation]] = field(default_factory=dict)
+    computation_atom_evaluations: dict[str, dict[str, ComputationAtomEvaluation]] = field(default_factory=dict)
     definition_consumption: tuple[DefinitionConsumerConsumption, ...] = ()
     accepted: bool = field(default=False, init=False)
 
 
 def _calculate_controls(frozen, control_input, control_selections, unverified_atom_reasons=None,
                         proposition_relations=(), proposition_pair_gaps=(), repeat_evaluations=None,
-                        frequency_evaluations=None):
+                        frequency_evaluations=None, computation_evaluations=None):
     publication = frozen.clause_pack.control_publication
     if publication is None or not publication.catalog.controls:
         if control_input is not None or control_selections:
@@ -110,6 +111,7 @@ def _calculate_controls(frozen, control_input, control_selections, unverified_at
         proposition_pair_gaps=proposition_pair_gaps,
         repeat_evaluations=repeat_evaluations,
         frequency_evaluations=frequency_evaluations,
+        computation_evaluations=computation_evaluations,
     )
 
 
@@ -572,6 +574,33 @@ def calculate_frozen_review(
             control_pair_gaps = [row for row in control_pair_gaps if row["identity_sha256"] not in control_frequency_for_review]
             for key, value in control_frequency_for_review.items():
                 control_selections[key] = list(value.result.used_fact_ids)
+    from app.services.computation_atom_calculation import calculate_computation_atoms
+    computation_atom_evaluations = {
+        item.candidate_family: calculate_computation_atoms(item, context)
+        for item in calculation_items
+    }
+    computation_by_component = {}
+    control_computation_for_review = {}
+    for item in calculation_items:
+        evaluated = computation_atom_evaluations[item.candidate_family]
+        if item.candidate_family == "predicate":
+            for component in item.predicate_frozen_input.components:
+                for entry in (*component.trigger_predicates, *component.exception_predicates):
+                    value = evaluated.get(entry.predicate_identity_sha256)
+                    if value is not None:
+                        computation_by_component.setdefault(component.rule_component_id, {})[entry.predicate_id] = value
+                        predicate_fact_ids_by_component[component.rule_component_id][entry.predicate_id] = list(value.result.used_fact_ids)
+        else:
+            control_computation_for_review = _eligible_control_calculations(evaluated, definition_control_unverified)
+            control_selections = {key: list(values) for key, values in control_selections.items()}
+            control_unverified = {key: values for key, values in (control_unverified or {}).items()
+                                  if key not in control_computation_for_review}
+            control_relations = [row for row in control_relations
+                                 if row["identity_sha256"] not in control_computation_for_review]
+            control_pair_gaps = [row for row in control_pair_gaps
+                                 if row["identity_sha256"] not in control_computation_for_review]
+            for key, value in control_computation_for_review.items():
+                control_selections[key] = list(value.result.used_fact_ids)
     if definition_control_unverified:
         if not isinstance(control_selections, Mapping):
             raise ValueError("来源定义消费原子缺少本次审核的补充要求资料对应清单")
@@ -582,7 +611,7 @@ def calculate_frozen_review(
             control_selections[identity] = []
     controls = _calculate_controls(frozen, control_input, control_selections, control_unverified,
                                    control_relations, control_pair_gaps, control_repeat_for_review,
-                                   control_frequency_for_review)
+                                   control_frequency_for_review, control_computation_for_review)
     templates = {item.template_id: item for item in frozen.expectation_templates}
     templates_by_requirement = {item.requirement_id: item for item in templates.values()}
     expectations = _expectation_views(frozen.expectations, templates)
@@ -600,6 +629,9 @@ def calculate_frozen_review(
         for parent, evaluated in frequency_by_component.items():
             for key in evaluated:
                 proposition_by_component.get(parent, {}).pop(key, None)
+        for parent, evaluated in computation_by_component.items():
+            for key in evaluated:
+                proposition_by_component.get(parent, {}).pop(key, None)
         unresolved = {
             outcome.identity_sha256 for outcome in item.material.identity_outcomes
             if outcome.status == "unresolved"
@@ -611,6 +643,7 @@ def calculate_frozen_review(
                 if predicate.predicate_identity_sha256 in unresolved
                 and predicate.predicate_id not in repeat_by_component.get(component.rule_component_id, {})
                 and predicate.predicate_id not in frequency_by_component.get(component.rule_component_id, {})
+                and predicate.predicate_id not in computation_by_component.get(component.rule_component_id, {})
             )
     # A consumer of an unproven source definition cannot keep its evidence
     # result: its selection is cleared and it is marked unverified. Siblings are
@@ -620,7 +653,7 @@ def calculate_frozen_review(
     # dropped as well instead of being carried past the unverified state.
     _withhold_unverified_definition_predicates(
         predicate_fact_ids_by_component,
-        (proposition_by_component, repeat_by_component, frequency_by_component),
+        (proposition_by_component, repeat_by_component, frequency_by_component, computation_by_component),
         unverified_by_component, definition_predicate_unverified,
     )
     result = []
@@ -647,6 +680,7 @@ def calculate_frozen_review(
             proposition_evaluations=proposition_by_component.get(clause.rule_component_id),
             repeat_evaluations=repeat_by_component.get(clause.rule_component_id),
             frequency_evaluations=frequency_by_component.get(clause.rule_component_id),
+            computation_evaluations=computation_by_component.get(clause.rule_component_id),
             unverified_predicate_ids=unverified_by_component.get(clause.rule_component_id, frozenset()),
             missing_judgment_predicate_ids=missing_judgment_predicates(
                 component, judgment_gaps, choices,
@@ -673,6 +707,11 @@ def calculate_frozen_review(
         "controls": controls.selections_sha256 if controls is not None else None,
     }
     if calculation_items:
+        if any(computation_atom_evaluations.values()):
+            selection_payload["computation_atom_evaluations"] = {
+                family: {key: value.model_dump(mode="json") for key, value in items.items()}
+                for family, items in computation_atom_evaluations.items()
+            }
         selection_payload["repeat_condition_calculations"] = repeat_condition_calculations
         selection_payload["frequency_atom_evaluations"] = {
             family: {key: value.model_dump(mode="json") for key, value in items.items()}
@@ -722,6 +761,7 @@ def calculate_frozen_review(
         repeat_result_resolutions=repeat_result_resolutions,
         repeat_atom_evaluations=repeat_atom_evaluations,
         frequency_atom_evaluations=frequency_atom_evaluations,
+        computation_atom_evaluations=computation_atom_evaluations,
         qualification_materials=tuple(
             item.material.model_copy(deep=True)
             for item in formal_items

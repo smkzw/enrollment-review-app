@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 
 from app.domain.contracts.enums import BlockingLevel, ComponentDecision, GapType, ReviewStage, RuleKind, TruthValue
 from app.domain.contracts.evidence import ConflictGroup
-from app.domain.contracts.evaluation_result import FrequencyAtomEvaluation
+from app.domain.contracts.evaluation_result import FrequencyAtomEvaluation, ComputationAtomEvaluation
 from app.domain.contracts.rules import RuleComponent
 from app.domain.expression import ComponentEvaluation, EvaluationContext, EvaluationResult, RepeatAtomEvaluation, evaluate_component
 from app.domain.gates.assessment import RequirementGapState, derive_component_decision, derive_gate_gap_types
@@ -38,6 +38,7 @@ def calculate_component_review(
     proposition_evaluations: Mapping[str, EvaluationResult] | None = None,
     repeat_evaluations: Mapping[str, RepeatAtomEvaluation] | None = None,
     frequency_evaluations: Mapping[str, FrequencyAtomEvaluation] | None = None,
+    computation_evaluations: Mapping[str, ComputationAtomEvaluation] | None = None,
 ) -> ComponentReviewResult:
     evaluation = evaluate_component(
         component, context, predicate_fact_ids=predicate_fact_ids,
@@ -46,6 +47,7 @@ def calculate_component_review(
         proposition_evaluations=proposition_evaluations,
         repeat_evaluations=repeat_evaluations,
         frequency_evaluations=frequency_evaluations,
+        computation_evaluations=computation_evaluations,
     )
     gaps = derive_gate_gap_types(
         component=component, evaluation=evaluation, episode_stage=episode_stage,

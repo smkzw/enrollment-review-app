@@ -26,6 +26,15 @@ it("一般失败仍允许恢复，完成或取消不显示失败原因", async (
   }
 });
 
+it("计算来源核对保留对应候选身份，不冒充审核完成", async () => {
+  const task = { job_id: "computation", kind: "computation_input", candidate_job_id: "candidate",
+    state: "running", state_label: "正在核对", progress_completed: 1, progress_total: 3 };
+  const result = await read({ ...base, state: "running", failure_reason: null, items: [task] });
+  expect(result.items[0].kind).toBe("computation_input");
+  expect(result.items[0].candidateJobId).toBe("candidate");
+  await expect(read({ ...base, items: [{ ...task, candidate_job_id: null }] })).rejects.toThrow();
+});
+
 it.each([
   { ...base, retry_available: true },
   { ...base, state: "completed" },

@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,6 +13,7 @@ from jsonschema import Draft202012Validator
 
 from app.agents import protocol_semantic_transport as transport_module
 from app.agents.protocol_deconstructor import (
+    DNF_WIRE_VERSION,
     ProtocolDeconstructionAttempt,
     ProtocolDeconstructionRunResult,
     ProtocolSemanticRuleRepair,
@@ -78,9 +80,11 @@ def _config_probe(overrides: dict[str, str] | None = None) -> list[str]:
         "str(OMLX_PROTOCOL_BATCH_MAX_TOKENS), "
         "str(MTPLX_PROTOCOL_BATCH_MAX_TOKENS))))"
     )
-    output = subprocess.check_output(
-        [sys.executable, "-c", script], cwd=ROOT, env=env, text=True
-    )
+    with tempfile.NamedTemporaryFile() as empty_env:
+        env["ENROLLMENT_ENV_FILE"] = empty_env.name
+        output = subprocess.check_output(
+            [sys.executable, "-c", script], cwd=ROOT, env=env, text=True
+        )
     return output.strip().split("|")
 
 
@@ -107,10 +111,10 @@ def test_deconstruction_defaults_use_pinned_glm_route_and_new_budgets():
     values = _config_probe()
 
     assert values == [
-        "mtplx-flash-next-optimized-speed",
-        "mtplx",
+        "deepseek-v4.1-flash",
+        "opencode-go",
         "glm-5.3-flash",
-        "zhipu-coding-plan",
+        "cms-router",
         "high",
         "131072",
         "131072",
@@ -481,11 +485,13 @@ def test_omlx_wire_schema_is_small_flat_and_kind_specific():
     encoded_wire = json.dumps(wire, ensure_ascii=False)
 
     # The provider schema is intentionally explicit rather than using the
-    # formal model's polymorphic definitions.  Its compactness contract is
+    # formal model's expression graph. Its compactness contract is
     # semantic: flat DNF arrays, no graph references, and no polymorphic
     # combinators.  Requiring fewer serialized characters is not stable when
     # common atom fields are repeated for the three strict atom shapes.
-    assert all(token not in encoded_wire for token in ("anyOf", "allOf", "oneOf"))
+    # Nullable/source-bound optional contracts may use anyOf; expression
+    # groups themselves remain three explicit atom arrays, not graph unions.
+    assert all(token not in encoded_wire for token in ("allOf", "oneOf"))
     assert all(
         token not in encoded_wire
         for token in (
@@ -497,8 +503,8 @@ def test_omlx_wire_schema_is_small_flat_and_kind_specific():
             "all_any_logical_nodes",
         )
     )
-    assert wire["properties"]["wire_version"] == {"const": "dnf-v1"}
-    assert repair["properties"]["wire_version"] == {"const": "dnf-v1"}
+    assert wire["properties"]["wire_version"] == {"const": DNF_WIRE_VERSION}
+    assert repair["properties"]["wire_version"] == {"const": DNF_WIRE_VERSION}
     assert "proposed_rules" in wire["properties"]
     assert "replacement_rules" in repair["properties"]
     assert "proposed_rules" not in repair["properties"]
@@ -625,6 +631,24 @@ def test_executor_selects_omlx_without_deepseek_key(monkeypatch):
     assert transport._backend == "omlx"
     assert _FakeOpenAI.calls[0]["api_key"] == "local-omlx"
     assert _FakeOpenAI.calls[0]["base_url"] == "http://127.0.0.1:8001/v1"
+
+
+@pytest.mark.parametrize("mode,expected", [("auto", False), ("formal", False), ("compact", True)])
+def test_wire_contract_configuration_reaches_pinned_and_graded_entries(monkeypatch, mode, expected):
+    from app.agents import protocol_semantic_model_router as router
+    monkeypatch.setattr(transport_module, "OpenAI", lambda **kwargs: object())
+    monkeypatch.setattr(transport_module, "DECONSTRUCT_WIRE_CONTRACT", mode)
+    monkeypatch.setattr(transport_module, "DEEPSEEK_API_KEY", "synthetic-test-key")
+    monkeypatch.setattr(executor_module, "DEEPSEEK_API_KEY", "synthetic-test-key")
+    monkeypatch.setattr(executor_module, "DECONSTRUCT_BACKEND", "deepseek")
+    monkeypatch.setattr(router, "candidate_availability_error", lambda candidate: None)
+    pinned = executor_module._resolve_transport(SimpleNamespace(transport=None, transport_factory=None))
+    graded = router.build_transport_for_candidate(router.ProtocolSemanticRouteCandidate(
+        backend="deepseek", model="synthetic-model", reasoning_effort="high"))
+    assert pinned.uses_compact_wire_contract is expected
+    assert graded.uses_compact_wire_contract is expected
+    assert graded._model == "synthetic-model"
+    assert graded._reasoning_effort == "high"
 
 
 def test_executor_fails_closed_for_unknown_backend(monkeypatch):

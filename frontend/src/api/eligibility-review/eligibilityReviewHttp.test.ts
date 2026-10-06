@@ -40,10 +40,10 @@ function reviewBody() {
 }
 
 describe("eligibility review HTTP repository", () => {
-  it("keeps a changed-source work draft distinct from an unstarted review", async () => {
-    const body = { ...reviewBody(), work_draft_state: "source_changed" };
+  it.each(["source_changed", "method_changed"])("keeps a %s work draft distinct from an unstarted review", async (state) => {
+    const body = { ...reviewBody(), work_draft_state: state };
     const repository = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
-    expect((await repository.getEligibilityReview("subject", "episode")).workDraftState).toBe("source_changed");
+    expect((await repository.getEligibilityReview("subject", "episode")).workDraftState).toBe(state);
     body.work_draft_state = "unknown";
     await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
   });

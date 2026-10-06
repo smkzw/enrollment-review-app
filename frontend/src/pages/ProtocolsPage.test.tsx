@@ -5,9 +5,11 @@
 
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import { navigate } from "../app/router";
 import { ProtocolsPage } from "./ProtocolsPage";
+import { ProtocolJobFlow } from "../components/protocols/ProtocolJobFlow";
+import { ProtocolCandidatePreview } from "../components/protocols/ProtocolJobProgress";
 import { PROTOCOL_DEMO_JOB_ID, PROTOCOL_IDENTITY_JOB_ID, PROTOCOL_RECOVERY_JOB_ID } from "../api/protocolWorkbenchRepository";
 import {
   createProtocolWorkbenchStub,
@@ -37,6 +39,82 @@ describe("方案工作台", () => {
       "href",
       "#/protocols?mode=first",
     );
+  });
+
+  it("失败任务重开仍可阅读已保存内容，查看不重启或发布", async () => {
+    const base = createProtocolWorkbenchStub();
+    const getPreview = vi.fn().mockResolvedValue({
+      jobId: "failed-preview", available: true, previewOnly: true,
+      batchIndex: 1, batchTotal: 2, updatedAt: null, reason: null, detail: null,
+      pendingCodes: ["EX-02"], unresolvedCount: 1, content: draftRevisionFixture.content,
+    });
+    const retryFailedStep = vi.fn();
+    const publish = vi.fn();
+    setProtocolWorkbenchRepository({ ...base,
+      getSession: async () => ({ ...protocolSessionFixtures[PROTOCOL_RECOVERY_JOB_ID]!,
+        jobId: "failed-preview", state: "failed_final", awaitingUser: null }),
+      getGenerationPreview: getPreview, retryFailedStep, publish,
+    });
+    render(<ProtocolJobFlow jobId="failed-preview" componentParam={null} />);
+    expect(await screen.findByRole("heading", { name: "已保存的方案读取内容（尚未采用）" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "草稿生成未完成" })).toBeInTheDocument();
+    expect(screen.getByText(/尚不能用于受试者审核或发布/)).toBeInTheDocument();
+    expect(screen.getByText(/尚未读取的标准/)).toHaveTextContent("EX-02");
+    expect(getPreview).toHaveBeenCalledTimes(1);
+    expect(retryFailedStep).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
+  });
+
+  it("切换任务不显示上一方案的读取内容，响应归属不符也不展示", async () => {
+    const base = createProtocolWorkbenchStub();
+    setProtocolWorkbenchRepository({ ...base,
+      getSession: async (jobId) => ({ ...protocolSessionFixtures[PROTOCOL_RECOVERY_JOB_ID]!,
+        jobId, state: "failed_final", awaitingUser: null }),
+      getGenerationPreview: async () => ({ jobId: "first-preview", available: true,
+        previewOnly: true, batchIndex: 1, batchTotal: 2, updatedAt: null,
+        reason: null, detail: null, pendingCodes: [], unresolvedCount: 0,
+        content: draftRevisionFixture.content }),
+    });
+    const view = render(<ProtocolJobFlow jobId="first-preview" componentParam={null} />);
+    await screen.findByRole("heading", { name: "已保存的方案读取内容（尚未采用）" });
+    view.rerender(<ProtocolJobFlow jobId="second-preview" componentParam={null} />);
+    expect(screen.queryByRole("heading", { name: "已保存的方案读取内容（尚未采用）" })).not.toBeInTheDocument();
+    await screen.findByText(/已保存的读取内容暂时无法打开/);
+    expect(screen.queryByRole("heading", { name: "已保存的方案读取内容（尚未采用）" })).not.toBeInTheDocument();
+  });
+
+  it("取消后的读取内容可查看，但不显示仍在生成", async () => {
+    const base = createProtocolWorkbenchStub();
+    setProtocolWorkbenchRepository({ ...base,
+      getSession: async () => ({ ...protocolSessionFixtures[PROTOCOL_RECOVERY_JOB_ID]!,
+        jobId: "cancelled-preview", state: "cancelled", stateLabel: "已取消", awaitingUser: null }),
+      getGenerationPreview: async () => ({ jobId: "cancelled-preview", available: true,
+        previewOnly: true, batchIndex: 1, batchTotal: 2, updatedAt: null,
+        reason: null, detail: null, pendingCodes: [], unresolvedCount: 0,
+        content: draftRevisionFixture.content }),
+    });
+    render(<ProtocolJobFlow jobId="cancelled-preview" componentParam={null} />);
+    await screen.findByRole("heading", { name: "已保存的方案读取内容（尚未采用）" });
+    expect(screen.getByRole("heading", { name: "方案读取记录" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "方案解构进行中" })).not.toBeInTheDocument();
+  });
+
+  it("长原文可完整展开，不把预览截断当作完整来源", async () => {
+    const content = structuredClone(draftRevisionFixture.content);
+    const original = "这里是方案逐字原文。".repeat(40) + "原文末尾仍应完整可读";
+    const componentDrafts = content.component_drafts as { source_excerpts: string[] }[];
+    componentDrafts[0]!.source_excerpts = [original];
+    render(<ProtocolCandidatePreview preview={{ jobId: "long-preview", available: true,
+      previewOnly: true, batchIndex: 1, batchTotal: 1, updatedAt: null,
+      reason: null, detail: null, pendingCodes: [], unresolvedCount: 0, content }} />);
+    const summary = screen.getByText("展开完整原文");
+    const details = summary.closest("details")!;
+    expect(details).not.toHaveAttribute("open");
+    await userEvent.click(summary);
+    expect(details).toHaveAttribute("open");
+    expect(within(details).getByText(original)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
   });
 
   it("真实模式可从首页继续上次方案任务", async () => {

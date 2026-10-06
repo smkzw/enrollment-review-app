@@ -4814,6 +4814,46 @@ def test_target_review_repairs_distinct_items_without_rereading_valid_sibling(fa
     else:
         assert result.status == "需要核对"
         assert result.final_output is None
+        assert result.source_target_review is not None
+        assert result.source_target_review.items == expected.items[:2]
+        from app.services.protocol_control_execution import _resumable_saved_source_review
+
+        saved = json.loads(result.model_dump_json())
+        resumed = _resumable_saved_source_review(batch, inventory, saved)
+        assert resumed.state == "partially_reused"
+        assert resumed.review == result.source_target_review
+        assert [entry.statement_index for entry in resumed.coverage] == [0, 1]
+        with pytest.raises(SourceTargetReviewValidationError):
+            validate_source_target_review(
+                batch, inventory, result.source_statement_coverage, resumed.review,
+            )
+
+        class ResumeTransport(_FakeTransport):
+            review_calls = 0
+
+            def start_source_target_review(self, *, prompt):
+                self.review_calls += 1
+                source_rows = json.loads(prompt.split("待核陈述：", 1)[1].split("\n", 1)[0])
+                assert [row["statement_index"] for row in source_rows] == [2]
+                return ProtocolControlAgentResponse(
+                    session_id="resumed-target-2",
+                    text=SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION,
+                                            items=[expected.items[2]]).model_dump_json(),
+                )
+
+        resume_transport = ResumeTransport([])
+        recovered = ProtocolControlAgentRunner().run(
+            batch, resume_transport, resume_wire=result.partial_wire,
+            resume_source_interpretation=inventory, resume_session_id="wire-1",
+            resume_source_target_review=resumed.review,
+            resume_source_statement_coverage=resumed.coverage,
+            output_validator=lambda _output: None,
+        )
+        assert resume_transport.review_calls == 1
+        assert recovered.status == "待跨章核验", [a.issues for a in recovered.attempts]
+        assert recovered.final_output is not None
+        assert recovered.source_target_review == expected
+        assert result.source_target_review.items == expected.items[:2]
         last = result.attempts[-1]
         if fault == "transport":
             assert last.error_classes == ["SOURCE_TARGET_REVIEW_TRANSPORT_FAILED"]
@@ -4825,6 +4865,61 @@ def test_target_review_repairs_distinct_items_without_rereading_valid_sibling(fa
             )
             assert last.error_detail["review_snapshot_kind"] == "rejected_local_correction"
             assert last.error_detail["review_snapshot"]["items"][0]["statement_index"] == 2
+
+
+@pytest.mark.parametrize("mutation", ["stale_item", "partial", "duplicate", "foreign", "bad_coverage"])
+def test_saved_review_recovery_checks_each_item_without_accepting_partial_scope(mutation) -> None:
+    from app.services.protocol_control_execution import _resumable_saved_source_review
+
+    batch, inventory, relations, _first, _second = _context_relation_example()
+    original = _wire(candidate=_candidate())
+    coverage = source_statement_coverage(batch, inventory, original)
+    review = SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=relations).model_copy(deep=True)
+    if mutation == "stale_item":
+        review.items[1].target_action_excerpt = "目标原文不存在的要求"
+    elif mutation == "partial":
+        review.items = review.items[:1]
+    elif mutation == "duplicate":
+        review.items.append(review.items[0].model_copy(deep=True))
+    elif mutation == "foreign":
+        review.items[1].statement_index = 99
+    elif mutation == "bad_coverage":
+        coverage[1] = coverage[1].model_copy(update={"structure_unit_id": "foreign-source"})
+    saved = {"source_target_review": review.model_dump(mode="json"),
+             "source_statement_coverage": [entry.model_dump(mode="json") for entry in coverage]}
+    before = json.dumps(saved, sort_keys=True)
+    restored = _resumable_saved_source_review(batch, inventory, saved)
+    if mutation in {"stale_item", "partial"}:
+        assert restored.state == "partially_reused"
+        assert restored.review.items == [relations[0]]
+        with pytest.raises(SourceTargetReviewValidationError):
+            validate_source_target_review(batch, inventory, coverage, restored.review)
+    else:
+        assert restored.state == "refresh_required"
+        assert restored.review is None
+    assert json.dumps(saved, sort_keys=True) == before
+
+
+def test_saved_review_validator_bug_is_not_a_reason_to_reread_models(monkeypatch) -> None:
+    import app.agents.protocol_control_source_interpretation as source_module
+    from app.services.protocol_control_execution import _resumable_saved_source_review
+    from app.workflow.errors import StepFailure
+
+    batch, inventory, relations, _first, _second = _context_relation_example()
+    coverage = source_statement_coverage(batch, inventory, _wire(candidate=_candidate()))
+    saved = {"source_target_review": SourceTargetReview(
+        version=SOURCE_TARGET_REVIEW_VERSION, items=relations,
+    ).model_dump(mode="json"),
+        "source_statement_coverage": [entry.model_dump(mode="json") for entry in coverage]}
+
+    def broken_validator(*args, **kwargs):
+        raise TypeError("injected validator implementation fault")
+
+    monkeypatch.setattr(source_module, "validate_source_target_review", broken_validator)
+    with pytest.raises(StepFailure) as failed:
+        _resumable_saved_source_review(batch, inventory, saved)
+    assert failed.value.error_code == "PROTOCOL_CONTROL_SOURCE_REVIEW_VALIDATION_FAILED"
+    assert failed.value.retryable is False
 
 
 @pytest.mark.parametrize("kind", ["time_scope", "frequency_comparison"])
@@ -7766,6 +7861,124 @@ def test_multiple_invalid_initial_candidates_do_not_get_single_candidate_repair(
             ]}),
             initial, (0, 1),
         )
+
+
+@pytest.mark.parametrize("failure", [None, "budget", "unresolved", "scope", "session", "transport", "consumer"])
+def test_multiple_candidate_repair_uses_typed_dates_without_rewriting_siblings(failure) -> None:
+    valid = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
+    initial = valid.model_dump(mode="json")
+    for draft in initial["candidate_drafts"]:
+        del draft["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]
+    proposal = valid.candidate_drafts[0].model_dump(mode="json")
+    atom = proposal["obligation_expression"]["groups"][0]["atoms"][0]
+    atom["time_constraint"] = {"anchor_type": "screening_date", "direction": "before"}
+    atom["evaluation"]["time_purpose"] = "unresolved"
+    atom["evaluation"]["time_operand_attribute"] = None
+    if failure == "scope":
+        proposal["source_structure_unit_ids"] = ["su-02"]
+
+    class Transport(_FakeTransport):
+        candidate_calls = 0
+        date_calls = 0
+
+        def continue_candidate(self, *, session_id, prompt):
+            self.candidate_calls += 1
+            assert self.candidate_calls <= 2
+            draft = proposal if self.candidate_calls == 1 else valid.candidate_drafts[1].model_dump(mode="json")
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"candidate_draft": draft}))
+
+        def continue_time_operands(self, *, session_id, prompt):
+            self.date_calls += 1
+            assert self.date_calls == 1
+            assert valid.candidate_drafts[1].title not in prompt
+            if failure == "transport":
+                raise RuntimeError("synthetic transport failure")
+            return ProtocolControlAgentResponse(
+                session_id="other-session" if failure == "session" else session_id,
+                text=json.dumps({"items": [{"group_index": 0, "atom_index": 0,
+                                           "attribute": "unresolved" if failure == "unresolved" else "record_time"}]}),
+            )
+
+        def continue_session(self, **kwargs):
+            pytest.fail("不得退回整批重写")
+
+    consumer_calls = 0
+
+    def validate(output):
+        nonlocal consumer_calls
+        consumer_calls += 1
+        expected_sibling = hydrate_protocol_control_agent_output(valid, _batch()).candidates[1]
+        assert output.candidates[1] == expected_sibling
+        if failure == "consumer":
+            raise ProtocolControlAgentWireValidationError("PUBLICATION_GATE_REJECTED", "synthetic semantic rejection")
+
+    transport = Transport([ProtocolControlAgentResponse(session_id="multi-dates", text=json.dumps(initial))])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1 if failure == "budget" else 2).run(
+        _batch(), transport, output_validator=validate,
+    )
+    assert initial["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0].get("evaluation") is None
+    assert atom["evaluation"]["time_operand_attribute"] is None
+    if failure is None:
+        assert result.status == "已解析", [a.issues for a in result.attempts]
+        assert transport.candidate_calls == 2 and transport.date_calls == 1
+        assert consumer_calls == 1
+        assert result.final_output.candidates[0].semantics.obligation_expression.groups[0].atoms[0].evaluation.time_operand_attribute == "record_time"
+        assert result.final_output.candidates[1] == hydrate_protocol_control_agent_output(valid, _batch()).candidates[1]
+        assert any(a.error_classes == ["CANDIDATE_REPAIR_INVALID"] for a in result.attempts)
+    else:
+        assert result.final_output is None
+        assert transport.date_calls == (0 if failure in {"budget", "scope"} else 1)
+        if failure == "unresolved":
+            assert result.attempts[-1].error_classes == ["TIME_OPERAND_UNRESOLVED"]
+
+
+@pytest.mark.parametrize("failure", [None, "scope", "other_error", "unresolved", "budget"])
+def test_plural_candidate_transport_missing_date_keeps_typed_followup(failure) -> None:
+    valid = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
+    initial = valid.model_dump(mode="json")
+    for draft in initial["candidate_drafts"]:
+        del draft["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]
+    proposals = [draft.model_dump(mode="json") for draft in valid.candidate_drafts]
+    atom = proposals[1]["obligation_expression"]["groups"][0]["atoms"][0]
+    atom["time_constraint"] = {"anchor_type": "screening_date", "direction": "before"}
+    atom["evaluation"]["time_purpose"] = "unresolved"
+    atom["evaluation"]["time_operand_attribute"] = None
+    if failure == "scope":
+        proposals[1]["source_structure_unit_ids"] = ["su-01"]
+    elif failure == "other_error":
+        proposals[0]["title"] = ""
+
+    class Transport(_FakeTransport):
+        date_calls = 0
+        plural_calls = 0
+
+        def continue_candidates(self, *, session_id, prompt):
+            self.plural_calls += 1
+            assert self.plural_calls == 1
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"candidate_drafts": proposals}))
+
+        def continue_time_operands(self, *, session_id, prompt):
+            self.date_calls += 1
+            assert valid.candidate_drafts[0].title not in prompt
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"items": [{
+                "group_index": 0, "atom_index": 0,
+                "attribute": "unresolved" if failure == "unresolved" else "record_time",
+            }]}))
+
+        def continue_session(self, **kwargs):
+            raise RuntimeError("reject whole-wire fallback in synthetic fixture")
+
+    transport = Transport([ProtocolControlAgentResponse(session_id="plural-dates", text=json.dumps(initial))])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1 if failure == "budget" else 2).run(_batch(), transport)
+    if failure is None:
+        assert result.status == "已解析", [a.issues for a in result.attempts]
+        expected = hydrate_protocol_control_agent_output(valid, _batch()).candidates[0]
+        assert result.final_output.candidates[0] == expected
+        assert result.final_output.candidates[1].semantics.obligation_expression.groups[0].atoms[0].evaluation.time_operand_attribute == "record_time"
+        assert transport.plural_calls == transport.date_calls == 1
+    else:
+        assert result.final_output is None
+        assert transport.date_calls == (1 if failure == "unresolved" else 0)
 
 
 def test_runner_repairs_only_the_rejected_candidate_when_transport_supports_it() -> None:

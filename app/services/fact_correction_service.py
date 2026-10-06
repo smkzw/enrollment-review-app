@@ -52,6 +52,7 @@ from app.domain.contracts.facts import (
     _date_range_identity,
     clinical_event_stable_identity,
     clinical_fact_stable_identity,
+    clinical_fact_object_key,
     fact_run_idempotency_key,
     medication_exposure_stable_identity,
 )
@@ -745,6 +746,17 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         and assertion_locator_id == target.assertion_basis.locator_id
         and asserted_object == target.asserted_object
     )
+    qualifiers = target.assertion_basis.contextual_qualifiers if target.assertion_basis else []
+    preserves_context = (
+        preserves_assertion_basis and locator.source_text_sha256 == target.assertion_basis.source_text_sha256
+        and fact_type == target.fact_type and polarity == target.polarity
+        and type(value) is type(target.value) and value == target.value
+        and unit == target.unit and date_range == target.date_range
+    )
+    if qualifiers and polarity != FactPolarity.UNKNOWN and not preserves_context:
+        raise FactCorrectionValidationError(
+            "这条记录带有检查背景；改动读数、对象、时间或原文后，需重新核对其归属，不能沿用旧依据。"
+        )
     assertion_text = (
         target.assertion_basis.assertion_text
         if preserves_assertion_basis
@@ -757,6 +769,7 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
             assertion_text=assertion_text,
             locator_id=assertion_locator_id,
             source_text_sha256=locator.source_text_sha256,
+            contextual_qualifiers=qualifiers if preserves_context else [],
         )
     stable = clinical_fact_stable_identity(
         authority=target.authority,
@@ -767,6 +780,7 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         value=value,
         unit=unit,
         date_range=date_range,
+        assertion_basis=assertion_basis,
     )
     existing = ClinicalFactV2Repository(session).list_for_authority(target.authority)
     revision = (
@@ -1502,7 +1516,8 @@ def _conflict_signature(item: Any) -> tuple[Any, ...]:
         return (
             "fact",
             item.fact_type,
-            item.asserted_object,
+            (clinical_fact_object_key(item.fact_type, item.asserted_object, item.assertion_basis)
+             if item.assertion_basis and item.assertion_basis.contextual_qualifiers else item.asserted_object),
             _scalar(item.polarity),
             item.value,
             item.unit,

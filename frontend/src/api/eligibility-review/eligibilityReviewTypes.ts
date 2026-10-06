@@ -82,7 +82,7 @@ export interface EligibilityControlWire {
 }
 
 export interface EligibilityReviewWire {
-  work_draft_state?: "not_started" | "current" | "source_changed";
+  work_draft_state?: "not_started" | "current" | "source_changed" | "method_changed";
   unassigned_conflicts?: { conflict_group_id: string; member_kind: "event" | "exposure"; member_ids: string[] }[];
   subject_id: string;
   review_episode_id: string;

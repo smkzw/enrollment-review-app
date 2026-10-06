@@ -72,12 +72,14 @@ from app.agents.protocol_control_source_interpretation import (
     is_post_eligibility_calculation,
     is_study_phase_label,
     normalize_source_excerpt,
+    parse_product_source_interpretation,
     validate_source_definition_consumers,
     validate_source_interpretation,
     normalize_schedule_randomization_anchors,
     normalize_mixed_schedule_scopes,
     schedule_column_links,
     validate_source_target_review,
+    validated_source_review_seed,
     target_review_indexes,
 )
 from app.agents.protocol_control_source_function import SOURCE_FUNCTION_RECHECK_VERSION
@@ -173,6 +175,7 @@ from app.evidence.artifacts import ArtifactStore, ArtifactStoreError
 from app.services.job_service import JobService, StepSpec
 from app.services.protocol_workbench_service import (
     PROTOCOL_DECONSTRUCTION_JOB_TYPE,
+    PROTOCOL_DECONSTRUCTION_STEPS,
     STEP_GENERATE as SOURCE_STEP_GENERATE,
     STEP_AWAIT_REVIEW as SOURCE_STEP_AWAIT_REVIEW,
     STEP_PUBLISH as SOURCE_STEP_PUBLISH,
@@ -189,7 +192,7 @@ from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
 PROTOCOL_CONTROL_EXECUTION_JOB_TYPE = "protocol_control_execution"
 # A short alias keeps callers independent from the longer API-facing name.
 PROTOCOL_CONTROL_JOB_TYPE = PROTOCOL_CONTROL_EXECUTION_JOB_TYPE
-PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v216"
+PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v217"
 PROTOCOL_CONTROL_EXECUTION_CONTROL_SCHEMA = (
     "phase5/protocol-control-execution-control/v2"
 )
@@ -208,14 +211,9 @@ _DEEP_STEP_PREFIX = "deep_"
 # cannot see a consumer in another batch, so completeness stays unproven.
 _DEFINITION_CONSUMER_SCOPE_UNPROVEN = "定义消费范围完整性尚未证实（含跨批消费者）"
 _SOURCE_DECONSTRUCTION_JOB_TYPE = PROTOCOL_DECONSTRUCTION_JOB_TYPE
-_SOURCE_STEP_ORDER = (
-    "register_file",
-    "extract_structure",
-    "render_and_align",
-    "identify_identity_phase",
-    "await_identity_confirm",
-    "freeze_deconstruction_input",
-)
+# Source registrations at the review/publish boundary must travel with the
+# exact draft. Use the workbench's order, not only its initial freeze.
+_SOURCE_STEP_ORDER = tuple(step.step_id for step in PROTOCOL_DECONSTRUCTION_STEPS)
 _DEFAULT_OUTER_STEP_ATTEMPTS = 2
 _MAX_BATCH_UNITS = 256
 _MAX_CONTEXT_RADIUS = 64
@@ -1967,8 +1965,9 @@ class _ResumedSourceReview:
     """State of the saved per-statement source review carried into a rerun.
 
     ``state`` is explicit so a refreshed review is never a silent drop:
-    ``absent`` (nothing was saved), ``reused`` (every saved decision still
-    passes the current validators) or ``refresh_required`` (only the affected
+    ``absent`` (nothing was saved), ``reused`` (all expected decisions still
+    pass), ``partially_reused`` (only individually current siblings seed the
+    next read) or ``refresh_required`` (only the affected
     statements are sent back to the reader while the proven candidate/source
     base stays reusable).
     """
@@ -1977,6 +1976,7 @@ class _ResumedSourceReview:
     reason: str
     review: SourceTargetReview | None = None
     coverage: tuple[SourceStatementCoverage, ...] = ()
+    source_seed_proof: Mapping[str, Any] | None = None
 
 
 def _resumable_saved_candidate_alignment(
@@ -2034,10 +2034,10 @@ def _resumable_saved_source_review(
 ) -> _ResumedSourceReview:
     """Prove a saved source review still holds before any reader call is skipped.
 
-    The whole saved review is revalidated against the restored source
-    statements, the restored batch and its own saved coverage; each statement is
-    then revalidated on its own so one stale statement cannot take its siblings
-    down with it. A saved review is provable without a partial wire: the frozen
+    The saved scope and coverage identity are checked before each decision is
+    revalidated against the restored source and batch. A partial seed is not a
+    complete review; final consumption still requires the full gate. A saved
+    review is provable without a partial wire: the frozen
     batch/route/prompt identity checked by the caller plus these current
     validators carry the proof. A review whose saved coverage is missing or
     unprovable stays out of the reuse seed and goes back through the existing
@@ -2068,44 +2068,90 @@ def _resumable_saved_source_review(
             state="refresh_required", reason="saved_source_coverage_identity_invalid",
         )
     try:
-        validate_source_target_review(batch, interpretation, coverage, review)
-    except (SourceTargetReviewValidationError, ValueError, KeyError, TypeError):
+        expected = target_review_indexes(interpretation, coverage, batch)
+        retained = validated_source_review_seed(batch, interpretation, coverage, review)
+    except SourceTargetReviewValidationError:
         return _ResumedSourceReview(
             state="refresh_required", reason="current_validators_reject_saved_source_review",
         )
+    except (ValueError, KeyError, TypeError) as exc:
+        raise StepFailure(
+            retryable=False, error_code="PROTOCOL_CONTROL_SOURCE_REVIEW_VALIDATION_FAILED",
+            detail="保存核对的程序校验失败，不能作为再次读取模型的理由。",
+        ) from exc
     if not review.items:
         return _ResumedSourceReview(state="absent", reason="no_saved_source_review")
-    coverage_by_index = {entry.statement_index: entry for entry in coverage}
-    kept_items: list[Any] = []
-    kept_coverage: list[SourceStatementCoverage] = []
-    for item in review.items:
-        single = SourceTargetReview(
-            version=SOURCE_TARGET_REVIEW_VERSION, items=[item],
-        )
-        try:
-            validate_source_target_review(
-                batch, interpretation, [coverage_by_index[item.statement_index]], single,
-            )
-        except (SourceTargetReviewValidationError, ValueError, KeyError, TypeError):
-            continue
-        kept_items.append(item)
-        kept_coverage.append(coverage_by_index[item.statement_index])
-    if not kept_items:
+    if retained is None:
         return _ResumedSourceReview(
             state="refresh_required", reason="no_saved_source_review_item_still_valid",
         )
-    state = "reused" if len(kept_items) == len(review.items) else "partially_reused"
+    kept_indexes = {item.statement_index for item in retained.items}
+    state = "reused" if kept_indexes == set(expected) else "partially_reused"
     return _ResumedSourceReview(
         state=state,
         reason=(
             "saved_source_review_still_current" if state == "reused"
             else "affected_source_review_statements_require_refresh"
         ),
-        review=SourceTargetReview(
-            version=SOURCE_TARGET_REVIEW_VERSION, items=kept_items,
-        ),
-        coverage=tuple(kept_coverage),
+        review=retained,
+        coverage=tuple(entry for entry in coverage if entry.statement_index in kept_indexes),
     )
+
+
+def _unrepaired_source_seed_proof(
+    batch: ProtocolControlDispositionBatch,
+    saved: Mapping[str, Any],
+    *, source_job_id: str, step_id: str, checkpoint_id: str,
+) -> dict[str, Any] | None:
+    """Prove the source read independently of later author/repair history."""
+    if saved.get("partial_wire") is not None:
+        return None
+    attempts = saved.get("attempts")
+    if not isinstance(attempts, list) or not attempts:
+        return None
+    first = attempts[0]
+    recorded_session = first.get("session_id", saved.get("session_id")) if isinstance(first, Mapping) else None
+    if (not isinstance(first, Mapping) or type(first.get("attempt")) is not int
+            or first["attempt"] != 1 or first.get("outcome") != "parsed"
+            or first.get("error_classes")
+            or not isinstance(recorded_session, str)
+            or not recorded_session.strip()):
+        return None
+    raw = first.get("raw_output_text")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("已解析来源的原始回答记录损坏")
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    if first.get("raw_output_sha256") != digest:
+        raise ValueError("已解析来源的原始回答摘要不一致")
+    try:
+        actual = parse_product_source_interpretation(batch, raw)
+        actual, _ = normalize_schedule_randomization_anchors(batch, actual)
+        actual, _ = normalize_mixed_schedule_scopes(batch, actual)
+        validate_source_interpretation(batch, actual)
+    except (ValueError, KeyError, TypeError):
+        return None
+    if actual.model_dump(mode="json") != saved.get("source_interpretation"):
+        return None
+    return {
+        "schema_version": "phase5/unrepaired-source-seed-proof/v1",
+        "source_job_id": source_job_id, "step_id": step_id,
+        "checkpoint_id": checkpoint_id,
+        "raw_output_sha256": digest, "raw_output_chars": len(raw),
+        "recorded_session_id": recorded_session,
+        "session_record_scope": "attempt" if "session_id" in first else "checkpoint",
+        "base_prompt_sha256": saved["prompt_template_sha256"],
+        "component_identity_sha256": hashlib.sha256(json.dumps(
+            saved["component_identity"], ensure_ascii=False, sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")).hexdigest(),
+        "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
+        "current_source_equal": True,
+        "reused": ["source_interpretation"],
+        "discarded": ["partial_wire", "source_target_review", "source_statement_coverage",
+                      "source_candidate_alignment", "session_id"],
+    }
 
 
 def _validated_deep_partial_source(
@@ -2167,14 +2213,33 @@ def _validated_deep_partial_source(
     if (not isinstance(repair_identity, str) or len(repair_identity) != 64
             or any(char not in "0123456789abcdef" for char in repair_identity)):
         raise ValueError("局部草稿修复合同身份缺失或损坏")
+    source_seed_proof = None
     if repair_identity != protocol_control_agent_repair_contract_sha256():
-        return None
+        if saved.get("partial_wire") is not None:
+            # A present draft never falls through to the source-only shortcut.
+            wire = ProtocolControlAgentWire.model_validate(saved["partial_wire"])
+            _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(wire, batch))
+            return None
+        source_seed_proof = _unrepaired_source_seed_proof(
+            batch, saved, source_job_id=source_job_id, step_id=step_id,
+            checkpoint_id=checkpoint_id,
+        )
+        if source_seed_proof is None:
+            return None
     if source is None and saved.get("partial_wire") is None:
         return None
     if not isinstance(source, Mapping):
         raise ValueError("局部草稿缺少有源解释")
     interpretation = SourceInterpretation.model_validate(source)
     validate_source_interpretation(batch, interpretation)
+    if source_seed_proof is not None:
+        seed = dict(saved, partial_wire=None, source_target_review=None,
+                    source_statement_coverage=[], source_candidate_alignment=None,
+                    session_id=None)
+        return checkpoint_id, seed, _ResumedSourceReview(
+            state="absent", reason="repair_material_changed_source_only",
+            source_seed_proof=source_seed_proof,
+        )
     wire = None
     if saved.get("partial_wire") is not None:
         if not isinstance(saved.get("session_id"), str):
@@ -2246,13 +2311,14 @@ def _preflight_deep_source(
         not isinstance(expected_route, str) or len(expected_route) != 64
     ):
         raise ValueError("当前深审模型线路身份无效")
-    decisions: dict[str, dict[str, str]] = {}
+    decisions: dict[str, dict[str, Any]] = {}
     for batch in current_plan.batches:
         step_id = f"{_DEEP_STEP_PREFIX}{batch.batch_number:04d}"
         step = source_steps.get(step_id)
         decision = "refresh_required"
         reason = "new_or_incomplete_batch"
         review_state = "not_applicable"
+        partial = None
         old_batch = old_batches_by_number.get(batch.batch_number)
         if old_batch is not None and step is None:
             raise ValueError("来源任务缺少深审批次定义")
@@ -2384,6 +2450,10 @@ def _preflight_deep_source(
             "step_id": step_id, "decision": decision, "reason": reason,
             "source_review": review_state,
         }
+        if (step is not None and step.state == "failed_final"
+                and partial is not None and partial[2].source_seed_proof is not None):
+            decisions[batch.batch_id]["reason"] = "verified_source_interpretation_repair_material_changed"
+            decisions[batch.batch_id]["source_seed_proof"] = partial[2].source_seed_proof
     return {
         "schema_version": "phase5/deep-reuse-plan/v1",
         "source_job_id": source_job_id,
@@ -2503,7 +2573,7 @@ def _validate_saved_source_review(
     if result.source_front_target_review is not None:
         from app.agents.protocol_control_fixed_flow import validate_front_review
         validate_front_review(batch, interpretation, result.source_front_target_review)
-        if any(item.decision not in {"additional_requirement", "covered_by_official", "covered_by_procedure"}
+        if any(item.decision not in {"additional_requirement", "covered_by_official", "covered_by_procedure", "background_context"}
                for item in result.source_front_target_review.items):
             raise ValueError("前置新增要求核对不能借已有覆盖或未决通过采用")
         if result.final_output is None or result.partial_wire is None:
@@ -2516,18 +2586,45 @@ def _validate_saved_source_review(
             raw_front_coverage,
         )
         front_decisions = {item.statement_index: item.decision for item in result.source_front_target_review.items}
+        from app.agents.protocol_control_fixed_flow import covered_front_wire
+        expected_base = covered_front_wire(
+            batch, interpretation, result.source_front_target_review, allow_additional_units=True,
+        )
+        base_dispositions = {item.structure_unit_id: item.disposition for item in expected_base.dispositions}
         if derived != result.source_statement_coverage or any(
             entry.status != ("expressed" if front_decisions.get(entry.statement_index) == "additional_requirement"
-                             else "linked_only") for entry in derived
+                             else "candidate_linked" if base_dispositions[entry.structure_unit_id]
+                             == StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE
+                             else "linked_only" if base_dispositions[entry.structure_unit_id] in {
+                                 StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+                                 StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+                             } else "not_located") for entry in derived
         ):
             raise ValueError("前置要求未由保存的正式候选逐项表达")
-        if all(item.decision in {"covered_by_official", "covered_by_procedure"}
+        actual_dispositions = {item.structure_unit_id: item for item in result.partial_wire.dispositions}
+        for disposition in expected_base.dispositions:
+            actual = actual_dispositions.get(disposition.structure_unit_id)
+            if (disposition.disposition != StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE
+                    and actual != disposition):
+                raise ValueError("已有覆盖的装配链接与实际来源核对不一致")
+            if disposition.disposition == StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE and (
+                actual is None or actual.disposition != disposition.disposition
+                or actual.linked_official_code is not None
+                or actual.linked_procedure_catalog_item_id is not None
+                or actual.linked_procedure_catalog_item_ids
+            ):
+                raise ValueError("混合来源不能借整段链接宣称邻近要求已覆盖")
+        if all(item.decision != "additional_requirement"
                for item in result.source_front_target_review.items):
-            from app.agents.protocol_control_fixed_flow import covered_front_wire
             expected_wire = covered_front_wire(batch, interpretation, result.source_front_target_review)
             if expected_wire != result.partial_wire:
                 raise ValueError("已有覆盖的装配链接与实际来源核对不一致")
-            validate_source_target_review(batch, interpretation, derived, result.source_front_target_review)
+            required_indexes = set(target_review_indexes(interpretation, derived, batch))
+            validate_source_target_review(batch, interpretation, derived,
+                result.source_front_target_review.model_copy(update={"items": [
+                    item for item in result.source_front_target_review.items
+                    if item.statement_index in required_indexes
+                ]}))
         else:
             alignment = result.source_candidate_alignment
             pairs = {(entry.statement_index, index) for entry in raw_front_coverage
@@ -3002,6 +3099,13 @@ def _execute_deep(
                     detail="已核局部草稿不再符合当前方案或批次，未继续执行。",
                 )
             _, draft, resume_review = partial
+            if (isinstance(plan, Mapping)
+                    and plan["decisions"][batch.batch_id].get("source_seed_proof")
+                    != resume_review.source_seed_proof):
+                raise StepFailure(
+                    retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                    detail="来源解释复用证明与入队前计划不一致。",
+                )
             if draft.get("transport_identity") != _transport_identity(transport, stage="deep"):
                 raise StepFailure(
                     retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
@@ -3076,7 +3180,7 @@ def _execute_deep(
     restricted_error: ValueError | None = None
     try:
         if isinstance(result, ProtocolControlAgentRunResult):
-            if result.final_output is not None and result.source_candidate_alignment is not None:
+            if result.final_output is not None:
                 _validate_saved_source_review(batch, result)
             restricted_batch = restricted_batch_from_review(batch, result)
     except ValueError as exc:
@@ -3203,6 +3307,7 @@ def _execute_deep(
                 "attempts": [
                     {
                         "attempt": item.attempt,
+                        "session_id": item.session_id,
                         "outcome": item.outcome,
                         "raw_output_sha256": item.raw_output_sha256,
                         "raw_output_chars": item.raw_output_chars,
@@ -3247,7 +3352,7 @@ def _deep_attempt_raw_outputs(result: ProtocolControlAgentRunResult) -> list[dic
 def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str, Any]:
     """Record the validated source seed, not candidate acceptance or saved calls."""
 
-    return {
+    record = {
         "state": resume_review.state,
         "reason": resume_review.reason,
         "proof_scope": "saved_source_target_review",
@@ -3257,6 +3362,10 @@ def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str
             )
         ),
     }
+    if resume_review.source_seed_proof is not None:
+        record["proof_scope"] = "unrepaired_source_interpretation"
+        record["source_seed_proof"] = dict(resume_review.source_seed_proof)
+    return record
 
 
 def _definition_consumer_atom(

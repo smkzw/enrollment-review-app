@@ -3,8 +3,9 @@ from app.domain.contracts.judgment_search import JudgmentSearchCoverageStatus
 from app.services.judgment_content_receipts import verify_completed_judgment_content
 from app.services.review_method_evidence import read_method_evaluation
 from app.storage.repositories import ScopeViolationError
+from app.services.judgment_fact_linkage import judgment_content_input_version
 
-CONTENT_CONSUMER_VERSION = "qualified-judgment-content/v2"
+CONTENT_CONSUMER_VERSION = "qualified-judgment-content/v3"
 
 
 def require_content_method(manifest, binding_method, content):
@@ -26,8 +27,7 @@ def require_content_method(manifest, binding_method, content):
 def verify_qualified_content(session, artifact_store, *, source, binding_method, adoption):
     content = verify_completed_judgment_content(session, artifact_store, adoption.job_id)
     payload = content["payload"]
-    expected_version = ("judgment-content-input/v1" if source["candidate_family"] == "predicate"
-                        else "judgment-content-input/control-v1")
+    expected_version = judgment_content_input_version(source["candidate_family"])
     if (payload.get("input_version") != expected_version
             or payload["candidate_job_id"] != source["payload"]["candidate_job_id"]
             or any(payload.get(key) is None or payload.get(key) != source["payload"].get(key)

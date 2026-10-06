@@ -21,6 +21,8 @@ from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentWireRelation,
     ProtocolControlAgentWireValidationError,
     _validate_known_targets,
+    build_protocol_control_repair_prompt,
+    validate_protocol_control_agent_wire,
     _repair_problem_guidance,
     _restore_bounded_wire_repair,
 )
@@ -49,6 +51,7 @@ from app.protocols.protocol_control_repair_errors import (
     publication_repair_error,
 )
 from tests.v2.protocols.test_slice58c_control_deconstructor import (
+    _candidate as _base_candidate,
     _FakeTransport,
     _evidence_policy,
     _evaluation,
@@ -128,6 +131,12 @@ def test_two_execution_visits_allow_source_bounded_repartition() -> None:
     ) as failure:
         _validate_known_targets(candidate, batch=batch)
     assert failure.value.allow_candidate_repartition is True
+    finding = failure.value.validation_findings[0]
+    assert finding["external_target_id"] == "procedure-screening-1"
+    assert finding["execution_workflow_stage_id"] == "stage:screening:one"
+    assert finding["affected_workflow_stage_id"] == "stage:baseline:1"
+    assert finding["json_path"] == "cross_source_relations.0.affected_workflow_stage_id"
+    assert finding["source_refs"] == candidate.source_span_ids
 
     single_target = candidate.model_copy(update={
         "cross_source_relations": [original_relation],
@@ -135,6 +144,38 @@ def test_two_execution_visits_allow_source_bounded_repartition() -> None:
     with pytest.raises(ProtocolControlAgentWireValidationError) as single_failure:
         _validate_known_targets(single_target, batch=batch)
     assert single_failure.value.allow_candidate_repartition is False
+
+    base_candidate = _base_candidate()
+    single_target = single_target.model_copy(update={
+        "review_node_bindings": base_candidate.review_node_bindings,
+        "minimum_evidence": base_candidate.minimum_evidence,
+    })
+    with pytest.raises(ProtocolControlAgentWireValidationError) as scoped_failure:
+        validate_protocol_control_agent_wire(_wire(candidate=single_target), batch)
+    assert scoped_failure.value.code == "PROCEDURE_AFFECTED_STAGE_MISMATCH"
+    assert scoped_failure.value.candidate_indexes == (0,)
+    finding = scoped_failure.value.validation_findings[0]
+    assert finding["candidate_index"] == 0
+    assert finding["json_path"] == "candidate_drafts.0.cross_source_relations.0.affected_workflow_stage_id"
+    prompt = build_protocol_control_repair_prompt(
+        batch, problem="diagnostic wording changed",
+        candidate_indexes=scoped_failure.value.candidate_indexes,
+        validation_findings=scoped_failure.value.validation_findings,
+        candidate_only=True,
+    )
+    assert '"execution_workflow_stage_id": "stage:screening:one"' in prompt
+    assert '"external_target_id": "procedure-screening-1"' in prompt
+    assert '"retry_class": "source_relationship_review"' in prompt
+
+
+def test_unsupported_later_verification_must_not_change_kind_or_advance_decision() -> None:
+    prompt = build_protocol_control_repair_prompt(
+        _batch_with_baseline(), problem="PROCEDURE_AFFECTED_STAGE_MISMATCH",
+        source_insert=True,
+    )
+    assert "只有现有合同支持且原文确有依据的后续核对关系" in prompt
+    assert "保留该有源要求与明确的软件能力缺口" in prompt
+    assert "指向较早执行访视的补充关系也应将受影响节点设为" not in prompt
 
 
 def test_mixed_trigger_decision_stages_authorizes_candidate_repartition() -> None:

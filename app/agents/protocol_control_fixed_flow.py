@@ -44,7 +44,7 @@ from app.domain.contracts.protocol_controls import (
 
 BASELINE = "RV1001-BASELINE"
 FIXED_FLOW = "RV1001-FLOW"
-FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v10"
+FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v13"
 
 
 def _failure_code(exc: Exception) -> str | None:
@@ -105,12 +105,15 @@ def supports_front_stage_flow(batch, interpretation: SourceInterpretation) -> bo
         return False
     units = {unit.structure_unit_id: unit for unit in batch.owned_units}
     if not all(
-        "action" in statement.decision_functions
+        (statement.decision_functions == ["background"]
+         and statement.force in {"descriptive", "unclear"}
+         and not statement.unresolved)
+        or ("action" in statement.decision_functions
         and set(statement.decision_functions) <= {"action", "time_validity"}
         and statement.control_authority == "study_or_unknown"
         and statement.eligibility_sequence == "current_or_unknown"
         and len(units[statement.structure_unit_id].source_span_ids) == 1
-        and can_compile_stage_bound_source(batch, interpretation, index)
+        and can_compile_stage_bound_source(batch, interpretation, index))
         for index, statement in enumerate(interpretation.statements)
     ):
         return False
@@ -160,17 +163,24 @@ def build_front_target_review_prompt(batch, interpretation, coverage) -> str:
     )
 
 
-def covered_front_wire(batch, interpretation, review) -> ProtocolControlAgentWire:
-    """One unit link is valid only when every source point names a covered target."""
+def covered_front_wire(
+    batch, interpretation, review, *, allow_additional_units: bool = False,
+) -> ProtocolControlAgentWire:
+    """Whole-unit links require full coverage; mixed units keep point-level proof."""
     validate_front_review(batch, interpretation, review)
     if (len(review.items) != len(interpretation.statements)
-            or any(item.decision not in {"covered_by_official", "covered_by_procedure"}
+            or any(item.decision not in ({"covered_by_official", "covered_by_procedure", "background_context", "additional_requirement"}
+                                        if allow_additional_units else
+                                        {"covered_by_official", "covered_by_procedure", "background_context"})
                    for item in review.items)):
         raise ProtocolControlAgentWireValidationError(
             "FLOW_TARGET_COVERAGE_UNASSEMBLED", "已有覆盖和新增要求混合，尚无对应装配，保留全部来源")
     procedures = {target.catalog_item_id: target for target in batch.known_procedure_targets}
     officials = {target.official_code: target for target in batch.known_official_targets}
+    pending_dispositions = {item.structure_unit_id: item for item in pending_front_wire(batch).dispositions}
     for item in review.items:
+        if item.decision in {"additional_requirement", "background_context"}:
+            continue
         statement = interpretation.statements[item.statement_index]
         target = (procedures if item.decision == "covered_by_procedure" else officials)[item.target_id]
         # A grounded noun label is a relation, not an action-bearing requirement.
@@ -183,11 +193,32 @@ def covered_front_wire(batch, interpretation, review) -> ProtocolControlAgentWir
     for unit in batch.owned_units:
         items = [item for item in review.items
                  if interpretation.statements[item.statement_index].structure_unit_id == unit.structure_unit_id]
-        kinds = {item.decision for item in items}
+        kinds = {item.decision for item in items} - {"background_context"}
+        if not kinds:
+            if batch.owned_required_action_kinds_by_structure_unit_id.get(unit.structure_unit_id):
+                raise ProtocolControlAgentWireValidationError(
+                    "REQUIRED_ACTION_DISCARDED",
+                    "冻结来源仍有独立动作，不能仅凭已枚举的背景陈述省略整段要求",
+                    structure_unit_ids=[unit.structure_unit_id],
+                )
+            dispositions.append(ProtocolControlAgentWireDisposition(
+                structure_unit_id=unit.structure_unit_id,
+                disposition=StructureUnitDispositionKind.ADMINISTRATIVE_STATISTICAL_BACKGROUND,
+                linked_official_code=None,
+                linked_procedure_catalog_item_id=None,
+                linked_procedure_catalog_item_ids=[],
+                notes="逐项有源核对确认为纯背景，不生成受试者义务",
+            ))
+            continue
+        if "additional_requirement" in kinds and allow_additional_units:
+            # No whole-unit coverage claim: the saved front review owns each
+            # covered point, while the compiler appends only the new points.
+            dispositions.append(pending_dispositions[unit.structure_unit_id])
+            continue
         targets = sorted({item.target_id for item in items if item.target_id is not None})
         if len(kinds) != 1 or not targets or ("covered_by_official" in kinds and len(targets) != 1):
             raise ProtocolControlAgentWireValidationError(
-                "FLOW_TARGET_COVERAGE_UNASSEMBLED", "来源单元不能无依据合并多种目录归属")
+                "FLOW_TARGET_COVERAGE_UNASSEMBLED", "同一来源单元的已有覆盖与新增要求或多种目录归属尚不能分别装配")
         dispositions.append(ProtocolControlAgentWireDisposition(
             structure_unit_id=unit.structure_unit_id,
             disposition=(StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY
@@ -222,28 +253,38 @@ def prepare_front_stage_flow(
         result.review = SourceTargetReview.model_validate_json(response.text)
         validate_source_target_review(batch, interpretation, coverage, result.review)
         result.review_validated = True
-        if any(item.decision in {"covered_by_official", "covered_by_procedure"}
+        if any(item.decision not in {"additional_requirement", "covered_by_official", "covered_by_procedure", "background_context"}
                for item in result.review.items):
-            # Only a completely covered unit can use a catalog link. A mixed
-            # unit needs a statement-level producer, not an invented whole-unit link.
+            result.error_code = "FLOW_SOURCE_SCOPE_UNRESOLVED"
+            raise ValueError("本次来源仍有未核清或当前简单动作流程不能装配的要求，保留具体核对结果")
+        if all(item.decision != "additional_requirement"
+               for item in result.review.items):
             phase = "assembly"
             wire = covered_front_wire(batch, interpretation, result.review)
-            validate_source_target_review(batch, interpretation,
-                source_statement_coverage(batch, interpretation, wire), result.review)
+            final_coverage = source_statement_coverage(batch, interpretation, wire)
+            required_indexes = set(target_review_indexes(interpretation, final_coverage, batch))
+            validate_source_target_review(batch, interpretation, final_coverage,
+                result.review.model_copy(update={"items": [
+                    item for item in result.review.items if item.statement_index in required_indexes
+                ]}))
             from .protocol_control_deconstructor import hydrate_protocol_control_agent_output
             output_validator(hydrate_protocol_control_agent_output(wire, batch))
             result.wire = wire
             result.error_code = None
             return result
-        indexes = {item.statement_index for item in result.review.items}
-        if indexes != set(range(len(interpretation.statements))) or not all(
+        # Mixed physical units retain individual source-target decisions,
+        # rather than lending one point's target link to its neighbours.
+        phase = "assembly"
+        pending = covered_front_wire(batch, interpretation, result.review, allow_additional_units=True)
+        reviews = sorted((item for item in result.review.items if item.decision == "additional_requirement"),
+                         key=lambda item: item.statement_index)
+        if not reviews or not all(
             can_compile_stage_bound_requirement(batch, interpretation, item)
-            for item in result.review.items
+            for item in reviews
         ):
             result.error_code = "FLOW_SOURCE_SCOPE_UNRESOLVED"
             raise ValueError("真实来源核对仍有已覆盖、未决或当前编译器不支持的维度")
         # Preserve source order rather than trusting provider item ordering.
-        reviews = sorted(result.review.items, key=lambda item: item.statement_index)
         authors = []
         for item in reviews:
             phase = f"author:{item.statement_index}"

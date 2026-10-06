@@ -222,9 +222,11 @@ def _correction_dto(correction) -> CorrectionDTO:
 
 
 def _gate_dto(gate: GateSummary) -> GateResultDTO:
+    from app.api.v2.vocabulary import evidence_check_label
+
     return GateResultDTO(
         gate=gate.gate,
-        gate_label=gate.gate,
+        gate_label=evidence_check_label(gate.gate),
         status=gate.status,
         status_label=gate_status_label(gate.status),
         detail=gate.detail,
@@ -311,6 +313,12 @@ def _revision_dto(view: RevisionView) -> ProcessingRevisionDTO:
         is_current=view.is_current,
         manifest_sha256=complete.manifest_sha256,
         completion_manifest_sha256=complete.completion_manifest_sha256,
+        source_qualification_mode=complete.source_qualification_mode,
+        source_qualification_label=(
+            "逐项采用，未核实内容继续保留"
+            if complete.source_qualification_mode == "scoped_text_v1"
+            else "资料核对完成后使用"
+        ),
         pages=[
             _revision_page_dto(page, view.page_dimensions.get(page.entry_id))
             for page in complete.manifest
@@ -638,6 +646,8 @@ def get_processing_candidate(
         raise AppInternalError("资料版本候选缺少持久任务")
     return ProcessingCandidateDTO(
         candidate_id=candidate.candidate_id,
+        evidence_snapshot_id=candidate.evidence_snapshot_id,
+        base_processing_revision_id=candidate.base_processing_revision_id,
         job_id=candidate.job_id,
         candidate_status=status,
         candidate_status_label=snapshot_status_label(status),
@@ -682,6 +692,7 @@ def build_processing_revision(
         actor=actor,
         scanner_rule_version=body.scanner_rule_version,
         selected_locator_ids=body.selected_locator_ids,
+        source_qualification_mode=body.source_qualification_mode,
     )
     if not result.created:
         response.status_code = http_status.HTTP_200_OK

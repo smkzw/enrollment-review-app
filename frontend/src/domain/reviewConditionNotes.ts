@@ -1,5 +1,6 @@
 /** Presentation of recorded reasons only; never infer a new clinical result. */
 const notes: Readonly<Record<string, string>> = {
+  observed_operand_type_unverified: "原文记载的结果形式与本条件要求比较的内容不同，尚不能直接判定；这不表示检查未做或结果异常。",
   professional_judgment_missing: "缺少用于判定本条件的研究者书面判断，暂无法判定。需补充对应判断记录。",
   professional_judgment_unverified: "相关研究者判断尚未核实清楚，不能据此认定缺失，也不能代入结论。",
   observation_unverified: "本条件对应的原始资料尚未核实清楚。",
@@ -89,6 +90,7 @@ const notes: Readonly<Record<string, string>> = {
   prospective_requirement_unverified: "尚未核清本项要求是确认当前意愿，还是核对一段期间内的实际履行情况。",
   future_conduct_not_established: "现有声明不能证明未来已经持续履行本项要求，仍需按方案在相应节点核对。",
   prospective_statement_verified: "此处核实的是原文所记载的意愿或计划及其适用期间，不代表未来行为已经履行。",
+  source_computation_operands_unverified: "方案的计算方法已有来源，但系统尚未核实应使用哪些原始记录并完成计算。这不表示患者缺少记录或研究者判断。",
   observation_selection_unverified: "存在多份相关记录，尚未确认应采用哪一次记录。",
   candidate_enumeration_incomplete: "本次提供的资料尚未逐项核对完，暂不能确定应采用哪次记录。",
   observation_scope_disagreement: "对哪些记录属于本项审核范围尚有不同理解，需结合原件核实。",
@@ -124,6 +126,8 @@ const notes: Readonly<Record<string, string>> = {
   half_life_time_precision_insufficient: "现有日期无法确认实际停药间隔已达到半衰期要求，需要核对具体时刻或更完整的时间记录。",
   unit_mismatch: "记录单位与要求的单位尚未核对一致，暂不能比较。",
   fact_polarity_unknown: "尚未核清原文是在确认还是否认该情况。",
+  negated_boolean_value_ambiguous: "这条否认记录的整理方式有歧义，系统需结合原文重新核实；不表示受试者存在该情况，也不需要因此补研究者判断。",
+  negated_operand_type_unverified: "这条否认记录的具体内容与本项要求尚未对应清楚，暂不能据此作出判断。",
   ambiguous_partial_date: "原记录日期不够精确，暂不能确定是否落在要求的时间范围内。",
   ambiguous_time_direction: "相关事件的先后关系尚不明确。",
   ambiguous_time_window: "尚不能确定相关记录是否符合时间要求。",

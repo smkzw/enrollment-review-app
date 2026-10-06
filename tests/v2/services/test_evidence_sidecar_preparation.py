@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.domain.contracts.enums import (
+    LocatorSourceLayer,
     OcrRiskLevel,
     OcrRiskReviewDecision,
     PageArtifactStatus,
@@ -26,6 +27,7 @@ from app.domain.publication import (
 )
 from app.evidence.risk import OCR_RISK_RULE_VERSION
 from app.services.evidence_activation_service import EvidenceActivationService
+from app.services.evidence_locator_service import EvidenceLocatorService, LocatorRequest
 from app.services.evidence_revision_workflow import (
     EvidenceRevisionBuildRequest,
     EvidenceRevisionWorkflow,
@@ -64,6 +66,37 @@ from tests.v2.storage.test_ocr_repositories import (
     sha,
 )
 from tests.v2.storage.test_slice44_repositories import RAW_TEXT, _correction, _seed_metadata
+
+
+def test_source_line_preparation_accepts_multiple_targets_on_same_range(
+    revision_stack, session_factory
+):
+    session, _fixture, keys = revision_stack
+    session.commit()
+    first_line = RAW_TEXT.splitlines()[0]
+    locator_service = EvidenceLocatorService(session_factory, keys["artifact_store"])
+    with session_factory() as current, current.begin():
+        ocr = OcrPageRepository(current).get("op-1")
+        for target in ("independent-target-a", "independent-target-b"):
+            locator_service.create_locator_in_session(current, LocatorRequest(
+                page_artifact_id=ocr.page_artifact_id, ocr_page_id=ocr.ocr_page_id,
+                source_layer=LocatorSourceLayer.RAW_OCR,
+                source_text_sha256=ocr.raw_text_sha256, target_id=target,
+                target_text_start=0, target_text_end=len(first_line), excerpt=first_line,
+            ))
+        before = {row.locator_id: row.payload_sha256
+                  for row in current.query(EvidenceLocatorArtifactRecord).all()}
+        assert len(before) == 2
+    preparation = EvidenceSidecarPreparationService(session_factory, keys["artifact_store"])
+    preparation.prepare("rev-1")
+    preparation.prepare("rev-1")
+    with session_factory() as current:
+        after = {row.locator_id: row.payload_sha256
+                 for row in current.query(EvidenceLocatorArtifactRecord).all()}
+        assert all(after[key] == digest for key, digest in before.items())
+        same_range = [row for row in current.query(EvidenceLocatorArtifactRecord).all()
+                      if row.text_start == 0 and row.text_end == len(first_line)]
+        assert len(same_range) == 2
 
 
 def test_incremental_reuses_unchanged_reviews_and_corrections_on_new_base(

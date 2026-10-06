@@ -72,15 +72,29 @@ def test_mtplx_dual_main_coverage_is_selectable_for_normalization(client, monkey
     """GLM main-A + MTPLX main-B 双主读结果必须能直接进入正式整理，不得因第三读语义回放失败。"""
     from app.domain.contracts.page_review import PageReviewLane
     from app.llm.page_review_harness import require_page_reader_routes
+    from app.llm import mtplx_model_lifecycle
+    from app.services.page_review_job_service import main_reader_identity
+
+    # Offline historical-consumer fixture, not a deployment/model availability test.
+    monkeypatch.setattr(mtplx_model_lifecycle, "_external_shared_mtplx_available",
+                        lambda base_url, model: base_url == "http://127.0.0.1:8002/v1"
+                        and model == "mtplx-flash-next-optimized-speed")
 
     monkeypatch.setenv("INDEPENDENT_VLM_PROVIDER", "zhipu-coding-plan")
     monkeypatch.setenv("PAGE_REVIEW_MAIN_A_MODEL", "glm-5.3-flash")
     monkeypatch.setenv("PAGE_REVIEW_MAIN_B_PROVIDER", "mtplx")
     monkeypatch.setenv("PAGE_REVIEW_MAIN_B_MODEL", "mtplx-flash-next-optimized-speed")
+    monkeypatch.setenv("PAGE_REVIEW_MAIN_B_BASE_URL", "http://127.0.0.1:8002/v1")
+    monkeypatch.setenv("PAGE_REVIEW_MAIN_A_REASONING_EFFORT", "high")
+    monkeypatch.setenv("PAGE_REVIEW_MAIN_B_REASONING_EFFORT", "xhigh")
     routes = require_page_reader_routes(require_credentials=False)
     assert set(routes) == {PageReviewLane.MAIN_A, PageReviewLane.MAIN_B}
     assert routes[PageReviewLane.MAIN_A].reasoning_effort == "high"
     assert routes[PageReviewLane.MAIN_B].reasoning_effort == "xhigh"
+    monkeypatch.setattr(client.app.state.fact_normalization_command_service,
+                        "require_page_review", True)
+    monkeypatch.setattr(client.app.state.fact_normalization_command_service,
+                        "page_reader_identity", lambda: main_reader_identity(routes))
 
     factory = client.app.state.session_factory
     with factory() as session, session.begin():
@@ -99,6 +113,9 @@ def test_formal_normalization_rejects_stale_reader_prompt(client, monkeypatch):
     from tests.v2.services import test_r3_page_review_normalizer_wiring as fixtures
 
     monkeypatch.setattr(fixtures, "PAGE_REVIEW_PROMPT_VERSION", "page-review-r3/obsolete")
+    # Exercise the legacy reader contract itself, not the newer readiness wrapper.
+    monkeypatch.setattr(client.app.state.fact_normalization_command_service,
+                        "require_page_review", True)
     with client.app.state.session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="api-stale-reader-prompt")
     response = client.post(_endpoint(chain["subject_id"], chain["episode_id"]), json={})

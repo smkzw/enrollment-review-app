@@ -24,6 +24,7 @@ DEFINITIVE_DECISIONS = {
 }
 
 INDETERMINATE_GAPS = {
+    GapType.CALCULATION_CAPABILITY_UNAVAILABLE,
     GapType.APPLICABLE_POPULATION_UNVERIFIED,
     GapType.OBSERVATION_UNVERIFIED,
     GapType.RECORD_INCOMPLETE,
@@ -66,6 +67,11 @@ class ActionDirective:
 
 
 ACTION_CONTENT = {
+    GapType.CALCULATION_CAPABILITY_UNAVAILABLE: (
+        ActionTarget.SPONSOR_MEDICAL_OR_PROJECT,
+        "联系系统维护人员接通并核实本条规定的记录选取和计算；不能用人工补写病史或研究者判断代替。",
+        "可回到方案计算依据、实际采用的原始记录及计算过程的核实结果。",
+    ),
     GapType.APPLICABLE_POPULATION_UNVERIFIED: (
         ActionTarget.SPONSOR_MEDICAL_OR_PROJECT,
         "核实该方案条件适用于哪些受试者，以及本例是否属于该范围；完成前不作自动入排结论。",

@@ -34,8 +34,8 @@ from app.domain.contracts.evidence_locator import (
 from app.domain.contracts.evidence_processing import EvidenceProcessingRevision
 from app.evidence.risk import (
     OCR_RISK_RULE_VERSION,
-    allows_risk_review,
-    correction_covers_risk,
+    blocking_risk_is_resolved,
+    can_defer_blocking_risk,
 )
 from app.storage.evidence_locator_models import (
     EvidenceLocatorArtifactRecord,
@@ -339,6 +339,7 @@ class EvidenceRevisionBuilder:
         candidate_input_sha256: str,
         revision_id: str | None = None,
         require_current_heads: bool = True,
+        source_qualification_mode: str = "strict",
     ) -> CompleteEvidenceProcessingRevision:
         """按闭包构建完整修订并交由仓储冻结（失败不留下可激活半闭包根）。"""
         base = closure.base_revision
@@ -363,6 +364,11 @@ class EvidenceRevisionBuilder:
             referenced_document_revision_ids=closure.referenced_document_revision_ids,
             resolution_revision_ids=closure.resolution_revision_ids,
             completion_manifest_sha256="0" * 64,
+            source_qualification_mode=source_qualification_mode,
+            unresolved_blocking_risk_ids=(
+                self.unresolved_blocking_ids(session, closure)
+                if source_qualification_mode == "scoped_text_v1" else []
+            ),
             status=ProcessingRevisionStatus.READY,
             is_activatable=True,
             created_at=_utcnow(),
@@ -377,9 +383,26 @@ class EvidenceRevisionBuilder:
         )
 
     def assert_blocking_resolved(
-        self, session: Session, closure: RevisionClosure
+        self, session: Session, closure: RevisionClosure, *, source_qualification_mode: str = "strict"
     ) -> None:
         """门禁前置：每个 blocking flag 必须由所选核对或覆盖校对解除。"""
+        unresolved = self.unresolved_blocking_ids(session, closure)
+        if source_qualification_mode == "scoped_text_v1":
+            scans = OCRRiskScanRepository(session)
+            for scan_id in closure.risk_scan_ids:
+                for flag in scans.get(scan_id).flags:
+                    if f"{scan_id}:{flag.risk_id}" in unresolved and not can_defer_blocking_risk(flag):
+                        raise UnresolvedBlockingRiskError("整页识别无效，不能保留为可用资料版本")
+            return
+        if source_qualification_mode != "strict":
+            raise RevisionBuildError("未知来源核实方式")
+        if unresolved:
+            raise UnresolvedBlockingRiskError(
+                f"blocking 风险 {unresolved[0]} 未由选中核对或覆盖校对解除，完整处理修订不可冻结"
+            )
+
+    def unresolved_blocking_ids(self, session: Session, closure: RevisionClosure) -> list[str]:
+        """Resolve only selected, source-validated sidecars; never consult later reviews."""
         scan_repo = OCRRiskScanRepository(session)
         correction_repo = CorrectionRepository(session)
         selected_scan_contracts = {
@@ -397,25 +420,21 @@ class EvidenceRevisionBuilder:
             scan.ocr_page_id: len(OcrPageRepository(session).get(scan.ocr_page_id).raw_text)
             for scan in selected_scan_contracts.values()
         }
+        unresolved = []
         for scan_id, scan in selected_scan_contracts.items():
             for flag in scan.flags:
                 if flag.level != OcrRiskLevel.BLOCKING:
                     continue
                 flag_id = f"{scan_id}:{flag.risk_id}"
-                if flag_id in reviewed_flags and allows_risk_review(flag):
-                    continue
-                covered = any(
-                    c.ocr_page_id == scan.ocr_page_id
-                    and correction_covers_risk(
-                        flag,
-                        correction_text_start=c.text_start,
-                        correction_text_end=c.text_end,
-                        page_text_length=page_lengths[scan.ocr_page_id],
-                    )
-                    for c in correction_contracts
+                covered = blocking_risk_is_resolved(
+                    flag,
+                    reviewed=flag_id in reviewed_flags,
+                    correction_ranges=(
+                        (c.text_start, c.text_end) for c in correction_contracts
+                        if c.ocr_page_id == scan.ocr_page_id
+                    ),
+                    page_text_length=page_lengths[scan.ocr_page_id],
                 )
                 if not covered:
-                    raise UnresolvedBlockingRiskError(
-                        f"blocking 风险 {flag_id} 未由选中核对或覆盖校对解除，"
-                        "完整处理修订不可冻结"
-                    )
+                    unresolved.append(flag_id)
+        return sorted(unresolved)

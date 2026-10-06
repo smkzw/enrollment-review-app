@@ -59,6 +59,22 @@ from app.domain.contracts.selective_vision_observation import (
 )
 from app.domain.gates.fact_evidence_closure import derive_source_strength_from_metadata
 from app.projections.normalizer_reference_aliases import NormalizerReferenceAliases
+from app.llm.medication_history_guidance import MEDICATION_HISTORY_GUIDANCE
+from app.agents.verified_evidence_prompt import (
+    OBSERVATION_ASSERTION_BOUNDARY,
+    OBSERVATION_VALUE_BOUNDARY,
+    OBSERVATION_CONTEXT_BOUNDARY,
+)
+from app.domain.contracts.fact_context import (
+    FactContextQualifier, FactContextQualifierDraft, FactContextSource,
+    validate_context_excerpt, validate_context_source_excerpt,
+)
+from app.agents.evidence_normalizer_repair import (
+    EvidenceSourceObjectError, EvidenceSourceObjectRepair, SOURCE_OBJECT_REPAIR_VERSION,
+    EvidenceContextError, EvidenceContextRepair, EvidenceDraftScopeError, CONTEXT_REPAIR_VERSION,
+    EvidencePendingContextRetention,
+    EvidenceProspectiveError, EvidenceProspectiveRepair, PROSPECTIVE_SCOPES, PROSPECTIVE_REPAIR_VERSION,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -164,10 +180,20 @@ class EvidenceAssertionDraft(ContractModel):
     asserted_object: str = Field(min_length=1)
     assertion_text: str = Field(min_length=1)
     locator_id: str = Field(min_length=1)
+    contextual_qualifiers: list[FactContextQualifierDraft] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_context(self):
+        validate_context_excerpt(self.contextual_qualifiers, self.assertion_text)
+        return self
 
 
 class EvidenceFactDraft(ContractModel):
     candidate_ref: str = Field(min_length=1)
+    assertion_scope: Literal[
+        "observed_state", "completed_action", "declared_intention",
+        "prospective_or_conditional", "uncertain",
+    ] | None = None
     value_kind: Literal["value", "identifier"] = "value"
     source_observation_refs: list[str] = Field(default_factory=list)
     fact_type: str = Field(min_length=1)
@@ -231,7 +257,7 @@ class EvidenceExposureDraft(ContractModel):
 class EvidenceNormalizerDraftOutput(ContractModel):
     """真实模型唯一输出形状；系统身份与审计字段不交给模型生成。"""
 
-    schema_version: Literal["phase5/normalizer-draft/v3"] = (
+    schema_version: Literal["phase5/normalizer-draft/v3", "phase5/normalizer-draft/v4", "phase5/normalizer-draft/v5"] = (
         "phase5/normalizer-draft/v3"
     )
     fact_candidates: list[EvidenceFactDraft] = Field(default_factory=list)
@@ -243,6 +269,9 @@ class EvidenceNormalizerDraftOutput(ContractModel):
 
     @model_validator(mode="after")
     def validate_candidate_refs(self) -> "EvidenceNormalizerDraftOutput":
+        if any(item.source_text_range is not None or item.code == "source_text_not_accounted"
+               for item in self.unresolved_items):
+            raise ValueError("来源文字范围由系统生成，不能由模型声明")
         refs = [
             item.candidate_ref
             for item in (
@@ -254,6 +283,20 @@ class EvidenceNormalizerDraftOutput(ContractModel):
         if refs != list(dict.fromkeys(refs)):
             raise ValueError("candidate_ref 必须在本次响应内唯一")
         facts_by_ref = {item.candidate_ref: item for item in self.fact_candidates}
+        if self.schema_version in {"phase5/normalizer-draft/v4", "phase5/normalizer-draft/v5"}:
+            for fact in self.fact_candidates:
+                if fact.assertion_scope is None:
+                    raise ValueError(f"{fact.candidate_ref} 缺少断言所指事项的发生状态")
+                if (fact.assertion_scope in {
+                    "declared_intention", "prospective_or_conditional", "uncertain",
+                } and fact.polarity != FactPolarity.UNKNOWN):
+                    raise ValueError(
+                        f"{fact.candidate_ref} 的意向、未来条件或未确认事项不能作为已发生的肯定或否定事实"
+                    )
+                if (self.schema_version == "phase5/normalizer-draft/v5"
+                        and fact.polarity == FactPolarity.NEGATED
+                        and (fact.raw_value is False or fact.canonical_value is False)):
+                    raise ValueError(f"{fact.candidate_ref} 否认命题不能用布尔假值重复表达否定，须按原文核对正命题内容")
         fact_refs = set(facts_by_ref)
         for item in (*self.event_candidates, *self.exposure_candidates):
             unknown = set(item.fact_candidate_refs) - fact_refs
@@ -261,6 +304,15 @@ class EvidenceNormalizerDraftOutput(ContractModel):
                 raise ValueError(
                     f"{item.candidate_ref} 引用了不存在的事实候选：{sorted(unknown)}"
                 )
+            if self.schema_version in {"phase5/normalizer-draft/v4", "phase5/normalizer-draft/v5"}:
+                unsupported = [ref for ref in item.fact_candidate_refs
+                    if facts_by_ref[ref].assertion_scope not in {
+                        "observed_state", "completed_action",
+                    } or facts_by_ref[ref].polarity == FactPolarity.UNKNOWN]
+                if unsupported:
+                    raise ValueError(
+                        f"{item.candidate_ref} 的事件或暴露引用了尚未发生或未确认的事项：{unsupported}"
+                    )
             fact_locator_ids = {
                 locator_id
                 for ref in item.fact_candidate_refs
@@ -388,7 +440,7 @@ DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE = (
     "请从本次资料页组中逐页提取临床事实候选，并严格按指定结构返回。"
 )
 
-_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v24"
+_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v37"
 _MAX_PROMPT_CHARS = 100_000
 
 
@@ -431,7 +483,7 @@ _SCHEMA_REPAIR_CONTRACT = (
     "不得通过删除已有候选、清空四类列表、遗漏字段或取消逐页证据闭合来规避错误；"
     "若输入有效文本包含明确事实，必须重新阅读原始页文本并恢复对应候选，不能重复返回全空列表；"
     "肯定或否定候选必须补全指向原句与定位的 assertion_basis，未解决项必须补全受影响页或定位。"
-    "若错误指出断言对象未逐字出现，必须从该候选已有 assertion_text 中直接截取最短连续临床名词"
+    "若错误指出断言对象未逐字出现，必须从该候选已有 assertion_text 中直接截取连续且保持完整含义的临床对象或命题"
     "作为 asserted_object 和 assertion_basis.asserted_object，两处必须填同一个字符串；"
     "对象因原句中的“无/未/有/等”等虚词而不连续时，必须连同虚词原样截取原句中的连续片段；"
     "不得添加原句未连续出现的修饰词或后缀，"
@@ -439,11 +491,11 @@ _SCHEMA_REPAIR_CONTRACT = (
     "若错误指出同一检验检查时点被拆成多条事件，必须合并为一条事件，并保留全部相关"
     "事实引用与定位；不得遗漏任何事实候选。"
     "若错误指出肯定或否定候选缺少规范值：原句明确给出定量结果时，必须把原数值和原单位分别填入"
-    "raw_value、canonical_value 和 unit；原句只有定性存在或否认时，affirmed 的 raw_value 与"
-    "canonical_value 均填 true，negated 均填 false，unit 填 JSON null。不得用说明文字代替值。"
+    "raw_value、canonical_value 和 unit；原句为是否存在或是否完成的命题时，raw_value与"
+    "canonical_value均填true，否认由negated表达，不能填false重复否定；具名类别或定性结果保留原文值，unit填JSON null。不得用说明文字代替值。"
     "持续状态与日期必须相容：ongoing 不得携带 end_range；ended 只能在原文明确"
     "给出终止日期并填写 end_range 时使用；两者不能同时明确时改为 unknown，不得删除候选。"
-)
+) + OBSERVATION_ASSERTION_BOUNDARY + OBSERVATION_VALUE_BOUNDARY + OBSERVATION_CONTEXT_BOUNDARY + MEDICATION_HISTORY_GUIDANCE
 
 _SYSTEM_CONTRACT = (
     "你是临床证据规范化助手（Evidence Normalizer）。你的唯一任务是将本次调用"
@@ -471,12 +523,12 @@ _SYSTEM_CONTRACT = (
     "actual_exposure_fact_refs、non_exposure_medication_fact_refs 与 unresolved_items。"
     "必须逐条复核每一条 polarity=affirmed 且 profile_lane=medication 的事实候选，并且"
     "恰好归入以下两个清单之一，不得靠遗漏清单项回避判断。actual_exposure_fact_refs 是"
-    "本次事实候选中原文明确证明受试者已经使用、正在使用、接受给药或已有生效医嘱的"
+    "本次事实候选中原文明确证明受试者已经使用、正在使用或接受给药的"
     "candidate_ref 升序去重清单；计划、建议、讨论、发放、领取、携回、退回、持有、"
     "药名清单、否认和不确定陈述均不得列入。该清单必须与所有 exposure_candidates 的"
     "fact_candidate_refs 并集完全一致，不能漏项，也不能多列。"
-    "non_exposure_medication_fact_refs 只列计划、建议、讨论、发放、领取、携回、退回、持有、"
-    "药名清单或其他不能证明实际使用的肯定药物相关事实；若原文明确记载既往某次实际给药或"
+    "non_exposure_medication_fact_refs 列处方、已开具医嘱、购药，以及计划、建议、讨论、发放、领取、携回、退回、持有、"
+    "药名清单或其他不能证明实际使用的肯定药物相关事实；该清单不表示事实不能作为用药史依据。若原文明确记载既往某次实际给药或"
     "使用，即使来自筛选病历对既往史的转述，也必须归入 actual_exposure_fact_refs。绝不输出接受事实、冲突裁决、EvidenceExpectation"
     "状态、入排结论、ReviewRun、ActionRequest、blocking_level、节点主状态或任何"
     "“通过/不通过”标签。绝不输出模型置信度作为阈值；model_uncertainty 仅作为"
@@ -494,25 +546,26 @@ _SYSTEM_CONTRACT = (
     "study_milestone 只收知情、筛选、随机、给药等研究节点；demographics 收人口学；"
     "target_disease 收目标疾病的诊断与病程；symptoms_signs 收症状与体征；"
     "medical_history 收不属于目标疾病、感染免疫或其他专项类别的一般病史；"
-    "medication 收药物使用；non_drug_treatment 收手术、操作及其他非药物治疗；"
+    "medication 收药物相关记录及用药史，包括处方、购药、实际使用、未使用及疗效；"
+    "non_drug_treatment 收手术、操作及其他非药物治疗；"
     "test_exam_score 收检验、检查与评分；allergy_infection_immune 收过敏、感染与免疫相关记录；"
     "reproductive 收生育、妊娠与避孕；social_environmental 收吸烟、饮酒、职业及环境暴露；"
     "special_history 只收家族史、既往研究、献血输血或移植等专项史；"
     "evidence_quality 只收资料质量与溯源问题。同一临床事件在事实与事件候选中必须使用同一主题归属。"
-    "主题交叉时按临床对象而非句式选择：具名药物的使用、未使用及疗效记录归 medication；"
+    "主题交叉时按临床对象而非句式选择：具名药物的处方、购药、实际使用、未使用及疗效记录归 medication；"
     "手术或操作史无论肯定还是否定均归 non_drug_treatment；量表条目、检查项目及其结果归"
     "test_exam_score，非量表叙述的主观症状归 symptoms_signs；target_disease 只收目标疾病本身"
     "的诊断、病程和疾病状态，鉴别诊断中被否认的其他疾病按其自身临床主题归类。"
     "exposure_candidates 只表示原文明确肯定发生的药物或治疗暴露，必须引用至少一条"
     "肯定的用药/治疗事实，而且原文必须明确陈述该受试者已经使用、正在使用、接受给药，"
-    "或存在已经生效的明确医嘱。邮件讨论、审核意见、治疗建议、待核实条目、方案规则、"
+    "不能仅凭已经生效的医嘱认作实际给药。邮件讨论、审核意见、治疗建议、待核实条目、方案规则、"
     "假设性表述、药物名称清单或他人用药均不构成该受试者的实际暴露。药品的发放、领取、携回、"
     "带回、退回、清点、持有或计划使用，本身也不能证明已实际使用；只有同一有定位的原文另外明确记载"
-    "已给药、已使用、正在使用或已生效医嘱时，才可形成暴露。可以按原文形成"
+    "已给药、已使用或正在使用时，才可形成暴露。可以按原文形成"
     "讨论或建议事实，但不得生成 exposure_candidate。疾病名称和症状名称不能作为药名。否认用药或否认病史仍须"
     "按原文生成对应的否定 fact_candidate，但不得额外生成 exposure_candidate。"
     "凡已生成事实候选且原文明确给出该事实的发生、采样、检查、手术或治疗日期，"
-    "必须同时生成引用该事实的 event_candidate；肯定用药或治疗事实必须同时生成"
+    "必须同时生成引用该事实的 event_candidate；明确实际用药或治疗事实必须同时生成"
     "exposure_candidate。输出前必须逐条对账肯定用药事实、用药事件与药物暴露：同一药物的不同给药日期或剂量"
     "是不同暴露，不得因药名相同而合并或漏掉任何一次明确给药。原文没有日期时不得为了补齐事件而借用"
     "记录时间或节点锚点。"
@@ -525,11 +578,12 @@ _SYSTEM_CONTRACT = (
     "持续状态仅用持续/已结束/间歇/单次/未知；“既往”不等于已结束，不得自动推断"
     "终止日期。ongoing 必须不带 end_range；ended 必须有原文明确给出的 end_range；"
     "持续状态与终止日期不能同时明确时使用 unknown，不得删除候选规避。"
-    "每条明确临床陈述均单独形成事实候选，尤其是带数值和单位的检验、生命体征、评分"
+    "每条明确记录的临床观察均单独形成事实候选，尤其是带数值和单位的检验、生命体征、评分"
     "或检查结果，不得改写成未解决项。多个原始读数须分别保留，不得由模型先求均值或合计后"
     "伪装成原始事实；规则要求的计算由后续审核依据已核实的逐次记录完成。"
-    "被断言对象必须是 assertion_text 中逐字出现的最短"
-    "临床名词或名词短语，例如原句“患者否认糖尿病病史”使用“糖尿病病史”，原句“收缩压"
+    + OBSERVATION_ASSERTION_BOUNDARY + OBSERVATION_VALUE_BOUNDARY + OBSERVATION_CONTEXT_BOUNDARY + MEDICATION_HISTORY_GUIDANCE +
+    "被断言对象必须是 assertion_text 中逐字出现且保持完整含义的"
+    "临床对象或命题，例如原句“患者否认糖尿病病史”使用“糖尿病病史”，原句“收缩压"
     "120 mmHg”使用“收缩压”；不得扩写成问句、解释句、目标疾病说明或原文未出现的名称。"
     "原句以“无/未/有/等”等虚词分隔修饰语与对象时，必须连同虚词截取原句中的连续片段，"
     "例如原句“家族无遗传病病史”应使用“遗传病病史”，不得把被虚词隔开的"
@@ -631,6 +685,9 @@ def evidence_normalizer_prompt_template_sha256(prompt_template: str) -> str:
         "\n\n".join(
             (
                 _PROMPT_LAYOUT_VERSION,
+                SOURCE_OBJECT_REPAIR_VERSION,
+                CONTEXT_REPAIR_VERSION,
+                PROSPECTIVE_REPAIR_VERSION,
                 prompt_template.strip(),
                 _SYSTEM_CONTRACT,
                 _VISUAL_OBSERVATION_PROMPT_BOUNDARY,
@@ -666,6 +723,20 @@ def evidence_normalizer_json_schema() -> dict:
     可空字段仍保留 ``null``，跨字段医学语义继续由运行时合同和确定性门禁负责。
     """
     schema = deepcopy(EvidenceNormalizerDraftOutput.model_json_schema())
+    # Source offsets are host-owned audit data, never an authoring field.
+    unresolved_schema = schema["$defs"]["EvidenceNormalizerUnresolvedItem"]
+    unresolved_schema["properties"].pop("source_text_range")
+    schema["$defs"].pop("EvidenceNormalizerSourceTextRange")
+    # Historical v3/v4 remain readable; new model requests must declare v5.
+    schema["properties"]["schema_version"] = {
+        "type": "string", "const": "phase5/normalizer-draft/v5",
+    }
+    schema["$defs"]["EvidenceFactDraft"]["properties"]["assertion_scope"] = {
+        "type": "string", "enum": [
+            "observed_state", "completed_action", "declared_intention",
+            "prospective_or_conditional", "uncertain",
+        ],
+    }
 
     def require_declared_properties(node) -> None:
         if isinstance(node, list):
@@ -815,7 +886,7 @@ def _model_input_payload(evidence_input: EvidenceNormalizerInput, *, pending_det
         ],
     }
     if evidence_input.page_review is None:
-        # 兼容 Phase 5 已冻结任务；R3 新任务必须携带页级判读附件。
+        # 文字主读及历史冻结任务不要求附加双模型判读。
         payload["pages"] = payload.pop("ocr_sidecar_pages")
         for page in payload["pages"]:
             page["effective_text"] = page.pop("sidecar_transcription")
@@ -885,6 +956,14 @@ def _model_input_payload(evidence_input: EvidenceNormalizerInput, *, pending_det
         from app.projections.page_review_model_input import retained_pending_summary
         payload["page_review"] = retained_pending_summary(payload["page_review"])
     return payload
+
+
+def evidence_normalizer_reference_aliases(
+    evidence_input: EvidenceNormalizerInput, *, pending_details_retained: bool = False,
+) -> NormalizerReferenceAliases:
+    return NormalizerReferenceAliases.from_payload(_model_input_payload(
+        evidence_input, pending_details_retained=pending_details_retained,
+    ))
 
 
 def build_evidence_normalizer_prompt(
@@ -1122,13 +1201,14 @@ def _restore_source_datetime_precision(
     return canonical_value
 
 
-def _normalize_evidence_json(value):
+def _normalize_evidence_json(value, *, preserve_boolean_objects: bool = False):
     """仅做语义保持的 JSON 实例规范化（不改变候选语义）。"""
     if isinstance(value, list):
-        return [_normalize_evidence_json(item) for item in value]
+        return [_normalize_evidence_json(item, preserve_boolean_objects=preserve_boolean_objects) for item in value]
     if not isinstance(value, dict):
         return value
-    normalized = {key: _normalize_evidence_json(item) for key, item in value.items() if not (key == "$defs" and item == {})}
+    normalized = {key: _normalize_evidence_json(item, preserve_boolean_objects=preserve_boolean_objects)
+                  for key, item in value.items() if not (key == "$defs" and item == {})}
     for key in _SET_LIKE_DRAFT_ARRAY_FIELDS:
         items = normalized.get(key)
         if not isinstance(items, list) or not items:
@@ -1204,7 +1284,11 @@ def _normalize_evidence_json(value):
     # 从其已有 assertion_text 中确定性地还原唯一逐字片段；歧义时保持原样，
     # 逐字门禁仍按原合同拒绝。两处对象在草稿中一致时保持一致。
     basis = normalized.get("assertion_basis")
-    if isinstance(basis, dict) and isinstance(basis.get("assertion_text"), str):
+    boolean_proposition = preserve_boolean_objects and (
+        isinstance(normalized.get("raw_value"), bool)
+        or isinstance(normalized.get("canonical_value"), bool)
+    )
+    if not boolean_proposition and isinstance(basis, dict) and isinstance(basis.get("assertion_text"), str):
         original = basis.get("asserted_object")
         if isinstance(original, str):
             repaired = _mechanical_verbatim_repair(original, basis["assertion_text"])
@@ -1380,9 +1464,11 @@ def _hydrate_draft_output(
     page_numbers: list[int],
     created_at: datetime,
     locator_source_hashes: Mapping[str, str],
+    locator_source_texts: Mapping[str, str],
 ) -> EvidenceNormalizerOutput:
     """把模型语义草稿提升为领域候选；系统字段不由模型决定。"""
     invalid_asserted_objects = []
+    invalid_refs = []
     for candidate in draft.fact_candidates:
         if candidate.assertion_basis is None:
             continue
@@ -1390,14 +1476,17 @@ def _hydrate_draft_output(
         assertion_text = " ".join(candidate.assertion_basis.assertion_text.split())
         if asserted_object not in assertion_text:
             invalid_asserted_objects.append(candidate.assertion_basis.asserted_object)
+            invalid_refs.append(candidate.candidate_ref)
     invalid_asserted_objects = list(dict.fromkeys(invalid_asserted_objects))
     if invalid_asserted_objects:
-        raise ValueError(
+        raise EvidenceSourceObjectError(
             "以下断言对象必须逐字出现在各自断言原句中："
-            + "；".join(invalid_asserted_objects)
+            + "；".join(invalid_asserted_objects), invalid_refs,
+            bounded_repair=draft.schema_version == "phase5/normalizer-draft/v5",
         )
 
     facts: list[ClinicalFactCandidateV2] = []
+    context_questions = []
     for candidate in draft.fact_candidates:
         basis = None
         if candidate.assertion_basis is not None:
@@ -1409,11 +1498,30 @@ def _hydrate_draft_output(
                     "断言依据定位不在系统冻结的定位摘要中："
                     f"{candidate.assertion_basis.locator_id}"
                 )
+            qualifiers = []
+            for qualifier in candidate.assertion_basis.contextual_qualifiers:
+                source = None
+                if qualifier.source is not None:
+                    lid = qualifier.source.locator_id
+                    if lid not in candidate.locator_ids or lid not in locator_source_hashes:
+                        raise ValueError("背景独立定位不在本次冻结的候选来源集合中")
+                    validate_context_source_excerpt(qualifier.source.excerpt, locator_source_texts.get(lid))
+                    source = FactContextSource(**qualifier.source.model_dump(),
+                        source_text_sha256=locator_source_hashes[lid])
+                qualifiers.append(FactContextQualifier(kind=qualifier.kind, label=qualifier.label, source=source))
+                if source is not None:
+                    context_questions.append(EvidenceNormalizerUnresolvedItem(
+                        code="context_relation_unverified",
+                        message=f"{qualifier.label}与{candidate.asserted_object}的归属关系尚待核实",
+                        affected_locator_ids=sorted({source.locator_id, candidate.assertion_basis.locator_id}),
+                        reason="两处摘录分别有来源，但尚不能仅因相邻位置确认标题属于本项结果；不是患者资料缺失。",
+                    ))
             basis = AssertionBasis(
                 asserted_object=candidate.assertion_basis.asserted_object,
                 assertion_text=candidate.assertion_basis.assertion_text,
                 locator_id=candidate.assertion_basis.locator_id,
                 source_text_sha256=source_text_sha256,
+                contextual_qualifiers=qualifiers,
             )
         try:
             fact = ClinicalFactCandidateV2(
@@ -1497,7 +1605,7 @@ def _hydrate_draft_output(
         fact_candidates=facts,
         event_candidates=events,
         exposure_candidates=exposures,
-        unresolved_items=draft.unresolved_items,
+        unresolved_items=[*draft.unresolved_items, *context_questions],
     )
 
 
@@ -1510,8 +1618,10 @@ def parse_evidence_normalizer_output(
     expected_page_numbers: list[int] | None = None,
     available_locator_ids: set[str] | None = None,
     locator_source_hashes: Mapping[str, str] | None = None,
+    locator_source_texts: Mapping[str, str] | None = None,
     created_at: datetime | None = None,
     reference_aliases: NormalizerReferenceAliases | None = None,
+    require_current_draft: bool = False,
 ) -> EvidenceNormalizerOutput:
     """解析模型原文为 ``EvidenceNormalizerOutput``，保留所有可操作错误。"""
     if not text or not text.strip():
@@ -1529,10 +1639,63 @@ def parse_evidence_normalizer_output(
     _check_forbidden_top_level(payload)
     if reference_aliases is not None:
         payload = reference_aliases.transform(payload, expand=True)
+    if require_current_draft and payload.get("schema_version") != "phase5/normalizer-draft/v5":
+        raise ValueError("本次新模型输出必须使用当前断言状态合同，旧输出仅可读取历史")
+    if require_current_draft:
+        facts = payload.get("fact_candidates")
+        if not isinstance(facts, list) or any(not isinstance(item, dict) for item in facts):
+            raise EvidenceDraftScopeError("事实候选形状不足以确定局部恢复范围，保留原答待核对")
+        refs = [item.get("candidate_ref") for item in facts]
+        if (any(not isinstance(ref, str) or not ref.strip() for ref in refs)
+                or len(refs) != len(set(refs))):
+            raise EvidenceDraftScopeError("候选身份缺失、重复或无效，不能从修复回答重新建立依据")
+        invalid_contexts = []
+        context_errors = []
+        for candidate in facts:
+            basis = candidate.get("assertion_basis")
+            if basis is None and candidate.get("polarity") == "unknown":
+                continue
+            if not isinstance(basis, dict):
+                raise EvidenceDraftScopeError("断言依据形状不完整，不能安全锁定原文恢复范围")
+            if (not isinstance(basis.get("assertion_text"), str)
+                    or not basis["assertion_text"].strip()):
+                raise EvidenceDraftScopeError("断言原文缺失或不是文字，不能从修复回答补造依据")
+            try:
+                if "contextual_qualifiers" not in basis:
+                    raise ValueError("本次新断言须显式声明背景限定；无相关限定时返回空列表")
+                raw = basis["contextual_qualifiers"]
+                if not isinstance(raw, list):
+                    raise ValueError("背景限定须为列表")
+                qualifiers = [FactContextQualifierDraft.model_validate(item) for item in raw]
+                validate_context_excerpt(qualifiers, basis.get("assertion_text") or "")
+                for qualifier in qualifiers:
+                    if qualifier.source is None:
+                        continue
+                    lid = qualifier.source.locator_id
+                    if lid not in candidate.get("locator_ids", []) or lid not in (locator_source_hashes or {}):
+                        raise ValueError("背景独立定位不在本次冻结的候选来源集合中")
+                    validate_context_source_excerpt(qualifier.source.excerpt,
+                        (locator_source_texts or {}).get(lid))
+            except (ValueError, TypeError) as exc:
+                invalid_contexts.append(candidate.get("candidate_ref"))
+                context_errors.append(str(exc))
+        if invalid_contexts:
+            raise EvidenceContextError("；".join(context_errors), invalid_contexts, bounded_repair=True)
+        classification = [payload.get(key) for key in ("actual_exposure_fact_refs", "non_exposure_medication_fact_refs")]
+        if any(not isinstance(items, list) or any(not isinstance(ref, str) for ref in items) for items in classification):
+            raise EvidenceDraftScopeError("药物分类引用形状不完整，不能锁定恢复依赖")
+        classified_refs = set(classification[0]) | set(classification[1])
+        prospective_refs = [item["candidate_ref"] for item in facts
+            if item.get("assertion_scope") in PROSPECTIVE_SCOPES
+            and (item.get("polarity") != "unknown" or item["candidate_ref"] in classified_refs)]
+        if prospective_refs:
+            raise EvidenceProspectiveError("意向、未来条件或未确认事项不能作为已发生的肯定或否定事实；须同时核对肯定分类引用",
+                prospective_refs, bounded_repair=True)
     normalized = _normalize_locator_aliases(
         _demote_conflicting_duration_status(
             _demote_invalid_date_ranges(
-                _normalize_evidence_json(payload),
+                _normalize_evidence_json(payload, preserve_boolean_objects=(
+                    payload.get("schema_version") == "phase5/normalizer-draft/v5")),
                 page_numbers=expected_page_numbers,
             ),
             page_numbers=expected_page_numbers,
@@ -1567,6 +1730,7 @@ def parse_evidence_normalizer_output(
                 page_numbers=expected_page_numbers,
                 created_at=created_at,
                 locator_source_hashes=locator_source_hashes or {},
+                locator_source_texts=locator_source_texts or {},
             )
         except ValidationError as exc:
             raise ValueError(_validation_error_summary(exc)) from exc
@@ -1599,6 +1763,14 @@ def parse_evidence_normalizer_output(
                 raise ValueError(f"未解决项引用了输入未提供的 locator：{sorted(unknown)}")
     # 来源语义白名单（模型侧）
     for cand in output.fact_candidates:
+        if cand.assertion_basis is not None:
+            for qualifier in cand.assertion_basis.contextual_qualifiers:
+                source = qualifier.source
+                if source is not None:
+                    if source.source_text_sha256 != (locator_source_hashes or {}).get(source.locator_id):
+                        raise ValueError("背景独立摘录不匹配本次冻结来源哈希")
+                    validate_context_source_excerpt(source.excerpt,
+                        (locator_source_texts or {}).get(source.locator_id))
         if cand.candidate_source_semantics not in _ALLOWED_CANDIDATE_SOURCE_SEMANTICS:
             raise ValueError(f"事实候选来源语义不在白名单：{cand.candidate_source_semantics}")
     for cand in output.event_candidates:
@@ -2112,6 +2284,7 @@ class EvidenceNormalizerRunner:
         pending_details_retained: bool = False,
         compact_references: bool = False,
         verified_scope_prompt: bool = False,
+        require_current_draft: bool = False,
     ) -> EvidenceNormalizerRunResult:
         # 传输层若已用 JSON Schema 受限解码强制输出结构（如 omlx json_schema
         # response_format），提示内不再重复内嵌同一份 Schema；其余传输保持
@@ -2120,8 +2293,8 @@ class EvidenceNormalizerRunner:
             getattr(transport, "enforces_output_json_schema", False)
         )
         attempts: list[EvidenceNormalizerAttempt] = []
-        reference_aliases = (NormalizerReferenceAliases.from_payload(_model_input_payload(
-            evidence_input, pending_details_retained=pending_details_retained))
+        reference_aliases = (evidence_normalizer_reference_aliases(
+            evidence_input, pending_details_retained=pending_details_retained)
             if compact_references else None)
         prompt = build_evidence_normalizer_prompt(
             evidence_input,
@@ -2136,6 +2309,9 @@ class EvidenceNormalizerRunner:
         locator_source_hashes = {
             item.locator_id: item.source_text_sha256
             for item in evidence_input.available_locators
+        }
+        locator_source_texts = {
+            item.locator_id: item.localized_text for item in evidence_input.available_locators
         }
         session_id: str | None = None
         raw_text: str | None = None
@@ -2183,10 +2359,19 @@ class EvidenceNormalizerRunner:
 
         # 尝试解析与 schema 修复循环
         schema_repairs = 0
+        object_repair: EvidenceSourceObjectRepair | None = None
+        pending_contexts: list[EvidencePendingContextRetention] = []
         while True:
             attempt_id = len(attempts) + 1
             raw_sha = _sha256(raw_text or "")
             try:
+                for pending in pending_contexts:
+                    pending.validate(raw_text or "")
+                pending = EvidencePendingContextRetention.capture(raw_text or "")
+                if pending is not None:
+                    pending_contexts.append(pending)
+                if object_repair is not None:
+                    object_repair.validate(raw_text or "")
                 output = parse_evidence_normalizer_output(
                     raw_text or "",
                     expected_run_id=evidence_input.run_id,
@@ -2195,8 +2380,10 @@ class EvidenceNormalizerRunner:
                     expected_page_numbers=evidence_input.page_numbers,
                     available_locator_ids=available,
                     locator_source_hashes=locator_source_hashes,
+                    locator_source_texts=locator_source_texts,
                     created_at=evidence_input.created_at,
                     reference_aliases=reference_aliases,
+                    require_current_draft=require_current_draft,
                 )
                 if not (
                     output.fact_candidates
@@ -2208,6 +2395,12 @@ class EvidenceNormalizerRunner:
                         "模型未返回候选，也未逐页说明无可提取内容。"
                     )
                 output = _validate_normalizer_semantics(output, evidence_input)
+                if isinstance(object_repair, EvidenceProspectiveRepair):
+                    questions = object_repair.retained_questions()
+                    if reference_aliases is not None:
+                        questions = reference_aliases.transform(questions, expand=True)
+                    output = output.model_copy(update={"unresolved_items": [*output.unresolved_items,
+                        *(EvidenceNormalizerUnresolvedItem.model_validate(item) for item in questions)]})
                 attempts.append(
                     EvidenceNormalizerAttempt(
                         attempt=attempt_id,
@@ -2248,11 +2441,35 @@ class EvidenceNormalizerRunner:
                         attempts=attempts,
                         final_output=None,
                     )
+                if isinstance(exc, EvidenceSourceObjectError):
+                    scope_unavailable = not exc.bounded_repair or (object_repair is None and schema_repairs > 0)
+                    repair_type = (EvidenceContextRepair if isinstance(exc, EvidenceContextError)
+                        else EvidenceProspectiveRepair if isinstance(exc, EvidenceProspectiveError)
+                        else EvidenceSourceObjectRepair)
+                    family_changed = object_repair is not None and type(object_repair) is not repair_type
+                    if scope_unavailable or family_changed:
+                        return EvidenceNormalizerRunResult(status="需要核对", session_id=session_id,
+                            attempts=attempts, final_output=None)
+                if (isinstance(exc, EvidenceSourceObjectError) and exc.bounded_repair
+                        and object_repair is None):
+                    try:
+                        object_repair = repair_type(
+                            raw_text or "", exc.candidate_refs, set_fields=_SET_LIKE_DRAFT_ARRAY_FIELDS,
+                        )
+                    except ValueError:
+                        return EvidenceNormalizerRunResult(
+                            status="需要核对", session_id=session_id,
+                            attempts=attempts, final_output=None,
+                        )
                 schema_repairs += 1
                 repair_prompt = _schema_repair_prompt(
                     str(exc), include_output_schema=include_output_schema,
                     verified_scope_prompt=verified_scope_prompt,
                 )
+                if pending_contexts:
+                    repair_prompt += "补答必须保留已有另处背景来源及其待核关系，不得删除、换候选或改为同句限定来解除疑问。"
+                if object_repair is not None:
+                    repair_prompt += object_repair.instruction()
                 try:
                     response = transport.continue_session(session_id=session_id, prompt=repair_prompt)
                     session_id = response.session_id

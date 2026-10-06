@@ -9,6 +9,7 @@ from app.domain.contracts.judgment_search import JudgmentSearchCoverageStatus, J
 from app.storage.judgment_search_models import JudgmentSearchSummaryORM
 from app.storage.judgment_search_repository import JudgmentSearchSummaryRepository
 from app.storage.repositories import persist_fixture
+from app.workflow.jobstore import JobStore
 from app.domain.publication import canonical_hash
 from tests.v2.storage.test_migration_0019 import _seed_page_stack
 from tests.v2.storage.test_migration_0022 import _authority, _summary
@@ -44,6 +45,9 @@ def test_identical_results_are_bound_to_each_search_job(session_factory):
             "judgment-required", JudgmentSearchCoverageStatus.COVERAGE_INCOMPLETE,
             "b" * 64,
         )
+        for job_id in ("search-first", "search-second", "search-third"):
+            JobStore(session).create_job(job_id=job_id, job_type="judgment_search",
+                                         payload={"authority": authority.model_dump(mode="json")})
         for job_id in ("search-first", "search-second", "search-second"):
             repository.save_summary(
                 summary, authority=authority, job_id=job_id,
@@ -95,6 +99,8 @@ def test_legacy_summary_identity_remains_readable_only_for_original_authority(se
             "legacy-judgment", JudgmentSearchCoverageStatus.COVERAGE_INCOMPLETE,
             "c" * 64,
         )
+        JobStore(session).create_job(job_id="legacy-search", job_type="judgment_search",
+                                     payload={"authority": authority.model_dump(mode="json")})
         repository.save_summary(
             summary, authority=authority, job_id="legacy-search",
             created_at=datetime(2026, 9, 12, tzinfo=UTC),

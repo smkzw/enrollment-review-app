@@ -156,6 +156,33 @@ def test_complete_step_rejects_wrong_owner(session_factory, clock):
         assert store.get_last_checkpoint("job-1", "s1") is None
 
 
+def test_failure_diagnostic_is_retained_but_not_completion_after_lease_loss(session_factory, clock):
+    from app.workflow.recovery import recover_expired_jobs
+
+    create_job_with_steps(session_factory, clock, job_id="diagnostic-recovery", steps=STEPS)
+    lease = _claim(session_factory, clock)
+    with _store(session_factory, clock) as store:
+        store.start_step(lease, "s1")
+        store.fail_step(lease, "s1", error_code="STREAM_INTERRUPTED", retryable=True,
+                        diagnostic_checkpoint={"partial": "preserved"})
+    with _store(session_factory, clock) as store:
+        original = store.get_last_checkpoint("diagnostic-recovery", "s1")
+        assert store.checkpoint_is_diagnostic("diagnostic-recovery", original[0])
+        assert not store.checkpoint_is_diagnostic("different-job", original[0])
+        store.retry_failed("diagnostic-recovery")
+    lease = _claim(session_factory, clock, "second-worker")
+    with _store(session_factory, clock) as store:
+        store.start_step(lease, "s1")
+    clock.advance(DEFAULT_LEASE_TTL.total_seconds() + 1)
+    report = recover_expired_jobs(session_factory, now=clock.now)
+    assert report.recovered_jobs == ["diagnostic-recovery"]
+    snapshot = _snapshot(session_factory, clock, "diagnostic-recovery")
+    assert snapshot.steps[0].state == "queued"
+    assert snapshot.progress_completed == 0
+    with _store(session_factory, clock) as store:
+        assert store.get_last_checkpoint("diagnostic-recovery", "s1") == original
+
+
 def test_complete_step_rejects_wrong_generation(session_factory, clock):
     create_job_with_steps(session_factory, clock, job_id="job-1", steps=STEPS)
     lease = _claim(session_factory, clock, "w1")

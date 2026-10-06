@@ -83,6 +83,7 @@ export interface ReviewEpisodeWire {
 }
 
 export interface GapCountsWire {
+  calculation_capability_unavailable?: number;
   observation_unverified?: number;
   record_incomplete?: number;
   description_insufficient?: number;

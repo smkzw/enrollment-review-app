@@ -180,6 +180,8 @@ describe("isReviewableLocator", () => {
 function makeCandidateResult(overrides: Record<string, unknown> = {}) {
   return {
     candidate_id: "candidate-1",
+    evidence_snapshot_id: "snap-active",
+    base_processing_revision_id: "base-revision-1",
     job_id: "job-1",
     candidate_status: "staged",
     candidate_status_label: "待处理",
@@ -228,6 +230,14 @@ function makeRiskReview() {
 }
 
 describe("证据处理领域解码", () => {
+  it("逐项采用保留核实方式；旧版本缺省仍为严格方式，未知标识拒绝", () => {
+    expect(decodeProcessingRevision(makeRevision()).sourceQualificationMode).toBe("strict");
+    const scoped = decodeProcessingRevision(makeRevision({ source_qualification_mode: "scoped_text_v1", pending_risk_flag_count: 2 }));
+    expect(scoped.sourceQualificationMode).toBe("scoped_text_v1");
+    expect(scoped.pendingRiskFlagCount).toBe(2);
+    expect(scoped.sourceQualificationLabel).toBe("逐项采用，未核实内容继续保留");
+    expect(() => decodeProcessingRevision(makeRevision({ source_qualification_mode: "verified" }))).toThrow(EvidenceDecodeError);
+  });
   it("风险汇总缺失时拒绝解码，不把合同缺口猜成零风险", () => {
     const revision: Record<string, unknown> = makeRevision();
     delete revision.risk_flag_count;
@@ -413,9 +423,19 @@ describe("证据处理领域解码", () => {
       }),
     ).toMatchObject({
       candidateStatus: "needs_attention",
+      evidenceSnapshotId: "snap-active",
+      baseProcessingRevisionId: "base-revision-1",
       candidateEventSeq: 2,
       completeRevisionId: null,
     });
+  });
+
+  it("待启用内容必须带确切来源与基础版本，不能猜测", () => {
+    for (const missing of ["evidence_snapshot_id", "base_processing_revision_id"]) {
+      const wire = makeCandidateResult() as Record<string, unknown>;
+      delete wire[missing];
+      expect(() => decodeProcessingCandidateStatus(wire)).toThrow();
+    }
   });
 
   it("解码来源锚定的零长度插入，并拒绝范围与空原文不一致", () => {

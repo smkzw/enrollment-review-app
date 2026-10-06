@@ -401,6 +401,8 @@ class ProcessingRevisionDTO(_StrictModel):
     pages: list[ProcessingRevisionPageDTO] = Field(default_factory=list)
     risk_flag_count: int = Field(default=0, ge=0)
     pending_risk_flag_count: int = Field(default=0, ge=0)
+    source_qualification_mode: Literal["strict", "scoped_text_v1"] = "strict"
+    source_qualification_label: str = "资料核对完成后使用"
     locator_ids: list[str] = Field(default_factory=list)
     risk_scan_ids: list[str] = Field(default_factory=list)
     risk_review_ids: list[str] = Field(default_factory=list)
@@ -423,6 +425,7 @@ class BuildRevisionRequest(_StrictModel):
     actor: str | None = Field(default=None, max_length=128)
     scanner_rule_version: str | None = None
     selected_locator_ids: list[str] = Field(default_factory=list)
+    source_qualification_mode: Literal["strict", "scoped_text_v1"] = "strict"
 
 
 class BuildRevisionResponse(_StrictModel):
@@ -442,6 +445,8 @@ class ProcessingCandidateDTO(_StrictModel):
     """持久资料版本候选状态；供工作台恢复、轮询和继续核对。"""
 
     candidate_id: str
+    evidence_snapshot_id: str
+    base_processing_revision_id: str
     job_id: str
     candidate_status: str
     candidate_status_label: str

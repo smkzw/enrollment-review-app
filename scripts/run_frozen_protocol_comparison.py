@@ -235,23 +235,138 @@ def _record_calls(transport: Any, receipts_dir: Path, sequence: list[int]) -> An
         _write_json(receipts_dir / f"request-{index:04d}.json", kwargs)
         started = time.monotonic()
         receipt = {**_transport_identity(transport), "attempt": index}
+        streaming = False
+
+        def save_receipt():
+            receipt["elapsed_seconds"] = time.monotonic() - started
+            target = receipts_dir / f"receipt-{index:04d}.json"
+            temporary = target.with_suffix(".json.tmp")
+            _write_json(temporary, receipt)
+            temporary.replace(target)
+
         try:
             response = original(**kwargs)
+            if kwargs.get("stream"):
+                streaming = True
+                receipt["status"] = "stream_pending"
+                save_receipt()
+
+                class RecordedStream:
+                    def __init__(self):
+                        self.chunks = []
+                        self.finished = False
+                        self.failure = None
+                        self.last_saved_at = started
+                        self.content_characters = 0
+                        self.reasoning_characters = 0
+
+                    def _observe_progress(self, payload):
+                        now = time.monotonic()
+                        content = 0
+                        reasoning = 0
+                        for choice in payload.get("choices", []):
+                            delta = choice.get("delta") or {}
+                            content += len(delta.get("content") or "")
+                            reasoning += len(delta.get("reasoning_content") or "")
+                        self.content_characters += content
+                        self.reasoning_characters += reasoning
+                        receipt.update(
+                            chunks_received=len(self.chunks),
+                            content_characters_received=self.content_characters,
+                            reasoning_characters_received=self.reasoning_characters,
+                            last_chunk_elapsed_seconds=now - started,
+                        )
+                        first_content = content and "first_content_elapsed_seconds" not in receipt
+                        first_reasoning = reasoning and "first_reasoning_elapsed_seconds" not in receipt
+                        if first_content:
+                            receipt["first_content_elapsed_seconds"] = now - started
+                        if first_reasoning:
+                            receipt["first_reasoning_elapsed_seconds"] = now - started
+                        # Counts are observability only, never token usage or a
+                        # clinical success signal. Keepalives do not imply output.
+                        if content or reasoning:
+                            receipt["last_output_elapsed_seconds"] = now - started
+                        if len(self.chunks) == 1 or first_content or first_reasoning or now - self.last_saved_at >= 30:
+                            save_receipt()
+                            self.last_saved_at = now
+
+                    def _save(self, status):
+                        if self.finished:
+                            return
+                        self.finished = True
+                        usage = next((chunk["usage"] for chunk in reversed(self.chunks)
+                                      if chunk.get("usage") is not None), None)
+                        effective = [chunk for chunk in self.chunks if any(
+                            choice.get("finish_reason") or choice.get("delta", {}).get("content")
+                            or choice.get("delta", {}).get("reasoning_content")
+                            for choice in chunk.get("choices", []))]
+                        model = next((chunk["model"] for chunk in reversed(effective)
+                                      if chunk.get("model")), None)
+                        reasons = [choice["finish_reason"] for chunk in self.chunks
+                                   for choice in chunk.get("choices", [])
+                                   if choice.get("finish_reason") is not None]
+                        request_ids = list(dict.fromkeys(chunk["id"] for chunk in effective
+                                                       if chunk.get("id")))
+                        _write_json(receipts_dir / f"response-{index:04d}.json", {
+                            "response_kind": "stream_chunks", "chunks": self.chunks,
+                            "usage": usage, "model": model, "failure": self.failure,
+                        })
+                        receipt.update(status=status, usage=usage, response_model=model,
+                                       finish_reasons=reasons, request_ids=request_ids)
+                        save_receipt()
+
+                    def __iter__(self):
+                        try:
+                            for chunk in response:
+                                payload = chunk.model_dump(mode="json")
+                                self.chunks.append(payload)
+                                self._observe_progress(payload)
+                                yield chunk
+                        except Exception as exc:
+                            receipt["failure_type"] = type(exc).__name__
+                            receipt["status_code"] = getattr(exc, "status_code", None)
+                            self.failure = {"type": type(exc).__name__, "message": str(exc),
+                                            "body": getattr(exc, "body", None)}
+                            self._save("stream_failed")
+                            raise
+                        else:
+                            self._save("stream_exhausted")
+
+                    def close(self):
+                        try:
+                            close = getattr(response, "close", None)
+                            if callable(close):
+                                close()
+                        finally:
+                            self._save("stream_closed_early")
+
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *args):
+                        self.close()
+
+                    def __getattr__(self, name):
+                        return getattr(response, name)
+
+                return RecordedStream()
             payload = response.model_dump(mode="json")
             _write_json(receipts_dir / f"response-{index:04d}.json", payload)
             receipt.update(
+                status="response_received",
                 response_model=payload.get("model"),
                 usage=payload.get("usage"),
                 finish_reasons=[c.get("finish_reason") for c in payload.get("choices", [])],
             )
             return response
         except Exception as exc:
+            receipt["status"] = "request_failed"
             receipt["failure_type"] = type(exc).__name__
             receipt["status_code"] = getattr(exc, "status_code", None)
             raise
         finally:
-            receipt["elapsed_seconds"] = time.monotonic() - started
-            _write_json(receipts_dir / f"receipt-{index:04d}.json", receipt)
+            if not streaming:
+                save_receipt()
 
     completions.create = create
     return transport
@@ -735,6 +850,11 @@ def execute(
         integrity_payload = integrity_checkpoint[1] if integrity_checkpoint else {}
         record["outcome"] = {
             "job_state": job.state,
+            "failed_steps": [
+                {"step_id": step.step_id, "state": step.state, "error_code": step.error_code,
+                 "error_classification": step.error_classification, "attempt": step.attempt}
+                for step in steps.values() if step.state in {"failed", "failed_retryable", "failed_final"}
+            ],
             "awaiting_user": (
                 "review"
                 if steps.get("await_review") is not None

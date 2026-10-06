@@ -208,9 +208,11 @@ def test_pending_only_group_preserves_pages_without_model_call(
     prepared = executor(context)
     assert len(calls) == expected_calls
     if expected_calls == 0:
+        assert prepared.checkpoint["reading_method"] == "retained_pending"
         assert prepared.checkpoint["model_called"] is False
         assert prepared.checkpoint["normalization_method"] == PENDING_NORMALIZATION_POLICY
     else:
+        assert prepared.checkpoint["reading_method"] == "adapter_response"
         assert "normalization_method" not in prepared.checkpoint
     assert prepared.checkpoint["candidate_ids"] == []
     assert prepared.checkpoint["unresolved_items"][0]["affected_pages"] == [1]
@@ -224,6 +226,10 @@ def test_pending_only_group_preserves_pages_without_model_call(
         assert retained[0]["gap_type"] is None
     with session_factory() as session, session.begin():
         prepared.apply(session)
+        from app.storage.fact_repositories import FactNormalizationCallRepository
+        saved = FactNormalizationCallRepository(session).get(payload["calls"][0]["call_id"])
+        assert saved.reading_method == prepared.checkpoint["reading_method"]
+        assert saved.raw_output_sha256 == prepared.checkpoint["raw_output_sha256"]
     from dataclasses import replace
     from app.services.fact_normalization_job_service import FACT_NORMALIZATION_FINALIZE_STEP_ID
     finalized = executor(replace(context, step_id=FACT_NORMALIZATION_FINALIZE_STEP_ID))

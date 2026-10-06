@@ -13,6 +13,21 @@ _REFERENCE_FIELDS = {
 }
 
 
+def text_reference_strategy():
+    """Bind reversible reference compression without changing evidence authority."""
+    from app.agents.verified_evidence_prompt import SHORT_REFERENCE_INSTRUCTION
+    from app.domain.publication import canonical_hash
+
+    return {
+        "version": "text-reference-aliases/v1",
+        "prompt_sha256": canonical_hash(SHORT_REFERENCE_INSTRUCTION),
+        "mapping_sha256": canonical_hash({
+            "fields": _REFERENCE_FIELDS,
+            "algorithm": "sorted-bijection-collision-safe/v1",
+        }),
+    }
+
+
 @dataclass(frozen=True)
 class NormalizerReferenceAliases:
     aliases: dict[str, dict[str, str]]

@@ -39,3 +39,13 @@ def test_unknown_or_wrong_kind_references_are_not_guessed():
     aliases = NormalizerReferenceAliases.from_payload({"locator_id": "real-locator"})
     bad = {"locator_ids": ["@L999", "@O1", None, 1], "source_observation_refs": ["@L1"]}
     assert aliases.transform(bad, expand=True) == bad
+
+
+def test_text_strategy_binds_instruction_and_mapping_fields(monkeypatch):
+    from app.agents import verified_evidence_prompt
+    from app.projections import normalizer_reference_aliases as module
+    original = module.text_reference_strategy()
+    monkeypatch.setattr(verified_evidence_prompt, "SHORT_REFERENCE_INSTRUCTION", "changed")
+    assert module.text_reference_strategy()["prompt_sha256"] != original["prompt_sha256"]
+    monkeypatch.setitem(module._REFERENCE_FIELDS, "other_ref", "locator")
+    assert module.text_reference_strategy()["mapping_sha256"] != original["mapping_sha256"]

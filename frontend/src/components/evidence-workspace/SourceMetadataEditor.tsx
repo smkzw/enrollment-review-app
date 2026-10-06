@@ -45,7 +45,8 @@ export function SourceMetadataEditor({
 
   return (
     <section className="evidence-metadata" aria-label="核对资料信息">
-      <header className="evidence-metadata__head">
+      <details key={member.metadataHead.metadataRevisionId}>
+      <summary className="evidence-metadata__head">
         <div>
           <p className="evidence-kicker">所选文件</p>
           <h4>核对资料信息</h4>
@@ -53,7 +54,8 @@ export function SourceMetadataEditor({
         <span className={`chip${member.metadataHead.isAutoSuggestion ? " chip--attention" : " chip--success"}`}>
           {member.metadataHead.isAutoSuggestion ? "系统建议，待核对" : "已人工核对"}
         </span>
-      </header>
+      </summary>
+      <div className="evidence-metadata__fields">
       <p className="evidence-metadata__file">{member.fileName}</p>
       <p className="evidence-metadata__file">上传者：{member.uploadedBy} · 资料归属由上传者核对</p>
       <label className="evidence-field">
@@ -113,8 +115,6 @@ export function SourceMetadataEditor({
           disabled={busy}
         />
       </label>
-      {error !== null && <p className="evidence-metadata__error" role="alert">{error}</p>}
-      {notice !== null && <p className="evidence-metadata__notice" role="status">{notice}</p>}
       <button
         type="button"
         className="button button--primary"
@@ -129,6 +129,10 @@ export function SourceMetadataEditor({
       >
         {busy ? "正在保存…" : "保存核对结果"}
       </button>
+      </div>
+      </details>
+      {error !== null && <p className="evidence-metadata__error" role="alert">{error}</p>}
+      {notice !== null && <p className="evidence-metadata__notice" role="status">{notice}</p>}
     </section>
   );
 }

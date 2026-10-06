@@ -7,7 +7,7 @@ from pydantic import Field, model_serializer, model_validator
 from app.domain.contracts.common import ContractModel
 from app.domain.contracts.control_atom_binding import ControlBindingFrozenInput
 from app.domain.contracts.enums import TruthValue
-from app.domain.contracts.evaluation_result import FrequencyAtomEvaluation
+from app.domain.contracts.evaluation_result import FrequencyAtomEvaluation, ComputationAtomEvaluation
 from app.domain.contracts.facts import ClinicalConflictGroupV2
 from app.domain.contracts.proposition_evidence import PropositionPairGap, ProspectiveEvidenceCheck
 from app.domain.control_layer_evaluation import ControlLayerEvaluation, compose_control_layers
@@ -30,7 +30,7 @@ class ControlConditionalObservation(ContractModel):
 
 
 class ControlCalculationExperiment(ContractModel):
-    version: Literal["control-calculation-experiment/v3", "control-calculation-experiment/v4", "control-calculation-experiment/v5", "control-calculation-experiment/v6", "control-calculation-experiment/v7", "control-calculation-experiment/v8", "control-calculation-experiment/v9", "control-calculation-experiment/v10", "control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16"] = "control-calculation-experiment/v16"
+    version: Literal["control-calculation-experiment/v3", "control-calculation-experiment/v4", "control-calculation-experiment/v5", "control-calculation-experiment/v6", "control-calculation-experiment/v7", "control-calculation-experiment/v8", "control-calculation-experiment/v9", "control-calculation-experiment/v10", "control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16", "control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19"] = "control-calculation-experiment/v19"
     frozen_input_sha256: str
     selections_sha256: str
     accepted: Literal[False] = False
@@ -45,13 +45,18 @@ class ControlCalculationExperiment(ContractModel):
     repeat_evaluations: dict[str, RepeatAtomEvaluation] = Field(default_factory=dict)
     frequency_evaluations: dict[str, FrequencyAtomEvaluation] = Field(default_factory=dict)
 
+    computation_evaluations: dict[str, ComputationAtomEvaluation] = Field(default_factory=dict)
+
     @model_validator(mode="after")
     def validate_repeat_scope(self):
-        if self.repeat_evaluations and (self.version not in {"control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16"} or self.purpose != "four_layer"):
+        if self.repeat_evaluations and (self.version not in {"control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16", "control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19"} or self.purpose != "four_layer"):
             raise ValueError("旧计算或复查触发条件不能夹带新的最终复查求值")
-        if self.frequency_evaluations and (self.version not in {"control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16"}
+        if self.frequency_evaluations and (self.version not in {"control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16", "control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19"}
                 or (self.version == "control-calculation-experiment/v12" and self.purpose != "four_layer")):
             raise ValueError("频次计算须使用当前完整审核，不能补写历史")
+        if self.computation_evaluations and (self.version not in {"control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19"}
+                or self.purpose != "four_layer"):
+            raise ValueError("计算输入求值不能夹带到历史或复查触发范围")
         return self
 
     @model_serializer(mode="wrap")
@@ -63,6 +68,8 @@ class ControlCalculationExperiment(ContractModel):
             value.pop("repeat_evaluations", None)
         if not self.frequency_evaluations:
             value.pop("frequency_evaluations", None)
+        if not self.computation_evaluations:
+            value.pop("computation_evaluations", None)
         return value
 
 
@@ -175,6 +182,7 @@ def _evaluate_control_selection(
     repeat_triggers_only: bool = False,
     repeat_evaluations: Mapping[str, RepeatAtomEvaluation] | None = None,
     frequency_evaluations: Mapping[str, FrequencyAtomEvaluation] | None = None,
+    computation_evaluations: Mapping[str, ComputationAtomEvaluation] | None = None,
 ) -> tuple[ControlCalculationExperiment, dict[str, dict[str, TruthValue]]]:
     """Consume an explicit full atom selection, with no category fallback.
 
@@ -236,6 +244,22 @@ def _evaluate_control_selection(
                     or not set(item.source_fact_ids) <= available
                     or set(item.result.used_fact_ids) != set(chosen[key])):
                 raise ValueError("频次计算与本次方案或所选原件不一致")
+    computation_evaluations = dict(computation_evaluations or {})
+    computation_atoms = {item.identity_sha256: item.atom for item in identities
+                         if item.atom.evaluation is not None and item.atom.evaluation.predicate is not None
+                         and item.atom.evaluation.predicate.source_computation is not None}
+    if computation_evaluations:
+        if (repeat_triggers_only or not set(computation_evaluations) <= set(computation_atoms)
+                or set(computation_evaluations) & (set(repeat_evaluations) | set(frequency_evaluations))):
+            raise ValueError("计算输入须对应本次独立计算条件")
+        available = {item.fact_id for item in frozen.evidence_input.facts}
+        for key, item in computation_evaluations.items():
+            if (not isinstance(item, ComputationAtomEvaluation)
+                    or item.context_sha256 != frozen.frozen_input_sha256
+                    or item.atom_sha256 != canonical_hash(computation_atoms[key].model_dump(mode="json"))
+                    or not set(item.source_fact_ids) <= available
+                    or set(item.result.used_fact_ids) != set(chosen[key])):
+                raise ValueError("计算输入求值与本次方案、节点或所选原件不一致")
     relation_pairs = set()
     by_observation = {}
     for record in proposition_relations:
@@ -374,6 +398,13 @@ def _evaluate_control_selection(
             truth, reasons = calculated.truth, list(calculated.reason_codes)
             scope_verified = truth != TruthValue.UNKNOWN
         observation_scopes[identity.identity_sha256] = scope_verified
+        if identity.identity_sha256 in computation_evaluations:
+            calculated = computation_evaluations[identity.identity_sha256].result
+            if (identity.identity_sha256 in unverified or selected_conflicts) and calculated.truth != TruthValue.UNKNOWN:
+                raise ValueError("计算结果不能覆盖未核实条件或来源冲突")
+            truth, reasons = calculated.truth, list(calculated.reason_codes)
+            scope_verified = truth != TruthValue.UNKNOWN
+            observation_scopes[identity.identity_sha256] = scope_verified
         by_control.setdefault(identity.protocol_control_id, {})[identity.atom_id] = truth
         if truth == TruthValue.UNKNOWN:
             pair_reasons = [reason for gap in gaps if gap.identity_sha256 == identity.identity_sha256
@@ -393,7 +424,7 @@ def _evaluate_control_selection(
         atom_truths=by_control.get(control.protocol_control_id, {}),
     ) for control in frozen.publication.catalog.controls] if not repeat_triggers_only else []
     selection_payload = {
-        "version": "control-calculation-experiment/v16",
+        "version": "control-calculation-experiment/v19",
         "frozen_input_sha256": frozen.frozen_input_sha256, "selections": chosen,
         "conflict_groups": [group.model_dump(mode="json") for group in sorted(
             groups, key=lambda group: group.conflict_group_id)],
@@ -411,7 +442,10 @@ def _evaluate_control_selection(
         selection_payload["repeat_evaluations"] = {key: item.model_dump(mode="json") for key, item in repeat_evaluations.items()}
     if frequency_evaluations:
         selection_payload["frequency_evaluations"] = {key: item.model_dump(mode="json") for key, item in frequency_evaluations.items()}
+    if computation_evaluations:
+        selection_payload["computation_evaluations"] = {key: item.model_dump(mode="json") for key, item in computation_evaluations.items()}
     return ControlCalculationExperiment(
+        version=selection_payload["version"],
         frozen_input_sha256=frozen.frozen_input_sha256,
         purpose="auxiliary_repeat_trigger" if repeat_triggers_only else "four_layer",
         selections_sha256=canonical_hash(selection_payload),
@@ -421,6 +455,7 @@ def _evaluate_control_selection(
         proposition_pair_gaps=gaps,
         repeat_evaluations=repeat_evaluations,
         frequency_evaluations=frequency_evaluations,
+        computation_evaluations=computation_evaluations,
     ), by_control
 
 
@@ -433,6 +468,7 @@ def evaluate_control_layers_experiment(
     proposition_pair_gaps: Sequence[dict] = (),
     repeat_evaluations: Mapping[str, RepeatAtomEvaluation] | None = None,
     frequency_evaluations: Mapping[str, FrequencyAtomEvaluation] | None = None,
+    computation_evaluations: Mapping[str, ComputationAtomEvaluation] | None = None,
 ) -> ControlCalculationExperiment:
     """Preserve the complete four-layer selection and composition contract."""
     calculated, _ = _evaluate_control_selection(
@@ -441,5 +477,6 @@ def evaluate_control_layers_experiment(
         proposition_relations=proposition_relations, proposition_pair_gaps=proposition_pair_gaps,
         repeat_evaluations=repeat_evaluations,
         frequency_evaluations=frequency_evaluations,
+        computation_evaluations=computation_evaluations,
     )
     return calculated

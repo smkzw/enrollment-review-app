@@ -1,6 +1,6 @@
 /**
  * 解构任务进行中：展示文件名、临床状态、进度与下一步（不展示内部任务编号）。
- * 生成期间若有已验证语义批次，附只读“有源候选预览”（不可发布、不可替代正式草稿）。
+ * 生成及失败恢复期间保留只读内容，不可发布、不可替代正式草稿。
  */
 
 import { useMemo } from "react";
@@ -22,21 +22,39 @@ function excerptText(excerpts: string[]): string {
   return joined.length > 240 ? `${joined.slice(0, 240)}…` : joined;
 }
 
+function SourceExcerpt({ excerpts }: { excerpts: string[] }) {
+  const fullText = excerpts.filter((item) => item.length > 0).join(" … ");
+  if (fullText.length === 0) return null;
+  return (
+    <div>
+      <blockquote className="protocol-job-progress__preview-excerpt">
+        {excerptText(excerpts)}
+      </blockquote>
+      {fullText.length > 240 && (
+        <details>
+          <summary>展开完整原文</summary>
+          {excerpts.filter((item) => item.length > 0).map((excerpt, index) => (
+            <blockquote key={index} className="protocol-job-progress__preview-excerpt">
+              {excerpt}
+            </blockquote>
+          ))}
+        </details>
+      )}
+    </div>
+  );
+}
+
 export function ProtocolJobProgress({ session, preview, onRefresh }: ProtocolJobProgressProps) {
   const progressPercent =
     session.progressTotal > 0
       ? Math.round((session.progressCompleted / session.progressTotal) * 100)
       : 0;
 
-  const previewRules = useMemo(
-    () => (preview !== null && preview.available ? mapProtocolDraftRules(preview.content) : []),
-    [preview],
-  );
-
   return (
     <div className="protocol-job-progress">
       <header className="page-head">
-        <h1 className="page-head__title">方案解构进行中</h1>
+        <h1 className="page-head__title">{["queued", "running", "recovering"].includes(session.state)
+          ? "方案解构进行中" : "方案读取记录"}</h1>
         <p className="page-head__note">
           {session.fileName !== null ? (
             <>
@@ -79,24 +97,34 @@ export function ProtocolJobProgress({ session, preview, onRefresh }: ProtocolJob
         </div>
       </section>
 
-      {preview !== null && preview.available && previewRules.length > 0 && (
+      <ProtocolCandidatePreview preview={preview} />
+    </div>
+  );
+}
+
+export function ProtocolCandidatePreview({ preview }: { preview: GenerationPreviewView | null }) {
+  const previewRules = useMemo(
+    () => (preview !== null && preview.available ? mapProtocolDraftRules(preview.content) : []),
+    [preview],
+  );
+  return preview !== null && preview.available && previewRules.length > 0 ? (
         <section
           className="protocol-job-progress__preview"
           aria-labelledby="protocol-job-preview-title"
         >
           <header className="protocol-job-progress__preview-head">
             <h2 id="protocol-job-preview-title" className="protocol-job-progress__preview-title">
-              有源候选预览（只读）
+              已保存的方案读取内容（尚未采用）
             </h2>
             <p className="protocol-job-progress__preview-note">
-              语义批次 {preview.batchIndex}/{preview.batchTotal} · 已有候选 {previewRules.length} 条父规则
+              已读取 {previewRules.length} 条入选、排除标准
               {preview.pendingCodes.length > 0
-                ? ` · 尚未生成 ${preview.pendingCodes.length} 条`
-                : " · 父规则已全部生成"}
+                ? ` · 尚未读取 ${preview.pendingCodes.length} 条`
+                : " · 条目已全部列出"}
               {preview.unresolvedCount > 0 ? ` · 未决 ${preview.unresolvedCount} 项` : ""}
             </p>
             <p className="protocol-job-progress__preview-note">
-              预览来自已验证批次，仅供尽早阅读；不能发布，正式判断以生成完成后的草稿审阅为准。
+              以下内容仅供核对。条目已列出不代表含义已核清；尚不能用于受试者审核或发布。
             </p>
           </header>
           <ul className="protocol-job-progress__preview-list">
@@ -114,11 +142,7 @@ export function ProtocolJobProgress({ session, preview, onRefresh }: ProtocolJob
                     <p className="protocol-job-progress__preview-component-title">
                       {component.displayCode} · {component.title}
                     </p>
-                    {component.sourceExcerpts.length > 0 && (
-                      <blockquote className="protocol-job-progress__preview-excerpt">
-                        {excerptText(component.sourceExcerpts)}
-                      </blockquote>
-                    )}
+                    <SourceExcerpt excerpts={component.sourceExcerpts} />
                   </div>
                 ))}
                 {rule.restrictedComponents.map((component) => (
@@ -127,9 +151,7 @@ export function ProtocolJobProgress({ session, preview, onRefresh }: ProtocolJob
                       {component.displayCode} · {component.title} · {component.limitationKind === "consumer_unavailable"
                         ? "审核方法待补齐" : "方案含义待核清"}
                     </p>
-                    <blockquote className="protocol-job-progress__preview-excerpt">
-                      {excerptText(component.sourceExcerpts)}
-                    </blockquote>
+                    <SourceExcerpt excerpts={component.sourceExcerpts} />
                   </div>
                 ))}
               </li>
@@ -137,11 +159,9 @@ export function ProtocolJobProgress({ session, preview, onRefresh }: ProtocolJob
           </ul>
           {preview.pendingCodes.length > 0 && (
             <p className="protocol-job-progress__preview-pending">
-              待生成父规则：{preview.pendingCodes.join("、")}
+              尚未读取的标准：{preview.pendingCodes.join("、")}
             </p>
           )}
         </section>
-      )}
-    </div>
-  );
+  ) : null;
 }

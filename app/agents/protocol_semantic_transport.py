@@ -6,12 +6,13 @@ import json
 import logging
 import os
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 from uuid import uuid4
 
 import httpx
 from app.llm.generation_completion import local_early_length
+from app.llm.json_container_recovery import recover_single_container_close, strict_json_loads
 from app.llm.omlx_schema_compat import decoding_response_format
 from openai import (
     APITimeoutError,
@@ -32,6 +33,7 @@ from app.config import (
     DECONSTRUCT_MAX_TOKENS,
     DECONSTRUCT_MODEL,
     DECONSTRUCT_REASONING_EFFORT,
+    DECONSTRUCT_WIRE_CONTRACT,
     OMLX_PROTOCOL_BATCH_MAX_TOKENS,
     DEEPSEEK_API_KEY,
     DEEPSEEK_BASE_URL,
@@ -257,11 +259,13 @@ class DeepSeekProtocolAgentTransport:
         # ``provider_defaults=False`` keeps the historical product-side
         # overrides for frozen legacy identities.
         self._provider_defaults = bool(provider_defaults)
-        if compact_wire is not None and (
-            type(compact_wire) is not bool
-            or selected_backend not in _LOCAL_STRUCTURED_BACKENDS
-        ):
-            raise ValueError("输出合同选择仅适用于本地方案解构，且必须为布尔值")
+        if compact_wire is not None and type(compact_wire) is not bool:
+            raise ValueError("输出合同选择必须为布尔值")
+        if compact_wire is None:
+            contract = DECONSTRUCT_WIRE_CONTRACT
+            if contract not in {"auto", "formal", "compact"}:
+                raise ValueError("DECONSTRUCT_WIRE_CONTRACT 仅支持 auto/formal/compact")
+            compact_wire = {"auto": None, "formal": False, "compact": True}[contract]
         self._compact_wire = compact_wire
         selected_reasoning_effort = (
             reasoning_effort
@@ -417,6 +421,8 @@ class DeepSeekProtocolAgentTransport:
         self._call_budget_store: Any = None
         self.logical_run_budget: LogicalCallBudget | None = None
         self._last_budget_request_sha256: str | None = None
+        self._scope_continuations: dict[str, dict[str, Any]] = {}
+        self._active_scope_continuation: dict[str, Any] | None = None
 
     def bind_call_budget_store(self, store: Any) -> None:
         self._call_budget_store = store
@@ -437,6 +443,11 @@ class DeepSeekProtocolAgentTransport:
         load = getattr(self._call_budget_store, "load_call_budget", None)
         if not callable(load):
             raise ValueError("恢复核对缺少原始持久预算记录")
+        continuation = self._call_budget_metadata().get("authorized_scope_continuation")
+        if metadata.get("authorized_scope_continuation") != continuation:
+            raise ValueError("恢复核对的追加授权关联不一致")
+        if self._active_scope_continuation is not None:
+            self._verify_scope_continuation(self._active_scope_continuation)
         for key, budget in (("logical_call_budget", self.logical_call_budget),
                             ("logical_run_budget", self.logical_run_budget)):
             saved = metadata.get(key)
@@ -475,6 +486,12 @@ class DeepSeekProtocolAgentTransport:
 
     def configure_logical_task(self, *, logical_task_id: str, max_requests: int = 2) -> None:
         """Initial output and one repair share all nested HTTP attempts."""
+        continuation = self._scope_continuations.get(logical_task_id)
+        self._active_scope_continuation = continuation
+        if continuation is not None:
+            self._verify_scope_continuation(continuation)
+            self.logical_call_budget = continuation["budget"]
+            return
         budget = self._call_budgets.get(logical_task_id)
         if budget is None:
             budget = self._restore_budget(
@@ -485,7 +502,90 @@ class DeepSeekProtocolAgentTransport:
             self._call_budgets[logical_task_id] = budget
         self.logical_call_budget = budget
 
+    def bind_authorized_scope_continuation(
+        self, *, authorization_ref: str, artifact_reader: Callable[[str], bytes],
+    ) -> None:
+        """Bind a host-authorized additional allowance, never an automatic retry.
+
+        The caller owns authority. The immutable receipt binds the spent scope,
+        current run and finite allowance; old ledgers remain unchanged.
+        """
+        raw = artifact_reader(authorization_ref)
+        grant = strict_json_loads(raw.decode("utf-8"))
+        required = {"policy", "scope_task_id", "prior_scope_budget_sha256", "run_task_id",
+                    "run_budget", "authorization_basis", "purpose", "max_requests",
+                    "max_output_tokens"}
+        if (not isinstance(grant, dict) or set(grant) != required
+                or grant["policy"] != "authorized-scope-continuation/v1"
+                or any(not isinstance(grant[key], str) or not grant[key].strip()
+                       for key in required - {"max_requests", "max_output_tokens", "run_budget"})
+                or any(type(grant[key]) is not int or grant[key] < 1
+                       for key in ("max_requests", "max_output_tokens"))):
+            raise ValueError("追加核查授权必须绑定原记录、总作业和明确的有限额度")
+        if not authorization_ref or grant["scope_task_id"] in self._scope_continuations:
+            raise ValueError("追加核查授权不可重复绑定或替换")
+        load = getattr(self._call_budget_store, "load_call_budget", None)
+        if not callable(load) or self.logical_run_budget is None:
+            raise ValueError("追加核查必须沿用持久原任务及总作业额度")
+        previous = load(grant["scope_task_id"])
+        if previous is None:
+            raise ValueError("追加核查的原任务额度记录不存在")
+        LogicalCallBudget(previous["logical_task_id"], max_requests=previous["max_requests"],
+                          max_output_tokens=previous["max_output_tokens"], saved=previous,
+                          contract_sha256=previous.get("contract_sha256"))
+        run = self.logical_run_budget.snapshot()
+        authorized_run = grant["run_budget"]
+        if not isinstance(authorized_run, dict):
+            raise ValueError("追加核查缺少授权时的总作业记录")
+        LogicalCallBudget(authorized_run["logical_task_id"], max_requests=authorized_run["max_requests"],
+                          max_output_tokens=authorized_run["max_output_tokens"], saved=authorized_run,
+                          contract_sha256=authorized_run.get("contract_sha256"))
+        digest = lambda value: hashlib.sha256(json.dumps(
+            value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        if (digest(previous) != grant["prior_scope_budget_sha256"]
+                or run["logical_task_id"] != grant["run_task_id"]
+                or any(run[key] != authorized_run[key] for key in (
+                    "policy", "logical_task_id", "max_requests", "max_output_tokens", "contract_sha256"))
+                or run["requests"][:authorized_run["requests_used"]] != authorized_run["requests"]
+                or load(run["logical_task_id"]) != run):
+            raise ValueError("追加核查授权与实际原记录或总作业不一致")
+        if (previous["requests_used"] < previous["max_requests"]
+                and previous["reserved_output_tokens"] < previous["max_output_tokens"]):
+            raise ValueError("原任务尚有额度，不能另开追加核查")
+        authorization_hash = hashlib.sha256(raw).hexdigest()
+        if load(authorization_hash) is None and run["requests_used"] != authorized_run["requests_used"]:
+            raise ValueError("总作业已前移但追加额度记录缺失，不能当作未使用重新核查")
+        budget = self._restore_budget(
+            authorization_hash, max_requests=grant["max_requests"],
+            max_output_tokens=grant["max_output_tokens"], contract_sha256=authorization_hash,
+        )
+        self._scope_continuations[grant["scope_task_id"]] = {
+            "authorization_ref": authorization_ref, "authorization_sha256": authorization_hash,
+            "prior_scope_budget": previous, "budget": budget,
+            "run_task_id": run["logical_task_id"], "authorized_run_budget": authorized_run,
+        }
+
+    def _verify_scope_continuation(self, continuation: Mapping[str, Any]) -> None:
+        load = getattr(self._call_budget_store, "load_call_budget", None)
+        previous = continuation["prior_scope_budget"]
+        if (not callable(load) or load(previous["logical_task_id"]) != previous
+                or self.logical_run_budget is None
+                or self.logical_run_budget.logical_task_id != continuation["run_task_id"]
+                or load(continuation["run_task_id"]) != self.logical_run_budget.snapshot()):
+            raise ValueError("追加核查的原额度或总作业发生变化，未发送请求")
+        budget = continuation["budget"].snapshot()
+        saved = load(budget["logical_task_id"])
+        if saved is None and self.logical_run_budget.snapshot()["requests_used"] != continuation["authorized_run_budget"]["requests_used"]:
+            raise ValueError("总作业已前移但追加额度记录缺失，不能重置核查")
+        if saved != budget and not (saved is None and budget["requests_used"] == 0):
+            raise ValueError("追加核查额度不是最新持久记录，未发送请求")
+
     def share_call_budget(self, budget: LogicalCallBudget) -> None:
+        if self._active_scope_continuation is not None:
+            if budget is not self._active_scope_continuation["budget"]:
+                raise ValueError("追加核查期间不能用其他额度替换授权范围")
+            self._verify_scope_continuation(self._active_scope_continuation)
         self._call_budgets[budget.logical_task_id] = budget
         self.logical_call_budget = budget
 
@@ -493,6 +593,9 @@ class DeepSeekProtocolAgentTransport:
         return {
             **({"logical_call_budget": self.logical_call_budget.snapshot()} if self.logical_call_budget else {}),
             **({"logical_run_budget": self.logical_run_budget.snapshot()} if self.logical_run_budget else {}),
+            **({"authorized_scope_continuation": {
+                key: value for key, value in self._active_scope_continuation.items() if key != "budget"
+            }} if self._active_scope_continuation else {}),
         }
 
     def _reserve_completion(self, kwargs: Mapping[str, Any]) -> None:
@@ -501,6 +604,8 @@ class DeepSeekProtocolAgentTransport:
         ).encode("utf-8")).hexdigest()
         self._last_budget_request_sha256 = request_hash
         try:
+            if self._active_scope_continuation is not None:
+                self._verify_scope_continuation(self._active_scope_continuation)
             for budget in (self.logical_call_budget, self.logical_run_budget):
                 if budget is not None:
                     budget.reserve(request_sha256=request_hash, max_tokens=int(kwargs["max_tokens"]))
@@ -564,6 +669,10 @@ class DeepSeekProtocolAgentTransport:
                 "compact_schema_prompt" if self.uses_compact_wire_contract
                 else "no_embedded_schema"
             )
+        elif self.uses_compact_wire_contract and self._backend not in _LOCAL_STRUCTURED_BACKENDS:
+            # Text/JSON-object endpoints do not put the output schema in kwargs;
+            # its explicit selection must still isolate the saved response.
+            payload["text_contract_mode"] = "compact_schema_prompt"
         from app.llm.mtplx_model_lifecycle import mtplx_deployment_identity
 
         deployment = mtplx_deployment_identity(
@@ -622,7 +731,7 @@ class DeepSeekProtocolAgentTransport:
         output_kind: ProtocolOutputKind = "semantic_candidate",
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
-        if output_kind not in {"semantic_candidate", "semantic_rule_repair", "official_source_scope_review"}:
+        if output_kind not in {"semantic_candidate", "semantic_rule_repair", "official_source_scope_review", "semantic_source_fields"}:
             raise ValueError(f"未知的方案解构输出类型：{output_kind}")
         kwargs: dict[str, Any] = {
             "model": self._model,
@@ -936,8 +1045,11 @@ class DeepSeekProtocolAgentTransport:
                             "content": (
                                 "上一请求的输出达到长度上限，正文不可作为完整JSON使用。"
                                 "请不要重复分析，立即按上一请求指定的结构重新输出完整JSON对象，"
-                                "不要附加解释。只处理原请求指定的1-3个父规则，"
-                                "返回最小完整图；不要重复节点、组件、source_excerpts或其他批次内容。"
+                                "不要附加解释。"
+                                + ("只返回原请求的来源字段提案，不返回整规则或任何其他字段。"
+                                   if output_kind == "semantic_source_fields" else
+                                   "只处理原请求指定的1-3个父规则，返回最小完整图；"
+                                   "不要重复节点、组件、source_excerpts或其他批次内容。")
                             ),
                         },
                     ]
@@ -952,8 +1064,27 @@ class DeepSeekProtocolAgentTransport:
             if text.strip():
                 json_text = _unwrap_complete_json_fence(text)
                 try:
-                    parsed = json.loads(json_text)
+                    parsed = strict_json_loads(json_text)
                 except json.JSONDecodeError as exc:
+                    schema = protocol_output_response_format(
+                        output_kind, compact=self.uses_compact_wire_contract,
+                        **(self._output_scope or {}),
+                    )["json_schema"]["schema"]
+                    save_recovery = getattr(self._call_budget_store, "store_response_recovery", None)
+                    recovered = (recover_single_container_close(json_text, schema)
+                                 if output_kind != "official_source_scope_review" and callable(save_recovery) else None)
+                    if recovered is not None:
+                        proof = {
+                            **recovered.receipt(json_text),
+                            "provider_content_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                            "schema_sha256": hashlib.sha256(json.dumps(schema, sort_keys=True,
+                                ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(),
+                        }
+                        refs = save_recovery(raw_text=text, original_text=json_text,
+                                             recovered_text=recovered.text, proof=proof)
+                        receipts[-1]["syntax_recovery"] = {**proof, **refs}
+                        return (recovered.text, {"attempts": receipts,
+                                "raw_response_text": text, **self._call_budget_metadata()}) if with_receipt else recovered.text
                     malformed_attempts += 1
                     recovery_trigger = recovery_trigger or {
                         "error_code": "SCHEMA_INVALID", "attempt": attempt + 1,
@@ -1038,7 +1169,7 @@ class DeepSeekProtocolAgentTransport:
         )
 
     def _wire_contract_prompt(self, prompt: str, output_kind: ProtocolOutputKind) -> str:
-        """语法约束不可用的后端：把 wire 合同 JSON 并入提示词，替代 response_format。
+        """为无服务端 Schema 的简化合同请求加入形状提示。
 
         嵌入版做瘦身（去 $defs、两三层后只留类型形状）：完整合同会显著改变
         prefill 长度形态，实测触发 Flash-Next qsa_prefill Metal kernel 的
@@ -1046,12 +1177,13 @@ class DeepSeekProtocolAgentTransport:
         校验共同保证。
         """
 
-        if output_kind == "official_source_scope_review":
+        if output_kind in {"official_source_scope_review", "semantic_source_fields"}:
             # This role already carries its complete, small schema in the frozen
             # prompt; exact replay cannot depend on a second opaque wrapper.
             return prompt
         if (
-            self._backend not in _GRAMMAR_INCOMPATIBLE_BACKENDS
+            (self._backend not in _GRAMMAR_INCOMPATIBLE_BACKENDS
+             and self._backend in _LOCAL_STRUCTURED_BACKENDS)
             or not self.uses_compact_wire_contract
         ):
             return prompt
@@ -1083,9 +1215,14 @@ class DeepSeekProtocolAgentTransport:
             return out
 
         contract_json = json.dumps(slim(schema, 0), ensure_ascii=False)
+        heading = (
+            "【输出 JSON 合同（本服务语法约束不可用，以下合同取代服务端携带）】"
+            if self._backend in _GRAMMAR_INCOMPATIBLE_BACKENDS
+            else "【简化输出结构（字段形状摘要，完整约束仍由宿主校验）】"
+        )
         return (
             prompt
-            + "\n\n【输出 JSON 合同（本服务语法约束不可用，以下合同取代服务端携带）】"
+            + "\n\n" + heading
             + "你的整段响应必须是一个符合该 JSON Schema 的 JSON 对象；"
             + "宿主会按完整合同逐字段严格校验，任何多余或缺失字段都会被拒绝：\n"
             + contract_json
@@ -1125,9 +1262,10 @@ class DeepSeekProtocolAgentTransport:
                 else "SEMANTIC_CALL_FAILED",
                 error_metadata=self._call_budget_metadata(),
             ) from exc
-        history.append({"role": "assistant", "content": text})
+        raw_text = metadata.pop("raw_response_text", None)
+        history.append({"role": "assistant", "content": text if raw_text is None else raw_text})
         self._histories[session_id] = history
-        return ProtocolAgentResponse(session_id=session_id, text=text, call_metadata=metadata)
+        return ProtocolAgentResponse(session_id=session_id, text=text, raw_text=raw_text, call_metadata=metadata)
 
     def continue_session(
         self,
@@ -1168,9 +1306,10 @@ class DeepSeekProtocolAgentTransport:
                 else "SEMANTIC_CALL_FAILED",
                 error_metadata=self._call_budget_metadata(),
             ) from exc
-        history.append({"role": "assistant", "content": text})
+        raw_text = metadata.pop("raw_response_text", None)
+        history.append({"role": "assistant", "content": text if raw_text is None else raw_text})
         self._histories[session_id] = history
-        return ProtocolAgentResponse(session_id=session_id, text=text, call_metadata=metadata)
+        return ProtocolAgentResponse(session_id=session_id, text=text, raw_text=raw_text, call_metadata=metadata)
 
     def restore_history(
         self, *, session_id: str, messages: Sequence[Mapping[str, str]]

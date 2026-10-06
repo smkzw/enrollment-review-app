@@ -29,6 +29,7 @@ from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from types import SimpleNamespace
 from typing import Literal, Protocol
+from app.domain.contracts.record_semantics import RECORD_SEMANTICS_GUIDANCE
 
 from pydantic import Field, ValidationError, model_serializer, model_validator
 
@@ -151,6 +152,7 @@ from .protocol_control_source_interpretation import (
     normalize_schedule_randomization_anchors,
     normalize_mixed_schedule_scopes,
     validate_source_target_review,
+    validated_source_review_seed,
     source_unit_comparison_as_review,
 )
 
@@ -1832,6 +1834,9 @@ _DISCOVERY_SYSTEM_CONTRACT = (
 )
 
 _CONTROL_AGENT_SYSTEM_CONTRACT = (
+    RECORD_SEMANTICS_GUIDANCE +
+    "跨章条件的record_semantics写在evaluation中，内层predicate省略或null；"
+    "逐字用途依据须属于evaluation.source_excerpts，不为已有相关原文补造患者记录。"
     "你是其他方案控制候选语义解构助手，不是官方 IN/EX 解构助手。"
     "每个条件和义务原子都须填写evaluation：proposition明确本原子成立的含义，不是最终入排结论；"
     "按原文区分deterministic、semantic和investigator_judgment，不按义务kind自动选择。"
@@ -1857,7 +1862,8 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "原文不足时明确标unverified；确定性求值必须声明computation方式，"
     "semantic与investigator_judgment模式不得夹带任何computation字段。语义或研究者判断模式operation和predicate均为null。"
     "语义任务不能确定所需事实属性时operand_attribute为null，不为填字段虚构操作数。"
-    "未找到记录不等于事件未发生；不要用任意占位值加ne比较器表示无病史，也不要反向解释exists。"
+    "方案作者不根据患者缺记录作判断；工作稿的范围化无记录处理另由宿主负责。"
+    "不要用任意占位值加ne比较器表示无病史，也不要反向解释exists。"
     "source_span_ids和source_excerpts必须逐项取自本原子的原文；比较的阈值、单位和方向均须有原文依据。"
     "有发生次数或发生天数期间时，用predicate.occurrence_window保存duration/minimum_count及scope，"
     "scope.version=occurrence-scope/v4，kind区分anchored_lookback、calendar_period、anchored_period、"
@@ -2242,14 +2248,14 @@ _CONTROL_REPAIR_CONTRACT = (
     "此角色只有存在更晚的明确判定节点才可使用。"
 )
 _CALENDAR_BOUND_REPAIR_PROMPT_VERSION = "phase5/calendar-bound-repair-prompt/v4"
-_AFFECTED_STAGE_REPAIR_GUIDANCE_VERSION = "phase5/affected-stage-repair-guidance/v4"
+_AFFECTED_STAGE_REPAIR_GUIDANCE_VERSION = "phase5/affected-stage-repair-guidance/v5"
 _OPTIONAL_ACTION_REPAIR_GUIDANCE_VERSION = "phase5/optional-action-repair-guidance/v2"
-_SOURCE_INSERT_GUIDANCE_VERSION = "phase5/source-insert-guidance/v6"
+_SOURCE_INSERT_GUIDANCE_VERSION = "phase5/source-insert-guidance/v7"
 _TREATMENT_DURATION_REPAIR_GUIDANCE_VERSION = "phase5/treatment-duration-repair-guidance/v2"
 _ATOM_REPAIR_GUIDANCE_VERSION = "phase5/atom-repair-guidance/v4"
 _SOURCE_SCOPE_CORRECTION_POLICY_VERSION = "phase5/source-scope-correction-policy/v2"
 _CALENDAR_REPAIR_TARGET_SELECTION_VERSION = "phase5/calendar-repair-target-selection/v3"
-_TIME_OPERAND_REPAIR_PRIORITY_VERSION = "phase5/time-operand-repair-priority/v2"
+_TIME_OPERAND_REPAIR_PRIORITY_VERSION = "phase5/time-operand-repair-priority/v3"
 _OBSERVATION_SOURCE_REPAIR_GUIDANCE_VERSION = "phase5/observation-source-repair/v3"
 SOURCE_TARGET_REPAIR_VERSION = "phase5/source-target-structured-feedback/v4"
 
@@ -2545,7 +2551,9 @@ def _repair_problem_guidance(problem: str) -> str:
             "若无直接补充关系，删除该错误关系，保留有源独立候选及其真实判定节点。"
             "若确为同阶段流程补充，affected_workflow_stage_id 应与 external_target_id"
             " 对应流程必做项的实际执行访视一致，并核对本节点判定与最低证据的到期节点。"
-            "不得为了凑关系改写原文时点。"
+            "不得为了凑关系改写原文时点。若原文要求完整持续期只能在后续节点核实，"
+            "而当前补充关系合同不能表达，不得改成更早判定、删除真实要求或改标义务种类；"
+            "保留该有源要求与明确的软件能力缺口，不把它说成研究者医学判断或病例缺件。"
         )
     if "AFFECTED_STAGE_DECISION_MISSING" in problem:
         return (
@@ -3013,6 +3021,7 @@ def build_protocol_control_repair_prompt(
     baseline_candidate_drafts: Sequence[dict[str, Any]] | None = None,
     missing_source_statements: Sequence[str] = (),
     source_statement_inventory: Sequence[tuple[str, str]] = (),
+    validation_findings: Sequence[dict[str, object]] = (),
 ) -> str:
     """Build a same-session repair prompt with an explicit bounded scope."""
 
@@ -3093,8 +3102,10 @@ def build_protocol_control_repair_prompt(
         "只有补充流程必做项的关系可填写 affected_workflow_stage_id；"
         "指向官方入排条款的关系须填 null，候选自身的审核节点仍应保留。"
         "若增量从较早访视开始执行，但完整持续期只能在较晚的冻结审核节点核实，"
-        "较早访视只能提前关注；指向较早执行访视的补充关系也应将受影响节点设为"
-        "较晚的最终判定节点，且该节点必须有本节点判定及到期证据。"
+        "不得将完整持续期提前判定；只有现有合同支持且原文确有依据的后续核对关系，"
+        "才可把指向较早执行访视的补充关系的受影响节点设为较晚的最终判定节点，"
+        "并保存本节点判定及到期证据。"
+        "当前关系合同不能表达时，保留有源要求及软件能力缺口，不改标义务种类或删去要求。"
         "若较早访视另有可独立判定的原文要求，则分成不同候选，不能把完整持续期提前判定。"
         "若原文允许某项操作但不要求所有适用者都执行，而仅规定实际执行后必做的动作，"
         "不得让许可条件本身触发必做动作；须分别表达许可、次数限制、实际执行事件及其后果。"
@@ -3156,6 +3167,11 @@ def build_protocol_control_repair_prompt(
         )
         + f"候选草稿位置（仅用于诊断，不得原样输出）："
         f"{json.dumps(list(candidate_indexes or []), ensure_ascii=False)}\n"
+        + (
+            "宿主定位的具体冲突（只定位修订范围，不是新的原文或医学判断）："
+            + json.dumps(list(validation_findings), ensure_ascii=False) + "\n"
+            if validation_findings else ""
+        )
         + (
             "本轮获授权候选原稿（来源身份与未被指出的问题均须保持）："
             + json.dumps(list(baseline_candidate_drafts), ensure_ascii=False) + "\n"
@@ -3271,7 +3287,7 @@ def _validate_known_targets(
         and relation.external_target_id in procedures
     }
     mixed_execution_stages = len(procedure_execution_ids - {None}) > 1
-    for relation in candidate.cross_source_relations:
+    for relation_index, relation in enumerate(candidate.cross_source_relations):
         if relation.external_target_kind == ControlRelationTargetKind.OFFICIAL_RULE:
             if relation.external_target_id not in official_codes:
                 raise ProtocolControlAgentWireValidationError(
@@ -3332,6 +3348,15 @@ def _validate_known_targets(
                 ),
                 structure_unit_ids=candidate.source_structure_unit_ids,
                 allow_candidate_repartition=mixed_execution_stages,
+                validation_findings=[{
+                    "code": "PROCEDURE_AFFECTED_STAGE_MISMATCH",
+                    "json_path": f"cross_source_relations.{relation_index}.affected_workflow_stage_id",
+                    "source_refs": list(candidate.source_span_ids),
+                    "external_target_id": relation.external_target_id,
+                    "execution_workflow_stage_id": execution_id,
+                    "affected_workflow_stage_id": affected_id,
+                    "retry_class": "source_relationship_review",
+                }],
             )
         if not any(
             node.workflow_stage_id == affected_id
@@ -3649,6 +3674,15 @@ def validate_protocol_control_agent_wire(
                 allow_source_closure_rewrite=exc.allow_source_closure_rewrite,
                 allow_post_enrollment_reclassification=exc.allow_post_enrollment_reclassification,
                 allow_source_insert=exc.allow_source_insert,
+                repair_scopes=exc.repair_scopes,
+                validation_findings=[{
+                    **finding,
+                    "candidate_index": candidate_index,
+                    "json_path": f"candidate_drafts.{candidate_index}.{finding['json_path']}",
+                } if finding.get("json_path") else {
+                    **finding, "candidate_index": candidate_index,
+                } for finding in exc.validation_findings],
+                repair_scope_unknown=exc.repair_scope_unknown,
             ) from exc
         _validate_temporal_obligation_scope(candidate)
 
@@ -6255,7 +6289,7 @@ def _invalid_time_operand_paths(
         location = tuple(item["loc"])
         # A single-candidate validator reports locations relative to that
         # candidate. The server-selected index, not model output, supplies scope.
-        if error.code == "CANDIDATE_REPAIR_INVALID":
+        if error.code == "CANDIDATE_REPAIR_INVALID" and location[:1] != ("candidate_drafts",):
             location = ("candidate_drafts", candidate_index, *location)
         if (
             item["type"] != "control_time_operand_missing"
@@ -6305,12 +6339,12 @@ def _build_time_operand_repair_prompt(
     )
 
 
-def _merge_time_operand_repair(
+def _merge_time_operand_repair_payload(
     raw_text: str,
     baseline: Mapping[str, Any],
     candidate_index: int,
     paths: tuple[tuple[int, int], ...],
-) -> ProtocolControlAgentWire:
+) -> dict[str, Any]:
     try:
         repair = _TimeOperandRepair.model_validate_json(raw_text)
         if sorted((item.group_index, item.atom_index) for item in repair.items) != list(paths):
@@ -6323,15 +6357,35 @@ def _merge_time_operand_repair(
         candidate = merged["candidate_drafts"][candidate_index]
         for item in repair.items:
             atom = candidate["obligation_expression"]["groups"][item.group_index]["atoms"][item.atom_index]
+            if (atom.get("time_constraint") is None
+                    or atom["evaluation"].get("time_operand_attribute") is not None):
+                raise ValueError("只能补齐已定位的缺失日期属性，不得覆盖已有属性")
             atom["evaluation"]["time_operand_attribute"] = item.attribute
-        _normalize_absent_time_bound_flags(merged)
-        return ProtocolControlAgentWire.model_validate(merged)
+        _normalize_absent_time_bound_flags(candidate)
+        ProtocolControlAgentWireCandidate.model_validate(candidate)
+        return merged
     except ProtocolControlAgentWireValidationError:
         raise
     except (ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
         raise ProtocolControlAgentWireValidationError(
             "TIME_OPERAND_REPAIR_INVALID",
             _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _merge_time_operand_repair(
+    raw_text: str,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    paths: tuple[tuple[int, int], ...],
+) -> ProtocolControlAgentWire:
+    try:
+        return ProtocolControlAgentWire.model_validate(
+            _merge_time_operand_repair_payload(raw_text, baseline, candidate_index, paths)
+        )
+    except ValidationError as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "TIME_OPERAND_REPAIR_INVALID", _validation_error_summary(exc),
         ) from exc
 
 
@@ -6575,14 +6629,14 @@ class ProtocolControlAgentRunner:
             # A saved review only suppresses a reviewer call after the current
             # validators prove it against the frozen batch, the restored source
             # statements and its own saved coverage. An unproven review is
-            # dropped here (the reviewer is asked again); it is never partially
-            # trusted and never silently carried into an acceptance.
+            # dropped here (the reviewer is asked again). Individually proved
+            # siblings may seed recovery, but cannot bypass the final full gate.
             saved_coverage = list(resume_source_statement_coverage)
             if resume_source_interpretation is None or not saved_coverage:
                 raise ValueError("已保存的逐项来源核对缺少对应有源陈述或来源覆盖账")
             validate_source_interpretation(batch, resume_source_interpretation)
             try:
-                validate_source_target_review(
+                retained = validated_source_review_seed(
                     batch, resume_source_interpretation, saved_coverage,
                     resume_source_target_review,
                 )
@@ -6591,7 +6645,7 @@ class ProtocolControlAgentRunner:
             else:
                 resumed_review_items = {
                     item.statement_index: item
-                    for item in resume_source_target_review.items
+                    for item in (retained.items if retained is not None else [])
                 }
                 resumed_review_identity = {
                     index: _source_statement_reuse_identity(statement)
@@ -7004,6 +7058,10 @@ class ProtocolControlAgentRunner:
                     attempts=attempts, source_interpretation=source_interpretation,
                     source_front_target_review=front_target_review,
                     source_candidate_alignment=front_candidate_alignment,
+                    partial_wire=prepared.wire,
+                    source_statement_coverage=(source_statement_coverage(
+                        batch, source_interpretation, prepared.wire,
+                    ) if prepared.wire is not None else []),
                 )
             # This is host assembly, not a provider-authored final wire. Actual
             # short answers remain above; the normal consumer still checks it.
@@ -7097,13 +7155,39 @@ class ProtocolControlAgentRunner:
             {entry.statement_index: entry for entry in resume_source_statement_coverage}
             if resumed_review_items else {}
         )
-        if (front_flow_assembled and front_target_review is not None
-                and all(item.decision in {"covered_by_official", "covered_by_procedure"}
-                        for item in front_target_review.items)):
+        if front_flow_assembled and front_target_review is not None:
             front_wire = parse_protocol_control_agent_wire(raw_text)
             front_coverage = source_statement_coverage(batch, source_interpretation, front_wire)
-            validate_source_target_review(batch, source_interpretation, front_coverage, front_target_review)
-            latest_source_target_review = front_target_review
+            front_review_indexes = set(target_review_indexes(source_interpretation, front_coverage, batch))
+            covered_review = front_target_review.model_copy(update={"items": [
+                item for item in front_target_review.items
+                if item.decision in {"covered_by_official", "covered_by_procedure", "background_context"}
+                and item.statement_index in front_review_indexes
+            ]})
+            try:
+                validate_source_target_review(batch, source_interpretation, front_coverage, covered_review)
+            except SourceTargetReviewValidationError as exc:
+                attempts.append(ProtocolControlAgentAttempt(
+                    attempt=len(attempts) + 1, session_id=session_id,
+                    raw_output_sha256=_sha256(raw_text),
+                    raw_output_chars=len(raw_text), raw_output_text=raw_text,
+                    outcome="publication_invalid", error_classes=[exc.code],
+                    issues=["装配后的已有要求覆盖核对未通过：" + str(exc)[:1800]],
+                    error_detail={
+                        "code": exc.code, "statement_id": exc.statement_index,
+                        "json_path": exc.json_path, "source_refs": list(exc.source_refs),
+                        "retry_class": exc.retry_class,
+                        "affected_dependents": list(exc.affected_dependents),
+                    },
+                ))
+                return build_result(
+                    status="需要核对", batch_id=batch.batch_id, session_id=session_id,
+                    attempts=attempts, source_interpretation=source_interpretation,
+                    source_front_target_review=front_target_review,
+                    source_candidate_alignment=front_candidate_alignment,
+                    partial_wire=front_wire, source_statement_coverage=front_coverage,
+                )
+            latest_source_target_review = covered_review if covered_review.items else None
             validated_target_coverage = {entry.statement_index: entry for entry in front_coverage}
         latest_source_statement_coverage: list[SourceStatementCoverage] = []
         latest_source_candidate_alignment: SourceCandidateAlignment | None = None
@@ -7357,6 +7441,26 @@ class ProtocolControlAgentRunner:
                     review_unavailable = False
                     unresolved_indexes: list[int] = []
                     temporal_unresolved_indexes: list[int] = []
+                    pending_review: SourceTargetReview | None = None
+                    reusable: list = []
+                    def recovery_target_review() -> SourceTargetReview | None:
+                        proposed = target_review
+                        if proposed is None and pending_review is not None:
+                            proposed = SourceTargetReview(
+                                version=SOURCE_TARGET_REVIEW_VERSION,
+                                items=[*reusable, *pending_review.items],
+                            )
+                        if proposed is None:
+                            proposed = latest_source_target_review
+                        if proposed is None:
+                            return None
+                        try:
+                            return validated_source_review_seed(
+                                batch, source_interpretation, coverage, proposed,
+                            )
+                        except (SourceTargetReviewValidationError, ValueError, KeyError, TypeError):
+                            return None
+
                     try:
                         resumed_review_indexes = {
                             index for index in resumed_review_items
@@ -7370,7 +7474,7 @@ class ProtocolControlAgentRunner:
                             item.statement_index: item
                             for item in (latest_source_target_review.items
                                          if latest_source_target_review is not None else [])
-                            if item.decision in {"covered_by_official", "covered_by_procedure"}
+                            if item.decision in {"covered_by_official", "covered_by_procedure", "background_context"}
                             or (item.statement_index in resumed_review_indexes
                                 and item.decision != "unresolved")
                         }
@@ -7610,7 +7714,7 @@ class ProtocolControlAgentRunner:
                                                 session_id=session_id, attempts=attempts,
                                                 source_interpretation=source_interpretation,
                                                 source_statement_coverage=coverage,
-                                                source_target_review=latest_source_target_review,
+                                                source_target_review=recovery_target_review(),
                                                 source_candidate_alignment=checkpoint_alignment(),
                                                 partial_wire=wire,
                                             )
@@ -8538,7 +8642,7 @@ class ProtocolControlAgentRunner:
                             attempts=attempts,
                             source_interpretation=source_interpretation,
                             source_statement_coverage=coverage,
-                            source_target_review=target_review,
+                            source_target_review=recovery_target_review(),
                             source_candidate_alignment=checkpoint_alignment(),
                             partial_wire=partial_wire,
                         )
@@ -8703,6 +8807,45 @@ class ProtocolControlAgentRunner:
                                     time_operand_repair_paths = missing_dates
                                     time_operand_repair_candidate = candidate_repair_index
                                     repair_candidate_indexes.add(candidate_repair_index)
+                    except (ValueError, TypeError, KeyError, IndexError):
+                        pass
+                elif (
+                    wire is None and error.code == "CANDIDATE_REPAIR_INVALID"
+                    and candidate_repair_indexes
+                    and (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                ):
+                    try:
+                        proposal = json.loads(raw_text)
+                        wrapped = (repair_baseline_wire.model_dump(mode="json")
+                                   if repair_baseline_wire is not None else deepcopy(repair_baseline_raw))
+                        if (not isinstance(proposal, dict) or set(proposal) != {"candidate_drafts"}
+                                or not isinstance(proposal["candidate_drafts"], list)
+                                or len(proposal["candidate_drafts"]) != len(candidate_repair_indexes)
+                                or _find_forbidden_provider_key(proposal) is not None):
+                            raise ValueError("多候选日期补齐须保留授权数量与来源身份")
+                        for index, draft in zip(candidate_repair_indexes, proposal["candidate_drafts"], strict=True):
+                            original = wrapped["candidate_drafts"][index]
+                            if (not isinstance(draft, dict)
+                                    or any(draft.get(field) != original[field] for field in (
+                                        "source_structure_unit_ids", "source_span_ids",
+                                    ))):
+                                raise ValueError("多候选日期补齐不得调换或改变来源范围")
+                            wrapped["candidate_drafts"][index] = draft
+                        try:
+                            ProtocolControlAgentWire.model_validate(wrapped)
+                        except ValidationError as cause:
+                            failure_indexes = {item["loc"][1] for item in cause.errors(include_url=False)
+                                               if len(item["loc"]) > 1 and item["loc"][0] == "candidate_drafts"}
+                            if len(failure_indexes) == 1:
+                                index = next(iter(failure_indexes))
+                                scoped_error = ProtocolControlAgentWireValidationError("CANDIDATE_REPAIR_INVALID", str(cause))
+                                scoped_error.__cause__ = cause
+                                paths = _invalid_time_operand_paths(scoped_error, wrapped, index)
+                                if paths and index in candidate_repair_indexes:
+                                    repair_baseline_raw = wrapped
+                                    time_operand_repair_paths = paths
+                                    time_operand_repair_candidate = index
+                                    repair_candidate_indexes.add(index)
                     except (ValueError, TypeError, KeyError, IndexError):
                         pass
                 elif repair_baseline_raw is not None and candidate_repair_index is not None:
@@ -9047,6 +9190,7 @@ class ProtocolControlAgentRunner:
                     if grounded:
                         repaired = deepcopy(repair_baseline_raw)
                         focused_response = None
+                        repairs += 1
                         try:
                             for index in focused_invalid_indexes:
                                 draft = repaired["candidate_drafts"][index]
@@ -9070,9 +9214,50 @@ class ProtocolControlAgentRunner:
                                 )
                                 if focused_response.session_id != session_id:
                                     raise ValueError("单候选修订不得更换原会话")
-                                repaired = _merge_candidate_repair_payload(
-                                    focused_response.text, repaired, index,
-                                )
+                                try:
+                                    repaired = _merge_candidate_repair_payload(
+                                        focused_response.text, repaired, index,
+                                    )
+                                except ProtocolControlAgentWireValidationError as candidate_error:
+                                    proposal = json.loads(focused_response.text)
+                                    date_reader = getattr(transport, "continue_time_operands", None)
+                                    if (candidate_error.code != "CANDIDATE_REPAIR_INVALID"
+                                            or not callable(date_reader)
+                                            or repairs >= self._max_schema_repairs
+                                            or not isinstance(proposal, dict)
+                                            or set(proposal) != {"candidate_draft"}
+                                            or not isinstance(proposal["candidate_draft"], dict)
+                                            or _find_forbidden_provider_key({
+                                                "candidate_drafts": [proposal["candidate_draft"]]
+                                            }) is not None
+                                            or any(proposal["candidate_draft"].get(field) != draft[field]
+                                                   for field in ("source_structure_unit_ids", "source_span_ids"))):
+                                        raise
+                                    proposed = deepcopy(repaired)
+                                    proposed["candidate_drafts"][index] = proposal["candidate_draft"]
+                                    date_paths = _invalid_time_operand_paths(candidate_error, proposed, index)
+                                    if not date_paths:
+                                        raise
+                                    # Retain this unaccepted proposal only for the
+                                    # typed missing-field repair. Siblings stay frozen.
+                                    repaired = proposed
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=session_id,
+                                        raw_output_sha256=_sha256(focused_response.text),
+                                        raw_output_chars=len(focused_response.text),
+                                        raw_output_text=focused_response.text,
+                                        outcome="schema_invalid", error_classes=[candidate_error.code],
+                                        issues=[str(candidate_error)[:1400]],
+                                    ))
+                                    repairs += 1
+                                    date_prompt = _build_time_operand_repair_prompt(repaired, index, date_paths)
+                                    focused_response = None
+                                    focused_response = date_reader(session_id=session_id, prompt=date_prompt)
+                                    if focused_response.session_id != session_id:
+                                        raise ValueError("日期属性修订不得更换原会话")
+                                    repaired = _merge_time_operand_repair_payload(
+                                        focused_response.text, repaired, index, date_paths,
+                                    )
                                 attempts.append(ProtocolControlAgentAttempt(
                                     attempt=len(attempts) + 1,
                                     session_id=session_id,
@@ -9100,7 +9285,10 @@ class ProtocolControlAgentRunner:
                                 outcome=("publication_invalid" if focused_response is not None
                                          else "transport_failed"),
                                 issues=["单候选逐项修订未通过：" + str(focused_error)[:1400]],
-                                error_classes=["CANDIDATE_REPAIR_INVALID"],
+                                error_classes=[protocol_control_call_failure_code(focused_error)
+                                               or (focused_error.code if isinstance(
+                                                   focused_error, ProtocolControlAgentWireValidationError
+                                               ) else "CANDIDATE_REPAIR_INVALID")],
                             ))
                             return build_result(
                                 status="需要核对", batch_id=batch.batch_id,
@@ -9111,7 +9299,6 @@ class ProtocolControlAgentRunner:
                         repair_baseline_raw = None
                         candidate_repair_index = None
                         candidate_repair_indexes = ()
-                        repairs += 1
                         repair_used = True
                         continue
                 future_path = _future_prohibition_repair_path(
@@ -9289,6 +9476,7 @@ class ProtocolControlAgentRunner:
                 repair_prompt = build_protocol_control_repair_prompt(
                     batch,
                     problem=str(error),
+                    validation_findings=error.validation_findings,
                     structure_unit_ids=(
                         error.structure_unit_ids or batch.owned_structure_unit_ids
                     ),

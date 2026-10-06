@@ -18,7 +18,7 @@ from app.agents.protocol_source_scope import source_references
 from app.domain.contracts.observation_selection import ObservationPolicy
 from app.domain.contracts.agent_io import ProtocolSemanticRuleRepair
 from app.domain.contracts.rules import iter_atomic_predicates
-from tests.v2.protocols.test_deconstruction_gate_slice3 import _fixture
+from tests.v2.protocols.test_deconstruction_gate_slice3 import _catalog, _fixture
 from tests.v2.protocols.test_protocol_deconstructor_adapter_slice3 import (
     _semantic_candidate,
     _wire_candidate,
@@ -79,9 +79,16 @@ def test_frozen_workflow_context_does_not_expand_rule_source_scope():
 
 
 @pytest.mark.parametrize("transport_type", [FakeTransport, CompactFakeTransport])
-def test_feedback_prompt_uses_only_target_rule_sources(transport_type):
+@pytest.mark.parametrize("shared_source", [False, True])
+def test_feedback_prompt_uses_only_target_rule_sources(transport_type, shared_source):
     source, draft, _ = _fixture()
     target_code = source.parent_rule_catalog.items[0].official_code
+    if shared_source:
+        items = list(source.required_procedure_catalog.items)
+        items[0] = items[0].model_copy(update={
+            "source_span_ids": ("span-in",), "source_excerpts": ("年龄≥18岁",),
+        })
+        source.required_procedure_catalog = _catalog(source.required_procedure_catalog.catalog_kind, items)
     transport = transport_type([
         ProtocolAgentResponse(session_id="session", text="{}"),
         ProtocolAgentResponse(session_id="session", text="{}"),
@@ -100,13 +107,16 @@ def test_feedback_prompt_uses_only_target_rule_sources(transport_type):
     assert payload["allowed_source_span_ids"] == ["span-in"]
     assert [item["official_code"] for item in payload["parent_rule_catalog"]] == [target_code]
     assert [item["source_span_id"] for item in payload["source_materials"]] == ["span-in"]
-    assert len(payload["required_procedure_catalog"]) == 2
-    assert all(item["source_excerpts"] == [] for item in payload["required_procedure_catalog"])
-    assert {
-        item["item_id"] for item in payload["required_procedure_catalog"]
-    } == {item.item_id for item in source.required_procedure_catalog.items}
+    expected_procedures = [source.required_procedure_catalog.items[0].model_dump(mode="json")] if shared_source else []
+    assert payload["required_procedure_catalog"] == expected_procedures
+    assert "span-proc-base" not in source_context
     assert "span-ex" not in source_context
     assert "ALT或AST≥1.5×ULN" not in source_context
+    assert "可引用完整原句" in transport.start_prompts[0]
+    assert "不必为来源绑定额外重复摘录括号" in transport.start_prompts[0]
+    assert "不得借用其他对象的时间" in transport.start_prompts[0]
+    assert "有源对象限定不代表患者归属已经核实" in transport.start_prompts[0]
+    assert "某个逐字片段起始处" not in transport.start_prompts[0]
 
 
 def test_feedback_keeps_procedure_excerpt_when_it_is_the_selected_rule_source():

@@ -3,22 +3,26 @@
 This executor is intentionally not registered in the normal application. It is
 an explicit candidate entry point, not permission to publish clinical bindings.
 """
+import json
+
 from app.domain.contracts.control_atom_binding import ControlBindingFrozenInput
 from app.domain.publication import canonical_hash
 from app.llm.control_binding_candidates import (
     PROMPT_VERSION, build_control_binding_messages, read_control_candidates, validate_control_candidates,
 )
 from app.llm.page_reader_capabilities import LOCAL_PAGE_PROVIDERS
+from app.llm.predicate_binding_candidates import computation_request_hashes
 from app.projections.control_atom_binding_input import project_control_atom_identities
 from app.projections.control_operand_calculation import calculate_control_operands
 from app.services.control_binding_input import build_control_binding_frozen_input
+from app.services.binding_candidate_comparison import COMPARISON_VERSION
 from app.services.job_service import JobService, StepSpec
 from app.services.page_review_job_service import route_identity
 from app.services.predicate_binding_job import LANES, PredicateBindingJobExecutor
 from app.workflow.errors import InvalidJobDefinitionError, StepFailure
 
 JOB_TYPE = "control_binding_candidates"
-CONTRACT = "control-binding-candidate-job/v6"
+CONTRACT = "control-binding-candidate-job/v7"
 
 
 def enqueue_control_candidates(session_factory, *, review_episode_id, routes, review_context_id=None,
@@ -56,6 +60,13 @@ def enqueue_control_candidates(session_factory, *, review_episode_id, routes, re
         from app.services.review_runtime_ownership import mark_prepared_review_job
         mark_prepared_review_job(payload, enabled=product_runtime, session=session,
                                  workflow_job_id=workflow_job_id)
+        persisted_frozen = ControlBindingFrozenInput.model_validate(json.loads(json.dumps(
+            payload["frozen_input"], ensure_ascii=False, sort_keys=True,
+        )))
+        messages = build_control_binding_messages(persisted_frozen)
+        request_hashes = computation_request_hashes({step.step_id: messages for step in reads})
+        if request_hashes:
+            payload["request_messages_sha256s"] = request_hashes
         return JobService(session_factory).create_job_in_session(
             session, idempotency_key=f"{JOB_TYPE}:{canonical_hash(payload)}",
             job_type=JOB_TYPE, payload=payload,
@@ -76,6 +87,7 @@ class ControlBindingJobExecutor(PredicateBindingJobExecutor):
     frozen_input_type = ControlBindingFrozenInput
     error_prefix = "CONTROL_BINDING"
     candidate_identity_field = "atom_identity_sha256"
+    comparison_version = COMPARISON_VERSION
 
     def _validate_candidate_payload(self, frozen, raw_text, batch):
         return validate_control_candidates(frozen, raw_text)

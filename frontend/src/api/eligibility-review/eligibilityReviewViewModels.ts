@@ -74,7 +74,7 @@ export type EligibilityActionTarget =
   | "sponsor_medical_or_project";
 
 export interface EligibilityReviewView {
-  workDraftState?: "not_started" | "current" | "source_changed";
+  workDraftState?: "not_started" | "current" | "source_changed" | "method_changed";
   unassignedConflicts?: { conflictGroupId: string; memberKind: "event" | "exposure"; memberIds: string[] }[];
   subjectId: string;
   reviewEpisodeId: string;
@@ -380,7 +380,7 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
   return {
     unassignedConflicts,
     workDraftState: "work_draft_state" in row
-      ? enumValue(row.work_draft_state, ["not_started", "current", "source_changed"] as const, "work_draft_state")
+      ? enumValue(row.work_draft_state, ["not_started", "current", "source_changed", "method_changed"] as const, "work_draft_state")
       : "not_started",
     subjectId: requiredString(field(row, "subject_id", "eligibility_review"), "subject_id"),
     reviewEpisodeId: requiredString(

@@ -76,6 +76,7 @@ export const decisionLabel: Record<ComponentDecision, string> = {
 };
 
 export const gapTypeLabel: Record<GapType, string> = {
+  calculation_capability_unavailable: "系统尚不能按方案完成计算",
   record_incomplete: "记录不完整",
   description_insufficient: "描述不充分",
   historical_source_unavailable: "既往来源无法取得",

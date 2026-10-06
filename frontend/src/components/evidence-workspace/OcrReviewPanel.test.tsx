@@ -126,6 +126,72 @@ function revision() {
 }
 
 describe("OcrReviewPanel", () => {
+  it("原文查找可打开，但不表示项目或读数已经核实", async () => {
+    const user = userEvent.setup();
+    const current = page();
+    current.locators = [{
+      locatorId: "transcript-1", pageArtifactId: current.pageArtifactId,
+      ocrPageId: current.ocrPageId, sourceDocumentVersionId: current.sourceDocumentVersionId,
+      pageNumber: current.pageNumber, sourceLayer: "raw_ocr", sourceLayerLabel: "原识别文字",
+      sourceTextSha256: current.rawTextSha256, targetId: "local-transcript:synthetic",
+      precision: "text_range", precisionLabel: "识别文字", degradationReason: "仅用于寻找对应原文，不能据此采用病史内容。",
+      textStart: 0, textEnd: current.rawText.length, excerpt: current.rawText,
+      disambiguation: "unique_match", locatorAlgorithmVersion: "fixture",
+      authenticity: "degraded", matchConfidence: null, bbox: null,
+      coordinateFrame: null, coordinateTransformVersion: null,
+    }];
+    const open = vi.fn();
+    const correction = vi.fn(async () => undefined);
+    const risk = vi.fn(async () => undefined);
+    render(<OcrReviewPanel page={current} revision={revision()} conflict={null} isCurrentRevision
+      onSubmitCorrection={correction} onSubmitRiskReview={risk} onOpenLocator={open} />);
+    expect(screen.getByText("原文可查找，相关读数尚未采用")).toBeInTheDocument();
+    expect(screen.queryByText("仅展示已核验的真实定位")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "查看 1 处原件定位" }));
+    expect(screen.getByText("原文查找 · 项目归属待核实")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "在原件中查看" }));
+    expect(open).toHaveBeenCalledWith(current.locators[0]);
+    expect(correction).not.toHaveBeenCalled();
+    expect(risk).not.toHaveBeenCalled();
+    expect(screen.getByText("文字已识别 · 1 项待核对")).toBeInTheDocument();
+  });
+
+  it("局部摘录不自动保存，补入仍要说明和关键变化确认", async () => {
+    const user = userEvent.setup();
+    const submit = vi.fn(async () => undefined);
+    const excerpt = "报告时间：2026-02-03 10:12";
+    render(<OcrReviewPanel page={page()} revision={revision()} conflict={null} isCurrentRevision
+      excerptProposal={{ proposalId: "read:1", excerpt }} onSubmitCorrection={submit}
+      onSubmitRiskReview={vi.fn(async () => undefined)} onOpenLocator={vi.fn()} />);
+    expect(submit).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "补入校对稿" }));
+    expect(screen.getByRole("textbox", { name: "补入的漏识别文字" })).toHaveValue(`\n${excerpt}`);
+    expect(screen.getByRole("textbox", { name: "校对说明" })).toHaveValue("");
+    expect(screen.getByRole("checkbox", { name: /关键变化/ })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "提交补入文字" })).toBeDisabled();
+    await user.type(screen.getByRole("textbox", { name: "校对说明" }), "已对照原件核实漏识别日期");
+    expect(screen.getByRole("button", { name: "提交补入文字" })).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: /关键变化/ }));
+    await user.click(screen.getByRole("button", { name: "提交补入文字" }));
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({
+      operation: "insert", textStart: page().rawText.length, textEnd: page().rawText.length,
+      originalText: "", correctedText: `\n${excerpt}`, criticalConfirmed: true,
+    })));
+  });
+
+  it.each(["raw", "effective", "blocked"])("已有摘录或写入被禁止时不准备重复补入：%s", (kind) => {
+    const current = page();
+    const excerpt = "接收时间：2026-02-03 10:12";
+    if (kind === "raw") current.rawText += excerpt;
+    if (kind === "effective") current.effectiveText = excerpt;
+    const submit = vi.fn(async () => undefined);
+    render(<OcrReviewPanel page={current} revision={revision()} conflict={null}
+      editingDisabledReason={kind === "blocked" ? "资料正在生成" : null}
+      excerptProposal={{ proposalId: "read:1", excerpt }} onSubmitCorrection={submit}
+      onSubmitRiskReview={vi.fn(async () => undefined)} onOpenLocator={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "补入校对稿" })).toBeDisabled();
+    expect(submit).not.toHaveBeenCalled();
+  });
   it("区分文字识别完成与风险尚待核对，并提示必填说明", () => {
     render(
       <OcrReviewPanel

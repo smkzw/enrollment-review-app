@@ -32,7 +32,7 @@ import {
   type FeedbackDraftValues,
   type ManualEditValues,
 } from "./ProtocolRedoDialogs";
-import { ProtocolJobProgress } from "./ProtocolJobProgress";
+import { ProtocolCandidatePreview, ProtocolJobProgress } from "./ProtocolJobProgress";
 import { ProtocolPublishResult } from "./ProtocolPublishResult";
 import { ProtocolPublishedSummary } from "./ProtocolPublishedSummary";
 import { ProtocolRecoveryBanner } from "./ProtocolRecoveryBanner";
@@ -163,11 +163,17 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
 
   // 生成期间轮询逐批只读预览；预览只用于尽早阅读，正式草稿仍以 getDraft 为准。
   const [generationPreview, setGenerationPreview] = useState<GenerationPreviewView | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const previewTimer = useRef<number | undefined>(undefined);
   useEffect(() => {
+    setGenerationPreview(null);
+    setPreviewError(null);
+    const live = ["queued", "running", "recovering"].includes(jobState ?? "");
+    const retained = ["resumable", "failed_retryable", "failed_final", "cancelled"].includes(jobState ?? "");
     if (
       sessionStatus !== "success" ||
-      !["queued", "running", "recovering"].includes(jobState ?? "")
+      sessionData?.jobId !== jobId ||
+      (!live && !retained)
     ) {
       window.clearTimeout(previewTimer.current);
       return;
@@ -177,11 +183,15 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     const poll = async () => {
       try {
         const preview = await repo.getGenerationPreview(jobId, { signal: controller.signal });
-        if (!stopped) setGenerationPreview(preview);
+        if (preview.jobId !== jobId) throw new Error("preview identity mismatch");
+        if (!stopped) {
+          setGenerationPreview(preview);
+          setPreviewError(null);
+        }
       } catch {
-        // 预览读取失败不阻断状态轮询；下一轮重新尝试。
+        if (!stopped) setPreviewError("已保存的读取内容暂时无法打开，请刷新状态重试。查看内容不会重新读取方案。");
       }
-      if (!stopped) {
+      if (!stopped && live) {
         previewTimer.current = window.setTimeout(() => { void poll(); }, 4000);
       }
     };
@@ -191,7 +201,9 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
       controller.abort();
       window.clearTimeout(previewTimer.current);
     };
-  }, [jobId, jobState, repo, sessionStatus]);
+  }, [jobId, jobState, repo, sessionStatus, sessionData?.jobId]);
+
+  const currentPreview = generationPreview?.jobId === jobId ? generationPreview : null;
 
   useEffect(() => {
     if (sessionData?.state === "completed") clearRememberedProtocolJob();
@@ -270,6 +282,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           feedbackKind: values.kind,
           targetRuleCode: values.targetRuleCode,
           targetComponentId: values.targetComponentId ?? undefined,
+          reviewParentScope: values.reviewParentScope,
           feedbackNote: values.note,
         });
         setFeedbackOpen(false);
@@ -462,6 +475,8 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
             session.retry();
           }}
         />
+        <ProtocolCandidatePreview preview={currentPreview} />
+        {previewError !== null && <p role="status">{previewError}</p>}
         <p className="protocol-recovery__home-link">
           <RouteLink to="/protocols" className="button button--quiet">
             返回首页
@@ -632,5 +647,8 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     );
   }
 
-  return <ProtocolJobProgress session={currentSession} preview={generationPreview} onRefresh={session.retry} />;
+  return <>
+    <ProtocolJobProgress session={currentSession} preview={currentPreview} onRefresh={session.retry} />
+    {previewError !== null && <p role="status">{previewError}</p>}
+  </>;
 }

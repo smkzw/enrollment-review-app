@@ -60,17 +60,26 @@ class LocalizedRegionReadCandidate(LocalRegionReadCandidate):
     items: list[LocalizedRegionReadItem]
 
 
+class LocalRegionFocusScopeError(ValueError):
+    def __init__(self, item_indices: list[int]):
+        super().__init__("读取项目的位置提案在圈选范围外，不能作为本次核实内容")
+        self.item_indices = item_indices
+
+
 def require_localized_focus_scope(candidate: LocalRegionReadCandidate, focus: LocalRegionRelativeBox) -> None:
     """Reject a proposal wholly outside the requested target; coordinates remain unverified."""
     if not isinstance(candidate, LocalizedRegionReadCandidate):
         return
-    for item in candidate.items:
+    outside = []
+    for index, item in enumerate(candidate.items):
         box = item.proposed_bbox
         if box is not None and not (
             max(box.x0, focus.x0) < min(box.x1, focus.x1)
             and max(box.y0, focus.y0) < min(box.y1, focus.y1)
         ):
-            raise ValueError("读取项目的位置提案在圈选范围外，不能作为本次核实内容")
+            outside.append(index)
+    if outside:
+        raise LocalRegionFocusScopeError(outside)
 
 
 def local_region_read_model(read_format: LocalReadFormat):

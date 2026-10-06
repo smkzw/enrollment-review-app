@@ -35,6 +35,14 @@ class StartFeedbackRevisionRequest(_StrictModel):
     actor: str = Field(default="用户", min_length=1, max_length=128)
 
 
+class StartSavedCandidateRecoveryRequest(_StrictModel):
+    candidate_ref: str = Field(pattern=r"^artifacts/evaluation_manifest/[0-9a-f]{64}$")
+    candidate_origin: Literal["operator_imported_unpublished"]
+    expected_freeze_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    actor: str = Field(default="用户", min_length=1, max_length=128)
+
+
 class RegisterInterpretationSourcesRequest(_StrictModel):
     expected_revision_id: str = Field(min_length=1, max_length=128)
     idempotency_key: str = Field(min_length=1, max_length=256)
@@ -225,6 +233,7 @@ class DraftRevisionResponse(_StrictModel):
     status_label: str
     reason: str
     reason_label: str
+    imported_unpublished_proposal: bool = False
     actor: str
     created_at: datetime
     study_phase: StudyPhase

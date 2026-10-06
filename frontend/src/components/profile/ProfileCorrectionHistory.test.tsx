@@ -211,6 +211,24 @@ describe("ProfileCorrectionHistory", () => {
     expect(model.revisionId).toBe(generatedModel.revisionId);
   });
 
+  it("修订前后的布尔记录用中文显示，不显示程序布尔值", async () => {
+    const user = userEvent.setup();
+    setPatientProfileRepository(makeRepo(vi.fn(async () => decodePatientProfileRevision(generatedWire()))));
+    const records = history();
+    records.items[0]!.oldSnapshot.value = true;
+    records.items[0]!.newSnapshot.value = false;
+    records.items[0]!.oldSnapshot.unit = null;
+    records.items[0]!.newSnapshot.unit = null;
+    render(<ProfileCorrectionHistory state={{ status: "success", data: records }} subjectId={SUBJECT} />);
+    await screen.findByText(GENERATED_TITLE);
+    await user.click(screen.getByText("修改前"));
+    await user.click(screen.getByText("修改后"));
+    expect(screen.getByText("是")).toBeInTheDocument();
+    expect(screen.getByText("否")).toBeInTheDocument();
+    expect(screen.queryByText("true")).not.toBeInTheDocument();
+    expect(screen.queryByText("false")).not.toBeInTheDocument();
+  });
+
   it("does not fall back to latest when the generated Profile cannot be loaded", async () => {
     const getRevision = vi.fn(async () => {
       throw new Error("revision missing");

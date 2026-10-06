@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from fastapi import status as http_status
 
 from app.api.v2.fact_normalization_schemas import (
     FactNormalizationRequest,
     FactNormalizationSubmitDTO,
+    NormalizationUnresolvedPageDTO,
 )
 from app.api.v2.vocabulary import JOB_STATE_LABELS, job_recovery_action
 from app.services.evidence_app_errors import EvidenceAppError, translate_storage_error
@@ -17,6 +18,19 @@ from app.services.fact_normalization_command_service import (
 )
 
 router = APIRouter(prefix="/api/v2", tags=["v2-fact-normalization"])
+
+
+@router.get(
+    "/subjects/{subject_id}/review-episodes/{review_episode_id}/fact-normalization-jobs/{job_id}/unresolved",
+    response_model=NormalizationUnresolvedPageDTO,
+)
+def read_normalization_unresolved(subject_id: str, review_episode_id: str, job_id: str,
+                                 request: Request, offset: int = Query(default=0, ge=0),
+                                 limit: int = Query(default=50, ge=1, le=200),
+                                 expected_content_sha256: str | None = Query(default=None, pattern="^[0-9a-f]{64}$")):
+    return _read(request).normalization_unresolved(
+        subject_id, review_episode_id, job_id, offset=offset, limit=limit,
+        expected_content_sha256=expected_content_sha256)
 
 _UNKNOWN_STATE_LABEL = "状态待更新"
 

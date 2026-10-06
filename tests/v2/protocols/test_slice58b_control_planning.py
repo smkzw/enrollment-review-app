@@ -435,6 +435,18 @@ def test_device_name_alone_does_not_claim_height_measurement_performed() -> None
     )
 
 
+@pytest.mark.parametrize("separator", ["。", "；", ";", "！", "?", "\n"])
+def test_collection_action_does_not_borrow_object_from_next_clause(separator: str) -> None:
+    text = f"核对是否已收集检查结果{separator}原文未限定资料种类。"
+    assert "collect_data" not in detect_required_action_kinds(text)
+
+
+def test_collection_action_in_following_clause_is_still_detected() -> None:
+    assert "collect_data" in detect_required_action_kinds(
+        "核对检查结果；另须收集受试者的既往治疗史资料。"
+    )
+
+
 def test_sequence_context_without_positive_action_does_not_create_action() -> None:
     assert "sequence_before_related_procedure" not in detect_required_action_kinds(
         "两项操作的先后顺序未作要求。"

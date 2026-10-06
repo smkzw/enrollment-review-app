@@ -31,10 +31,11 @@ import math
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, model_serializer, model_validator
 
 from .common import ContractModel, ScalarValue
 from .identifier_value import validate_identifier_value
+from .fact_context import FactContextQualifier, semantic_context, validate_context_excerpt
 from .enums import (
     DatePrecision,
     DurationStatus,
@@ -196,6 +197,19 @@ class AssertionBasis(ContractModel):
     assertion_text: str = Field(min_length=1)
     locator_id: str = Field(min_length=1)
     source_text_sha256: str = Field(pattern=_SHA256)
+    contextual_qualifiers: list[FactContextQualifier] = Field(
+        default_factory=list, exclude_if=lambda value: not value,
+    )
+
+    @model_validator(mode="after")
+    def validate_context(self):
+        validate_context_excerpt(self.contextual_qualifiers, self.assertion_text)
+        return self
+
+    def require_context_locators(self, locator_ids: list[str]) -> None:
+        from .fact_context import context_source_ids
+        if not context_source_ids(self.contextual_qualifiers) <= set(locator_ids):
+            raise ValueError("背景独立定位必须属于同一候选事实的定位集合")
 
 
 # --------------------------------------------------------------------------- 极性/值共享校验
@@ -296,6 +310,7 @@ class ClinicalFactCandidateV2(Phase5Model):
                 raise ValueError("断言依据定位必须属于候选事实的定位集合")
             if self.assertion_basis.asserted_object != self.asserted_object:
                 raise ValueError("候选被断言对象必须与断言依据对象一致")
+            self.assertion_basis.require_context_locators(self.locator_ids)
         return self
 
 
@@ -419,6 +434,10 @@ class ClinicalFactV2(Phase5Model):
         _validate_fact_polarity_value(
             self.polarity, self.value, self.unit, self.assertion_basis
         )
+        if self.assertion_basis is not None:
+            self.assertion_basis.require_context_locators(self.locator_ids)
+            if any(item.source is not None for item in self.assertion_basis.contextual_qualifiers):
+                raise ValueError("跨位置背景归属尚未核实，仅可保留候选与疑问，不能写入正式病史")
         if (
             self.assertion_basis is not None
             and self.assertion_basis.locator_id not in self.locator_ids
@@ -438,6 +457,7 @@ class ClinicalFactV2(Phase5Model):
             value=self.value,
             unit=self.unit,
             date_range=self.date_range,
+            assertion_basis=self.assertion_basis,
         )
         if self.stable_identity != expected:
             raise ValueError("发布事实稳定身份与权威元组/类型/对象/极性/规范值/单位/日期范围不一致")
@@ -627,6 +647,17 @@ class ClinicalConflictGroupV2(Phase5Model):
 # --------------------------------------------------------------------------- 稳定身份
 
 
+def clinical_fact_object_key(
+    fact_type: str, asserted_object: str, assertion_basis: AssertionBasis | None,
+) -> str:
+    """Contextual semantic object, never a measurement/acquisition identifier."""
+    key = f"{fact_type}:{asserted_object}"
+    if assertion_basis is not None and assertion_basis.contextual_qualifiers:
+        from app.domain.publication import canonical_hash
+        key += ":context:" + canonical_hash(semantic_context(assertion_basis.contextual_qualifiers))
+    return key
+
+
 def clinical_fact_stable_identity(
     *,
     authority: FactAuthority,
@@ -637,23 +668,25 @@ def clinical_fact_stable_identity(
     unit: str | None,
     date_range: PartialDateRange | None,
     profile_lane: ProfileLane = ProfileLane.EVIDENCE_QUALITY,
+    assertion_basis: AssertionBasis | None = None,
 ) -> str:
     """临床事实稳定重复键：包含被断言对象，排除置信度与定位。"""
     from app.domain.publication import canonical_hash
 
-    return canonical_hash(
-        {
-            "identity": "clinical_fact/v2",
-            "authority": authority.model_dump(mode="json"),
-            "fact_type": fact_type,
-            "profile_lane": profile_lane.value,
-            "asserted_object": asserted_object,
-            "polarity": polarity.value,
-            "value": value,
-            "unit": unit,
-            "date_range": _date_range_identity(date_range),
-        }
-    )
+    material = {
+        "identity": "clinical_fact/v2",
+        "authority": authority.model_dump(mode="json"),
+        "fact_type": fact_type,
+        "profile_lane": profile_lane.value,
+        "asserted_object": asserted_object,
+        "polarity": polarity.value,
+        "value": value,
+        "unit": unit,
+        "date_range": _date_range_identity(date_range),
+    }
+    if assertion_basis is not None and assertion_basis.contextual_qualifiers:
+        material["contextual_qualifiers"] = semantic_context(assertion_basis.contextual_qualifiers)
+    return canonical_hash(material)
 
 
 def clinical_event_stable_identity(
@@ -793,7 +826,15 @@ class FactNormalizationCall(Phase5Model):
     status: FactCallStatus
     input_sha256: str = Field(pattern=_SHA256)
     raw_output_sha256: str | None = Field(default=None, pattern=_SHA256)
+    reading_method: Literal["model_response", "adapter_response", "retained_pending"] | None = None
     created_at: datetime
+
+    @model_serializer(mode="wrap")
+    def serialize_reading_method(self, handler):
+        value = handler(self)
+        if self.reading_method is None:
+            value.pop("reading_method", None)
+        return value
 
     @model_validator(mode="after")
     def validate_call(self) -> "FactNormalizationCall":
@@ -801,6 +842,9 @@ class FactNormalizationCall(Phase5Model):
         pages = self.page_numbers
         if pages != sorted(set(pages)) or any(p < 1 for p in pages):
             raise ValueError("调用页清单必须升序、无重复且页码从 1 起")
+        if self.reading_method is not None and (
+                self.status != FactCallStatus.SUCCEEDED or self.raw_output_sha256 is None):
+            raise ValueError("读取方式只记录已持久化且有原答身份的成功调用，不证明资料核清")
         return self
 
 

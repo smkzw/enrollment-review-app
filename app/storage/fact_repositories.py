@@ -36,6 +36,7 @@ from app.domain.contracts.facts import (
     ClinicalEventV2,
     ClinicalFactCandidateV2,
     ClinicalFactV2,
+    clinical_fact_object_key,
     FactAuthority,
     FactGateResult,
     FactNormalizationCall,
@@ -1047,7 +1048,7 @@ class _PublishMixin:
         repository = ClinicalFactV2Repository(self.session)
         return sorted(
             {
-                f"{fact.fact_type}:{fact.asserted_object}"
+                clinical_fact_object_key(fact.fact_type, fact.asserted_object, fact.assertion_basis)
                 for fact_id in fact_ids
                 for fact in [repository.get(fact_id)]
             }
@@ -1600,7 +1601,8 @@ class ClinicalEventV2Repository(_PublishMixin):
             fact_ids = fact_ids_by_event[row.event_id]
             objects = sorted(
                 {
-                    f"{facts_by_id[fact_id].fact_type}:{facts_by_id[fact_id].asserted_object}"
+                    clinical_fact_object_key(facts_by_id[fact_id].fact_type, facts_by_id[fact_id].asserted_object,
+                                             facts_by_id[fact_id].assertion_basis)
                     for fact_id in fact_ids
                 }
             )

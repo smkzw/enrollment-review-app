@@ -41,7 +41,9 @@ from app.domain.contracts.enums import (
     OcrRiskLevel,
     SourceStrength,
 )
-from app.domain.contracts.evidence_locator import CompleteEvidenceProcessingRevision
+from app.domain.contracts.evidence_locator import (
+    CompleteEvidenceProcessingRevision, TRANSCRIPT_NAVIGATION_TARGET_PREFIX,
+)
 from app.domain.contracts.fact_gates import GateVerdict
 from app.domain.contracts.facts import (
     ClinicalEventCandidateV2,
@@ -51,6 +53,7 @@ from app.domain.contracts.facts import (
     MedicationExposureCandidateV2,
 )
 from app.storage.repositories import RepositoryError
+from app.evidence.risk import blocking_risk_is_resolved, scan_ocr_risks
 
 _CANDIDATE_UNION = (ClinicalFactCandidateV2, ClinicalEventCandidateV2, MedicationExposureCandidateV2)
 
@@ -450,6 +453,10 @@ def validate_locator_and_text_hash(
             errors.append(f"定位 {lid} 未通过真实性门禁（authenticity=rejected）")
             failed_locators.add(lid)
 
+        if locator.target_id.startswith(TRANSCRIPT_NAVIGATION_TARGET_PREFIX):
+            errors.append(f"定位 {lid} 仅供原文导航，字段归属尚未核实，不能据此采用病史内容")
+            failed_locators.add(lid)
+
         # effective_text 绑定当前修订
         if (
             locator.source_layer == LocatorSourceLayer.EFFECTIVE_TEXT
@@ -490,6 +497,29 @@ def validate_locator_and_text_hash(
                     except RepositoryError as exc:
                         errors.append(f"断言依据定位 {basis_lid} 无法还原：{exc}")
                         failed_locators.add(basis_lid)
+    if isinstance(candidate, ClinicalFactCandidateV2) and candidate.assertion_basis is not None:
+        from app.domain.contracts.fact_context import validate_context_source_excerpt
+        for item in candidate.assertion_basis.contextual_qualifiers:
+            source = item.source
+            if source is None:
+                continue
+            lid = source.locator_id
+            if lid in failed_locators:
+                continue
+            try:
+                locator = _fetch_cached(session, lid, locator_cache, visual_batch)
+                primary_locator = _fetch_cached(session, candidate.assertion_basis.locator_id,
+                    locator_cache, visual_batch)
+                if locator.source_document_version_id != primary_locator.source_document_version_id:
+                    raise ValueError("背景独立摘录不能跨逻辑文档或原件版本借用")
+                if source.source_text_sha256 != locator.source_text_sha256:
+                    raise ValueError("背景独立定位的原文哈希已变化")
+                localized = _localized_locator_text(session, locator, revision,
+                    correction_cache=correction_cache)
+                validate_context_source_excerpt(source.excerpt, localized)
+            except (RepositoryError, ValueError) as exc:
+                errors.append(f"背景定位 {lid} 无法核对：{exc}")
+                failed_locators.add(lid)
     if errors:
         return GateOutcome.REJECTED, errors, sorted(failed_locators)
     return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
@@ -525,16 +555,11 @@ def validate_blocking_ocr_for_candidate(
     若候选任一定位所在页存在未解除的 BLOCKING 级风险且与定位范围重叠，
     则该候选被 BLOCKED，affected_scope 为被阻断的定位 ids。
 
-    解除条件（与完整修订闭包一致）：
-    - 该风险 flag 的全局 id ``"{scan_id}:{risk_id}"`` 出现在
-      ``revision.risk_review_ids`` 对应的 ``OCRRiskReview.risk_flag_id`` 中；或
-    - 存在 ``revision.correction_ids`` 中某条 ``CorrectionRecord`` 覆盖该 flag
-      的字符范围（同一 ocr_page_id 且 correction.text_start <= flag.text_start
-      且 correction.text_end >= flag.text_end）。
+    解除条件由风险模块的共享谓词确定，只消费修订选中的核对和校对。
 
     范围重叠判定：
-    - 若定位为 BBOX / TEXT_RANGE 且携带 text_start/end，则与 flag 范围
-      区间重叠即视为影响；
+    - 只有 raw_ocr 的 BBOX / TEXT_RANGE 字符偏移与原始风险范围可直接比较；
+    - native_text / effective_text 没有已核实的原文坐标映射时按整页阻断；
     - 若定位为 PAGE_EXCERPT / PAGE_ONLY 等页级定位，则该页任一未解除的
       BLOCKING 风险即视为阻断（保守策略，符合“整页 OCR 风险未完成校对时
       相关候选不得发布”的要求）。
@@ -552,6 +577,10 @@ def validate_blocking_ocr_for_candidate(
         return GateOutcome.BLOCKED, list(closure_errors), sorted(set(locator_ids))
     if not blocking_by_page:
         return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
+    if revision.source_qualification_mode == "scoped_text_v1" and _has_unlocated_value_dependencies(candidate):
+        return GateOutcome.BLOCKED, [
+            "资料仍有未核实读数，候选数值或日期尚无逐项来源核实依据"
+        ], sorted(set(locator_ids))
 
     blocked_locators: set[str] = set()
     reasons: list[str] = []
@@ -559,42 +588,31 @@ def validate_blocking_ocr_for_candidate(
     for lid in locator_ids:
         try:
             locator = _fetch_cached(session, lid, locator_cache, visual_batch)
-        except RepositoryError:
+        except RepositoryError as exc:
+            reasons.append(f"定位 {lid} 无法还原：{exc}")
+            blocked_locators.add(lid)
             continue
-        ocr_pid = getattr(locator, "ocr_page_id", None)
-        if ocr_pid is None:
+        if locator.source_layer == LocatorSourceLayer.PAGE_REVIEW_VISUAL:
+            continue  # The independent visual provenance gate remains mandatory.
+        page_entry = next((entry for entry in revision.manifest if entry.page_artifact_id == locator.page_artifact_id), None)
+        if page_entry is None:
+            reasons.append(f"定位 {lid} 不属于当前资料页清单")
+            blocked_locators.add(lid)
+            continue
+        ocr_pid = page_entry.ocr_page_id
+        if getattr(locator, "ocr_page_id", None) not in (None, ocr_pid):
+            reasons.append(f"定位 {lid} 的识别页与原件页不一致")
+            blocked_locators.add(lid)
             continue
         flags = blocking_by_page.get(ocr_pid, [])
         for scan_id, flag in flags:
-            flag_id = f"{scan_id}:{getattr(flag, 'risk_id', '')}"
-            if flag_id in resolved_via_review:
-                continue
-            covered = False
-            for corr in corrections:
-                if getattr(corr, "ocr_page_id", None) != ocr_pid:
-                    continue
-                c_start = getattr(corr, "text_start", None)
-                c_end = getattr(corr, "text_end", None)
-                f_start = getattr(flag, "text_start", None)
-                f_end = getattr(flag, "text_end", None)
-                if (
-                    c_start is not None
-                    and c_end is not None
-                    and f_start is not None
-                    and f_end is not None
-                    and c_start <= f_start
-                    and c_end >= f_end
-                ):
-                    covered = True
-                    break
-            if covered:
-                continue
             loc_start = getattr(locator, "text_start", None)
             loc_end = getattr(locator, "text_end", None)
             flag_start = getattr(flag, "text_start", None)
             flag_end = getattr(flag, "text_end", None)
             if (
-                locator.precision in (LocatorPrecision.BBOX, LocatorPrecision.TEXT_RANGE)
+                locator.source_layer == LocatorSourceLayer.RAW_OCR
+                and locator.precision in (LocatorPrecision.BBOX, LocatorPrecision.TEXT_RANGE)
                 and loc_start is not None
                 and loc_end is not None
                 and flag_start is not None
@@ -616,6 +634,27 @@ def validate_blocking_ocr_for_candidate(
     if reasons:
         return GateOutcome.BLOCKED, reasons, sorted(blocked_locators)
     return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
+
+
+def _has_unlocated_value_dependencies(candidate) -> bool:
+    """The bounded text trial cannot certify a date/value without field provenance."""
+    if any(getattr(candidate, field, None) is not None for field in (
+        "date_range", "start_range", "end_range", "record_time", "unit", "dose", "frequency",
+    )):
+        return True
+    values = [getattr(candidate, field, None) for field in (
+        "raw_value", "canonical_value", "asserted_object", "medication_name",
+    )]
+    values.append(getattr(getattr(candidate, "assertion_basis", None), "assertion_text", None))
+    for value in values:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return True
+        if isinstance(value, str) and any(
+            flag.kind.value in {"numeric_value", "decimal_point", "unit", "date"}
+            for flag in scan_ocr_risks(value)
+        ):
+            return True
+    return False
 
 
 def _prepare_blocking_ocr_context(
@@ -702,6 +741,31 @@ def _prepare_blocking_ocr_context(
                 closure_errors.append(
                     f"完整修订选中的校对 {left.correction_id} 与 {right.correction_id} 范围重叠"
                 )
+
+    from app.storage.ocr_repositories import OcrPageRepository
+    try:
+        page_lengths = {
+            page.ocr_page_id: len(page.raw_text)
+            for page in OcrPageRepository(session).get_many(sorted(manifest_ocr_page_ids))
+        }
+        blocking_by_page = {
+            page_id: [
+                (scan_id, flag) for scan_id, flag in flags
+                if not blocking_risk_is_resolved(
+                    flag,
+                    reviewed=f"{scan_id}:{flag.risk_id}" in resolved_via_review,
+                    correction_ranges=(
+                        (corr.text_start, corr.text_end) for corr in corrections
+                        if corr.ocr_page_id == page_id
+                    ),
+                    page_text_length=page_lengths[page_id],
+                )
+            ]
+            for page_id, flags in blocking_by_page.items()
+        }
+        blocking_by_page = {page_id: flags for page_id, flags in blocking_by_page.items() if flags}
+    except RepositoryError as exc:
+        closure_errors.append(f"风险扫描对应的原始文字无法还原：{exc}")
 
     return closure_errors, blocking_by_page, resolved_via_review, corrections
 

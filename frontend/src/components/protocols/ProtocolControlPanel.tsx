@@ -50,6 +50,7 @@ export function ProtocolControlPanel({ controls }: Props) {
     {state.status === "loading" && <p role="status">正在读取补充审核要求…</p>}
     {state.status === "processing" && <p role="status">{state.job.statusLabel}；完成后可与入排标准一并发布。</p>}
     {state.status === "stopped" && <>
+      <p role="status">{state.job.statusLabel}。</p>
       <p role="status">补充审核要求尚未整理完成，当前方案暂不能发布。已保存的结果仍保留。</p>
       {state.job.state === "failed_final" && <button type="button" className="button" disabled={controls.retrying} onClick={() => { void controls.retryFailed(); }}>
         {controls.retrying ? "正在继续整理…" : "继续整理未完成部分"}
@@ -59,9 +60,25 @@ export function ProtocolControlPanel({ controls }: Props) {
     {state.status === "ready" && <>
       <p>{state.data.calculationGaps.length > 0
         ? `已整理${state.data.requirements.length}项补充要求，另有${state.data.calculationGaps.length}处计算相关原文尚未纳入可靠审核，当前不能发布。`
+        : state.data.restrictedStatements.length > 0
+          ? `已整理${state.data.requirements.length}项补充要求，另有${state.data.restrictedStatements.length}段方案原文尚不能自动核对，以下一并保留。`
         : state.data.requirements.length === 0
           ? "本次整理未列出额外审核要求。"
           : `已整理${state.data.requirements.length}项补充要求，待随方案发布。`}</p>
+      {state.data.restrictedStatements.length > 0 && <section className="kz-control-layer" aria-label="尚不能自动核对的方案原文">
+        <h4>尚不能自动核对的方案原文</h4>
+        <p>这些内容随本次方案保存，不视为已符合，也不代表受试者缺少资料。其他已核清要求仍单独保留。</p>
+        <ol>{state.data.restrictedStatements.map((item, index) => <li key={item.id}>
+          <strong>待核原文{index + 1}：{item.limitationKind === "consumer_unavailable" ? "核对方法尚未接通" : "适用含义尚待核清"}</strong>
+          <blockquote>{item.sourceQuote}</blockquote>
+          {item.scopeQuote && <p><strong>原文限定范围：</strong>{item.scopeQuote}</p>}
+          {item.timeWords.length > 0 && <p><strong>原文时间要求：</strong>{item.timeWords.join("、")}</p>}
+          {item.exceptionWords && <p><strong>原文例外：</strong>{item.exceptionWords}</p>}
+          {item.affectedStage && <p><strong>涉及时期：</strong>{item.affectedStage}</p>}
+          <ul>{item.unresolvedDimensions.map((dimension, dimensionIndex) => <li key={dimensionIndex}>{dimension}</li>)}</ul>
+          {item.dependencyLabels.length > 0 && <p>还需结合{item.dependencyLabels.join("、")}核对。</p>}
+        </li>)}</ol>
+      </section>}
       {state.data.calculationGaps.length > 0 && <section className="kz-control-layer" aria-label="尚未纳入审核的计算相关原文">
         <h4>尚未纳入审核的计算相关原文</h4>
         <p>这里保留了方案原文。仍需核对它对哪些审核要求起作用，并接通可靠的取值或计算方式；这不是请研究者补写医学判断。</p>
@@ -84,6 +101,10 @@ export function ProtocolControlPanel({ controls }: Props) {
             <p><strong>适用人群：</strong>{item.population}</p>
             <ul className="kz-control-nodes">{item.nodes.map((node, nodeIndex) => <li key={nodeIndex}>
               <strong>{node.label}</strong> · {node.role}{node.guidance ? `：${node.guidance}` : ""}
+              {node.scopeSource && <details className="kz-control-source">
+                <summary>审核时期原文</summary>
+                <blockquote>{node.scopeSource.excerpt}</blockquote>
+              </details>}
             </li>)}</ul>
             <div className="kz-control-layers">
               <Groups title="适用条件组" groups={item.applicability} />

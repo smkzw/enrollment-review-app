@@ -368,6 +368,8 @@ describe("证据处理 HTTP 仓储", () => {
       const payload = url.includes("/evidence-processing-candidates/")
         ? {
             candidate_id: "candidate-3",
+            evidence_snapshot_id: "snapshot-1",
+            base_processing_revision_id: "revision-1",
             job_id: "job-3",
             candidate_status: "needs_attention",
             candidate_status_label: "需要关注",
@@ -445,6 +447,8 @@ describe("证据处理 HTTP 仓储", () => {
     const candidate = await repository.getProcessingCandidate("candidate-3");
     expect(candidate).toMatchObject({
       candidateId: "candidate-3",
+      evidenceSnapshotId: "snapshot-1",
+      baseProcessingRevisionId: "revision-1",
       candidateStatus: "needs_attention",
       candidateEventSeq: 2,
       completeRevisionId: null,
