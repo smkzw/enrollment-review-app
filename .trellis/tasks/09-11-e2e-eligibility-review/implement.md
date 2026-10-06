@@ -12,6 +12,7 @@ Goal现场查询paused；execution_paused_by_user=true、claims_complete=false�
 | P1现行 | v6保留238处来源，bytes65944→62453但字符37406→40960，token/速度unknown；两目标实际41.554876s仍TARGET_VISIT_SCOPE_UNPROVEN/0写库。25项23单项有效、14/19关系未证、10项短编译能力缺口；旧6/6不重置。target-scope C03631.697s只作首错建议，不采无据全访视推断。 |
 | 最终集中窗口 | v5七模块178pass/251.63s/exit0/5SWIG，XML /Users/smkzw/tmp/enrollment-normalizer-saved-response-window-20261006-v5.xml。v3 173pass/130.73s；v4 177pass1fail/94s，新verified夹具缺来源，改已有合成来源未改门禁。不相加；P1旧919pass9.05s不重跑。无全库/前端/Ego/Q3/完整病例更正验证。 |
 | 复盘与接续 | 同SAR/D001/31001反复提示/guard调优存在反馈过拟合风险；通用身份/局部分区不是病种特例，但缺独立留出。整段repair/语义包装耦合/普通消费者未完成/文档叠加消耗主要时间。暂停后不读取。恢复先P2合法副本及原件QC，P1先通用分类/消费者家族，随后完整采用/当前节点/更正/留出/Q3。 |
+| GitHub交付与保全 | 28文件提交8b5b4c4f75f85110dfc81ce080755b1c8457144f已push，ls-remote同SHA。5份源/测试暂存与测试快照一致，188静态命名依赖无漂移；暂存JSON/AST/实际导入/diff检查退出0，28文件凭据模式0命中。此次后续仅文档回执；7份继承delivery dirty和其他未跟踪资料保留。不含原答/库/环境，不归档任务。 |
 <!-- RV1001-CURRENT:END -->
 
 ## 截至f2603a9f的执行轨迹（历史快照，不覆盖上述当前状态）

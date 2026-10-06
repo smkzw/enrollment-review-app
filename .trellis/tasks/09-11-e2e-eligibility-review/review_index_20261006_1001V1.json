@@ -11,6 +11,7 @@
   "code_snapshots": [
     {
       "id": "S-01",
+      "commit": "8b5b4c4f75f85110dfc81ce080755b1c8457144f",
       "kind": "base_plus_selected_exact_source",
       "base_commit": "f2603a9fea5dfc0615abf5a1c0d5f21915168d8c",
       "manifest_artifact_id": "E-02",
@@ -21,7 +22,7 @@
   "changes": [
     {
       "id": "CH-01",
-      "delivery_state": "selected_for_commit",
+      "delivery_state": "committed_pushed_remote_sha_verified",
       "paths": [
         "app/agents/deepseek_evidence_normalizer_transport.py",
         "app/domain/contracts/facts.py",
@@ -219,5 +220,5 @@
     "Complete same-source current node, real correction/new report, independent holdout and Ego wide-screen/recovery acceptance."
   ],
   "product_claims_complete": false,
-  "notes": "Goal paused already observed. No clinical/raw answers/env/DB submitted. Commit/push verified after staging; current file content identifies exact tested source without a self-hash commit loop. Model pairing winner/generalization/automatic clinical adoption not demonstrated."
+  "notes": "Goal paused observed and confirmed. Selected28 files committed and pushed8b5b4c4f75f85110dfc81ce080755b1c8457144f; remote branch SHA matched. This receipt is a later documentation-only update. Five source/test staged bytes equal178-pass snapshot; JSON/import/diff checks passed, credential-pattern scan0 hits,188 named static imports no nonselected drift. Seven inherited delivery dirty files preserved. No clinical/raw answers/env/DB or SDK private traces submitted. Dynamic/full clinical/UI acceptance and generalization not demonstrated."
 }
