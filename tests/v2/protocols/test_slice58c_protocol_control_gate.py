@@ -2282,7 +2282,7 @@ def test_future_prohibition_has_separate_source_bound_not_due_record(narrow_exce
             observation_policy=SimpleNamespace(scope="筛选期及双盲治疗期背景治疗调整记录"),
         ),
     )
-    with pytest.raises(ProtocolControlGateError, match="FUTURE_PROHIBITION_DECIDED_EARLY"):
+    with pytest.raises(ProtocolControlGateError, match="FUTURE_PROHIBITION_DECIDED_EARLY") as failure:
         _check_future_prohibition_not_decided_at_current_node(
             entity_id="candidate:future-observation-scope",
             obligation_expression=SimpleNamespace(groups=[SimpleNamespace(atoms=[with_future_scope])]),
@@ -2292,6 +2292,7 @@ def test_future_prohibition_has_separate_source_bound_not_due_record(narrow_exce
                 role=ReviewNodeRole.DECIDE_AT_NODE,
             )],
         )
+    assert failure.value.json_path == "obligation_expression.groups.0.atoms.0.evaluation.observation_policy.scope"
     _check_future_prohibition_not_decided_at_current_node(
         entity_id="candidate:explicit-no-future-proof",
         obligation_expression=expression,

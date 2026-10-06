@@ -62,7 +62,7 @@ from app.protocols.source_time_fragments import (
 from app.protocols.control_scope_sources import validate_scope_citations
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v43"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v44"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -95,9 +95,11 @@ class ProtocolControlGateError(ValueError):
         structure_unit_ids: Sequence[str] = (),
         candidate_ids: Sequence[str] = (),
         obligation_source_span_ids: Sequence[str] = (),
+        json_path: str | None = None,
     ) -> None:
         self.code = code
         self.message = message
+        self.json_path = json_path
         self.entity_id = entity_id
         self.structure_unit_ids = tuple(sorted(set(structure_unit_ids)))
         self.candidate_ids = tuple(sorted(set(candidate_ids)))
@@ -121,6 +123,7 @@ class ProtocolControlGateIssue:
     structure_unit_ids: tuple[str, ...] = ()
     candidate_ids: tuple[str, ...] = ()
     obligation_source_span_ids: tuple[str, ...] = ()
+    json_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -481,6 +484,7 @@ def _fail(
     structure_unit_ids: Sequence[str] = (),
     candidate_ids: Sequence[str] = (),
     obligation_source_span_ids: Sequence[str] = (),
+    json_path: str | None = None,
 ) -> None:
     raise ProtocolControlGateError(
         code,
@@ -489,6 +493,7 @@ def _fail(
         structure_unit_ids=structure_unit_ids,
         candidate_ids=candidate_ids,
         obligation_source_span_ids=obligation_source_span_ids,
+        json_path=json_path,
     )
 
 
@@ -3627,7 +3632,13 @@ def _check_future_prohibition_not_decided_at_current_node(
 
     if not any(_value(getattr(binding, "role", None)) == "decide_at_node" for binding in bindings):
         return
-    for atom in _iter_expression_atoms(obligation_expression):
+    indexed_atoms = (
+        (group_index, atom_index, atom)
+        for group_index, group in enumerate(getattr(obligation_expression, "groups", ()) or ())
+        for atom_index, atom in enumerate(getattr(group, "atoms", ()) or ())
+    )
+    for group_index, atom_index, atom in indexed_atoms:
+        atom_path = f"obligation_expression.groups.{group_index}.atoms.{atom_index}"
         if _value(getattr(atom, "kind", None)) not in {
             ControlObligationKind.PROHIBIT_EVENT.value,
             ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE.value,
@@ -3645,6 +3656,7 @@ def _check_future_prohibition_not_decided_at_current_node(
                 "FUTURE_PROHIBITION_DECIDED_EARLY",
                 "同时覆盖当前节点和后续期间的禁止要求，须分开保存可核事实和未到期持续义务",
                 entity_id=entity_id,
+                json_path=atom_path + ".continuing_obligation",
             )
         observation_policy = getattr(evaluation, "observation_policy", None)
         observation_scope = str(getattr(observation_policy, "scope", "") or "")
@@ -3653,6 +3665,7 @@ def _check_future_prohibition_not_decided_at_current_node(
                 "FUTURE_PROHIBITION_DECIDED_EARLY",
                 "当前节点的观察范围不得要求覆盖后续期间；未到期记录与本节点资料分开",
                 entity_id=entity_id,
+                json_path=atom_path + ".evaluation.observation_policy.scope",
             )
         statement = str(getattr(atom, "statement", "") or "")
         if any(
@@ -3663,6 +3676,9 @@ def _check_future_prohibition_not_decided_at_current_node(
                 "FUTURE_PROHIBITION_DECIDED_EARLY",
                 "当前节点的义务与求值命题不得包含后续期间；后续义务由未到期记录承载",
                 entity_id=entity_id,
+                json_path=atom_path + (".evaluation.proposition" if (
+                    _STUDY_PERIOD_CUE_RE.search(proposition) or _TREATMENT_PERIOD_CUE_RE.search(proposition)
+                ) else ".statement"),
             )
         for text in (
             *(str(getattr(binding, "guidance", "") or "") for binding in bindings),
@@ -5486,6 +5502,7 @@ def check_protocol_control_publication(*args: Any, **kwargs: Any) -> ProtocolCon
                     exc.structure_unit_ids,
                     exc.candidate_ids,
                     exc.obligation_source_span_ids,
+                    exc.json_path,
                 ),
             ),
         )

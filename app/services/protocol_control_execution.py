@@ -1823,6 +1823,7 @@ def _validate_deep_batch_output(
                 structure_unit_ids=error.structure_unit_ids,
                 candidate_ids=error.candidate_ids,
                 obligation_source_span_ids=error.obligation_source_span_ids,
+                json_path=error.json_path,
             )
             for error in errors
         ],

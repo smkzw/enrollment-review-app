@@ -221,6 +221,7 @@ def publication_repair_error(
             "structure_unit_ids": list(getattr(issue, "structure_unit_ids", ()) or ()),
             "candidate_ids": list(getattr(issue, "candidate_ids", ()) or ()),
             "obligation_source_span_ids": list(getattr(issue, "obligation_source_span_ids", ()) or ()),
+            "json_path": getattr(issue, "json_path", None),
         } for issue in issues],
     )
 

@@ -5554,6 +5554,32 @@ def _merge_post_treatment_scope_repair(
         ) from exc
 
 
+def _future_prohibition_finding_paths(
+    error: ProtocolControlAgentWireValidationError,
+) -> tuple[tuple[int, int, str], ...] | None:
+    """None means legacy metadata; malformed present locations grant no scope."""
+
+    findings = [item for item in error.validation_findings
+                if item.get("code") == "FUTURE_PROHIBITION_DECIDED_EARLY"]
+    if not any(item.get("json_path") is not None for item in findings):
+        return None
+    paths = []
+    fields = {"continuing_obligation", "statement", "evaluation.proposition",
+              "evaluation.observation_policy.scope"}
+    for finding in findings:
+        path = finding.get("json_path")
+        if not isinstance(path, str):
+            return ()
+        parts = path.split(".")
+        if (len(parts) < 6 or parts[0:2] != ["obligation_expression", "groups"]
+                or parts[3] != "atoms" or not parts[2].isascii() or not parts[2].isdigit()
+                or not parts[4].isascii() or not parts[4].isdigit()
+                or ".".join(parts[5:]) not in fields):
+            return ()
+        paths.append((int(parts[2]), int(parts[4]), ".".join(parts[5:])))
+    return tuple(dict.fromkeys(paths))
+
+
 def _future_prohibition_repair_path(
     error: ProtocolControlAgentWireValidationError,
     wire: ProtocolControlAgentWire | None,
@@ -5563,7 +5589,6 @@ def _future_prohibition_repair_path(
     if (
         wire is None
         or "FUTURE_PROHIBITION_DECIDED_EARLY" not in error_classes
-        or "当前节点的观察范围" in str(error)
         or error_classes - {"FUTURE_PROHIBITION_DECIDED_EARLY", "PUBLICATION_GATE_REJECTED"}
         or len(candidate_indexes) != 1
         or error.allow_candidate_repartition
@@ -5572,6 +5597,23 @@ def _future_prohibition_repair_path(
         return None
     candidate_index = next(iter(candidate_indexes))
     if not 0 <= candidate_index < len(wire.candidate_drafts):
+        return None
+    located = _future_prohibition_finding_paths(error)
+    if located is not None:
+        if (len(located) != 1
+                or located[0][2] == "evaluation.observation_policy.scope"):
+            return None
+        group_index, atom_index, _ = located[0]
+        groups = wire.candidate_drafts[candidate_index].obligation_expression.groups
+        if group_index >= len(groups) or atom_index >= len(groups[group_index].atoms):
+            return None
+        atom = groups[group_index].atoms[atom_index]
+        if (atom.kind not in {ControlObligationKind.PROHIBIT_EVENT,
+                              ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE}
+                or atom.prospective_period is not None):
+            return None
+        return candidate_index, group_index, atom_index
+    if "当前节点的观察范围" in str(error):
         return None
     matches = [
         (candidate_index, group_index, atom_index)
@@ -5596,7 +5638,7 @@ def _future_observation_scope_repair_path(
     if (
         wire is None
         or "FUTURE_PROHIBITION_DECIDED_EARLY" not in error.error_class_codes
-        or "当前节点的观察范围" not in str(error)
+        or set(error.error_class_codes) - {"FUTURE_PROHIBITION_DECIDED_EARLY", "PUBLICATION_GATE_REJECTED"}
         or len(candidate_indexes) != 1
         or error.allow_candidate_repartition
         or error.allow_source_closure_rewrite
@@ -5604,6 +5646,26 @@ def _future_observation_scope_repair_path(
         return None
     candidate_index = next(iter(candidate_indexes))
     if not 0 <= candidate_index < len(wire.candidate_drafts):
+        return None
+    located = _future_prohibition_finding_paths(error)
+    if located is not None:
+        if not located or any(field != "evaluation.observation_policy.scope"
+                              for _, _, field in located):
+            return None
+        groups = wire.candidate_drafts[candidate_index].obligation_expression.groups
+        paths = []
+        for group_index, atom_index, _ in located:
+            if group_index >= len(groups) or atom_index >= len(groups[group_index].atoms):
+                return None
+            atom = groups[group_index].atoms[atom_index]
+            if (atom.kind not in {ControlObligationKind.PROHIBIT_EVENT,
+                                  ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE}
+                    or atom.continuing_obligation is None or atom.evaluation is None
+                    or atom.evaluation.observation_policy is None):
+                return None
+            paths.append(("obligation", group_index, atom_index))
+        return candidate_index, tuple(paths)
+    if "当前节点的观察范围" not in str(error):
         return None
     matches = [
         ("obligation", group_index, atom_index)
@@ -7206,6 +7268,7 @@ class ProtocolControlAgentRunner:
         source_insert_repairs = 0
         future_scope_repairs = 0
         future_observation_scope_repairs = 0
+        future_observation_scope_paths: set[tuple[int, tuple[tuple[str, int, int], ...]]] = set()
         calendar_bound_repairs = 0
         calendar_bound_repair_paths: set[tuple[int, int, int]] = set()
         invalid_fingerprint_counts: dict[tuple[str, str, str], int] = {}
@@ -9491,11 +9554,18 @@ class ProtocolControlAgentRunner:
                     and future_path is not None
                     and callable(getattr(transport, "continue_future_prohibition_repair", None))
                 )
+                current_scope_path = _future_observation_scope_repair_path(
+                    error, repair_baseline_wire, repair_candidate_indexes
+                )
+                located_scope = _future_prohibition_finding_paths(error) is not None
                 scope_only = (
-                    future_observation_scope_repairs == 0
+                    current_scope_path is not None
+                    and current_scope_path not in future_observation_scope_paths
+                    and future_observation_scope_repairs < (
+                        max(1, self._max_schema_repairs) if located_scope else 1
+                    )
                     and observation_repair_candidate is not None
                     and bool(observation_repair_paths)
-                    and "当前节点的观察范围" in str(error)
                     and callable(getattr(transport, "continue_observation_policies", None))
                 )
                 calendar_path = _calendar_bound_repair_path(
@@ -9515,6 +9585,12 @@ class ProtocolControlAgentRunner:
                 )
                 if (
                     no_progress
+                    or (current_scope_path is not None and (
+                        current_scope_path in future_observation_scope_paths
+                        or future_observation_scope_repairs >= (
+                            max(1, self._max_schema_repairs) if located_scope else 1
+                        )
+                    ))
                     or (candidate_repair_fields and wire is None)
                     or front_flow_assembled
                     or error.code == "REPAIR_SCOPE_ESCAPE"
@@ -9555,6 +9631,7 @@ class ProtocolControlAgentRunner:
                     calendar_bound_repair_paths.add(calendar_path)
                 elif scope_only:
                     future_observation_scope_repairs += 1
+                    future_observation_scope_paths.add(current_scope_path)
                 else:
                     repairs += 1
                 atom_only = (

@@ -7667,6 +7667,128 @@ def test_future_observation_scope_repair_preserves_policy_and_source() -> None:
         _merge_observation_policy_repair(json.dumps(repair), baseline, 0, (("obligation", 0, 0),))
 
 
+@pytest.mark.parametrize("both_candidates", [False, True])
+@pytest.mark.parametrize("repair_succeeds", [False, True])
+def test_located_future_scope_repairs_one_of_several_atoms_without_rewriting(
+    both_candidates: bool, repair_succeeds: bool,
+) -> None:
+    baseline = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit()).model_dump(mode="json")
+    atoms = baseline["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"]
+    first = atoms[0]
+    first["kind"] = ControlObligationKind.PROHIBIT_EVENT.value
+    first["continuing_obligation"] = {
+        "statement": "治疗期不得调整背景治疗",
+        "prospective_period": {"period": "treatment_period"},
+        "source_span_ids": first["source_span_ids"],
+        "source_excerpts": first["source_excerpts"], "status": "not_due_at_review_node",
+    }
+    sibling = deepcopy(first)
+    sibling["statement"] = "核对另一独立禁止行为"
+    sibling["evaluation"]["proposition"] = sibling["statement"]
+    sibling["evaluation"]["observation_policy"]["scope"] = "截至当前审核节点的记录"
+    first["evaluation"]["observation_policy"]["scope"] = "筛选期及治疗期记录"
+    atoms.append(sibling)
+    if both_candidates:
+        second = baseline["candidate_drafts"][1]["obligation_expression"]["groups"][0]["atoms"][0]
+        second["kind"] = first["kind"]
+        second["continuing_obligation"] = {
+            **first["continuing_obligation"], "source_span_ids": second["source_span_ids"],
+            "source_excerpts": second["source_excerpts"],
+        }
+        second["evaluation"]["observation_policy"]["scope"] = first["evaluation"]["observation_policy"]["scope"]
+    initial = ProtocolControlAgentWire.model_validate(baseline)
+    policy = deepcopy(first["evaluation"]["observation_policy"])
+    policy["scope"] = "截至当前审核节点的记录"
+
+    class FieldTransport(_FakeTransport):
+        def continue_observation_policies(self, *, session_id, prompt):
+            self.prompts.append(prompt)
+            assert "另一独立禁止行为" not in prompt
+            target = baseline["candidate_drafts"][len(self.prompts) - 2]["obligation_expression"]["groups"][0]["atoms"][0]
+            fixed_policy = deepcopy(target["evaluation"]["observation_policy"])
+            if repair_succeeds:
+                fixed_policy["scope"] = policy["scope"]
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({
+                "items": [{"layer": "obligation", "group_index": 0, "atom_index": 0, "policy": fixed_policy}],
+            }))
+
+        def continue_candidate(self, **kwargs):
+            pytest.fail("已有字段定位，不得整条重写")
+
+        def continue_session(self, **kwargs):
+            pytest.fail("已有字段定位，不得整组重写")
+
+    calls = 0
+
+    def validate(output):
+        nonlocal calls
+        calls += 1
+        issues = [SimpleNamespace(
+            code="FUTURE_PROHIBITION_DECIDED_EARLY", message="显示文字可以改变",
+            entity_id=candidate.control_candidate_id,
+            json_path="obligation_expression.groups.0.atoms.0.evaluation.observation_policy.scope",
+        ) for candidate in output.candidates[:2 if both_candidates else 1]
+            if candidate.semantics.obligation_expression.groups[0].atoms[0].evaluation.observation_policy.scope != policy["scope"]]
+        if issues:
+            raise publication_repair_error(
+                issues=issues, candidate_by_id={c.control_candidate_id: c for c in output.candidates},
+                control_to_candidate={}, default_structure_unit_ids=["su-01", "su-02"],
+            )
+
+    transport = FieldTransport([ProtocolControlAgentResponse(session_id="field-scope", text=initial.model_dump_json())])
+    result = ProtocolControlAgentRunner(max_schema_repairs=2).run(_batch(), transport, output_validator=validate)
+    if not repair_succeeds:
+        assert result.status == "需要核对"
+        assert calls == 2 and len(transport.prompts) == 2
+        return
+    assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
+    assert calls == (3 if both_candidates else 2) and len(transport.prompts) == calls
+    final = result.partial_wire
+    if not both_candidates:
+        assert final.candidate_drafts[1] == initial.candidate_drafts[1]
+    assert final.candidate_drafts[0].obligation_expression.groups[0].atoms[1] == initial.candidate_drafts[0].obligation_expression.groups[0].atoms[1]
+    expected = deepcopy(baseline)
+    expected["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["observation_policy"] = policy
+    if both_candidates:
+        expected["candidate_drafts"][1]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["observation_policy"]["scope"] = policy["scope"]
+    assert final == ProtocolControlAgentWire.model_validate(expected)
+    finding = result.attempts[0].error_detail["findings"][0]
+    assert finding["json_path"].endswith("observation_policy.scope")
+
+
+@pytest.mark.parametrize("path", [
+    "obligation_expression.groups.99.atoms.0.evaluation.observation_policy.scope",
+    "obligation_expression.groups.-1.atoms.0.evaluation.observation_policy.scope",
+    "candidate_drafts.1.obligation_expression.groups.0.atoms.0.evaluation.observation_policy.scope",
+    "obligation_expression.groups.0.atoms.0.source_excerpts",
+    0,
+])
+def test_present_invalid_future_field_location_never_falls_back_to_guessing(path) -> None:
+    wire = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
+    error = ProtocolControlAgentWireValidationError(
+        "PUBLICATION_GATE_REJECTED", "当前节点的观察范围",
+        candidate_indexes=[0], error_class_codes=["FUTURE_PROHIBITION_DECIDED_EARLY"],
+        validation_findings=[{"code": "FUTURE_PROHIBITION_DECIDED_EARLY", "json_path": path}],
+    )
+    assert _future_observation_scope_repair_path(error, wire, {0}) is None
+    assert _future_prohibition_repair_path(error, wire, {0}) is None
+
+
+def test_located_future_statement_selects_exact_atom_despite_legacy_message() -> None:
+    wire = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
+    atoms = wire.candidate_drafts[0].obligation_expression.groups[0].atoms
+    atoms[0].kind = ControlObligationKind.PROHIBIT_EVENT
+    atoms.append(atoms[0].model_copy(deep=True))
+    error = ProtocolControlAgentWireValidationError(
+        "PUBLICATION_GATE_REJECTED", "当前节点的观察范围",
+        candidate_indexes=[0], error_class_codes=["FUTURE_PROHIBITION_DECIDED_EARLY"],
+        validation_findings=[{"code": "FUTURE_PROHIBITION_DECIDED_EARLY",
+                              "json_path": "obligation_expression.groups.0.atoms.1.statement"}],
+    )
+    assert _future_prohibition_repair_path(error, wire, {0}) == (0, 0, 1)
+    assert _future_observation_scope_repair_path(error, wire, {0}) is None
+
+
 def test_mixed_future_scope_and_duration_use_separate_existing_repairs():
     baseline = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit()).model_dump(mode="json")
     first_atom = baseline["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]
