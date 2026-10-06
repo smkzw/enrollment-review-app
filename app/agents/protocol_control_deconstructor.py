@@ -7929,6 +7929,104 @@ class ProtocolControlAgentRunner:
                                             for item in pending_review.items
                                         ],
                                     )
+                            function_reads = 0
+                            for item in tuple(pending_review.items):
+                                entry = next((entry for entry in pending_coverage
+                                              if entry.statement_index == item.statement_index), None)
+                                if (item.decision != "unresolved" or entry is None
+                                        or item.statement_index in repaired_review_indexes
+                                        or function_reads >= 2 or not callable(source_reader)
+                                        or not can_recheck_source_function(
+                                            batch, source_interpretation, entry, item)):
+                                    continue
+                                function_reads += 1
+                                local_response = None
+                                local_phase = "SOURCE_FUNCTION_RECHECK"
+                                try:
+                                    local_response = source_reader(prompt=build_source_function_recheck_prompt(
+                                        batch, source_interpretation, item.statement_index,
+                                    ))
+                                    proposal = SourceInterpretation.model_validate_json(local_response.text)
+                                    revised_source = apply_source_function_recheck(
+                                        batch, source_interpretation, entry, item, proposal,
+                                    )
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=local_response.session_id,
+                                        raw_output_sha256=_sha256(local_response.text),
+                                        raw_output_chars=len(local_response.text),
+                                        raw_output_text=local_response.text, outcome="parsed",
+                                        issues=["仅复核未消费陈述的用途；未生成覆盖或采用证明"],
+                                    ))
+                                    if revised_source == source_interpretation:
+                                        continue
+                                    source_interpretation = revised_source
+                                    coverage = source_statement_coverage(batch, source_interpretation, wire)
+                                    latest_source_statement_coverage = coverage
+                                    pending_coverage = [entry for entry in coverage
+                                                        if entry.statement_index not in reusable_indexes]
+                                    revised_entry = next(entry for entry in coverage
+                                                         if entry.statement_index == item.statement_index)
+                                    # A classification proposal is not a target-review answer.
+                                    local_phase = "SOURCE_TARGET_FOCUSED"
+                                    local_response = None
+                                    local_response = reviewer(prompt=build_source_target_review_prompt(
+                                        batch, source_interpretation, [revised_entry],
+                                    ))
+                                    corrected = SourceTargetReview.model_validate_json(local_response.text)
+                                    validate_source_target_review(
+                                        batch, source_interpretation, [revised_entry], corrected,
+                                    )
+                                    pending_review = SourceTargetReview(
+                                        version=SOURCE_TARGET_REVIEW_VERSION,
+                                        items=[corrected.items[0] if old.statement_index == item.statement_index
+                                               else old for old in pending_review.items],
+                                    )
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=local_response.session_id,
+                                        raw_output_sha256=_sha256(local_response.text),
+                                        raw_output_chars=len(local_response.text),
+                                        raw_output_text=local_response.text, outcome="parsed",
+                                        issues=["用途复核后已重新读取本条目标处置；兄弟核对保持不变"],
+                                    ))
+                                except Exception as local_error:  # noqa: BLE001 - preserve bounded recovery
+                                    failure_code = (
+                                        protocol_control_call_failure_code(local_error)
+                                        or f"{local_phase}_TRANSPORT_FAILED"
+                                        if local_response is None else
+                                        f"{local_phase}_SCHEMA_INVALID"
+                                        if isinstance(local_error, ValidationError) else
+                                        "SOURCE_FUNCTION_RECHECK_UNRESOLVED"
+                                        if isinstance(local_error, SourceFunctionRecheckUnresolved) else
+                                        f"{local_phase}_INVALID"
+                                    )
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1,
+                                        session_id=(local_response.session_id if local_response else
+                                                    getattr(local_error, "session_id", None) or session_id),
+                                        raw_output_sha256=_sha256(local_response.text if local_response else str(local_error)),
+                                        raw_output_chars=len(local_response.text) if local_response else None,
+                                        raw_output_text=local_response.text if local_response else None,
+                                        outcome=("transport_failed" if local_response is None else
+                                                 "schema_invalid" if isinstance(local_error, ValidationError)
+                                                 else "publication_invalid"),
+                                        error_classes=[failure_code],
+                                        error_detail={
+                                            "code": failure_code, "statement_id": item.statement_index,
+                                            "json_path": f"/statements/{item.statement_index}",
+                                            "source_refs": list(next(unit for unit in batch.owned_units
+                                                                     if unit.structure_unit_id == entry.structure_unit_id).source_span_ids),
+                                            "retry_class": "transport" if local_response is None else "source_function_review",
+                                            "affected_dependents": [item.statement_index],
+                                        },
+                                        issues=["局部用途复核未完成，已保存原文和已有核对：" + str(local_error)[:1000]],
+                                    ))
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id, session_id=session_id,
+                                        attempts=attempts, source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage,
+                                        source_target_review=recovery_target_review(),
+                                        source_candidate_alignment=checkpoint_alignment(), partial_wire=wire,
+                                    )
                             if not corrected_invalid_review:
                                 focused_reads = 0
                                 for item in tuple(pending_review.items):

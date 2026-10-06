@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from app.domain.contracts.protocol_controls import ProtocolControlDispositionBatch
 
@@ -13,12 +14,14 @@ from .protocol_control_source_interpretation import (
     SourceTargetReview,
     SourceTargetReviewItem,
     build_source_interpretation_prompt,
+    normalize_source_excerpt,
+    source_requires_temporal_resolution,
     validate_source_interpretation,
     validate_source_target_review,
 )
 
 
-SOURCE_FUNCTION_RECHECK_VERSION = "phase5/source-function-recheck/v2"
+SOURCE_FUNCTION_RECHECK_VERSION = "phase5/source-function-recheck/v3"
 
 
 class SourceFunctionRecheckUnresolved(ValueError):
@@ -39,13 +42,19 @@ def can_recheck_source_function(
     if (entry.structure_unit_id != statement.structure_unit_id
             or statement.force not in {"descriptive", "unclear"}
             or not set(statement.decision_functions) <= {"definition", "time_validity"}
-            or statement.unresolved or item.decision != "background_context"
+            or statement.unresolved or item.decision not in {"background_context", "unresolved"}
             or entry.status != "not_located"
             or entry.candidate_indexes or entry.action_candidate_indexes
             or entry.linked_candidate_indexes or entry.matched_roles
             or entry.linked_official_code or entry.linked_procedure_target_ids
             or entry.exact_official_excerpt_matches or entry.exact_procedure_excerpt_matches
             or entry.schedule_columns):
+        return False
+    # An absent consumer is not proof that a concrete period is background.
+    if (statement.time_words or statement.affected_stage or statement.scope_quote
+            or source_requires_temporal_resolution(statement)
+            or re.search(r"[一二三四五六七八九十百两半]+(?:天|日|周|月|年)|(?:W|D)-?\d+",
+                         normalize_source_excerpt(statement.quoted_text), re.IGNORECASE)):
         return False
     unit = next((unit for unit in batch.owned_units
                  if unit.structure_unit_id == statement.structure_unit_id), None)
@@ -62,7 +71,12 @@ def can_recheck_source_function(
         validate_source_target_review(
             batch, probe, [entry], SourceTargetReview(
                 version=SOURCE_TARGET_REVIEW_VERSION,
-                items=[item],
+                # Admission probe only; this is never saved as review evidence.
+                items=[item.model_copy(update={
+                    "decision": "background_context",
+                    "non_control_basis_excerpt": statement.quoted_text,
+                    "unresolved_aspects": [],
+                }) if item.decision == "unresolved" else item],
             ),
         )
     except ValueError:
@@ -95,7 +109,7 @@ def build_source_function_recheck_prompt(
     return (
         build_source_interpretation_prompt(local)
         + "\n本次是单条来源用途分歧核对，不重新生成陈述清单。"
-        "第一次读取和后续核对对本条用途不一致；两次意见都不是正确答案。"
+        "第一次读取与后续核对对本条用途有分歧或尚未核清；两次意见都不是正确答案。"
         "请依据原文及上下文判断它是否实际限定审核、定义、取值或时间。"
         "描述研究总时长不一定是背景，描述性语气也不能作为排除依据。"
         "仅在没有实际决策作用时提出 background；否则保留原 decision_functions，"

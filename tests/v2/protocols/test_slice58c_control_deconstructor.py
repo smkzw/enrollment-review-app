@@ -2813,6 +2813,118 @@ def test_source_function_recheck_can_reaffirm_without_approving_background() -> 
     assert error.value.code == "BACKGROUND_CONTEXT_UNPROVEN"
 
 
+@pytest.mark.parametrize("outcome", [
+    "background", "retained", "uncertain", "bad_quote", "transport",
+    "review_unresolved", "bad_review", "review_transport",
+])
+def test_honest_unresolved_function_reaches_bounded_recheck(outcome: str) -> None:
+    batch, original, entry, background, proposal = _function_disagreement()
+    honest = SourceTargetReview(
+        version=SOURCE_TARGET_REVIEW_VERSION,
+        items=[SourceTargetReviewItem(
+            statement_index=0, decision="unresolved",
+            source_action_excerpt=original.statements[0].quoted_text,
+            unresolved_aspects=["本条是设计说明还是审核所用定义尚未核清"],
+        )],
+    )
+    assert can_recheck_source_function(batch, original, entry, honest.items[0])
+    validate_source_target_review(batch, original, [entry], honest)
+    if outcome == "retained":
+        proposal.statements[0] = original.statements[0].model_copy(deep=True)
+    elif outcome == "uncertain":
+        proposal.statements[0].unresolved = ["用途仍有歧义"]
+    elif outcome == "bad_quote":
+        proposal.statements[0].quoted_text = "模型擅自修改的原文"
+
+    class Transport(_FakeTransport):
+        function_calls = 0
+        target_calls = 0
+
+        def start_source_interpretation(self, *, prompt: str):
+            self.function_calls += 1
+            assert '"frozen_statement"' in prompt
+            if outcome == "transport":
+                raise ProtocolControlAgentCallError("function-failed", "synthetic failure")
+            return ProtocolControlAgentResponse(session_id="purpose-only", text=proposal.model_dump_json())
+
+        def start_source_target_review(self, *, prompt: str):
+            self.target_calls += 1
+            if self.target_calls == 2:
+                assert '"background_context_allowed":true' in prompt
+                if outcome == "review_transport":
+                    raise ProtocolControlAgentCallError("review-failed", "synthetic failure")
+                if outcome == "bad_review":
+                    return ProtocolControlAgentResponse(session_id="bad-review", text="{")
+            return ProtocolControlAgentResponse(
+                session_id=f"honest-review-{self.target_calls}",
+                text=(honest if self.target_calls == 1 or outcome == "review_unresolved"
+                      else background).model_dump_json(),
+            )
+
+        def start(self, *, prompt: str):
+            pytest.fail("用途复核不能重新生成已有候选")
+
+        def continue_session(self, **kwargs):
+            pytest.fail("局部复核失败不能回退整包重读")
+
+    transport = Transport([])
+    wire = _wire(candidate=_candidate())
+    original_json = original.model_dump_json()
+    wire_json = wire.model_dump_json()
+    result = ProtocolControlAgentRunner(max_transport_retries=3).run(
+        batch, transport, resume_wire=wire, resume_source_interpretation=original,
+        resume_session_id="saved-wire", output_validator=lambda value: None,
+    )
+    assert transport.function_calls == 1
+    assert transport.target_calls == (2 if outcome in {
+        "background", "review_unresolved", "bad_review", "review_transport",
+    } else 1)
+    assert original.model_dump_json() == original_json
+    assert wire.model_dump_json() == wire_json
+    assert result.partial_wire == wire
+    if outcome == "background":
+        assert result.final_output is not None
+        assert result.source_target_review == background
+        assert result.source_interpretation.statements[0].decision_functions == ["background"]
+        assert any(attempt.session_id == "honest-review-2" and attempt.raw_output_text == background.model_dump_json()
+                   for attempt in result.attempts)
+    else:
+        assert result.final_output is None
+        if outcome in {"review_unresolved", "bad_review", "review_transport"}:
+            assert result.source_interpretation.statements[0].decision_functions == ["background"]
+        else:
+            assert result.source_interpretation == original
+        assert result.source_target_review == honest
+
+
+@pytest.mark.parametrize("quote, time_words, stage, scope", [
+    ("筛选期为1周（D-7~D-1）", ["1周", "D-7~D-1"], "筛选期", None),
+    ("筛选期为一周", [], None, None),
+    ("资料须在D-7~D-1取得", [], None, None),
+    ("每12周一次", [], None, None),
+    ("整个治疗期保持不变", [], None, None),
+    ("在本节点记录检查结果", [], "筛选期", None),
+    ("在本节点记录检查结果", [], None, "给药前"),
+])
+@pytest.mark.parametrize("decision", ["background_context", "unresolved"])
+def test_source_function_recheck_never_backgrounds_unconsumed_time(quote, time_words, stage, scope, decision):
+    batch, original, entry, review, proposal = _function_disagreement()
+    batch.owned_units[1].excerpt = quote
+    original.statements[0] = original.statements[0].model_copy(update={
+        "quoted_text": quote, "time_words": time_words, "affected_stage": stage, "scope_quote": scope,
+    })
+    item = review.items[0].model_copy(update={
+        "decision": decision, "source_action_excerpt": quote,
+        "non_control_basis_excerpt": quote if decision == "background_context" else None,
+        "unresolved_aspects": [] if decision == "background_context" else ["已有目标缺少时窗定义"],
+    })
+    proposal.statements[0] = original.statements[0].model_copy(update={"decision_functions": ["background"]})
+    assert not can_recheck_source_function(batch, original, entry, item)
+    with pytest.raises(ValueError):
+        apply_source_function_recheck(batch, original, entry, item, proposal)
+    assert original.statements[0].decision_functions == ["definition", "time_validity"]
+
+
 @pytest.mark.parametrize("resolved", [True, False])
 def test_runner_reaffirmed_function_requires_one_valid_target_review(resolved: bool) -> None:
     batch, original, entry, review, proposal = _function_disagreement()
