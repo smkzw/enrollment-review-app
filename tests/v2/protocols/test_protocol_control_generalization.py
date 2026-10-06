@@ -18,7 +18,7 @@ from app.agents.protocol_control_deconstructor import (
     parse_protocol_control_discovery_agent_wire,
     wire_to_protocol_control_discovery_decisions,
 )
-from app.domain.contracts.enums import CatalogItemKind, CatalogKind, PhaseScope, ReviewStage, StudyPhase
+from app.domain.contracts.enums import CatalogItemKind, CatalogKind, DocumentPart, PhaseScope, ReviewStage, StudyPhase
 from app.domain.contracts.protocol_controls import (
     ProtocolControlDispositionBatch,
     ProtocolControlDiscoveryDecision,
@@ -30,6 +30,9 @@ from app.domain.contracts.protocol_controls import (
 )
 from app.domain.contracts.protocol_ingestion import FrozenCatalogItem, FrozenProtocolCatalog
 from app.domain.publication import canonical_hash
+from app.protocols.docx_structure import BlockKind, StructureBlock
+from app.protocols.full_protocol_coverage import build_full_protocol_coverage_manifest
+from app.protocols.phase_detection import build_phase_applicability_graph, project_single_phase
 from app.protocols.protocol_control_planning import (
     DEFAULT_PROTOCOL_CONTROL_DISCOVERY_BATCH_UNITS,
     _cross_chapter_readonly_context,
@@ -539,6 +542,51 @@ def _discovery_decisions(
                 )
         batches.append(decisions)
     return batches
+
+
+@pytest.mark.parametrize("referenced", [False, True])
+def test_native_cell_phase_headings_reach_full_coverage_and_deep_routing(referenced: bool) -> None:
+    paragraphs = ["II期给药方案：", "每日按本期安排完成操作。",
+                  "III期给药方案：", "每日按本期安排完成操作。"]
+    blocks = [StructureBlock(
+        source_ref=f"body.t0.r0.c0.p{index}", document_part=DocumentPart.BODY,
+        block_order=index, kind=BlockKind.PARAGRAPH, text=text, table_path=(0, 0),
+    ) for index, text in enumerate(paragraphs)]
+    graph = build_phase_applicability_graph(blocks, snapshot_id="native-cell-plan").graph
+    projection = project_single_phase(graph, StudyPhase.PHASE_III)
+    manifest = build_full_protocol_coverage_manifest(
+        blocks, projection, graph, protocol_version_id=_PROTOCOL,
+        protocol_document_sha256="a" * 64, snapshot_id=graph.snapshot_id,
+    )
+    by_ref = {unit.source_ref: unit for unit in manifest.units}
+    other = by_ref["body.t0.r0.c0.p1"]
+    current = by_ref["body.t0.r0.c0.p3"]
+    assert other.phase_scopes == [PhaseScope.PHASE_II]
+    assert current.phase_scopes == [PhaseScope.PHASE_III]
+    assert other.excerpt == current.excerpt
+    assert other.structure_unit_id != current.structure_unit_id
+    assert {ref for unit in manifest.units for ref in unit.member_source_refs} == {
+        block.source_ref for block in blocks
+    }
+    discovery = plan_protocol_control_discovery(manifest, max_units_per_batch=4)
+    decisions = [[ProtocolControlDiscoveryDecision(
+        structure_unit_id=unit_id,
+        disposition=(ProtocolControlDiscoveryDisposition.CANDIDATE
+                     if unit_id in {other.structure_unit_id, current.structure_unit_id}
+                     else ProtocolControlDiscoveryDisposition.NON_CONTROL),
+        required_context_structure_unit_ids=(
+            [other.structure_unit_id] if referenced and unit_id == current.structure_unit_id else []
+        ),
+        rationale="操作为候选，小标题为有源范围上下文。",
+    ) for unit_id in batch.target_structure_unit_ids] for batch in discovery.batches]
+    plan = plan_protocol_control_deep_batches_from_discovery(manifest, discovery, decisions)
+    assert plan.deep_structure_unit_ids == (current.structure_unit_id,)
+    assert other.structure_unit_id in plan.non_deep_structure_unit_ids
+    assert next(item for item in plan.discovery_decisions
+                if item.structure_unit_id == other.structure_unit_id).disposition == (
+        ProtocolControlDiscoveryDisposition.CONTEXT_ONLY if referenced
+        else ProtocolControlDiscoveryDisposition.NON_CONTROL
+    )
 
 
 def test_explicit_other_phase_is_covered_without_deep_review() -> None:

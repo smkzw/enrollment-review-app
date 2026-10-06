@@ -973,6 +973,105 @@ def test_same_table_cell_ordinary_phase_sentence_does_not_start_context() -> Non
     assert atomic["body.t0.r0.c1.p0"].phase_scopes == [PhaseScope.UNKNOWN]
 
 
+@pytest.mark.parametrize("topic", ["给药", "治疗"])
+@pytest.mark.parametrize("markers", [("II", "III"), ("Ⅱ", "Ⅲ"), ("二", "三")])
+def test_compound_phase_heading_keeps_identical_paragraphs_in_distinct_scopes(
+    topic: str, markers: tuple[str, str],
+) -> None:
+    repeated = "按本期安排执行，频次与操作分别见下文。"
+    blocks = [
+        _block("body.t0.r0.c0.p0", f"{markers[0]}期{topic}方案：", 0, table_path=(0, 0)),
+        _block("body.t0.r0.c0.p1", repeated, 1, table_path=(0, 0)),
+        _block("body.t0.r0.c0.p2", f"{markers[1]}期{topic}方案：", 2, table_path=(0, 0)),
+        _block("body.t0.r0.c0.p3", repeated, 3, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "其他单元格的普通说明", 4, table_path=(0, 1)),
+        _block("body.t0.r1.c0.p0", "下一行的普通说明", 5, table_path=(1, 0)),
+    ]
+    graph = build_phase_applicability_graph(blocks, snapshot_id="compound-cell-heading").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+    assert atomic["body.t0.r0.c0.p1"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.t0.r0.c0.p3"].phase_scopes == [PhaseScope.PHASE_III]
+    assert atomic["body.t0.r0.c0.p1"].block_id != atomic["body.t0.r0.c0.p3"].block_id
+    assert atomic["body.t0.r0.c1.p0"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert atomic["body.t0.r1.c0.p0"].phase_scopes == [PhaseScope.UNKNOWN]
+    for phase, own, other in (
+        (StudyPhase.PHASE_II, "body.t0.r0.c0.p1", "body.t0.r0.c0.p3"),
+        (StudyPhase.PHASE_III, "body.t0.r0.c0.p3", "body.t0.r0.c0.p1"),
+    ):
+        refs = {item.source_ref for item in project_single_phase(graph, phase).blocks}
+        assert own in refs
+        assert other not in refs
+
+
+@pytest.mark.parametrize("text", [
+    "II期给药方案与III期不同，后续分析另行说明。",
+    "III期治疗方案将在完成入组后确定。",
+    "II期给药方案：详见其他章节。",
+])
+def test_phase_plan_narrative_does_not_scope_following_paragraph(text: str) -> None:
+    blocks = [
+        _block("body.t0.r0.c0.p0", text, 0, table_path=(0, 0)),
+        _block("body.t0.r0.c0.p1", "未明确适用期别的说明", 1, table_path=(0, 0)),
+    ]
+    graph = build_phase_applicability_graph(blocks, snapshot_id="compound-heading-narrative").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+    assert atomic["body.t0.r0.c0.p1"].phase_scopes == [PhaseScope.UNKNOWN]
+
+
+@pytest.mark.parametrize("heading, expected, tail", [
+    ("II期与III期给药方案：", PhaseScope.MIXED, PhaseScope.UNKNOWN),
+    ("II/III期治疗方案：", PhaseScope.MIXED, PhaseScope.UNKNOWN),
+    ("II期和III期共同标准：", PhaseScope.SHARED, PhaseScope.SHARED),
+])
+def test_same_cell_mixed_or_shared_heading_does_not_keep_single_phase_hint(
+    heading: str, expected: PhaseScope, tail: PhaseScope,
+) -> None:
+    blocks = [
+        _block("body.t0.r0.c0.p0", "II期给药方案：", 0, table_path=(0, 0)),
+        _block("body.t0.r0.c0.p1", "前段操作", 1, table_path=(0, 0)),
+        _block("body.t0.r0.c0.p2", heading, 2, table_path=(0, 0)),
+        _block("body.t0.r0.c0.p3", "后段操作", 3, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "另一列未明确范围的说明", 4, table_path=(0, 1)),
+    ]
+    graph = build_phase_applicability_graph(blocks, snapshot_id="cell-mixed-plan").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+    assert atomic["body.t0.r0.c0.p1"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.t0.r0.c0.p2"].phase_scopes == [expected]
+    assert atomic["body.t0.r0.c0.p3"].phase_scopes == [tail]
+    assert atomic["body.t0.r0.c1.p0"].phase_scopes == [PhaseScope.UNKNOWN]
+    if expected == PhaseScope.MIXED:
+        assert "body.t0.r0.c0.p2" not in {
+            item.source_ref for item in project_single_phase(graph, StudyPhase.PHASE_II).blocks
+        }
+
+
+def test_compound_body_phase_heading_uses_existing_outline_boundary() -> None:
+    blocks = [
+        _block("body.p0", "II期给药方案：", 0),
+        _block("body.p1", "本段操作", 1),
+        _block("body.p2", "III期治疗方案：", 2),
+        _block("body.p3", "下一段操作", 3),
+    ]
+    graph = build_phase_applicability_graph(blocks, snapshot_id="body-compound-plan").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p3"].phase_scopes == [PhaseScope.PHASE_III]
+
+
+def test_body_mixed_plan_heading_closes_previous_single_phase_context() -> None:
+    blocks = [
+        _block("body.p0", "II期给药方案：", 0),
+        _block("body.p1", "本段操作", 1),
+        _block("body.p2", "II期与III期给药方案：", 2),
+        _block("body.p3", "未明确适用范围的操作", 3),
+    ]
+    graph = build_phase_applicability_graph(blocks, snapshot_id="body-mixed-plan").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p2"].phase_scopes == [PhaseScope.MIXED]
+    assert atomic["body.p3"].phase_scopes == [PhaseScope.UNKNOWN]
+
+
 def test_numeric_slashes_stay_neutral_while_real_phase_pairs_are_mixed() -> None:
     """Clinical ratios must not become phase evidence inside a table cell."""
     blocks = [

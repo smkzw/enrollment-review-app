@@ -102,10 +102,11 @@ _PROTOCOL_TITLE_LABEL_RE = re.compile(r"(?:试验|研究|方案)(?:题目|名称
 # remains local evidence and cannot retag the rest of the cell.
 _PLAIN_PHASE_HEADING_RE = re.compile(
     r"^(?:[（(]?\s*(?:\d+|[一二三四五六七八九十]+)\s*[）).、]\s*|[-–—•·]\s*)?"
-    r"(?:Ⅱ|II|2|二|Ⅲ|III|3|三)\s*期"
+    rf"(?:{_PHASE_PAIR_RE}|(?:Ⅱ|II|2|二|Ⅲ|III|3|三)\s*期)"
     r"(?:临床)?(?:研究|试验)?"
     r"(?:阶段|部分|入选标准|排除标准|适用标准|共同标准|标准|要求|"
-    r"设计|方案|流程|日程|主要终点|次要终点|研究目的|队列|治疗|给药)?"
+    r"设计|方案|流程|日程|主要终点|次要终点|研究目的|队列|"
+    r"(?:治疗|给药)(?:方案)?)?"
     r"\s*[：:]?\s*$",
     re.I,
 )
@@ -245,6 +246,14 @@ def _looks_like_heading(block: StructureBlock) -> bool:
     )
 
 
+def _is_mixed_phase_heading(block: StructureBlock, scopes: tuple[PhaseScope, ...]) -> bool:
+    return (
+        scopes == (PhaseScope.MIXED,)
+        and block.document_part == DocumentPart.BODY
+        and _PLAIN_PHASE_HEADING_RE.fullmatch(_normalize(block.text)) is not None
+    )
+
+
 def _establishes_scope_context(
     block: StructureBlock,
     scopes: tuple[PhaseScope, ...],
@@ -347,10 +356,11 @@ def _body_contexts(blocks: Sequence[StructureBlock]) -> Mapping[str, tuple[Phase
         has_explicit = bool(_PHASE_II_RE.search(text) or _PHASE_III_RE.search(text))
         if has_explicit or explicit == (PhaseScope.SHARED,):
             establishes_context = _establishes_scope_context(block, explicit)
+            mixed_heading = _is_mixed_phase_heading(block, explicit)
             effective, _cross = _scope_with_context(
                 text,
                 context,
-                allow_local_context_switch=establishes_context,
+                allow_local_context_switch=establishes_context or mixed_heading,
             )
             result[block.source_ref] = effective
             if establishes_context:
@@ -361,7 +371,7 @@ def _body_contexts(blocks: Sequence[StructureBlock]) -> Mapping[str, tuple[Phase
                 context_heading_level = (
                     heading_level if is_heading else nearest_heading_level
                 )
-            elif is_heading:
+            elif is_heading or mixed_heading:
                 # A structural heading with an unclear/mixed phase scope is a
                 # real boundary, but it cannot safely establish inheritance.
                 context = None
@@ -549,6 +559,22 @@ def _clear_header_scope(cells: Sequence[StructureBlock]) -> tuple[PhaseScope, ..
                 )
             )
         ):
+            first_location = _CELL_REF_RE.match(cell.source_ref)
+            if first_location is not None:
+                # A multi-paragraph cell can contain separate phase sections;
+                # its first heading is not authority for the whole row/column.
+                for sibling in cells:
+                    location = _CELL_REF_RE.match(sibling.source_ref)
+                    if (location is None or sibling.block_order <= cell.block_order
+                            or location.group("table", "row", "col")
+                            != first_location.group("table", "row", "col")):
+                        continue
+                    sibling_scopes, _ = _scope_from_text(sibling.text)
+                    if (sibling_scopes != scopes and (
+                        _establishes_scope_context(sibling, sibling_scopes)
+                        or _is_mixed_phase_heading(sibling, sibling_scopes)
+                    )):
+                        return None
             return scopes
         return None
     return None
@@ -721,6 +747,7 @@ def _effective_table_scopes(
         row_hint = row_hints[(table, row)]
         for cell in sorted(cells, key=lambda item: (item.block_order, item.source_ref)):
             local, _local_cross = _scope_from_text(cell.text)
+            mixed_heading = _is_mixed_phase_heading(cell, local)
             match = _CELL_REF_RE.match(cell.source_ref)
             cell_key = (
                 table,
@@ -746,13 +773,13 @@ def _effective_table_scopes(
             effective, effective_cross = _scope_with_context(
                 cell.text,
                 inherited,
-                allow_local_context_switch=_establishes_scope_context(cell, local),
+                allow_local_context_switch=_establishes_scope_context(cell, local) or mixed_heading,
             )
             result[cell.source_ref] = (
                 effective,
                 effective_cross if local != (PhaseScope.UNKNOWN,) else False,
             )
-            if _establishes_scope_context(cell, local) and _scope_is_clear(local):
+            if mixed_heading or (_establishes_scope_context(cell, local) and _scope_is_clear(local)):
                 cell_contexts[cell_key] = local
     return result
 
