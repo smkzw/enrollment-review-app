@@ -62,10 +62,24 @@
     {"path": "frontend/src/features/patient-profile/model/patientProfileModel.ts", "sha256": "0b832799b60c1c622151c4d4c8e8229cf3dabd89c2711972df4a2825c0f22ab5", "bytes": 8996},
     {"path": "frontend/src/components/profile/ProfileLaneList.test.tsx", "sha256": "7986dfab176b7ef306e1d76dec62878e13014f2e9a69adf586b8c103c62362c4", "bytes": 5977}
   ],
+  "candidate_field_repair_commit": "7a6132043813e65e93f125e9d0596dc5d006798c",
+  "candidate_field_repair_files": [
+    {"path": "app/agents/protocol_control_deconstructor.py", "sha256": "a6c6a4eae9d95475f80ef7679e968ce53c62ed3858b10c320f0d8a7a357c7c0b", "bytes": 564888},
+    {"path": "app/agents/protocol_control_agent_transport.py", "sha256": "a5838dcd7b451e66dc867df5c3ba4196c3572cec69ec0b88bbd716886dbe89a8", "bytes": 87450},
+    {"path": "tests/v2/protocols/test_slice58c_control_deconstructor.py", "sha256": "101d2ffbd4cfc2672c76b435e1ccba4bcf428b531abd650b3ac18633fba7330b", "bytes": 550355},
+    {"path": "tests/v2/protocols/test_protocol_control_agent_transport.py", "sha256": "4c4bf4f175c442329291b41582946addd862b4b6428ec24280d858a890c4143e", "bytes": 79251}
+  ],
+  "terminal_clause_commit": "3472fa2859277fd18fe98d39c5da34434b19a92d",
+  "terminal_clause_files": [
+    {"path": "app/agents/protocol_control_source_interpretation.py", "sha256": "2e945c3507424becaefb8715694d478a90e4c00c9796da15cba447c00c74198a", "bytes": 129215},
+    {"path": "tests/v2/protocols/test_slice58c_control_deconstructor.py", "sha256": "4c1d1edaada698c1e154a221577f5c2dd502a82d374f455e67ff003b924432f2", "bytes": 553243}
+  ],
   "notes": [
     "Backend two-module checks match this commit; frontend four-module checks match these two exact frontend files.",
     "Real P1 trial ran the base backend before this identity-feedback patch; do not claim new live acceptance.",
     "P2 recovery and UI correction used base backend and the same frontend display patch; not a complete clinical review chain.",
-    "Layout file hashes bind frontend_layout_commit,not the later clinical_display_commit. Current v2 P1 used S-02 backend,failed before target review. Clinical display tests bind the exact five files above;CSS sticky top was verified by final build/render."
+    "Layout file hashes bind frontend_layout_commit,not the later clinical_display_commit. Current v2 P1 used S-02 backend,failed before target review. Clinical display tests bind the exact five files above;CSS sticky top was verified by final build/render.",
+    "S-05 final five-module822 checks and v3/v4 real runs use candidate_field_repair_commit. V3 reached source target review but did not trigger the new relationship-only branch; its absence of the former stage failure does not establish causal clinical improvement.",
+    "S-06 terminal-clause fix matches final three-module845 checks,zero-call saved-response revalidation and v5 runtime. Verbatim raw response and clinical content remain unchanged; no source/adoption policy or request material changed."
   ]
 }

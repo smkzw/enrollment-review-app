@@ -1,6 +1,6 @@
 # HANDOFF｜1006V1｜资料恢复与UI更正成立，完整工作稿未达
 
-记录日期2026-10-06（Europe/Rome）。现场Goal已查active，任务in_progress，用户暂停已解除；不是新增暂停点。窗口尚未达，claims_complete=false。用户明确测试调用次数不设硬上限，要求尽快完成、不钻牛角尖；旧12次保持历史，新v2已终态失败，6新调用、总18，不把停止同失败分支说成暂停所有工作。普通工程提交不等于规则激活、事实自动采用或临床签发。
+记录日期2026-10-06（Europe/Rome）。现场Goal已查active，任务in_progress，用户暂停已解除；不是新增暂停点。窗口尚未达，claims_complete=false。用户明确测试调用次数不设硬上限，要求尽快完成、不钻牛角尖；旧25/30账本保留。v5合法部分续核7调用/212.4902s/exit3，总37；两草稿/29来源/24核对已保存，剩研究目的用途与期别定义对应两项未核清。末尾句号误拒已修，原保存回答零调用复验通过但不等于正式采用。普通工程提交不等于规则激活、事实自动采用或临床签发。
 
 当前增量：前端0e9b9bb99643ad074b2033d408ed8b7fc3dd1936消除原件展开后的短列表空白列，节点栏收拢受试者选择；相连27项与构建通过，Ego1080P/2K/4K实际截图均无横溢出，关闭恢复列表。0c6f40291e95eae6fce17467d02f75b4d14890ca进一步收拢正文：普通报告医师/申请医生/打印/页码省略，临床记录、研究者书面判断及关联/待核保留，原始索引不删。4相连模块33passed/3.36s，正式构建exit0；Ego实际Profile4原198项/展示190项，未打开原件时列表sticky仍可见，top68避开52顶栏。截图仅本机受控，非完整Q3；旧调用账本及身份保护不变。
 
@@ -14,8 +14,8 @@
 |---|---|
 | 唯一工作树/分支 | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile；codex/phase5-clinical-facts-profile |
 | 开始基线 | 7b3ed4f9251323b3194371764f2bcd17ad94559e；此前产品源码8b5b4c4f75f85110dfc81ce080755b1c8457144f |
-| 本轮产品代码 | 后端cc4048348f12afde4d3221415e884c7966e5bf4c；布局0e9b9bb99643ad074b2033d408ed8b7fc3dd1936；临床展示0c6f40291e95eae6fce17467d02f75b4d14890ca。精确hash见SOURCE_SNAPSHOT_20261006_1006V1.json，历史快照字段不被新文件覆盖 |
-| 实际测试/真实运行的代码 | 后端643与cc404834一致，v2真实请求冻结0e9b9bb9且app源码仍同cc；未到目标核对，不能宣称v7临床效果。前端31/27/33及各Ego分别绑定对应源码。P2恢复/更正用基线后端 |
+| 本轮产品代码 | 后端cc404834、关系字段修复7a6132043813e65e93f125e9d0596dc5d006798c、末尾标点修复3472fa2859277fd18fe98d39c5da34434b19a92d均已普通push；前端最终09e00e63。精确hash见SOURCE_SNAPSHOT_20261006_1006V1.json，历史快照字段不被新文件覆盖 |
+| 实际测试/真实运行的代码 | 后端643绑定cc，822及v3/v4绑定7a，末尾标点三模块845绑定3472；前端最终34及Ego绑定09e00e63。v3未触发关系字段修复，不把通过更前层归因该修复。P2恢复/更正用基线后端 |
 | 外部可复核 | Git源码、合成正反例、当前review_index、净化事实/调用汇总、两次工程顾问报告 |
 | 仅本机可读 | 以下tmp目录的原件/数据库/原答/截图/私有驱动。未提供外部审阅；hash只证明身份，不证明临床含义 |
 
@@ -25,7 +25,7 @@
 
 | 节点 | 已证 | 仍未证/不能拼接 |
 |---|---|---|
-| 完整要求快照 | 内置DOCX官方草稿rev2，23条82组件，带前版/diff门禁publishable=true；跨章发现/闭包可保存 | 尚未共同采用；跨章60深审批首批失败、59未读。25项23预览和局部26陈述不能代完整范围；旧P2库81组件0controls不能拼成新要求包 |
+| 完整要求快照 | 内置DOCX官方草稿rev2，23条82组件，带前版/diff门禁publishable=true；跨章发现/闭包可保存。当前首组两项未发布草稿、29来源及24核对合法保存，其中2项仍未核清 | 尚未共同采用；跨章60深审批首批未通过、59未读，局部来源核对不能代完整范围；旧P2库81组件0controls不能拼成新要求包 |
 | 资料处置与资格/Profile | 14组/5文件24页均有处置；第7组恢复首次保存回答，前6成功检查点不变，余7实际读取；458候选、32可事务候选合并为30事实，Profile第3版 | run仍partial；426阻断、584未决、5冲突组、55档案待核；0事件/0暴露/0规则关联。未定位数值/日期不可借文字正确自动采用，也不证明其余候选临床错误 |
 | 当前节点工作稿与原件 | Ego空间114/p1真实进入正式个例/筛选/资料/档案及历史，原图第8页自动定位可核 | eligibility-review API真实not_started；无完整同源工作稿/报告，C1/C4未达。不造红框，没有像素证明只定位页面 |
 | 更正与历史 | 实际UI预览→确认→提交一条有原文依据的对象描述修订，合法新Job37.1176s/0模型调用；新事实和Profile第4版，旧payload hash不变 | 未修改临床值；此为档案描述更正，不宣称旧入排判决错误。0规则关联，未发生新审核报告重算，C8未达 |
@@ -42,6 +42,8 @@ P2私有根：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v
 | F4 旧读取复用身份失效 | 原/当前来源分包hash相同，首个来源读取实际消息相同，但prompt材料/整套wire Schema及response_format路线身份变化 | 只读当前预检60批refresh_required；原首批partial_wire为空，非损坏wire。未扩建跨版本恢复/未改旧hash/未靠提示版本白名单复用。用原剩余额度一次现行第一组尝试，未读其余59组 |
 | F5 当前第一组流程关联错误 | 新v2来源阶段遗漏局部修复后，候选将不同执行节点的流程项关联到不匹配的决定节点；两次完整候选生成仍不一致 | failed_final/DEEP_OUTPUT_INVALID，不能因无硬次数上限反复生成整包。首错层是解释/候选关系装配，非端点故障/额度不足。先冻结出错关系与原流程目标核是否真实补充或独立义务，再经已有局部修订/完整校验；不得删真实要求、改时点凑目标或放松阶段资格 |
 | F6 档案噪声 | OCR行政字段与临床记录等权铺开；无原件长页列表随滚动离开留下空列 | 仅前端展示投影，不删事实或历史；实际原198/展示190，临床检查仍可回源，列表保持可见。不新增临床类型猜测或模型请求 |
+| F7 正确句子因末尾标点被拒 | `_object_in_action_clause`拒绝动作中任一句号，包括末尾句号。v3第10及v4第17条两端动作/对象/时期均有源，保存回答却被同句检查误拒 | 3472仅允许连续末尾标点，仍拒动作内部跨句；定位终点放在句尾前，不借下一句对象。845相连检查含末尾/无末尾/多种句界、邻句借对象/时期、双句反例及保存核对恢复。两旧原答沿当前校验零调用通过，旧失败/原答不改；不靠删标点或改医学内容“修答案”。直接执行判断有冻结原文和确定性反例，无新临床解释决策，不重复派会商 |
+| F8 副本保全布尔误报 | v4 execute记录protected_unchanged=false，old_jobs_unchanged=true | 后只读核原v3主库SHA与prepare前完全一致，额外WAL为0字节。文件集合差异不能说临床写入，也不覆盖原false回执；另留terminal-clause-readonly-audit.json。v5只在既有受控v4库追加合法新Job，避免每次再复制约1.9GB库；原v3/原临床库另保护，旧Job不修改 |
 
 主动延后：跨版本来源/部分wire复用扩展、自动source_ref规范化、模型榜单、bundle性能优化、通用恢复UI。它们未被用作通行证。主工作台适配只完成所有者亲自评估：既有App统一新建项目已消费handoff，宜用Option A；本子系统V2与共享/api/projects身份桥接未证。不重复消费sessionStorage、不修改首屏、不把“未改”说成集成通过。
 
@@ -59,6 +61,10 @@ P2私有根：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v
 | T8 | 1006V1 MANIFEST七文件hash/字节、git diff --check | 出口0；PACKAGE_CHECKS是包作者报告，本轮另核实际hash。全库/留出/启动恢复/完整Q3未运行，2K/4K仅布局已核 |
 | T9 | 私有run_rv1006_authorized_control_window.py，新API Job09e55762a458420ca72dcea22bdd25ce | 326.497161625s/exit3/6新物理调用，failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID；旧12不变，总18。来源局部修复后两次PROCEDURE_AFFECTED_STAGE_MISMATCH，未到目标ID核对。原库与旧作业保护true；请求/原答本机受控 |
 | T10 | npm test -- src/components/profile/ProfileLaneList.test.tsx src/features/patient-profile/model/patientProfileModel.test.ts src/components/profile/ProfileHighlights.test.tsx src/pages/SubjectsPage.test.tsx；npm run build；Ego114/只读52507 | 4模块33passed/3.36s/exit0、TS/Vite exit0；后续CSS避开顶栏经最终正式构建与Ego核，原198/展示190、行政标题0、无溢出，列表top68。PID12658/session77157退出130，无模型/临床写入 |
+| T11 | 五相连协议模块；/Users/smkzw/tmp/rv1006-candidate-field-connected-v6.xml | 822passed/17.65s/exit0/5SWIG，源码7a；实际候选门禁接受合法关系修订/删除，兄弟/字段越权/不支持传输拒绝。会商358.448s/exit0/no fallback/72reported工具先于末版保护和测试；净化reviews/metrics可Git复核，不能追认顾问看过末版 |
+| T12 | 私有run_rv1006_relation_field_window.py；run_rv1006_verified_partial_window.py | v3e5b5cc50…449.5689s/7调用/总25；v4b153288c…278.1594s/5调用/总30；均exit3/DEEP_OUTPUT_INVALID，不是端点故障。v4合法预检resume_partial＋partially_reused，仅补待核范围，原有效兄弟保留；两终态不改成功 |
+| T13 | .venv/bin/python -m pytest tests/v2/protocols/test_slice58c_control_deconstructor.py tests/v2/services/test_protocol_control_execution.py tests/v2/protocols/test_slice58c_protocol_control_gate.py -q --junitxml=/Users/smkzw/tmp/rv1006-terminal-clause-connected-v2.xml；私有audit_rv1006_terminal_clauses.py | 最终845passed/92.63s/exit0/5SWIG，源码3472；首窗839pass5fail是新负例夹具漏scope_quote，修夹具不放宽来源。两旧保存回答当前零调用/零DB写复验通过；不当整批采用或临床验收 |
+| T14 | 私有run_rv1006_terminal_partial_window.py，当前源3472，原v4受控库合法新Job | Job4d0c6eb5a0ae47ef98f24b081ef186e7，212.490164625s/exit3/7新调用，总37；PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED，两草稿/29来源/24核对（第4与26未核清）。原临床库/原v3库hash和全部旧Job状态/载荷不变；不重读初始来源/草稿。来源关系均通过现行校验，但其后定义/独立要求尚未消费；不能把24当整包覆盖通过 |
 
 T5首错顺序：STUDY_PHASE_NOT_VISIT_STAGE → 局部纠正 → FUTURE_PROHIBITION_DECIDED_EARLY/TREATMENT_DURATION_USED_AS_EVENT_WINDOW → 局部修订后wire解析成立 → 主目标核对CONTEXT_RELATION_UNGROUNDED → 首项编号更正成立 → 下一项同初始错编号 → 累计预算拒绝。不是所有时间都耗在一个慢模型上，也不是端点不可用。
 
@@ -70,14 +76,16 @@ T5首错顺序：STUDY_PHASE_NOT_VISIT_STAGE → 局部纠正 → FUTURE_PROHIBI
 
 本轮经验：先按一次用户动作判断收益。资料/档案修订确有进展；更正存库不是审核报告重算。预检的真相来自实际消息/Schema，不来自文件名。类型化反馈应准确区分编号错误与临床关系不足；不以词表、自动猜别名或背景重分类“消灭”失败。先冻结、功能包集中回归，再判断是否值得付真实读取成本，不继续逐错误新建整方案长作业。
 
+本次首错另有明确反证：旧CONTEXT_RELATION_UNGROUNDED并不证明原文没有对应；两份原答同版本零调用重验及普通末尾标点变体证明同句实现误拒。既有合成正例多用无句号的短动作，未覆盖真实模型常返回完整句子。教训是同时检验正确自然输出和危险邻句，不只不断追加“坏输出应拒”的guard。用途与目标覆盖应是不同核对维度：研究目的误列definition不能逼用户补病例；来源明确的时期定义未在目录找到，也不等于患者缺证。下一步先核现有用途复核及定义消费是否可达，不再增加药物/时点专用提示。
+
 执行自身问题亦保留：若干只读命令最初猜了不存在文件路径/字段；审计第一次错误遍历None partial_wire，已修审计不归产品故障；一次收据摘要glob过宽误读取request/response大对象，后限定receipt-*.json及白名单字段，未提交原答；原件截图缩放切换时尚在滚动中，复开/回当前页定位成立，未虚报查看器bug。无reset/clean、共享关停或原件改写。
 
 ## 6. 当前终点和下一步
 
-窗口未达。首个未达节点是C1完整同源要求仍未核清；C4/C8因此也未完成。后59批未读不能改成忠实医学未决；现有P2旧81组件库不能拿来冒充新包。用户无硬次数上限授权已落实，新v2终态失败，旧Job/终态/账本不改。此次失败不证明v7编号提示无效，因为候选阶段错误发生在更前层。
+窗口未达。首个未达节点是C1完整同源要求仍未核清；C4/C8因此也未完成。后59批未读不能改成忠实医学未决；现有P2旧81组件库不能拿来冒充新包。用户无硬次数上限授权已落实，失败终态/账本不改。v3/v4正确动作被标点误拒的首错已证，不再把该错归因医学歧义或模型不可靠。
 
-1. 对v2最后两份候选与冻结流程执行节点作局部只读对照，区分错误附加关系、真实独立要求与合同能力缺口，随后按既有局部修订/完整校验推进；不重复同故障或扩重读整本。模型授权已明确，不再询问额度；旧历史及复用资格继续核，不把技术问题改成研究者判断。
+1. v5已终态失败，不复活旧Job。先核当前source-function-recheck与定义消费者是否被来源未决触发：第4研究设计/评价目的初读definition导致background_context_allowed=false，第26为明确期别/时长定义但目录未证明完整对应。这是用途/消费首错范围，不是可凭投票消解的患者缺证。沿现有通用路径做有源局部修订，保留24目标核对及其他兄弟；尚未实施，不新建continue专用接口或无条件放行。恢复前继续合法预检，原37次账本保留。
 2. 完整要求覆盖/共同采用合法后，将本例资料资格沿现有消费者接入工作稿；原有数值正式采用限制不绕过，必要时用已批准的有源人工核对路径，而非逐字段默认签名。
 3. 再从正式UI完成相关审核结果重算/新旧报告；留出、2K/4K及运维/Q3尚待最终集中验收，不因本档案更正宣布完成。
 
-仅本轮自有59128临时UI（PID5156/session89840）已正常shutdown/exit130，Runner原本关闭；其他共享服务不动。临床读取/纠正Runner、两次顾问及测试均已终态，没有本轮后台生成作业仍跑。正式规则激活/自动数字采用/临床签发均未做；旧原件/临床库/失败回执不改。7份继承tracked dirty和其他未跟踪临床/过程材料不stage、不删除。普通工程Git递交与专业验收分开；具体push及远端HEAD由最终回执核实，不能据本交接自称全部工作树已递交。
+本轮自有临时UI/产品Runner、三次顾问及测试均已终态，共享服务不动；Goal仍active，不新增暂停。正式规则激活/自动数字采用/临床签发均未做；旧原件/临床库/失败回执不改。7份继承tracked dirty和其他未跟踪临床/过程材料不stage、不删除。源码3472fa28已普通push；文档与净化审阅为明确独立清单递交，不能自称全部工作树已递交。
