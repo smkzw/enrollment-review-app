@@ -836,8 +836,9 @@ def assemble_source_requirement_inserts(
     baseline: ProtocolControlAgentWire,
     responses: list[ProtocolControlAgentResponse],
     output_validator: Callable[..., None],
+    *, validate_complete: bool = True,
 ):
-    """Insert all independently read actions as one source-closed batch."""
+    """Compile each insert; incomplete checkpoints are never publication proof."""
 
     if not reviews or len(reviews) != len(responses):
         raise StageBoundCompilationGap("逐项解释回执与待补来源数目不一致")
@@ -849,8 +850,9 @@ def assemble_source_requirement_inserts(
         baseline,
         authorized_unit_ids=owned,
     )
-    output = hydrate_protocol_control_agent_output(merged, batch)
-    output_validator(output)
+    output = hydrate_protocol_control_agent_output(merged, batch) if validate_complete else None
+    if validate_complete:
+        output_validator(output)
     coverage = source_statement_coverage(batch, interpretation, merged)
     if any(coverage[item.statement_index].status != "expressed" for item in reviews):
         raise StageBoundCompilationGap("新增义务没有逐字表达全部授权来源陈述")

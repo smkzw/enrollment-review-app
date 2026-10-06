@@ -273,6 +273,62 @@ def test_front_author_reaches_existing_hydration_and_publication_consumer():
     assert result.review.items[0] == review
 
 
+@pytest.mark.parametrize("defect", [None, "raw_hash", "raw_text", "no_receipt", "partial_wire"])
+def test_source_only_front_review_recovery_requires_actual_witness(defect):
+    from app.services.protocol_control_execution import _resumable_saved_source_review
+    from app.agents.protocol_control_fixed_flow import pending_front_wire
+    import hashlib
+
+    batch, inventory, review, selection = _example()
+
+    class Broken(_Transport):
+        def read_stage_bound_requirement(self, *, prompt):
+            self.calls.append("author")
+            return ProtocolControlAgentResponse(session_id="bad-author", text="[]")
+
+    failed = ProtocolControlAgentRunner().run(
+        batch, Broken(review, selection), resume_source_interpretation=inventory,
+        workflow_variant=FIXED_FLOW,
+        output_validator=lambda output: validate_protocol_control_batch_candidates(batch, output),
+    )
+    assert failed.final_output is None and failed.partial_wire is None
+    saved = failed.model_dump(mode="json")
+    # The public result intentionally excludes raw text. The actual failure
+    # checkpoint saves it explicitly for source-bound recovery.
+    saved["attempts"] = [{**attempt.model_dump(mode="json"),
+                          "raw_output_text": attempt.raw_output_text}
+                         for attempt in failed.attempts]
+    if defect == "raw_hash":
+        saved["attempts"][0]["raw_output_sha256"] = "0" * 64
+    elif defect == "raw_text":
+        changed = review.model_copy(update={"source_action_excerpt": "与已存原答不同的内容"})
+        raw = SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[changed]).model_dump_json()
+        saved["attempts"][0]["raw_output_text"] = raw
+        saved["attempts"][0]["raw_output_sha256"] = hashlib.sha256(raw.encode()).hexdigest()
+    elif defect == "no_receipt":
+        saved["attempts"][0]["error_detail"] = None
+    elif defect == "partial_wire":
+        saved["partial_wire"] = pending_front_wire(batch).model_dump(mode="json")
+    if defect in {"raw_hash", "raw_text"}:
+        with pytest.raises(ValueError):
+            _resumable_saved_source_review(batch, inventory, saved)
+        return
+    seed = _resumable_saved_source_review(batch, inventory, saved)
+    if defect is not None:
+        assert seed.review is None
+        return
+    assert seed.state == "reused" and seed.reason == "verified_pending_front_review"
+    transport = _Transport(review, selection)
+    restored = ProtocolControlAgentRunner().run(
+        batch, transport, resume_source_interpretation=inventory, workflow_variant=FIXED_FLOW,
+        resume_source_target_review=seed.review, resume_source_statement_coverage=seed.coverage,
+        output_validator=lambda output: validate_protocol_control_batch_candidates(batch, output),
+    )
+    assert transport.calls == ["author", "alignment"]
+    assert restored.final_output is not None
+    _validate_saved_source_review(batch, restored)
+
+
 @pytest.mark.parametrize("functions", [["action", "time_validity"], ["time_validity", "action"]])
 @pytest.mark.parametrize("source_types", [[], ["知情同意记录"]])
 def test_same_visit_action_and_time_reach_saved_consumer_without_inventing_source_limits(
@@ -1050,7 +1106,12 @@ def test_each_short_answer_is_checked_before_the_next_author(failure_index, fail
         assert len(result.final_output.candidates) == 2
         _validate_saved_source_review(batch, type(result).model_validate_json(result.model_dump_json()))
     else:
-        assert result.final_output is None and result.partial_wire is None
+        assert result.final_output is None
+        if failure_index == 0:
+            assert result.partial_wire is None
+        else:
+            assert len(result.partial_wire.candidate_drafts) == 1
+            assert result.partial_wire.candidate_drafts[0].source_structure_unit_ids == [inventory.statements[0].structure_unit_id]
         assert transport.calls == ["review", *(["author"] * (failure_index + 1))]
         assert result.attempts[-1].error_classes == ["FLOW_ASSEMBLY_INVALID"]
         retained = [attempt for attempt in result.attempts if attempt.raw_output_text is not None]
@@ -1059,6 +1120,63 @@ def test_each_short_answer_is_checked_before_the_next_author(failure_index, fail
             assert json.loads(retained[1].raw_output_text) == first.model_dump(mode="json")
         with pytest.raises(ValueError):
             _validate_saved_source_review(batch, result)
+
+
+@pytest.mark.parametrize("review_order", ["source", "reversed"])
+@pytest.mark.parametrize("unsupported", ["definition", "duration", "unknown_scope"])
+def test_mixed_capability_preserves_simple_point_without_completing_batch(unsupported, review_order):
+    from app.agents.protocol_control_fixed_flow import front_stage_supported_indexes
+    batch, inventory, review, selection = _independent_mixed_example()
+    # Retain the first statement's actual source rather than using a whole-unit
+    # target link as proof that an unsupported dependency has been consumed.
+    first = inventory.statements[0]
+    review.items[0] = review.items[0].model_copy(update={
+        "decision": "additional_requirement", "target_id": None,
+        "target_action_excerpt": None, "source_time_excerpt": None,
+        "target_time_excerpt": None, "unresolved_aspects": ["保留独立要求"],
+    })
+    if unsupported == "definition":
+        first.decision_functions = ["action", "definition"]
+    elif unsupported == "unknown_scope":
+        first.unresolved = ["适用节点仍不明确"]
+    else:
+        quote = first.quoted_text
+        first.quoted_text += "，连续7天"
+        first.time_words.append("连续7天")
+        batch.owned_units[0].excerpt = batch.owned_units[0].excerpt.replace(quote, first.quoted_text)
+        review.items[0].source_action_excerpt = first.quoted_text
+    if review_order == "reversed":
+        review.items.reverse()
+    frozen = inventory.model_dump(mode="json")
+    assert front_stage_supported_indexes(batch, inventory) == {1}
+    assert supports_front_stage_flow(batch, inventory)
+    transport = _MixedTransport(review, selection)
+    result = ProtocolControlAgentRunner().run(
+        batch, transport, resume_source_interpretation=inventory, workflow_variant=FIXED_FLOW,
+        output_validator=lambda output: validate_protocol_control_batch_candidates(batch, output),
+    )
+    assert transport.calls == ["review", "author", "alignment"]
+    assert inventory.model_dump(mode="json") == frozen
+    assert result.final_output is None and result.status == "需要核对"
+    assert len(result.partial_wire.candidate_drafts) == 1
+    assert result.partial_wire.candidate_drafts[0].source_structure_unit_ids == ["independent-action"]
+    assert result.source_front_target_review == review
+    detail = result.attempts[-1].error_detail
+    assert result.attempts[-1].error_classes == [
+        "FLOW_SOURCE_SCOPE_UNRESOLVED" if unsupported == "unknown_scope" else "FLOW_COMPILER_CAPABILITY_GAP"
+    ]
+    assert detail["completed_author_indexes"] == [1]
+    retained = detail["retained_statements"]
+    assert len(retained) == 1 and retained[0]["statement_index"] == 0
+    assert retained[0]["reason"] == (
+        "source_review_unresolved" if unsupported == "unknown_scope" else "compiler_capability_gap"
+    )
+    assert retained[0]["source_refs"] == [batch.owned_units[0].source_ref]
+    restored = type(result).model_validate_json(result.model_dump_json())
+    assert restored.partial_wire == result.partial_wire
+    assert restored.attempts[-1].error_detail == detail
+    with pytest.raises(ValueError):
+        _validate_saved_source_review(batch, restored)
 
 
 @pytest.mark.parametrize("order", ["source", "reversed"])

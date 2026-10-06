@@ -2046,7 +2046,33 @@ def _resumable_saved_source_review(
 
     payload = saved.get("source_target_review")
     if payload is None:
-        return _ResumedSourceReview(state="absent", reason="no_saved_source_review")
+        front = saved.get("source_front_target_review")
+        if (front is None or saved.get("workflow_path_executed") != "front_stage_flow"
+                or saved.get("partial_wire") is not None):
+            return _ResumedSourceReview(state="absent", reason="no_saved_source_review")
+        from app.agents.protocol_control_fixed_flow import pending_front_wire, validate_front_review
+
+        review = SourceTargetReview.model_validate(front)
+        validate_front_review(batch, interpretation, review)
+        witnessed = False
+        for attempt in saved.get("attempts", []):
+            if not isinstance(attempt, Mapping) or not isinstance(attempt.get("error_detail"), Mapping):
+                continue
+            if attempt["error_detail"].get("workflow_phase") != "source_review":
+                continue
+            raw = attempt.get("raw_output_text")
+            if (not isinstance(raw, str) or not isinstance(attempt.get("session_id"), str)
+                    or hashlib.sha256(raw.encode()).hexdigest() != attempt.get("raw_output_sha256")
+                    or SourceTargetReview.model_validate_json(raw) != review):
+                raise ValueError("前置来源核对与实际保存原答不一致，不能复用")
+            witnessed = True
+        if not witnessed:
+            return _ResumedSourceReview(state="refresh_required", reason="front_review_receipt_unproven")
+        coverage = source_statement_coverage(batch, interpretation, pending_front_wire(batch))
+        return _ResumedSourceReview(
+            state="reused", reason="verified_pending_front_review",
+            review=review, coverage=tuple(coverage),
+        )
     coverage_payload = saved.get("source_statement_coverage")
     if not isinstance(coverage_payload, list) or not coverage_payload:
         return _ResumedSourceReview(
@@ -3206,6 +3232,7 @@ def _execute_deep(
             "LOGICAL_BUDGET_EXHAUSTED",
             "FLOW_TRANSPORT_FAILED", "FLOW_COMPLETION_UNCERTAIN", "FLOW_RESPONSE_INVALID", "FLOW_ASSEMBLY_INVALID",
             "FLOW_SOURCE_SCOPE_UNRESOLVED", "FLOW_TARGET_ALREADY_COVERED",
+            "FLOW_COMPILER_CAPABILITY_GAP",
             "SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED",
             "SOURCE_FUNCTION_RECHECK_SCHEMA_INVALID",
             "SOURCE_FUNCTION_RECHECK_INVALID",

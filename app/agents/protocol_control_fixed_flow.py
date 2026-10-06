@@ -45,7 +45,7 @@ from app.domain.contracts.protocol_controls import (
 
 BASELINE = "RV1001-BASELINE"
 FIXED_FLOW = "RV1001-FLOW"
-FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v14"
+FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v15"
 
 
 def _failure_code(exc: Exception) -> str | None:
@@ -95,8 +95,23 @@ def validate_front_review(batch, interpretation, review) -> None:
     validate_source_target_review(batch, interpretation, coverage, review)
 
 
+def front_stage_supported_indexes(batch, interpretation: SourceInterpretation) -> set[int]:
+    """Compiler capability is per statement, not a clinical coverage decision."""
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    return {
+        index for index, statement in enumerate(interpretation.statements)
+        if ("action" in statement.decision_functions
+            and set(statement.decision_functions) <= {"action", "time_validity"}
+            and statement.control_authority == "study_or_unknown"
+            and statement.eligibility_sequence == "current_or_unknown"
+            and statement.structure_unit_id in units
+            and len(units[statement.structure_unit_id].source_span_ids) == 1
+            and can_compile_stage_bound_source(batch, interpretation, index))
+    }
+
+
 def supports_front_stage_flow(batch, interpretation: SourceInterpretation) -> bool:
-    """Unsupported units retain the baseline path before any new author call."""
+    """Mixed sources may preserve supported points without certifying the rest."""
     validate_source_interpretation(batch, interpretation)
     if not interpretation.statements or interpretation.units_without_statement:
         return False
@@ -104,19 +119,13 @@ def supports_front_stage_flow(batch, interpretation: SourceInterpretation) -> bo
         unit.structure_unit_id for unit in batch.owned_units
     }:
         return False
-    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
-    if not all(
-        (statement.decision_functions == ["background"]
+    background_only = all(
+        statement.decision_functions == ["background"]
          and statement.force in {"descriptive", "unclear"}
-         and not statement.unresolved)
-        or ("action" in statement.decision_functions
-        and set(statement.decision_functions) <= {"action", "time_validity"}
-        and statement.control_authority == "study_or_unknown"
-        and statement.eligibility_sequence == "current_or_unknown"
-        and len(units[statement.structure_unit_id].source_span_ids) == 1
-        and can_compile_stage_bound_source(batch, interpretation, index))
-        for index, statement in enumerate(interpretation.statements)
-    ):
+         and not statement.unresolved
+        for statement in interpretation.statements
+    )
+    if not background_only and not front_stage_supported_indexes(batch, interpretation):
         return False
     coverage = source_statement_coverage(batch, interpretation, pending_front_wire(batch))
     # An exact match only routes to the established comparison path; it does
@@ -138,6 +147,7 @@ class FrontStageFlowResult:
     alignment: SourceCandidateAlignment | None = None
     error: Exception | None = None
     error_code: str | None = None
+    error_detail: dict[str, object] | None = None
 
 
 def _target_action_established(batch, statement, target) -> bool:
@@ -166,11 +176,12 @@ def build_front_target_review_prompt(batch, interpretation, coverage) -> str:
 
 def covered_front_wire(
     batch, interpretation, review, *, allow_additional_units: bool = False,
+    retained_indexes: frozenset[int] = frozenset(),
 ) -> ProtocolControlAgentWire:
     """Whole-unit links require full coverage; mixed units keep point-level proof."""
     validate_front_review(batch, interpretation, review)
     if (len(review.items) != len(interpretation.statements)
-            or any(item.decision not in ({"covered_by_official", "covered_by_procedure", "background_context", "additional_requirement"}
+            or any(item.statement_index not in retained_indexes and item.decision not in ({"covered_by_official", "covered_by_procedure", "background_context", "additional_requirement"}
                                         if allow_additional_units else
                                         {"covered_by_official", "covered_by_procedure", "background_context"})
                    for item in review.items)):
@@ -180,7 +191,7 @@ def covered_front_wire(
     officials = {target.official_code: target for target in batch.known_official_targets}
     pending_dispositions = {item.structure_unit_id: item for item in pending_front_wire(batch).dispositions}
     for item in review.items:
-        if item.decision in {"additional_requirement", "background_context"}:
+        if item.statement_index in retained_indexes or item.decision in {"additional_requirement", "background_context"}:
             continue
         statement = interpretation.statements[item.statement_index]
         target = (procedures if item.decision == "covered_by_procedure" else officials)[item.target_id]
@@ -194,6 +205,9 @@ def covered_front_wire(
     for unit in batch.owned_units:
         items = [item for item in review.items
                  if interpretation.statements[item.statement_index].structure_unit_id == unit.structure_unit_id]
+        if any(item.statement_index in retained_indexes for item in items):
+            dispositions.append(pending_dispositions[unit.structure_unit_id])
+            continue
         kinds = {item.decision for item in items} - {"background_context"}
         if not kinds:
             if batch.owned_required_action_kinds_by_structure_unit_id.get(unit.structure_unit_id):
@@ -238,6 +252,7 @@ def prepare_front_stage_flow(
     interpretation: SourceInterpretation,
     transport,
     output_validator,
+    *, review_seed: SourceTargetReview | None = None,
 ) -> FrontStageFlowResult:
     """No whole-wire reread on failure and no invented review declarations."""
     result = FrontStageFlowResult()
@@ -247,18 +262,24 @@ def prepare_front_stage_flow(
             raise ValueError("本批来源不属于单阶段动作解释范围")
         pending = pending_front_wire(batch)
         coverage = source_statement_coverage(batch, interpretation, pending)
-        response = transport.start_source_target_review(
-            prompt=build_front_target_review_prompt(batch, interpretation, coverage),
-        )
-        result.responses.append((phase, response))
-        result.review = SourceTargetReview.model_validate_json(response.text)
+        if review_seed is None:
+            response = transport.start_source_target_review(
+                prompt=build_front_target_review_prompt(batch, interpretation, coverage),
+            )
+            result.responses.append((phase, response))
+            result.review = SourceTargetReview.model_validate_json(response.text)
+        else:
+            result.review = review_seed.model_copy(deep=True)
         validate_source_target_review(batch, interpretation, coverage, result.review)
         result.review_validated = True
-        if any(item.decision not in {"additional_requirement", "covered_by_official", "covered_by_procedure", "background_context"}
-               for item in result.review.items):
-            result.error_code = "FLOW_SOURCE_SCOPE_UNRESOLVED"
-            raise ValueError("本次来源仍有未核清或当前简单动作流程不能装配的要求，保留具体核对结果")
-        if all(item.decision != "additional_requirement"
+        supported = front_stage_supported_indexes(batch, interpretation)
+        retained = [item for item in result.review.items
+                    if item.decision not in {"additional_requirement", "covered_by_official", "covered_by_procedure", "background_context"}
+                    or (item.decision == "additional_requirement" and (
+                        item.statement_index not in supported
+                        or not can_compile_stage_bound_requirement(batch, interpretation, item)))]
+        retained_indexes = frozenset(item.statement_index for item in retained)
+        if not retained and all(item.decision != "additional_requirement"
                for item in result.review.items):
             phase = "assembly"
             wire = covered_front_wire(batch, interpretation, result.review)
@@ -276,18 +297,33 @@ def prepare_front_stage_flow(
         # Mixed physical units retain individual source-target decisions,
         # rather than lending one point's target link to its neighbours.
         phase = "assembly"
-        pending = covered_front_wire(batch, interpretation, result.review, allow_additional_units=True)
-        reviews = sorted((item for item in result.review.items if item.decision == "additional_requirement"),
+        pending = covered_front_wire(batch, interpretation, result.review, allow_additional_units=True,
+                                     retained_indexes=retained_indexes)
+        reviews = sorted((item for item in result.review.items if item.decision == "additional_requirement"
+                          and item.statement_index not in retained_indexes),
                          key=lambda item: item.statement_index)
-        if not reviews or not all(
-            can_compile_stage_bound_requirement(batch, interpretation, item)
-            for item in reviews
-        ):
-            result.error_code = "FLOW_SOURCE_SCOPE_UNRESOLVED"
-            raise ValueError("真实来源核对仍有已覆盖、未决或当前编译器不支持的维度")
+        if retained:
+            result.error_detail = {
+                "code": "FLOW_STATEMENTS_RETAINED",
+                "retained_statements": [{
+                    "statement_index": item.statement_index,
+                    "structure_unit_id": interpretation.statements[item.statement_index].structure_unit_id,
+                    "source_refs": [unit.source_ref for unit in batch.owned_units
+                                    if unit.structure_unit_id == interpretation.statements[item.statement_index].structure_unit_id],
+                    "json_path": f"source_front_target_review.items[{index}]",
+                    "reason": ("source_review_unresolved" if item.decision == "unresolved"
+                               or interpretation.statements[item.statement_index].unresolved
+                               else "compiler_capability_gap"),
+                    "retry_class": ("source_review" if item.decision == "unresolved"
+                                    or interpretation.statements[item.statement_index].unresolved
+                                    else "capability_review"),
+                    "decision": item.decision,
+                } for index, item in enumerate(result.review.items) if item.statement_index in retained_indexes],
+                "completed_author_indexes": [],
+            }
         # Preserve source order rather than trusting provider item ordering.
         authors = []
-        for item in reviews:
+        for position, item in enumerate(reviews):
             phase = f"author:{item.statement_index}"
             response = transport.read_stage_bound_requirement(
                 prompt=build_stage_bound_requirement_prompt(batch, interpretation, item),
@@ -296,10 +332,21 @@ def prepare_front_stage_flow(
             phase = "assembly"
             compile_source_requirement_response(batch, interpretation, item, response)
             authors.append(response)
-        phase = "assembly"
-        result.wire, _, coverage = assemble_source_requirement_inserts(
-            batch, interpretation, reviews, pending, authors, output_validator,
-        )
+            # Freeze each accepted author through the same constructor and
+            # validator; a later failure cannot erase its assembled artifact.
+            result.wire, _, coverage = assemble_source_requirement_inserts(
+                batch, interpretation, reviews[:position + 1], pending, authors, output_validator,
+                validate_complete=not retained and position == len(reviews) - 1,
+            )
+            if result.error_detail is not None:
+                result.error_detail["completed_author_indexes"] = [
+                    accepted.statement_index for accepted in reviews[:position + 1]
+                ]
+        if not reviews:
+            result.error_code = "FLOW_COMPILER_CAPABILITY_GAP" if any(
+                item["reason"] == "compiler_capability_gap" for item in result.error_detail["retained_statements"]
+            ) else "FLOW_SOURCE_SCOPE_UNRESOLVED"
+            raise ValueError("本批已保留逐项来源核对；尚无可完整装配的新增要求，不生成采用结果")
         # A source quote alone does not prove the chosen observation policy.
         # Reuse the existing fresh-session reviewer and source-bound proof.
         phase = "candidate_review"
@@ -321,6 +368,11 @@ def prepare_front_stage_flow(
                 != sorted(pairs) or any(item.decision != "fully_expressed" for item in alignment.items)):
             raise ProtocolControlAgentWireValidationError(
                 "FLOW_CANDIDATE_SEMANTICS_UNVERIFIED", "要求的结果条件或其他含义尚未核实，保留原答，不继续自动改写")
+        if retained:
+            result.error_code = "FLOW_COMPILER_CAPABILITY_GAP" if any(
+                item["reason"] == "compiler_capability_gap" for item in result.error_detail["retained_statements"]
+            ) else "FLOW_SOURCE_SCOPE_UNRESOLVED"
+            raise ValueError("已保存可装配要求及其核对依据；其余具体来源仍待处理，整批未完成、未采用")
     except Exception as exc:  # product boundary; retained without parent reread
         result.error = exc
         result.error_code = result.error_code or _failure_code(exc) or (

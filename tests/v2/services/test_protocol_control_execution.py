@@ -842,6 +842,7 @@ def test_completed_restricted_source_reuse_rechecks_saved_review(monkeypatch, ki
     ("SOURCE_INTERPRETATION_CORRECTION_TRANSPORT_FAILED", False),
     ("MODEL_IDENTITY_INVALID", False),
     ("FLOW_RESPONSE_INVALID", False),
+    ("FLOW_COMPILER_CAPABILITY_GAP", False),
     ("LOGICAL_BUDGET_EXHAUSTED", False),
     ("SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED", True),
     ("SOURCE_FUNCTION_RECHECK_SCHEMA_INVALID", False),
@@ -895,6 +896,58 @@ def test_deep_service_preserves_recheck_failure_kind_and_checkpoint(monkeypatch,
     assert checkpoint["source_interpretation"] == result.source_interpretation.model_dump(mode="json")
     assert checkpoint["attempts"][-1]["error_classes"] == [code]
     assert checkpoint["model_call_receipts"] == [{"request_id": "recheck-1"}]
+
+
+def test_mixed_front_progress_survives_actual_failure_checkpoint_without_adoption(monkeypatch):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
+    from app.agents.protocol_control_fixed_flow import FIXED_FLOW
+    from tests.v2.protocols.test_protocol_control_fixed_flow import _independent_mixed_example, _MixedTransport
+    from app.protocols.protocol_control_gate import validate_protocol_control_batch_candidates
+
+    module = protocol_control_execution_module
+    batch, inventory, review, selection = _independent_mixed_example()
+    inventory.statements[0].decision_functions = ["action", "definition"]
+    review.items[0] = review.items[0].model_copy(update={
+        "decision": "additional_requirement", "target_id": None,
+        "target_action_excerpt": None, "source_time_excerpt": None,
+        "target_time_excerpt": None, "unresolved_aspects": ["独立定义尚待装配"],
+    })
+    result = ProtocolControlAgentRunner().run(
+        batch, _MixedTransport(review, selection), resume_source_interpretation=inventory,
+        workflow_variant=FIXED_FLOW,
+        output_validator=lambda output: validate_protocol_control_batch_candidates(batch, output),
+    )
+    assert result.final_output is None and result.source_candidate_alignment is not None
+    monkeypatch.setattr(module, "_closure_checkpoint", lambda *_: {"deep_plan": {}})
+    monkeypatch.setattr(module.ProtocolControlDiscoveryToDeepPlan, "model_validate",
+                        staticmethod(lambda _: SimpleNamespace(batches=[batch])))
+    monkeypatch.setattr(module, "_deep_batch_for_step", lambda *_: batch)
+    monkeypatch.setattr(module, "_prompt_from_payload", lambda *_: "合成隔离提示")
+    monkeypatch.setattr(module, "_limits_from_payload", lambda *_: (1, 2))
+    monkeypatch.setattr(module, "_frozen_official_predicates", lambda *_: ({}, {}))
+    monkeypatch.setattr(module, "_resolve_transport", lambda *_, **__: SimpleNamespace(
+        start_source_interpretation=lambda **_: None, take_call_receipts=lambda: [],
+    ))
+    monkeypatch.setattr(module, "_require_frozen_route", lambda *_, **__: None)
+    monkeypatch.setattr(module, "_transport_identity", lambda *_, **__: {})
+    monkeypatch.setattr(module.ProtocolControlAgentRunner, "run", lambda *_, **__: result)
+    context = StepContext(
+        job_id="synthetic", job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+        job_payload={}, step_id="deep_0001", name="深审", attempt=1,
+        last_checkpoint_id=None, last_checkpoint=None,
+    )
+    with pytest.raises(StepFailure) as failure:
+        module._execute_deep(context, SimpleNamespace())
+    assert failure.value.error_code == "PROTOCOL_CONTROL_FLOW_COMPILER_CAPABILITY_GAP"
+    assert not failure.value.retryable
+    checkpoint = failure.value.diagnostic_checkpoint
+    assert checkpoint["partial_wire"] == result.partial_wire.model_dump(mode="json")
+    assert checkpoint["source_front_target_review"] == review.model_dump(mode="json")
+    assert checkpoint["source_candidate_alignment"] == result.source_candidate_alignment.model_dump(mode="json")
+    assert checkpoint["attempts"][-1]["error_detail"] == result.attempts[-1].error_detail
+    assert checkpoint["stage"] == "deep_failure_diagnostic"
+    with pytest.raises(ValueError):
+        module._validate_saved_source_review(batch, result)
 
 
 @pytest.mark.parametrize("failure", [

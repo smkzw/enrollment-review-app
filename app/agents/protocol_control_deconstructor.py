@@ -7024,6 +7024,9 @@ class ProtocolControlAgentRunner:
             workflow_path_executed = "front_stage_flow"
             prepared = prepare_front_stage_flow(
                 batch, source_interpretation, transport, output_validator,
+                review_seed=(resume_source_target_review
+                             if len(resumed_review_items) == len(source_interpretation.statements)
+                             else None),
             )
             if prepared.review_validated:
                 front_target_review = prepared.review
@@ -7037,6 +7040,7 @@ class ProtocolControlAgentRunner:
                     raw_output_text=actual_response.text,
                     outcome="parsed",
                     issues=[f"RV1001-FLOW/{phase}：实际回答，尚未采用"],
+                    error_detail={"workflow_phase": phase},
                 ))
             if prepared.error is not None or prepared.wire is None:
                 sid = (prepared.responses[-1][1].session_id if prepared.responses
@@ -7051,7 +7055,7 @@ class ProtocolControlAgentRunner:
                     error_classes=[prepared.error_code or "FLOW_ASSEMBLY_INVALID"],
                     issues=[str(prepared.error)[:1800]],
                     error_detail=(prepared.error.error_detail
-                                  if isinstance(prepared.error, EvidencePolicyCheckError) else None),
+                                  if isinstance(prepared.error, EvidencePolicyCheckError) else prepared.error_detail),
                 ))
                 return build_result(
                     status="需要核对", batch_id=batch.batch_id, session_id=sid,
@@ -7067,7 +7071,8 @@ class ProtocolControlAgentRunner:
             # short answers remain above; the normal consumer still checks it.
             raw_text = prepared.wire.model_dump_json()
             front_flow_assembled = True
-            session_id = prepared.responses[-1][1].session_id
+            session_id = (prepared.responses[-1][1].session_id if prepared.responses
+                          else resume_session_id or "flow-source-review-reused")
             attempts.append(ProtocolControlAgentAttempt(
                 attempt=len(attempts) + 1, session_id=session_id,
                 raw_output_sha256=_sha256(raw_text), raw_output_chars=len(raw_text),
