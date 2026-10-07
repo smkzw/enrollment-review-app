@@ -5,6 +5,17 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "restricted_table_header_scope": {
+    "base_commit": "184bdb60",
+    "validator_version": "phase5/control-publication-gate/v46",
+    "first_cause": "Actual deep_0012 scope accepted from owned frozen row header by interpretation, rejected by restricted gate which searched only body/heading. Actual trace refutes global definition/mapping guards as this first cause",
+    "scope": "Own row/column headers ground scope_quote only; time/exception/stage, independent executable proofs and source unresolved unchanged",
+    "readonly_replay": {"job_id": "534d3e484e10491f86132cfc069864f4", "step_id": "deep_0012", "source_statements": 6, "restricted_statements": 1, "candidates": 0, "full_gate_valid": true, "readback_equal": true, "source_unresolved_unchanged": true, "model_calls": 0, "database_writes": 0, "database_unchanged": true, "not_job_execution": true},
+    "tests": {"modules": 3, "passed": 473, "seconds": 78.94, "exit_code": 0, "warnings": "5 SWIG deprecations", "junit": "/Users/smkzw/tmp/rv1006-table-header-scope-connected-20261007-v1.xml"},
+    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session_id": "01a11777-3278-7d44-aa47-1be375649815", "provider_seconds": [152.160,71.358], "exit_codes": [0,0], "fallback": false, "owner_silent_completion_wait": true, "limits": "First conditional G1/G2 hypothesis refuted by actual trace; follow-up source-only review supports frozen-header patch. No clinical/test review. Exact equivalence with author time/stage scope normalization not claimed"},
+    "formal_joint_publication": false,
+    "new_current_node_report": false
+  },
   "full_timed_official_citation": {
     "base_commit": "a4a26d3e",
     "validator_version": "phase5/control-publication-gate/v45",

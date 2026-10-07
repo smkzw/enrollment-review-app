@@ -583,6 +583,59 @@ def test_restricted_source_keeps_its_context_without_guessing_independence() -> 
     assert type(output).model_validate(output.model_dump(mode="json")) == output
 
 
+@pytest.mark.parametrize("header_field", ["row_headers", "column_headers"])
+@pytest.mark.parametrize("header", ["拟参加者", "拟 参加者"])
+def test_restricted_table_scope_survives_saved_source_and_consumer(header_field, header) -> None:
+    from app.services.eligibility_review_projection import _restricted_control_projections
+    from tests.v2.domain.test_control_catalog_restricted_contract import _catalog, _publication
+
+    batch, result = _unresolved_batch_review()
+    unit = batch.owned_units[0]
+    unit.unit_kind = "table_row"
+    unit.table_context = TableCellContext(
+        table_path=(1, 0), row_index=1, column_index=0, member_cell_paths=[(1, 0)],
+        **{header_field: [header]},
+    )
+    result.source_interpretation.statements[0].scope_quote = "拟参加者"
+    saved = ProtocolControlAgentRunResult.model_validate(result.model_dump(mode="json"))
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, saved)
+    assert output is not None
+    assert output.restricted_statements[0].scope_quote == "拟参加者"
+    assert output.restricted_statements[0].unresolved_dimensions
+    assert output.candidates == []
+    protocol_control_execution_module._validate_deep_batch_output(batch, output)
+    reloaded = type(output).model_validate(output.model_dump(mode="json"))
+    assert reloaded == output
+    projection = _restricted_control_projections(_publication(_catalog(
+        restricted=tuple(reloaded.restricted_statements),
+        allowed=tuple(batch.owned_source_span_ids),
+    )))
+    assert all(item.obligations[0].status == "restricted" for item in projection)
+
+
+@pytest.mark.parametrize("field", ["scope_quote", "time_words", "exception_words", "affected_stage"])
+def test_restricted_table_header_does_not_ground_unrelated_qualifiers(field) -> None:
+    from app.protocols.protocol_control_gate import check_protocol_control_batch_candidates
+
+    batch, result = _unresolved_batch_review()
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert output is not None
+    batch.owned_units[0].table_context = TableCellContext(
+        table_path=(1, 0), row_index=1, column_index=0, member_cell_paths=[(1, 0)],
+        row_headers=["治疗期"],
+    )
+    batch.owned_units[1].table_context = TableCellContext(
+        table_path=(2, 0), row_index=2, column_index=0, member_cell_paths=[(2, 0)],
+        row_headers=["筛选期"],
+    )
+    statement = output.restricted_statements[0]
+    setattr(statement, field, ["治疗期"] if field == "time_words"
+            else "筛选期" if field == "scope_quote" else "治疗期")
+    assert "RESTRICTED_SOURCE_CONTEXT_UNGROUNDED" in {
+        issue.code for issue in check_protocol_control_batch_candidates(batch, output)
+    }
+
+
 @pytest.mark.parametrize("kind", ["interpretation", "temporal"])
 def test_same_unit_restriction_survives_real_checkpoint_and_rebuild(
     session_factory, monkeypatch, kind,

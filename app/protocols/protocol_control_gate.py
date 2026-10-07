@@ -62,7 +62,7 @@ from app.protocols.source_time_fragments import (
 from app.protocols.control_scope_sources import validate_scope_citations
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v45"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v46"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -5138,9 +5138,21 @@ def _restricted_statement_scope_issues(
         consistent_ranges = True
         for statement in statements:
             texts = [_compact_source_text(value) for value in [unit.excerpt, *unit.heading_path]]
+            scope_texts = list(texts)
+            if unit.table_context is not None:
+                scope_texts.extend(_compact_source_text(value) for value in (
+                    *unit.table_context.row_headers, *unit.table_context.column_headers,
+                ))
+            # Table headers ground this unit's scope, not arbitrary time or exception claims.
+            qualifiers = [
+                (statement.scope_quote, scope_texts),
+                *((value, texts) for value in statement.time_words),
+                (statement.exception_words, texts),
+                (statement.affected_stage, texts),
+            ]
             if any(not _compact_source_text(value)
-                   or not any(_compact_source_text(value) in text for text in texts)
-                   for value in source_statement_qualifier_quotes(statement)):
+                   or not any(_compact_source_text(value) in text for text in sources)
+                   for value, sources in qualifiers if value is not None):
                 unit_issues.append(_scope_proof_failure(
                     "RESTRICTED_SOURCE_CONTEXT_UNGROUNDED",
                     "受限陈述的适用范围、时间或例外未逐字保留冻结来源。",

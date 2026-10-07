@@ -3,7 +3,11 @@
 
 ### 单一当前用户流程表
 
-源码32ced805已push；7份继承delivery修改未动。现场Goal active/claims_complete=false，无用户暂停。当前主线单所有者集成；共享接入以有界E03实施并由C03独审，所有者修复身份、事务和失败恢复边界。只修改入排侧，不改共享首屏/后端；共享侧真实binding仍缺，不能宣称两个产品已贯通。
+源码184bdb60已push；7份继承delivery修改未动。现场Goal active/claims_complete=false，无用户暂停。当前主线单所有者集成；共享接入以有界E03实施并由C03独审，所有者修复身份、事务和失败恢复边界。只修改入排侧，不改共享首屏/后端；共享侧真实binding仍缺，不能宣称两个产品已贯通。
+
+当前采用直接集成＋单C03：R1来源保护的含义边界需独立挑战；共享接入已push184bdb60。rv1006-mixed-restricted-consumer-review-20261007首次C03实际CodeBuddy/DeepSeek/max同会话01a11777…152.160s/exit0/no fallback、15读取；其G1/G2是条件性风险，不是当前第12组首错。所有者只读实际检查点：6点分别在6单元，无calculation_input/定义关系回执/候选，仅index3原文及目标未决；函数跟踪仅RESTRICTED_SOURCE_CONTEXT_UNGROUNDED。scope来自本单元冻结行标题，正文/章节标题无此范围，时间都在正文。故不盲改定义保护/未决类别，不补医学缩写特例。
+
+表格范围功能包（基础184bdb60）：gate/v46仅让scope_quote核本单元冻结行/列标题；时间、例外、阶段不借表头，自包含及同段独立性保护不变。源未决和目标未决原样保留，不新增可执行事实。实际保存回答0调用/0库写重验：第12组1受限陈述、6来源点、0候选，完整gate通过、序列化读回一致，DB hash保持；不是Job执行/共同发布。三相连原模块473passed78.94s/exit0/5SWIG，JUnit rv1006-table-header-scope-connected-20261007-v1.xml，含行/列表头、等义空白、邻行借用及时间/例外/阶段反例、既有同段恢复和受限投影。C03同会话定向挑战71.358s/exit0/no fallback、120min静默完成等待，支持该来源保存修复但非临床批准。其“字段分区完全一致”表述不采信：原作者仍允许部分time/stage经scope，当前gate更保守；NFKC及有源访视列的范围仍是具体残余，不预先扩当前窗口。首次私有诊断误用SQLite status/metadata列，改按实际state/payload及检查点读取；两次apply_patch上下文不符均原子失败无修改。旧Job终态/原答/原件不改。
 
 最新真实API作业534d3e484e10491f86132cfc069864f4，32ced805/既有隔离库：28物理调用775.6323s、failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED；90计划中deep_0002–0011共10组完成，第一原未决保持0调用，2–4当前gate重验0调用，第5组局部2调用完成，6–11新读取完成，第12组目标对应未决停止。输入526684、输出含思考235101、缓存118400已含输入，28回执stop/实际deepseek-v4.1-flash，缺报0；费用/思考拆分unknown。所列链91业务＋6只读=97，非全历史/额度重置。原来源库、保护库、旧Job/payload/hash保持；definition_scope/hydrate/gate仍依赖失败，没有共同发布或新节点报告。第12组为展开检查名与官方缩写及上位条件的对应未决，尚非原文歧义或受试者缺件；先核冻结目标结构/受限消费者，不立即再开整本作业。
 
