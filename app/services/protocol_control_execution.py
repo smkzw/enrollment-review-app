@@ -212,6 +212,11 @@ FORMAL_CATALOG_STATUS_NOT_MATERIALIZED = "not_materialized"
 
 _DISCOVERY_STEP_PREFIX = "discovery_"
 _DEEP_STEP_PREFIX = "deep_"
+_INDEPENDENT_DEEP_READ_POLICY = {
+    "step_prefix": _DEEP_STEP_PREFIX,
+    "error_codes": ["PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED"],
+    "max_failed_steps": 2,
+}
 # Recorded on every relation with verified consumers: this per-batch closure
 # cannot see a consumer in another batch, so completeness stays unproven.
 _DEFINITION_CONSUMER_SCOPE_UNPROVEN = "定义消费范围完整性尚未证实（含跨批消费者）"
@@ -363,6 +368,7 @@ class ProtocolControlJobService:
         deep_prompt_template: str = DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE,
         deep_workflow_variant: str = "RV1001-BASELINE",
         deep_request_limit: int | None = None,
+        deep_independent_reads_after_unresolved: bool = False,
         discovery_step_max_attempts: int = _DEFAULT_OUTER_STEP_ATTEMPTS,
         deep_step_max_attempts: int = _DEFAULT_OUTER_STEP_ATTEMPTS,
         discovery_max_transport_retries: int = DEFAULT_MAX_TRANSPORT_RETRIES,
@@ -434,6 +440,9 @@ class ProtocolControlJobService:
         if deep_workflow_variant == "RV1001-FLOW" and deep_request_limit is None:
             raise ValueError("隔离固定流程必须显式冻结累计请求上限")
         self.deep_request_limit = deep_request_limit
+        if type(deep_independent_reads_after_unresolved) is not bool:
+            raise ValueError("独立来源读取设置必须为明确的布尔值")
+        self.deep_independent_reads_after_unresolved = deep_independent_reads_after_unresolved
         self.deep_prompt_template = workflow_template(deep_prompt_template, deep_workflow_variant)
         self.discovery_step_max_attempts = discovery_step_max_attempts
         self.deep_step_max_attempts = deep_step_max_attempts
@@ -978,6 +987,11 @@ class ProtocolControlJobService:
             },
             "execution_control": {
                 "schema": PROTOCOL_CONTROL_EXECUTION_CONTROL_SCHEMA,
+                **({"continue_after_final_failure": {
+                       **_INDEPENDENT_DEEP_READ_POLICY,
+                       "error_codes": list(_INDEPENDENT_DEEP_READ_POLICY["error_codes"]),
+                   }}
+                   if self.deep_independent_reads_after_unresolved else {}),
                 "max_parallel_steps": self.discovery_max_parallel,
                 "parallelizable_step_ids": [
                     entry["step_id"] for entry in discovery_steps
@@ -987,7 +1001,9 @@ class ProtocolControlJobService:
                     "Only explicitly listed independent discovery steps may share one lease wave.",
                     "Jobs without execution_control keep the historical serial runner path.",
                     "Do not rewrite paused serial discovery jobs to a mixed parallel config.",
-                    "A terminal deep failure stops new inference; completed receipts remain available for verified reuse.",
+                    ("One source-target unresolved unit stays failed while independent reads continue; a second stops. Publication remains blocked."
+                     if self.deep_independent_reads_after_unresolved else
+                     "A terminal deep failure stops new inference; completed receipts remain available for verified reuse."),
                 ],
             },
         }
@@ -2490,6 +2506,53 @@ def _validated_deep_partial_source(
     return checkpoint_id, saved, resumed_review
 
 
+def _preserved_unresolved_review_proof(
+    batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Revalidate an actual local unresolved result, never turn it into success."""
+    attempts = saved.get("attempts")
+    if not isinstance(attempts, list) or not attempts:
+        return None
+    last = attempts[-1]
+    if not isinstance(last, Mapping):
+        raise ValueError("原未决的终态诊断结构损坏")
+    if (last.get("outcome") != "publication_invalid"
+            or last.get("error_classes") != ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+            or not isinstance(saved.get("partial_wire"), Mapping)
+            or not isinstance(saved.get("source_target_review"), Mapping)):
+        return None
+    source = SourceInterpretation.model_validate(saved["source_interpretation"])
+    wire = ProtocolControlAgentWire.model_validate(saved["partial_wire"])
+    coverage = [SourceStatementCoverage.model_validate(entry)
+                for entry in saved.get("source_statement_coverage", [])]
+    review = SourceTargetReview.model_validate(saved["source_target_review"])
+    validate_source_interpretation(batch, source)
+    _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(wire, batch))
+    if coverage != source_statement_coverage(batch, source, wire):
+        raise ValueError("原未决的来源覆盖与当前草稿不一致")
+    validate_source_target_review(batch, source, coverage, review)
+    unresolved = sorted(item.statement_index for item in review.items if item.decision == "unresolved")
+    detail = last.get("error_detail")
+    units = {source.statements[index].structure_unit_id for index in unresolved}
+    spans = sorted({span for unit in batch.owned_units if unit.structure_unit_id in units
+                    for span in unit.source_span_ids})
+    if (not unresolved or not isinstance(detail, Mapping)
+            or detail.get("code") != "SOURCE_TARGET_REVIEW_UNRESOLVED"
+            or detail.get("statement_ids") != unresolved
+            or any(type(index) is not int for index in detail.get("statement_ids", []))
+            or detail.get("source_refs") != spans or detail.get("json_path") != "/items"):
+        return None
+    return {
+        "schema_version": "phase5/preserved-unresolved-review-proof/v1",
+        "diagnostic_sha256": hashlib.sha256(json.dumps(
+            saved, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest(),
+        "statement_ids": unresolved, "source_refs": spans,
+        "error_code": "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED",
+        "adopted": False,
+    }
+
+
 def _preflight_deep_source(
     store: JobStore,
     current_payload: Mapping[str, Any],
@@ -2687,10 +2750,19 @@ def _preflight_deep_source(
                     if review_state == "partially_reused"
                     else base_reason + "_source_review_refresh_required"
                 )
+                control = current_payload.get("execution_control")
+                if (isinstance(control, Mapping)
+                        and control.get("continue_after_final_failure") == _INDEPENDENT_DEEP_READ_POLICY
+                        and partial[2].source_seed_proof is None):
+                    preserved = _preserved_unresolved_review_proof(batch, partial[1])
+                    if preserved is not None:
+                        decision, reason = "preserve_unresolved", "same_material_failed_review_no_new_inference"
         decisions[batch.batch_id] = {
             "step_id": step_id, "decision": decision, "reason": reason,
             "source_review": review_state,
         }
+        if decision == "preserve_unresolved":
+            decisions[batch.batch_id]["unresolved_review_proof"] = preserved
         if (step is not None and step.state == "failed_final"
                 and partial is not None and partial[2].source_seed_proof is not None):
             decisions[batch.batch_id]["reason"] = (
@@ -3311,11 +3383,36 @@ def _execute_deep(
                     error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
                     detail="深审复用计划与当前批次不一致。")
             decision = entry.get("decision")
-            if decision not in {"reusable", "refresh_required", "resume_partial"}:
+            if decision not in {"reusable", "refresh_required", "resume_partial", "preserve_unresolved"}:
                 raise StepFailure(retryable=False,
                     error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
                     detail="深审复用计划的批次处置无效。")
         checkpoint_id, saved = None, None
+        if decision == "preserve_unresolved":
+            control = context.job_payload.get("execution_control")
+            if (not isinstance(control, Mapping)
+                    or control.get("continue_after_final_failure") != _INDEPENDENT_DEEP_READ_POLICY):
+                raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                                  detail="保留原未决仅限已冻结的独立来源核查，未发送请求。")
+            with config.session_factory() as session:
+                partial = _validated_deep_partial_source(
+                    JobStore(session, now=config.now), context.job_payload,
+                    deep_source_job_id, batch, context.step_id, prompt_template,
+                )
+            proof = (_preserved_unresolved_review_proof(batch, partial[1])
+                     if partial is not None and partial[2].source_seed_proof is None else None)
+            if proof is None or proof != entry.get("unresolved_review_proof"):
+                raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                                  detail="原未决与入队前证明不一致，未发送请求。")
+            checkpoint_id, diagnostic, _ = partial
+            raise StepFailure(
+                retryable=False, error_code=proof["error_code"],
+                detail="原文对应关系仍未核清，本次保留原未决且不重复读取；其他独立来源可继续核查。",
+                diagnostic_checkpoint={**diagnostic, "model_call_receipts": [],
+                    "preserved_unresolved_from": {"job_id": deep_source_job_id,
+                        "checkpoint_id": checkpoint_id, "proof": proof},
+                    "new_model_calls": 0, "adopted": False},
+            )
         if decision == "reusable":
             with config.session_factory() as session:
                 checkpoint_id, saved = _validated_deep_source(

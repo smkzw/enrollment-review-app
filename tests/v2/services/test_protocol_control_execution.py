@@ -3643,6 +3643,132 @@ def test_partial_resume_reuses_saved_source_review_and_keeps_source_history(
     assert _job_checkpoint_fingerprint(session_factory, seed.source_job_id) == source_history
 
 
+@pytest.mark.parametrize("invalid", [None, 1, "true", []])
+def test_independent_deep_read_setting_rejects_implicit_truthiness(data_paths, session_factory, invalid):
+    seed = _seed_frozen_source(data_paths, session_factory, key="independent-read-invalid")
+    with pytest.raises(ValueError, match="布尔值"):
+        _build_service(data_paths, session_factory, seed,
+                       deep_independent_reads_after_unresolved=invalid)
+
+
+def test_independent_reads_preserve_actual_unresolved_failure_without_model_retry(
+    data_paths, session_factory, monkeypatch,
+) -> None:
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
+    from app.agents.protocol_control_source_interpretation import validate_source_target_review
+
+    seed = _seed_frozen_source(data_paths, session_factory, key="independent-source-review")
+    class AllSourceDiscovery(_DiscoveryTransport):
+        def _response(self, prompt):
+            for unit in _prompt_payload(prompt, "本次发现输入：")["target_units"]:
+                self.routing[unit["structure_unit_id"]] = ProtocolControlDiscoveryDisposition.CANDIDATE
+            return super()._response(prompt)
+
+    deep = _ReviewRecordingDeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed, max_deep_units_per_batch=1)
+    first = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="independent-review-old",
+    )
+    original_run, _ = _fail_with_saved_review(monkeypatch, deep)
+    fabricate = ProtocolControlAgentRunner.run
+
+    def saved_unresolved(self, batch, transport, **kwargs):
+        result = fabricate(self, batch, transport, **kwargs)
+        if result.status == "需要核对" and result.source_target_review is not None:
+            item = result.source_target_review.items[0]
+            item.decision = "unresolved"
+            item.target_id = item.target_action_excerpt = None
+            item.unresolved_aspects = ["这一来源要求的对象范围尚不能确定"]
+            validate_source_target_review(batch, result.source_interpretation,
+                                          result.source_statement_coverage, result.source_target_review)
+            source_unit = next(unit for unit in batch.owned_units
+                              if unit.structure_unit_id == result.source_interpretation.statements[0].structure_unit_id)
+            attempt = result.attempts[-1]
+            attempt.error_classes = ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+            attempt.error_detail = {"code": "SOURCE_TARGET_REVIEW_UNRESOLVED",
+                "statement_ids": [0], "json_path": "/items",
+                "source_refs": sorted(source_unit.source_span_ids)}
+            attempt.raw_output_text = result.source_target_review.model_dump_json()
+            attempt.raw_output_sha256 = hashlib.sha256(attempt.raw_output_text.encode()).hexdigest()
+        return result
+
+    monkeypatch.setattr(ProtocolControlAgentRunner, "run", saved_unresolved)
+    runner, _ = _build_runner(data_paths, session_factory, AllSourceDiscovery(), deep)
+    assert runner.run_job(first.job_id)
+    old, _ = _job_snapshot_and_payload(session_factory, first.job_id)
+    saved_step = _step_with_saved_review(session_factory, first.job_id)
+    assert old.state == "failed_final" and saved_step is not None
+    old_history = _job_checkpoint_fingerprint(session_factory, first.job_id)
+
+    from copy import deepcopy
+    from app.domain.contracts.protocol_controls import ProtocolControlDiscoveryToDeepPlan
+    with session_factory() as session:
+        store = JobStore(session, now=_now)
+        diagnostic = store.get_last_checkpoint(first.job_id, saved_step)[1]
+        closure = store.get_last_checkpoint(first.job_id, "deterministic_closure")[1]
+    batch = ProtocolControlDiscoveryToDeepPlan.model_validate(closure["deep_plan"]).batches[
+        int(saved_step.removeprefix("deep_")) - 1]
+    original_diagnostic = deepcopy(diagnostic)
+    for change in ("technical_failure", "wrong_range", "boolean_range", "wrong_refs", "no_wire"):
+        bad = deepcopy(diagnostic)
+        if change == "technical_failure":
+            bad["attempts"][-1]["error_classes"] = ["MODEL_IDENTITY_INVALID"]
+        elif change == "wrong_range":
+            bad["attempts"][-1]["error_detail"]["statement_ids"] = [1]
+        elif change == "boolean_range":
+            bad["attempts"][-1]["error_detail"]["statement_ids"] = [False]
+        elif change == "wrong_refs":
+            bad["attempts"][-1]["error_detail"]["source_refs"] = ["foreign-source"]
+        else:
+            bad["partial_wire"] = None
+        assert protocol_control_execution_module._preserved_unresolved_review_proof(batch, bad) is None, change
+    bad = deepcopy(diagnostic)
+    bad["source_statement_coverage"] = []
+    with pytest.raises(ValueError, match="来源覆盖"):
+        protocol_control_execution_module._preserved_unresolved_review_proof(batch, bad)
+    assert diagnostic == original_diagnostic
+
+    continued = _build_service(data_paths, session_factory, seed,
+                              max_deep_units_per_batch=1,
+                              deep_independent_reads_after_unresolved=True).create_from_deconstruction(
+        source_job_id=seed.source_job_id, deep_source_job_id=first.job_id,
+        idempotency_key="independent-review-new",
+    )
+    _, payload = _job_snapshot_and_payload(session_factory, continued.job_id)
+    entry = next(value for value in payload["deep_reuse_plan"]["decisions"].values()
+                 if value["step_id"] == saved_step)
+    assert entry["decision"] == "preserve_unresolved"
+    assert entry["unresolved_review_proof"]["adopted"] is False
+    assert payload["execution_control"]["continue_after_final_failure"] == {
+        "step_prefix": "deep_", "error_codes": ["PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED"],
+        "max_failed_steps": 2,
+    }
+    read_steps = []
+
+    def no_old_read(self, batch, transport, **kwargs):
+        assert batch.batch_id != next(key for key, value in payload["deep_reuse_plan"]["decisions"].items()
+                                     if value["step_id"] == saved_step)
+        read_steps.append(batch.batch_id)
+        return original_run(self, batch, transport, **kwargs)
+
+    monkeypatch.setattr(ProtocolControlAgentRunner, "run", no_old_read)
+    assert runner.run_job(continued.job_id)
+    current, _ = _job_snapshot_and_payload(session_factory, continued.job_id)
+    assert current.state == "failed_final"
+    assert read_steps
+    assert any(step.step_id.startswith("deep_") and step.step_id != saved_step and step.state == "completed"
+               for step in current.steps)
+    assert next(step for step in current.steps if step.step_id == saved_step).state == "failed_final"
+    assert next(step for step in current.steps if step.step_id == saved_step).error_code == "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED"
+    assert next(step for step in current.steps if step.step_id == "gate").state == "failed_final"
+    with session_factory() as session:
+        diagnostic = JobStore(session, now=_now).get_last_checkpoint(continued.job_id, saved_step)[1]
+    assert diagnostic["new_model_calls"] == 0
+    assert diagnostic["model_call_receipts"] == []
+    assert diagnostic["preserved_unresolved_from"]["job_id"] == first.job_id
+    assert _job_checkpoint_fingerprint(session_factory, first.job_id) == old_history
+
+
 def test_continuation_plan_refreshes_a_changed_saved_source_review(
     data_paths, session_factory, monkeypatch,
 ) -> None:
