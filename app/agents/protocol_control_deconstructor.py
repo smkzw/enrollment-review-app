@@ -237,7 +237,7 @@ __all__ = [
 
 PUBLICATION_REPAIR_SCOPE_VERSION = "phase5/publication-candidate-repair-scope/v2"
 _CANDIDATE_FIELD_REPAIR_VERSION = "phase5/candidate-field-repair/v1"
-SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION = "phase5/source-requirement-failure-policy/v3"
+SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION = "phase5/source-requirement-failure-policy/v4"
 # Reporting changes do not change author/repair prompts or invalidate successful reads.
 SOURCE_REQUIREMENT_FAILURE_REASON_VERSION = "phase5/source-requirement-failure-reason/v1"
 
@@ -6699,6 +6699,26 @@ def _temporal_scope_error_detail(exc: BaseException) -> dict[str, object] | None
     }
 
 
+def _require_resolved_source_target_review(
+    batch: ProtocolControlDispositionBatch | ProtocolControlAgentInput,
+    interpretation: SourceInterpretation,
+    review: SourceTargetReview,
+) -> None:
+    unresolved = [item.statement_index for item in review.items if item.decision == "unresolved"]
+    if not unresolved:
+        return
+    units = {interpretation.statements[index].structure_unit_id for index in unresolved}
+    raise SourceTargetReviewValidationError(
+        "已读原文与审核要求的对应关系仍需核清。",
+        code="SOURCE_TARGET_REVIEW_UNRESOLVED",
+        statement_index=unresolved[0] if len(unresolved) == 1 else None,
+        json_path="/items",
+        source_refs=tuple(sorted({span for unit in batch.owned_units
+                                  if unit.structure_unit_id in units
+                                  for span in unit.source_span_ids})),
+    )
+
+
 class ProtocolControlAgentRunner:
     """Bounded same-session parser/repair loop for one planned batch.
 
@@ -8246,23 +8266,6 @@ class ProtocolControlAgentRunner:
                             item.statement_index for item in target_review.items
                             if item.decision == "unresolved"
                         ]
-                        if unresolved_indexes:
-                            unresolved_units = {
-                                source_interpretation.statements[index].structure_unit_id
-                                for index in unresolved_indexes
-                            }
-                            raise SourceTargetReviewValidationError(
-                                "已读原文与审核要求的对应关系仍需核清。",
-                                code="SOURCE_TARGET_REVIEW_UNRESOLVED",
-                                statement_index=(unresolved_indexes[0]
-                                                 if len(unresolved_indexes) == 1 else None),
-                                json_path="/items",
-                                source_refs=tuple(sorted({
-                                    span for unit in batch.owned_units
-                                    if unit.structure_unit_id in unresolved_units
-                                    for span in unit.source_span_ids
-                                })),
-                            )
                         additional = [
                             item for item in target_review.items
                             if item.decision == "additional_requirement"
@@ -8372,6 +8375,9 @@ class ProtocolControlAgentRunner:
                                         partial_wire = wire
                                         raw_text = wire.model_dump_json()
                                         target_review = remaining
+                                        latest_source_target_review = remaining
+                                        latest_source_statement_coverage = coverage
+                                        review_validation_snapshot = remaining
                                         temporal_unresolved_indexes = [
                                             index for index in temporal_unresolved_indexes
                                             if index not in {review.statement_index for review in short_reviews}
@@ -8652,6 +8658,11 @@ class ProtocolControlAgentRunner:
                                     })),
                                 )
                             if not pending_additional:
+                                # Keep gate-verified inserts before stopping at a sibling's
+                                # unresolved scope. This never makes the batch publishable.
+                                _require_resolved_source_target_review(
+                                    batch, source_interpretation, target_review,
+                                )
                                 definition_consumers, definition_failed = (
                                     declare_source_definition_consumers(
                                         batch, transport, source_interpretation, output,
@@ -8773,6 +8784,16 @@ class ProtocolControlAgentRunner:
                                 source_interpretation.statements[item.statement_index].structure_unit_id
                                 for item in additional
                             }
+                            unresolved_units = {
+                                source_interpretation.statements[index].structure_unit_id
+                                for index in unresolved_indexes
+                            }
+                            if units & unresolved_units:
+                                # Unit-scoped insertion cannot authorize a still-unknown
+                                # sibling simply because a bounded insert failed.
+                                _require_resolved_source_target_review(
+                                    batch, source_interpretation, target_review,
+                                )
                             authorized = [unit for unit in batch.owned_units
                                           if unit.structure_unit_id in units]
                             source_insert_statement_count = len(additional)
@@ -8803,6 +8824,9 @@ class ProtocolControlAgentRunner:
                                 }),
                                 allow_source_insert=True,
                             )
+                        _require_resolved_source_target_review(
+                            batch, source_interpretation, target_review,
+                        )
                     except ProtocolControlAgentWireValidationError:
                         # This baseline passed hydration and the batch gate;
                         # supplementation is still unaccepted and unpublished.

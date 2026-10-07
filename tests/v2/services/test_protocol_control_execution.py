@@ -246,6 +246,17 @@ def test_failure_reason_reporting_does_not_invalidate_author_or_repair_material(
     assert agent.protocol_control_agent_repair_contract_sha256() == repair_before
 
 
+def test_unresolved_sibling_retention_versions_recovery_not_author_material(monkeypatch):
+    import app.agents.protocol_control_deconstructor as agent
+
+    prompt = agent.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE
+    author = agent.protocol_control_agent_prompt_template_sha256(prompt)
+    current = agent.protocol_control_agent_repair_contract_sha256()
+    monkeypatch.setattr(agent, "SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION", "phase5/source-requirement-failure-policy/v3")
+    assert agent.protocol_control_agent_prompt_template_sha256(prompt) == author
+    assert agent.protocol_control_agent_repair_contract_sha256() != current
+
+
 def _independent_candidate_and_clock_capability():
     batch, result = _independent_candidate_and_unresolved_review()
     quote = "给药前90分钟内采集样本"

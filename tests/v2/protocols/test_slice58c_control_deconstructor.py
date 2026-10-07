@@ -10660,6 +10660,86 @@ def test_temporal_gap_keeps_independently_verified_stage_addition() -> None:
     assert any("TEMPORAL_SCOPE_UNRESOLVED" in attempt.error_classes for attempt in result.attempts)
 
 
+@pytest.mark.parametrize("same_unit", [False, True])
+@pytest.mark.parametrize("invalid_selection", [False, True])
+def test_unresolved_sibling_keeps_verified_insert_without_accepting_batch(same_unit, invalid_selection) -> None:
+    batch, inventory, review, selection = _stage_bound_example()
+    known = inventory.statements[0].quoted_text
+    unknown = "建议择期复核既往病史记录"
+    batch.owned_units[0].excerpt = "年龄至少18岁；筛选期（D-7~D-1）：" + known + "。"
+    if same_unit:
+        batch.owned_units[0].excerpt += unknown + "。"
+    else:
+        batch.owned_units[1].excerpt = unknown
+        inventory.units_without_statement = []
+    inventory.statements.append(inventory.statements[0].model_copy(update={
+        "structure_unit_id": "su-01" if same_unit else "su-02",
+        "quoted_text": unknown, "scope_quote": None, "time_words": [],
+        "force": "recommended", "unresolved": ["适用时期未核清"],
+    }))
+    unknown_review = review.model_copy(update={
+        "statement_index": 1, "decision": "unresolved",
+        "source_action_excerpt": unknown, "unresolved_aspects": ["适用时期未核清"],
+    })
+    initial = _wire(candidate=_candidate())
+
+    class MixedReviewTransport(_FakeTransport):
+        stage_calls = 0
+        review_calls = 0
+        insert_calls = 0
+
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="source", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            self.review_calls += 1
+            return ProtocolControlAgentResponse(session_id="review", text=SourceTargetReview(
+                version=SOURCE_TARGET_REVIEW_VERSION,
+                items=[review, unknown_review] if self.review_calls == 1 else [unknown_review],
+            ).model_dump_json())
+
+        def read_stage_bound_requirement(self, *, prompt):
+            self.stage_calls += 1
+            proposal = selection.model_copy(update={
+                "action_excerpt": "另一来源的操作" if invalid_selection else selection.action_excerpt,
+            })
+            return ProtocolControlAgentResponse(session_id="stage", text=proposal.model_dump_json())
+
+        def start_source_insert(self, **kwargs):
+            self.insert_calls += 1
+            raise RuntimeError("本例不允许整批补入")
+
+    transport = MixedReviewTransport([ProtocolControlAgentResponse(
+        session_id="wire", text=initial.model_dump_json(),
+    )])
+    result = ProtocolControlAgentRunner(max_schema_repairs=0).run(
+        batch, transport, output_validator=lambda _output: None,
+    )
+    assert transport.stage_calls == 1
+    assert result.status == "需要核对"
+    assert result.final_output is None
+    assert result.partial_wire is not None
+    assert result.partial_wire.candidate_drafts[0] == initial.candidate_drafts[0]
+    assert len(result.partial_wire.candidate_drafts) == (1 if invalid_selection else 2)
+    restored = type(result).model_validate_json(result.model_dump_json())
+    assert restored.partial_wire == result.partial_wire
+    assert restored.source_target_review is not None
+    assert any(item.statement_index == 1 and item.decision == "unresolved"
+               for item in restored.source_target_review.items)
+    from app.services.protocol_control_restricted_source import restricted_batch_from_review
+    # This fixture's shared scope was not proved independent. A diagnostic
+    # checkpoint is not sufficient authority for the restricted consumer.
+    assert restricted_batch_from_review(batch, restored) is None
+    assert len(restored.source_statement_coverage) == len(inventory.statements)
+    if same_unit:
+        assert transport.insert_calls == 0
+    if not invalid_selection:
+        assert [item.statement_index for item in restored.source_target_review.items] == [1]
+        assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+        assert result.attempts[-1].error_detail["statement_ids"] == [1]
+        assert result.source_statement_coverage[0].status == "expressed"
+
+
 def test_temporal_candidate_is_reviewed_before_insert_guard_without_forging_acceptance() -> None:
     from app.agents.protocol_control_candidate_alignment import SOURCE_CANDIDATE_ALIGNMENT_VERSION
 
