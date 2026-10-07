@@ -5,6 +5,32 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "current_crosschapter_recovery": {
+    "source_commit": "5caf93a2d2c7665fe6ea69c2a8f68f76ba95eddd",
+    "failed_job_id": "3094d4cbebe74da5ae43778bfa282b6e",
+    "failed_state": "failed_final", "physical_calls": 6, "seconds": 390.179168834,
+    "deep_planned": 71, "deep_completed": 0, "other_batches_unread": 70,
+    "recovery_job_id": "bb2ddfe7125743338d95eb958c3ae289",
+    "recovery_state": "running_last_observed", "discovery_reused": 85,
+    "source_interpretation_resume_batches": 1, "old_invalid_wire_adopted": false,
+    "deep_max_schema_repairs": 4, "sdk_retries": 0, "outer_step_attempts": 1,
+    "failed_family": ["PROCEDURE_AFFECTED_STAGE_MISMATCH", "AFFECTED_STAGE_DECISION_MISSING"],
+    "counterfactual_exposed_errors": ["TREATMENT_DURATION_USED_AS_EVENT_WINDOW", "FUTURE_PROHIBITION_DECIDED_EARLY"],
+    "counterfactual_is_test_or_adoption": false, "helper_broadened": false,
+    "private_root": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003",
+    "access": "controlled_local_only", "formal_joint_publication": false, "claims_complete": false,
+    "conference": {"route": "grok/grok-build/grok-4.7/high", "session_id": "28e66554-88f8-4b7e-b126-11d099956f1c", "seconds": 305.067, "exit_code": 0, "fallback": false, "reported_material_reads": 17, "read_cap": 16, "preflight_exit_code": 1, "limitation": "Annotated paths misparsed and owner failed to gate dispatch; actual source and consumers not read by adviser; no clinical or test acceptance"}
+  },
+  "shared_workbench_adaptation": {
+    "execution_route": "pi/cursor/default", "runtime_model_verified": false,
+    "session_id": "01a11509-169e-7000-81ef-7a47b0213aad", "seconds": 107.806,
+    "exit_code": 0, "fallback": false, "tool_calls": 88,
+    "shared_homepage_modified": false, "product_code_patch": false,
+    "status": "Persistent project/API bridge missing; no fake binding or duplicate panel",
+    "owner_checked_consumers": true,
+    "report": ".trellis/tasks/09-11-e2e-eligibility-review/WORKBENCH_ADAPTATION_20261007.md",
+    "standalone_window_blocked_by_this": false
+  },
   "base_review_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
   "delivered_snapshot_id": "S-16",
   "selected_review_source_scope_package": {
