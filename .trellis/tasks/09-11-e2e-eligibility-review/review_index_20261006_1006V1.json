@@ -5,9 +5,22 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "compact_completed_source_reading": {
+    "base_commit": "5b5d9e8b90183f6716965b1304d944d86be48f90",
+    "scope": "Native collapsed details only for completed known full coverage without failure, closed scope, unknown counts or retry; original panel and actions retained. No qualification or model behavior changes",
+    "tests": {"modules": 3, "passed": 77, "seconds": 11.81, "exit_code": 0, "production_build_exit_code": 0, "earlier_window": "74pass3fail: owner DOM-absence assertion and two preexisting duplicate-text-heading assertions corrected; acceptance assertions retained"},
+    "browser": {"browser": "Ego Lite", "space": 147, "mode": "actual product non-Mock read-only", "viewports": ["1920x1080", "2560x1440", "3840x2160"], "horizontal_overflow": false, "collapse_expand_checked": true, "screenshots_owner_viewed": ["1920x1080", "3840x2160"], "private_directory": "/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-printed-source-qc-20261007-v1", "service_exit_code": 130, "clinical_writes": 0, "full_Q3": false}
+  },
+  "mixed_source_current_diagnostics": {
+    "completed_originals": {"completed": 13, "current_checks_passed": 13, "failed": 0, "source_link_refresh": 0, "model_calls": 0, "database_writes": 0, "source_database_unchanged": true, "production_reuse_authorized": false, "directory": "rv1006-completed-source-revalidation-20261007-v1"},
+    "intraday_local_scope": {"model_calls": 1, "seconds": 23.833214417, "state": "local_scope_or_consumer_failed", "input_tokens": 1461, "output_including_reasoning_tokens": 6075, "cache_tokens": 0, "database_writes": 0, "directory": "rv1006-intraday-scope-local-20261007-v1"},
+    "single_source_unit": {"model_calls": 1, "seconds": 42.60672970797168, "state": "current_source_gate_passed", "statements": 5, "semantic_acceptance": false, "source_database_unchanged": true, "protected_unchanged": true, "database_writes": 0, "directory": "rv1006-regimen-source-unit-20261007-v1", "limit": "Dose and recommendation reclassified as background; neither proposal accepted. Two diagnostic-construction failures before call, zero model calls"},
+    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "seconds": 107.398, "exit_code": 0, "fallback": false, "owner_silent_120min_completion_wait": true, "report": "runs/conference/rv1006-mixed-restricted-consumer-review-20261007/mixed_dependency_review.md", "limits": "Code only, no clinical/tests. Eight reads exceeded six-file budget; no clinical approval"},
+    "formal_joint_publication": false, "new_current_node_report": false
+  },
   "explicit_same_cell_scope_source": {
     "base_commit": "dd766bc3",
-    "code_state": "explicit_owner_patch_not_yet_committed",
+    "code_state": "committed_and_pushed_5b5d9e8b",
     "identity": {"interpretation_schema": "v11", "interpretation_prompt": "v22", "scope_repair_policy": "v4", "gate": "v47"},
     "scope": "Optional frozen immediate same-cell label ID and complete literal quote, exact document/cell/paragraph/phase proof; source and reviewer must establish applicability. No authority for time/stage/exception or clinical adoption",
     "actual_api_preceding_run": {"job_id": "91a3bc421b2b4f0399092b5d104b549a", "source_commit": "dd766bc3", "state": "failed_final", "error": "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED", "planned": 90, "completed": 13, "physical_calls": 14, "seconds": 386.2356226249831, "input_tokens": 229486, "output_including_reasoning": 98487, "cache_included_in_input": 36992, "usage_missing": 0, "response_model": "deepseek-v4.1-flash", "new_calls_deep_0012": 0, "old_sources_jobs_hashes_unchanged": true},

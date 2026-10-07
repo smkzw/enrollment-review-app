@@ -822,6 +822,19 @@
   font-size: var(--font-size-base);
 }
 
+.evidence-completed-reading > summary {
+  padding: var(--space-3) 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+  line-height: 1.7;
+  cursor: pointer;
+}
+
+.evidence-completed-reading > summary:focus-visible {
+  outline: 2px solid var(--color-brand-dark);
+  outline-offset: 2px;
+}
+
 .evidence-placeholder__title {
   font-weight: 600;
 }

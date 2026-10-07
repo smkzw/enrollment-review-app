@@ -125,7 +125,7 @@ export function SelectiveVisionTaskPanel({
     }
   }
 
-  return (
+  const panel = (
     <section
       className="tasks-section persistent-task"
       aria-labelledby="selective-vision-task-title"
@@ -209,5 +209,24 @@ export function SelectiveVisionTaskPanel({
         )}
       </div>
     </section>
+  );
+
+  const readingSaved = task.state === "completed"
+    && task.closedPageCount === 0
+    && task.eligiblePageCount !== null
+    && task.observationPageCount === task.eligiblePageCount
+    && task.skippedPageCount !== null
+    && task.failedScopeLabel === null
+    && task.closedReasonLabel === null
+    && task.failedPageArtifactIds.length === 0
+    && !task.canRetry && !task.canCancel
+    && actionError === null;
+
+  if (!readingSaved) return panel;
+  return (
+    <details key={revisionId} className="evidence-completed-reading">
+      <summary>原件补充识读已保存，内容仍需核对</summary>
+      {panel}
+    </details>
   );
 }

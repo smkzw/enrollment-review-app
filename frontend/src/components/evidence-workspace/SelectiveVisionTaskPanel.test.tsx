@@ -70,6 +70,44 @@ describe("证据工作台页面视觉核验面板", () => {
     expect(document.body.textContent).not.toContain("payload");
   });
 
+  const completedTask = {
+    state: "completed", stateLabel: "识读已保存", canRetry: false,
+    closedPageCount: 0, eligiblePageCount: 3, observationPageCount: 3,
+    failedPageArtifactIds: [], failedScopeLabel: null, closedReasonLabel: null,
+  };
+
+  it("无失败或遗漏的已完成识读默认收起，保留展开详情而不宣称核对完成", async () => {
+    getSelectiveVisionTask.mockResolvedValue(task(completedTask));
+    render(<SelectiveVisionTaskPanel revisionId="complete-1" />);
+    const summary = await screen.findByText("原件补充识读已保存，内容仍需核对");
+    const details = summary.closest("details");
+    expect(details).not.toBeNull();
+    expect(details?.open).toBe(false);
+    expect(screen.getByRole("heading", { name: "页面视觉核验" })).not.toBeVisible();
+    fireEvent.click(summary);
+    expect(details?.open).toBe(true);
+    expect(screen.getByRole("heading", { name: "页面视觉核验" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "刷新状态" })).toBeInTheDocument();
+  });
+
+  it.each([
+    { closedPageCount: 1 },
+    { closedPageCount: null },
+    { observationPageCount: 2 },
+    { eligiblePageCount: null },
+    { skippedPageCount: null },
+    { failedPageArtifactIds: ["artifact-1"] },
+    { failedScopeLabel: "本页未核清" },
+    { closedReasonLabel: "尚有未核实的范围" },
+    { canRetry: true },
+    { state: "running", canCancel: true },
+  ])("完成标签不能收起失败、范围不明或仍需处理的任务：%j", async (overrides) => {
+    getSelectiveVisionTask.mockResolvedValue(task({ ...completedTask, ...overrides }));
+    render(<SelectiveVisionTaskPanel revisionId="complete-1" />);
+    expect(await screen.findByRole("heading", { name: "页面视觉核验" })).toBeInTheDocument();
+    expect(document.querySelector("details.evidence-completed-reading")).toBeNull();
+  });
+
   it("停止后按同一完整版本刷新状态", async () => {
     getSelectiveVisionTask
       .mockResolvedValueOnce(

@@ -842,7 +842,7 @@ describe("证据工作台", () => {
     await openValid(user);
     expect(await screen.findByText("原始识别")).toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { name: "校对后文本" }),
+      await screen.findByRole("heading", { name: "原始识别 / 校对后文本" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "查看 1 处原件定位" }));
     expect(
@@ -998,7 +998,7 @@ describe("证据工作台", () => {
 
     expect(await screen.findByText("原始识别")).toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { name: "校对后文本" }),
+      await screen.findByRole("heading", { name: "原始识别 / 校对后文本" }),
     ).toBeInTheDocument();
     expect(fns.getOcrPage).toHaveBeenCalledWith(
       "ocr-page-1",
