@@ -2239,6 +2239,8 @@ def test_parent_disjunction_does_not_turn_one_component_into_internal_any():
         ("不良事件", "不良事件"),
         ("梅毒特异性抗体阳性，非特异性抗体阴性", "梅毒特异性抗体"),
         ("梅毒特异性抗体阴性", "梅毒特异性抗体"),
+        ("未分化癌", "分化癌"),
+        ("未成年人", "成年人"),
     ],
 )
 def test_categorical_words_do_not_authorize_logical_negation(text, attribute):
@@ -2265,6 +2267,9 @@ def test_categorical_words_do_not_authorize_logical_negation(text, attribute):
         ("无活动性感染", "活动性感染"),
         ("否认使用全身性免疫抑制剂", "使用全身性免疫抑制剂"),
         ("知情同意书未签署", "知情同意书"),
+        ("未使用治疗甲", "使用治疗甲"),
+        ("未完成检查乙", "完成检查乙"),
+        ("未接受治疗甲", "接受治疗甲"),
     ],
 )
 def test_direct_object_bound_absence_supports_logical_negation(text, attribute):
@@ -2440,6 +2445,33 @@ def test_parent_rule_obligations_can_be_covered_across_multiple_atoms():
         item.issue_code == "PARENT_RULE_OBLIGATION_NOT_COVERED"
         for item in _issues(result, "source_coverage")
     )
+
+
+@pytest.mark.parametrize("mutation", ["normal", "layout", "different_period", "missing_sibling"])
+def test_shared_subject_qualifier_full_coverage_retains_independent_obligations(mutation):
+    source, draft, spans = _fixture()
+    lead = "受试者在当前或既往同一自然期间"
+    text = lead + "，接受专项评估，签署资料核对记录"
+    if mutation == "layout":
+        lead = "受试者 在 当前或既往同一自然期间"
+        text = lead + "；接受专项评估；签署资料核对记录"
+    first = _exists_predicate("assessment", "当前或既往同一自然期间接受专项评估", "接受专项评估")
+    first.predicate.source_clause = None
+    first.predicate.source_clauses = [lead, "接受专项评估"]
+    second = _exists_predicate("record", "签署资料核对记录", "签署资料核对记录")
+    if mutation == "different_period":
+        first.predicate.attribute = "另一自然期间接受专项评估"
+        first.predicate.source_term = first.predicate.attribute
+    children = [first] if mutation == "missing_sibling" else [first, second]
+    expression = first if len(children) == 1 else LogicalExpression(operator=LogicalOperator.ALL, children=children)
+    _replace_inclusion_source_and_expression(source, draft, text, expression)
+    draft.proposed_rules[0].source_text = text
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    gaps = [item for item in _issues(result, "source_coverage")
+            if item.issue_code == "PARENT_RULE_OBLIGATION_NOT_COVERED"]
+    assert bool(gaps) == (mutation in {"different_period", "missing_sibling"})
+    if mutation == "missing_sibling":
+        assert any("签署资料核对记录" in ref for item in gaps for ref in item.affected_refs)
 
 
 def test_categorical_value_cannot_be_split_into_source_characters():

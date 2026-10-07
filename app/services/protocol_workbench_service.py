@@ -1809,6 +1809,7 @@ class ProtocolWorkbenchService:
         target_rule_code: str,
         target_component_id: str | None = None,
         review_parent_scope: bool = False,
+        retire_redundant_source: bool = False,
         actor: str,
     ) -> DraftDetailView:
         merged = self._merged_payload(job_id)
@@ -1826,6 +1827,15 @@ class ProtocolWorkbenchService:
             current_revision = ProtocolDraftRevisionRepository(session).get(
                 expected_revision_id
             )
+            head = ProtocolDraftRevisionRepository(session).get_head(current_revision.draft_id)
+            if head is None or head.revision_id != expected_revision_id:
+                raise ProtocolWorkbenchError(
+                    "DRAFT_REVISION_CONFLICT", title="草稿已更新",
+                    detail="这次反馈针对旧版草稿，没有重新读取或修改当前版本。",
+                    recovery="请刷新当前草稿，再选定需要核对的内容。",
+                    context={"expected_revision_id": expected_revision_id,
+                             "current_revision_id": head.revision_id if head else None},
+                )
         current_draft = current_revision.content
         rule_codes = {rule.official_code for rule in current_draft.proposed_rules}
         if target_rule_code not in rule_codes:
@@ -1840,6 +1850,15 @@ class ProtocolWorkbenchService:
             if rule.official_code == target_rule_code
         )
         target_items = [*target_rule.components, *target_rule.restricted_components]
+        if retire_redundant_source and (
+            feedback_kind != DraftFeedbackKind.SOURCE_ERROR
+            or review_parent_scope or target_component_id is None
+        ):
+            raise ProtocolWorkbenchError(
+                "REDUNDANT_SOURCE_TARGET_REQUIRED", title="请选定重复的待核项",
+                detail="只能核对一项待核来源是否已由其他要求完整承担，不能撤下整条标准。",
+                recovery="请选择具体待核项，其他条件保持不变。",
+            )
         if review_parent_scope and (feedback_kind != DraftFeedbackKind.SOURCE_ERROR or target_component_id is not None or not self._uses_default_feedback_reviser):
             raise ProtocolWorkbenchError(
                 "SCOPE_REVIEW_REQUEST_INVALID", title="请单独核对总标题作用范围",
@@ -1944,9 +1963,9 @@ class ProtocolWorkbenchService:
                 # 模型局部修订有小幅随机性。首个候选若未通过确定性
                 # 门禁，将具体问题回填后只重试一次；两次都不合格则
                 # 保留原草稿。注入的测试修订器仍只执行一次。
-                attempt_count = 2 if self._uses_default_feedback_reviser and not review_parent_scope else 1
+                attempt_count = 2 if self._uses_default_feedback_reviser and not review_parent_scope and not retire_redundant_source else 1
                 retry_guidance = ""
-                if self._uses_default_feedback_reviser:
+                if self._uses_default_feedback_reviser and not retire_redundant_source:
                     from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
                     budget_owner = job_id
                     if merged.get("saved_candidate_recovery") is not None:
@@ -1963,7 +1982,19 @@ class ProtocolWorkbenchService:
                     regressing = False
                     new_core_semantics_issue = False
                     attempt_note = model_note + retry_guidance
-                    if self._uses_default_feedback_reviser:
+                    if retire_redundant_source:
+                        draft = current_draft.model_copy(deep=True)
+                        selected_rule = next(rule for rule in draft.proposed_rules
+                                             if rule.official_code == target_rule_code)
+                        selected_rule.restricted_components = [
+                            item for item in selected_rule.restricted_components
+                            if item.rule_component_id != target_component_id
+                        ]
+                        if not self._redundant_restricted_removal_proven(
+                            current_draft, draft, target_rule_code, target_component_id
+                        ):
+                            raise ValueError("所选来源尚未由其他要求完整承担，不能撤下")
+                    elif self._uses_default_feedback_reviser:
                         draft = self._revise_feedback_with_model(
                             source_input, current_draft, target_rule_code,
                             attempt_note, target_component_id,
@@ -1987,6 +2018,7 @@ class ProtocolWorkbenchService:
                         draft,
                         target_rule_code=target_rule_code,
                         target_component_id=target_component_id,
+                        allow_redundant_retirement=retire_redundant_source,
                     )
                     if review_parent_scope:
                         self._validate_scope_review_only(current_draft, draft, target_rule_code)
@@ -2225,18 +2257,28 @@ class ProtocolWorkbenchService:
                             "candidate_hashes": candidate_hashes} if identity_error else {}),
                     },
                 ) from exc
-        with self.session_factory() as session:
-            with session.begin():
-                service = ProtocolDraftService(session)
-                revision = service.apply_feedback(
-                    draft,
-                    expected_revision_id=expected_revision_id,
-                    feedback_kind=feedback_kind,
-                    feedback_note=f"{target_rule_code}：{note}",
-                    actor=actor,
-                    created_at=self.now(),
-                )
-                self._update_draft_checkpoint(session, job_id, revision)
+        from app.storage.concurrency import StaleRevisionError
+        try:
+            with self.session_factory() as session:
+                with session.begin():
+                    service = ProtocolDraftService(session)
+                    revision = service.apply_feedback(
+                        draft,
+                        expected_revision_id=expected_revision_id,
+                        feedback_kind=feedback_kind,
+                        feedback_note=f"{target_rule_code}：{note}",
+                        actor=actor,
+                        created_at=self.now(),
+                    )
+                    self._update_draft_checkpoint(session, job_id, revision)
+        except StaleRevisionError as exc:
+            raise ProtocolWorkbenchError(
+                "DRAFT_REVISION_CONFLICT", title="草稿已更新",
+                detail="核对期间草稿已有新版本，本次结果没有覆盖当前草稿。",
+                recovery="请刷新当前草稿，再核对需要修订的内容。",
+                context={"expected_revision_id": expected_revision_id,
+                         "current_revision_number": exc.current_revision},
+            ) from exc
         return self.get_draft_detail(job_id)
 
     @staticmethod
@@ -2504,12 +2546,111 @@ class ProtocolWorkbenchService:
             raise ValueError("总标题核对只能保存来源核对记录，不得修改条件、来源或待核问题")
 
     @staticmethod
+    def _redundant_restricted_removal_proven(previous, current, rule_code, component_id) -> bool:
+        """Prove unchanged source ownership, not clinical equivalence or adoption.
+
+        A paragraph may already be split between several children. Its complete
+        substantive segments must remain mapped; predicate excerpts may separately
+        hold the trigger and its exception. The ordinary full gate still checks
+        those roles, values and scope proofs before saving or publication.
+        """
+        from app.protocols.deconstruction_gate import (
+            _normalized, _predicate_binds_obligation, _substantive_obligation_segments,
+            _negated_predicates, _source_supports_predicate_negation,
+        )
+        from app.domain.contracts.rules import iter_atomic_predicates
+
+        before = next(rule for rule in previous.proposed_rules if rule.official_code == rule_code)
+        after = next(rule for rule in current.proposed_rules if rule.official_code == rule_code)
+        selected = next((item for item in before.restricted_components
+                         if item.rule_component_id == component_id), None)
+        if selected is None or selected.limitation_kind != "consumer_unavailable":
+            return False
+        expected = before.model_copy(deep=True)
+        expected.restricted_components = [item for item in expected.restricted_components
+                                          if item.rule_component_id != component_id]
+        if after != expected or not after.components:
+            return False
+        bindings = {item.proposed_component.rule_component_id: item for item in previous.component_drafts
+                    if item.parent_official_code == rule_code}
+        if [item for item in previous.component_drafts if item.parent_official_code == rule_code] != [
+            item for item in current.component_drafts if item.parent_official_code == rule_code
+        ]:
+            return False
+        source_owners = [(component, bindings.get(component.rule_component_id)) for component in after.components]
+        source_owners = [(component, binding) for component, binding in source_owners
+                         if binding is not None and set(selected.source_span_ids) <= set(binding.source_refs)]
+        if not source_owners:
+            return False
+        # Mapped paragraphs alone are insufficient: all their words, including
+        # qualifiers dropped by the segmenter, must remain in atomic citations.
+        # Only source connectors represented by the unchanged tree may remain.
+        predicates = [predicate for component, _ in source_owners
+                      for expression in (component.expression, component.exception_expression,
+                                         *(item.expression for item in component.repeat_trigger_conditions))
+                      if expression is not None for predicate in iter_atomic_predicates(expression)]
+        negated_ids = {predicate.predicate_id for component, _ in source_owners
+                       for expression in (component.expression, component.exception_expression)
+                       if expression is not None for predicate in _negated_predicates(expression)}
+        if any(_source_supports_predicate_negation(predicate)
+               and predicate.predicate_id not in negated_ids
+               and predicate.comparator.value not in {"ne", "not_in"}
+               for predicate in predicates):
+            return False
+        clauses = sorted({_normalized(quote) for predicate in predicates
+                          for quote in predicate.exact_source_clauses if _normalized(quote)}, key=len, reverse=True)
+        for excerpt in selected.source_excerpts:
+            remaining = _normalized(excerpt)
+            for clause in clauses:
+                remaining = remaining.replace(clause, "")
+            if remaining:
+                connectors = ["且"]
+                if before.kind.value == "exclusion":
+                    connectors.append("或")
+                if any(component.exception_expression is not None
+                       and any("除外" in _normalized(quote)
+                               and _normalized(quote) in _normalized(excerpt)
+                               for quote in binding.source_excerpts)
+                       for component, binding in source_owners):
+                    connectors.append("除外")
+                for connector in connectors:
+                    remaining = remaining.replace(connector, "")
+                if remaining:
+                    return False
+            segments = _substantive_obligation_segments(excerpt)
+            if not segments:
+                if not any(_normalized(excerpt) == _normalized(quote)
+                           for _, binding in source_owners for quote in binding.source_excerpts):
+                    return False
+                continue
+            for segment in segments:
+                normalized = _normalized(segment)
+                # An unchanged exclusion parent retains the disjunction. The
+                # leading connective itself need not be duplicated in its child.
+                source_forms = {normalized}
+                if before.kind.value == "exclusion" and normalized.startswith("或"):
+                    source_forms.add(normalized[1:])
+                owners = [(component, binding) for component, binding in source_owners
+                          if any(form in _normalized(quote) for form in source_forms
+                                 for quote in binding.source_excerpts)]
+                if not owners:
+                    return False
+                if not any(_predicate_binds_obligation(predicate, segment)
+                           for component, _ in owners
+                           for expression in (component.expression, component.exception_expression,
+                                              *(item.expression for item in component.repeat_trigger_conditions))
+                           if expression is not None for predicate in iter_atomic_predicates(expression)):
+                    return False
+        return True
+
+    @staticmethod
     def _validate_source_error_scope(
         previous: ProtocolDeconstructionDraft,
         current: ProtocolDeconstructionDraft,
         *,
         target_rule_code: str,
         target_component_id: str | None = None,
+        allow_redundant_retirement: bool = False,
     ) -> None:
         """原文理解纠错只能重建选中的官方父规则及其附属结构。"""
 
@@ -2547,8 +2688,12 @@ class ProtocolWorkbenchService:
                 item.rule_component_id: item
                 for item in (*after.components, *after.restricted_components)
             }
+            removed = set(before_items) - set(after_items)
+            proven_retirement = (allow_redundant_retirement and removed == {target_component_id}
+                and ProtocolWorkbenchService._redundant_restricted_removal_proven(
+                    previous, current, target_rule_code, target_component_id))
             if (target_component_id not in before_items
-                    or not set(before_items) <= set(after_items)):
+                    or (removed and not proven_retirement)):
                 raise ValueError("局部纠错不得删除或重新编号同条标准的其他子项")
             new_ids = set(after_items) - set(before_items)
             if any(not item_id.startswith(f"{target_component_id}:split:")

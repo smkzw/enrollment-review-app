@@ -558,6 +558,7 @@ def submit_feedback(
         target_rule_code=body.target_rule_code,
         target_component_id=body.target_component_id,
         review_parent_scope=body.review_parent_scope,
+        retire_redundant_source=body.retire_redundant_source,
         actor=body.actor,
     )
     return _draft_dto(view)

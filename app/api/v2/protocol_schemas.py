@@ -275,6 +275,7 @@ class FeedbackRequest(_StrictModel):
     target_component_id: str | None = Field(default=None, min_length=1, max_length=128)
     feedback_note: str = Field(min_length=1, max_length=12000)
     review_parent_scope: bool = False
+    retire_redundant_source: bool = False
     actor: str = Field(default="用户", min_length=1, max_length=128)
 
 

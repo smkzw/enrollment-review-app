@@ -472,6 +472,7 @@ export interface FeedbackInput {
   targetRuleCode: string;
   targetComponentId?: string;
   reviewParentScope?: boolean;
+  retireRedundantSource?: boolean;
   feedbackNote: string;
   actor?: string;
 }

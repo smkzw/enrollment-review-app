@@ -416,6 +416,10 @@ describe("protocolWorkbenchHttp", () => {
   });
 
   it("原文纠错请求保留所选子项身份，补充解释不虚构子项", () => {
+    expect(encodeFeedback({ expectedRevisionId: "rev-2", feedbackKind: "source_error",
+      targetRuleCode: "EX-02", targetComponentId: "duplicate-holder", feedbackNote: "核对重复来源",
+      retireRedundantSource: true,
+    })).toHaveProperty("retire_redundant_source", true);
     expect(encodeFeedback({
       expectedRevisionId: "rev-2",
       feedbackKind: "source_error",
@@ -432,6 +436,9 @@ describe("protocolWorkbenchHttp", () => {
       targetRuleCode: "EX-02",
       feedbackNote: "补充说明",
     })).not.toHaveProperty("target_component_id");
+    expect(encodeFeedback({ expectedRevisionId: "rev-2", feedbackKind: "source_error",
+      targetRuleCode: "EX-02", feedbackNote: "普通核对",
+    })).not.toHaveProperty("retire_redundant_source");
   });
 
   it("editDraft 发送 PUT snake_case 手工修订正文", async () => {

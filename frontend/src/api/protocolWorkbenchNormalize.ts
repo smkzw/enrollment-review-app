@@ -1086,6 +1086,7 @@ export function encodeFeedback(input: FeedbackInput): Record<string, unknown> {
     target_rule_code: input.targetRuleCode,
     ...(input.targetComponentId ? { target_component_id: input.targetComponentId } : {}),
     ...(input.reviewParentScope ? { review_parent_scope: true } : {}),
+    ...(input.retireRedundantSource ? { retire_redundant_source: true } : {}),
     feedback_note: input.feedbackNote,
     actor: input.actor ?? "用户",
   };

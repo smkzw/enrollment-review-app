@@ -73,7 +73,7 @@ CHECK_NAMES = (
 
 # 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
 # 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
-DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-10-07.56"
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-10-07.58"
 
 _SOURCED_PERIOD_LEAD = re.compile(
     r"(?:整个)?(?:研究|治疗)期间(?:（[^（）()]+）|\([^（）()]+\))"
@@ -1056,6 +1056,9 @@ def _source_supports_predicate_negation(predicate) -> bool:
     )
     for term in terms:
         escaped = re.escape(term)
+        if any(prefix.startswith("未") and term.startswith(prefix[1:])
+               and re.search("未" + escaped, source) for prefix in prefixes):
+            return True
         if any(
             re.search(re.escape(prefix) + r"[^，；。\n]{0,8}" + escaped, source)
             for prefix in prefixes
@@ -1280,7 +1283,18 @@ def _predicate_binds_obligation(predicate, segment: str) -> bool:
     elif isinstance(predicate.value, list):
         terms.extend(value for value in predicate.value if isinstance(value, str))
     semantic_terms = [_normalized(term) for term in terms if term and _normalized(term)]
-    if any(
+    # Keep the entire cited qualifier; only its own grammatical subject may
+    # be absent from a condition label. A shorter term cannot cover the tail.
+    subject = _normalized(predicate.subject)
+    prefix = subject + "在"
+    own_subject_prefix = (subject in {"受试者", "参与者", "患者", "志愿者"}
+            and normalized_segment.startswith(prefix)
+            and any(normalized_segment in clause for clause in clauses))
+    if own_subject_prefix:
+        qualifier = normalized_segment[len(prefix):]
+        if len(qualifier) >= 2 and any(qualifier in term for term in semantic_terms):
+            return True
+    if not own_subject_prefix and any(
         term in normalized_segment
         or normalized_segment in term
         for term in semantic_terms

@@ -283,6 +283,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           targetRuleCode: values.targetRuleCode,
           targetComponentId: values.targetComponentId ?? undefined,
           reviewParentScope: values.reviewParentScope,
+          retireRedundantSource: values.retireRedundantSource,
           feedbackNote: values.note,
         });
         setFeedbackOpen(false);

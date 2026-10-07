@@ -18,6 +18,7 @@ export interface FeedbackDraftValues {
   targetRuleCode: string;
   targetComponentId: string | null;
   reviewParentScope?: boolean;
+  retireRedundantSource?: boolean;
   note: string;
 }
 
@@ -59,6 +60,7 @@ export function ProtocolFeedbackDialog({
   const [targetRuleCode, setTargetRuleCode] = useState("");
   const [targetComponentId, setTargetComponentId] = useState("");
   const [reviewParentScope, setReviewParentScope] = useState(false);
+  const [retireRedundantSource, setRetireRedundantSource] = useState(false);
   const targetRule = rules.find((rule) => rule.officialCode === targetRuleCode);
   const targetItems = targetRule === undefined
     ? [] : [...targetRule.components, ...targetRule.restrictedComponents];
@@ -73,6 +75,7 @@ export function ProtocolFeedbackDialog({
     setTargetRuleCode(rules[0]?.officialCode ?? "");
     setTargetComponentId("");
     setReviewParentScope(false);
+    setRetireRedundantSource(false);
     setNote("");
     requestAnimationFrame(() => noteRef.current?.focus());
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -85,7 +88,7 @@ export function ProtocolFeedbackDialog({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose, rules]);
 
-  const needsComponent = kind === "source_error" && !reviewParentScope && targetItems.length > 1;
+  const needsComponent = kind === "source_error" && !reviewParentScope && (targetItems.length > 1 || retireRedundantSource);
   const canSubmit = targetRuleCode.length > 0 && note.trim().length > 0
     && (!needsComponent || targetComponentId.length > 0);
 
@@ -93,6 +96,7 @@ export function ProtocolFeedbackDialog({
     if (!canSubmit) return;
     onSubmit({ kind, targetRuleCode, targetComponentId: needsComponent ? targetComponentId : null, note: note.trim(),
       ...(reviewParentScope ? { reviewParentScope: true } : {}),
+      ...(retireRedundantSource ? { retireRedundantSource: true } : {}),
     });
   };
 
@@ -120,7 +124,7 @@ export function ProtocolFeedbackDialog({
                 name="protocol-feedback-kind"
                 value={item.kind}
                 checked={kind === item.kind}
-                onChange={() => { setKind(item.kind); setTargetComponentId(""); setReviewParentScope(false); }}
+                onChange={() => { setKind(item.kind); setTargetComponentId(""); setReviewParentScope(false); setRetireRedundantSource(false); }}
               />
               <span>
                 <strong>{item.label}</strong>
@@ -133,7 +137,7 @@ export function ProtocolFeedbackDialog({
           <span>需要核对的入排标准</span>
           <select
             value={targetRuleCode}
-            onChange={(event) => { setTargetRuleCode(event.target.value); setTargetComponentId(""); }}
+            onChange={(event) => { setTargetRuleCode(event.target.value); setTargetComponentId(""); setRetireRedundantSource(false); }}
           >
             {rules.map((rule) => (
               <option key={rule.ruleId} value={rule.officialCode}>
@@ -145,14 +149,14 @@ export function ProtocolFeedbackDialog({
         {kind === "source_error" && (
           <label className="protocol-feedback-kind__option">
             <input type="checkbox" checked={reviewParentScope}
-              onChange={(event) => { setReviewParentScope(event.target.checked); setTargetComponentId(""); }} />
+              onChange={(event) => { setReviewParentScope(event.target.checked); setTargetComponentId(""); setRetireRedundantSource(false); }} />
             <span>仅核对总标题与各子项适用节点，不修改条件</span>
           </label>
         )}
         {needsComponent && (
           <label className="protocol-feedback-note">
             <span>需要纠正的具体要求</span>
-            <select value={targetComponentId} onChange={(event) => setTargetComponentId(event.target.value)}>
+            <select value={targetComponentId} onChange={(event) => { setTargetComponentId(event.target.value); setRetireRedundantSource(false); }}>
               <option value="">请选择具体要求</option>
               {targetItems.map((item) => (
                 <option key={item.componentId} value={item.componentId}>
@@ -160,6 +164,15 @@ export function ProtocolFeedbackDialog({
                 </option>
               ))}
             </select>
+          </label>
+        )}
+        {kind === "source_error" && !reviewParentScope
+          && targetRule?.restrictedComponents.some((item) => item.componentId === targetComponentId
+            && item.limitationKind === "consumer_unavailable") && (
+          <label className="protocol-feedback-kind__option">
+            <input type="checkbox" checked={retireRedundantSource}
+              onChange={(event) => setRetireRedundantSource(event.target.checked)} />
+            <span>撤下已由其他要求完整承担的重复待核项</span>
           </label>
         )}
         <label className="protocol-feedback-note">

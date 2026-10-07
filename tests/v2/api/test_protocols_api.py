@@ -1240,3 +1240,199 @@ def test_draft_comparison_rejected_for_first_deconstruction(client) -> None:
     error = response.json()["error"]
     assert error["code"] == "NOT_RE_DECONSTRUCTION_JOB"
     assert error["recovery_action"]
+
+
+@pytest.mark.parametrize("problem", [None, "uncovered", "wrong_source", "true_uncertainty", "executable", "parent"])
+def test_redundant_source_retirement_keeps_consumers_and_requires_current_review(
+    build_app, data_paths, monkeypatch, problem,
+):
+    from app.domain.contracts.rules import RestrictedRuleComponent
+    from app.evidence.artifacts import ArtifactStore
+    from app.services.protocol_scope_review_service import review_official_source_scope
+    from app.storage.repositories import ProtocolDraftRevisionRepository
+    from tests.v2.protocols.test_official_scope_review import ScopeReader, scope_fixture
+
+    app = build_app(run_runner=False)
+    store = ArtifactStore(data_paths)
+    source, draft, spans = scope_fixture()
+    rule = draft.proposed_rules[0]
+    duplicate = RestrictedRuleComponent(
+        rule_component_id="duplicate-source-holder", display_code="IN-01待核",
+        title="重复来源待核", source_span_ids=["span-in"],
+        source_excerpts=[quote for binding in draft.component_drafts
+                         if binding.parent_official_code == "IN-01"
+                         for quote in binding.source_excerpts],
+        limitation_kind="consumer_unavailable", unresolved_dimensions=["原系统未能装配"],
+    )
+    if problem == "uncovered":
+        duplicate.source_excerpts.append("筛选时必须记录体重")
+    elif problem == "wrong_source":
+        duplicate.source_span_ids = ["span-ex"]
+    elif problem == "true_uncertainty":
+        duplicate.limitation_kind = "interpretation_unresolved"
+    rule.restricted_components.append(duplicate)
+    draft = review_official_source_scope(source, draft, official_code="IN-01",
+        transport=ScopeReader(), store=store)
+    old_ref = draft.proposed_rules[0].components[0].source_scope_review_ref
+    old_proof = store.read(old_ref)
+
+    def forbid_model(*args, **kwargs):
+        pytest.fail("source ownership check must not call a model")
+    monkeypatch.setattr(ProtocolWorkbenchService, "_revise_feedback_with_model", staticmethod(forbid_model))
+    with TestClient(app) as client:
+        job = _create_protocol_job(client, key=f"retire-source-{problem}")
+        service = app.state.protocol_workbench_service
+        service.seed_review_session(job, source_input=source, draft=draft, source_spans=spans, wait_at="await_review")
+        url = f"/api/v2/protocol/deconstructions/{job}"
+        before = client.get(url + "/draft").json()
+        request = {"expected_revision_id": before["revision_id"], "feedback_kind": "source_error",
+                   "feedback_note": "核对来源已由原有两个独立要求完整承担；不改变条件。",
+                   "target_rule_code": "IN-01", "target_component_id": duplicate.rule_component_id,
+                   "retire_redundant_source": True}
+        if problem == "executable":
+            request["target_component_id"] = rule.components[0].rule_component_id
+        elif problem == "parent":
+            request["target_component_id"] = None
+            request["review_parent_scope"] = True
+        response = client.post(url + "/draft/feedback", json=request)
+        after = client.get(url + "/draft").json()
+        if problem is not None:
+            assert response.status_code == 409, response.text
+            assert after == before
+        else:
+            assert response.status_code == 200, response.text
+            assert after["revision_number"] == 2
+            old_rule = before["content"]["proposed_rules"][0]
+            new_rule = after["content"]["proposed_rules"][0]
+            assert not new_rule.get("restricted_components", [])
+            assert new_rule["components"] == old_rule["components"]
+            for field in before["content"]:
+                if field not in {"proposed_rules", "draft_revision", "previous_draft_id"}:
+                    assert after["content"][field] == before["content"][field]
+            integrity = client.get(url + "/integrity").json()
+            assert not integrity["publishable"]
+            from app.services.protocol_publication_service import (
+                ProtocolPublicationService, ProtocolPublicationRequest, PublicationGateError,
+            )
+            with pytest.raises(PublicationGateError):
+                ProtocolPublicationService(app.state.session_factory).publish(ProtocolPublicationRequest(
+                    idempotency_key="retirement-is-not-approval", draft_revision_id=after["revision_id"],
+                    source_input=source, source_spans=spans, actor="测试用户"))
+            stale = client.post(url + "/draft/feedback", json=request)
+            assert stale.status_code == 409
+            assert client.get(url + "/draft").json() == after
+            def only_review(source_input, current, target_rule_code, feedback_note, target_component_id,
+                            *, joint_source_repair, budget_store, scope_review_store=None):
+                assert scope_review_store is not None
+                return review_official_source_scope(source_input, current, official_code=target_rule_code,
+                    transport=ScopeReader(), store=scope_review_store)
+            monkeypatch.setattr(ProtocolWorkbenchService, "_revise_feedback_with_model", staticmethod(only_review))
+            reviewed = client.post(url + "/draft/feedback", json={
+                "expected_revision_id": after["revision_id"], "feedback_kind": "source_error",
+                "feedback_note": "只重新核对当前要求的来源关系。", "target_rule_code": "IN-01",
+                "review_parent_scope": True})
+            assert reviewed.status_code == 200, reviewed.text
+            assert client.get(url + "/integrity").json()["publishable"]
+        with app.state.session_factory() as session:
+            historical = ProtocolDraftRevisionRepository(session).get(before["revision_id"])
+            assert historical.content.model_dump(mode="json") == before["content"]
+        assert store.read(old_ref) == old_proof
+
+
+@pytest.mark.parametrize("changed", ["sibling_value", "binding", "other_restricted", "last_consumer"])
+def test_redundant_source_retirement_never_authorizes_sibling_edits(changed):
+    from app.domain.contracts.rules import RestrictedRuleComponent
+    from tests.v2.protocols.test_official_scope_review import scope_fixture
+    _, before, _ = scope_fixture()
+    rule = before.proposed_rules[0]
+    item = RestrictedRuleComponent(rule_component_id="duplicate-holder", display_code="IN-01待核",
+        title="重复来源", source_span_ids=["span-in"],
+        source_excerpts=[before.component_drafts[0].source_excerpts[0]],
+        limitation_kind="consumer_unavailable", unresolved_dimensions=["未装配"])
+    rule.restricted_components.append(item)
+    after = before.model_copy(deep=True)
+    after.proposed_rules[0].restricted_components = []
+    assert ProtocolWorkbenchService._redundant_restricted_removal_proven(before, after, "IN-01", item.rule_component_id)
+    if changed == "sibling_value":
+        after.proposed_rules[0].components[0].expression.predicate.value = 99
+    elif changed == "binding":
+        after.component_drafts[0].source_excerpts = ["其他来源"]
+    elif changed == "other_restricted":
+        rule.restricted_components.append(item.model_copy(update={"rule_component_id": "another-holder"}))
+    else:
+        after.proposed_rules[0].components = []
+    assert not ProtocolWorkbenchService._redundant_restricted_removal_proven(before, after, "IN-01", item.rule_component_id)
+
+
+def test_ordinary_feedback_cannot_silently_retire_a_restricted_source():
+    from app.domain.contracts.rules import RestrictedRuleComponent
+    from tests.v2.protocols.test_official_scope_review import scope_fixture
+    _, before, _ = scope_fixture()
+    item = RestrictedRuleComponent(rule_component_id="duplicate-holder", display_code="IN-01待核",
+        title="重复来源", source_span_ids=["span-in"], source_excerpts=before.component_drafts[0].source_excerpts,
+        limitation_kind="consumer_unavailable", unresolved_dimensions=["未装配"])
+    before.proposed_rules[0].restricted_components.append(item)
+    after = before.model_copy(deep=True)
+    after.proposed_rules[0].restricted_components = []
+    with pytest.raises(ValueError, match="不得删除"):
+        ProtocolWorkbenchService._validate_source_error_scope(before, after,
+            target_rule_code="IN-01", target_component_id=item.rule_component_id)
+    ProtocolWorkbenchService._validate_source_error_scope(before, after,
+        target_rule_code="IN-01", target_component_id=item.rule_component_id, allow_redundant_retirement=True)
+
+
+@pytest.mark.parametrize("clause,atomic_quote", [
+    ("治疗期间，使用治疗甲", "使用治疗甲"),
+    ("未使用治疗甲", "未使用治疗甲"),
+    ("使用治疗甲（已稳定治疗的受试者除外）", "使用治疗甲"),
+    ("使用治疗甲且完成检查乙", "使用治疗甲"),
+])
+def test_retirement_rejects_quoted_but_unrepresented_qualifiers(clause, atomic_quote):
+    from app.domain.contracts.enums import Comparator
+    from app.domain.contracts.rules import RestrictedRuleComponent
+    from tests.v2.protocols.test_official_scope_review import scope_fixture
+    _, before, _ = scope_fixture()
+    rule = before.proposed_rules[0]
+    component = rule.components[0]
+    predicate = component.expression.predicate
+    predicate.attribute = predicate.source_term = "使用治疗甲"
+    predicate.comparator = Comparator.EXISTS
+    predicate.value = predicate.unit = None
+    predicate.source_clause = atomic_quote
+    component.exception_expression = None
+    before.component_drafts[0].source_excerpts = [clause]
+    before.component_drafts[0].proposed_component = component.model_copy(deep=True)
+    item = RestrictedRuleComponent(rule_component_id="duplicate-holder", display_code="IN-01待核",
+        title="重复来源", source_span_ids=["span-in"], source_excerpts=[clause],
+        limitation_kind="consumer_unavailable", unresolved_dimensions=["未装配"])
+    rule.restricted_components.append(item)
+    after = before.model_copy(deep=True)
+    after.proposed_rules[0].restricted_components = []
+    assert not ProtocolWorkbenchService._redundant_restricted_removal_proven(before, after, "IN-01", item.rule_component_id)
+
+
+def test_retirement_cannot_borrow_exception_marker_from_another_source():
+    from app.domain.contracts.enums import Comparator
+    from app.domain.contracts.rules import RestrictedRuleComponent
+    from tests.v2.protocols.test_official_scope_review import scope_fixture
+    _, before, _ = scope_fixture()
+    rule = before.proposed_rules[0]
+    component = rule.components[0]
+    predicate = component.expression.predicate
+    predicate.attribute = predicate.source_term = predicate.source_clause = "使用治疗甲"
+    predicate.comparator = Comparator.EXISTS
+    predicate.value = predicate.unit = None
+    component.exception_expression = component.expression.model_copy(deep=True)
+    exception = component.exception_expression.predicate
+    exception.predicate_id += "-exception"
+    exception.attribute = exception.source_term = exception.source_clause = "完成检查乙"
+    before.component_drafts[0].source_excerpts = ["使用治疗甲", "完成检查乙除外"]
+    before.component_drafts[0].proposed_component = component.model_copy(deep=True)
+    item = RestrictedRuleComponent(rule_component_id="duplicate-holder", display_code="IN-01待核",
+        title="重复来源", source_span_ids=["span-in"], source_excerpts=["使用治疗甲除外"],
+        limitation_kind="consumer_unavailable", unresolved_dimensions=["未装配"])
+    rule.restricted_components.append(item)
+    after = before.model_copy(deep=True)
+    after.proposed_rules[0].restricted_components = []
+    assert not ProtocolWorkbenchService._redundant_restricted_removal_proven(
+        before, after, "IN-01", item.rule_component_id)

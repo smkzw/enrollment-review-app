@@ -71,6 +71,44 @@ def test_generic_identity_does_not_replace_a_missing_exact_locator():
     assert not _predicate_binds_obligation(item, '存在或疑似情况乙')
 
 
+@pytest.mark.parametrize('subject', ['受试者', '参与者', '患者', '志愿者'])
+def test_complete_shared_qualifier_can_omit_only_its_own_grammatical_subject(subject):
+    segment = subject + '在当前或既往同一自然期间'
+    item = AtomicPredicate(
+        predicate_id='history', subject=subject,
+        attribute='当前或既往同一自然期间的治疗甲记录', comparator='exists',
+        source_clauses=[segment, '使用治疗甲'],
+    )
+    assert _predicate_binds_obligation(item, segment)
+    assert not _predicate_binds_obligation(item, '使用治疗乙')
+
+
+@pytest.mark.parametrize('mutation', ['short_identity', 'different_period', 'missing_source',
+                                    'different_subject', 'negated_scope', 'different_preposition'])
+def test_shared_qualifier_does_not_hide_a_changed_meaning_or_source(mutation):
+    segment = '受试者在当前或既往同一自然期间'
+    item = AtomicPredicate(
+        predicate_id='history', subject='受试者',
+        attribute='当前或既往同一自然期间的治疗甲记录', comparator='exists',
+        source_clauses=[segment, '使用治疗甲'],
+    )
+    if mutation == 'short_identity':
+        item.attribute = '自然期间'
+    elif mutation == 'different_period':
+        item.attribute = '另一自然期间的治疗甲记录'
+    elif mutation == 'missing_source':
+        item.source_clauses = ['使用治疗甲']
+    elif mutation == 'different_subject':
+        item.subject = '研究者'
+    elif mutation == 'negated_scope':
+        segment = '受试者不在当前或既往同一自然期间'
+        item.source_clauses = [segment, '使用治疗甲']
+    else:
+        segment = '受试者于当前或既往同一自然期间'
+        item.source_clauses = [segment, '使用治疗甲']
+    assert not _predicate_binds_obligation(item, segment)
+
+
 @pytest.mark.parametrize('mutation', ['normal', 'other_action', 'wrong_period', 'two_periods', 'no_period'])
 def test_exact_action_can_bind_across_only_its_single_retained_period(mutation):
     text = '计划在研究期间接受专项评估'

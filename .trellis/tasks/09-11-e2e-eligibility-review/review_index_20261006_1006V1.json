@@ -18,10 +18,19 @@
     "formal_fact_adoption": false, "claims_complete": false
   },
   "official_local_recovery_after_revision10": {
-    "actual_saved_revision": 18, "parents": 23, "blocking_count": 2, "reminder_count": 2,
+    "actual_saved_revision": 21, "parents": 23, "blocking_count": 0, "publishable": true,
+    "latest_recovery": {
+      "in03": {"revision": 19, "physical_calls": 0, "http_status": 200, "seconds": 3.589, "kind": "frozen_answer_current_gate_revalidation", "prior_failed_calls_retained": 2},
+      "ex04": {"revision": 20, "physical_calls": 1, "http_status": 200, "seconds": 141.812453125, "route": "cms-router/glm-5.3-flash/high", "numeric_value_unit_window_and_judgment_policy_unchanged": true, "audit_note": "Match original numeric predicate by identity, not index of prior extra EXISTS predicate"},
+      "ex06": {"revision": 21, "physical_calls": 0, "http_status": 200, "seconds": 9.274805124965496, "kind": "explicit_host_only_redundant_source_retirement", "other_parents_unchanged": true, "old_revision_unchanged": true, "protected_unchanged": true, "existing_current_scope_receipts_still_gate_valid": true},
+      "tests": {"backend_passed": 753, "backend_seconds": 51.67, "backend_exit_code": 0, "final_local_exception_guard_passed": 16, "final_guard_seconds": 7.05, "frontend_passed": 29, "frontend_seconds": 1.58, "formal_build_exit_code": 0, "overlapping_counts_not_additive": true},
+      "conference": {"route": "grok/grok-build/grok-4.7/high", "session_id": "b021fe63-d57b-4d00-8598-8556db6c2eeb", "exit_code": 0, "fallback": false, "limits": "Static bounded pending-save review only; no clinical source or tests; final local exception association tightened and owner-tested after review"},
+      "discovery_reuse": {"compatible": true, "batches": 85, "physical_calls": 0, "new_jobs": 0, "draft_revision_number": 21},
+      "formal_joint_publication": false, "case_workdraft_created": false
+    },
     "eight_feedback_invocations_saved": true, "all_eight_saved_path_audit_completed": true,
     "saved_path_audit": {"physical_calls": 0, "database_writes": 0, "old_history_hashes_match": true, "actual_saved_matches_receipts": true, "paths": ["rv1006-saved-local-changes-readonly-20261007-v2.json", "rv1006-saved-local-changes-readonly-20261007-v3.json"], "eighth_fields": "source_term only; no new time,threshold,judgment or extra predicate"},
-    "remaining": ["IN03 shared natural-period binding", "EX06 unproven restricted-component capability", "EX04 prior unauthorized extra independent predicate must be corrected before adoption"],
+    "remaining": ["Complete same-source crosschapter deep review and joint publication", "Current-node case facts qualification, workdraft and correction-linked new report", "Shared workbench project identity/API bridge unverified"],
     "in03_repeated_feedback": {"physical_calls": 2, "seconds": 309.6667972499854, "http_status": 409, "exit_code": 3, "revision_unchanged": true, "protected_unchanged": true, "next": "inspect representation/coverage/consumer first cause,not repeat the same author request"},
     "formal_rules_published": false, "claims_complete": false,
     "evidence_root": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003", "access": "controlled_local_only"
