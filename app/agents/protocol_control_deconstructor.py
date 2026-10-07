@@ -237,7 +237,7 @@ __all__ = [
 
 
 PUBLICATION_REPAIR_SCOPE_VERSION = "phase5/publication-candidate-repair-scope/v2"
-_CANDIDATE_FIELD_REPAIR_VERSION = "phase5/candidate-field-repair/v1"
+_CANDIDATE_FIELD_REPAIR_VERSION = "phase5/candidate-field-repair/v2"
 SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION = "phase5/source-requirement-failure-policy/v5"
 # Reporting changes do not change author/repair prompts or invalidate successful reads.
 SOURCE_REQUIREMENT_FAILURE_REASON_VERSION = "phase5/source-requirement-failure-reason/v1"
@@ -5294,21 +5294,30 @@ def _merge_candidate_repair_payload(
             selected = [old_relations[index] for index in relation_indexes]
             if {item["external_target_id"] for item in selected} != set(relation_target_ids):
                 raise ValueError("关联修订位置与授权目标不一致")
+            if len(set(relation_indexes)) != len(relation_indexes):
+                raise ValueError("关联字段修订位置不得重复")
+            if len(relations) not in {0, len(selected)}:
+                raise ValueError("关联修订不得以部分遗漏暗中删除获授权关系")
             available = [tuple(item[key] for key in identities) for item in selected]
-            authorized = set(available)
-
-            def outside(items):
-                return [item for item in items
-                        if tuple(item.get(key) for key in identities) not in authorized]
-            if outside(relations) != outside(old_relations):
-                raise ValueError("关联修订不得改变未授权关系")
             for item in relations:
                 identity = tuple(item.get(key) for key in identities)
-                if identity in authorized:
-                    if identity not in available:
-                        raise ValueError("关联修订不得新建目标、改变关系性质或重复关系")
-                    available.remove(identity)
-            payload["candidate_draft"] = {**original, **payload["candidate_draft"]}
+                if identity not in available:
+                    raise ValueError("关联修订不得新建目标、改变关系性质或包含未授权关系")
+                available.remove(identity)
+            # Only selected relations come back from the model. The host keeps
+            # every unselected relation, including equal-identity siblings.
+            replacements = list(relations)
+            merged_relations = []
+            for relation_index, item in enumerate(old_relations):
+                if relation_index not in relation_indexes:
+                    merged_relations.append(item)
+                    continue
+                identity = tuple(item[key] for key in identities)
+                match = next((i for i, replacement in enumerate(replacements)
+                              if tuple(replacement.get(key) for key in identities) == identity), None)
+                if match is not None:
+                    merged_relations.append(replacements.pop(match))
+            payload["candidate_draft"] = {**original, "cross_source_relations": merged_relations}
         _collapse_exact_duplicate_day_bounds(payload["candidate_draft"])
         _normalize_absent_time_bound_flags(payload["candidate_draft"])
         if isinstance(baseline, ProtocolControlAgentWire) and 0 <= index < len(baseline.candidate_drafts):
@@ -7645,7 +7654,11 @@ class ProtocolControlAgentRunner:
                             ["已由系统原样保留定向修订范围外的上一轮内容"]
                             if bounded_restore_applied
                             else []
-                        ) + (["只读原文被误列为本批处置，已按冻结分包归属排除："
+                        ) + (["已明确删除获授权关联，候选位置=" + str(candidate_repair_index)
+                              + "，关联位置=" + str(list(candidate_repair_relation_indexes))
+                              + "；原义务、来源及未授权关联保留，仍须完整核对"]
+                             if candidate_repair_fields and not json.loads(raw_text)["candidate_draft"]["cross_source_relations"]
+                             else []) + (["只读原文被误列为本批处置，已按冻结分包归属排除："
                               + ",".join(context_only_dispositions)]
                              if context_only_dispositions else []),
                     )
@@ -9962,11 +9975,11 @@ class ProtocolControlAgentRunner:
                     if finding.get("code") == "PROCEDURE_AFFECTED_STAGE_MISMATCH"
                     and isinstance(finding.get("external_target_id"), str)
                 )) if candidate_repair_fields else ()
-                candidate_repair_relation_indexes = tuple(dict.fromkeys(
+                candidate_repair_relation_indexes = tuple(sorted(set(
                     finding["relation_index"] for finding in error.validation_findings
                     if finding.get("code") == "PROCEDURE_AFFECTED_STAGE_MISMATCH"
                     and type(finding.get("relation_index")) is int
-                )) if candidate_repair_fields else ()
+                ))) if candidate_repair_fields else ()
                 candidate_repair_indexes = (
                     tuple(sorted(repair_candidate_indexes)) if candidates_only else ()
                 )
@@ -10076,9 +10089,22 @@ class ProtocolControlAgentRunner:
                         + json.dumps(frozen_candidates, ensure_ascii=False)
                     )
                 if candidate_repair_fields:
+                    selected_relations = [
+                        repair_baseline_wire.candidate_drafts[candidate_repair_index]
+                        .cross_source_relations[index].model_dump(mode="json")
+                        for index in candidate_repair_relation_indexes
+                    ]
                     repair_prompt += (
                         "\n本次仅授权 candidate_draft.cross_source_relations。"
                         "返回 {\"candidate_draft\":{\"cross_source_relations\":[...]}}；"
+                        "只返回下列获授权关系的修订，不要照抄其他关系；其他关系由系统原样保留。"
+                        "kind、external_target_kind、external_target_id、candidate_side必须保持，"
+                        "不得换成另一个流程或条款。可以修订受影响节点及说明；"
+                        "确无补充关系时可删除获授权关系（返回空数组），不能换对象替代。"
+                        "本次须返回全部获授权关系的修订，或明确删除全部获授权关系；"
+                        "不得只返回其中一部分而隐含删除其余关系。"
+                        + "获授权关系原稿：" + json.dumps(selected_relations, ensure_ascii=False) + "\n"
+                        +
                         "不要重发候选其他字段。系统原样保留疗程、时间、义务、判定节点和证据。"
                         "若所引用流程不能表达该要求，应删除错误关联、保留独立要求；"
                         "不得为适配流程而提前完成时间或改变临床含义。"

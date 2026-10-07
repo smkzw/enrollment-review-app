@@ -16,6 +16,16 @@
     "current_product_run": {"source_commit": "ef362a028e5572bd38547abc9da8b09fbbbf22b0", "job_id": "aec62eb759b34c07aff30775cb64895a", "state": "failed_final", "error_code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID", "seconds": 262.64570225, "physical_calls": 6, "deep_planned": 90, "deep_completed": 0, "discovery_reused": 85, "verified_source_points": 18, "source_scope_corrections": 1, "pending_source_points": 0, "partial_wire": false, "protected_unchanged": true, "source_database_unchanged": true, "old_jobs_unchanged": true, "first_author_errors": ["WIRE_SCHEMA_INVALID: time purpose without a time constraint", "PROCEDURE_AFFECTED_STAGE_MISMATCH candidate0 then candidate1", "Mixed procedure execution stages authorized full repartition; full response reintroduced the earlier time schema defect"], "receipt_finish_reason": null, "receipt_state": "stream_exhausted", "private_path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-shared-source-budget-20261007-v1", "access": "controlled_local_only"},
     "formal_joint_publication": false, "new_current_node_report": false
   },
+  "selected_relation_host_merge": {
+    "base_commit": "a335b5ee",
+    "repair_contract": "phase5/candidate-field-repair/v2",
+    "compiler_marker": "procedure-link-selected-patch-host-merge/v1",
+    "scope": "Only selected relation return; host preserves unselected fields and source. All selected returned or explicit empty deletion; partial omission refuses. Frozen identity changes, duplicate indexes/relations and extra keys refuse; whole validation remains",
+    "tests": {"modules": 4, "passed": 961, "seconds": 70.43, "exit_code": 0, "junit": "/Users/smkzw/tmp/rv1006-selected-relation-merge-connected-20261007-final.xml", "early_failure": "Seven new duplicate-relation fixtures violated existing wire; corrected without loosening gate", "overlapping_windows_not_additive": true},
+    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session_id": "01a11664-17db-705a-a6a2-fbecdcbeac7f", "seconds": 146.264, "exit_code": 0, "fallback": false, "tool_calls": 16, "parsed_tool_results": 0, "limits": "Reviewer12self-reported material reads; shell diff denied; no clinical/test reads. Owner final patch verification, no independent patch attribution", "owner_silent_completion_wait": true},
+    "real_run_before_patch": {"source_commit": "a335b5ee", "job_id": "0777262d064a4d67b935bba6a30ceae2", "state": "failed_final", "seconds": 197.619744208, "physical_calls": 4, "deep_planned": 90, "deep_completed": 0, "source_points_reused": 18, "new_source_reads": 0, "last_error": "CANDIDATE_REPAIR_INVALID: changed external_target_id, remains rejected", "input_tokens": [53211,75643,95610,115968], "output_tokens_including_reasoning": [40144,1988,2422,1340], "actual_finish_reasons": ["stop","stop","stop","stop"], "reasoning_breakdown": null, "api_fees": null, "protected_and_source_databases_unchanged": true, "old_jobs_unchanged": true},
+    "formal_joint_publication": false, "new_current_node_report": false, "large_history_cost_solved": false
+  },
   "source_frozen_runner_budget_reader": {
     "source_base": "84e63475",
     "actual_source_job": "aec62eb759b34c07aff30775cb64895a",

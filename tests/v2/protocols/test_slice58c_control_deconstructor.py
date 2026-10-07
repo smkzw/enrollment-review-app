@@ -7320,10 +7320,15 @@ def test_wire_stage_error_repairs_only_its_candidate_without_rewriting_batch(
             assert expected.title in prompt
             assert fields == ("cross_source_relations",)
             assert "系统原样保留疗程、时间、义务、判定节点和证据" in prompt
+            assert "不要照抄其他关系" in prompt
+            assert "external_target_id、candidate_side必须保持" in prompt
             return ProtocolControlAgentResponse(
                 session_id=session_id,
                 text=json.dumps({"candidate_draft": {
-                    "cross_source_relations": expected.model_dump(mode="json")["cross_source_relations"],
+                    "cross_source_relations": (
+                        [] if len(self.prompts) == 2 and remove_unrelated_link
+                        else [valid_relation.model_dump(mode="json")]
+                    ),
                 }}),
             )
 
@@ -7340,6 +7345,7 @@ def test_wire_stage_error_repairs_only_its_candidate_without_rewriting_batch(
     assert result.partial_wire.candidate_drafts[0].obligation_expression == first.obligation_expression
     assert result.partial_wire.candidate_drafts[0].review_node_bindings == first.review_node_bindings
     assert result.partial_wire.candidate_drafts[0].minimum_evidence == first.minimum_evidence
+    assert result.partial_wire.candidate_drafts[0].cross_source_relations == fixed_first.cross_source_relations
     assert result.partial_wire.candidate_drafts[1] == fixed_second
     assert len(result.attempts) == (3 if sibling_bad_relation else 2)
     assert result.attempts[0].error_classes[0] == "PROCEDURE_AFFECTED_STAGE_MISMATCH"
@@ -7370,7 +7376,7 @@ def test_relation_field_repair_retains_clinical_meaning_and_other_targets() -> N
     first = first.model_copy(update={"cross_source_relations": [relation, unrelated]})
     baseline = _wire_with_two_candidates(first, _candidate_for_second_unit())
     retained = unrelated.model_dump(mode="json")
-    payload = {"candidate_draft": {"cross_source_relations": [retained]}}
+    payload = {"candidate_draft": {"cross_source_relations": []}}
     merged = _merge_candidate_repair(
         json.dumps(payload), baseline, 0, fields=("cross_source_relations",),
         relation_target_ids=("procedure-screening-1",), relation_indexes=(0,),
@@ -7381,7 +7387,7 @@ def test_relation_field_repair_retains_clinical_meaning_and_other_targets() -> N
     assert baseline.candidate_drafts[0] == first
     for changed in (
         {"cross_source_relations": [], "workflow_stage_nodes": []},
-        {"cross_source_relations": []},
+        {"cross_source_relations": [retained]},
         {"cross_source_relations": [retained, retained]},
         {"cross_source_relations": [retained, {**relation.model_dump(mode="json"), "kind": "mentions"}]},
     ):
@@ -7404,12 +7410,91 @@ def test_relation_field_repair_retains_clinical_meaning_and_other_targets() -> N
         first.model_copy(update={"cross_source_relations": [relation, same_target]}),
         baseline.candidate_drafts[1],
     ]})
-    with pytest.raises(ProtocolControlAgentWireValidationError, match="未授权关系"):
-        _merge_candidate_repair(
-            json.dumps({"candidate_draft": {"cross_source_relations": []}}),
-            same_target_wire, 0, fields=("cross_source_relations",),
-            relation_target_ids=(relation.external_target_id,), relation_indexes=(0,),
+    merged = _merge_candidate_repair(
+        json.dumps({"candidate_draft": {"cross_source_relations": []}}),
+        same_target_wire, 0, fields=("cross_source_relations",),
+        relation_target_ids=(relation.external_target_id,), relation_indexes=(0,),
+    )
+    assert merged.candidate_drafts[0].cross_source_relations == [same_target]
+
+
+@pytest.mark.parametrize("changed", ["target", "kind", "side", "duplicate", "extra_field", "relation_extra", "duplicate_index"])
+def test_selected_relation_patch_rejects_identity_and_scope_changes(changed):
+    relation = ProtocolControlAgentWireRelation(
+        kind=CrossSourceRelationKind.SUPPLEMENTARY_REQUIREMENT,
+        external_target_kind=ControlRelationTargetKind.REQUIRED_PROCEDURE,
+        external_target_id="procedure-screening-1", candidate_side="left",
+        affected_workflow_stage_id="stage:screening:two", notes="待核对的关联",
+    )
+    unselected = relation.model_copy(update={"external_target_id": "other-target", "notes": "未授权兄弟关联"})
+    first = _candidate().model_copy(update={"cross_source_relations": [relation, unselected]})
+    baseline = _wire_with_two_candidates(first, _candidate_for_second_unit())
+    before = baseline.model_dump(mode="json")
+    repaired = relation.model_copy(update={"affected_workflow_stage_id": "stage:screening:one"}).model_dump(mode="json")
+    if changed == "target":
+        repaired["external_target_id"] = "procedure-screening-2"
+    elif changed == "kind":
+        repaired["kind"] = "mentions"
+    elif changed == "side":
+        repaired["candidate_side"] = "right"
+    elif changed == "relation_extra":
+        repaired["unexpected"] = True
+    patch = {"cross_source_relations": [repaired, repaired] if changed == "duplicate" else [repaired]}
+    if changed == "extra_field":
+        patch["title"] = "越权改写"
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="CANDIDATE_REPAIR_INVALID"):
+        _merge_candidate_repair(json.dumps({"candidate_draft": patch}), baseline, 0,
+            fields=("cross_source_relations",), relation_target_ids=(relation.external_target_id,),
+            relation_indexes=(0, 0) if changed == "duplicate_index" else (0,))
+    assert baseline.model_dump(mode="json") == before
+
+
+def test_selected_relation_patch_preserves_same_target_sibling_at_another_stage():
+    relation = ProtocolControlAgentWireRelation(
+        kind=CrossSourceRelationKind.SUPPLEMENTARY_REQUIREMENT,
+        external_target_kind=ControlRelationTargetKind.REQUIRED_PROCEDURE,
+        external_target_id="procedure-screening-1", candidate_side="left",
+        affected_workflow_stage_id="stage:screening:two", notes="获授权关联",
+    )
+    sibling = relation.model_copy(update={"affected_workflow_stage_id": "stage:screening:one", "notes": "未授权关联"})
+    first = _candidate().model_copy(update={"cross_source_relations": [relation, sibling]})
+    baseline = _wire_with_two_candidates(first, _candidate_for_second_unit())
+    merged = _merge_candidate_repair(json.dumps({"candidate_draft": {
+        "cross_source_relations": [],
+    }}), baseline, 0, fields=("cross_source_relations",),
+        relation_target_ids=(relation.external_target_id,), relation_indexes=(0,))
+    assert merged.candidate_drafts[0].cross_source_relations == [sibling]
+    assert merged.candidate_drafts[1] == baseline.candidate_drafts[1]
+    assert baseline.candidate_drafts[0] == first
+
+
+@pytest.mark.parametrize("mode", ["partial", "both", "delete"])
+def test_selected_multi_relation_patch_never_infers_partial_deletion(mode):
+    relation = ProtocolControlAgentWireRelation(
+        kind=CrossSourceRelationKind.SUPPLEMENTARY_REQUIREMENT,
+        external_target_kind=ControlRelationTargetKind.REQUIRED_PROCEDURE,
+        external_target_id="procedure-screening-1", candidate_side="left",
+        affected_workflow_stage_id="stage:screening:two", notes="第一关联",
+    )
+    second = relation.model_copy(update={"external_target_id": "procedure-screening-2", "notes": "第二关联"})
+    unselected = relation.model_copy(update={"external_target_id": "unselected-target"})
+    first = _candidate().model_copy(update={"cross_source_relations": [relation, unselected, second]})
+    baseline = _wire_with_two_candidates(first, _candidate_for_second_unit())
+    fixed = [item.model_copy(update={"affected_workflow_stage_id": "stage:screening:one"}) for item in (relation, second)]
+    returned = fixed[:1] if mode == "partial" else [] if mode == "delete" else list(reversed(fixed))
+    payload = json.dumps({"candidate_draft": {"cross_source_relations": [item.model_dump(mode="json") for item in returned]}})
+    if mode == "partial":
+        with pytest.raises(ProtocolControlAgentWireValidationError, match="部分遗漏"):
+            _merge_candidate_repair(payload, baseline, 0, fields=("cross_source_relations",),
+                relation_target_ids=(relation.external_target_id, second.external_target_id), relation_indexes=(0, 2))
+    else:
+        merged = _merge_candidate_repair(payload, baseline, 0, fields=("cross_source_relations",),
+            relation_target_ids=(relation.external_target_id, second.external_target_id), relation_indexes=(0, 2))
+        assert merged.candidate_drafts[0].cross_source_relations == (
+            [unselected] if mode == "delete" else [fixed[0], unselected, fixed[1]]
         )
+        assert merged.candidate_drafts[1] == baseline.candidate_drafts[1]
+    assert baseline.candidate_drafts[0] == first
 
 
 def test_stage_field_repair_cannot_fall_back_to_full_candidate_transport() -> None:
