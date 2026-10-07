@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -1076,7 +1076,7 @@ def create_protocol_control_executor(
                     _verified_definition_scope(context, config, checkpoint=context.last_checkpoint)
                     return {key: value for key, value in context.last_checkpoint.items() if key != "attempt"}
                 if context.step_id in {STEP_HYDRATE, STEP_GATE}:
-                    saved = _replay_checkpoint(context)
+                    saved = _replay_checkpoint(context, config)
                     current = (_execute_hydrate(context, config) if context.step_id == STEP_HYDRATE
                                else _execute_gate(context, config))
                     if {key: value for key, value in saved.items() if key != "attempt"} != current:
@@ -1085,7 +1085,7 @@ def create_protocol_control_executor(
                             detail="已保存的整理结果与当前冻结来源及核对依据不一致，原记录保留。",
                         )
                     return {key: value for key, value in saved.items() if key != "attempt"}
-                return _replay_checkpoint(context)
+                return _replay_checkpoint(context, config)
             from app.llm.mtplx_model_lifecycle import MtplxOwnershipError, require_local_deployment_job
 
             try:
@@ -1139,7 +1139,9 @@ def create_protocol_control_executor(
     return execute
 
 
-def _replay_checkpoint(context: StepContext) -> dict[str, Any]:
+def _replay_checkpoint(
+    context: StepContext, config: ProtocolControlExecutorConfig,
+) -> dict[str, Any]:
     """Validate a completed checkpoint without re-calling a model or source file."""
 
     checkpoint = dict(context.last_checkpoint or {})
@@ -1162,21 +1164,74 @@ def _replay_checkpoint(context: StepContext) -> dict[str, Any]:
             )
         return checkpoint
     if stage == "deep":
+        closure = _closure_checkpoint(context, config)
+        deep_plan = ProtocolControlDiscoveryToDeepPlan.model_validate(closure.get("deep_plan"))
+        scoped_context = replace(context, job_payload={
+            **context.job_payload, "deep_step_ids": closure.get("deep_step_ids", []),
+        })
+        batch = _deep_batch_for_step(scoped_context, deep_plan)
+        prompt_template = _prompt_from_payload(context, "deep", config)
+        transport = _resolve_transport(config, stage="deep")
+        try:
+            _require_frozen_route(context, config, transport, stage="deep")
+            transport_identity = _transport_identity(transport, stage="deep")
+        finally:
+            if isinstance(config, ProtocolControlExecutorConfig) and all(
+                value is None for value in (
+                    config.deep_transport, config.deep_transport_factory,
+                    config.transport, config.transport_factory,
+                )
+            ):
+                client = getattr(transport, "_client", None)
+                close = getattr(client, "close", None)
+                if callable(close):
+                    close()
+        if (checkpoint.get("batch_id") != batch.batch_id
+                or checkpoint.get("prompt_template_sha256")
+                != protocol_control_agent_prompt_template_sha256(prompt_template)
+                or checkpoint.get("component_identity")
+                != _deep_component_identity(context.job_payload, prompt_template)
+                or checkpoint.get("transport_identity") != transport_identity
+                or not _repair_material_matches(checkpoint)):
+            raise StepFailure(
+                retryable=False, error_code="PROTOCOL_CONTROL_CHECKPOINT_INVALID",
+                detail="已保存的深审结果与当前冻结来源、提示或模型线路不一致。",
+            )
         run_result = ProtocolControlAgentRunResult.model_validate(
             checkpoint.get("run_result")
         )
-        if run_result.status != "已解析" or run_result.final_output is None:
-            raise StepFailure(
-                retryable=False,
-                error_code="PROTOCOL_CONTROL_CHECKPOINT_INVALID",
-                detail="深析阶段已保存的结果不是可恢复的完整结果。",
-            )
-        if run_result.batch_id != checkpoint.get("batch_id"):
+        if run_result.batch_id != batch.batch_id:
             raise StepFailure(
                 retryable=False,
                 error_code="PROTOCOL_CONTROL_CHECKPOINT_INVALID",
                 detail="深析阶段检查点身份不一致。",
             )
+        try:
+            if checkpoint.get("restricted_batch") is not None:
+                expected = restricted_batch_from_review(batch, run_result)
+                saved = ProtocolControlBatchDispositionHydrated.model_validate(checkpoint["restricted_batch"])
+                if expected is None or saved != expected:
+                    raise ValueError("受限来源与逐项核对不一致")
+                _validate_deep_batch_output(batch, saved)
+            else:
+                if run_result.status not in {"已解析", "待跨章核验"} or run_result.final_output is None:
+                    raise ValueError("深析结果缺少已完成的处置")
+                _validate_saved_source_review(batch, run_result)
+                _validate_deep_batch_output(batch, run_result.final_output)
+            if _source_interpretation_requires_refresh(batch, run_result):
+                raise ValueError("来源核对需按当前冻结结构重新验证")
+            pending_relations = any(
+                item.decision == "potential_same_requirement"
+                for item in (run_result.source_target_review.items
+                             if run_result.source_target_review else [])
+            )
+            if pending_relations != (run_result.status == "待跨章核验"):
+                raise ValueError("跨章节待核状态与实际来源对应不一致")
+        except (TypeError, ValueError, ProtocolControlGateError) as exc:
+            raise StepFailure(
+                retryable=False, error_code="PROTOCOL_CONTROL_CHECKPOINT_INVALID",
+                detail="已保存的深审处置未通过当前来源及输出校验。",
+            ) from exc
         return checkpoint
     if stage == "closure":
         ProtocolControlDiscoveryToDeepPlan.model_validate(checkpoint.get("deep_plan"))

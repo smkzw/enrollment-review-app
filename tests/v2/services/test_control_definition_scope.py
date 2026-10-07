@@ -541,7 +541,7 @@ def test_replay_of_downstream_result_rechecks_current_sources_not_saved_acceptan
 ):
     _install_scope_basis(monkeypatch)
     saved = {"stage": step, "fixture_output": "old"}
-    monkeypatch.setattr(execution, "_replay_checkpoint", lambda context: saved)
+    monkeypatch.setattr(execution, "_replay_checkpoint", lambda context, config: saved)
     entry = "_execute_hydrate" if step == execution.STEP_HYDRATE else "_execute_gate"
     checks = []
     def current(context, config):

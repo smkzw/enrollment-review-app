@@ -5,6 +5,16 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "current_consumer_audit_and_checkpoint_replay": {
+    "base_commit": "eb950865",
+    "execution": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "exit_code": 0, "fallback": false, "owner_silent_120min_completion_wait": true, "limits": "Code-only mapping; zero FactRuleLinks does not prove absence from complete fact input; clinical_adoption=True throws invalid-ready error. Owner rejects F2/F5 proposed repairs"},
+    "conference": {"primary": "zcode/zcode/GLM-5.3-Flash/max", "primary_exit_code": 1, "primary_resumable_session": false, "actual": "grok/grok-build/grok-4.7/high", "actual_session": "c30c4059-03df-4b86-9154-c4a57f5a70b1", "actual_exit_code": 0, "declared_fallback": true, "rounds": 1, "owner_silent_120min_completion_wait": true, "decision": "Reject early diagnostic-scope bridge; pending local proposals are not an exhaustive adopted inventory", "limits": "Code only, no clinical/tests. Final owner replay patch not in frozen reviewer snapshot. Duration and token usage unknown"},
+    "replay": "Current frozen batch/prompt/components/route, exact restriction reconstruction, source/output gate and pending-state consistency; no model call, historical write or adoption",
+    "scope_contract_comment": "Clarified publication precedes frozen-draft withholding; scope_complete proves consumer scope, not clinical satisfaction. Flag and algorithm unchanged",
+    "tests": {"modules": 4, "passed": 389, "seconds": 80.50, "exit_code": 0, "junit": "artifacts/rv1006-deep-checkpoint-replay-connected-20261008-final-client.xml", "warnings": "5 inherited SWIG", "first_window": "333pass2fail77.37s; owner-unupdated single-argument replay mocks; downstream source-recheck assertions retained. Prior389/83.52s predates ephemeral-client cleanup. Windows not additive"},
+    "formal_joint_publication": false,
+    "new_current_node_report": false
+  },
   "pending_definition_consumer_diagnostic": {
     "base_commit": "d620670a20f0717005d9e2ccf89affeb42b0832b",
     "identity": "pending-definition-consumer-diagnostic/v1",

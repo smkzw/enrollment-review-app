@@ -2079,10 +2079,12 @@ class ProtocolControlDefinitionConsumerRecord(Phase5ControlModel):
 
     ``scope_complete`` is the fail-closed release claim and stays conservative:
     it may only be asserted once a producer proves the complete consumer scope,
-    including consumers in other batches, *and* the affected consumers are already
-    consumed as unknown by the working draft. It is the only value that can narrow
-    the calculation publication block, so a producer must not set it while the
-    consumer scope or the working-draft consumption path is still missing. An
+    including consumers in other batches. It proves scope, not clinical evaluation:
+    the frozen working-draft consumer subsequently withholds the listed atoms,
+    including derived results, until their calculation definition is usable.
+    A working draft need not exist before the publication that it consumes.
+    The flag narrows the calculation publication block only through the verified
+    scope receipt; it does not authorize the affected atoms as satisfied. An
     empty, unresolved or scope-unproven record never authorizes release, so a
     missing relation keeps the current publication block instead of silently
     passing.

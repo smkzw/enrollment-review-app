@@ -835,6 +835,44 @@ def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
     assert len(saved["restricted_batch"]["candidates"]) == int(independent_candidate)
     assert len(saved["restricted_batch"]["restricted_statements"]) == 2 - int(independent_candidate)
 
+    replay_context = StepContext(
+        job_id=context.job_id, job_type=context.job_type,
+        job_payload={"execution_version": module.PROTOCOL_CONTROL_EXECUTION_VERSION},
+        step_id=context.step_id, name=context.name, attempt=2,
+        last_checkpoint_id="saved-restricted", last_checkpoint=saved,
+    )
+    with monkeypatch.context() as replay_patch:
+        def forbid_model_call(*_args, **_kwargs):
+            raise AssertionError("checkpoint replay must not call a model")
+
+        replay_patch.setattr(module.ProtocolControlAgentRunner, "run", forbid_model_call)
+        assert module.create_protocol_control_executor(SimpleNamespace())(replay_context) == saved
+        closed = []
+        ephemeral = SimpleNamespace(_client=SimpleNamespace(close=lambda: closed.append(True)))
+        with monkeypatch.context() as client_patch:
+            client_patch.setattr(module, "_resolve_transport", lambda *_, **__: ephemeral)
+            local_config = ProtocolControlExecutorConfig(data_paths=None, session_factory=None)
+            assert module.create_protocol_control_executor(local_config)(replay_context) == saved
+            assert closed == [True]
+            local_config.deep_transport = ephemeral
+            assert module.create_protocol_control_executor(local_config)(replay_context) == saved
+            assert closed == [True]
+        unchanged = json.dumps(saved, ensure_ascii=False, sort_keys=True)
+        for field in ("batch_id", "prompt_template_sha256", "transport_identity", "component_identity"):
+            prior = saved[field]
+            saved[field] = "different-identity"
+            with pytest.raises(StepFailure) as rejected_replay:
+                module.create_protocol_control_executor(SimpleNamespace())(replay_context)
+            assert rejected_replay.value.error_code == "PROTOCOL_CONTROL_CHECKPOINT_INVALID"
+            saved[field] = prior
+        prior_quote = saved["restricted_batch"]["restricted_statements"][0]["source_quote"]
+        saved["restricted_batch"]["restricted_statements"][0]["source_quote"] = "原文没有的结论"
+        with pytest.raises(StepFailure) as rejected_replay:
+            module.create_protocol_control_executor(SimpleNamespace())(replay_context)
+        assert rejected_replay.value.error_code == "PROTOCOL_CONTROL_CHECKPOINT_INVALID"
+        saved["restricted_batch"]["restricted_statements"][0]["source_quote"] = prior_quote
+        assert json.dumps(saved, ensure_ascii=False, sort_keys=True) == unchanged
+
     original_restriction = module.restricted_batch_from_review
 
     def invalid_restriction(*_args):
@@ -2140,6 +2178,22 @@ def test_service_reuses_frozen_snapshot_and_builds_candidate_package(
         max_attempts=gate_step.max_attempts,
     )
     starts_before = (discovery.start_calls, deep.start_calls)
+    with session_factory() as session:
+        deep_checkpoint = JobStore(session, now=_now).get_last_checkpoint(result.job_id, "deep_0001")
+    assert deep_checkpoint is not None
+    deep_replay = StepContext(
+        job_id=result.job_id, job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+        job_payload=payload, step_id="deep_0001", name="深审", attempt=2,
+        last_checkpoint_id=deep_checkpoint[0], last_checkpoint=deep_checkpoint[1],
+    )
+    assert executor(deep_replay) == deep_checkpoint[1]
+    deep_checkpoint[1]["run_result"]["status"] = "待跨章核验"
+    with pytest.raises(StepFailure) as pending_without_relation:
+        executor(deep_replay)
+    assert pending_without_relation.value.error_code == "PROTOCOL_CONTROL_CHECKPOINT_INVALID"
+    deep_checkpoint[1]["run_result"]["status"] = "已解析"
+    with session_factory() as session:
+        assert JobStore(session, now=_now).get_last_checkpoint(result.job_id, "deep_0001") == deep_checkpoint
     # The runner owns the next attempt number; replay returns business content only.
     assert executor(replay_context) == {key: value for key, value in gate.items() if key != "attempt"}
     assert (discovery.start_calls, deep.start_calls) == starts_before
