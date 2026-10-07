@@ -2633,6 +2633,8 @@ def test_manual_retry_reexecutes_failed_deep_instead_of_replaying_diagnostic(
     (True, "source_witness_compiler"), (True, "source_witness_repair"),
     (True, "source_witness_validator"), (True, "source_witness_old_gate"),
     (True, "source_witness_two_scopes"),
+    (True, "source_witness_two_quotes"),
+    (True, "source_witness_same_gate"), (True, "same_gate_without_witness"),
 ])
 def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     data_paths, session_factory, monkeypatch, new_job: bool, reuse_change: str | None,
@@ -2644,6 +2646,7 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     )
     from app.agents.protocol_control_source_interpretation import (
         SOURCE_INTERPRETATION_VERSION, SourceInterpretation, SourceStatement, SourceScopeCorrection,
+        SourceQuoteCorrection,
     )
 
     seed = _seed_frozen_source(data_paths, session_factory, key="deep-partial-resume")
@@ -2673,16 +2676,19 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
             batch, prompt_template=kwargs["prompt_template"],
         )
         wire = parse_protocol_control_agent_wire(deep._response(prompt).text)
+        if reuse_change in {"source_witness_same_gate", "same_gate_without_witness"}:
+            wire.candidate_drafts[0].title = "injected-invalid-semantic-wire"
         interpretation = SourceInterpretation(
             version=SOURCE_INTERPRETATION_VERSION,
             statements=[],
             units_without_statement=list(batch.owned_structure_unit_ids),
         )
-        if reuse_change == "source_witness_two_scopes":
+        if reuse_change in {"source_witness_two_scopes", "source_witness_two_quotes"}:
             initial = SourceInterpretation(
                 version=SOURCE_INTERPRETATION_VERSION,
                 statements=[SourceStatement(structure_unit_id=unit.structure_unit_id,
-                                            quoted_text=unit.excerpt, scope_quote="不在原文的范围",
+                                            quoted_text=(unit.excerpt + "。" if reuse_change == "source_witness_two_quotes" else unit.excerpt),
+                                            scope_quote=(None if reuse_change == "source_witness_two_quotes" else "不在原文的范围"),
                                             force="descriptive", decision_functions=["background"], time_words=[])
                             for unit in batch.owned_units[:2]],
                 units_without_statement=list(batch.owned_structure_unit_ids[2:]),
@@ -2698,12 +2704,20 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
                         text=SourceScopeCorrection(version="phase5/control-source-scope-correction/v1",
                             structure_unit_id=unit.structure_unit_id, scope_quote=None,
                             affected_stage=None, time_words=[], unresolved=None).model_dump_json())
+                def correct_source_quote(self, *, prompt):
+                    unit = batch.owned_units[self.correction_count]
+                    self.correction_count += 1
+                    return ProtocolControlAgentResponse(session_id=f"quote-{self.correction_count}",
+                        text=SourceQuoteCorrection(version="phase5/control-source-quote-correction/v1",
+                            structure_unit_id=unit.structure_unit_id,
+                            corrected_quote=unit.excerpt, unresolved=None).model_dump_json())
             scope_transport = ScopeTransport([ProtocolControlAgentResponse(session_id="author", text=wire.model_dump_json())])
             produced = original_run(self, batch, scope_transport, **kwargs)
             assert scope_transport.correction_count == 2, [(a.outcome, a.error_classes) for a in produced.attempts]
             assert produced.source_interpretation is not None
+            phase = ("source_quote_correction" if reuse_change == "source_witness_two_quotes" else "source_scope_correction")
             assert len([a for a in produced.attempts if a.error_detail
-                        and a.error_detail.get("workflow_phase") == "source_scope_correction"]) == 2
+                        and a.error_detail.get("workflow_phase") == phase]) == 2
             return produced.model_copy(update={"status": "需要核对", "final_output": None, "partial_wire": wire})
         return ProtocolControlAgentRunResult(
             status="需要核对", batch_id=batch.batch_id, session_id="deep-session",
@@ -2744,7 +2758,7 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
                     "broken" if reuse_change == "repair_corrupt" else
                     hashlib.sha256(b"previous frozen repair contract").hexdigest()
                 ))
-            elif reuse_change in {"compiler_old", "source_witness_compiler", "source_witness_old_gate", "source_witness_two_scopes"}:
+            elif reuse_change in {"compiler_old", "source_witness_compiler", "source_witness_old_gate", "source_witness_two_scopes", "source_witness_two_quotes"}:
                 component = dict(record["component_identity"])
                 component["compiler_versions"] = [version for version in component["compiler_versions"]
                                                    if version != protocol_control_execution_module.SOURCE_FUNCTION_RECHECK_VERSION]
@@ -2767,16 +2781,35 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
             assert deep.start_calls == 0
             return
         original_gate = protocol_control_execution_module._validate_deep_batch_output
-        if reuse_change in {"source_witness_old_gate", "source_witness_two_scopes"}:
+        if reuse_change in {"source_witness_old_gate", "source_witness_two_scopes", "source_witness_two_quotes", "source_witness_same_gate", "same_gate_without_witness"}:
             def reject_obsolete_author(*args):
-                raise ValueError("旧作者结果在现行语义门禁不成立")
+                if reuse_change == "source_witness_same_gate" and not any(
+                    candidate.title == "injected-invalid-semantic-wire"
+                    for candidate in args[1].candidates
+                ):
+                    return original_gate(*args)
+                raise protocol_control_execution_module.ProtocolControlAgentWireValidationError(
+                    "PUBLICATION_GATE_REJECTED", "作者结果在现行语义门禁不成立",
+                )
             monkeypatch.setattr(protocol_control_execution_module, "_validate_deep_batch_output", reject_obsolete_author)
+        if reuse_change == "same_gate_without_witness":
+            with pytest.raises(protocol_control_execution_module.ProtocolControlExecutionError) as error:
+                service.create_from_deconstruction(
+                    source_job_id=seed.source_job_id, deep_source_job_id=job.job_id,
+                    idempotency_key="deep-partial-no-source-witness",
+                )
+            assert error.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+            assert deep.start_calls == 0
+            monkeypatch.setattr(JobStore, "get_last_checkpoint", original_checkpoint)
+            assert _job_checkpoint_fingerprint(session_factory, job.job_id) == before_source
+            return
         continued = service.create_from_deconstruction(
             source_job_id=seed.source_job_id,
             deep_source_job_id=job.job_id,
             idempotency_key="deep-partial-resume-new-version",
         )
-        monkeypatch.setattr(protocol_control_execution_module, "_validate_deep_batch_output", original_gate)
+        if reuse_change != "source_witness_same_gate":
+            monkeypatch.setattr(protocol_control_execution_module, "_validate_deep_batch_output", original_gate)
         _, payload = _job_snapshot_and_payload(session_factory, continued.job_id)
         expected = ("refresh_required" if reuse_change and not reuse_change.startswith("source_witness")
                     else "resume_partial")
@@ -2790,7 +2823,7 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
         target_job_id = job.job_id
     assert runner.run_job(target_job_id)
     snapshot, _ = _job_snapshot_and_payload(session_factory, target_job_id)
-    if reuse_change == "source_witness_two_scopes":
+    if reuse_change in {"source_witness_two_scopes", "source_witness_two_quotes"}:
         # Source replay reaches the real consumer; absent review is not fabricated success.
         assert snapshot.state == "failed_final"
         assert next(step for step in snapshot.steps if step.step_id == "deep_0001").error_code == "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNAVAILABLE"
@@ -2810,7 +2843,86 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     if new_job:
         monkeypatch.setattr(JobStore, "get_last_checkpoint", original_checkpoint)
         assert _job_checkpoint_fingerprint(session_factory, job.job_id) == before_source
-    assert deep.start_calls == (1 if reuse_change == "source_witness_two_scopes" else 2 if reuse_change else 1)
+    assert deep.start_calls == (1 if reuse_change in {"source_witness_two_scopes", "source_witness_two_quotes"} else 2 if reuse_change else 1)
+
+
+@pytest.mark.parametrize("change", [
+    "same", "legacy_first", "missing_second", "wrong_statement", "wrong_unit",
+    "wrong_phase", "wrong_reason", "corrupt_response", "changed_snapshot",
+    "changed_number", "changed_sibling", "wrong_sequence", "false_sequence",
+])
+def test_quote_source_replay_requires_actual_targets_and_preserves_source(change):
+    from copy import deepcopy
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _two_independent_candidate_linked_alignment_material
+    from app.agents.protocol_control_source_interpretation import (
+        SourceQuoteCorrection, SourceInterpretationValidationError,
+        validate_source_interpretation, apply_source_quote_correction,
+    )
+    module = protocol_control_execution_module
+    batch, inventory, _, wire, _ = _two_independent_candidate_linked_alignment_material()
+    original = inventory.model_copy(deep=True)
+    original.statements[0].quoted_text = "年龄至少18周岁"
+    original.statements[1].quoted_text = "拟参加者须持续接收治疗7天"
+    text = original.model_dump_json()
+    attempts = [dict(attempt=1, session_id="source", outcome="schema_invalid",
+                     raw_output_text=text, raw_output_sha256=hashlib.sha256(text.encode()).hexdigest())]
+    for index in range(2):
+        with pytest.raises(SourceInterpretationValidationError) as caught:
+            validate_source_interpretation(batch, original)
+        issue = caught.value
+        assert issue.statement_id == index
+        detail = dict(workflow_phase="source_quote_correction", code=issue.code,
+                      statement_id=index, structure_unit_id=issue.structure_unit_id, source_refs=issue.source_refs)
+        if index == 0:
+            attempts[0]["error_classes"] = [issue.code]
+            attempts[0]["error_detail"] = detail
+        correction = SourceQuoteCorrection(version="phase5/control-source-quote-correction/v1",
+            structure_unit_id=inventory.statements[index].structure_unit_id,
+            corrected_quote=inventory.statements[index].quoted_text, unresolved=None)
+        raw = correction.model_dump_json()
+        attempts.append(dict(attempt=index + 2, session_id=f"quote-{index}", outcome="parsed",
+            error_classes=[], error_detail=detail, raw_output_text=raw,
+            raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest()))
+        original = apply_source_quote_correction(batch, original, index, correction)
+    current = module._deep_component_identity({}, module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE)
+    saved = dict(component_identity=dict(current, compiler_versions=["previous compiler"]),
+                 prompt_template_sha256=current["prompt_material_sha256"], attempts=attempts,
+                 source_interpretation=original.model_dump(mode="json"), partial_wire=wire.model_dump(mode="json"))
+    if change == "legacy_first":
+        attempts[1].pop("error_detail")
+    elif change == "missing_second":
+        attempts[2].pop("error_detail")
+    elif change in {"wrong_statement", "wrong_unit", "wrong_phase", "wrong_reason"}:
+        key, value = {"wrong_statement": ("statement_id", 0), "wrong_unit": ("structure_unit_id", "su-01"),
+                      "wrong_phase": ("workflow_phase", "source_scope_correction"),
+                      "wrong_reason": ("code", "SOURCE_SCOPE_UNGROUNDED")}[change]
+        attempts[2]["error_detail"][key] = value
+    elif change == "corrupt_response":
+        attempts[2]["raw_output_sha256"] = "0" * 64
+    elif change == "changed_snapshot":
+        saved["source_interpretation"]["statements"][1]["unresolved"] = ["未经核实的范围"]
+    elif change == "changed_number":
+        attempts[2]["raw_output_text"] = attempts[2]["raw_output_text"].replace("7天", "8天")
+        attempts[2]["raw_output_sha256"] = hashlib.sha256(attempts[2]["raw_output_text"].encode()).hexdigest()
+    elif change == "changed_sibling":
+        saved["source_interpretation"]["statements"][0]["quoted_text"] += "且不得调整"
+    elif change in {"wrong_sequence", "false_sequence"}:
+        attempts[2]["attempt"] = 4 if change == "wrong_sequence" else True
+    before = deepcopy(saved)
+    args = dict(source_job_id="old", step_id="deep_0001", checkpoint_id="checkpoint")
+    if change == "corrupt_response":
+        with pytest.raises(ValueError, match="摘要损坏"):
+            module._revalidated_source_seed_proof(batch, saved, current, **args)
+    else:
+        proof = module._revalidated_source_seed_proof(batch, saved, current, **args)
+        assert bool(proof) is (change == "same")
+        if proof:
+            assert proof["quote_correction_indexes"] == [0, 1]
+            assert proof["scope_correction_indexes"] == []
+            assert len(proof["source_response_sha256"]) == 3
+            assert proof["discarded"] == ["partial_wire", "source_target_review", "source_statement_coverage",
+                                          "source_candidate_alignment", "session_id"]
+    assert saved == before
 
 
 @pytest.mark.parametrize("change", [

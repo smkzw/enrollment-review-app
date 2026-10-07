@@ -2325,6 +2325,16 @@ def test_source_inventory_corrects_one_nearby_quote_without_rewriting_batch() ->
     assert transport.source_calls == 1
     assert result.source_interpretation.statements[0].quoted_text == "年龄至少18岁"
     assert [item.outcome for item in result.attempts[:2]] == ["schema_invalid", "parsed"]
+    assert result.attempts[1].error_detail == {
+        "workflow_phase": "source_quote_correction",
+        "code": "SOURCE_QUOTE_UNGROUNDED",
+        "statement_id": 0,
+        "structure_unit_id": "su-01",
+        "json_path": "statements[0].quoted_text",
+        "source_refs": ["span:01"],
+        "retry_class": "correct_source_quote",
+        "affected_dependents": ["su-01"],
+    }
 
 
 def test_source_inventory_corrects_embedded_eligibility_basis_locally() -> None:

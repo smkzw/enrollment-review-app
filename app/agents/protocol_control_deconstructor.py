@@ -7154,6 +7154,16 @@ class ProtocolControlAgentRunner:
                                     raw_output_text=correction_response.text,
                                     outcome="parsed",
                                     issues=["单条来源摘录经原文核对；整批仍须校验"],
+                                    error_detail={
+                                        "workflow_phase": "source_quote_correction",
+                                        "code": quote_issue.code,
+                                        "statement_id": quote_issue.statement_id,
+                                        "structure_unit_id": quote_issue.structure_unit_id,
+                                        "json_path": quote_issue.json_path,
+                                        "source_refs": quote_issue.source_refs,
+                                        "retry_class": quote_issue.retry_class,
+                                        "affected_dependents": quote_issue.affected_dependents,
+                                    },
                                 ))
                                 try:
                                     validate_source_interpretation(batch, source_interpretation)
@@ -7175,6 +7185,16 @@ class ProtocolControlAgentRunner:
                                     raw_output_text=(correction_response.text if correction_response else None),
                                     outcome="schema_invalid" if correction_response else "transport_failed",
                                     issues=["单条来源摘录校正未通过：" + str(correction_exc)[:1200]],
+                                    error_detail={
+                                        "workflow_phase": "source_quote_correction",
+                                        "code": quote_issue.code,
+                                        "statement_id": quote_issue.statement_id,
+                                        "structure_unit_id": quote_issue.structure_unit_id,
+                                        "json_path": quote_issue.json_path,
+                                        "source_refs": quote_issue.source_refs,
+                                        "retry_class": quote_issue.retry_class,
+                                        "affected_dependents": quote_issue.affected_dependents,
+                                    },
                                     error_classes=[failure_code or "SOURCE_INTERPRETATION_CORRECTION_TRANSPORT_FAILED"]
                                     if correction_response is None else [],
                                 ))

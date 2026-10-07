@@ -67,6 +67,7 @@ from app.agents.protocol_control_source_interpretation import (
     SourceInterpretation,
     SourceInterpretationValidationError,
     SourceScopeCorrection,
+    SourceQuoteCorrection,
     SourceStatementCoverage,
     SourceTargetReview,
     SourceTargetReviewValidationError,
@@ -76,6 +77,7 @@ from app.agents.protocol_control_source_interpretation import (
     normalize_source_excerpt,
     parse_product_source_interpretation,
     apply_source_scope_correction,
+    apply_source_quote_correction,
     validate_source_definition_consumers,
     validate_source_interpretation,
     normalize_schedule_randomization_anchors,
@@ -1928,6 +1930,7 @@ def _deep_component_identity(
             "source-time-completeness/v1",
             "frequency-source-text-temporal-guard/v1",
             "source-scope-correction-trigger-witness/v1",
+            "source-quote-correction-trigger-replay/v1",
         ],
         "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
         "requested_route_sha256": (
@@ -2261,6 +2264,7 @@ def _revalidated_source_seed_proof(
         return None
     witnessed = [first["raw_output_sha256"]]
     corrected: set[int] = set()
+    quote_corrected: set[int] = set()
     for offset in range(3):
         try:
             validate_source_interpretation(batch, actual)
@@ -2268,6 +2272,7 @@ def _revalidated_source_seed_proof(
             if (offset == 2 or issue.code not in {
                     "SOURCE_TIME_UNGROUNDED", "SOURCE_SCOPE_UNGROUNDED", "SOURCE_TIME_INCOMPLETE",
                     "SOURCE_STAGE_TIME_MISSING", "STUDY_PHASE_NOT_VISIT_TIME", "STUDY_PHASE_NOT_VISIT_STAGE",
+                    "SOURCE_QUOTE_UNGROUNDED", "POST_ELIGIBILITY_SEQUENCE_UNGROUNDED",
                 } or issue.statement_id in corrected or offset + 1 >= len(attempts)):
                 return None
             if offset == 0:
@@ -2285,25 +2290,38 @@ def _revalidated_source_seed_proof(
                     or correction_attempt.get("error_classes")):
                 return None
             detail = correction_attempt.get("error_detail")
+            quote_correction = issue.code in {
+                "SOURCE_QUOTE_UNGROUNDED", "POST_ELIGIBILITY_SEQUENCE_UNGROUNDED",
+            }
             # Legacy first corrections have their trigger on the initial answer.
-            if detail is None and offset == 0:
+            if detail is None and offset == 0 and not quote_correction:
                 detail = first.get("error_detail")
             if (not isinstance(detail, Mapping) or detail.get("code") != issue.code
                     or detail.get("statement_id") != issue.statement_id
                     or detail.get("source_refs") != issue.source_refs):
                 return None
+            if quote_correction and (
+                detail.get("workflow_phase") != "source_quote_correction"
+                or detail.get("structure_unit_id") != issue.structure_unit_id
+            ):
+                return None
             text = actual_text(correction_attempt)
             if text is None:
                 return None
             try:
-                correction = SourceScopeCorrection.model_validate_json(text)
-                statement = actual.statements[issue.statement_id]
-                if issue.code in {"STUDY_PHASE_NOT_VISIT_TIME", "SOURCE_TIME_INCOMPLETE"} and (
-                    correction.scope_quote != statement.scope_quote
-                    or correction.affected_stage != statement.affected_stage
-                ):
-                    return None
-                actual = apply_source_scope_correction(batch, actual, issue.statement_id, correction)
+                if quote_correction:
+                    correction = SourceQuoteCorrection.model_validate_json(text)
+                    actual = apply_source_quote_correction(batch, actual, issue.statement_id, correction)
+                    quote_corrected.add(issue.statement_id)
+                else:
+                    correction = SourceScopeCorrection.model_validate_json(text)
+                    statement = actual.statements[issue.statement_id]
+                    if issue.code in {"STUDY_PHASE_NOT_VISIT_TIME", "SOURCE_TIME_INCOMPLETE"} and (
+                        correction.scope_quote != statement.scope_quote
+                        or correction.affected_stage != statement.affected_stage
+                    ):
+                        return None
+                    actual = apply_source_scope_correction(batch, actual, issue.statement_id, correction)
             except (ValueError, KeyError, TypeError):
                 return None
             corrected.add(issue.statement_id)
@@ -2315,9 +2333,11 @@ def _revalidated_source_seed_proof(
     if actual.model_dump(mode="json") != saved.get("source_interpretation"):
         return None
     return {
-        "schema_version": "phase5/revalidated-source-seed-proof/v1",
+        "schema_version": "phase5/revalidated-source-seed-proof/v2",
         "source_job_id": source_job_id, "step_id": step_id, "checkpoint_id": checkpoint_id,
-        "source_response_sha256": witnessed, "scope_correction_indexes": sorted(corrected),
+        "source_response_sha256": witnessed,
+        "scope_correction_indexes": sorted(corrected - quote_corrected),
+        "quote_correction_indexes": sorted(quote_corrected),
         "base_prompt_sha256": saved["prompt_template_sha256"],
         "source_sha256": hashlib.sha256(actual.model_dump_json().encode()).hexdigest(),
         "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
@@ -2422,7 +2442,24 @@ def _validated_deep_partial_source(
         if not isinstance(saved.get("session_id"), str):
             raise ValueError("局部草稿缺少会话身份")
         wire = ProtocolControlAgentWire.model_validate(saved["partial_wire"])
-        _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(wire, batch))
+        output = hydrate_protocol_control_agent_output(wire, batch)
+        try:
+            _validate_deep_batch_output(batch, output)
+        except (ProtocolControlGateError, ProtocolControlAgentWireValidationError):
+            proof = _revalidated_source_seed_proof(
+                batch, saved, current_components, source_job_id=source_job_id,
+                step_id=step_id, checkpoint_id=checkpoint_id,
+            )
+            if proof is None:
+                raise
+            # Only the witnessed source survives; failed author/reviewer output does not.
+            seed = dict(saved, partial_wire=None, source_target_review=None,
+                        source_statement_coverage=[], source_candidate_alignment=None,
+                        session_id=None)
+            return checkpoint_id, seed, _ResumedSourceReview(
+                state="absent", reason="invalid_author_witnessed_source_only",
+                source_seed_proof=proof,
+            )
     resumed_review = _resumable_saved_source_review(batch, interpretation, saved)
     return checkpoint_id, saved, resumed_review
 
@@ -2632,7 +2669,7 @@ def _preflight_deep_source(
                 and partial is not None and partial[2].source_seed_proof is not None):
             decisions[batch.batch_id]["reason"] = (
                 "verified_source_interpretation_components_revalidated"
-                if partial[2].source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v1"
+                if partial[2].source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v2"
                 else "verified_source_interpretation_repair_material_changed"
             )
             decisions[batch.batch_id]["source_seed_proof"] = partial[2].source_seed_proof
@@ -3550,7 +3587,7 @@ def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str
     if resume_review.source_seed_proof is not None:
         record["proof_scope"] = (
             "revalidated_source_interpretation"
-            if resume_review.source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v1"
+            if resume_review.source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v2"
             else "unrepaired_source_interpretation"
         )
         record["source_seed_proof"] = dict(resume_review.source_seed_proof)

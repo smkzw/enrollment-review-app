@@ -5,6 +5,14 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "quote_source_recovery": {
+    "base_commit": "9d4f94c4", "proof_version": "phase5/revalidated-source-seed-proof/v2",
+    "scope": "Actual response and typed quote trigger replay, max two corrections. Same-component invalid semantic wire may discard downstream output only with the same proof; malformed wire/missing witness still refuses. No old trigger reconstruction or adoption",
+    "tests": {"modules": 5, "passed": 1206, "seconds": 64.74, "exit_code": 0, "warnings": "5 SWIG deprecations", "junit": "/Users/smkzw/tmp/rv1006-quote-source-recovery-connected-20261007-v3.xml", "overlapping_windows_not_additive": true, "earlier_errors": "Owner diagnostic expectation mismatch; nonexistent module path exit4; inconsistent injected gate across preflight/execution correctly rejected"},
+    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session_id": "01a1160f-39c6-7882-bd4c-2cf8f5f2ec45", "seconds": 200.521, "exit_code": 0, "fallback": false, "tool_calls": 14, "parsed_tool_results": 0, "clinical_or_test_execution": false, "owner_silent_completion_wait": true, "final_patch_owner_verified": true},
+    "historical_missing_quote_trigger": "2a24a4c remains refresh-only; old terminal/hash unchanged",
+    "formal_joint_publication": false, "new_current_node_report": false
+  },
   "bounded_packet_diagnostic": {
     "source_commit": "619af9f4", "job_id": "2a24a4c90184445ca541cb61a2898cd4",
     "state": "failed_final", "error_code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID",
