@@ -143,6 +143,7 @@ from .protocol_control_source_interpretation import (
     build_source_unit_comparison_prompt,
     normalize_source_excerpt,
     simple_visit_action_preserves_time,
+    relative_visit_action_preserves_time,
     parse_product_source_definition_consumers,
     parse_product_source_interpretation,
     _unreported_time_fragments,
@@ -237,7 +238,7 @@ __all__ = [
 
 PUBLICATION_REPAIR_SCOPE_VERSION = "phase5/publication-candidate-repair-scope/v2"
 _CANDIDATE_FIELD_REPAIR_VERSION = "phase5/candidate-field-repair/v1"
-SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION = "phase5/source-requirement-failure-policy/v4"
+SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION = "phase5/source-requirement-failure-policy/v5"
 # Reporting changes do not change author/repair prompts or invalidate successful reads.
 SOURCE_REQUIREMENT_FAILURE_REASON_VERSION = "phase5/source-requirement-failure-reason/v1"
 
@@ -4447,7 +4448,8 @@ def source_statement_coverage(
                                       ControlObligationKind.SELECT_BASELINE_VALUE,
                                       ControlObligationKind.COMPLETE_BEFORE_ANCHOR},
                 }
-                if simple_visit_action_preserves_time(batch, statement, candidate):
+                if (simple_visit_action_preserves_time(batch, statement, candidate)
+                        or relative_visit_action_preserves_time(batch, statement, candidate)):
                     compatible_kinds["time_validity"] = {
                         *compatible_kinds["time_validity"],
                         ControlObligationKind.COMPLETE_OR_VERIFY,
@@ -8288,6 +8290,7 @@ class ProtocolControlAgentRunner:
                         if additional:
                             from .protocol_control_stage_compiler import (
                                 assemble_source_requirement_inserts,
+                                compile_source_requirement_response,
                                 build_relative_stage_requirement_prompt,
                                 build_stage_bound_requirement_prompt,
                                 build_shared_prohibition_requirement_prompt,
@@ -8370,18 +8373,53 @@ class ProtocolControlAgentRunner:
                                             issues=["单项来源解释未通过原门禁：" + str(stage_exc)[:1400]],
                                             error_classes=["STAGE_BOUND_INSERT_INVALID"],
                                         ))
-                                if short_reviews:
+                                validated_short_reviews = []
+                                validated_short_responses = []
+                                failed_short_indexes = []
+                                for short_review, short_response in zip(short_reviews, short_responses, strict=True):
+                                    try:
+                                        compile_source_requirement_response(
+                                            batch, source_interpretation, short_review, short_response,
+                                        )
+                                        validated_short_reviews.append(short_review)
+                                        validated_short_responses.append(short_response)
+                                    except Exception as stage_exc:  # noqa: BLE001 - preserve unresolved source
+                                        failed_short_indexes.append(short_review.statement_index)
+                                        if short_review.statement_index not in temporal_unresolved_indexes:
+                                            pending_additional.append(short_review)
+                                        failed_statement = source_interpretation.statements[short_review.statement_index]
+                                        failed_unit = next(unit for unit in batch.owned_units
+                                                           if unit.structure_unit_id == failed_statement.structure_unit_id)
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=short_response.session_id,
+                                            raw_output_sha256=_sha256(str(stage_exc)),
+                                            raw_output_chars=None,
+                                            outcome="publication_invalid",
+                                            issues=["本条解释未通过原门禁；此前通过条目保持：" + str(stage_exc)[:1400]],
+                                            error_classes=["STAGE_BOUND_INSERT_INVALID"],
+                                            error_detail={
+                                                "code": getattr(stage_exc, "code", None) or "STAGE_BOUND_INSERT_INVALID",
+                                                "statement_id": short_review.statement_index,
+                                                "json_path": getattr(stage_exc, "json_path", None) or f"/source_interpretation/statements/{short_review.statement_index}",
+                                                "source_refs": list(failed_unit.source_span_ids),
+                                                "retry_class": "single_statement",
+                                                "affected_dependents": [short_review.statement_index],
+                                            },
+                                        ))
+                                # Individual source checks isolate bad answers; the valid
+                                # subset still must pass the original whole-batch gate.
+                                if validated_short_reviews:
                                     try:
                                         next_wire, next_output, next_coverage = assemble_source_requirement_inserts(
-                                            batch, source_interpretation, short_reviews, wire,
-                                            short_responses, output_validator,
+                                            batch, source_interpretation, validated_short_reviews, wire,
+                                            validated_short_responses, output_validator,
                                         )
+                                        inserted_indexes = {item.statement_index for item in validated_short_reviews}
                                         remaining = SourceTargetReview(
                                             version=SOURCE_TARGET_REVIEW_VERSION,
                                             items=[entry for entry in target_review.items
-                                                   if entry.statement_index not in {
-                                                       review.statement_index for review in short_reviews
-                                                   }],
+                                                   if entry.statement_index not in inserted_indexes],
                                         )
                                         validate_source_target_review(
                                             batch, source_interpretation, next_coverage, remaining,
@@ -8393,32 +8431,37 @@ class ProtocolControlAgentRunner:
                                         latest_source_target_review = remaining
                                         latest_source_statement_coverage = coverage
                                         review_validation_snapshot = remaining
-                                        temporal_unresolved_indexes = [
-                                            index for index in temporal_unresolved_indexes
-                                            if index not in {review.statement_index for review in short_reviews}
-                                        ]
+                                        temporal_unresolved_indexes = [index for index in temporal_unresolved_indexes
+                                                                       if index not in inserted_indexes]
                                         attempts.append(ProtocolControlAgentAttempt(
                                             attempt=len(attempts) + 1,
-                                            session_id=short_responses[-1].session_id,
-                                            raw_output_sha256=_sha256(raw_text),
-                                            raw_output_chars=len(raw_text),
-                                            outcome="parsed",
-                                            output=output,
-                                            issues=["同批单项解释经来源闭包与原批次门禁核实"],
+                                            session_id=validated_short_responses[-1].session_id,
+                                            raw_output_sha256=_sha256(raw_text), raw_output_chars=len(raw_text),
+                                            outcome="parsed", output=output,
+                                            issues=["有效单项解释经来源闭包与原批次门禁核实；未通过条目保持待核"],
                                         ))
-                                    except Exception as stage_exc:  # noqa: BLE001 - preserve unresolved source
-                                        pending_additional.extend(
-                                            review for review in short_reviews
-                                            if review.statement_index not in temporal_unresolved_indexes
-                                        )
+                                    except Exception as stage_exc:  # noqa: BLE001 - shared dependencies remain mandatory
+                                        failed_short_indexes.extend(item.statement_index for item in validated_short_reviews)
+                                        pending_additional.extend(item for item in validated_short_reviews
+                                                                  if item.statement_index not in temporal_unresolved_indexes)
                                         attempts.append(ProtocolControlAgentAttempt(
                                             attempt=len(attempts) + 1,
-                                            session_id=short_responses[-1].session_id,
-                                            raw_output_sha256=_sha256(str(stage_exc)),
-                                            raw_output_chars=None,
+                                            session_id=validated_short_responses[-1].session_id,
+                                            raw_output_sha256=_sha256(str(stage_exc)), raw_output_chars=None,
                                             outcome="publication_invalid",
-                                            issues=["同批单项解释未通过原门禁：" + str(stage_exc)[:1400]],
+                                            issues=["有效解释合并未通过原批次门禁：" + str(stage_exc)[:1400]],
                                             error_classes=["STAGE_BOUND_INSERT_INVALID"],
+                                            error_detail={
+                                                "code": "STAGE_BOUND_INSERT_INVALID",
+                                                "statement_ids": [item.statement_index for item in validated_short_reviews],
+                                                "json_path": "/candidate_drafts",
+                                                "source_refs": list(dict.fromkeys(span for unit in batch.owned_units
+                                                    if unit.structure_unit_id in {source_interpretation.statements[item.statement_index].structure_unit_id
+                                                                                 for item in validated_short_reviews}
+                                                    for span in unit.source_span_ids)),
+                                                "retry_class": "assembly_validation",
+                                                "affected_dependents": [item.statement_index for item in validated_short_reviews],
+                                            },
                                         ))
                                 if short_failure is not None:
                                     failure, failed_index, code = short_failure
@@ -8441,6 +8484,15 @@ class ProtocolControlAgentRunner:
                                     ))
                                     return build_result(
                                         status="需要核对", batch_id=batch.batch_id, session_id=failed_session,
+                                        attempts=attempts, source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        partial_wire=wire, source_candidate_alignment=checkpoint_alignment(),
+                                    )
+                                if failed_short_indexes:
+                                    # A rejected short proposal cannot authorize a later
+                                    # whole-unit rewrite or an alignment vote over that error.
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id, session_id=session_id,
                                         attempts=attempts, source_interpretation=source_interpretation,
                                         source_statement_coverage=coverage, source_target_review=target_review,
                                         partial_wire=wire, source_candidate_alignment=checkpoint_alignment(),

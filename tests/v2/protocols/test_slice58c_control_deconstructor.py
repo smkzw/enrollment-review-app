@@ -10307,6 +10307,95 @@ def test_shared_prohibition_preserves_raw_fullwidth_source_excerpt() -> None:
     validate_protocol_control_batch_candidates(batch, output)
 
 
+@pytest.mark.parametrize("same_unit", [False, True])
+@pytest.mark.parametrize("broken_answer", ["wrong_period", "wrong_action", "wrong_version"])
+def test_invalid_short_sibling_cannot_erase_verified_insert(same_unit, broken_answer) -> None:
+    from app.services.protocol_control_restricted_source import restricted_batch_from_review
+
+    batch, inventory, review, selection = _stage_bound_example()
+    prohibition = "筛选期、治疗期不得调整既定治疗。"
+    batch.owned_units[0].excerpt = "年龄至少18岁；" + batch.owned_units[0].excerpt
+    if same_unit:
+        batch.owned_units[0].excerpt += prohibition
+    else:
+        batch.owned_units[1].excerpt = prohibition
+        inventory.units_without_statement = []
+    inventory.statements.append(inventory.statements[0].model_copy(update={
+        "structure_unit_id": "su-01" if same_unit else "su-02",
+        "quoted_text": prohibition, "scope_quote": "筛选期、治疗期",
+        "force": "prohibited", "time_words": ["筛选期", "治疗期"],
+    }))
+    prohibited_review = review.model_copy(update={
+        "statement_index": 1, "source_action_excerpt": "不得调整既定治疗",
+    })
+    prohibited_selection = {
+        "version": SHARED_PROHIBITION_REQUIREMENT_VERSION,
+        "statement_index": 1, "current_statement": "筛选期不得调整既定治疗",
+        "future_statement": "治疗期不得调整既定治疗",
+        "workflow_stage_id": "stage:screening:one", "prospective_period": "treatment_period",
+        "kind": "prohibit_medication_or_treatment_exposure", "title": "既定治疗限制",
+        "applicable_population": "拟参加者", "observation_scope": "筛选期既定治疗记录",
+        "fact_type": "treatment_change", "evidence_description": "既定治疗记录",
+        "required_source_types": [], "unresolved_aspects": [],
+    }
+    prohibited_selection.update({
+        "wrong_period": {"prospective_period": "study_period"},
+        "wrong_action": {"future_statement": "治疗期不得更换既定治疗"},
+        "wrong_version": {"version": "unrecognized"},
+    }[broken_answer])
+    initial = _wire(candidate=_candidate())
+
+    class MixedShortTransport(_FakeTransport):
+        short_calls = 0
+
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="source", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="review", text=SourceTargetReview(
+                version=SOURCE_TARGET_REVIEW_VERSION, items=[review, prohibited_review],
+            ).model_dump_json())
+
+        def read_stage_bound_requirement(self, *, prompt):
+            self.short_calls += 1
+            return ProtocolControlAgentResponse(session_id="good", text=selection.model_dump_json())
+
+        def read_shared_prohibition_requirement(self, *, prompt):
+            self.short_calls += 1
+            assert "不能仅因治疗阶段属于研究的一部分" in prompt
+            return ProtocolControlAgentResponse(session_id="bad", text=json.dumps(prohibited_selection))
+
+        def start_source_insert(self, **kwargs):
+            raise AssertionError("跨阶段坏项不得退回整单元重写")
+
+    transport = MixedShortTransport([ProtocolControlAgentResponse(
+        session_id="wire", text=initial.model_dump_json(),
+    )])
+    result = ProtocolControlAgentRunner(max_schema_repairs=0).run(
+        batch, transport, output_validator=lambda _output: None,
+    )
+    assert transport.short_calls == 2
+    assert result.status == "需要核对"
+    assert result.final_output is None
+    assert result.partial_wire is not None
+    assert len(result.partial_wire.candidate_drafts) == 2
+    assert result.partial_wire.candidate_drafts[0] == initial.candidate_drafts[0]
+    assert result.source_statement_coverage[0].status == "expressed"
+    assert result.source_statement_coverage[1].status != "expressed"
+    assert [item.statement_index for item in result.source_target_review.items] == [1]
+    failure = next(attempt for attempt in result.attempts
+                   if attempt.error_classes == ["STAGE_BOUND_INSERT_INVALID"])
+    assert failure.error_detail["statement_id"] == 1
+    assert failure.error_detail["affected_dependents"] == [1]
+    assert failure.error_detail["source_refs"] == batch.owned_units[0 if same_unit else 1].source_span_ids
+    if broken_answer == "wrong_period":
+        assert failure.error_detail["code"] == "PROSPECTIVE_PERIOD_SOURCE_MISMATCH"
+        assert failure.error_detail["json_path"] == "/prospective_period"
+    restored = type(result).model_validate_json(result.model_dump_json())
+    assert restored.partial_wire == result.partial_wire
+    assert restricted_batch_from_review(batch, restored) is None
+
+
 def test_stage_bound_requirement_compiles_only_frozen_visit_scope() -> None:
     batch, inventory, review, selection = _stage_bound_example()
     prompt = build_stage_bound_requirement_prompt(batch, inventory, review)
@@ -10876,7 +10965,8 @@ def test_stage_bound_insert_uses_product_reader_and_keeps_original_candidate() -
 
 
 @pytest.mark.parametrize("shared_time_word", [None, "筛选/导入期（D-7~D-1）", "D-7~D-1"])
-def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window(shared_time_word) -> None:
+@pytest.mark.parametrize("functions", [["action"], ["action", "time_validity"]])
+def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window(shared_time_word, functions) -> None:
     batch, inventory, review, selection = _stage_bound_example()
     batch.owned_units[0].excerpt = (
         "筛选/导入期（D-7~D-1）：完成导入治疗后再次核查资格。"
@@ -10893,6 +10983,7 @@ def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_w
     inventory.statements[0].quoted_text = "完成导入治疗后再次核查资格"
     inventory.statements[0].scope_quote = "筛选/导入期（D-7~D-1）："
     inventory.statements[0].time_words = ["完成导入治疗后"]
+    inventory.statements[0].decision_functions = functions
     if shared_time_word:
         inventory.statements[0].time_words.insert(0, shared_time_word)
     review.source_action_excerpt = "完成导入治疗后再次核查资格"
@@ -10921,6 +11012,23 @@ def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_w
     assert candidate.review_node_bindings[0].review_stage == ReviewStage.BASELINE
     assert candidate.cross_source_relations[0].affected_workflow_stage_id == "stage:screening:two"
     assert source_statement_coverage(batch, inventory, _wire(candidate=candidate))[0].status == "expressed"
+    if "time_validity" in functions:
+        for mutation in ("relation_missing", "wrong_target", "wrong_stage", "wrong_scope"):
+            broken = candidate.model_copy(deep=True)
+            if mutation == "relation_missing":
+                broken.cross_source_relations = []
+            elif mutation == "wrong_target":
+                broken.cross_source_relations[0].external_target_id = "unknown-procedure"
+            elif mutation == "wrong_stage":
+                broken.review_node_bindings[0].workflow_stage_id = "stage:screening:one"
+            else:
+                broken.obligation_expression.groups[0].atoms[0].statement = "完成检查"
+            assert source_statement_coverage(batch, inventory, _wire(candidate=broken))[0].status == "candidate_linked"
+        changed_source = batch.model_copy(deep=True)
+        changed_source.known_procedure_targets[0].source_excerpts = ["记录身高"]
+        # Literal coverage is not target-semantic acceptance; recompilation must reject stale target proof.
+        with pytest.raises(StageBoundCompilationGap, match="不能逐项回源"):
+            compile_stage_bound_requirement(changed_source, inventory, review, relative)
     if shared_time_word:
         missing_scope = candidate.model_copy(deep=True)
         missing_scope.obligation_expression.groups[0].atoms[0].source_excerpts[0] = (
@@ -10951,7 +11059,8 @@ def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_w
         compile_stage_bound_requirement(batch, invented_time, review, relative)
 
 
-def test_two_sourced_actions_insert_together_without_rewriting_existing_draft() -> None:
+@pytest.mark.parametrize("case", ["complete", "broken_first", "joint_failure"])
+def test_two_sourced_actions_insert_together_without_rewriting_existing_draft(case) -> None:
     batch, inventory, first_review, first = _stage_bound_example()
     batch.owned_units[0].excerpt = (
         "年龄至少18岁；筛选期（D-7~D-1）：拟参加者须完成知情同意记录。"
@@ -11002,19 +11111,27 @@ def test_two_sourced_actions_insert_together_without_rewriting_existing_draft() 
             return ProtocolControlAgentResponse(session_id="target-1", text=target_review.model_dump_json())
 
         def read_stage_bound_requirement(self, *, prompt: str) -> ProtocolControlAgentResponse:
-            return ProtocolControlAgentResponse(session_id="stage-1", text=first.model_dump_json())
+            proposal = first.model_copy(update={"action_excerpt": "未在来源记载的操作"}) if case == "broken_first" else first
+            return ProtocolControlAgentResponse(session_id="stage-1", text=proposal.model_dump_json())
 
         def read_relative_stage_requirement(self, *, prompt: str) -> ProtocolControlAgentResponse:
             return ProtocolControlAgentResponse(session_id="relative-1", text=relative.model_dump_json())
 
         def start_source_candidate_alignment(self, *, prompt):
+            if case != "complete":
+                raise AssertionError("失败短答不得借后续投票或整单元重写消解")
             return _consent_policy_alignment_response(first.action_excerpt, prompt)
+
+        def start_source_insert(self, **kwargs):
+            raise AssertionError("同单元已有合法兄弟，不能整单元重写")
 
     validated_sizes = []
 
     def validate_complete_batch(output) -> None:
         validated_sizes.append(len(output.candidates))
-        if len(validated_sizes) > 1 and len(output.candidates) != 3:
+        if len(validated_sizes) > 1 and (
+            case == "joint_failure" or len(output.candidates) != (2 if case == "broken_first" else 3)
+        ):
             raise ValueError("同批增量要求尚未齐全")
 
     result = ProtocolControlAgentRunner().run(
@@ -11024,6 +11141,26 @@ def test_two_sourced_actions_insert_together_without_rewriting_existing_draft() 
         )]),
         output_validator=validate_complete_batch,
     )
+    if case != "complete":
+        assert result.status == "需要核对"
+        assert result.final_output is None
+        assert result.partial_wire is not None
+        assert result.partial_wire.candidate_drafts[0].model_dump(mode="json") == original["candidate_drafts"][0]
+        assert len(result.partial_wire.candidate_drafts) == (2 if case == "broken_first" else 1)
+        assert {item.session_id for item in result.attempts} >= {"stage-1", "relative-1"}
+        if case == "broken_first":
+            assert [item.statement_index for item in result.source_target_review.items] == [0]
+            assert result.source_statement_coverage[1].status == "expressed"
+            assert result.source_statement_coverage[0].status != "expressed"
+        else:
+            assert result.partial_wire.dispositions == ProtocolControlAgentWire.model_validate(original).dispositions
+            failed = next(item for item in result.attempts if item.error_detail
+                          and item.error_detail.get("retry_class") == "assembly_validation")
+            assert failed.error_detail["statement_ids"] == [0, 1]
+            assert failed.error_detail["json_path"] == "/candidate_drafts"
+        from app.services.protocol_control_restricted_source import restricted_batch_from_review
+        assert restricted_batch_from_review(batch, type(result).model_validate_json(result.model_dump_json())) is None
+        return
     assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
     assert validated_sizes == [1, 3]
     assert result.final_output is not None

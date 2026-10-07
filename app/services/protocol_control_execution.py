@@ -1895,7 +1895,7 @@ def _deep_component_identity(
             STAGE_BOUND_REQUIREMENT_VERSION, RELATIVE_STAGE_REQUIREMENT_VERSION,
             SHARED_PROHIBITION_REQUIREMENT_VERSION,
             "stage-period-inside-visit-scope/v3",
-            "source-statement-coverage/v5",
+            "source-statement-coverage/v6",
             SOURCE_CANDIDATE_ALIGNMENT_VERSION,
             SOURCE_FUNCTION_RECHECK_VERSION,
             SOURCE_TARGET_REPAIR_VERSION,

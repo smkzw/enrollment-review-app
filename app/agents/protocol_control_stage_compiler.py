@@ -49,7 +49,7 @@ from .protocol_control_source_interpretation import (
 
 STAGE_BOUND_REQUIREMENT_VERSION = "phase5/control-stage-bound-requirement/v10"
 RELATIVE_STAGE_REQUIREMENT_VERSION = "phase5/control-relative-stage-requirement/v9"
-SHARED_PROHIBITION_REQUIREMENT_VERSION = "phase5/control-shared-prohibition-requirement/v3"
+SHARED_PROHIBITION_REQUIREMENT_VERSION = "phase5/control-shared-prohibition-requirement/v4"
 
 
 class _SourceRequirement(ContractModel):
@@ -111,6 +111,11 @@ class SharedProhibitionRequirement(ContractModel):
 
 class StageBoundCompilationGap(ValueError):
     """A source dimension cannot be assembled without semantic invention."""
+
+    def __init__(self, message: str, *, code: str | None = None, json_path: str | None = None):
+        super().__init__(message)
+        self.code = code
+        self.json_path = json_path
 
 
 def _time_parts(text: str) -> list[str]:
@@ -213,6 +218,9 @@ def build_shared_prohibition_requirement_prompt(
         "只写后续时期和完全相同的原禁止动作。observation_scope 须逐字保留本次时期名称，"
         "不得把未来未发生的行为写进本次观察范围，"
         "不得创造节点、日期、药物或医学结论。prospective_period 只从原文明确的治疗期或研究期选择。"
+        "原文后续范围是治疗、给药或用药阶段时填写 treatment_period；study_period 表示原文明示的"
+        "研究期间，不能仅因治疗阶段属于研究的一部分而扩大为研究期。不能确定时保留 unresolved_aspects，"
+        "不要猜测或自动扩大范围。"
         "全部字段只根据这条原文和冻结节点填写，不能借同单元另一句话补时间。"
         "required_source_types 仅填写原文明文限定的受试者资料种类；未限定时必须填写空列表 []，"
         "不把可用的证明材料编成强制来源限制。"
@@ -225,7 +233,7 @@ def shared_prohibition_requirement_response_format() -> dict[str, object]:
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": "protocol_control_shared_prohibition_requirement_v1",
+            "name": "protocol_control_shared_prohibition_requirement_v4",
             "strict": True,
             "schema": SharedProhibitionRequirement.model_json_schema(),
         },
@@ -525,9 +533,11 @@ def compile_shared_prohibition_requirement(
     future_prefix = future[:future.index(verb.group())]
     if selection.prospective_period == ProtocolPeriod.TREATMENT_PERIOD:
         if not re.search(r"治疗|给药|用药", future_prefix):
-            raise StageBoundCompilationGap("后续时期未明确属于治疗或用药期")
+            raise StageBoundCompilationGap("后续时期未明确属于治疗或用药期",
+                                           code="PROSPECTIVE_PERIOD_SOURCE_MISMATCH", json_path="/prospective_period")
     elif not re.search(r"(?:随机|基线|给药|入组)后", future_prefix):
-        raise StageBoundCompilationGap("研究期未明确从本次审核节点以后开始")
+        raise StageBoundCompilationGap("研究期未明确从本次审核节点以后开始",
+                                       code="PROSPECTIVE_PERIOD_SOURCE_MISMATCH", json_path="/prospective_period")
     if normalize_source_excerpt(current_prefix) not in normalize_source_excerpt(selection.observation_scope) or (
         normalize_source_excerpt(future_prefix) in normalize_source_excerpt(selection.observation_scope)
     ):

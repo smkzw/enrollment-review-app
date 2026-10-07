@@ -2014,6 +2014,8 @@ def simple_visit_action_preserves_time(batch, statement, candidate) -> bool:
             or not source_has_single_visit_anchor(statement)):
         return False
     word = normalize_source_excerpt(statement.scope_quote or statement.time_words[0])
+    if normalize_source_excerpt(statement.time_words[0]) not in word:
+        return False
     source = normalize_source_excerpt(statement.quoted_text)
     stages = {item.workflow_stage_id: item for item in batch.known_workflow_stage_targets}
     for node in candidate.review_node_bindings:
@@ -2030,6 +2032,72 @@ def simple_visit_action_preserves_time(batch, statement, candidate) -> bool:
                 for group in candidate.obligation_expression.groups
                 for atom in group.atoms
             )
+    return False
+
+
+def relative_visit_action_preserves_time(batch, statement, candidate) -> bool:
+    """A later procedure may retain an exact, source-bound earlier-stage condition."""
+    from app.domain.contracts.enums import ReviewStage
+    from app.protocols.control_scope_sources import resolve_ancestor_scope_citation
+    from app.protocols.supplementary_relation_contract import procedure_execution_workflow_stage_id
+
+    if (statement.force != "required" or statement.unresolved or statement.exception_words
+            or not statement.scope_quote or "action" not in statement.decision_functions
+            or not set(statement.decision_functions) <= {"action", "time_validity"}
+            or source_requires_temporal_resolution(statement)):
+        return False
+    unit = next((item for item in batch.owned_units
+                 if item.structure_unit_id == statement.structure_unit_id), None)
+    if (unit is None or len(unit.source_span_ids) != 1
+            or unit.structure_unit_id not in candidate.source_structure_unit_ids):
+        return False
+    try:
+        citation = resolve_ancestor_scope_citation(
+            unit, statement.scope_quote, [*batch.owned_units, *batch.context_units],
+        )
+    except ValueError:
+        return False
+    source = normalize_source_excerpt(statement.quoted_text)
+    scope = normalize_source_excerpt(statement.scope_quote)
+    relative_words = [normalize_source_excerpt(word) for word in statement.time_words
+                      if normalize_source_excerpt(word) not in scope]
+    if (not relative_words or any(word not in source for word in relative_words)
+            or not any(word.endswith(("后", "之后")) for word in relative_words)):
+        return False
+    stages = {item.workflow_stage_id: item for item in batch.known_workflow_stage_targets}
+    prior = [stage for stage in stages.values() if source_visit_scope_matches(
+        statement.scope_quote, normalize_source_excerpt(" ".join(filter(None, (
+            stage.display_name, stage.visit_instance, stage.visit_window,
+        )))),
+    )]
+    if len(prior) != 1:
+        return False
+    order = list(ReviewStage)
+    for node in candidate.review_node_bindings:
+        stage = stages.get(node.workflow_stage_id)
+        if (stage is None or node.role != ReviewNodeRole.DECIDE_AT_NODE
+                or node.scope_citation != citation
+                or order.index(prior[0].review_stage) >= order.index(stage.review_stage)):
+            continue
+        procedures = [item for item in batch.known_procedure_targets if any(
+            relation.kind.value == "supplementary_requirement"
+            and relation.external_target_kind.value == "required_procedure"
+            and relation.external_target_id == item.catalog_item_id
+            and relation.affected_workflow_stage_id == stage.workflow_stage_id
+            for relation in candidate.cross_source_relations
+        ) and procedure_execution_workflow_stage_id(
+            item, batch.known_workflow_stage_targets,
+        ) == stage.workflow_stage_id]
+        if not procedures:
+            continue
+        if any(
+            atom.kind == ControlObligationKind.COMPLETE_OR_VERIFY
+            and normalize_source_excerpt(atom.statement).rstrip("。；;.!！?？") == source.rstrip("。；;.!！?？")
+            and set(atom.source_span_ids) <= set(unit.source_span_ids)
+            and any(normalize_source_excerpt(excerpt) == source for excerpt in atom.source_excerpts)
+            for group in candidate.obligation_expression.groups for atom in group.atoms
+        ):
+            return True
     return False
 
 
