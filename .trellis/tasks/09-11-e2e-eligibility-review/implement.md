@@ -3,7 +3,11 @@
 
 ### 单一当前用户流程表
 
-源码基础4e4f93bd已push；7份继承delivery修改未动。现场Goal active/claims_complete=false，无用户暂停。本包选择单所有者执行＋一个C03：出处装配有作用域不确定，独立挑战后所有者核消费者，不另开平台。共享工作台E03本侧审计已终态，真实project/API桥接未实施，不重复派发、不改共享首屏。
+源码7979a9f1已push；7份继承delivery修改未动。现场Goal active/claims_complete=false，无用户暂停。当前单所有者执行＋一个C03：日内建议与访视覆盖、忠实受限要求的采用边界存在实质不确定，独立挑战后核实际消费者，不另开平台。共享工作台E03本侧审计已终态，真实project/API桥接未实施，不重复派发、不改共享首屏。
+
+当前功能包unresolved-frozen-source-correspondence/v1：只对来源本身无未决、冻结context中原句重复的首条未决，调用既有SourceUnitComparison；原对象/时期/摘录及完整review重验后仅变为potential_same_requirement。实际只读1调用14.6281s验证这条已有合同可用；原库/原答/旧Job保持，不作为采用。前述3+2诊断及本次1调用分列，所列链27+14+6=47物理调用不是全历史或额度清零。生产新增原答hash、原条hash及assembled_review_sha256；兄弟、wire、来源不改。来源自己有歧义/无相同context不读；不清仍原未决，错对象/身份/范围/预算/中断拒绝。首批下一次合法API必须证明26ed四项wire可恢复，禁止作者/来源整批重读。
+
+该包四相连原模块集中v4：991passed/60.93s/exit0/5SWIG，JUnit /Users/smkzw/tmp/rv1006-unresolved-context-correspondence-connected-20261007-v4.xml；窗口重叠不相加。v1错误模块路径exit4/no tests；v2 982pass/9fail：新夹具逐项请求回全两项，先被范围拒绝；v3 990pass/1fail：夹具把另一个清楚兄弟也放进同context，应可独立核对却错误期望0读；均修夹具、不放产品门。PDB只查合成失败，退出2，不临床/模型调用。C03 CodeBuddy/DeepSeek/max同会话01a116cd…两轮211.201/115.669s、exit0/no fallback；工具20/7、解析结果0/0、首轮18读预算超出，120min静默完成等待。顾问不跑测试/不读临床。所有者实际核attempts每run新建、预算在网络前reserve、outer terminal保留identity/budget/interruption；后继必须查另一owned批的唯一同义/同force且已表达候选，不能把待跨章核验作为窗口报告完成。未采纳全混合单元限制放宽或把定义当背景；最终receipt hash由所有者验证，非后补独审。净化审阅见 RV1006_CONTEXT_CORRESPONDENCE_REVIEW_20261007.md。
 
 | 用户步骤 | 实际入口与已证 | 当前首阻断/下一动作 |
 |---|---|---|
@@ -20,6 +24,10 @@
 首因已定位：第9点完整疗程在草稿中，缺同一正文开头的时期出处，并非原文无疗程。零调用只读证据：scope与动作各一次、单owned span、完整节点匹配；仅追加一对原出处后临床/时间/求值不变、完整门禁通过，18条覆盖仅第9条改变。仅诊断，不冒称新Job/规则批准。当前最小包inline-scope-citation-assembly/v1仅装配正文前缀唯一出处，保留原答hash、兄弟覆盖、完整验证。升级组件身份后按现行合同丢旧wire/核对/会话，仅见证来源复用，不改旧身份偷用5项草稿。
 
 集中窗口v1为970pass/6fail121.11s：所有者夹具误读水合semantics路径、两无效源应更早拒，未松产品门；v2四相连976passed120.69s/exit0/5SWIG。最终四相连原模块980passed/124.01s/exit0/5SWIG，JUnit rv1006-inline-scope-citation-connected-20261007-final.xml，窗口不累加。C03同CodeBuddy/DeepSeek/max会话01a11695…两轮provider193.386/102.392s、exit0/no fallback、120min静默完成等待；首轮29工具/0解析结果、超14材料预算且包误写测试路径，限制保留；第二轮6工具/0解析结果。所有者未采纳隐藏资格后动作/外部转述的建议，错误控制仍须原硬门拒；追加危险消费者例。模型改动范围检查移到宿主装配前，不扩mutable范围；增加非来源字段零变化检查。最终调用者排序/反例由所有者验证，非再次独审。真实298保存wire的最终函数只读回放：完整门禁通过、coverage_delta=[9]、0调用/0库写，wire 4fa7f5e9…→e4d968d5…；原wire/hash未修改。首次诊断输出取错statement_id键产生KeyError，修输出读取后通过，非产品/模型失败。完整同源采用与病例工作稿仍未完成。
+
+最新真实终态26ed356b…（源码7979a9f1）：合法API来源恢复证明v3，18来源点/85发现复用，丢旧作者/核对/会话；14物理调用623.0658s，90深审0完成，failed_final/SOURCE_TARGET_REVIEW_UNRESOLVED。输入356767、输出含思考146995、缓存231706已含输入；实际模型均deepseek-v4.1-flash/stop，思考细分与费用unknown。保存4项门禁合法候选，第9点已expressed；首阻断转为第14点日内用药建议的节点关系，非端点或原文缺失。保护库/来源库/旧Job及payload不变，未共同发布/新报告。新编译身份导致旧5项不复用、新作者再次引入错误，是实际恢复成本，不称效率改善。
+
+随后同一冻结来源、只读产品harness诊断3调用32.3047s：短解释把patient_study_procedure标unresolved却没有具体疑问，原文查阅只重复原句。再携带实际保存的target-review疑问做2调用33.2346s，找到冻结正文内相关背景治疗开始说明，但remains_unknown；出处有效不是语义已核、没有采用或库写。5次诊断均原库/旧payload/保护库不变，列示累计27+14+5=46物理调用仅该链，不是全历史总数或预算清零。私有源/原答仅本机受控ROOT/rv1006-{inline-scope-source-resume,unresolved-clock-source-inquiry,clock-target-question-inquiry}-20261007-v1。停止同假设整批重开；当前先核日内建议、访视覆盖、严格受限保存/消费三个实际合同是否相容，保留来源/义务强度/兄弟和未决，不将程序缺口交给研究者。C03 rv1006-clock-scope-delivery-boundary-20261007待实际终态，未宣称独审完成。
 
 ### 既往过程证据（以下段落是当时快照，不覆盖上表）
 

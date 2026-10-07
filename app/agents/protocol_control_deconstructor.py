@@ -8443,6 +8443,93 @@ class ProtocolControlAgentRunner:
                         validate_source_target_review(
                             batch, source_interpretation, coverage, target_review,
                         )
+                        # A clear source may lack a catalog target while its exact
+                        # statement recurs in frozen context. Establish only the
+                        # existing pending correspondence, never target coverage.
+                        comparison_reader = getattr(transport, "start_source_unit_comparison", None)
+                        contextual_unresolved = next((
+                            item for item in target_review.items
+                            if item.decision == "unresolved"
+                            and not source_interpretation.statements[item.statement_index].unresolved
+                            and source_interpretation.statements[item.statement_index].decision_functions != ["unclassified"]
+                            and source_interpretation.statements[item.statement_index].control_authority != "cited_external_rationale"
+                            and len(normalize_source_excerpt(item.source_action_excerpt)) >= 8
+                            and any(normalize_source_excerpt(item.source_action_excerpt)
+                                    in normalize_source_excerpt(unit.excerpt)
+                                    for unit in batch.context_units)
+                        ), None) if callable(comparison_reader) and not any(
+                            isinstance(attempt.error_detail, dict)
+                            and attempt.error_detail.get("recovery_method") == "unresolved-frozen-source-correspondence/v1"
+                            for attempt in attempts
+                        ) else None
+                        if contextual_unresolved is not None:
+                            comparison_response = None
+                            comparison_detail = {
+                                "recovery_method": "unresolved-frozen-source-correspondence/v1",
+                                "statement_id": contextual_unresolved.statement_index,
+                                "original_review_sha256": _sha256(contextual_unresolved.model_dump_json()),
+                                "automatic_adoption": False,
+                            }
+                            try:
+                                comparison_response = comparison_reader(prompt=(
+                                    build_source_unit_comparison_prompt(
+                                        batch, source_interpretation, contextual_unresolved.statement_index,
+                                    ) + "\n已保存的具体未决（只供核查，不是答案）："
+                                    + _stable_json(contextual_unresolved.model_dump(mode="json"))
+                                ))
+                                comparison = SourceUnitComparison.model_validate_json(comparison_response.text)
+                                proposed = source_unit_comparison_as_review(
+                                    batch, source_interpretation,
+                                    next(entry for entry in coverage
+                                         if entry.statement_index == contextual_unresolved.statement_index),
+                                    comparison,
+                                )
+                                if proposed is not None:
+                                    revised = SourceTargetReview(
+                                        version=SOURCE_TARGET_REVIEW_VERSION,
+                                        items=[proposed.items[0] if item.statement_index == contextual_unresolved.statement_index
+                                               else item for item in target_review.items],
+                                    )
+                                    validate_source_target_review(batch, source_interpretation, coverage, revised)
+                                    target_review = revised
+                                    repaired_review_indexes.add(contextual_unresolved.statement_index)
+                                comparison_detail["pending_correspondence_verified"] = proposed is not None
+                                comparison_detail["assembled_review_sha256"] = _sha256(target_review.model_dump_json())
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1, session_id=comparison_response.session_id,
+                                    raw_output_sha256=_sha256(comparison_response.text),
+                                    raw_output_chars=len(comparison_response.text), raw_output_text=comparison_response.text,
+                                    outcome="parsed", error_detail=comparison_detail,
+                                    issues=["跨章节关系仅登记待核；没有改写来源、候选或证明已有流程完整覆盖"],
+                                ))
+                            except Exception as comparison_error:  # noqa: BLE001 - preserve original unresolved item
+                                comparison_detail["code"] = (
+                                    protocol_control_call_failure_code(comparison_error)
+                                    or "SOURCE_UNIT_COMPARISON_INVALID"
+                                )
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=(comparison_response.session_id if comparison_response else review_response.session_id
+                                                if review_response else session_id),
+                                    raw_output_sha256=_sha256(comparison_response.text if comparison_response else str(comparison_error)),
+                                    raw_output_chars=(len(comparison_response.text) if comparison_response else None),
+                                    raw_output_text=(comparison_response.text if comparison_response else None),
+                                    outcome="publication_invalid" if comparison_response else "transport_failed",
+                                    error_classes=[comparison_detail["code"]], error_detail=comparison_detail,
+                                    issues=["局部对应核查未通过，原未决保持：" + str(comparison_error)[:900]],
+                                ))
+                                if comparison_response is None:
+                                    review_response = None
+                                    raise
+                                return build_result(
+                                    status="需要核对", batch_id=batch.batch_id,
+                                    session_id=session_id, attempts=attempts,
+                                    source_interpretation=source_interpretation,
+                                    source_statement_coverage=coverage,
+                                    source_target_review=target_review,
+                                    source_candidate_alignment=checkpoint_alignment(), partial_wire=wire,
+                                )
+                            review_validation_snapshot = target_review
                         latest_source_target_review = target_review
                         # Restored review evidence is not a new model response.
                         review_basis_session = review_response.session_id if review_response else session_id

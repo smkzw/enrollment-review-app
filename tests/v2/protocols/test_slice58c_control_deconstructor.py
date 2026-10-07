@@ -5068,6 +5068,109 @@ def test_context_relation_repair_receives_rejection_and_preserves_failed_scope(
         assert result.attempts[-1].error_detail["statement_id"] == 0
 
 
+@pytest.mark.parametrize("fault", [
+    None, "unclear", "wrong_object", "foreign_target", "foreign_index",
+    "source_ambiguous", "no_matching_context", "transport", "identity", "budget", "interrupted",
+])
+def test_unresolved_exact_context_uses_one_pending_correspondence_without_adoption(fault) -> None:
+    from app.agents.protocol_control_source_interpretation import SOURCE_UNIT_COMPARISON_VERSION
+
+    batch = _batch().model_copy(deep=True)
+    action = "建议每天上午完成治疗记录"
+    sibling = "每次检查并记录治疗用法"
+    batch.owned_units[0].excerpt = (
+        "其他控制：年龄至少18岁；背景治疗：" + action + "；背景治疗：" + sibling
+    )
+    batch.context_units[0].excerpt = (
+        "筛选期：背景治疗：" + action
+    )
+    if fault == "no_matching_context":
+        batch.context_units[0].excerpt = "其他项目在基线期安排"
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": "su-01", "quoted_text": action, "force": "recommended",
+             "time_words": ["每天上午"],
+             "unresolved": ["原文对象有歧义"] if fault == "source_ambiguous" else []},
+            {"structure_unit_id": "su-01", "quoted_text": sibling, "force": "required", "time_words": []},
+        ], "units_without_statement": ["su-02"],
+    })
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [
+            {"statement_index": 0, "decision": "unresolved", "source_action_excerpt": action,
+             "unresolved_aspects": ["已有访视项目尚不能证明该建议的执行时期"]},
+            {"statement_index": 1, "decision": "unresolved", "source_action_excerpt": sibling,
+             "unresolved_aspects": ["另一个要求尚未核对"]},
+        ],
+    })
+    comparison = {
+        "version": SOURCE_UNIT_COMPARISON_VERSION, "statement_index": 0,
+        "relation": "same_requirement", "target_structure_unit_id": "su-03",
+        "source_action_excerpt": action, "target_action_excerpt": action,
+        "source_object_excerpt": "背景治疗", "target_object_excerpt": "背景治疗",
+        "target_scope_excerpt": "筛选期", "differences": [],
+    }
+    if fault == "unclear":
+        comparison.update(relation="different_or_unclear", differences=["原文对应尚未核清"])
+    elif fault == "wrong_object":
+        comparison["target_object_excerpt"] = "另一治疗"
+    elif fault == "foreign_target":
+        comparison["target_structure_unit_id"] = "outside-source"
+    elif fault == "foreign_index":
+        comparison["statement_index"] = 9
+
+    class ReviewingTransport(_FakeTransport):
+        comparison_calls = 0
+
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="source-1", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            rows = json.loads(prompt.split("待核陈述：", 1)[1].split("\n", 1)[0])
+            indexes = {row["statement_index"] for row in rows}
+            answer = SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION,
+                                        items=[item for item in review.items if item.statement_index in indexes])
+            return ProtocolControlAgentResponse(session_id="review-1", text=answer.model_dump_json())
+
+        def start_source_unit_comparison(self, *, prompt):
+            self.comparison_calls += 1
+            assert self.comparison_calls == 1
+            assert review.items[0].unresolved_aspects[0] in prompt
+            if fault == "transport":
+                raise OSError("source comparison service unavailable")
+            if fault in {"identity", "budget", "interrupted"}:
+                _raise_wrapped_terminal_failure(fault)
+            return ProtocolControlAgentResponse(session_id="comparison-1", text=json.dumps(comparison))
+
+    original = _wire(candidate=_candidate())
+    transport = ReviewingTransport([
+        ProtocolControlAgentResponse(session_id="wire-1", text=original.model_dump_json()),
+    ])
+    result = ProtocolControlAgentRunner().run(batch, transport)
+    assert result.status == "需要核对" and result.final_output is None
+    assert result.partial_wire == original and result.source_interpretation == inventory
+    assert result.source_target_review.items[1] == review.items[1]
+    assert transport.comparison_calls == (0 if fault in {"source_ambiguous", "no_matching_context"} else 1)
+    if fault is None:
+        item = result.source_target_review.items[0]
+        assert item.decision == "potential_same_requirement" and item.target_id == "su-03"
+        receipt = next(attempt for attempt in result.attempts
+                       if (attempt.error_detail or {}).get("recovery_method")
+                       == "unresolved-frozen-source-correspondence/v1")
+        assert receipt.raw_output_text == json.dumps(comparison)
+        assert receipt.raw_output_sha256 == hashlib.sha256(receipt.raw_output_text.encode()).hexdigest()
+        assert receipt.error_detail["automatic_adoption"] is False
+        assert receipt.error_detail["assembled_review_sha256"] == hashlib.sha256(
+            result.source_target_review.model_dump_json().encode()).hexdigest()
+    else:
+        assert result.source_target_review.items[0] == review.items[0]
+    if fault in {"identity", "budget", "interrupted"}:
+        expected = {"identity": "MODEL_IDENTITY_INVALID", "budget": "LOGICAL_BUDGET_EXHAUSTED",
+                    "interrupted": "FLOW_COMPLETION_UNCERTAIN"}[fault]
+        assert result.attempts[-1].error_classes == [expected]
+
+
 @pytest.mark.parametrize("fault", [None, "unproved", "scope_escape", "transport"])
 def test_target_review_repairs_distinct_items_without_rereading_valid_sibling(fault) -> None:
     batch = _batch().model_copy(deep=True)
