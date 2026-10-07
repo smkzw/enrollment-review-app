@@ -2269,7 +2269,7 @@ _OPTIONAL_ACTION_REPAIR_GUIDANCE_VERSION = "phase5/optional-action-repair-guidan
 _SOURCE_INSERT_GUIDANCE_VERSION = "phase5/source-insert-guidance/v7"
 _TREATMENT_DURATION_REPAIR_GUIDANCE_VERSION = "phase5/treatment-duration-repair-guidance/v2"
 _ATOM_REPAIR_GUIDANCE_VERSION = "phase5/atom-repair-guidance/v4"
-_SOURCE_SCOPE_CORRECTION_POLICY_VERSION = "phase5/source-scope-correction-policy/v2"
+_SOURCE_SCOPE_CORRECTION_POLICY_VERSION = "phase5/source-scope-correction-policy/v3"
 _CALENDAR_REPAIR_TARGET_SELECTION_VERSION = "phase5/calendar-repair-target-selection/v3"
 _TIME_OPERAND_REPAIR_PRIORITY_VERSION = "phase5/time-operand-repair-priority/v3"
 _OBSERVATION_SOURCE_REPAIR_GUIDANCE_VERSION = "phase5/observation-source-repair/v3"
@@ -4232,6 +4232,8 @@ class ProtocolControlAgentRunResult(ContractModel):
     attempts: list[ProtocolControlAgentAttempt] = Field(min_length=1)
     final_output: ProtocolControlBatchDispositionHydrated | None = None
     source_interpretation: SourceInterpretation | None = None
+    # Failed source corrections are diagnostics, not authoring/adoption input.
+    pending_source_interpretation: SourceInterpretation | None = None
     source_statement_coverage: list[SourceStatementCoverage] = Field(default_factory=list)
     source_target_review: SourceTargetReview | None = None
     # Pre-author comparison uses pending coverage, not the completed wire.
@@ -6743,7 +6745,8 @@ class ProtocolControlAgentRunner:
 
     1. The total number of schema repair rounds is strictly bounded by
        ``max_schema_repairs`` (default ``DEFAULT_MAX_SCHEMA_REPAIRS`` = 2).
-       The budget is shared across structure and publication errors. Once a
+       The budget is shared across source corrections, structure and publication
+       errors; a whole-source format repair also consumes it. Once a
        parsed output passes those checks, a source-target review may authorize
        one separate, source-scoped insertion. It cannot grant another schema
        repair or repeat an unsuccessful insertion.
@@ -6946,6 +6949,7 @@ class ProtocolControlAgentRunner:
             validate_source_interpretation(batch, resume_source_interpretation)
             source_interpretation = resume_source_interpretation
         source_reader = getattr(transport, "start_source_interpretation", None)
+        source_repairs = 0
         if source_interpretation is None and callable(source_reader):
             source_response: ProtocolControlAgentResponse | None = None
             source_prompt = build_source_interpretation_prompt(batch)
@@ -7018,7 +7022,7 @@ class ProtocolControlAgentRunner:
                             and source_interpretation is not None and callable(scope_corrector)):
                         scope_issue = exc
                         corrected_scope_indexes: set[int] = set()
-                        for _ in range(2):
+                        while source_repairs < self._max_schema_repairs:
                             if (not isinstance(scope_issue, SourceInterpretationValidationError)
                                     or scope_issue.code not in {
                                         "SOURCE_TIME_UNGROUNDED", "SOURCE_SCOPE_UNGROUNDED",
@@ -7049,6 +7053,7 @@ class ProtocolControlAgentRunner:
                                         "\n本次只补全 time_words；已核 scope_quote 和 affected_stage"
                                         "必须原样保留，不得删除共同范围或缩短时间限制。"
                                     )
+                                source_repairs += 1
                                 correction_response = scope_corrector(prompt=correction_prompt)
                                 correction = SourceScopeCorrection.model_validate_json(correction_response.text)
                                 if scope_issue.code in {"STUDY_PHASE_NOT_VISIT_TIME", "SOURCE_TIME_INCOMPLETE"} and (
@@ -7105,8 +7110,10 @@ class ProtocolControlAgentRunner:
                                     return build_result(
                                         status="需要核对", batch_id=batch.batch_id,
                                         session_id=source_session_id, attempts=attempts,
+                                        pending_source_interpretation=source_interpretation,
                                     )
                                 break
+                        exc = scope_issue
                         if corrected_scope_indexes:
                             try:
                                 validate_source_interpretation(batch, source_interpretation)
@@ -7127,7 +7134,7 @@ class ProtocolControlAgentRunner:
                     ):
                         quote_issue = exc
                         corrected_quote_indexes: set[int] = set()
-                        while quote_issue.code in {
+                        while source_repairs < self._max_schema_repairs and quote_issue.code in {
                             "SOURCE_QUOTE_UNGROUNDED", "POST_ELIGIBILITY_SEQUENCE_UNGROUNDED",
                         }:
                             index = quote_issue.statement_id
@@ -7138,6 +7145,7 @@ class ProtocolControlAgentRunner:
                                 break
                             correction_response = None
                             try:
+                                source_repairs += 1
                                 correction_response = quote_corrector(prompt=build_source_quote_correction_prompt(
                                     batch, source_interpretation.statements[index], quote_issue.code
                                 ))
@@ -7202,8 +7210,10 @@ class ProtocolControlAgentRunner:
                                     return build_result(
                                         status="需要核对", batch_id=batch.batch_id,
                                         session_id=source_session_id, attempts=attempts,
+                                        pending_source_interpretation=source_interpretation,
                                     )
                                 break
+                        exc = quote_issue
                         if corrected_quote_indexes:
                             try:
                                 validate_source_interpretation(batch, source_interpretation)
@@ -7211,13 +7221,44 @@ class ProtocolControlAgentRunner:
                                 pass
                             else:
                                 break
-                    if source_response is None or source_attempt == 1:
+                    # A known semantic defect is a local task, never a reason to
+                    # discard its siblings and reread the complete source batch.
+                    if source_interpretation is not None:
+                        try:
+                            validate_source_interpretation(batch, source_interpretation)
+                        except SourceInterpretationValidationError as remaining:
+                            exc = remaining
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1,
+                                session_id=source_session_id,
+                                raw_output_sha256=_sha256(str(remaining)),
+                                outcome="schema_invalid",
+                                issues=["局部来源仍未核清；保留修订，不重读整组"],
+                                error_classes=[remaining.code],
+                                error_detail={
+                                    "workflow_phase": "source_correction_pending",
+                                    "code": remaining.code,
+                                    "statement_id": remaining.statement_id,
+                                    "structure_unit_id": remaining.structure_unit_id,
+                                    "json_path": remaining.json_path,
+                                    "source_refs": remaining.source_refs,
+                                    "retry_class": remaining.retry_class,
+                                    "affected_dependents": remaining.affected_dependents,
+                                    "repairs_used": source_repairs,
+                                    "repair_limit": self._max_schema_repairs,
+                                },
+                            ))
+                    if (source_response is None or source_attempt == 1
+                            or source_repairs >= self._max_schema_repairs
+                            or isinstance(exc, SourceInterpretationValidationError)):
                         return build_result(
                             status="需要核对",
                             batch_id=batch.batch_id,
                             session_id=source_session_id,
                             attempts=attempts,
+                            pending_source_interpretation=source_interpretation,
                         )
+                    source_repairs += 1
                     source_prompt = (
                         build_source_interpretation_prompt(batch)
                         + "\n上一轮有源陈述未通过逐字来源核对："
@@ -7338,7 +7379,7 @@ class ProtocolControlAgentRunner:
                     )
 
         assert session_id is not None and raw_text is not None
-        repairs = 0
+        repairs = source_repairs
         source_insert_repairs = 0
         future_scope_repairs = 0
         future_observation_scope_repairs = 0

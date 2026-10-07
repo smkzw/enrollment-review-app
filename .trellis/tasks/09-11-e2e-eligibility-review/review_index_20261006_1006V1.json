@@ -5,6 +5,16 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "shared_source_repair_budget": {
+    "base_commit": "d7927aeb", "proof_version": "phase5/revalidated-source-seed-proof/v3",
+    "source_policy_version": "phase5/source-scope-correction-policy/v3",
+    "scope": "Source corrections/format repair and author schema share declared allowance; known semantic source defect stops without whole reread. Pending source is diagnostic-only, saved to existing checkpoint; verified replay binds original job allowance, exact actual trigger/answer and final source equality. No validator/adoption relaxation",
+    "tests": {"modules": 5, "passed": 1215, "seconds": 66.52, "exit_code": 0, "warnings": "5 SWIG deprecations", "junit": "/Users/smkzw/tmp/rv1006-shared-source-budget-connected-20261007-final.xml", "overlapping_windows_not_additive": true, "earlier_errors": "New fixture missed required time_words; connected source/pending field conflict resolved without relaxing guards; new discovery-route reuse fixture invalid, changed to actual deep preflight; wrong module path exit4/no tests"},
+    "consumer_evidence": "Actual Runner -> failure checkpoint saved/read back -> new-job deep preflight refresh-only; invalid pending never used for author/adoption. Original job/checkpoint unchanged",
+    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session_id": null, "provider_seconds": null, "parent_wait_seconds_approx": 147.9, "exit_code": 0, "fallback": false, "reported_tool_calls": 12, "useful_evidence_calls": 8, "failed_tool_calls": 4, "clinical_or_test_execution": false, "owner_silent_completion_wait": true, "final_patch_owner_verified": true},
+    "previous_product_run": {"source_commit": "d7927aeb", "job_id": "3c63c4f954414aad9f71e5e50d09cfe8", "state": "failed_final", "error_code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID", "seconds": 229.1905927, "physical_calls": 4, "deep_planned": 90, "deep_completed": 0, "discovery_reused": 85, "protected_unchanged": true, "source_database_unchanged": true, "old_jobs_unchanged": true, "first_cause": "Source scope hard cap2 led to complete source reread with stale feedback; successful corrections discarded. No author wire reached. Model semantic errors remain plausible contributing cause", "private_path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-witnessed-source-window-20261007-v1", "access": "controlled_local_only"},
+    "formal_joint_publication": false, "new_current_node_report": false
+  },
   "quote_source_recovery": {
     "base_commit": "9d4f94c4", "proof_version": "phase5/revalidated-source-seed-proof/v2",
     "scope": "Actual response and typed quote trigger replay, max two corrections. Same-component invalid semantic wire may discard downstream output only with the same proof; malformed wire/missing witness still refuses. No old trigger reconstruction or adoption",

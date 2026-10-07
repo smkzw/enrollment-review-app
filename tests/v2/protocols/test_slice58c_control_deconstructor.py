@@ -2165,11 +2165,18 @@ def test_source_inventory_rechecks_unlocated_scope_once_without_inventing_it() -
                 session_id="source-session", text=result.model_dump_json()
             )
 
+        def correct_source_scope(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            assert "su-01" in prompt
+            return ProtocolControlAgentResponse(session_id="scope-session", text=SourceScopeCorrection(
+                version="phase5/control-source-scope-correction/v1", structure_unit_id="su-01",
+                scope_quote=None, affected_stage=None, time_words=[], unresolved=None,
+            ).model_dump_json())
+
     transport = SourceTransport()
     result = ProtocolControlAgentRunner().run(_batch(), transport)
     assert result.status == "已解析"
-    assert len(transport.source_prompts) == 2
-    assert "上一轮有源陈述未通过" in transport.source_prompts[1]
+    assert len(transport.source_prompts) == 1
+    assert result.pending_source_interpretation is None
     assert result.attempts[0].outcome == "schema_invalid"
     assert result.attempts[0].error_detail["json_path"] == "statements[0].scope_quote"
     assert result.source_interpretation == valid
@@ -2402,7 +2409,8 @@ def test_source_inventory_rejects_quote_correction_that_changes_number() -> None
     transport = SourceTransport()
     result = ProtocolControlAgentRunner().run(_batch(), transport)
     assert result.status == "需要核对"
-    assert transport.source_calls == 2
+    assert transport.source_calls == 1
+    assert result.source_interpretation is None and result.pending_source_interpretation is not None
     assert any("不能证明是同一来源要求" in issue
                for attempt in result.attempts for issue in attempt.issues)
 
@@ -2465,7 +2473,9 @@ def test_source_inventory_repairs_distinct_quotes_and_preserves_siblings(second_
     else:
         assert result.status == "需要核对"
         assert result.source_interpretation is None
-        assert transport.source_calls == (1 if second_failure == "transport" else 2)
+        assert transport.source_calls == 1
+        assert result.pending_source_interpretation is not None
+        assert result.pending_source_interpretation.statements[1].quoted_text == "筛选时记录末次用药日期"
         if second_failure == "transport":
             assert result.attempts[-1].error_classes == ["SOURCE_INTERPRETATION_CORRECTION_TRANSPORT_FAILED"]
             assert "筛选时记录末次用药日期" in result.attempts[1].raw_output_text
@@ -4552,6 +4562,101 @@ def test_runner_repairs_two_source_scopes_without_rereading_other_statements() -
                    if attempt.error_detail and attempt.error_detail.get("workflow_phase") == "source_scope_correction"]
     assert [attempt.error_detail["statement_id"] for attempt in corrections] == [0, 1]
     assert all(attempt.error_detail["source_refs"] for attempt in corrections)
+
+
+def _three_scope_correction_material():
+    batch = _batch().model_copy(deep=True)
+    unit = _unit("su-04", 4, "span:04", "其他控制：记录检查日期")
+    batch.owned_units.append(unit)
+    batch.owned_structure_unit_ids.append(unit.structure_unit_id)
+    batch.owned_source_span_ids.extend(unit.source_span_ids)
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁", "force": "required", "time_words": []},
+            {"structure_unit_id": "su-02", "quoted_text": "筛选时记录末次用药日期",
+             "force": "required", "time_words": ["筛选时"]},
+            {"structure_unit_id": "su-04", "quoted_text": "记录检查日期", "force": "required", "time_words": []},
+        ],
+        "units_without_statement": [],
+    })
+    for statement in inventory.statements:
+        statement.scope_quote = "不存在的范围"
+    return batch, inventory
+
+
+@pytest.mark.parametrize("budget,expected_corrections,source_valid", [(2, 2, False), (4, 3, True)])
+def test_source_scope_budget_preserves_siblings_without_full_reread(budget, expected_corrections, source_valid):
+    batch, inventory = _three_scope_correction_material()
+
+    class Transport(_FakeTransport):
+        source_calls = 0
+        corrections = 0
+
+        def start_source_interpretation(self, *, prompt):
+            self.source_calls += 1
+            return ProtocolControlAgentResponse(session_id="source", text=inventory.model_dump_json())
+
+        def correct_source_scope(self, *, prompt):
+            index = self.corrections
+            self.corrections += 1
+            statement = inventory.statements[index]
+            return ProtocolControlAgentResponse(session_id=f"scope-{index}", text=SourceScopeCorrection(
+                version="phase5/control-source-scope-correction/v1",
+                structure_unit_id=statement.structure_unit_id, scope_quote=None, affected_stage=None,
+                time_words=statement.time_words, unresolved=None,
+            ).model_dump_json())
+
+    transport = Transport([ProtocolControlAgentResponse(session_id="wire", text="{}")])
+    result = ProtocolControlAgentRunner(max_schema_repairs=budget).run(batch, transport)
+    assert transport.source_calls == 1
+    assert transport.corrections == expected_corrections
+    assert len(transport.prompts) <= 1 + budget - expected_corrections
+    preserved = result.source_interpretation if source_valid else result.pending_source_interpretation
+    assert preserved is not None
+    statements = preserved.statements
+    assert [statement.quoted_text for statement in statements] == [statement.quoted_text for statement in inventory.statements]
+    assert all(statement.scope_quote is None for statement in statements[:expected_corrections])
+    if source_valid:
+        validate_source_interpretation(batch, result.source_interpretation)
+    else:
+        assert statements[2].scope_quote == "不存在的范围"
+        assert result.source_interpretation is None
+        assert result.partial_wire is None and result.final_output is None
+        assert result.attempts[-1].error_detail["workflow_phase"] == "source_correction_pending"
+        assert result.attempts[-1].error_detail["statement_id"] == 2
+        assert result.attempts[-1].error_detail["repairs_used"] == budget
+
+
+@pytest.mark.parametrize("failure", ["transport", "unresolved", "unchanged"])
+def test_source_scope_failure_retains_pending_source_without_reread(failure):
+    batch, inventory = _three_scope_correction_material()
+
+    class Transport(_FakeTransport):
+        corrections = 0
+        source_calls = 0
+
+        def start_source_interpretation(self, *, prompt):
+            self.source_calls += 1
+            return ProtocolControlAgentResponse(session_id="source", text=inventory.model_dump_json())
+
+        def correct_source_scope(self, *, prompt):
+            self.corrections += 1
+            if failure == "transport":
+                raise RuntimeError("offline")
+            return ProtocolControlAgentResponse(session_id="scope", text=SourceScopeCorrection(
+                version="phase5/control-source-scope-correction/v1", structure_unit_id="su-01",
+                scope_quote="不存在的范围" if failure == "unchanged" else None,
+                affected_stage=None, time_words=[],
+                unresolved="范围不能确认" if failure == "unresolved" else None,
+            ).model_dump_json())
+
+    transport = Transport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=4).run(batch, transport)
+    assert transport.source_calls == transport.corrections == 1
+    assert result.status == "需要核对" and result.final_output is None
+    assert result.source_interpretation is None and result.pending_source_interpretation is not None
+    assert result.pending_source_interpretation.statements[1:] == inventory.statements[1:]
 
 
 def test_runner_repairs_missing_stage_time_on_one_source_statement() -> None:

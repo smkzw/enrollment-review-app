@@ -1931,6 +1931,7 @@ def _deep_component_identity(
             "frequency-source-text-temporal-guard/v1",
             "source-scope-correction-trigger-witness/v1",
             "source-quote-correction-trigger-replay/v1",
+            "source-and-author-shared-repair-budget/v1",
         ],
         "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
         "requested_route_sha256": (
@@ -2224,8 +2225,11 @@ def _revalidated_source_seed_proof(
     batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
     current_components: Mapping[str, Any], *, source_job_id: str,
     step_id: str, checkpoint_id: str,
+    max_source_corrections: int = DEFAULT_MAX_SCHEMA_REPAIRS,
 ) -> dict[str, Any] | None:
     """Replay the actual source read only; never reuse its downstream author result."""
+    if type(max_source_corrections) is not int or max_source_corrections < 0:
+        raise ValueError("来源作业的局部核对额度无效")
     components = saved.get("component_identity")
     if (not isinstance(components, Mapping) or set(components) != set(current_components)
             or any(components[name] != value for name, value in current_components.items()
@@ -2265,11 +2269,11 @@ def _revalidated_source_seed_proof(
     witnessed = [first["raw_output_sha256"]]
     corrected: set[int] = set()
     quote_corrected: set[int] = set()
-    for offset in range(3):
+    for offset in range(max_source_corrections + 1):
         try:
             validate_source_interpretation(batch, actual)
         except SourceInterpretationValidationError as issue:
-            if (offset == 2 or issue.code not in {
+            if (offset == max_source_corrections or issue.code not in {
                     "SOURCE_TIME_UNGROUNDED", "SOURCE_SCOPE_UNGROUNDED", "SOURCE_TIME_INCOMPLETE",
                     "SOURCE_STAGE_TIME_MISSING", "STUDY_PHASE_NOT_VISIT_TIME", "STUDY_PHASE_NOT_VISIT_STAGE",
                     "SOURCE_QUOTE_UNGROUNDED", "POST_ELIGIBILITY_SEQUENCE_UNGROUNDED",
@@ -2333,7 +2337,8 @@ def _revalidated_source_seed_proof(
     if actual.model_dump(mode="json") != saved.get("source_interpretation"):
         return None
     return {
-        "schema_version": "phase5/revalidated-source-seed-proof/v2",
+        "schema_version": "phase5/revalidated-source-seed-proof/v3",
+        "source_repair_limit": max_source_corrections,
         "source_job_id": source_job_id, "step_id": step_id, "checkpoint_id": checkpoint_id,
         "source_response_sha256": witnessed,
         "scope_correction_indexes": sorted(corrected - quote_corrected),
@@ -2359,7 +2364,11 @@ def _validated_deep_partial_source(
     """Resume a verified source interpretation or gate-valid draft, never its failed result."""
 
     source_job = store.get_job(source_job_id)
-    _require_compatible_deep_source(current_payload, json.loads(source_job.payload_json))
+    source_payload = json.loads(source_job.payload_json)
+    _require_compatible_deep_source(current_payload, source_payload)
+    source_repair_limit = source_payload.get("deep_max_schema_repairs", DEFAULT_MAX_SCHEMA_REPAIRS)
+    if type(source_repair_limit) is not int or source_repair_limit < 0:
+        raise ValueError("来源作业的局部核对额度无效")
     source_step = next(
         (step for step in store.list_steps(source_job_id) if step.step_id == step_id), None
     )
@@ -2407,7 +2416,13 @@ def _validated_deep_partial_source(
         raise ValueError("局部草稿修复合同身份缺失或损坏")
     source_seed_proof = None
     changed_components = saved_components != current_components
-    if changed_components or repair_identity != protocol_control_agent_repair_contract_sha256():
+    pending_source = any(
+        isinstance(attempt, Mapping) and isinstance(attempt.get("error_detail"), Mapping)
+        and attempt["error_detail"].get("workflow_phase") == "source_correction_pending"
+        for attempt in saved.get("attempts", [])
+    )
+    if (changed_components or pending_source
+            or repair_identity != protocol_control_agent_repair_contract_sha256()):
         if saved.get("partial_wire") is not None:
             # A damaged wire hard-fails; outdated semantics are discarded, not reused.
             ProtocolControlAgentWire.model_validate(saved["partial_wire"])
@@ -2420,6 +2435,7 @@ def _validated_deep_partial_source(
             source_seed_proof = _revalidated_source_seed_proof(
                 batch, saved, current_components, source_job_id=source_job_id,
                 step_id=step_id, checkpoint_id=checkpoint_id,
+                max_source_corrections=source_repair_limit,
             )
         if source_seed_proof is None:
             return None
@@ -2449,6 +2465,7 @@ def _validated_deep_partial_source(
             proof = _revalidated_source_seed_proof(
                 batch, saved, current_components, source_job_id=source_job_id,
                 step_id=step_id, checkpoint_id=checkpoint_id,
+                max_source_corrections=source_repair_limit,
             )
             if proof is None:
                 raise
@@ -2669,7 +2686,7 @@ def _preflight_deep_source(
                 and partial is not None and partial[2].source_seed_proof is not None):
             decisions[batch.batch_id]["reason"] = (
                 "verified_source_interpretation_components_revalidated"
-                if partial[2].source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v2"
+                if partial[2].source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v3"
                 else "verified_source_interpretation_repair_material_changed"
             )
             decisions[batch.batch_id]["source_seed_proof"] = partial[2].source_seed_proof
@@ -3508,6 +3525,10 @@ def _execute_deep(
                     result.source_interpretation.model_dump(mode="json")
                     if result.source_interpretation is not None else None
                 ),
+                "pending_source_interpretation": (
+                    result.pending_source_interpretation.model_dump(mode="json")
+                    if result.pending_source_interpretation is not None else None
+                ),
                 "source_statement_coverage": [
                     item.model_dump(mode="json")
                     for item in result.source_statement_coverage
@@ -3587,7 +3608,7 @@ def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str
     if resume_review.source_seed_proof is not None:
         record["proof_scope"] = (
             "revalidated_source_interpretation"
-            if resume_review.source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v2"
+            if resume_review.source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v3"
             else "unrepaired_source_interpretation"
         )
         record["source_seed_proof"] = dict(resume_review.source_seed_proof)

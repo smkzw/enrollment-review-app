@@ -2627,6 +2627,55 @@ def test_manual_retry_reexecutes_failed_deep_instead_of_replaying_diagnostic(
     assert deep.owned_batches[2] != deep.owned_batches[0]
 
 
+def test_pending_source_is_saved_but_not_reused_as_verified_source(data_paths, session_factory, monkeypatch):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
+    from app.agents.protocol_control_source_interpretation import (
+        SOURCE_INTERPRETATION_VERSION, SourceInterpretation, SourceStatement,
+    )
+    seed = _seed_frozen_source(data_paths, session_factory, key="pending-source-isolated")
+    discovery, deep = _DiscoveryTransport(), _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    job = service.create_from_deconstruction(source_job_id=seed.source_job_id,
+                                             idempotency_key="pending-source-old")
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+    actual_run = ProtocolControlAgentRunner.run
+
+    def pending_run(self, batch, transport, **kwargs):
+        inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+            statements=[SourceStatement(structure_unit_id=batch.owned_units[0].structure_unit_id,
+                quoted_text=batch.owned_units[0].excerpt, force="descriptive",
+                decision_functions=["background"], time_words=[], scope_quote="不在原文的范围")],
+            units_without_statement=list(batch.owned_structure_unit_ids[1:]))
+
+        class Transport(_FakeTransport):
+            def start_source_interpretation(self, *, prompt):
+                return ProtocolControlAgentResponse(session_id="source", text=inventory.model_dump_json())
+            def correct_source_scope(self, *, prompt):
+                raise OSError("synthetic source correction unavailable")
+            def start(self, *, prompt):
+                pytest.fail("Pending source must not enter authoring")
+
+        return actual_run(self, batch, Transport([]), **kwargs)
+
+    monkeypatch.setattr(ProtocolControlAgentRunner, "run", pending_run)
+    assert runner.run_job(job.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, job.job_id)
+    assert snapshot.state == "failed_final"
+    with session_factory() as session:
+        checkpoint = JobStore(session, now=_now).get_last_checkpoint(job.job_id, "deep_0001")
+    saved = checkpoint[1]
+    assert saved["source_interpretation"] is None and saved["partial_wire"] is None
+    assert saved["pending_source_interpretation"]["statements"][0]["scope_quote"] == "不在原文的范围"
+    before = _job_checkpoint_fingerprint(session_factory, job.job_id)
+    new_job = service.create_from_deconstruction(source_job_id=seed.source_job_id,
+        deep_source_job_id=job.job_id,
+        idempotency_key="pending-source-new")
+    with session_factory() as session:
+        payload = json.loads(JobStore(session, now=_now).get_job(new_job.job_id).payload_json)
+    assert all(item["decision"] == "refresh_required" for item in payload["deep_reuse_plan"]["decisions"].values())
+    assert _job_checkpoint_fingerprint(session_factory, job.job_id) == before
+
+
 @pytest.mark.parametrize("new_job, reuse_change", [
     (False, None), (True, None), (True, "repair_expired"),
     (True, "repair_corrupt"), (True, "compiler_old"), (True, "wire_corrupt"),
@@ -3027,6 +3076,46 @@ def test_revalidated_source_seed_replays_only_proven_scope_corrections(change):
             assert proof["scope_correction_indexes"] == [0]
             assert len(proof["source_response_sha256"]) == 2
     assert saved == before
+
+
+@pytest.mark.parametrize("budget,completed,accepted", [(2, 3, False), (4, 3, True), (4, 2, False)])
+def test_revalidated_source_seed_uses_original_budget_and_refuses_residual(budget, completed, accepted):
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _three_scope_correction_material
+    from app.agents.protocol_control_source_interpretation import (
+        SourceScopeCorrection, SourceInterpretationValidationError, validate_source_interpretation,
+        apply_source_scope_correction,
+    )
+    module = protocol_control_execution_module
+    batch, source = _three_scope_correction_material()
+    raw = source.model_dump_json()
+    attempts = [dict(attempt=1, session_id="source", outcome="schema_invalid", raw_output_text=raw,
+                     raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest())]
+    for index in range(completed):
+        with pytest.raises(SourceInterpretationValidationError) as error:
+            validate_source_interpretation(batch, source)
+        issue = error.value
+        detail = dict(code=issue.code, statement_id=issue.statement_id, source_refs=issue.source_refs)
+        if index == 0:
+            attempts[0]["error_detail"] = detail
+        statement = source.statements[index]
+        correction = SourceScopeCorrection(version="phase5/control-source-scope-correction/v1",
+                                           structure_unit_id=statement.structure_unit_id, scope_quote=None,
+                                           affected_stage=None, time_words=statement.time_words, unresolved=None)
+        text = correction.model_dump_json()
+        attempts.append(dict(attempt=index + 2, session_id=f"scope-{index}", outcome="parsed", error_classes=[],
+                             error_detail=detail, raw_output_text=text, raw_output_sha256=hashlib.sha256(text.encode()).hexdigest()))
+        source = apply_source_scope_correction(batch, source, index, correction)
+    current = module._deep_component_identity({}, module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE)
+    saved = dict(component_identity=dict(current, compiler_versions=["previous compiler"]),
+                 prompt_template_sha256=current["prompt_material_sha256"], attempts=attempts,
+                 source_interpretation=source.model_dump(mode="json"))
+    proof = module._revalidated_source_seed_proof(batch, saved, current, source_job_id="old",
+            step_id="deep", checkpoint_id="checkpoint", max_source_corrections=budget)
+    assert bool(proof) is accepted
+    if proof:
+        assert proof["schema_version"] == "phase5/revalidated-source-seed-proof/v3"
+        assert proof["source_repair_limit"] == budget
+        assert proof["scope_correction_indexes"] == [0, 1, 2]
 
 
 @pytest.mark.parametrize("change", ["same", "missing_trigger", "wrong_trigger", "wrong_sequence", "boolean_sequence"])
