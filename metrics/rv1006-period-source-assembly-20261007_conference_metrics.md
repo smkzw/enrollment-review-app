@@ -6,6 +6,7 @@ Date: 2026-10-07
 |---|---|---|---|---:|---:|---:|---|
 | 首轮evidence_single_object | codebuddy-cli | deepseek-v4.1-flash/max | exit0 | 179.212s | 工程CLI内部unknown | unknown | 自动裁短不充分，采用作者字段核对 |
 | 同会话实现复核 | codebuddy-cli | deepseek-v4.1-flash/max | exit0 | 137.52s | 工程CLI内部unknown | unknown | 边界认可，共同限定拒修补强 |
+| 同会话相邻消费者复核 | codebuddy-cli | deepseek-v4.1-flash/max | exit0 | 108.414s | 工程CLI内部unknown | unknown | 限定replacement身份和原结构恢复槽；含义非宿主自动证明 |
 
 ## Timeout And Retry Evidence
 
@@ -14,3 +15,5 @@ Date: 2026-10-07
 ## Quality Decision
 
 不把两轮同模型审阅称为两模型共识；不授医学、正式采用或签发权限。最终783软件检查由所有者执行，末次提示/反例晚于独审，实际字段恢复尚待运行。
+
+第三轮parent接收等待97.087s，不等于模型时长；同session、无fallback、120min静默上限。顾问报告16工具，Bash拒绝，未执行测试/检查实际临床作业；末版反馈衔接和夹具修正由所有者核。第三轮相连最终855/46.46s是软件窗口，不是正式规则或病例验收。首次字段真实1调用31.2134s/provider，整个续跑29新增调用8624.308s，仅形成仍受19项门禁约束的官方草稿；API费用及思考拆分unknown。

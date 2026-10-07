@@ -9,7 +9,8 @@ import json
 from pydantic import ValidationError
 
 from app.domain.contracts.agent_io import (
-    ProtocolSemanticDeconstructionCandidate, SemanticRestrictedComponent, SemanticRuleComponent,
+    ProtocolSemanticDeconstructionCandidate, ProtocolSemanticRuleRepair,
+    SemanticRestrictedComponent, SemanticRuleComponent,
 )
 from app.domain.contracts.normalization import UnresolvedItem
 from app.domain.contracts.source_computation import (
@@ -48,13 +49,17 @@ def source_field_repair_schema(*, version: str = SOURCE_FIELD_REPAIR_VERSION) ->
     }
 
 
-def plan_period_source_repair(previous_text: str, *, source_input, rule_codes: list[str]) -> dict | None:
+def plan_period_source_repair(previous_text: str, *, source_input, rule_codes: list[str],
+                              replacement_candidate_id: str | None = None) -> dict | None:
     """Admit only duplicate provenance fields; never select a new period or clause."""
     from app.agents.protocol_deconstructor import _batch_source_span_ids, _normalize_model_json
 
     try:
         previous = _unique_json(previous_text)
-        rules = previous.get("proposed_rules")
+        rules_key = "replacement_rules" if replacement_candidate_id is not None else "proposed_rules"
+        if replacement_candidate_id is not None and previous.get("candidate_id") != replacement_candidate_id:
+            return None
+        rules = previous.get(rules_key)
         if not isinstance(rules, list) or [row["official_code"] for row in rules] != rule_codes:
             return None
         checked = copy.deepcopy(previous)
@@ -74,9 +79,12 @@ def plan_period_source_repair(previous_text: str, *, source_input, rule_codes: l
                     if quotes != clauses:
                         if (not isinstance(quotes, list) or not quotes or not clauses
                                 or not all(isinstance(q, str) and q for q in [*clauses, *quotes])
-                                or not all(any(clause in quote for quote in quotes) for clause in clauses)
+                                or not (all(any(clause in quote for quote in quotes) for clause in clauses)
+                                    or (replacement_candidate_id is not None
+                                        and all(any(quote in clause for clause in clauses) for quote in quotes)))
+                                or not all(any(clause in text for text in materials) for clause in clauses)
                                 or not all(any(quote in text for text in materials) for quote in quotes)):
-                            raise ValueError("期间引用不是本父规则中完整有源的较宽引用")
+                            raise ValueError("期间引用与本条件不具备可核实的逐字包含关系")
                         targets.append({"path": [*path, "prospective_period", "source_excerpts"],
                                         "source_clauses": list(clauses), "previous_excerpts": list(quotes),
                                         "predicate": copy.deepcopy(value), "parent_sources": list(materials)})
@@ -86,13 +94,14 @@ def plan_period_source_repair(previous_text: str, *, source_input, rule_codes: l
                     if key != "prospective_period":
                         visit(item, [*path, key], materials)
 
-        for index, rule in enumerate(checked["proposed_rules"]):
+        for index, rule in enumerate(checked[rules_key]):
             ids = set(_batch_source_span_ids(source_input, [rule["official_code"]]))
             materials = [item.text for item in source_input.source_materials if item.source_span_id in ids]
-            visit(rule, ["proposed_rules", index], materials)
+            visit(rule, [rules_key, index], materials)
         if not 1 <= len(targets) <= 8:
             return None
-        ProtocolSemanticDeconstructionCandidate.model_validate(_normalize_model_json(checked))
+        model = ProtocolSemanticRuleRepair if replacement_candidate_id is not None else ProtocolSemanticDeconstructionCandidate
+        model.model_validate(_normalize_model_json(checked))
         return {"version": PERIOD_SOURCE_REPAIR_VERSION,
                 "precondition_sha256": hashlib.sha256(previous_text.encode()).hexdigest(), "targets": targets}
     except (ValueError, TypeError, KeyError):
@@ -303,8 +312,8 @@ def assemble_unresolved_observation_sources(previous_text: str, *, candidate_id:
 def source_field_repair_prompt(plan: dict) -> str:
     if plan["version"] == PERIOD_SOURCE_REPAIR_VERSION:
         return (
-            "本次只核对并修正列出的prospective_period.source_excerpts。原答使用了较宽的父条引用，"
-            "而本条件已有独立source_clauses。请核对后逐项返回完整source_clauses，文字及顺序不变。"
+            "本次只核对并修正列出的prospective_period.source_excerpts。原答的期间引用与本条件"
+            "已有的独立source_clauses范围不一致。请核对后逐项返回完整source_clauses，文字及顺序不变。"
             "不得改主体、期间含义、命题、条件来源、数值、例外、兄弟项或其他字段；若这些也需要改变，"
             "尤其是较宽引文中未被本条件来源保留的文字仍限定共同期间、例外或适用人群时，"
             "必须返回fields=[]；不能因为文字包含关系或其他兄弟引用过就认定本条件已保留这些限定。"

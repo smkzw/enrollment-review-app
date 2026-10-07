@@ -4276,11 +4276,15 @@ def revise_protocol_draft_from_feedback(
                 break
             from .protocol_schema_repair import (
                 plan_source_field_repair, source_field_repair_prompt,
-                recover_source_fields,
+                recover_source_fields, plan_period_source_repair,
             )
             field_plan = (plan_source_field_repair(response.text,
                 candidate_id=current.candidate_id, official_code=target_rule_code)
                 if repair_phase == "parse" and not compact else None)
+            if (field_plan is None and repair_phase == "parse" and not compact
+                    and isinstance(exc.__cause__, ValidationError)):
+                field_plan = plan_period_source_repair(response.text, source_input=source_input,
+                    rule_codes=[target_rule_code], replacement_candidate_id=current.candidate_id)
             repair_prompt = (
                     "上一响应无法作为指定父规则的局部修订读取。"
                     f"问题：{str(exc)[:12000]}。请只返回符合下列结构的 JSON："
@@ -6518,6 +6522,30 @@ class ProtocolDeconstructorRunner:
                         call_metadata=response.call_metadata,
                     )
                 )
+                if (not compact and current_candidate is not None and replacement_rule_codes
+                        and isinstance(exc.__cause__, ValidationError)
+                        and local_schema_repairs < self.MAX_LOCAL_SCHEMA_REPAIRS):
+                    from app.agents.protocol_schema_repair import plan_period_source_repair, recover_source_fields
+
+                    period_plan = plan_period_source_repair(response.text, source_input=source_input,
+                        rule_codes=list(replacement_rule_codes),
+                        replacement_candidate_id=current_candidate.candidate_id)
+                    if period_plan is not None:
+                        # Spend the existing one structural recovery on fields,
+                        # not another full parent proposal. The next iteration
+                        # still validates identity, sources, merge and all gates.
+                        local_schema_repairs += 1
+                        try:
+                            response = recover_source_fields(previous_response=response,
+                                plan=period_plan, transport=transport)
+                        except ProtocolAgentCallError as field_error:
+                            attempts.append(ProtocolDeconstructionAttempt(
+                                attempt=attempt_number + 1, session_id=field_error.session_id,
+                                raw_output_sha256=_sha256(str(field_error)), outcome="会话异常",
+                                issues=[_call_issue(field_error)], call_metadata={
+                                    **field_error.error_metadata, "error_code": field_error.error_code}))
+                            break
+                        continue
             else:
                 parsed_response = True
                 gate_result = self._gate.evaluate(

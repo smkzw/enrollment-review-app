@@ -198,7 +198,10 @@ def _freeze_source_job(
 
     steps: list[StepSpec] = []
     previous: str | None = None
-    for step_id in (*_SOURCE_STEP_ORDER, SOURCE_STEP_GENERATE):
+    # The production order now includes generation and later review/publish.
+    # This fixture freezes only the source through its actual draft output.
+    source_steps = _SOURCE_STEP_ORDER[:_SOURCE_STEP_ORDER.index(SOURCE_STEP_GENERATE) + 1]
+    for step_id in source_steps:
         steps.append(
             StepSpec(
                 step_id=step_id,

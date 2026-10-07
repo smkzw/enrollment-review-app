@@ -193,6 +193,138 @@ def test_period_author_decline_preserves_unaccounted_common_qualifier(monkeypatc
     assert not list(cache._root.glob("*.json"))
 
 
+def period_replacement_proposal():
+    source, good, _, _, _ = period_source_proposal()
+    repair = ProtocolSemanticRuleRepair(candidate_id=good.candidate_id,
+        replacement_rules=[good.proposed_rules[0]])
+    raw = repair.model_dump(mode="json")
+    atom = raw["replacement_rules"][0]["components"][0]["expression"]["predicate"]
+    atom["prospective_period"]["source_excerpts"] = [atom["source_clauses"][0]]
+    before = json.dumps(raw, ensure_ascii=False)
+    codes = [good.proposed_rules[0].official_code]
+    plan = plan_period_source_repair(before, source_input=source, rule_codes=codes,
+                                    replacement_candidate_id=good.candidate_id)
+    proposal = {"version": plan["version"], "precondition_sha256": plan["precondition_sha256"],
+        "fields": [{"path": t["path"], "source_excerpts": t["source_clauses"]} for t in plan["targets"]]}
+    return source, good, repair, before, plan, proposal
+
+
+def test_replacement_period_field_repair_keeps_identity_and_all_authored_conditions():
+    from app.agents.protocol_deconstructor import _parse_semantic_repair, _apply_semantic_repair
+
+    source, good, repair, before, plan, proposal = period_replacement_proposal()
+    assert plan["targets"][0]["path"][0] == "replacement_rules"
+    assert plan_period_source_repair(before, source_input=source,
+        rule_codes=[good.proposed_rules[0].official_code], replacement_candidate_id="wrong-candidate") is None
+    assert plan_period_source_repair(before, source_input=source,
+        rule_codes=[good.proposed_rules[1].official_code], replacement_candidate_id=good.candidate_id) is None
+    assembled, proof = apply_source_field_repair(before, json.dumps(proposal), plan=plan)
+    assert _parse_semantic_repair(assembled) == repair
+    merged = _apply_semantic_repair(good, _parse_semantic_repair(assembled),
+                                  expected_codes=[good.proposed_rules[0].official_code])
+    assert merged == good and not proof["adoption_checked"]
+    raw = json.loads(before)
+    raw["replacement_rules"][0]["components"][0]["title"] = None
+    assert plan_period_source_repair(json.dumps(raw), source_input=source,
+        rule_codes=[good.proposed_rules[0].official_code], replacement_candidate_id=good.candidate_id) is None
+    raw = json.loads(before)
+    raw["replacement_rules"][0]["components"][0]["expression"]["predicate"]["prospective_period"]["source_excerpts"] = ["另一条件的期间"]
+    assert plan_period_source_repair(json.dumps(raw), source_input=source,
+        rule_codes=[good.proposed_rules[0].official_code], replacement_candidate_id=good.candidate_id) is None
+
+
+@pytest.mark.parametrize("declined", [False, True])
+def test_actual_runner_repairs_replacement_fields_without_another_whole_parent(monkeypatch, tmp_path, declined):
+    from app.agents.protocol_deconstructor import ProtocolDeconstructorRunner, _hydrate_semantic_candidate
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    from app.storage.config import resolve_data_paths
+    from tests.v2.protocols.test_protocol_deconstructor_adapter_slice3 import _prompt_version
+    from app.protocols.deconstruction_gate import ProtocolDeconstructionGate, ProtocolGateIssue
+
+    source, good, repair, before, plan, proposal = period_replacement_proposal()
+    _, _, spans = _fixture()
+    codes = [good.proposed_rules[0].official_code]
+    if declined:
+        proposal["fields"] = []
+    monkeypatch.setattr("app.agents.protocol_deconstructor._collect_initial_semantic_response",
+        lambda *args, **kwargs: (ProtocolAgentResponse(session_id="period-replacement", text=good.model_dump_json()), None))
+    monkeypatch.setattr("app.agents.protocol_deconstructor._select_repair_rule_codes", lambda *args, **kwargs: codes)
+
+    class InspectingGate(ProtocolDeconstructionGate):
+        def __init__(self):
+            super().__init__()
+            self.checked = []
+
+        def evaluate(self, source_input, draft, **kwargs):
+            self.checked.append(draft.model_copy(deep=True))
+            result = super().evaluate(source_input, draft, **kwargs)
+            if len(self.checked) == 1:
+                check = next(item for item in result.checks if item.check_name == "source_coverage")
+                ref = draft.proposed_rules[0].components[0].rule_component_id
+                check.issues.append(ProtocolGateIssue(issue_code="SYNTHETIC_LOCAL_REVIEW",
+                    check_name="source_coverage", level="阻止发布", problem="合成局部核对入口",
+                    impact="尚不能采用", next_action="仅核对目标", affected_refs=[ref], repair_scope=[ref]))
+                check.passed = False
+                result.publishable = False
+            return result
+
+    transport = FakeTransport([
+        ProtocolAgentResponse(session_id="period-replacement", text=before),
+        ProtocolAgentResponse(session_id="period-replacement", text=json.dumps(proposal)),
+    ])
+    cache = _ProtocolSemanticBatchFileCache(resolve_data_paths(tmp_path / "data"), "period-replacement")
+    transport._call_budget_store = cache
+    gate = InspectingGate()
+    result = ProtocolDeconstructorRunner(gate=gate, max_semantic_repairs=1).run(
+        source, prompt_version=_prompt_version("冻结原文"), prompt_template="冻结原文",
+        transport=transport, source_spans=spans)
+    assert transport.repair_output_kinds == ["semantic_rule_repair", "semantic_period_sources"]
+    assert not transport.responses
+    assert result.final_draft == _hydrate_semantic_candidate(source, good)
+    if declined:
+        assert len(gate.checked) == 1
+        assert result.attempts[-1].call_metadata["error_code"] == "SOURCE_FIELD_REPAIR_DECLINED"
+    else:
+        assert len(gate.checked) == 2
+        proof = result.attempts[-1].call_metadata["source_field_repair"]
+        assert proof["field_repair_proof_ref"] and not proof["adoption_checked"]
+
+
+@pytest.mark.parametrize("declined", [False, True])
+def test_feedback_uses_same_period_field_recovery_and_keeps_other_rules(tmp_path, declined):
+    from app.agents.protocol_deconstructor import (
+        ProtocolAgentCallError, _hydrate_semantic_candidate, revise_protocol_draft_from_feedback,
+    )
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    from app.storage.config import resolve_data_paths
+
+    source, good, _, before, plan, proposal = period_replacement_proposal()
+    current = _hydrate_semantic_candidate(source, good)
+    if declined:
+        proposal["fields"] = []
+    transport = FakeTransport([
+        ProtocolAgentResponse(session_id="period-feedback", text=before),
+        ProtocolAgentResponse(session_id="period-feedback", text=json.dumps(proposal)),
+    ])
+    transport._call_budget_store = _ProtocolSemanticBatchFileCache(
+        resolve_data_paths(tmp_path / "data"), "period-feedback")
+    kwargs = dict(target_rule_code=good.proposed_rules[0].official_code,
+        target_component_id=current.proposed_rules[0].components[0].rule_component_id,
+        feedback_note="仅核对当前条件的期间引用，条件和兄弟内容不改。",
+        transport=transport, preserve_review_items=True)
+    if declined:
+        with pytest.raises(ProtocolAgentCallError) as exc:
+            revise_protocol_draft_from_feedback(source, current, **kwargs)
+        assert exc.value.error_code == "SOURCE_FIELD_REPAIR_DECLINED"
+    else:
+        revised = revise_protocol_draft_from_feedback(source, current, **kwargs)
+        assert revised.proposed_rules == current.proposed_rules
+        assert revised.component_drafts == current.component_drafts
+    assert transport.start_output_kinds == ["semantic_rule_repair"]
+    assert transport.repair_output_kinds == ["semantic_period_sources"]
+    assert not transport.responses
+
+
 def missing_input_source_proposal():
     source, draft, _ = _fixture()
     text = "取全部指标甲记录的均值，指标甲≥18分"
