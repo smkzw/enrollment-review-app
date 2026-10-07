@@ -375,6 +375,7 @@ async def start_deconstruction(
     file: UploadFile = File(...),
     actor: str = Form(default="用户", min_length=1, max_length=128),
     project_id: str = Form(default="", max_length=128),
+    workbench_origin: str = Form(default="", max_length=256),
 ) -> StartDeconstructionResponse:
     suffix = Path(file.filename or "protocol.docx").suffix or ".docx"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as handle:
@@ -391,6 +392,7 @@ async def start_deconstruction(
                 project_id=project_id.strip(),
                 idempotency_key=idempotency_key,
                 actor=actor,
+                workbench_origin=workbench_origin or None,
             )
         else:
             result = _service(request).start_first_deconstruction(
@@ -398,6 +400,7 @@ async def start_deconstruction(
                 original_name=file.filename or "protocol.docx",
                 idempotency_key=idempotency_key,
                 actor=actor,
+                workbench_origin=workbench_origin or None,
             )
     finally:
         temp_path.unlink(missing_ok=True)
@@ -431,6 +434,7 @@ def start_feedback_re_deconstruction(
         idempotency_key=payload.idempotency_key,
         interpretation_sources=payload.interpretation_sources,
         actor=payload.actor,
+        workbench_origin=payload.workbench_origin,
     )
     if not result.created:
         response.status_code = http_status.HTTP_200_OK
@@ -688,3 +692,41 @@ def get_project_official_version(
         ],
         publication_count=view.publication_count,
     )
+
+
+# ---------------------------------------------------------------------------
+# 共享工作台来源（元数据入口；不创建项目、不代替上传/核对/发布流程）
+# ---------------------------------------------------------------------------
+
+
+@projects_router.get("/projects/workbench-origins/{workbench_origin}")
+def get_workbench_origin_entry(workbench_origin: str, request: Request) -> dict:
+    """按持久身份解析 ``workbench:<shared_project_id>``：已关联任务/项目或未绑定。
+
+    只读投影：来源是元数据，不是方案身份；未绑定时返回 ``unbound``，由入口展示
+    真实 DOCX 上传或如实待配置，不返回历史项目。
+    """
+    view = _service(request).resolve_workbench_origin(workbench_origin)
+    return {
+        "origin": view.origin,
+        "entry_state": view.entry_state,
+        "job": (
+            None
+            if view.job_id is None
+            else {
+                "job_id": view.job_id,
+                "state": view.job_state,
+                "state_label": view.job_state_label,
+                "session_kind": view.session_kind,
+                "awaiting_user": view.awaiting_user,
+                "awaiting_user_label": view.awaiting_user_label,
+                "publishable": view.publishable,
+                "file_name": view.file_name,
+            }
+        ),
+        "project": (
+            None
+            if view.project is None
+            else _official_project_dto(view.project).model_dump(mode="json")
+        ),
+    }

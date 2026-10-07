@@ -52,6 +52,28 @@ def _minimal_docx_bytes() -> bytes:
     return payload
 
 
+def test_workbench_origin_upload_is_persisted_and_queryable(client):
+    origin = "workbench:shared-project-1"
+    path = f"/api/v2/protocol/projects/workbench-origins/{origin}"
+    assert client.get(path).json()["entry_state"] == "unbound"
+    files = {"file": ("protocol.docx", _minimal_docx_bytes(),
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
+    data = {"idempotency_key": "origin-api", "workbench_origin": origin}
+    created = client.post("/api/v2/protocol/deconstructions", files=files, data=data)
+    assert created.status_code == 201, created.text
+    view = client.get(path)
+    assert view.status_code == 200, view.text
+    assert view.json()["job"]["job_id"] == created.json()["job_id"]
+    assert view.json()["project"] is None
+    replay = client.post("/api/v2/protocol/deconstructions", files=files, data=data)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["job_id"] == created.json()["job_id"]
+    assert client.get("/api/v2/protocol/projects/workbench-origins/workbench:another").json()["entry_state"] == "unbound"
+    bad = client.post("/api/v2/protocol/deconstructions", files=files,
+        data={"idempotency_key": "bad-origin", "workbench_origin": "shared-project-1"})
+    assert bad.status_code == 409, bad.text
+
+
 def _pipeline_docx_bytes() -> bytes:
     with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as handle:
         path = Path(handle.name)

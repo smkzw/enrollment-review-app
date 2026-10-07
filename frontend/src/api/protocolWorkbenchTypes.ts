@@ -97,6 +97,49 @@ export interface IdentityDecisionView {
   selectedCandidateIds: string[];
 }
 
+/**
+ * 共享工作台来源解析状态（`workbench:<shared_project_id>`，与 GET
+ * /api/v2/protocol/projects/workbench-origins/{origin} 对齐）。
+ *
+ * 来源是元数据：`unbound` 表示本产品尚无该来源的持久任务，入口必须展示真实
+ * DOCX 上传或如实待配置，不得展示历史项目；已绑定时从持久身份跳转到既有
+ * 任务/项目流程，不新建审批捷径。
+ */
+export type WorkbenchProjectEntryState =
+  | "unbound"
+  | "job_in_progress"
+  | "project_published";
+
+export interface WorkbenchEntryProjectView {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  studyPhase: StudyPhase;
+  studyPhaseLabel: string;
+  protocolCode: string;
+  officialVersion: string;
+  ruleSetId: string;
+  ruleSetRevision: number;
+}
+
+export interface WorkbenchEntryJobView {
+  jobId: string;
+  state: string | null;
+  stateLabel: string | null;
+  sessionKind: string | null;
+  awaitingUser: string | null;
+  awaitingUserLabel: string | null;
+  publishable: boolean | null;
+  fileName: string | null;
+}
+
+export interface WorkbenchProjectEntryView {
+  origin: string;
+  entryState: WorkbenchProjectEntryState;
+  job: WorkbenchEntryJobView | null;
+  project: WorkbenchEntryProjectView | null;
+}
+
 export interface PhaseCandidateView {
   candidateId: string;
   phase: StudyPhase;

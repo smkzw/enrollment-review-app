@@ -422,6 +422,11 @@
   border-top: 3px solid var(--color-brand);
 }
 
+.protocol-workbench-entry > .button {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
 .protocol-home-card__title {
   display: flex;
   align-items: center;

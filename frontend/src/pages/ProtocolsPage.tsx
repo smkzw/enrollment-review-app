@@ -8,17 +8,28 @@ import {
   getProtocolWorkbenchRepository,
   ProtocolWorkbenchApiError,
 } from "../api/protocolWorkbenchRepository";
-import { navigate, useHashRoute } from "../app/router";
+import { navigate, RouteLink, useHashRoute } from "../app/router";
 import { rememberProtocolJob } from "../app/lastProtocolJob";
 import { ProtocolWorkbenchHome } from "../components/protocols/ProtocolWorkbenchHome";
 import { ProtocolUploadPanel } from "../components/protocols/ProtocolUploadPanel";
 import { ProtocolRedoSelectPanel } from "../components/protocols/ProtocolRedoSelectPanel";
 import { ProtocolJobFlow } from "../components/protocols/ProtocolJobFlow";
+import {
+  WorkbenchProjectEntry,
+  isReturnRouteRejected,
+  sanitizeReturnRoute,
+} from "../components/protocols/WorkbenchProjectEntry";
 
 export function ProtocolsPage() {
   const { params } = useHashRoute();
   const mode = params.get("mode");
   const jobId = params.get("job");
+  // 共享工作台来源：显式命名空间元数据，只随上传持久保存；返回上下文仅接受
+  // 本产品相对路由，绝对 returnUrl 一律丢弃并如实提示。
+  const workbenchOrigin = params.get("workbench_origin");
+  const rawReturnRoute = params.get("return");
+  const workbenchReturnRoute = sanitizeReturnRoute(rawReturnRoute);
+  const workbenchReturnRejected = isReturnRouteRejected(rawReturnRoute);
 
   const repo = getProtocolWorkbenchRepository();
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -35,9 +46,14 @@ export function ProtocolsPage() {
       try {
         const result = await repo.startDeconstruction(file, `upload-${Date.now()}`, {
           projectId: projectId ?? undefined,
+          workbenchOrigin: workbenchOrigin ?? undefined,
         });
         rememberProtocolJob(result.jobId);
-        navigate("/protocols", { job: result.jobId });
+        navigate("/protocols", {
+          job: result.jobId,
+          ...(workbenchOrigin !== null ? { workbench_origin: workbenchOrigin } : {}),
+          ...(workbenchReturnRoute !== null ? { return: workbenchReturnRoute } : {}),
+        });
       } catch (error) {
         setUploadError(
           error instanceof ProtocolWorkbenchApiError
@@ -48,7 +64,7 @@ export function ProtocolsPage() {
         setUploadBusy(false);
       }
     },
-    [repo],
+    [repo, workbenchOrigin, workbenchReturnRoute],
   );
 
   const handleFirstUpload = useCallback(
@@ -67,9 +83,13 @@ export function ProtocolsPage() {
         const result = await repo.startFeedbackRevision(
           projectId,
           `feedback-revision-${Date.now()}`,
+          { workbenchOrigin: workbenchOrigin ?? undefined },
         );
         rememberProtocolJob(result.jobId);
-        navigate("/protocols", { job: result.jobId });
+        navigate("/protocols", { job: result.jobId,
+          ...(workbenchOrigin !== null ? { workbench_origin: workbenchOrigin } : {}),
+          ...(workbenchReturnRoute !== null ? { return: workbenchReturnRoute } : {}),
+        });
       } catch (error) {
         setUploadError(
           error instanceof ProtocolWorkbenchApiError
@@ -80,7 +100,7 @@ export function ProtocolsPage() {
         setUploadBusy(false);
       }
     },
-    [repo],
+    [repo, workbenchOrigin, workbenchReturnRoute],
   );
 
   if (mode === null && jobId === null) {
@@ -89,6 +109,12 @@ export function ProtocolsPage() {
 
   if (mode === "redo" && jobId === null) {
     return (
+      <>
+      {workbenchOrigin !== null && <p className="protocol-upload__back">
+        <RouteLink to="/protocols" params={{ mode: "workbench", workbench_origin: workbenchOrigin,
+          ...(workbenchReturnRoute !== null ? { return: workbenchReturnRoute } : {}) }}
+          className="button button--quiet">返回项目入口</RouteLink>
+      </p>}
       <ProtocolRedoSelectPanel
         initialProjectId={params.get("project")}
         busy={uploadBusy}
@@ -96,6 +122,7 @@ export function ProtocolsPage() {
         onUpload={handleRedoUpload}
         onStartFeedback={handleFeedbackRevision}
       />
+      </>
     );
   }
 
@@ -110,8 +137,31 @@ export function ProtocolsPage() {
     );
   }
 
+  // 共享工作台来源入口：来源已绑定时按持久身份跳既有任务/项目流程；
+  // 未绑定只提供真实 DOCX 上传。缺少 origin 的深链退回工作台首页。
+  if (mode === "workbench" && jobId === null && workbenchOrigin !== null) {
+    return (
+      <WorkbenchProjectEntry
+        origin={workbenchOrigin}
+        returnRoute={workbenchReturnRoute}
+        returnRejected={workbenchReturnRejected}
+        busy={uploadBusy}
+        error={uploadError}
+        onUpload={handleFirstUpload}
+        onInvalidFile={setUploadError}
+      />
+    );
+  }
+
   if (jobId !== null) {
-    return <ProtocolJobFlow jobId={jobId} componentParam={params.get("component")} />;
+    return <>
+      {workbenchOrigin !== null && <p className="protocol-upload__back">
+        <RouteLink to="/protocols" params={{ mode: "workbench", workbench_origin: workbenchOrigin,
+          ...(workbenchReturnRoute !== null ? { return: workbenchReturnRoute } : {}) }}
+          className="button button--quiet">返回项目入口</RouteLink>
+      </p>}
+      <ProtocolJobFlow jobId={jobId} componentParam={params.get("component")} />
+    </>;
   }
 
   return <ProtocolWorkbenchHome />;

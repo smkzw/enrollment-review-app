@@ -2,6 +2,7 @@
  * 方案解构工作台 HTTP 仓储：multipart 上传、错误信封解码、wire 归一化。
  */
 
+import type { StudyPhase } from "../domain/enums";
 import {
   protocolDeconstructionsUrl,
   protocolJobsUrl,
@@ -43,6 +44,10 @@ import type {
   PublishResultView,
   SourcesView,
   StartDeconstructionResult,
+  WorkbenchEntryJobView,
+  WorkbenchEntryProjectView,
+  WorkbenchProjectEntryState,
+  WorkbenchProjectEntryView,
 } from "./protocolWorkbenchTypes";
 export interface ProtocolWorkbenchHttpOptions {
   fetchImpl?: typeof fetch;
@@ -110,6 +115,14 @@ export function createProtocolWorkbenchHttp(
       if (options?.projectId !== undefined && options.projectId.length > 0) {
         body.append("project_id", options.projectId);
       }
+      if (
+        options?.workbenchOrigin !== undefined &&
+        options.workbenchOrigin.length > 0
+      ) {
+        // 共享工作台来源只作为任务元数据随上传持久保存；方案身份、
+        // 身份确认与联合发布仍由既有流程裁定。
+        body.append("workbench_origin", options.workbenchOrigin);
+      }
       const result = await request(
         "",
         { method: "POST", body, signal: options?.signal },
@@ -132,6 +145,8 @@ export function createProtocolWorkbenchHttp(
             project_id: projectId,
             idempotency_key: idempotencyKey,
             actor: "用户",
+            ...(options?.workbenchOrigin !== undefined
+              ? { workbench_origin: options.workbenchOrigin } : {}),
           }),
           signal: options?.signal,
         },
@@ -356,4 +371,137 @@ export function createProtocolWorkbenchHttp(
       );
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// 共享工作台来源（workbench:<shared_project_id>）：只读入口解析
+//
+// 来源是元数据，不是方案身份；已绑定的任务/项目由服务端按持久身份解析，
+// 不使用 localStorage 作为权威映射。共享侧目前尚未产出命名空间来源
+// （共享 manifest 的 eligibility 路由绑定缺口在 WORKBENCH_ADAPTATION_20261007
+// 单独记录），因此这里只提供真实 HTTP 查询，stub 仓储不伪造来源数据。
+// ---------------------------------------------------------------------------
+
+const WORKBENCH_ENTRY_STATES: ReadonlyArray<WorkbenchProjectEntryState> = [
+  "unbound",
+  "job_in_progress",
+  "project_published",
+];
+
+function entryRecord(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw decodeProtocolWorkbenchError(null);
+  }
+  return value as Record<string, unknown>;
+}
+
+function entryRequiredString(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw decodeProtocolWorkbenchError(null);
+  }
+  return value;
+}
+
+function entryOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function entryOptionalBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function entryRequiredNumber(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw decodeProtocolWorkbenchError(null);
+  }
+  return value;
+}
+
+function entryStudyPhase(value: unknown): StudyPhase {
+  const candidate = entryRequiredString(value);
+  if (
+    candidate !== "phase_ii" &&
+    candidate !== "phase_iii" &&
+    candidate !== "seamless_phase_ii_iii" &&
+    candidate !== "other"
+  ) {
+    throw decodeProtocolWorkbenchError(null);
+  }
+  return candidate;
+}
+
+function normalizeEntryProject(raw: unknown): WorkbenchEntryProjectView {
+  const row = entryRecord(raw);
+  return {
+    projectId: entryRequiredString(row.project_id),
+    projectCode: entryRequiredString(row.project_code),
+    projectName: entryRequiredString(row.project_name),
+    studyPhase: entryStudyPhase(row.study_phase),
+    studyPhaseLabel: entryRequiredString(row.study_phase_label),
+    protocolCode: entryRequiredString(row.protocol_code),
+    officialVersion: entryRequiredString(row.official_version),
+    ruleSetId: entryRequiredString(row.rule_set_id),
+    ruleSetRevision: entryRequiredNumber(row.rule_set_revision),
+  };
+}
+
+function normalizeEntryJob(raw: unknown): WorkbenchEntryJobView {
+  const job = entryRecord(raw);
+  return {
+    jobId: entryRequiredString(job.job_id),
+    state: entryOptionalString(job.state),
+    stateLabel: entryOptionalString(job.state_label),
+    sessionKind: entryOptionalString(job.session_kind),
+    awaitingUser: entryOptionalString(job.awaiting_user),
+    awaitingUserLabel: entryOptionalString(job.awaiting_user_label),
+    publishable: entryOptionalBoolean(job.publishable),
+    fileName: entryOptionalString(job.file_name),
+  };
+}
+
+export function normalizeWorkbenchProjectEntry(
+  payload: unknown,
+): WorkbenchProjectEntryView {
+  const row = entryRecord(payload);
+  const rawState = entryRequiredString(row.entry_state);
+  if (!WORKBENCH_ENTRY_STATES.includes(rawState as WorkbenchProjectEntryState)) {
+    throw decodeProtocolWorkbenchError(null);
+  }
+  const rawJob = row.job;
+  const rawProject = row.project;
+  const entry: WorkbenchProjectEntryView = {
+    origin: entryRequiredString(row.origin),
+    entryState: rawState as WorkbenchProjectEntryState,
+    job:
+      rawJob === null || rawJob === undefined ? null : normalizeEntryJob(rawJob),
+    project:
+      rawProject === null || rawProject === undefined
+        ? null
+        : normalizeEntryProject(rawProject),
+  };
+  if ((entry.entryState === "unbound" && (entry.job !== null || entry.project !== null)) ||
+      (entry.entryState === "job_in_progress" && entry.job === null) ||
+      (entry.entryState === "project_published" && entry.project === null)) {
+    throw decodeProtocolWorkbenchError(null);
+  }
+  return entry;
+}
+
+/** 按持久身份解析共享工作台来源；未绑定时返回 entry_state="unbound"。 */
+export async function fetchWorkbenchProjectEntry(
+  origin: string,
+  options: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
+): Promise<WorkbenchProjectEntryView> {
+  const fetchImpl = options.fetchImpl ?? fetch.bind(globalThis);
+  const response = await fetchImpl(
+    protocolProjectsUrl(`/workbench-origins/${encodeURIComponent(origin)}`),
+    { method: "GET", signal: options.signal },
+  );
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw decodeProtocolWorkbenchError(payload);
+  }
+  const entry = normalizeWorkbenchProjectEntry(payload);
+  if (entry.origin !== origin) throw decodeProtocolWorkbenchError(null);
+  return entry;
 }

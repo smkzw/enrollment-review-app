@@ -18,7 +18,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Literal, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 from app.llm.mtplx_model_lifecycle import local_deployment_job_fields
 
@@ -54,7 +54,7 @@ from app.protocols.ingestion import (
     register_source_artifact,
 )
 from app.protocols.metadata import MetadataExtractionError, confirm_protocol_identity
-from app.services.job_service import JobService, StepSpec
+from app.services.job_service import JOB_IDEMPOTENCY_SCOPE, JobService, StepSpec
 from app.services.protocol_draft_service import (
     FormalBaselineError,
     ProtocolDraftService,
@@ -69,7 +69,14 @@ from app.services.protocol_publication_service import (
     PublicationGateError,
     PublicationLineageError,
 )
-from app.storage.codecs import utc_now
+from app.services.workbench_project_origin import (
+    WORKBENCH_ORIGIN_PAYLOAD_KEY,
+    WorkbenchOriginError,
+    job_workbench_origin,
+    normalize_workbench_origin,
+)
+from app.workflow.states import TERMINAL_JOB_STATES
+from app.storage.codecs import PersistedContractInvalid, utc_now
 from app.storage.idempotency import (
     IdempotencyConflict,
     IdempotencyRepository,
@@ -227,6 +234,34 @@ class ProjectOfficialVersionView:
     project: OfficialProjectView
     versions: list[ProjectVersionView]
     publication_count: int
+
+
+@dataclass(frozen=True)
+class WorkbenchProjectEntryView:
+    """共享工作台来源解析结果：已持久关联的任务/正式项目，或未绑定。
+
+    来源（``workbench:<shared_project_id>``）只是元数据；本投影不创建项目、
+    不代替上传/身份核对/联合发布，也不把共享项目编号当作本产品正式身份。
+    """
+
+    origin: str
+    #: "unbound"（本产品尚无该来源的任务）| "job_in_progress" | "project_published"
+    entry_state: str
+    job_id: str | None
+    job_state: str | None
+    job_state_label: str | None
+    session_kind: str | None
+    awaiting_user: str | None
+    awaiting_user_label: str | None
+    publishable: bool | None
+    file_name: str | None
+    project: OfficialProjectView | None
+
+
+def _optional_text(value: Any) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
 
 
 @dataclass(frozen=True)
@@ -565,6 +600,62 @@ class ProtocolWorkbenchService:
             recovery="请以 DOCX 重新上传正式方案。",
         )
 
+    @staticmethod
+    def _normalize_optional_workbench_origin(value: str | None) -> str | None:
+        """把共享工作台来源规范化为 ``workbench:<shared_project_id>``；不合法立即拒绝。
+
+        来源是任务元数据，不是方案身份；缺失时保持 payload 与既有行为逐字一致。
+        """
+        if value is None or not value.strip():
+            return None
+        try:
+            return normalize_workbench_origin(value)
+        except WorkbenchOriginError as exc:
+            raise ProtocolWorkbenchError(
+                "WORKBENCH_ORIGIN_INVALID",
+                title="共享工作台来源无效",
+                detail=str(exc),
+                recovery="请从医学经理工作台重新进入本产品；不要手工拼写来源标识。",
+            ) from exc
+
+    def _check_workbench_entry_creation(
+        self, session: Session, *, payload: dict[str, Any], idempotency_key: str,
+    ) -> None:
+        """调用方持有 SQLite 写锁后核对入口，幂等重放仍由原创建合同验证。"""
+        origin = job_workbench_origin(payload)
+        if origin is None or IdempotencyRepository(session).get(JOB_IDEMPOTENCY_SCOPE, idempotency_key):
+            return
+        entry = self.resolve_workbench_origin(origin)
+        target = payload.get("target_project_id")
+        if target is not None and (entry.project is None or entry.project.project_id != target):
+            raise ProtocolWorkbenchError(
+                "WORKBENCH_ORIGIN_PROJECT_MISMATCH", title="项目与工作台入口不一致",
+                detail="新草稿必须关联入口原有的正式项目。", recovery="请返回原项目继续处理。",
+            )
+        if (entry.entry_state == "job_in_progress" and entry.job_id is not None
+                and entry.job_state not in TERMINAL_JOB_STATES):
+            raise ProtocolWorkbenchError(
+                "WORKBENCH_ORIGIN_ALREADY_BOUND", title="该项目已有未完成的方案任务",
+                detail="请先继续或取消已有任务。", recovery="返回项目入口查看处理记录。",
+            )
+        if target is None and entry.project is not None:
+            raise ProtocolWorkbenchError(
+                "WORKBENCH_ORIGIN_ALREADY_BOUND", title="该项目已有正式方案",
+                detail="请使用上传新版方案入口，不要再次新建项目。", recovery="返回原项目继续处理。",
+            )
+
+    def _create_workbench_entry_job(self, *, payload: dict[str, Any], idempotency_key: str):
+        if job_workbench_origin(payload) is None:
+            return self.jobs.create_job(idempotency_key=idempotency_key,
+                job_type=PROTOCOL_DECONSTRUCTION_JOB_TYPE, payload=payload,
+                steps=list(PROTOCOL_DECONSTRUCTION_STEPS))
+        with self.session_factory() as session, session.begin():
+            session.execute(text("BEGIN IMMEDIATE"))
+            self._check_workbench_entry_creation(session, payload=payload, idempotency_key=idempotency_key)
+            return self.jobs.create_job_in_session(session, idempotency_key=idempotency_key,
+                job_type=PROTOCOL_DECONSTRUCTION_JOB_TYPE, payload=payload,
+                steps=list(PROTOCOL_DECONSTRUCTION_STEPS))
+
     def start_first_deconstruction(
         self,
         *,
@@ -572,8 +663,10 @@ class ProtocolWorkbenchService:
         original_name: str,
         idempotency_key: str,
         actor: str = "用户",
+        workbench_origin: str | None = None,
     ) -> StartDeconstructionResult:
         display_name = original_name or upload_path.name
+        origin_value = self._normalize_optional_workbench_origin(workbench_origin)
         self._require_supported_protocol_file(upload_path, display_name)
         try:
             sha256 = compute_sha256(upload_path)
@@ -617,11 +710,13 @@ class ProtocolWorkbenchService:
             "actor": actor,
             "awaiting_user": None,
         }
-        result = self.jobs.create_job(
+        if origin_value is not None:
+            # 只在显式来源存在时写入：无来源请求的 payload 保持逐字不变，
+            # 既有幂等键与历史任务的重放语义不受影响。
+            payload[WORKBENCH_ORIGIN_PAYLOAD_KEY] = origin_value
+        result = self._create_workbench_entry_job(
             idempotency_key=idempotency_key,
-            job_type=PROTOCOL_DECONSTRUCTION_JOB_TYPE,
             payload=payload,
-            steps=list(PROTOCOL_DECONSTRUCTION_STEPS),
         )
         if not result.created:
             merged = self._merged_payload(result.job_id)
@@ -746,10 +841,20 @@ class ProtocolWorkbenchService:
         project_id: str,
         idempotency_key: str,
         actor: str = "用户",
+        workbench_origin: str | None = None,
     ) -> StartDeconstructionResult:
         """重新解构：目标项目必须在持久任务中保存，上传的新版方案在同一项目中
         生成新的不可变规则版本。目标项目不存在时直接拒绝，不创建任务。"""
         display_name = original_name or upload_path.name
+        origin_value = self._normalize_optional_workbench_origin(workbench_origin)
+        if origin_value is not None:
+            entry = self.resolve_workbench_origin(origin_value)
+            if entry.project is None or entry.project.project_id != project_id:
+                raise ProtocolWorkbenchError(
+                    "WORKBENCH_ORIGIN_PROJECT_MISMATCH", title="项目与工作台入口不一致",
+                    detail="新版方案必须上传到该工作台入口已关联的正式项目。",
+                    recovery="请从原项目进入并继续处理，不要另选其他项目。",
+                )
         self._require_supported_protocol_file(upload_path, display_name)
         try:
             sha256 = compute_sha256(upload_path)
@@ -812,11 +917,11 @@ class ProtocolWorkbenchService:
             "target_official_version": target_version.official_version,
             "target_rule_set_revision": target_rule_set_revision,
         }
-        result = self.jobs.create_job(
+        if origin_value is not None:
+            payload[WORKBENCH_ORIGIN_PAYLOAD_KEY] = origin_value
+        result = self._create_workbench_entry_job(
             idempotency_key=idempotency_key,
-            job_type=PROTOCOL_DECONSTRUCTION_JOB_TYPE,
             payload=payload,
-            steps=list(PROTOCOL_DECONSTRUCTION_STEPS),
         )
         if not result.created:
             merged = self._merged_payload(result.job_id)
@@ -870,12 +975,14 @@ class ProtocolWorkbenchService:
         idempotency_key: str,
         interpretation_sources: Sequence[InterpretationSource] = (),
         actor: str = "用户",
+        workbench_origin: str | None = None,
     ) -> StartDeconstructionResult:
         """无需上传新版文件，复制当前正式草稿为候选稿并进入反馈修订。
 
         该路径仍必须恢复正式版本发布时使用的方案输入与来源定位；若历史任务已
         缺失这些权威上下文则失败关闭，不能用只有规则正文的无来源副本继续发布。
         """
+        origin_value = self._normalize_optional_workbench_origin(workbench_origin)
         with self.session_factory() as session:
             row = get_project_row(session, project_id)
             if row is None:
@@ -1019,8 +1126,13 @@ class ProtocolWorkbenchService:
             key: ProtocolSourceSpan.model_validate(value)
             for key, value in source_context["source_spans"].items()
         }
+        if origin_value is not None:
+            payload[WORKBENCH_ORIGIN_PAYLOAD_KEY] = origin_value
         with self.session_factory() as session:
             with session.begin():
+                if origin_value is not None:
+                    session.execute(text("BEGIN IMMEDIATE"))
+                    self._check_workbench_entry_creation(session, payload=payload, idempotency_key=idempotency_key)
                 # 任务、初稿和全部已完成检查点一次提交。后台 runner 在提交前
                 # 看不到 queued 任务，因此不能抢先取得租约并破坏同步初始化。
                 result = self.jobs.create_job_in_session(
@@ -1650,6 +1762,129 @@ class ProtocolWorkbenchService:
             project=_official_project_view(project, rule_set_revision=revision),
             versions=versions,
             publication_count=len(versions),
+        )
+
+    def resolve_workbench_origin(
+        self, workbench_origin: str
+    ) -> WorkbenchProjectEntryView:
+        """按持久身份解析共享工作台来源，不使用浏览器本地缓存作为权威映射。
+
+        只在既有 ``protocol_deconstruction`` 任务的 payload 中查找显式命名空间的
+        ``workbench_origin``：最新任务已发布正式项目时返回 ``project_published``，
+        否则返回可继续的 ``job_in_progress``；没有任何持久关联时返回 ``unbound``。
+        未绑定时不返回任何历史项目，由入口展示真实上传或如实说明待配置。
+        """
+        try:
+            origin = normalize_workbench_origin(workbench_origin)
+        except WorkbenchOriginError as exc:
+            raise ProtocolWorkbenchError(
+                "WORKBENCH_ORIGIN_INVALID",
+                title="共享工作台来源无效",
+                detail=str(exc),
+                recovery="请从医学经理工作台重新进入本产品；不要手工拼写来源标识。",
+            ) from exc
+
+        from app.storage.codecs import verify_payload_sha256
+
+        with self.session_factory() as session:
+            jobs = session.execute(
+                select(JobRecord)
+                .where(
+                    JobRecord.job_type == PROTOCOL_DECONSTRUCTION_JOB_TYPE,
+                    func.json_extract(JobRecord.payload_json, "$.workbench_origin") == origin,
+                )
+                .order_by(JobRecord.created_at.desc(), JobRecord.job_id.desc())
+            ).scalars().all()
+
+        entries: list[WorkbenchProjectEntryView] = []
+        for job in jobs:
+            try:
+                frozen = verify_payload_sha256(job.payload_json, job.payload_sha256)
+                if job_workbench_origin(frozen) != origin:
+                    raise ValueError("任务来源与请求不一致")
+                merged = self._merged_payload(job.job_id)
+                if merged.get(WORKBENCH_ORIGIN_PAYLOAD_KEY) != origin:
+                    raise ValueError("后续记录改变了任务创建时的来源")
+                target = frozen.get("target_project_id")
+                if target is not None and (
+                    merged.get("target_project_id") != target or
+                    (merged.get("project_id") is not None and merged["project_id"] != target)
+                ):
+                    raise ValueError("任务冻结的目标项目与后续记录不一致")
+                entries.append(self._workbench_origin_entry(origin, job.job_id, merged))
+            except (JobNotFoundError, ValueError, PersistedContractInvalid) as exc:
+                raise ProtocolWorkbenchError(
+                    "WORKBENCH_ORIGIN_RECORD_INVALID", title="项目关联记录无法核对",
+                    detail=str(exc), recovery="请核对该项目的任务记录；不会改用其他历史项目。",
+                ) from exc
+
+        project_ids = {entry.project.project_id for entry in entries if entry.project is not None}
+        if len(project_ids) > 1:
+            raise ProtocolWorkbenchError(
+                "WORKBENCH_ORIGIN_CONFLICT", title="项目关联存在冲突",
+                detail="同一工作台项目关联了多个正式项目。",
+                recovery="请核对项目关联后继续；不会按最近访问记录猜选项目。",
+            )
+        if entries:
+            return entries[0]
+
+        return WorkbenchProjectEntryView(
+            origin=origin,
+            entry_state="unbound",
+            job_id=None,
+            job_state=None,
+            job_state_label=None,
+            session_kind=None,
+            awaiting_user=None,
+            awaiting_user_label=None,
+            publishable=None,
+            file_name=None,
+            project=None,
+        )
+
+    def _workbench_origin_entry(
+        self, origin: str, job_id: str, merged: dict[str, Any]
+    ) -> WorkbenchProjectEntryView:
+        """把命中来源的任务投影为入口视图；项目不存在时如实退回进行中状态。"""
+        project_id = _optional_text(merged.get("project_id")) or _optional_text(
+            merged.get("target_project_id")
+        )
+        published_project = None
+        if project_id is not None:
+            with self.session_factory() as session:
+                row = get_project_row(session, project_id)
+            if row is None:
+                raise ValueError("关联的正式项目不存在")
+            project, revision = row
+            published_project = _official_project_view(project, rule_set_revision=revision)
+
+        snapshot = self.jobs.get_status(job_id)
+        published = any(step.step_id == STEP_PUBLISH and step.state == "completed"
+                        for step in snapshot.steps)
+        persisted_wait = next(
+            (
+                step.waiting_user_kind
+                for step in snapshot.steps
+                if step.state == "waiting_user" and step.waiting_user_kind is not None
+            ),
+            None,
+        )
+        awaiting = persisted_wait or merged.get("awaiting_user")
+        gate_summary = self._gate_summary(merged)
+        return WorkbenchProjectEntryView(
+            origin=origin,
+            entry_state=("project_published" if published
+                         and merged.get("project_id") is not None and published_project is not None
+                         else "job_in_progress"),
+            job_id=job_id,
+            job_state=snapshot.state,
+            job_state_label=self._job_state_label(snapshot.state),
+            session_kind=str(merged.get("session_kind", "first_deconstruction")),
+            awaiting_user=awaiting,
+            awaiting_user_label=_awaiting_user_label(awaiting),
+            publishable=gate_summary.get("publishable"),
+            file_name=_optional_text(merged.get("file_name")),
+            project=published_project,
         )
 
     # ------------------------------------------------------------------ 写入

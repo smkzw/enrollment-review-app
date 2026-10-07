@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { createProtocolWorkbenchHttp } from "./protocolWorkbenchHttp";
+import { createProtocolWorkbenchHttp, fetchWorkbenchProjectEntry, normalizeWorkbenchProjectEntry } from "./protocolWorkbenchHttp";
 import {
   encodeFeedback,
   normalizeIdentityReview,
@@ -49,6 +49,15 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe("protocolWorkbenchHttp", () => {
+  it("工作台来源响应不得串项目或虚构未绑定状态", async () => {
+    const wire = { origin: "workbench:other", entry_state: "unbound", job: null, project: null };
+    await expect(fetchWorkbenchProjectEntry("workbench:expected", {
+      fetchImpl: vi.fn(async () => jsonResponse(200, wire)),
+    })).rejects.toThrow();
+    expect(() => normalizeWorkbenchProjectEntry({ ...wire, entry_state: "job_in_progress" })).toThrow();
+    expect(() => normalizeWorkbenchProjectEntry({ ...wire, job: { job_id: "job" } })).toThrow();
+    expect(() => normalizeWorkbenchProjectEntry([])).toThrow();
+  });
   it("保留提案提示使用真实布尔标记，旧响应不虚构提示", () => {
     const wire = {
       job_id: "review-job", revision_id: "revision-1", draft_id: "draft-1",

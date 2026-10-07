@@ -33,6 +33,7 @@ class StartFeedbackRevisionRequest(_StrictModel):
     idempotency_key: str = Field(min_length=1, max_length=256)
     interpretation_sources: list[InterpretationSource] = Field(default_factory=list)
     actor: str = Field(default="用户", min_length=1, max_length=128)
+    workbench_origin: str | None = Field(default=None, min_length=1, max_length=256)
 
 
 class StartSavedCandidateRecoveryRequest(_StrictModel):

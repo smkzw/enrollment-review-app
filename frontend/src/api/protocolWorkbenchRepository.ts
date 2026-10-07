@@ -34,6 +34,12 @@ export interface ProtocolWorkbenchRequestOptions {
   signal?: AbortSignal;
   /** 重新解构：上传目标正式项目编号（非空时进入重新解构路径）。 */
   projectId?: string;
+  /**
+   * 共享工作台来源（显式命名空间 `workbench:<shared_project_id>`）。
+   * 仅随任务持久保存为来源元数据，不构成方案身份、期别或发布授权；
+   * 合法性与持久化由服务端裁定，前端不做宽容猜测。
+   */
+  workbenchOrigin?: string;
   /** 用户正在审阅的补充要求版本；仅用于发布，不能用最新结果替代。 */
   controlPublication?: { jobId: string; checkpointId: string };
 }
