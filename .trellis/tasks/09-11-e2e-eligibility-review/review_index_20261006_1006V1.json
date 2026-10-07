@@ -5,6 +5,30 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "bounded_packet_diagnostic": {
+    "source_commit": "619af9f4", "job_id": "2a24a4c90184445ca541cb61a2898cd4",
+    "state": "failed_final", "error_code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID",
+    "seconds": 295.4596511249547, "physical_calls": 6,
+    "discovery_reused": 85, "new_discovery_calls": 0,
+    "max_deep_units_per_batch": 6, "deep_planned": 90, "deep_completed": 0,
+    "isolated_variable": "existing source-closed packing only;same model/prompt/schema/gate",
+    "protected_unchanged": true, "source_database_unchanged": true, "old_jobs_unchanged": true,
+    "first_causes": ["source eligibility sequencing", "time purpose without time constraint", "procedure affected-stage mismatch", "treatment duration used as event window", "future continuous obligation decided early"],
+    "repair_scope_inspection": "Typed findings retained; deconstructor selects one proved candidate scope before full revalidation. Two schema repairs exhausted; no new generic duration loop or relaxed gate",
+    "private_path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-bounded-batches-20261007-v1",
+    "access": "controlled_local_only", "formal_rules_published": false, "new_current_node_report": false
+  },
+  "clinical_reading_display": {
+    "source_base": "619af9f4", "layer": "presentation_only",
+    "paths": ["frontend/src/components/evidence-workspace/OcrReviewPanel.tsx", "frontend/src/components/evidence-workspace/ocrDisplayScope.ts", "frontend/src/styles/evidence.css"],
+    "scope": "Fold exact pure administrative lines; keep mixed/unknown clinical content and source offsets. Pending hidden risk prevents whole-page confirmation. Identical raw/effective reading uses one column; changed/full mode preserves comparison",
+    "tests": {"modules": 4, "passed": 44, "seconds": 2.39, "exit_code": 0, "overlapping_windows_not_additive": true},
+    "build": {"exit_code": 0, "modules": 2093, "vite_milliseconds": 239, "warning": "existing chunk over500k"},
+    "ego": {"space": 114, "page": "p1", "viewport_width": 1920, "document_width": 1920, "port": 62742, "non_get": 403, "runner_enabled": false, "administrative_flags_folded": 8, "all_pending_flags_unchanged": 266, "full_mode_restores_flags": 266},
+    "original_qc": "Original has handwritten clinical-significance notes not fully present in OCR; absence in extracted text cannot prove missing investigator judgment. Exact handwriting object remains unverified",
+    "private_path": "/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-source-qc-readonly-20261007-v1",
+    "access": "controlled_local_only", "clinical_adoption_changed": false, "q3_complete": false
+  },
   "source_seed_revalidation": {
     "base_commit": "c55a528e",
     "paths": ["app/services/protocol_control_execution.py", "app/agents/protocol_control_deconstructor.py", "tests/v2/services/test_protocol_control_execution.py", "tests/v2/protocols/test_slice58c_control_deconstructor.py"],

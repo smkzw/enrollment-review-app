@@ -126,6 +126,42 @@ function revision() {
 }
 
 describe("OcrReviewPanel", () => {
+  it("普通报告信息收起但待核总数不变，展开之前不能确认整页", async () => {
+    const user = userEvent.setup();
+    const current = page();
+    current.rawText = "联系电话：12345678\n肌酐 79 μmol/L";
+    current.effectiveText = current.rawText;
+    current.riskScans[0].flags = [{
+      ...current.riskScans[0].flags[0], text: "12345678", textStart: 5, textEnd: 13,
+      kind: "numeric_value", kindLabel: "关键数值",
+    }];
+    const submit = vi.fn(async () => undefined);
+    render(<OcrReviewPanel page={current} revision={revision()} conflict={null}
+      onSubmitCorrection={vi.fn(async () => undefined)} onSubmitRiskReview={submit}
+      onOpenLocator={vi.fn()} />);
+    expect(screen.getAllByText("肌酐 79 μmol/L", { selector: "pre" })).toHaveLength(1);
+    expect(screen.getByText(/其中 1 项仍待核对/)).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "关键数值的核对说明" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: /逐项核对本页/ }));
+    expect(screen.getByRole("button", { name: "确认本页 1 项" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "展开完整记录与核对项" }));
+    expect(screen.getByRole("textbox", { name: "关键数值的核对说明" })).toBeInTheDocument();
+    expect(screen.getAllByText((_, element) => element?.tagName === "PRE"
+      && element.textContent === current.rawText)).toHaveLength(2);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("有实际校对差异时仍分别保留原文与校对文本", () => {
+    const current = page();
+    current.effectiveText = "患者记录发热。";
+    render(<OcrReviewPanel page={current} revision={revision()} conflict={null}
+      onSubmitCorrection={vi.fn(async () => undefined)} onSubmitRiskReview={vi.fn(async () => undefined)}
+      onOpenLocator={vi.fn()} />);
+    expect(screen.getByText(current.rawText, { selector: "pre" })).toBeInTheDocument();
+    expect(screen.getByText(current.effectiveText, { selector: "pre" })).toBeInTheDocument();
+    expect(screen.getByText("校对后文本", { selector: "h5" })).toBeInTheDocument();
+  });
+
   it("原文查找可打开，但不表示项目或读数已经核实", async () => {
     const user = userEvent.setup();
     const current = page();

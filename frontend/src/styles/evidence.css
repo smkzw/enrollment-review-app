@@ -1374,6 +1374,10 @@
   gap: var(--space-2);
 }
 
+.evidence-text-pair--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .evidence-text-pane {
   min-width: 0;
   min-height: 12rem;

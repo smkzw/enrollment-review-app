@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { administrativeLineRanges, clinicalReadingText, isAdministrativeRange } from "./ocrDisplayScope";
 import {
   conflictDifferenceRows,
   clinicalLocatorPrecisionLabel,
@@ -243,6 +244,9 @@ export function OcrReviewPanel({
   const [riskBusy, setRiskBusy] = useState<string | null>(null);
   const [pageReviewConfirmed, setPageReviewConfirmed] = useState(false);
   const [pageReviewBusy, setPageReviewBusy] = useState(false);
+  const [showAdministrativeDetails, setShowAdministrativeDetails] = useState(false);
+  const administrativeRanges = useMemo(() => administrativeLineRanges(page.rawText), [page.rawText]);
+  const readingText = useMemo(() => clinicalReadingText(page.rawText), [page.rawText]);
 
   const rangeOptions = useMemo(() => {
     const options = [
@@ -270,6 +274,11 @@ export function OcrReviewPanel({
   }, [page.rawText, page.riskScans]);
 
   const allFlags = page.riskScans.flatMap((scan) => scan.flags);
+  const administrativeFlags = allFlags.filter((flag) => flag.kind !== "output_repetition"
+    && page.rawText.slice(flag.textStart, flag.textEnd) === flag.text
+    && isAdministrativeRange(flag, administrativeRanges));
+  const displayedFlags = showAdministrativeDetails ? allFlags
+    : allFlags.filter((flag) => !administrativeFlags.includes(flag));
   const reviewedRiskIds = new Set(
     page.riskReviews.map((review) => review.riskFlagId),
   );
@@ -288,6 +297,8 @@ export function OcrReviewPanel({
     return !reviewedRiskIds.has(flag.riskFlagId) && !corrected;
   });
   const pendingRiskCount = pendingFlags.length;
+  const hiddenPendingRiskCount = showAdministrativeDetails ? 0
+    : pendingFlags.filter((flag) => administrativeFlags.includes(flag)).length;
   const pageReviewScan =
     page.riskScans.length === 1 && severeQualityFlags.length === 0
       ? page.riskScans[0]
@@ -309,6 +320,7 @@ export function OcrReviewPanel({
     useState(!isCurrentRevision);
   useEffect(() => {
     if (excerptProposal === null) return;
+    setShowAdministrativeDetails(true);
     setShowCorrectionTools(true);
     openSection("evidence-correction");
   }, [excerptProposal?.proposalId]);
@@ -519,6 +531,7 @@ export function OcrReviewPanel({
   async function submitPageReview() {
     if (
       pageReviewScan === null ||
+      hiddenPendingRiskCount > 0 ||
       !pageReviewConfirmed ||
       pageReviewBusy ||
       editingDisabledReason !== null
@@ -545,7 +558,7 @@ export function OcrReviewPanel({
         </button>
         <button
           type="button"
-          onClick={() => openSection("evidence-correction")}
+          onClick={() => { setShowAdministrativeDetails(true); openSection("evidence-correction"); }}
         >
           文字校对
         </button>
@@ -575,22 +588,29 @@ export function OcrReviewPanel({
           </div>
           <span className="chip">{pageReviewStatus}</span>
         </div>
-        <div className="evidence-text-pair">
+        {administrativeRanges.length > 0 && (
+          <label className="evidence-critical-confirmation">
+            <input type="checkbox" checked={showAdministrativeDetails}
+              onChange={(event) => setShowAdministrativeDetails(event.target.checked)} />
+            <span>显示完整识别记录与普通报告信息</span>
+          </label>
+        )}
+        <div className={`evidence-text-pair${!showAdministrativeDetails && page.effectiveText === page.rawText ? " evidence-text-pair--single" : ""}`}>
           <article className="evidence-text-pane evidence-text-pane--source">
             <div className="evidence-text-pane__head">
-              <h5>原始识别</h5>
-              <span>原始记录</span>
+              <h5>{showAdministrativeDetails || administrativeRanges.length === 0 ? "原始识别" : "临床内容"}</h5>
+              <span>{showAdministrativeDetails || administrativeRanges.length === 0 ? "原始记录" : "原文摘录"}</span>
             </div>
             <pre
-              ref={rawTextRef}
+              ref={showAdministrativeDetails || administrativeRanges.length === 0 ? rawTextRef : null}
               tabIndex={0}
               onMouseUp={chooseBrowserSelection}
               onKeyUp={chooseBrowserSelection}
             >
-              {page.rawText}
+              {showAdministrativeDetails ? page.rawText : readingText}
             </pre>
           </article>
-          <article className="evidence-text-pane evidence-text-pane--effective">
+          {(showAdministrativeDetails || page.effectiveText !== page.rawText) && <article className="evidence-text-pane evidence-text-pane--effective">
             <div className="evidence-text-pane__head">
               <h5>校对后文本</h5>
               <span>审核使用</span>
@@ -600,9 +620,9 @@ export function OcrReviewPanel({
                 尚未形成校对文本。可在下方修正已识别文字，或补入漏识别文字。
               </p>
             ) : (
-              <pre>{page.effectiveText}</pre>
+              <pre>{showAdministrativeDetails ? page.effectiveText : clinicalReadingText(page.effectiveText)}</pre>
             )}
-          </article>
+          </article>}
         </div>
       </section>
 
@@ -627,7 +647,7 @@ export function OcrReviewPanel({
                 type="button"
                 className="button"
                 aria-expanded={showCorrectionTools}
-                onClick={() => setShowCorrectionTools((value) => !value)}
+                onClick={() => { setShowAdministrativeDetails(true); setShowCorrectionTools((value) => !value); }}
               >
                 {showCorrectionTools ? "收起校对工具" : "需要修订识别文字"}
               </button>
@@ -836,6 +856,12 @@ export function OcrReviewPanel({
         className="evidence-risk-section"
         aria-label="识别风险核对"
       >
+        {administrativeFlags.length > 0 && !showAdministrativeDetails && (
+          <p className="evidence-section-summary">
+            已收起 {administrativeFlags.length} 项普通报告信息，其中 {hiddenPendingRiskCount} 项仍待核对；尚未解除或采用。
+            <button type="button" className="button" onClick={() => setShowAdministrativeDetails(true)}>展开完整记录与核对项</button>
+          </p>
+        )}
         <div className="evidence-review-context" role="note">
           {revision.sourceQualificationMode === "scoped_text_v1" && (
             <p>本版本逐项核实使用，未核实内容继续保留，不代表全部资料已确认。后续核对将生成新的资料版本，本次记录不会被覆盖。</p>
@@ -905,6 +931,7 @@ export function OcrReviewPanel({
                 className="button button--primary"
                 disabled={
                   editingDisabledReason !== null ||
+                  hiddenPendingRiskCount > 0 ||
                   !pageReviewConfirmed ||
                   pageReviewBusy
                 }
@@ -915,7 +942,7 @@ export function OcrReviewPanel({
             </div>
           ) : null}
           <ul className="evidence-risk-list">
-            {allFlags.map((flag) => {
+            {displayedFlags.map((flag) => {
               const existing = riskReviewFor(page.riskReviews, flag);
               const draft = riskDraftFor(flag);
               const hasCoveringCorrection =
