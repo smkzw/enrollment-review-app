@@ -514,6 +514,96 @@ def test_parent_scope_request_saves_proof_through_existing_feedback_api(build_ap
             assert historical.content.model_dump(mode="json") == cleared_content
 
 
+@pytest.mark.parametrize("regression", [None, "numeric", "sibling", "binding"])
+def test_local_feedback_saves_expired_scope_as_pending_not_approval(build_app, data_paths, monkeypatch, regression):
+    from app.evidence.artifacts import ArtifactStore
+    from app.services.protocol_scope_review_service import review_official_source_scope
+    from app.storage.repositories import ProtocolDraftRevisionRepository
+    from tests.v2.protocols.test_official_scope_review import ScopeReader, scope_fixture
+
+    app = build_app(run_runner=False)
+    store = ArtifactStore(data_paths)
+    source, draft, spans = scope_fixture()
+    target = draft.proposed_rules[0].components[0]
+    target.expression.predicate.source_term = "年龄评分"
+    draft.component_drafts[0].proposed_component = target.model_copy(deep=True)
+    draft = review_official_source_scope(source, draft, official_code="IN-01",
+        transport=ScopeReader(), store=store)
+    old_proof_ref = draft.proposed_rules[0].components[0].source_scope_review_ref
+    old_proof = store.read(old_proof_ref)
+
+    def revise(source_input, current_draft, target_rule_code, feedback_note, target_component_id,
+               *, joint_source_repair, budget_store, scope_review_store=None):
+        if scope_review_store is not None:
+            return review_official_source_scope(source_input, current_draft, official_code=target_rule_code,
+                transport=ScopeReader(), store=scope_review_store)
+        result = current_draft.model_copy(deep=True)
+        component = result.proposed_rules[0].components[0]
+        component.expression.predicate.source_term = "年龄"
+        component.source_scope_review_ref = None
+        if regression == "numeric":
+            component.expression.predicate.value = 19
+        elif regression == "sibling":
+            result.proposed_rules[0].components[1].expression.predicate.value = 19
+            result.component_drafts[1].proposed_component = result.proposed_rules[0].components[1].model_copy(deep=True)
+        result.component_drafts[0].proposed_component = component.model_copy(deep=True)
+        if regression == "binding":
+            result.component_drafts[0].source_refs = ["foreign-source"]
+        return result
+
+    monkeypatch.setattr(ProtocolWorkbenchService, "_revise_feedback_with_model", staticmethod(revise))
+    with TestClient(app) as client:
+        job_id = _create_protocol_job(client, key=f"scope-expiry-{regression}")
+        app.state.protocol_workbench_service.seed_review_session(job_id, source_input=source,
+            draft=draft, source_spans=spans, wait_at="await_review")
+        url = f"/api/v2/protocol/deconstructions/{job_id}"
+        before = client.get(url + "/draft").json()
+        response = client.post(url + "/draft/feedback", json={
+            "expected_revision_id": before["revision_id"], "feedback_kind": "source_error",
+            "feedback_note": "仅纠正当前指标原名，其他含义及兄弟项保持。", "target_rule_code": "IN-01",
+            "target_component_id": target.rule_component_id,
+        })
+        after = client.get(url + "/draft").json()
+        if regression is not None:
+            assert response.status_code == 409, response.text
+            assert after["revision_id"] == before["revision_id"]
+            assert after["content"] == before["content"]
+        else:
+            assert response.status_code == 200, response.text
+            assert after["revision_number"] == 2
+            components = after["content"]["proposed_rules"][0]["components"]
+            assert components[0].get("source_scope_review_ref") is None
+            assert components[1] == before["content"]["proposed_rules"][0]["components"][1]
+            integrity = client.get(url + "/integrity").json()
+            assert not integrity["publishable"] and integrity["blocking_count"] > 0
+            pending = app.state.protocol_workbench_service.get_draft_detail(job_id).revision.content
+            pending_gate = app.state.protocol_workbench_service.gate.evaluate(source, pending, source_spans=spans)
+            codes = {issue.issue_code for check in pending_gate.checks for issue in check.issues}
+            assert "SOURCE_SCOPE_REVIEW_INVALID" in codes
+            assert "REVIEW_STAGE_SCOPE_UNVERIFIED" in codes
+            assert "METRIC_NOT_IN_SOURCE" not in codes
+            from app.services.protocol_publication_service import (
+                ProtocolPublicationRequest, ProtocolPublicationService, PublicationGateError,
+            )
+            with pytest.raises(PublicationGateError):
+                ProtocolPublicationService(app.state.session_factory).publish(ProtocolPublicationRequest(
+                    idempotency_key="expired-scope-must-not-publish", draft_revision_id=after["revision_id"],
+                    source_input=source, source_spans=spans, actor="测试医学监查员",
+                ))
+            checked = client.post(url + "/draft/feedback", json={
+                "expected_revision_id": after["revision_id"], "feedback_kind": "source_error",
+                "feedback_note": "重新核对当前版本的总标题关系。", "target_rule_code": "IN-01",
+                "review_parent_scope": True,
+            })
+            assert checked.status_code == 200, checked.text
+            assert client.get(url + "/integrity").json()["publishable"]
+            assert client.get(url + "/draft").json()["revision_number"] == 3
+        with app.state.session_factory() as session:
+            historical = ProtocolDraftRevisionRepository(session).get(before["revision_id"])
+            assert historical.content.model_dump(mode="json") == before["content"]
+        assert store.read(old_proof_ref) == old_proof
+
+
 def test_scope_request_cannot_be_disguised_as_clarification(build_app):
     app = build_app(run_runner=False)
     with TestClient(app) as client:

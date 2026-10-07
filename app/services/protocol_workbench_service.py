@@ -12,6 +12,7 @@ import json
 import logging
 import re
 import uuid
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -2020,18 +2021,32 @@ class ProtocolWorkbenchService:
                             for check in revised_gate.checks
                             for issue in check.issues
                         ]
+                        pending_scope_refs = self._expired_feedback_scope_reviews(
+                            source_input, current_draft, draft,
+                            target_rule_code=target_rule_code,
+                            target_component_id=target_component_id,
+                        )
+                        previously_failed_scope = {ref for issue in previous_issues
+                            if issue.issue_code in pending_scope_refs for ref in issue.affected_refs}
+                        pending_scope_refs = {code: refs - previously_failed_scope
+                                              for code, refs in pending_scope_refs.items()}
+                        # Expected proof expiry may be saved as a pending draft,
+                        # never removed from integrity or publication checks.
+                        comparison_issues = [issue for issue in revised_issues
+                            if not (issue.affected_refs and set(issue.affected_refs)
+                                <= pending_scope_refs.get(issue.issue_code, set()))]
                         regressing = target_rule_code in regressing_rule_codes(
                             current_draft,
                             previous_issues,
                             draft,
-                            revised_issues,
+                            comparison_issues,
                             [target_rule_code],
                         )
                         reduced = issue_reduced_for_rule(
                             current_draft,
                             previous_issues,
                             draft,
-                            revised_issues,
+                            comparison_issues,
                             target_rule_code,
                         )
                         # A completed scope-only review must save new uncertainty
@@ -2398,6 +2413,80 @@ class ProtocolWorkbenchService:
                 *[item for item in revised.structural_warnings if selected(item)],
             ],
         }, deep=True)
+
+    def _expired_feedback_scope_reviews(self, source, previous, current, *,
+                                        target_rule_code, target_component_id) -> dict[str, set[str]]:
+        """Identify formerly valid proofs expired by an authorized local edit.
+
+        Scope validation must run first. Missing, corrupt or unresolved old
+        proofs do not qualify; an unchanged basis cannot excuse new issues.
+        """
+        if target_component_id is None:
+            return {}
+        from app.domain.publication import canonical_hash
+        from app.protocols.deconstruction_gate import _source_review_stages, _substantive_obligation_segments
+        from app.protocols.official_source_scope import frozen_parent_scope_fragments
+        from app.protocols.official_scope_review import (
+            OfficialScopeReviewError, reviewed_scope_stages, scope_review_basis,
+        )
+        from app.protocols.source_time_fragments import frozen_review_stage_aliases
+
+        old_rules = [rule for rule in previous.proposed_rules if rule.official_code == target_rule_code]
+        new_rules = [rule for rule in current.proposed_rules if rule.official_code == target_rule_code]
+        if len(old_rules) != 1 or len(new_rules) != 1:
+            return {}
+        old_rule, new_rule = old_rules[0], new_rules[0]
+        headings = frozen_parent_scope_fragments(source, target_rule_code,
+            scope_has_stages=lambda text: bool(_source_review_stages([text])),
+            is_substantive=lambda text: bool(_substantive_obligation_segments(text)))
+        stages = [stage.value for stage in _source_review_stages(
+            [item.excerpt for item in headings], stage_aliases=frozen_review_stage_aliases(source))]
+        try:
+            old_basis = scope_review_basis(source, previous, old_rule, headings, heading_stages=stages)
+            new_basis = scope_review_basis(source, current, new_rule, headings, heading_stages=stages)
+        except OfficialScopeReviewError:
+            return {}
+        if canonical_hash(old_basis) == canonical_hash(new_basis):
+            return {}
+        eligible, unchanged_scope = set(), set()
+
+        def scope_inputs(child):
+            # A literal metric-name correction cannot alter any node evidence.
+            # All other clinical fields, expression structure and source bindings
+            # remain part of this conservative comparison.
+            value = deepcopy(child["component"])
+            def expression(node):
+                if node["kind"] == "predicate":
+                    node["predicate"].pop("source_term", None)
+                else:
+                    for item in node["children"]:
+                        expression(item)
+            expression(value["expression"])
+            if value.get("exception_expression") is not None:
+                expression(value["exception_expression"])
+            for trigger in value.get("repeat_trigger_conditions", []):
+                expression(trigger["expression"])
+            return {**child, "component": value}
+
+        old_children = {item["component_id"]: item for item in old_basis["children"]}
+        new_children = {item["component_id"]: item for item in new_basis["children"]}
+        new_components = {item.rule_component_id: item for item in new_rule.components}
+        for component in old_rule.components:
+            revised = new_components.get(component.rule_component_id)
+            if (component.source_scope_review_ref is None or revised is None
+                    or revised.source_scope_review_ref not in (None, component.source_scope_review_ref)):
+                continue
+            try:
+                stages_read = reviewed_scope_stages(source, previous, old_rule, component,
+                    headings, ArtifactStore(self.data_paths).read, heading_stages=stages)
+            except OfficialScopeReviewError:
+                continue
+            if stages_read is not None:
+                eligible.add(component.rule_component_id)
+                if scope_inputs(old_children[component.rule_component_id]) == scope_inputs(new_children[component.rule_component_id]):
+                    unchanged_scope.add(component.rule_component_id)
+        return {"SOURCE_SCOPE_REVIEW_INVALID": eligible,
+                "REVIEW_STAGE_SCOPE_UNVERIFIED": unchanged_scope}
 
     @staticmethod
     def _validate_scope_review_only(previous, current, target_rule_code: str) -> None:

@@ -136,6 +136,58 @@ class UncertainScopeReader(ScopeReader):
         return response.model_copy(update={"text": OfficialScopeReading.model_validate(reading).model_dump_json()})
 
 
+@pytest.mark.parametrize("old_state", ["valid", "missing", "unresolved", "rejected", "unchanged_basis", "scope_changed"])
+def test_pending_feedback_expiry_requires_valid_prior_proof_and_changed_basis(tmp_path, old_state):
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+    source, draft, _ = scope_fixture()
+    paths = resolve_data_paths(str(tmp_path / "data"))
+    store = ArtifactStore(paths)
+    reader = (UncertainScopeReader() if old_state == "unresolved" else
+              ScopeReader(agree=False) if old_state == "rejected" else ScopeReader())
+    previous = review_official_source_scope(source, draft, official_code="IN-01", transport=reader, store=store)
+    if old_state == "missing":
+        for component in previous.proposed_rules[0].components:
+            component.source_scope_review_ref = "artifacts/evaluation_manifest/missing.json"
+            next(item for item in previous.component_drafts
+                 if item.proposed_component.rule_component_id == component.rule_component_id
+                 ).proposed_component = component.model_copy(deep=True)
+    original = previous.model_dump_json()
+    current = previous.model_copy(deep=True)
+    target = current.proposed_rules[0].components[0]
+    target.source_scope_review_ref = None
+    if old_state != "unchanged_basis":
+        target.expression.predicate.source_term = "年龄"
+        # Ensure a semantic basis difference even if a fixture already uses this name.
+        previous.proposed_rules[0].components[0].expression.predicate.source_term = "年龄评分"
+        previous.component_drafts[0].proposed_component = previous.proposed_rules[0].components[0].model_copy(deep=True)
+        if old_state != "missing":
+            previous = review_official_source_scope(source, previous, official_code="IN-01",
+                transport=(UncertainScopeReader() if old_state == "unresolved" else
+                           ScopeReader(agree=False) if old_state == "rejected" else ScopeReader()), store=store)
+            current = previous.model_copy(deep=True)
+            target = current.proposed_rules[0].components[0]
+            target.expression.predicate.source_term = "年龄"
+            target.source_scope_review_ref = None
+        original = previous.model_dump_json()
+    current.component_drafts[0].proposed_component = target.model_copy(deep=True)
+    if old_state == "scope_changed":
+        current.component_drafts[0].source_excerpts = [source.source_materials[0].text]
+    service = ProtocolWorkbenchService.__new__(ProtocolWorkbenchService)
+    service.data_paths = paths
+    refs = service._expired_feedback_scope_reviews(source, previous, current,
+        target_rule_code="IN-01", target_component_id=target.rule_component_id)
+    ids = {item.rule_component_id for item in previous.proposed_rules[0].components}
+    if old_state in {"valid", "scope_changed"}:
+        assert refs["SOURCE_SCOPE_REVIEW_INVALID"] == ids
+        assert refs["REVIEW_STAGE_SCOPE_UNVERIFIED"] == (
+            ids if old_state == "valid" else ids - {target.rule_component_id})
+    else:
+        assert not any(refs.values())
+    assert previous.model_dump_json() == original
+    assert not service._expired_feedback_scope_reviews(source, previous, current,
+        target_rule_code="IN-01", target_component_id=None)
+
+
 def test_two_reads_store_relationship_without_changing_clinical_fields(tmp_path):
     source, draft, spans = scope_fixture()
     original = draft.model_dump_json()
