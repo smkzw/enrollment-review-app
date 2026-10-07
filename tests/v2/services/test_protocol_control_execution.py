@@ -3709,7 +3709,8 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
     batch = ProtocolControlDiscoveryToDeepPlan.model_validate(closure["deep_plan"]).batches[
         int(saved_step.removeprefix("deep_")) - 1]
     original_diagnostic = deepcopy(diagnostic)
-    for change in ("technical_failure", "wrong_range", "boolean_range", "wrong_refs", "no_wire"):
+    for change in ("technical_failure", "wrong_range", "boolean_range", "wrong_refs", "no_wire",
+                   "dependency_now_available"):
         bad = deepcopy(diagnostic)
         if change == "technical_failure":
             bad["attempts"][-1]["error_classes"] = ["MODEL_IDENTITY_INVALID"]
@@ -3719,8 +3720,12 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
             bad["attempts"][-1]["error_detail"]["statement_ids"] = [False]
         elif change == "wrong_refs":
             bad["attempts"][-1]["error_detail"]["source_refs"] = ["foreign-source"]
-        else:
+        elif change == "no_wire":
             bad["partial_wire"] = None
+        else:
+            statement = bad["source_interpretation"]["statements"][0]
+            statement["force"] = "descriptive"
+            statement["decision_functions"] = ["definition", "calculation_input", "threshold"]
         assert protocol_control_execution_module._preserved_unresolved_review_proof(batch, bad) is None, change
     bad = deepcopy(diagnostic)
     bad["source_statement_coverage"] = []

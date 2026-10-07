@@ -770,11 +770,11 @@ SOURCE_DEFINITION_CONSUMER_PROMPT_VERSION = (
 
 
 def is_non_action_definition(statement: SourceStatement) -> bool:
-    """A clear definition is a dependency, not an invented patient obligation."""
+    """Permit dependency review; numerical definitions still need proven consumers."""
     functions = set(statement.decision_functions)
     return bool(
         "definition" in functions
-        and functions <= {"definition", "time_validity"}
+        and functions <= {"definition", "time_validity", "calculation_input", "threshold"}
         and getattr(statement, "force", None) == "descriptive"
         and not statement.unresolved
         and getattr(statement, "control_authority", "study_or_unknown") == "study_or_unknown"
@@ -1190,6 +1190,7 @@ def build_source_target_review_prompt(
                 interpretation.statements[index].decision_functions == ["background"]
             ),
             "definition_dependency_allowed": is_non_action_definition(interpretation.statements[index]),
+            "definition_dependency_permission_version": "non-action-numeric-definition/v1",
             "exception_words": interpretation.statements[index].exception_words,
             "eligibility_sequence": interpretation.statements[index].eligibility_sequence,
             "eligibility_sequence_quote": interpretation.statements[index].eligibility_sequence_quote,

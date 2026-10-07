@@ -245,6 +245,48 @@ def test_definition_with_action_words_still_requires_dependency_registration():
     assert "来源定义缺少实际依赖登记回执，需补齐后重新核对" in records[0].unresolved_reasons
 
 
+@pytest.mark.parametrize("quote,functions", [
+    ("观察期包括准备期、观察期和随访期，各期分别为两天、四周和六周", ["definition", "time_validity", "calculation_input", "threshold"]),
+    ("准备、观察及随访分别占两天、四周和六周，合为观察周期", ["definition", "threshold", "time_validity"]),
+    (DEFINITION_QUOTE, ["definition", "calculation_input"]),
+])
+def test_numeric_definition_routes_without_releasing_unproved_dependencies(quote, functions):
+    from app.agents.protocol_control_source_interpretation import is_non_action_definition
+    statement = _definition_statement(decision_functions=functions)
+    statement.force = "descriptive"
+    statement.quoted_text = quote
+    assert is_non_action_definition(statement)
+    batch = _batch(_unit(excerpt=quote))
+    records = execution_module._source_definition_consumers(
+        _plan(batch), {batch.batch_id: SimpleNamespace(candidates=[])},
+        {batch.batch_id: _run(statement, declarations=None)},
+    )
+    assert len(records) == 1 and records[0].source_quote == quote
+    assert records[0].consumers == [] and not records[0].scope_complete
+    assert records[0].unresolved_reasons
+    assert publication_module._released_definition_keys(records, _plan(batch)) == frozenset()
+
+
+@pytest.mark.parametrize("change", ["imperative", "action", "no_definition", "required", "unclear", "external"])
+def test_numeric_definition_permission_cannot_drop_actions_or_uncertainty(change):
+    from app.agents.protocol_control_source_interpretation import is_non_action_definition
+    statement = _definition_statement(decision_functions=["definition", "threshold", "calculation_input"])
+    statement.force = "descriptive"
+    if change == "imperative":
+        statement.quoted_text = "受试者必须满足该检验阈值"
+    elif change == "action":
+        statement.decision_functions.append("action")
+    elif change == "no_definition":
+        statement.decision_functions.remove("definition")
+    elif change == "required":
+        statement.force = "required"
+    elif change == "unclear":
+        statement.unresolved = ["适用对象尚不明确"]
+    else:
+        statement.control_authority = "cited_external_rationale"
+    assert not is_non_action_definition(statement)
+
+
 def test_deep_step_uses_frozen_draft_predicate_identity_and_source(monkeypatch) -> None:
     predicate = SimpleNamespace(
         predicate_id=PREDICATE_ID,

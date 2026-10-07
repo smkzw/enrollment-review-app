@@ -3,11 +3,15 @@
 
 ### 单一当前用户流程表
 
-源码ac6b7200已push；7份继承delivery修改未动。现场Goal active/claims_complete=false，无用户暂停。当前单所有者执行＋同会话C03：保留真实未决而继续独立来源读取涉及恢复/采用边界，独立挑战后核实际消费者，不另开平台。共享工作台E03本侧审计已终态，真实project/API桥接未实施，不重复派发、不改共享首屏。
+源码6a6507df已push；7份继承delivery修改未动。现场Goal active/claims_complete=false，无用户暂停。当前单所有者执行＋同会话C03：数字定义的读取与消费边界有实质不确定，独立挑战后核实际消费者，不另开平台。共享工作台E03本侧审计已终态，真实project/API桥接未实施，不重复派发、不改共享首屏。
 
 已提交功能包unresolved-frozen-source-correspondence/v1在真实API作业6e30d649…到达：复用四项门禁合法wire和18来源点、85发现；3物理调用120.2416s，failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED，90计划0完成。实际对应核对different_or_unclear，和此前只读单次positive不同；不挑有利答案、不重读同一未决。三请求input41554/output含思考25127/cache17524已含输入，费用/思考细分unknown。所列链27+14+3+6=50调用不是全历史或额度清零。来源库/保护库/旧Job及payload保持，无共同发布/新报告。
 
-当前最小包preserved-unresolved-review-proof/v1：复用既有Runner独立继续能力，服务严格bool开关默认关闭，冻结deep_及唯一SOURCE_TARGET_REVIEW_UNRESOLVED、max_failed_steps=2（允许保留一个失败，第二个停止）。旧失败仍failed_final；来源/范围/route/组件/额度/覆盖/wire/review/原诊断hash在入队和执行各核一次，改变语义引擎或见证来源刷新不得保留旧未决；实际相容未决只保存真实失败证明、0新增推理，其他未读来源可继续。定义/水合/发布仍依赖完整全部深审，不将技术错误或原件损坏纳入继续、不改变采用权限。
+已提交preserved-unresolved-review-proof/v1实跑ee2a5825…：新API预检/执行均证明第一项actual未决14，检查点new_model_calls=0及原诊断hash一致，第一项未重新调用。其他未读第二项实际3调用63.6205s，遇第二项对应未决后failed_final；90计划0完成、gate依赖失败，来源/保护库/旧Job及payload保持。输入54949、输出含思考12763、缓存0，实际deepseek-v4.1-flash/stop；费用及思考细分unknown。列示链47业务+6只读=53调用，非全历史、非额度重置。无共同发布/工作稿/新报告，继续机制不冒称医学进展。
+
+新首错为来源角色和宿主分流合同：一个有源研究周期定义带definition/calculation_input/threshold/time_validity，无动作/来源疑问；宿主只允许definition/time_validity进入依赖核对，故模型明确说明定义却被迫留下“没有患者动作对应”的未决。当前non-action-numeric-definition/v1只扩既有依赖核对许可集合，仍须descriptive、非动作、无原文疑问、非外部转述，命令语气拒绝；review已有候选动作不能改为定义，真实数字/时长不改。后续定义实际消费者回执及范围完整性仍必需，空关系/未核范围在发布层不释放，不把定义当背景/患者义务。BASELINE/FLOW共同助手复用，默认仍BASELINE，未迁移流程。实际target-review请求新增许可版本及flag，原作者/解释/wire/Schema/修复身份不变；旧合法证明重验、旧原答不改写。原未决若当前可进定义依赖路径则不冻结复用失败，进入已有单条review，不新增修复器或整包重读。
+
+该数字定义包C03同CodeBuddy/DeepSeek/max/01a116cd…75.711s、8工具/0解析结果、exit0/no fallback，120min静默等待；仅合同审阅，误给发布模块路径导致一读失败，未独立看最终补丁/临床/运行测试。所有者补核真正publication service空消费者/范围不明硬阻、FLOW definitions_only仍经过review及缺关系回执拒绝；未把顾问“无版本影响”当历史工件证据。四相连定义消费者/执行/FLOW/完整Agent模块最终1137passed/69.64s/exit0/5SWIG，JUnit rv1006-numeric-definition-connected-20261007-final.xml；首窗1134/74.73s在补新增FLOW三变体前，不累加。包含有源数字定义正常/等义、命令/动作/非定义/歧义/外部反例、空依赖不能发布、真实消费者读回与恢复资格；尚未真实试跑该许可改动。
 
 当前方式直接集成＋同会话C03两有界追问：边界86.146s、补丁91.598s，CodeBuddy/DeepSeek/max/01a116cd…，各8工具/0解析结果、exit0/no fallback、120min静默完成等待。顾问不跑测试/不读临床，非医学批准。采纳必须验证新未读来源实际运行，而非只复用已读兄弟。首窗365pass/69.07s仍缺这一断言；补断言后364pass/1fail67.21s证实旧夹具所有兄弟已读，非产品失败。改同源合成发现覆盖和单单元分包保留真实未读兄弟，不改产品门；目标例1pass/2.58s。最终service/Runner/transport三相连模块365passed/70.01s/exit0/5SWIG，命令`.venv/bin/python -m pytest tests/v2/services/test_protocol_control_execution.py tests/v2/workflow/test_runner.py tests/v2/protocols/test_protocol_control_agent_transport.py -q --tb=short --junitxml=/Users/smkzw/tmp/rv1006-independent-read-policy-connected-20261007-v3.xml`；重叠窗口不累加。尚未真实试跑本包。此包只解决范围读取被首个未决饿死，不证明R1混合受限已可采用。
 

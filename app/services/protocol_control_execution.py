@@ -71,6 +71,7 @@ from app.agents.protocol_control_source_interpretation import (
     SourceStatementCoverage,
     SourceTargetReview,
     SourceTargetReviewValidationError,
+    is_non_action_definition,
     is_post_eligibility_calculation,
     is_study_phase_label,
     source_definition_statement_indexes,
@@ -2532,6 +2533,10 @@ def _preserved_unresolved_review_proof(
         raise ValueError("原未决的来源覆盖与当前草稿不一致")
     validate_source_target_review(batch, source, coverage, review)
     unresolved = sorted(item.statement_index for item in review.items if item.decision == "unresolved")
+    # A definition with an available dependency route needs a fresh semantic
+    # review, not a frozen failure caused by the older permission restriction.
+    if any(is_non_action_definition(source.statements[index]) for index in unresolved):
+        return None
     detail = last.get("error_detail")
     units = {source.statements[index].structure_unit_id for index in unresolved}
     spans = sorted({span for unit in batch.owned_units if unit.structure_unit_id in units

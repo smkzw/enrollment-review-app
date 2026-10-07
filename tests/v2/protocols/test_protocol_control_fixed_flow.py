@@ -1589,7 +1589,11 @@ def _definition_example(*, same_unit=False, definition_only=False):
 
 
 @pytest.mark.parametrize("same_unit,definition_only", [(False, True), (False, False), (True, False)])
-def test_definition_reaches_saved_flow_without_patient_obligation(same_unit, definition_only):
+@pytest.mark.parametrize("functions", [
+    ["definition", "time_validity"],
+    ["definition", "calculation_input", "threshold", "time_validity"],
+])
+def test_definition_reaches_saved_flow_without_patient_obligation(same_unit, definition_only, functions):
     from app.agents.protocol_control_source_interpretation import (
         SOURCE_DEFINITION_CONSUMER_VERSION, SourceDefinitionConsumers,
     )
@@ -1605,6 +1609,7 @@ def test_definition_reaches_saved_flow_without_patient_obligation(same_unit, def
     batch, inventory, review, selection = _definition_example(
         same_unit=same_unit, definition_only=definition_only,
     )
+    inventory.statements[-1].decision_functions = functions
     reader = Reader(review, selection)
     result = ProtocolControlAgentRunner().run(
         batch, reader, resume_source_interpretation=inventory, workflow_variant=FIXED_FLOW,
