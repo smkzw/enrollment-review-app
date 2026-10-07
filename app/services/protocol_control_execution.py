@@ -2367,7 +2367,13 @@ def _validated_deep_partial_source(
     source_job = store.get_job(source_job_id)
     source_payload = json.loads(source_job.payload_json)
     _require_compatible_deep_source(current_payload, source_payload)
-    source_repair_limit = source_payload.get("deep_max_schema_repairs", DEFAULT_MAX_SCHEMA_REPAIRS)
+    limits = source_payload.get("runner_limits")
+    if limits is not None and not isinstance(limits, Mapping):
+        raise ValueError("来源作业的冻结运行预算损坏")
+    source_repair_limit = (
+        limits.get("deep_max_schema_repairs")
+        if limits is not None else DEFAULT_MAX_SCHEMA_REPAIRS
+    )
     if type(source_repair_limit) is not int or source_repair_limit < 0:
         raise ValueError("来源作业的局部核对额度无效")
     source_step = next(

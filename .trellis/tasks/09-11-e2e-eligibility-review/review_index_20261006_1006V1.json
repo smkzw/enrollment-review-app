@@ -16,6 +16,19 @@
     "current_product_run": {"source_commit": "ef362a028e5572bd38547abc9da8b09fbbbf22b0", "job_id": "aec62eb759b34c07aff30775cb64895a", "state": "failed_final", "error_code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID", "seconds": 262.64570225, "physical_calls": 6, "deep_planned": 90, "deep_completed": 0, "discovery_reused": 85, "verified_source_points": 18, "source_scope_corrections": 1, "pending_source_points": 0, "partial_wire": false, "protected_unchanged": true, "source_database_unchanged": true, "old_jobs_unchanged": true, "first_author_errors": ["WIRE_SCHEMA_INVALID: time purpose without a time constraint", "PROCEDURE_AFFECTED_STAGE_MISMATCH candidate0 then candidate1", "Mixed procedure execution stages authorized full repartition; full response reintroduced the earlier time schema defect"], "receipt_finish_reason": null, "receipt_state": "stream_exhausted", "private_path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-shared-source-budget-20261007-v1", "access": "controlled_local_only"},
     "formal_joint_publication": false, "new_current_node_report": false
   },
+  "source_frozen_runner_budget_reader": {
+    "source_base": "84e63475",
+    "actual_source_job": "aec62eb759b34c07aff30775cb64895a",
+    "actual_carrier": "runner_limits.deep_max_schema_repairs",
+    "original_allowance": 4,
+    "preflight_refused_job": "14a359cfa2b0450c8a13195ef105058a",
+    "preflight_refused_terminal": "cancelled",
+    "preflight_physical_calls": 0,
+    "scope": "Read the frozen original producer field; reject corrupt present budgets before checkpoint access. Do not borrow current allowance or root-level override. Legacy absent carrier keeps existing default",
+    "tests": {"modules": 2, "passed": 790, "seconds": 64.43, "exit_code": 0, "junit": "/Users/smkzw/tmp/rv1006-source-payload-budget-connected-20261007-v2.xml", "earlier_failure": "Owner new fixture omitted compiler-change branches, v1 789pass/1fail; corrected, not a clinical product failure", "overlapping_windows_not_additive": true},
+    "method": "Direct deterministic producer/consumer correction; prior C03 does not claim review of this patch",
+    "formal_joint_publication": false, "new_current_node_report": false
+  },
   "procedure_link_field_recovery": {
     "base_commit": "ef362a028e5572bd38547abc9da8b09fbbbf22b0",
     "compiler_marker": "procedure-link-field-repair-before-repartition/v1",

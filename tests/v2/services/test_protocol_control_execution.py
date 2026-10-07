@@ -2683,6 +2683,7 @@ def test_pending_source_is_saved_but_not_reused_as_verified_source(data_paths, s
     (True, "source_witness_validator"), (True, "source_witness_old_gate"),
     (True, "source_witness_two_scopes"),
     (True, "source_witness_two_quotes"),
+    (True, "source_witness_two_scopes_budget4"),
     (True, "source_witness_same_gate"), (True, "same_gate_without_witness"),
 ])
 def test_manual_retry_uses_verified_partial_wire_without_full_reread(
@@ -2702,6 +2703,8 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     discovery = _DiscoveryTransport()
     deep = _DeepTransport(seed.source_span_excerpts)
     service = _build_service(data_paths, session_factory, seed)
+    if reuse_change == "source_witness_two_scopes_budget4":
+        service.deep_max_schema_repairs = 4
     job = service.create_from_deconstruction(
         source_job_id=seed.source_job_id, idempotency_key="deep-partial-resume-job",
     )
@@ -2732,7 +2735,7 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
             statements=[],
             units_without_statement=list(batch.owned_structure_unit_ids),
         )
-        if reuse_change in {"source_witness_two_scopes", "source_witness_two_quotes"}:
+        if reuse_change in {"source_witness_two_scopes", "source_witness_two_quotes", "source_witness_two_scopes_budget4"}:
             initial = SourceInterpretation(
                 version=SOURCE_INTERPRETATION_VERSION,
                 statements=[SourceStatement(structure_unit_id=unit.structure_unit_id,
@@ -2807,7 +2810,7 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
                     "broken" if reuse_change == "repair_corrupt" else
                     hashlib.sha256(b"previous frozen repair contract").hexdigest()
                 ))
-            elif reuse_change in {"compiler_old", "source_witness_compiler", "source_witness_old_gate", "source_witness_two_scopes", "source_witness_two_quotes"}:
+            elif reuse_change in {"compiler_old", "source_witness_compiler", "source_witness_old_gate", "source_witness_two_scopes", "source_witness_two_quotes", "source_witness_two_scopes_budget4"}:
                 component = dict(record["component_identity"])
                 component["compiler_versions"] = [version for version in component["compiler_versions"]
                                                    if version != protocol_control_execution_module.SOURCE_FUNCTION_RECHECK_VERSION]
@@ -2830,7 +2833,7 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
             assert deep.start_calls == 0
             return
         original_gate = protocol_control_execution_module._validate_deep_batch_output
-        if reuse_change in {"source_witness_old_gate", "source_witness_two_scopes", "source_witness_two_quotes", "source_witness_same_gate", "same_gate_without_witness"}:
+        if reuse_change in {"source_witness_old_gate", "source_witness_two_scopes", "source_witness_two_quotes", "source_witness_two_scopes_budget4", "source_witness_same_gate", "same_gate_without_witness"}:
             def reject_obsolete_author(*args):
                 if reuse_change == "source_witness_same_gate" and not any(
                     candidate.title == "injected-invalid-semantic-wire"
@@ -2872,7 +2875,7 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
         target_job_id = job.job_id
     assert runner.run_job(target_job_id)
     snapshot, _ = _job_snapshot_and_payload(session_factory, target_job_id)
-    if reuse_change in {"source_witness_two_scopes", "source_witness_two_quotes"}:
+    if reuse_change in {"source_witness_two_scopes", "source_witness_two_quotes", "source_witness_two_scopes_budget4"}:
         # Source replay reaches the real consumer; absent review is not fabricated success.
         assert snapshot.state == "failed_final"
         assert next(step for step in snapshot.steps if step.step_id == "deep_0001").error_code == "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNAVAILABLE"
@@ -2889,10 +2892,14 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
         assert checkpoint["source_review_reuse"]["proof_scope"] == "revalidated_source_interpretation"
         assert checkpoint["source_review_reuse"]["source_seed_proof"]["reused"] == ["source_interpretation"]
         assert "partial_wire" in checkpoint["source_review_reuse"]["source_seed_proof"]["discarded"]
+        if reuse_change == "source_witness_two_scopes_budget4":
+            assert checkpoint["source_review_reuse"]["source_seed_proof"]["source_repair_limit"] == 4
+            _, original_payload = _job_snapshot_and_payload(session_factory, job.job_id)
+            assert original_payload["runner_limits"]["deep_max_schema_repairs"] == 4
     if new_job:
         monkeypatch.setattr(JobStore, "get_last_checkpoint", original_checkpoint)
         assert _job_checkpoint_fingerprint(session_factory, job.job_id) == before_source
-    assert deep.start_calls == (1 if reuse_change in {"source_witness_two_scopes", "source_witness_two_quotes"} else 2 if reuse_change else 1)
+    assert deep.start_calls == (1 if reuse_change in {"source_witness_two_scopes", "source_witness_two_quotes", "source_witness_two_scopes_budget4"} else 2 if reuse_change else 1)
 
 
 @pytest.mark.parametrize("change", [
@@ -3116,6 +3123,34 @@ def test_revalidated_source_seed_uses_original_budget_and_refuses_residual(budge
         assert proof["schema_version"] == "phase5/revalidated-source-seed-proof/v3"
         assert proof["source_repair_limit"] == budget
         assert proof["scope_correction_indexes"] == [0, 1, 2]
+
+
+@pytest.mark.parametrize("limits", [[], {}, {"deep_max_schema_repairs": True},
+    {"deep_max_schema_repairs": -1}, {"deep_max_schema_repairs": "4"}])
+def test_source_reuse_rejects_corrupt_frozen_runner_budget_before_checkpoint_reads(
+    data_paths, session_factory, limits,
+):
+    seed = _seed_frozen_source(data_paths, session_factory, key="source-runner-budget-invalid")
+    service = _build_service(data_paths, session_factory, seed)
+    job = service.create_from_deconstruction(source_job_id=seed.source_job_id,
+        idempotency_key="source-runner-budget-invalid-job")
+    _, payload = _job_snapshot_and_payload(session_factory, job.job_id)
+    broken = dict(payload, runner_limits=limits, deep_max_schema_repairs=99)
+
+    class Store:
+        def get_job(self, job_id):
+            assert job_id == job.job_id
+            return SimpleNamespace(payload_json=json.dumps(broken))
+
+        def list_steps(self, job_id):
+            pytest.fail("Malformed frozen allowance must fail before checkpoint or model access")
+
+    with pytest.raises(ValueError, match="预算损坏|额度无效"):
+        protocol_control_execution_module._validated_deep_partial_source(
+            Store(), payload, job.job_id, None, "deep_0001",
+            protocol_control_execution_module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE,
+        )
+    assert _job_snapshot_and_payload(session_factory, job.job_id)[1] == payload
 
 
 @pytest.mark.parametrize("change", ["same", "missing_trigger", "wrong_trigger", "wrong_sequence", "boolean_sequence"])
