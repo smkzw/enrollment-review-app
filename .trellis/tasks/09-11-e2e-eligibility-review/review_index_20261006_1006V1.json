@@ -5,6 +5,19 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "inline_scope_citation_assembly": {
+    "base_commit": "4e4f93bd", "compiler_marker": "inline-scope-citation-assembly/v1",
+    "scope": "Unique inline body-prefix source quotation only; exact owned action, single span and decided-node scope. Model repair scope checked before host addition; full gate and all sibling coverage retained. Raw model answer/hash separate from assembly proof. No clinical field changes or adoption relaxation",
+    "tests": {"modules": 4, "passed": 980, "seconds": 124.01, "exit_code": 0, "warnings": "5 SWIG deprecations", "junit": "/Users/smkzw/tmp/rv1006-inline-scope-citation-connected-20261007-final.xml", "overlapping_windows_not_additive": true, "early_failures": "Owner fixtures read wrong hydrated semantics; invalid source rejected earlier than expected. No gate relaxation"},
+    "actual_readonly_replay": {"job_id": "29850b33179044f69847e0c09a3365a3", "model_calls": 0, "database_writes": 0, "coverage_delta": [9], "full_gate_valid": true, "wire_before_sha256": "4fa7f5e9187aa460791deb5cfeac59b9ca5e7fb45c901d9b75426e2d8ed6549e", "wire_after_sha256": "e4d968d5b99007d952b34b1e048a9d9e095211fa169cb9d20ce52e540f42541c", "adopted": false},
+    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session_id": "01a11695-114b-795c-9f27-578c04e30b65", "provider_seconds": [193.386,102.392], "tool_calls": [29,6], "parsed_tool_results": [0,0], "exit_codes": [0,0], "fallback": false, "owner_silent_completion_wait": true, "limits": "First read budget exceeded and incorrect test path; final owner checks not rereviewed; no clinical/test execution"},
+    "real_runs_before_patch": [
+      {"job_id": "ab26ef704d8c45c3a51e5897337a1e4a", "state": "failed_final", "seconds": 152.263826958, "physical_calls": 5, "input_tokens": 340981, "output_including_reasoning_tokens": 40602, "cache_tokens_included_in_input": 276930, "deep_planned": 90, "deep_completed": 0, "private_path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-selected-relation-host-merge-20261007-v1"},
+      {"job_id": "93dfd712075e49609923d28dced99ace", "state": "failed_final", "seconds": 379.216255667, "physical_calls": 7, "input_tokens": 125159, "output_including_reasoning_tokens": 111055, "cache_tokens_included_in_input": 57314, "gate_valid_saved_candidates": 2, "deep_planned": 90, "deep_completed": 0, "private_path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-selected-relation-host-merge-20261007-v2"},
+      {"job_id": "29850b33179044f69847e0c09a3365a3", "state": "failed_final", "seconds": 131.824626792, "physical_calls": 5, "input_tokens": 46054, "output_including_reasoning_tokens": 28324, "cache_tokens_included_in_input": 20432, "gate_valid_saved_candidates": 5, "deep_planned": 90, "deep_completed": 0, "new_source_or_whole_author_read": false, "first_cause": "Inline period source not cited separately; candidate duration present", "private_path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-saved-wire-target-resume-20261007-v1"}
+    ],
+    "access": "controlled_local_only", "formal_joint_publication": false, "new_current_node_report": false
+  },
   "shared_source_repair_budget": {
     "base_commit": "d7927aeb", "proof_version": "phase5/revalidated-source-seed-proof/v3",
     "source_policy_version": "phase5/source-scope-correction-policy/v3",

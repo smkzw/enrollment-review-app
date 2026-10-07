@@ -4648,6 +4648,89 @@ def _candidate_preserves_source_time_words(
                or (scope_cited and word in scope_words) for word in time_words)
 
 
+def _complete_inline_scope_citations(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    wire: ProtocolControlAgentWire,
+) -> tuple[ProtocolControlAgentWire, list[dict[str, object]]]:
+    """Attach a uniquely frozen inline heading; never change an atom's meaning."""
+    from .protocol_control_source_interpretation import source_visit_scope_matches
+
+    validate_source_interpretation(batch, interpretation)
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    stages = {stage.workflow_stage_id: stage for stage in batch.known_workflow_stage_targets}
+    result = wire.model_copy(deep=True)
+    changes: list[dict[str, object]] = []
+    for index, statement in enumerate(interpretation.statements):
+        before = source_statement_coverage(batch, interpretation, result)
+        unit = units[statement.structure_unit_id]
+        scope = normalize_source_excerpt(statement.scope_quote or "")
+        quote = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
+        body = normalize_source_excerpt(unit.excerpt)
+        if (before[index].status != "candidate_linked" or not scope or not quote
+                or statement.unresolved or statement.exception_words
+                or statement.force not in {"required", "prohibited", "recommended"}
+                or "action" not in statement.decision_functions
+                or len(unit.source_span_ids) != 1 or scope in quote
+                or not body.startswith(scope) or body.count(scope) != 1
+                or body.count(quote) != 1):
+            continue
+        paths = []
+        for candidate_index, candidate in enumerate(result.candidate_drafts):
+            if unit.structure_unit_id not in candidate.source_structure_unit_ids:
+                continue
+            if not candidate.review_node_bindings or any(
+                node.role != ReviewNodeRole.DECIDE_AT_NODE
+                or node.workflow_stage_id not in stages
+                or node.review_stage != stages[node.workflow_stage_id].review_stage
+                or not source_visit_scope_matches(scope, normalize_source_excerpt(" ".join(
+                    filter(None, (stages[node.workflow_stage_id].display_name,
+                                  stages[node.workflow_stage_id].visit_instance,
+                                  stages[node.workflow_stage_id].visit_window)),
+                ))) for node in candidate.review_node_bindings
+            ):
+                continue
+            for group_index, group in enumerate(candidate.obligation_expression.groups):
+                for atom_index, atom in enumerate(group.atoms):
+                    if (normalize_source_excerpt(atom.statement).rstrip("。；;.!！?？") == quote
+                            and any(span == unit.source_span_ids[0]
+                                    and normalize_source_excerpt(excerpt).rstrip("。；;.!！?？") == quote
+                                    for span, excerpt in zip(atom.source_span_ids,
+                                                             atom.source_excerpts, strict=True))
+                            and all(normalize_source_excerpt(excerpt) != scope
+                                    for excerpt in atom.source_excerpts)):
+                        paths.append((candidate_index, group_index, atom_index))
+        if len(paths) != 1:
+            continue
+        candidate_index, group_index, atom_index = paths[0]
+        trial = result.model_copy(deep=True)
+        atom = trial.candidate_drafts[candidate_index].obligation_expression.groups[group_index].atoms[atom_index]
+        atom.source_span_ids.append(unit.source_span_ids[0])
+        atom.source_excerpts.append(statement.scope_quote)
+        checked = validate_protocol_control_agent_wire(trial, batch)
+        if checked != trial:
+            # Quote restoration has its own receipt boundary. This assembler
+            # cannot silently normalize an unrelated atom while adding a pair.
+            continue
+        after = source_statement_coverage(batch, interpretation, trial)
+        # A heading can itself be another statement. Do not let an added quote
+        # silently change that sibling's coverage or authorize a second atom.
+        if (after[index].status != "expressed"
+                or after[index].candidate_indexes != [candidate_index]
+                or any(old != new for i, (old, new) in enumerate(zip(before, after, strict=True))
+                       if i != index)):
+            continue
+        changes.append({
+            "statement_id": index, "candidate_index": candidate_index,
+            "group_index": group_index, "atom_index": atom_index,
+            "source_refs": [unit.source_span_ids[0]],
+            "wire_before_sha256": _sha256(result.model_dump_json()),
+            "wire_after_sha256": _sha256(trial.model_dump_json()),
+        })
+        result = trial
+    return result, changes
+
+
 def _split_obligation_quotes_cover_statement(quote: str, atoms: Sequence[object]) -> bool:
     """Accept a sentence split across atoms only when literal spans cover it once."""
 
@@ -7632,6 +7715,16 @@ class ProtocolControlAgentRunner:
                             allow_candidate_repartition=allow_candidate_repartition,
                             allow_source_closure_rewrite=allow_source_closure_rewrite,
                         )
+                # Check model repair authority before independently assembling
+                # host-proven source metadata; never widen its mutable scope.
+                inline_scope_changes = []
+                if source_interpretation is not None:
+                    wire, inline_scope_changes = _complete_inline_scope_citations(
+                        batch, source_interpretation, wire,
+                    )
+                    if inline_scope_changes:
+                        output = hydrate_protocol_control_agent_output(wire, batch)
+                if output_validator is not None:
                     try:
                         output_validator(output)
                     except ProtocolControlAgentWireValidationError:
@@ -7659,8 +7752,15 @@ class ProtocolControlAgentRunner:
                               + "；原义务、来源及未授权关联保留，仍须完整核对"]
                              if candidate_repair_fields and not json.loads(raw_text)["candidate_draft"]["cross_source_relations"]
                              else []) + (["只读原文被误列为本批处置，已按冻结分包归属排除："
-                              + ",".join(context_only_dispositions)]
+                             + ",".join(context_only_dispositions)]
                              if context_only_dispositions else []),
+                        error_detail=({
+                            "code": "INLINE_SCOPE_CITATION_ASSEMBLED",
+                            "workflow_phase": "deterministic_source_assembly",
+                            "assembly_version": "inline-scope-citation-assembly/v1",
+                            "physical_model_calls": 0,
+                            "changes": inline_scope_changes,
+                        } if inline_scope_changes else None),
                     )
                 )
                 coverage = (

@@ -1934,6 +1934,7 @@ def _deep_component_identity(
             "source-and-author-shared-repair-budget/v1",
             "procedure-link-field-repair-before-repartition/v1",
             "procedure-link-selected-patch-host-merge/v1",
+            "inline-scope-citation-assembly/v1",
         ],
         "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
         "requested_route_sha256": (

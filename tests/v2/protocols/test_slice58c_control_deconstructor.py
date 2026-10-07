@@ -80,6 +80,7 @@ from app.agents.protocol_control_deconstructor import (
     protocol_control_time_operand_repair_response_format,
     protocol_control_evidence_source_repair_response_format,
     source_statement_coverage,
+    _complete_inline_scope_citations,
     validate_protocol_control_agent_wire,
 )
 from app.agents.protocol_control_source_interpretation import (
@@ -12093,3 +12094,207 @@ def test_target_review_prompt_supplies_force_without_declaring_coverage():
     assert "force 只记原文语气，不决定是否要核对" in prompt
     assert "不是时间已对应的证明" in prompt
     assert "shared_visit_source_positions" in prompt
+
+
+def _inline_scope_citation_example(*, separator="", quote="自筛选日起接受研究处理并持续11天"):
+    batch = _batch()
+    scope = "筛选期（V0）："
+    batch.owned_units[0].excerpt = scope + separator + quote
+    batch.known_workflow_stage_targets[0].display_name = "筛选期（V0）"
+    batch.known_workflow_stage_targets[0].visit_instance = "V0"
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-01", quoted_text=quote,
+            scope_quote=scope, affected_stage="筛选期（V0）", force="required",
+            decision_functions=["action"], time_words=[scope.rstrip("："), "自筛选日起", "11天"])],
+        units_without_statement=["su-02"])
+    payload = _candidate().model_dump(mode="json")
+    payload["applicability_expression"] = None
+    payload["exception_expression"] = None
+    atom = payload["obligation_expression"]["groups"][0]["atoms"][0]
+    atom.update(kind="complete_or_verify", statement=quote,
+                source_excerpts=[quote],
+                evaluation={**_evaluation(quote, "span:01", quote),
+                            "time_purpose": "interval_condition", "time_operand_attribute": "date_range"},
+                time_constraint={"anchor_type": "screening_date", "direction": "on"})
+    payload["minimum_evidence"][0].update(fact_type="treatment", description=quote,
+        source_policy=_evidence_policy("span:01", quote))
+    return batch, inventory, _wire(candidate=ProtocolControlAgentWireCandidate.model_validate(payload))
+
+
+@pytest.mark.parametrize("separator", ["", "\n", " \n  "])
+def test_inline_scope_citation_assembly_is_additive_and_idempotent(separator):
+    batch, inventory, wire = _inline_scope_citation_example(separator=separator)
+    frozen = wire.model_dump_json()
+    old_atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    assert source_statement_coverage(batch, inventory, wire)[0].status == "candidate_linked"
+    assembled, changes = _complete_inline_scope_citations(batch, inventory, wire)
+    assert wire.model_dump_json() == frozen
+    assert len(changes) == 1
+    assert changes[0]["statement_id"] == 0
+    assert changes[0]["source_refs"] == ["span:01"]
+    new_atom = assembled.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    assert new_atom.model_dump(exclude={"source_span_ids", "source_excerpts"}) == old_atom.model_dump(
+        exclude={"source_span_ids", "source_excerpts"})
+    assert new_atom.source_span_ids == ["span:01", "span:01"]
+    assert new_atom.source_excerpts == [old_atom.source_excerpts[0], inventory.statements[0].scope_quote]
+    assert source_statement_coverage(batch, inventory, assembled)[0].status == "expressed"
+    output = hydrate_protocol_control_agent_output(assembled, batch)
+    assert output.candidates[0].semantics.obligation_expression.groups[0].atoms[0].evaluation.time_purpose == "interval_condition"
+    assert output.candidates[0].semantics.obligation_expression.groups[0].atoms[0].source_excerpts == new_atom.source_excerpts
+    again, extra = _complete_inline_scope_citations(batch, inventory, assembled)
+    assert again == assembled and extra == []
+
+
+@pytest.mark.parametrize("mutation", [
+    "wrong_stage", "missing_stage", "not_prefix", "repeated_scope", "repeated_action",
+    "changed_action", "multiple_atoms", "missing_time", "unresolved", "multiple_spans",
+    "heading_is_sibling",
+])
+def test_inline_scope_citation_assembly_refuses_unproven_scope(mutation):
+    batch, inventory, wire = _inline_scope_citation_example()
+    statement = inventory.statements[0]
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    if mutation == "wrong_stage":
+        wire.candidate_drafts[0].review_node_bindings[0].workflow_stage_id = "stage:screening:two"
+    elif mutation == "missing_stage":
+        wire.candidate_drafts[0].review_node_bindings = []
+    elif mutation == "not_prefix":
+        batch.owned_units[0].excerpt = "其他时期。" + batch.owned_units[0].excerpt
+    elif mutation == "repeated_scope":
+        batch.owned_units[0].excerpt += statement.scope_quote
+    elif mutation == "repeated_action":
+        batch.owned_units[0].excerpt += statement.quoted_text
+    elif mutation == "changed_action":
+        atom.statement = "仅完成单次研究处理"
+    elif mutation == "multiple_atoms":
+        wire.candidate_drafts[0].obligation_expression.groups[0].atoms.append(atom.model_copy(deep=True))
+    elif mutation == "missing_time":
+        statement.time_words.append("下次访视")
+        batch.owned_units[0].excerpt += "；下次访视。"
+    elif mutation == "unresolved":
+        statement.unresolved = ["适用范围不清"]
+    elif mutation == "multiple_spans":
+        batch.owned_units[0].source_span_ids.append("span:alternative")
+    else:
+        inventory.statements.append(SourceStatement(
+            structure_unit_id="su-01", quoted_text=statement.scope_quote,
+            force="descriptive", decision_functions=["background"], time_words=[]))
+    frozen = wire.model_dump_json()
+    if mutation in {"repeated_action", "missing_time"}:
+        with pytest.raises(SourceInterpretationValidationError) as caught:
+            _complete_inline_scope_citations(batch, inventory, wire)
+        assert caught.value.code == ("SOURCE_SCOPE_UNGROUNDED" if mutation == "repeated_action"
+                                     else "SOURCE_TIME_UNGROUNDED")
+        assert wire.model_dump_json() == frozen
+        return
+    assembled, changes = _complete_inline_scope_citations(batch, inventory, wire)
+    assert changes == []
+    assert assembled.model_dump_json() == frozen
+
+
+def test_inline_scope_citation_runner_saves_receipt_and_preserves_raw_response():
+    batch, inventory, wire = _inline_scope_citation_example()
+    raw = wire.model_dump_json()
+
+    class ScopeTransport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="scope-source", text=inventory.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            payload = json.loads(_consent_policy_alignment_response(inventory.statements[0].quoted_text, prompt).text)
+            payload["items"][0]["candidate_index"] = 0
+            payload["items"][0]["evidence_policy_checks"] = _synthetic_policy_checks_from_prompt(prompt, 0)
+            return ProtocolControlAgentResponse(session_id="scope-alignment", text=json.dumps(payload, ensure_ascii=False))
+
+    validated = []
+    result = ProtocolControlAgentRunner().run(batch, ScopeTransport([
+        ProtocolControlAgentResponse(session_id="scope-author", text=raw),
+    ]), output_validator=lambda output: validated.append(output))
+    assert result.status == "已解析"
+    assert result.final_output is not None
+    assert validated
+    receipt = next(a for a in result.attempts if a.error_detail and a.error_detail.get("code") == "INLINE_SCOPE_CITATION_ASSEMBLED")
+    assert receipt.raw_output_text == raw
+    assert receipt.raw_output_sha256 == hashlib.sha256(raw.encode()).hexdigest()
+    assert receipt.error_detail["physical_model_calls"] == 0
+    assert len(receipt.error_detail["changes"]) == 1
+    assert result.final_output.candidates[0].semantics.obligation_expression.groups[0].atoms[0].source_excerpts == [
+        inventory.statements[0].quoted_text, inventory.statements[0].scope_quote,
+    ]
+    # The hydrated, saved shape preserves both same-span quotes, not a dict
+    # that silently overwrites one of them.
+    restored = type(result.final_output).model_validate_json(result.final_output.model_dump_json())
+    assert restored == result.final_output
+
+
+def test_inline_scope_citation_cannot_normalize_other_fields():
+    batch, inventory, wire = _inline_scope_citation_example(quote="自筛选日起接受'处理A'并持续11天")
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    atom.evaluation.source_excerpts[0] = atom.evaluation.source_excerpts[0].replace("'处理A'", "‘处理A’")
+    frozen = wire.model_dump_json()
+    assembled, changes = _complete_inline_scope_citations(batch, inventory, wire)
+    assert changes == []
+    assert assembled.model_dump_json() == frozen
+
+
+@pytest.mark.parametrize("authority", ["after_eligibility", "external_rationale"])
+def test_inline_scope_citation_does_not_hide_wrong_control_authority(authority):
+    batch, inventory, wire = _inline_scope_citation_example()
+    statement = inventory.statements[0]
+    prefix = "先确认符合入排条件的受试者，" if authority == "after_eligibility" else "某共识建议"
+    batch.owned_units[0].excerpt = statement.scope_quote + prefix + statement.quoted_text
+    if authority == "after_eligibility":
+        statement.eligibility_sequence = "after_eligibility_decision"
+        statement.eligibility_sequence_quote = prefix.rstrip("，")
+        expected = "POST_ELIGIBILITY_ACTION_AS_CONTROL"
+    else:
+        statement.control_authority = "cited_external_rationale"
+        statement.attribution_quote = prefix
+        expected = "EXTERNAL_RATIONALE_AS_CONTROL"
+
+    class AuthorityTransport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="authority-source", text=inventory.model_dump_json())
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=0).run(batch, AuthorityTransport([
+        ProtocolControlAgentResponse(session_id="authority-author", text=wire.model_dump_json()),
+    ]), output_validator=lambda output: None)
+    assert result.final_output is None
+    assert any(expected in attempt.error_classes for attempt in result.attempts)
+
+
+def test_inline_scope_citation_keeps_outside_unit_frozen_during_later_repair():
+    batch, inventory, initial = _inline_scope_citation_example()
+    second = _candidate_for_second_unit()
+    initial = _wire_with_two_candidates(initial.candidate_drafts[0], second)
+    repaired = _wire_with_two_candidates(initial.candidate_drafts[0], second.model_copy(update={"title": "已更正的第二项"}))
+    outputs = []
+
+    class RepairTransport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="repair-source", text=inventory.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            payload = json.loads(_consent_policy_alignment_response(inventory.statements[0].quoted_text, prompt).text)
+            payload["items"][0]["candidate_index"] = 0
+            payload["items"][0]["evidence_policy_checks"] = _synthetic_policy_checks_from_prompt(prompt, 0)
+            return ProtocolControlAgentResponse(session_id="repair-alignment", text=json.dumps(payload, ensure_ascii=False))
+
+    def validate(output):
+        by_unit = {c.frozen_structure_unit_ids[0]: c for c in output.candidates}
+        outputs.append(by_unit)
+        if len(outputs) == 1:
+            raise ProtocolControlAgentWireValidationError("SECOND_REPAIR", "只修第二项",
+                candidate_ids=[by_unit["su-02"].control_candidate_id], structure_unit_ids=["su-02"])
+        assert by_unit["su-01"] == outputs[0]["su-01"]
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, RepairTransport([
+        ProtocolControlAgentResponse(session_id="repair-session", text=initial.model_dump_json()),
+        ProtocolControlAgentResponse(session_id="repair-session", text=repaired.model_dump_json()),
+    ]), output_validator=validate)
+    assert result.status == "已解析"
+    assert len(outputs) == 2
+    assert outputs[1]["su-02"].title == "已更正的第二项"
+    assert outputs[1]["su-01"].semantics.obligation_expression.groups[0].atoms[0].source_excerpts == [
+        inventory.statements[0].quoted_text, inventory.statements[0].scope_quote,
+    ]
