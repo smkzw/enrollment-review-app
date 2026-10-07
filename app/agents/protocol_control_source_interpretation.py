@@ -672,13 +672,13 @@ def is_post_eligibility_calculation(
     )
 
 
-SOURCE_DEFINITION_CONSUMER_VERSION = "phase5/control-source-definition-consumer/v2"
+SOURCE_DEFINITION_CONSUMER_VERSION = "phase5/control-source-definition-consumer/v3"
 
 
 class SourceDefinitionAtomConsumer(ContractModel):
     """One bounded declaration of a consumer that evaluates a source definition.
 
-    Two consumer kinds are declared and never substituted for each other:
+    Three consumer kinds are declared and never substituted for each other:
 
     * ``control_atom`` — a hydrated control candidate atom. Candidate indexes
       are batch-local and are resolved by the execution layer against the frozen
@@ -688,6 +688,8 @@ class SourceDefinitionAtomConsumer(ContractModel):
       targets, and the ``(rule_component_id, predicate_id)`` identity is proven
       later against the frozen RuleSet; a parent IN/EX code is never accepted as
       the consumer identity.
+    * ``restricted_statement`` — an actual non-executable source statement.
+      It records a dependency, never a clinical truth or a made-up atom.
 
     The declaration carries the consumer's own source excerpt as its anchor; the
     definition quote is already stored on the record, and the two anchors are
@@ -696,7 +698,8 @@ class SourceDefinitionAtomConsumer(ContractModel):
     never proves it.
     """
 
-    consumer_kind: Literal["control_atom", "official_predicate"] = "control_atom"
+    consumer_kind: Literal["control_atom", "official_predicate", "restricted_statement"] = "control_atom"
+    restricted_statement_id: str | None = Field(default=None, min_length=1, exclude_if=lambda value: value is None)
     candidate_index: int | None = Field(default=None, ge=0)
     layer: Literal["applicability", "trigger", "obligation", "exception", "repeat_trigger"] | None = None
     group_index: int | None = Field(default=None, ge=0)
@@ -710,6 +713,8 @@ class SourceDefinitionAtomConsumer(ContractModel):
 
     @property
     def key(self) -> tuple:
+        if self.consumer_kind == "restricted_statement":
+            return (self.consumer_kind, self.restricted_statement_id)
         if self.consumer_kind == "official_predicate":
             return (self.consumer_kind, self.rule_component_id, self.predicate_id)
         return (
@@ -719,7 +724,17 @@ class SourceDefinitionAtomConsumer(ContractModel):
 
     @model_validator(mode="after")
     def require_repeat_condition(self) -> "SourceDefinitionAtomConsumer":
-        if self.consumer_kind == "official_predicate":
+        if self.consumer_kind == "restricted_statement":
+            if (not (self.restricted_statement_id or "").startswith("restricted:")
+                    or not self.restricted_statement_id[len("restricted:"):].strip()
+                    or any(value is not None for value in (
+                        self.candidate_index, self.layer, self.group_index, self.atom_index,
+                        self.condition_id, self.official_code, self.rule_component_id, self.predicate_id,
+                    ))):
+                raise ValueError("受限来源消费声明必须且只能携带实际受限陈述身份")
+        elif self.restricted_statement_id is not None:
+            raise ValueError("受限陈述身份不得混入可执行消费者")
+        elif self.consumer_kind == "official_predicate":
             if (self.official_code is None or self.rule_component_id is None
                     or self.predicate_id is None
                     or any(value is not None for value in (
@@ -762,11 +777,16 @@ class SourceDefinitionConsumerItem(ContractModel):
 
 
 class SourceDefinitionConsumers(ContractModel):
-    version: Literal[SOURCE_DEFINITION_CONSUMER_VERSION]
+    version: Literal[SOURCE_DEFINITION_CONSUMER_VERSION, "phase5/control-source-definition-consumer/v2"]
     items: list[SourceDefinitionConsumerItem]
 
     @model_validator(mode="after")
     def require_unique_statements(self) -> "SourceDefinitionConsumers":
+        if self.version.endswith("/v2") and any(
+            consumer.consumer_kind == "restricted_statement"
+            for item in self.items for consumer in item.consumers
+        ):
+            raise ValueError("旧定义登记合同不能携带新增受限消费者")
         indexes = [item.statement_index for item in self.items]
         if len(indexes) != len(set(indexes)):
             raise ValueError("同一来源陈述不得重复登记消费原子")
@@ -774,7 +794,7 @@ class SourceDefinitionConsumers(ContractModel):
 
 
 SOURCE_DEFINITION_CONSUMER_PROMPT_VERSION = (
-    "phase5/control-source-definition-consumer-prompt/v3"
+    "phase5/control-source-definition-consumer-prompt/v4"
 )
 
 
@@ -905,6 +925,14 @@ def build_source_definition_consumers_prompt(
         }
         for index, candidate in enumerate(output.candidates)
     ]
+    restricted = [
+        {"restricted_statement_id": statement.restricted_statement_id,
+         "source_quote": statement.source_quote,
+         "source_structure_unit_id": statement.source_structure_unit_id,
+         "source_statement_index": statement.source_statement_index,
+         "decision_functions": list(statement.decision_functions)}
+        for statement in getattr(output, "restricted_statements", ())
+    ]
     official_targets = [
         {
             "official_code": target.official_code,
@@ -944,6 +972,9 @@ def build_source_definition_consumers_prompt(
         "你是本系统方案 Agent 的来源定义消费登记步骤。只登记下面列出的冻结定义由哪些"
         "已冻结条件实际依赖；包括计算输入以及时期、范围的定义，不把定义变成患者义务。"
         "不生成规则、不修改候选、不判断受试者。"
+        "受限来源也可以依赖定义，但只能用冻结受限陈述清单中的 restricted_statement_id，"
+        "consumer_kind 写 restricted_statement，consumer_excerpt 逐字取自该陈述自己的 source_quote。"
+        "它不是可执行原子，所有候选、条件和原子位置字段填 null；不得用定义自身登记自我依赖。"
         "控制原子消费必须用冻结候选索引 candidate_index 加原子位置 layer、group_index、atom_index"
         "（复查触发原子还须逐字填写该条件的 condition_id），consumer_excerpt 必须逐字取自"
         "该原子自己列出的 excerpts 中任一段连续原文，不得改写或拼接。"
@@ -960,10 +991,11 @@ def build_source_definition_consumers_prompt(
         "candidate_index、layer、group_index、atom_index、condition_id 填 null；"
         "控制原子消费则填写已给出的 candidate_index、"
         "layer、group_index、atom_index；非 repeat_trigger 的 condition_id 填 null，"
-        "official_code、rule_component_id、predicate_id 填 null。两种身份不能混填；"
+        "official_code、rule_component_id、predicate_id 填 null。三种身份不能混填；"
         "relation_note 可为 null，不确定就不要登记该消费者。\n"
         f"冻结来源定义：{json.dumps(definitions, ensure_ascii=False, sort_keys=True)}\n"
         f"冻结候选身份与原子：{json.dumps(candidates, ensure_ascii=False, sort_keys=True)}\n"
+        f"冻结受限陈述：{json.dumps(restricted, ensure_ascii=False, sort_keys=True)}\n"
         f"冻结官方目标：{json.dumps(official_targets, ensure_ascii=False, sort_keys=True)}\n"
         f"冻结官方条件身份：{json.dumps(frozen_official, ensure_ascii=False, sort_keys=True)}"
     )
@@ -1915,15 +1947,53 @@ def parse_product_source_definition_consumers(
     text: str,
     *,
     official_predicate_identities: Mapping[str, Sequence[tuple[str, str]]] | None = None,
+    restricted_statements: Sequence[object] = (),
 ) -> SourceDefinitionConsumers:
     """Parse and source-bind one declaration; invalid input never becomes a record."""
 
     consumers = SourceDefinitionConsumers.model_validate_json(text)
+    if consumers.version != SOURCE_DEFINITION_CONSUMER_VERSION:
+        raise ValueError("当前定义登记回答必须使用本次冻结合同版本")
     validate_source_definition_consumers(batch, interpretation, consumers)
     require_frozen_official_predicate_identities(
         batch, interpretation, consumers, official_predicate_identities,
     )
+    validate_restricted_definition_consumers(batch, interpretation, consumers, restricted_statements)
     return consumers
+
+
+def validate_restricted_definition_consumers(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    consumers: SourceDefinitionConsumers,
+    restricted_statements: Sequence[object],
+) -> None:
+    """Bind restricted references to actual source objects, not proposed IDs."""
+    restricted = {item.restricted_statement_id: item for item in restricted_statements}
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    for item in consumers.items:
+        for consumer in item.consumers:
+            if consumer.consumer_kind != "restricted_statement":
+                continue
+            target = restricted.get(consumer.restricted_statement_id)
+            definition = interpretation.statements[item.statement_index]
+            if (target is None or target.source_structure_unit_id not in batch.owned_structure_unit_ids
+                    or target.source_statement_index >= len(interpretation.statements)
+                    or interpretation.statements[target.source_statement_index].structure_unit_id
+                    != target.source_structure_unit_id
+                    or (target.source_structure_unit_id, target.source_statement_index)
+                    == (definition.structure_unit_id, item.statement_index)
+                    or interpretation.statements[target.source_statement_index].quoted_text != target.source_quote
+                    or sorted(target.source_span_ids)
+                    != sorted(units[target.source_structure_unit_id].source_span_ids)
+                    or not normalize_source_excerpt(consumer.consumer_excerpt)
+                    in normalize_source_excerpt(target.source_quote)):
+                raise SourceTargetReviewValidationError(
+                    "受限定义消费者未绑定本批实际陈述及其自身逐字原文",
+                    code="SOURCE_DEFINITION_CONSUMER_IDENTITY_UNPROVEN",
+                    statement_index=item.statement_index,
+                    json_path="/source_definition_consumers/items",
+                )
 
 
 def normalize_source_excerpt(value: str) -> str:

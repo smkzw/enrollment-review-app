@@ -101,7 +101,7 @@ def _candidate(candidate_id: str = "pcc-consumer") -> SimpleNamespace:
 
 
 def _output() -> SimpleNamespace:
-    return SimpleNamespace(candidates=[_candidate()])
+    return SimpleNamespace(candidates=[_candidate()], restricted_statements=[])
 
 
 def _batch(official_targets: tuple[SimpleNamespace, ...] = ()) -> SimpleNamespace:

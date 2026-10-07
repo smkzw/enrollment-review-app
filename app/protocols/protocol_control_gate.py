@@ -4935,20 +4935,26 @@ def source_statement_is_standalone_action(statement: object) -> bool:
 
 def source_statement_ranges_cover_unit(
     excerpt: str, ranges: Sequence[tuple[int, int]],
+    *, allow_joining_punctuation: bool = False,
 ) -> bool:
-    """An independence proof cannot omit words outside its claimed statements."""
+    """Reject unreported source words. Commas are retained only by whole-unit restriction.
+
+    The optional joining punctuation does not prove statement independence;
+    executable, independent statement proofs must use the strict default.
+    """
 
     if not ranges:
         return False
+    separators = "；;。.:：，," if allow_joining_punctuation else "；;。.:："
     cursor = 0
     for start, end in sorted(ranges):
         if start < cursor or end <= start or end > len(excerpt):
             return False
-        if any(not char.isspace() and char not in "；;。.:："
+        if any(not char.isspace() and char not in separators
                for char in excerpt[cursor:start]):
             return False
         cursor = end
-    return all(char.isspace() or char in "；;。.:：" for char in excerpt[cursor:])
+    return all(char.isspace() or char in separators for char in excerpt[cursor:])
 
 
 def candidate_cites_unit_quote(

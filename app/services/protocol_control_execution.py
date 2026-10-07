@@ -36,6 +36,7 @@ from app.agents.protocol_control_deconstructor import (
     SOURCE_TARGET_REPAIR_VERSION,
     SOURCE_REQUIREMENT_FAILURE_REASON_VERSION,
     ProtocolControlAgentRunner,
+    ProtocolControlAgentAttempt,
     ProtocolControlAgentRunResult,
     ProtocolControlAgentWire,
     ProtocolControlAgentWireValidationError,
@@ -107,6 +108,7 @@ from app.services.protocol_control_definition_scope import (
 from app.llm.logical_call_budget import LogicalCallBudget
 from app.services.protocol_control_restricted_source import (
     TEMPORAL_RESTRICTION_VERSION,
+    WHOLE_UNIT_RESTRICTION_VERSION,
     restricted_batch_from_review,
 )
 from app.domain.contracts.agent_io import ProtocolDeconstructionInput
@@ -1197,9 +1199,13 @@ def _replay_checkpoint(
                 retryable=False, error_code="PROTOCOL_CONTROL_CHECKPOINT_INVALID",
                 detail="已保存的深审结果与当前冻结来源、提示或模型线路不一致。",
             )
-        run_result = ProtocolControlAgentRunResult.model_validate(
-            checkpoint.get("run_result")
-        )
+        try:
+            run_result = _saved_deep_run_result(checkpoint)
+        except (TypeError, ValueError) as exc:
+            raise StepFailure(
+                retryable=False, error_code="PROTOCOL_CONTROL_CHECKPOINT_INVALID",
+                detail="深审恢复缺少完整且身份一致的原答回执，未重新读取。",
+            ) from exc
         if run_result.batch_id != batch.batch_id:
             raise StepFailure(
                 retryable=False,
@@ -1220,12 +1226,17 @@ def _replay_checkpoint(
                 _validate_deep_batch_output(batch, run_result.final_output)
             if _source_interpretation_requires_refresh(batch, run_result):
                 raise ValueError("来源核对需按当前冻结结构重新验证")
+            restricted_indexes = ({item.source_statement_index for item in saved.restricted_statements}
+                                  if checkpoint.get("restricted_batch") is not None else set())
             pending_relations = any(
                 item.decision == "potential_same_requirement"
+                and item.statement_index not in restricted_indexes
                 for item in (run_result.source_target_review.items
                              if run_result.source_target_review else [])
             )
-            if pending_relations != (run_result.status == "待跨章核验"):
+            if (pending_relations != (run_result.status == "待跨章核验")
+                    and not (pending_relations and run_result.status == "需要核对"
+                             and checkpoint.get("restricted_batch") is not None)):
                 raise ValueError("跨章节待核状态与实际来源对应不一致")
         except (TypeError, ValueError, ProtocolControlGateError) as exc:
             raise StepFailure(
@@ -1985,6 +1996,7 @@ def _deep_component_identity(
             "restricted-nonreview-unit-preservation/v1",
             "restricted-independent-candidate-preservation/v1",
             TEMPORAL_RESTRICTION_VERSION,
+            WHOLE_UNIT_RESTRICTION_VERSION,
             "saved-review-temporal-failure-classification/v1",
             "source-intraday-scope-preservation/v1",
             "source-numeric-unscoped-repair-stop/v1",
@@ -2763,9 +2775,7 @@ def _preflight_deep_source(
                         "step_id": step_id, "decision": decision, "reason": reason,
                     }
                     continue
-                result = ProtocolControlAgentRunResult.model_validate(
-                    saved.get("run_result")
-                )
+                result = _saved_deep_run_result(saved)
                 if result.batch_id != batch.batch_id:
                     raise ValueError("已完成的来源批次结果损坏")
                 if saved.get("restricted_batch") is not None:
@@ -3152,7 +3162,7 @@ def _validated_deep_source(
             or identity != _transport_identity(transport, stage="deep")
         ):
             raise ValueError("已完成的来源批次提示或模型回执身份不一致")
-        result = ProtocolControlAgentRunResult.model_validate(saved.get("run_result"))
+        result = _saved_deep_run_result(saved)
         if result.batch_id != batch.batch_id:
             raise ValueError("来源深审结果身份不一致")
         if saved.get("restricted_batch") is not None:
@@ -3641,6 +3651,36 @@ def _execute_deep(
     except ValueError as exc:
         restricted_error = exc
     if restricted_batch is not None:
+        if (source_definition_statement_indexes(result.source_interpretation)
+                and result.source_definition_consumers is None):
+            from app.agents.protocol_control_deconstructor import declare_source_definition_consumers
+            declarations: list[ProtocolControlAgentAttempt] = []
+            declaration, failed = declare_source_definition_consumers(
+                batch, transport, result.source_interpretation, restricted_batch, declarations,
+                official_predicate_identities=official_predicate_identities,
+                official_predicate_sources=official_predicate_sources,
+            )
+            result = result.model_copy(update={
+                "source_definition_consumers": declaration,
+                "restricted_source_definition_consumer_attempts": declarations,
+            })
+            model_call_receipts.extend(take_receipts() if callable(take_receipts) else [])
+            if failed:
+                raise StepFailure(
+                    retryable=False,
+                    error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                    detail="受限原文已保留，但定义依赖尚未实际登记，不能作为完整采用依据。",
+                    diagnostic_checkpoint=_restricted_deep_checkpoint(
+                        context, batch, transport, prompt_template, result, restricted_batch,
+                        model_call_receipts, resume_review,
+                    ),
+                )
+            if restricted_batch_from_review(batch, result) != restricted_batch:
+                raise StepFailure(
+                    retryable=False,
+                    error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                    detail="定义登记后受限来源发生变化，未保存为可消费结果。",
+                )
         return _restricted_deep_checkpoint(
             context, batch, transport, prompt_template, result, restricted_batch,
             model_call_receipts, resume_review,
@@ -3809,7 +3849,43 @@ def _deep_attempt_raw_outputs(result: ProtocolControlAgentRunResult) -> list[dic
         "raw_output_text": item.raw_output_text,
         "role": "pending_source_definition_consumer",
     } for item in result.pending_source_definition_consumer_attempts)
+    outputs.extend({
+        "attempt": item.attempt,
+        "session_id": item.session_id,
+        "raw_output_sha256": item.raw_output_sha256,
+        "raw_output_chars": item.raw_output_chars,
+        "raw_output_text": item.raw_output_text,
+        "role": "restricted_source_definition_consumer",
+    } for item in result.restricted_source_definition_consumer_attempts)
     return outputs
+
+
+def _saved_deep_run_result(payload: Mapping[str, Any]) -> ProtocolControlAgentRunResult:
+    """Restore only source-bound private answers; public result bytes stay unchanged."""
+    result = ProtocolControlAgentRunResult.model_validate(payload.get("run_result"))
+    attempts = result.restricted_source_definition_consumer_attempts
+    if not attempts:
+        return result
+    outputs = payload.get("attempt_raw_outputs", [])
+    if not isinstance(outputs, list):
+        raise ValueError("受限定义登记原答清单损坏")
+    saved = [item for item in outputs
+             if isinstance(item, Mapping)
+             and item.get("role") == "restricted_source_definition_consumer"]
+    if len(saved) != len(attempts):
+        raise ValueError("受限定义登记原答回执缺失或重复")
+    restored = []
+    for attempt, answer in zip(attempts, saved, strict=True):
+        if any(answer.get(key) != getattr(attempt, key) for key in (
+            "attempt", "session_id", "raw_output_sha256", "raw_output_chars",
+        )):
+            raise ValueError("受限定义登记原答身份不一致")
+        raw = answer.get("raw_output_text")
+        if (not isinstance(raw, str) or len(raw) != attempt.raw_output_chars
+                or hashlib.sha256(raw.encode("utf-8")).hexdigest() != attempt.raw_output_sha256):
+            raise ValueError("受限定义登记原答损坏")
+        restored.append(attempt.model_copy(update={"raw_output_text": raw}))
+    return result.model_copy(update={"restricted_source_definition_consumer_attempts": restored})
 
 
 def _pending_definition_consumer_checkpoint(
@@ -3990,7 +4066,17 @@ def _source_definition_consumers(
             if entry is not None:
                 reasons.update(entry.unresolved_aspects)
                 for consumer in entry.consumers:
-                    if consumer.consumer_kind == "official_predicate":
+                    if consumer.consumer_kind == "restricted_statement":
+                        targets = {item.restricted_statement_id: item for item in output.restricted_statements}
+                        target = targets.get(consumer.restricted_statement_id)
+                        if (target is None or target.source_structure_unit_id not in units
+                                or (target.source_structure_unit_id, target.source_statement_index)
+                                == (statement.structure_unit_id, index)):
+                            raise StepFailure(retryable=False,
+                                error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                                detail="定义消费登记未对应实际受限陈述，不能猜补或借用原子身份。")
+                        excerpts = [target.source_quote]
+                    elif consumer.consumer_kind == "official_predicate":
                         try:
                             excerpts = _definition_consumer_official_target(
                                 consumer, official_targets,
@@ -4027,7 +4113,14 @@ def _source_definition_consumers(
                             error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_UNGROUNDED",
                             detail="消费来源摘录不在该消费者自身声明的冻结原文中。",
                         )
-                    if consumer.consumer_kind == "official_predicate":
+                    if consumer.consumer_kind == "restricted_statement":
+                        consumers.append(ProtocolControlDefinitionAtomConsumption(
+                            consumer_kind="restricted_statement",
+                            restricted_statement_id=consumer.restricted_statement_id,
+                            consumer_excerpt=consumer.consumer_excerpt,
+                            relation_note=consumer.relation_note,
+                        ))
+                    elif consumer.consumer_kind == "official_predicate":
                         consumers.append(ProtocolControlDefinitionAtomConsumption(
                             consumer_kind="official_predicate",
                             rule_component_id=consumer.rule_component_id,
@@ -4120,9 +4213,13 @@ def _deep_results(
                     detail="深析阶段仍缺少已接受的批次结果。",
                 )
             _, payload = checkpoint
-            run_result = ProtocolControlAgentRunResult.model_validate(
-                payload.get("run_result")
-            )
+            try:
+                run_result = _saved_deep_run_result(payload)
+            except (TypeError, ValueError) as exc:
+                raise StepFailure(
+                    retryable=False, error_code="PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID",
+                    detail="已保存的深审原答回执缺失或损坏，不能作为采用依据。",
+                ) from exc
             if payload.get("restricted_batch") is not None:
                 try:
                     expected = restricted_batch_from_review(batch, run_result)
@@ -4174,10 +4271,14 @@ def _deep_results(
     relations: list[ProtocolControlSourceUnitRelation] = []
     for batch in deep_plan.batches:
         run_result = reviewed[batch.batch_id]
+        restricted_indexes = {item.source_statement_index
+                              for item in output[batch.batch_id].restricted_statements}
         pending = [item for item in (run_result.source_target_review.items
                                      if run_result.source_target_review else [])
-                   if item.decision == "potential_same_requirement"]
-        if bool(pending) != (run_result.status == "待跨章核验"):
+                   if item.decision == "potential_same_requirement"
+                   and item.statement_index not in restricted_indexes]
+        if (bool(pending) != (run_result.status == "待跨章核验")
+                and not (pending and run_result.status == "需要核对" and restricted_indexes)):
             raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_SOURCE_RELATION_INVALID",
                               detail="跨章节待核状态与逐项来源对应不一致。")
         if pending and (run_result.source_interpretation is None or run_result.source_target_review is None):

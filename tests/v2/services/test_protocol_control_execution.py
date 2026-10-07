@@ -151,6 +151,7 @@ def test_deep_step_preserves_pending_cross_chapter_for_final_relation_check(monk
         status="待跨章核验", final_output=SimpleNamespace(model_dump=lambda **_: {}),
         attempts=[],
         pending_source_definition_consumer_attempts=[],
+        restricted_source_definition_consumer_attempts=[],
         model_dump=lambda **_: {"status": "待跨章核验", "batch_id": "batch-a"},
     )
     monkeypatch.setattr(module.ProtocolControlAgentRunner, "run", lambda *_ , **__: result)
@@ -343,6 +344,159 @@ def _independent_candidate_and_temporal_gap(*, same_unit: bool = False):
         "retry_class": "temporal_scope_review", "affected_dependents": [1],
     }
     return batch, result
+
+
+@pytest.mark.parametrize("swap", [False, True])
+def test_whole_mixed_unit_retains_all_points_without_fake_independence(swap):
+    batch, result = _same_unit_two_requirement_review(swap=swap)
+    result.source_interpretation.statements[1].unresolved = []
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire,
+    )
+    frozen = result.model_dump(mode="json")
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert output is not None
+    assert output.candidates == []
+    assert len(output.restricted_statements) == 2
+    assert {item.source_quote for item in output.restricted_statements} == {
+        _SAME_UNIT_INDEPENDENT, _SAME_UNIT_RESTRICTED,
+    }
+    assert all(item.independent_scope_proof is None for item in output.restricted_statements)
+    assert output.dispositions[0].disposition == StructureUnitDispositionKind.RESTRICTED_SOURCE
+    assert result.model_dump(mode="json") == frozen
+    protocol_control_execution_module._validate_deep_batch_output(batch, output)
+    assert protocol_control_execution_module.restricted_batch_from_review(
+        batch, type(result).model_validate(frozen),
+    ) == output
+
+
+@pytest.mark.parametrize("failure", ["bad_value", "extra_error", "transport", "unread_prefix"])
+def test_whole_mixed_unit_does_not_disguise_invalid_source_or_author(failure):
+    batch, result = _same_unit_two_requirement_review()
+    result.source_interpretation.statements[1].unresolved = []
+    if failure == "bad_value":
+        result.partial_wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0].evaluation.predicate.value = 19
+    elif failure == "extra_error":
+        result.attempts[-1].error_classes.append("POST_HYDRATION_INVALID")
+    elif failure == "transport":
+        result.attempts[-1].outcome = "transport_failed"
+    else:
+        batch.owned_units[0].excerpt = "仅在另一阶段适用：" + batch.owned_units[0].excerpt
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire,
+    )
+    assert protocol_control_execution_module.restricted_batch_from_review(batch, result) is None
+
+
+@pytest.mark.parametrize("separator", ["，", ",", "；\n"])
+def test_whole_unit_coverage_keeps_joiners_without_proving_independence(separator):
+    from app.protocols.protocol_control_gate import source_statement_ranges_cover_unit
+
+    batch, result = _same_unit_two_requirement_review()
+    result.source_interpretation.statements[1].unresolved = []
+    batch.owned_units[0].excerpt = separator.join([_SAME_UNIT_INDEPENDENT, _SAME_UNIT_RESTRICTED])
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire,
+    )
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert output is not None and not output.candidates
+    assert len(output.restricted_statements) == 2
+    ranges = [(0, len(_SAME_UNIT_INDEPENDENT)),
+              (len(_SAME_UNIT_INDEPENDENT) + len(separator), len(batch.owned_units[0].excerpt))]
+    assert source_statement_ranges_cover_unit(
+        batch.owned_units[0].excerpt, ranges, allow_joining_punctuation=True,
+    )
+    assert source_statement_ranges_cover_unit(batch.owned_units[0].excerpt, ranges) == (separator == "；\n")
+    assert not source_statement_ranges_cover_unit(
+        batch.owned_units[0].excerpt + "例外情况", ranges, allow_joining_punctuation=True,
+    )
+
+
+def _mixed_definition_declared_result():
+    from app.agents.protocol_control_source_interpretation import (
+        SOURCE_DEFINITION_CONSUMER_VERSION, SourceDefinitionAtomConsumer,
+        SourceDefinitionConsumerItem, SourceDefinitionConsumers,
+    )
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentAttempt
+
+    batch, result = _same_unit_two_requirement_review()
+    result.source_interpretation.statements[1].unresolved = []
+    result.source_interpretation.statements[1].decision_functions.append("definition")
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire,
+    )
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert output is not None
+    target = next(item for item in output.restricted_statements if item.source_statement_index == 0)
+    declaration = SourceDefinitionConsumers(
+        version=SOURCE_DEFINITION_CONSUMER_VERSION,
+        items=[SourceDefinitionConsumerItem(statement_index=1, consumers=[SourceDefinitionAtomConsumer(
+            consumer_kind="restricted_statement", restricted_statement_id=target.restricted_statement_id,
+            consumer_excerpt=target.source_quote,
+        )])],
+    )
+    raw = declaration.model_dump_json()
+    result.source_definition_consumers = declaration
+    result.restricted_source_definition_consumer_attempts = [ProtocolControlAgentAttempt(
+        attempt=1, session_id="fresh-restricted-definition", outcome="parsed",
+        raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(), raw_output_chars=len(raw),
+        raw_output_text=raw, issues=[],
+    )]
+    return batch, result, output
+
+
+@pytest.mark.parametrize("defect", [None, "missing", "duplicate", "changed_text", "changed_hash", "changed_declaration", "malformed_list"])
+def test_fresh_restricted_registration_private_save_readback_and_source_recheck(defect):
+    module = protocol_control_execution_module
+    batch, result, output = _mixed_definition_declared_result()
+    checkpoint = {"run_result": result.model_dump(mode="json"),
+                  "attempt_raw_outputs": module._deep_attempt_raw_outputs(result)}
+    assert "raw_output_text" not in checkpoint["run_result"]["restricted_source_definition_consumer_attempts"][0]
+    if defect == "missing":
+        checkpoint["attempt_raw_outputs"] = []
+    elif defect == "duplicate":
+        checkpoint["attempt_raw_outputs"].append(checkpoint["attempt_raw_outputs"][-1])
+    elif defect == "changed_text":
+        checkpoint["attempt_raw_outputs"][-1]["raw_output_text"] += " "
+    elif defect == "changed_hash":
+        checkpoint["attempt_raw_outputs"][-1]["raw_output_sha256"] = "f" * 64
+    elif defect == "changed_declaration":
+        checkpoint["run_result"]["source_definition_consumers"]["items"][0]["consumers"][0]["consumer_excerpt"] = "不属于原文"
+    elif defect == "malformed_list":
+        checkpoint["attempt_raw_outputs"] = None
+    if defect:
+        with pytest.raises(ValueError):
+            module.restricted_batch_from_review(batch, module._saved_deep_run_result(checkpoint))
+    else:
+        restored = module._saved_deep_run_result(checkpoint)
+        assert module.restricted_batch_from_review(batch, restored) == output
+        records = module._source_definition_consumers(
+            SimpleNamespace(batches=[batch]), {batch.batch_id: output}, {batch.batch_id: restored},
+        )
+        assert records[0].consumers[0].consumer_kind == "restricted_statement"
+        assert not records[0].scope_complete
+        assert records[0].unresolved_reasons  # target correspondence remains unknown
+
+
+def test_restricted_registration_cannot_use_self_reference_or_legacy_contract():
+    from app.agents.protocol_control_source_interpretation import parse_product_source_definition_consumers
+
+    batch, result, output = _mixed_definition_declared_result()
+    parse_product_source_definition_consumers(
+        batch, result.source_interpretation, result.source_definition_consumers.model_dump_json(),
+        restricted_statements=output.restricted_statements,
+    )
+    raw = result.source_definition_consumers.model_dump(mode="json")
+    consumer = raw["items"][0]["consumers"][0]
+    self_target = next(item for item in output.restricted_statements if item.source_statement_index == 1)
+    consumer.update(restricted_statement_id=self_target.restricted_statement_id, consumer_excerpt=self_target.source_quote)
+    with pytest.raises(ValueError):
+        parse_product_source_definition_consumers(
+            batch, result.source_interpretation, json.dumps(raw), restricted_statements=output.restricted_statements,
+        )
+    raw["version"] = "phase5/control-source-definition-consumer/v2"
+    with pytest.raises(ValueError):
+        type(result.source_definition_consumers).model_validate(raw)
 
 
 @pytest.mark.parametrize("same_unit", [False, True])
@@ -568,7 +722,12 @@ def test_same_unit_independence_cannot_omit_source_words(position: str) -> None:
 def test_same_unit_source_function_cannot_be_promoted_by_literal_separation(function: str) -> None:
     batch, result = _same_unit_two_requirement_review()
     result.source_interpretation.statements[1].decision_functions = ["action", function]
-    assert protocol_control_execution_module.restricted_batch_from_review(batch, result) is None
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    # R1 permits a whole-unit non-executable record, not a promoted sibling.
+    assert output is not None and output.candidates == []
+    assert len(output.restricted_statements) == 2
+    assert all(item.independent_scope_proof is None for item in output.restricted_statements)
+    assert function in output.restricted_statements[1].decision_functions
 
 
 def test_restricted_source_keeps_its_context_without_guessing_independence() -> None:
@@ -796,19 +955,34 @@ def test_capability_restriction_keeps_source_and_rejects_unproven_failures(failu
 
 
 def _restriction_case(kind: str):
+    if kind == "mixed_definition":
+        batch, result, _ = _mixed_definition_declared_result()
+        return batch, result
     return (_independent_candidate_and_clock_capability() if kind == "clock"
             else _independent_candidate_and_temporal_gap() if kind == "temporal"
             else _independent_candidate_and_unresolved_review() if kind == "independent"
             else _unresolved_batch_review())
 
 
-@pytest.mark.parametrize("kind", ["unresolved", "independent", "clock", "temporal"])
+@pytest.mark.parametrize("kind", ["unresolved", "independent", "clock", "temporal", "mixed_definition"])
 def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
     monkeypatch, kind: str,
 ) -> None:
     module = protocol_control_execution_module
     batch, result = _restriction_case(kind)
-    independent_candidate = kind != "unresolved"
+    independent_candidate = kind in {"independent", "clock", "temporal"}
+    declarations_called = []
+    declaration_text = (result.source_definition_consumers.model_dump_json()
+                        if kind == "mixed_definition" else None)
+    if kind == "mixed_definition":
+        result.source_definition_consumers = None
+        result.restricted_source_definition_consumer_attempts = []
+
+    def declare(*, prompt):
+        assert declaration_text is not None
+        assert "restricted_statement" in prompt
+        declarations_called.append(prompt)
+        return ProtocolControlAgentResponse(session_id="fresh-declaration", text=declaration_text)
     monkeypatch.setattr(module, "_closure_checkpoint", lambda *_: {
         "deep_plan": {}, "deep_step_ids": [{"step_id": "deep_0001", "batch_id": batch.batch_id}],
     })
@@ -820,6 +994,7 @@ def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
     monkeypatch.setattr(module, "_frozen_official_predicates", lambda *_: ({}, {}))
     monkeypatch.setattr(module, "_resolve_transport", lambda *_, **__: SimpleNamespace(
         start_source_interpretation=lambda **_: None,
+        start_source_definition_consumers=declare,
         take_call_receipts=lambda: [{"request_id": "request-1"}],
     ))
     monkeypatch.setattr(module, "_require_frozen_route", lambda *_, **__: None)
@@ -834,6 +1009,12 @@ def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
     saved = module._execute_deep(context, SimpleNamespace())
     assert len(saved["restricted_batch"]["candidates"]) == int(independent_candidate)
     assert len(saved["restricted_batch"]["restricted_statements"]) == 2 - int(independent_candidate)
+    assert len(declarations_called) == int(kind == "mixed_definition")
+    if kind == "mixed_definition":
+        assert saved["run_result"]["status"] == "需要核对"
+        assert saved["run_result"]["final_output"] is None
+        assert len(saved["run_result"]["restricted_source_definition_consumer_attempts"]) == 1
+        assert saved["attempt_raw_outputs"][-1]["role"] == "restricted_source_definition_consumer"
 
     replay_context = StepContext(
         job_id=context.job_id, job_type=context.job_type,
@@ -872,6 +1053,15 @@ def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
         assert rejected_replay.value.error_code == "PROTOCOL_CONTROL_CHECKPOINT_INVALID"
         saved["restricted_batch"]["restricted_statements"][0]["source_quote"] = prior_quote
         assert json.dumps(saved, ensure_ascii=False, sort_keys=True) == unchanged
+        if kind == "mixed_definition":
+            original_answers = saved["attempt_raw_outputs"]
+            for corrupted in ([], None, [*original_answers, original_answers[-1]]):
+                saved["attempt_raw_outputs"] = corrupted
+                with pytest.raises(StepFailure) as corrupt_error:
+                    module.create_protocol_control_executor(SimpleNamespace())(replay_context)
+                assert corrupt_error.value.error_code == "PROTOCOL_CONTROL_CHECKPOINT_INVALID"
+                assert not corrupt_error.value.retryable
+            saved["attempt_raw_outputs"] = original_answers
 
     original_restriction = module.restricted_batch_from_review
 
@@ -924,7 +1114,20 @@ def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
         )
         assert outputs[batch.batch_id].candidates == expected.candidates[:1]
     assert relations == []
-    assert definition_consumers == []
+    if kind == "mixed_definition":
+        assert len(definition_consumers) == 1
+        assert definition_consumers[0].consumers[0].consumer_kind == "restricted_statement"
+        assert not definition_consumers[0].scope_complete
+        assert "与已有目标的关系未核清" in definition_consumers[0].unresolved_reasons
+        original_answers = saved["attempt_raw_outputs"]
+        saved["attempt_raw_outputs"] = None
+        with pytest.raises(StepFailure) as corrupt_error:
+            module._deep_results(context, config, module._closure_checkpoint(context, config))
+        assert corrupt_error.value.error_code == "PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID"
+        assert not corrupt_error.value.retryable
+        saved["attempt_raw_outputs"] = original_answers
+    else:
+        assert definition_consumers == []
 
     saved["restricted_batch"]["restricted_statements"][0]["source_quote"] = "原文未写的结论"
     with pytest.raises(StepFailure) as error:
@@ -932,7 +1135,7 @@ def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
     assert error.value.error_code == "PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID"
 
 
-@pytest.mark.parametrize("kind", ["unresolved", "independent", "clock", "temporal"])
+@pytest.mark.parametrize("kind", ["unresolved", "independent", "clock", "temporal", "mixed_definition"])
 def test_completed_restricted_source_reuse_rechecks_saved_review(monkeypatch, kind) -> None:
     module = protocol_control_execution_module
     batch, result = _restriction_case(kind)
@@ -945,6 +1148,7 @@ def test_completed_restricted_source_reuse_rechecks_saved_review(monkeypatch, ki
         "component_identity": {}, "repair_contract_sha256": module.protocol_control_agent_repair_contract_sha256(),
         "transport_identity": {}, "run_result": result.model_dump(mode="json"),
         "restricted_batch": restricted.model_dump(mode="json"),
+        "attempt_raw_outputs": module._deep_attempt_raw_outputs(result),
     }
 
     class FakeStore:
@@ -1427,8 +1631,9 @@ def test_cross_chapter_source_pair_requires_independent_target_result(monkeypatc
                                target_action_excerpt=action, target_scope_excerpt="自筛选期开始",
                                source_object_excerpt="背景治疗", target_object_excerpt="背景治疗")
     source_result = SimpleNamespace(status="待跨章核验", batch_id="batch-a",
+                                    restricted_source_definition_consumer_attempts=[],
                                     final_output=SimpleNamespace(owned_structure_unit_ids=["su-a"],
-                                                                 candidates=[]),
+                                                                 candidates=[], restricted_statements=[]),
                                     source_target_review=SimpleNamespace(items=[relation]),
                                     source_interpretation=SimpleNamespace(statements=[statement]),
                                     source_statement_coverage=[],
@@ -1440,8 +1645,9 @@ def test_cross_chapter_source_pair_requires_independent_target_result(monkeypatc
                                         SimpleNamespace(source_excerpts=["自筛选期开始接受背景治疗：" + action])
                                     ])]), exception_expression=None))
     target_result = SimpleNamespace(status="已解析", batch_id="batch-b",
+                                    restricted_source_definition_consumer_attempts=[],
                                     final_output=SimpleNamespace(owned_structure_unit_ids=["su-b"],
-                                                                  candidates=[candidate]),
+                                                                  candidates=[candidate], restricted_statements=[]),
                                     source_target_review=None,
                                     source_interpretation=SimpleNamespace(statements=[target_statement]),
                                     source_definition_consumers=None,

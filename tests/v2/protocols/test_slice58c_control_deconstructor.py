@@ -3146,10 +3146,11 @@ def test_runner_reaffirmed_function_requires_one_valid_target_review(resolved: b
 
         def start_source_definition_consumers(self, *, prompt: str):
             self.definition_calls += 1
+            from app.agents.protocol_control_source_interpretation import SOURCE_DEFINITION_CONSUMER_VERSION
             return ProtocolControlAgentResponse(
                 session_id="definition-consumers",
                 text=json.dumps({
-                    "version": "phase5/control-source-definition-consumer/v2", "items": [],
+                    "version": SOURCE_DEFINITION_CONSUMER_VERSION, "items": [],
                 }),
             )
 

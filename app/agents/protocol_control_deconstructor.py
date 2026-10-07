@@ -4256,6 +4256,9 @@ class ProtocolControlAgentRunResult(ContractModel):
     pending_source_definition_consumer_attempts: list[ProtocolControlAgentAttempt] = Field(
         default_factory=list, exclude_if=lambda value: not value,
     )
+    restricted_source_definition_consumer_attempts: list[ProtocolControlAgentAttempt] = Field(
+        default_factory=list, exclude_if=lambda value: not value,
+    )
     partial_wire: ProtocolControlAgentWire | None = None
     # Diagnostic only: an unaccepted full wire with a typed consumer-capability
     # failure. The source restriction producer revalidates it on every read.
@@ -4319,6 +4322,7 @@ def declare_source_definition_consumers(
         declaration = parse_product_source_definition_consumers(
             batch, interpretation, response.text,
             official_predicate_identities=official_predicate_identities,
+            restricted_statements=output.restricted_statements,
         )
     except Exception as exc:  # noqa: BLE001 - product declaration boundary
         attempts.append(ProtocolControlAgentAttempt(

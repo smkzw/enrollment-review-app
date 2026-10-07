@@ -14,6 +14,10 @@ from app.agents.protocol_control_deconstructor import (
 from app.agents.protocol_control_source_interpretation import (
     SourceInterpretation,
     SourceStatementCoverage,
+    SourceDefinitionConsumers,
+    SOURCE_DEFINITION_CONSUMER_VERSION,
+    validate_source_definition_consumers,
+    validate_restricted_definition_consumers,
     validate_source_interpretation,
     validate_source_target_review,
 )
@@ -40,6 +44,7 @@ from app.agents.protocol_control_stage_compiler import requires_temporal_resolut
 
 
 TEMPORAL_RESTRICTION_VERSION = "source-temporal-restricted-disposition/v2"
+WHOLE_UNIT_RESTRICTION_VERSION = "source-whole-unit-restricted-disposition/v1"
 
 
 def _temporal_restriction_indexes(
@@ -304,7 +309,149 @@ def _coexisting_statement_proofs(
     return proofs
 
 
-def restricted_batch_from_review(
+def _whole_unit_restriction(
+    batch: ProtocolControlDispositionBatch,
+    result: ProtocolControlAgentRunResult,
+) -> ProtocolControlBatchDispositionHydrated | None:
+    """Retain every source point when independence inside a unit is unproven.
+
+    This is not repair of bad semantics or failed transport. A valid source and
+    author output with unresolved target correspondence may become non-executable
+    in whole frozen units. Definitions still require the existing local/global
+    dependency closure; this function never supplies that closure.
+    """
+    if (result.partial_wire is None
+            or (result.source_definition_consumers is not None
+                and not result.restricted_source_definition_consumer_attempts)
+            or set(result.attempts[-1].error_classes) != {"SOURCE_TARGET_REVIEW_UNRESOLVED"}):
+        return None
+    interpretation = result.source_interpretation
+    review = result.source_target_review
+    original = hydrate_protocol_control_agent_output(result.partial_wire, batch)
+    if (check_protocol_control_batch_candidates(batch, original)
+            or result.source_statement_coverage
+            != source_statement_coverage(batch, interpretation, result.partial_wire)):
+        return None
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    reviewed = {item.statement_index: item for item in review.items}
+    uncertain = [item for item in review.items if item.decision == "unresolved"]
+    if not uncertain or any(not item.unresolved_aspects for item in uncertain):
+        return None
+    restricted_units = {interpretation.statements[item.statement_index].structure_unit_id
+                        for item in uncertain}
+    by_unit: dict[str, list[int]] = {}
+    for index, statement in enumerate(interpretation.statements):
+        by_unit.setdefault(statement.structure_unit_id, []).append(index)
+    if not any(len(by_unit[unit_id]) > 1 for unit_id in restricted_units):
+        return None
+    dispositions = {item.structure_unit_id: item for item in original.dispositions}
+    coverage = {item.statement_index: item for item in result.source_statement_coverage}
+    for unit_id, indexes in by_unit.items():
+        if unit_id in restricted_units:
+            if dispositions[unit_id].disposition != StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE:
+                return None
+            ranges = [locate_source_quote_offsets(units[unit_id].excerpt,
+                       interpretation.statements[index].quoted_text) for index in indexes]
+            if any(bounds is None for bounds in ranges) or not source_statement_ranges_cover_unit(
+                units[unit_id].excerpt, [bounds for bounds in ranges if bounds is not None],
+                allow_joining_punctuation=True,
+            ):
+                return None
+            continue
+        for index in indexes:
+            statement = interpretation.statements[index]
+            item = reviewed.get(index)
+            if statement.unresolved:
+                return None
+            if item is None:
+                if (coverage[index].status not in {"expressed", "semantically_aligned"}
+                        and dispositions[unit_id].disposition not in {
+                            StructureUnitDispositionKind.POST_TREATMENT_EXECUTION,
+                            StructureUnitDispositionKind.NON_ENROLLMENT_EXECUTION,
+                            StructureUnitDispositionKind.PHASE_EXCLUDED,
+                            StructureUnitDispositionKind.ADMINISTRATIVE_STATISTICAL_BACKGROUND,
+                        }):
+                    return None
+            elif item.decision == "additional_requirement":
+                if coverage[index].status not in {"expressed", "semantically_aligned"}:
+                    return None
+            elif item.decision not in {
+                "covered_by_official", "covered_by_procedure", "definition_dependency",
+                "potential_same_requirement", "background_context", "cited_external_rationale",
+            }:
+                return None
+    removed = [candidate for candidate in original.candidates
+               if set(candidate.frozen_structure_unit_ids) & restricted_units]
+    # A shared candidate cannot be removed without limiting its other source
+    # units as well. No guessed dependency expansion is performed here.
+    if any(not set(candidate.frozen_structure_unit_ids) <= restricted_units for candidate in removed):
+        return None
+    retained = [candidate for candidate in original.candidates if candidate not in removed]
+    restricted_spans = {span for unit_id in restricted_units for span in units[unit_id].source_span_ids}
+    if any(set(candidate.source_span_ids) & restricted_spans for candidate in retained):
+        return None
+    statements = []
+    for unit_id in sorted(restricted_units):
+        aspects = list(dict.fromkeys(
+            aspect for index in by_unit[unit_id]
+            for aspect in [*interpretation.statements[index].unresolved,
+                           *(reviewed[index].unresolved_aspects if index in reviewed else ())]
+        ))
+        for index in by_unit[unit_id]:
+            source = interpretation.statements[index]
+            digest = hashlib.sha256(json.dumps(
+                [batch.batch_id, unit_id, index], ensure_ascii=False, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()[:24]
+            statements.append(RestrictedProtocolControlStatement(
+                restricted_statement_id=f"restricted:{digest}",
+                source_structure_unit_id=unit_id, source_statement_index=index,
+                source_quote=source.quoted_text, source_span_ids=sorted(units[unit_id].source_span_ids),
+                limitation_kind="interpretation_unresolved",
+                unresolved_dimensions=[
+                    "同一原文单元的对应关系尚未核清，未证明各要求可独立采用；本单元整体保留待核",
+                    *aspects,
+                ],
+                scope_quote=source.scope_quote, scope_context_unit_id=source.scope_context_unit_id,
+                time_words=list(source.time_words), exception_words=source.exception_words,
+                affected_stage=source.affected_stage, decision_functions=list(source.decision_functions),
+                source_force=source.force,
+            ))
+    output = ProtocolControlBatchDispositionHydrated(
+        batch_id=batch.batch_id, coverage_manifest_id=batch.coverage_manifest_id,
+        owned_structure_unit_ids=list(batch.owned_structure_unit_ids),
+        owned_source_span_ids=list(batch.owned_source_span_ids),
+        dispositions=[ProtocolControlUnitDisposition(
+            structure_unit_id=item.structure_unit_id,
+            disposition=StructureUnitDispositionKind.RESTRICTED_SOURCE,
+        ) if item.structure_unit_id in restricted_units else item for item in original.dispositions],
+        candidates=retained, restricted_statements=sorted(
+            statements, key=lambda item: (item.source_structure_unit_id, item.source_statement_index),
+        ),
+    )
+    if check_protocol_control_batch_candidates(batch, output):
+        return None
+    if result.source_definition_consumers is not None:
+        attempts = result.restricted_source_definition_consumer_attempts
+        if len(attempts) != 1:
+            raise ValueError("受限定义登记缺少唯一实际回答")
+        attempt = attempts[0]
+        raw = attempt.raw_output_text
+        if (attempt.outcome != "parsed" or not isinstance(raw, str)
+                or len(raw) != attempt.raw_output_chars
+                or hashlib.sha256(raw.encode("utf-8")).hexdigest() != attempt.raw_output_sha256):
+            raise ValueError("受限定义登记原答与实际回执不一致")
+        declaration = SourceDefinitionConsumers.model_validate_json(raw)
+        if (declaration.version != SOURCE_DEFINITION_CONSUMER_VERSION
+                or declaration != result.source_definition_consumers):
+            raise ValueError("受限定义登记字段与实际原答不一致")
+        validate_source_definition_consumers(batch, interpretation, declaration)
+        validate_restricted_definition_consumers(
+            batch, interpretation, declaration, output.restricted_statements,
+        )
+    return output
+
+
+def _restricted_statement_batch_from_review(
     batch: ProtocolControlDispositionBatch,
     result: ProtocolControlAgentRunResult,
 ) -> ProtocolControlBatchDispositionHydrated | None:
@@ -517,3 +664,27 @@ def restricted_batch_from_review(
     if check_protocol_control_batch_candidates(batch, output):
         return None
     return output
+
+
+def restricted_batch_from_review(
+    batch: ProtocolControlDispositionBatch,
+    result: ProtocolControlAgentRunResult,
+) -> ProtocolControlBatchDispositionHydrated | None:
+    output = _restricted_statement_batch_from_review(batch, result)
+    if output is not None:
+        return output
+    if (result.status != "需要核对" or result.final_output is not None
+            or result.source_interpretation is None or result.source_target_review is None
+            or not result.attempts or result.attempts[-1].outcome != "publication_invalid"
+            or result.capability_wire is not None):
+        return None
+    validate_source_interpretation(batch, result.source_interpretation)
+    if sorted(item.statement_index for item in result.source_statement_coverage) != list(
+        range(len(result.source_interpretation.statements))
+    ):
+        return None
+    validate_source_target_review(
+        batch, result.source_interpretation, result.source_statement_coverage,
+        result.source_target_review,
+    )
+    return _whole_unit_restriction(batch, result)
