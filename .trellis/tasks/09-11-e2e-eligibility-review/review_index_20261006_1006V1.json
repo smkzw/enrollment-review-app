@@ -7,6 +7,16 @@
   "claims_complete": false,
   "base_review_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
   "delivered_snapshot_id": "S-15",
+  "feedback_hydration_package": {
+    "base_commit": "1e5f3e35",
+    "paths": ["app/agents/protocol_deconstructor.py", "tests/v2/protocols/test_protocol_deconstructor_adapter_slice3.py", "tests/v2/protocols/test_official_scope_review.py"],
+    "behavior": "Only unchanged unselected component and exactly one equal binding can retain the same host scope reference; selected target and parent-wide repair do not inherit; complete parent basis is still validated.",
+    "tests": {"passed": 280, "seconds": 43.44, "exit_code": 0, "modules": 4, "junit": "/Users/smkzw/tmp/rv1006-feedback-scope-ref-connected-20261007-v1.xml", "red": "1fail/6pass before second consumer test;not additive"},
+    "conference": {"route": "grok/grok-build/grok-4.7/high", "session_id": "80fcf27c-acae-4244-a729-84121f984525", "seconds": 466.889, "exit_code": 0, "fallback": false, "reported_material_reads": 18, "input_tokens": 119620, "cache_read_input_tokens": 344704, "output_tokens": 31034, "reasoning_tokens_in_output": 26987, "total_tokens": 495358, "reported_cost_usd": 0.20325064, "limits": "Design review of pre-patch code; final patch and missing gate/publication branches owner-verified;no clinical/DB/runtime acceptance"},
+    "saved_answer_replay": {"physical_calls": 0, "scope_ok_before": false, "scope_ok_after": true, "draft_persisted": false, "protected_unchanged": true, "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-feedback-hydration-audit-20261007-v3", "access": "controlled_local_only", "source_term_changed": false, "clinical_repair_claimed": false},
+    "literal_identity_batch": {"state": "requires_owner_review", "exit_code": 4, "target_01_calls": 1, "target_01_http": 409, "target_02_calls": 2, "target_02_seconds": 564.6695424999925, "target_02_http": 200, "revision_after": 7, "blocking_after": 11, "authorized_field_scope_preserved": false, "first_cause": "Second author added an independent predicate instead of only changing the source term; post-save field audit stopped the batch; not adopted.", "remaining_targets_called": 0, "old_revision_unchanged": true, "other_parents_unchanged": true, "protected_unchanged": true, "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-literal-identity-batch-20261007-v1", "access": "controlled_local_only"},
+    "formal_rules_published": false, "claims_complete": false
+  },
   "source_binding_package": {
     "base_commit": "f26cc4e5160485a4fdc1a9ad1ed865c40ca356c0",
     "gate_version": "protocol-deconstruction-gate/2026-10-07.56",

@@ -4614,7 +4614,38 @@ def _merge_feedback_hydration(
         "structural_warnings": hydrated.structural_warnings,
         "unresolved_items": hydrated.unresolved_items,
     }, deep=True)
-    return ProtocolDeconstructionDraft.model_validate(merged.model_dump(mode="json"))
+    result = ProtocolDeconstructionDraft.model_validate(merged.model_dump(mode="json"))
+    if target_component_id is not None:
+        # Semantic hydration omits host-owned review references. Restore only
+        # untouched siblings; the gate still validates the whole review basis.
+        original_components = {item.rule_component_id: item for item in before.components}
+        result_rule = next(rule for rule in result.proposed_rules if rule.official_code == target_code)
+        for component in result_rule.components:
+            if component.rule_component_id == target_component_id:
+                continue
+            original = original_components.get(component.rule_component_id)
+            if original is None or original.source_scope_review_ref is None:
+                continue
+            old_bindings = [item for item in current.component_drafts
+                            if item.proposed_component.rule_component_id == component.rule_component_id]
+            new_bindings = [item for item in result.component_drafts
+                            if item.proposed_component.rule_component_id == component.rule_component_id]
+            if len(old_bindings) != 1 or len(new_bindings) != 1:
+                continue
+            old_binding, new_binding = old_bindings[0], new_bindings[0]
+            proof = original.source_scope_review_ref
+            if (old_binding.proposed_component.source_scope_review_ref != proof
+                    or component.source_scope_review_ref is not None
+                    or new_binding.proposed_component.source_scope_review_ref is not None):
+                continue
+            old_component = original.model_copy(update={"source_scope_review_ref": None}, deep=True)
+            old_mapping = old_binding.model_copy(deep=True)
+            old_mapping.proposed_component.source_scope_review_ref = None
+            if old_component != component or old_mapping != new_binding:
+                continue
+            component.source_scope_review_ref = proof
+            new_binding.proposed_component.source_scope_review_ref = proof
+    return result
 
 
 def _parse_semantic_candidate(

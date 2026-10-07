@@ -604,6 +604,51 @@ def test_restricted_sibling_changes_invalidate_the_parent_review(tmp_path):
     assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_INVALID" for check in gate.checks for issue in check.issues)
 
 
+@pytest.mark.parametrize("change_target", [False, True])
+def test_preserved_sibling_proof_is_revalidated_against_the_current_parent_basis(tmp_path, change_target):
+    from app.agents.protocol_deconstructor import _merge_feedback_hydration
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+
+    source, draft, spans = scope_fixture()
+    store = ArtifactStore(resolve_data_paths(str(tmp_path / "data")))
+    reader = ScopeReader()
+    reviewed = review_official_source_scope(source, draft, official_code="IN-01", transport=reader, store=store)
+    frozen = reviewed.model_dump(mode="json")
+    old_sibling = reviewed.proposed_rules[0].components[1]
+    old_proof = store.read(old_sibling.source_scope_review_ref)
+    hydrated = reviewed.model_copy(deep=True)
+    selected = hydrated.proposed_rules[0].components[0]
+    if change_target:
+        selected.title = "仅修订选中的说明"
+    for item in hydrated.proposed_rules[0].components:
+        item.source_scope_review_ref = None
+    for mapping in hydrated.component_drafts:
+        if mapping.parent_official_code == "IN-01":
+            mapping.proposed_component.source_scope_review_ref = None
+            if mapping.proposed_component.rule_component_id == selected.rule_component_id:
+                mapping.proposed_component.title = selected.title
+    revised = _merge_feedback_hydration(
+        reviewed, hydrated, "IN-01", target_component_id=selected.rule_component_id,
+    )
+    assert revised.proposed_rules[0].components[1] == old_sibling
+    ProtocolWorkbenchService._validate_source_error_scope(
+        reviewed, revised, target_rule_code="IN-01", target_component_id=selected.rule_component_id,
+    )
+    gate = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, revised, source_spans=spans)
+    issues = [issue for check in gate.checks for issue in check.issues]
+    if change_target:
+        assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_INVALID" for issue in issues)
+    else:
+        assert not any(issue.issue_code == "SOURCE_SCOPE_REVIEW_INVALID" for issue in issues)
+        assert any(issue.issue_code == "REVIEW_STAGE_SCOPE_UNVERIFIED"
+                   and selected.rule_component_id in issue.affected_refs for issue in issues)
+        assert not any(old_sibling.rule_component_id in issue.affected_refs for issue in issues)
+    assert not gate.publishable
+    assert store.read(old_sibling.source_scope_review_ref) == old_proof
+    assert reviewed.model_dump(mode="json") == frozen
+    assert len(reader.prompts) == 2
+
+
 class PartiallyRejectedScopeReader(ScopeReader):
     def start(self, **kwargs):
         response = super().start(**kwargs)

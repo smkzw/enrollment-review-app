@@ -20,6 +20,7 @@ from app.agents.protocol_deconstructor import (
     _plan_semantic_rule_batches,
     _merge_semantic_batches,
     _merge_component_only_repair,
+    _merge_feedback_hydration,
     _repair_batch_id,
     _repair_prompt,
     _validate_semantic_batch,
@@ -1703,6 +1704,112 @@ def test_component_feedback_split_preserves_siblings_and_source_scope():
             draft, borrowed, target_rule_code="EX-01",
             target_component_id=target.rule_component_id,
         )
+
+
+def _scope_review_feedback_fixture():
+    source_input, draft, _ = _fixture()
+    candidate = semantic_candidate_from_draft(draft)
+    sibling = candidate.proposed_rules[1].components[0].model_copy(deep=True)
+    sibling.title = "独立且未修订的子项"
+    candidate.proposed_rules[1].components.append(sibling)
+    draft = _hydrate_semantic_candidate(source_input, candidate)
+    proof = "artifacts/evaluation_manifest/" + "a" * 64
+    for component in draft.proposed_rules[1].components:
+        component.source_scope_review_ref = proof
+    for mapping in draft.component_drafts:
+        if mapping.parent_official_code == "EX-01":
+            mapping.proposed_component.source_scope_review_ref = proof
+    return source_input, type(draft).model_validate(draft.model_dump(mode="json"))
+
+
+def test_feedback_rehydration_retains_only_unchanged_sibling_scope_proof():
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+
+    source_input, draft = _scope_review_feedback_fixture()
+    frozen = draft.model_dump(mode="json")
+    candidate = semantic_candidate_from_draft(draft)
+    selected = candidate.proposed_rules[1].components[0].model_copy(deep=True)
+    selected.title = "所选子项已修订"
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[SemanticRule(official_code="EX-01", components=[selected])],
+    )
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="EX-01",
+        target_component_id=draft.proposed_rules[1].components[0].rule_component_id,
+        feedback_note="仅修订所选子项", transport=FakeTransport([
+            ProtocolAgentResponse(session_id="scope-proof-feedback", text=repair.model_dump_json()),
+        ]),
+    )
+    selected_after, sibling_after = revised.proposed_rules[1].components
+    assert selected_after.source_scope_review_ref is None
+    assert sibling_after == draft.proposed_rules[1].components[1]
+    old_sibling_mapping = next(item for item in draft.component_drafts
+                               if item.proposed_component.rule_component_id == sibling_after.rule_component_id)
+    assert next(item for item in revised.component_drafts
+                if item.proposed_component.rule_component_id == sibling_after.rule_component_id) == old_sibling_mapping
+    ProtocolWorkbenchService._validate_source_error_scope(
+        draft, revised, target_rule_code="EX-01",
+        target_component_id=selected_after.rule_component_id,
+    )
+    assert draft.model_dump(mode="json") == frozen
+    sibling_after.title = "返回稿之后的修改也不影响历史"
+    assert draft.model_dump(mode="json") == frozen
+
+
+@pytest.mark.parametrize("change", [
+    "meaning", "mapping", "different_proof", "single_side_proof",
+    "old_mismatched_proof", "missing_mapping", "duplicate_mapping",
+])
+def test_feedback_scope_proof_is_not_reused_across_sibling_changes(change):
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+
+    source_input, draft = _scope_review_feedback_fixture()
+    hydrated = type(draft).model_validate(
+        _hydrate_semantic_candidate(source_input, semantic_candidate_from_draft(draft)).model_dump(mode="json"),
+    )
+    sibling = hydrated.proposed_rules[1].components[1]
+    mapping = next(item for item in hydrated.component_drafts
+                   if item.proposed_component.rule_component_id == sibling.rule_component_id)
+    if change == "meaning":
+        sibling.title = "实际改变了兄弟含义"
+        mapping.proposed_component.title = sibling.title
+    elif change == "mapping":
+        mapping.source_excerpts = ["另一段原文"]
+    elif change == "different_proof":
+        sibling.source_scope_review_ref = "artifacts/evaluation_manifest/" + "b" * 64
+        mapping.proposed_component.source_scope_review_ref = sibling.source_scope_review_ref
+    elif change == "single_side_proof":
+        mapping.proposed_component.source_scope_review_ref = "artifacts/evaluation_manifest/" + "b" * 64
+    elif change == "old_mismatched_proof":
+        next(item for item in draft.component_drafts
+             if item.proposed_component.rule_component_id == sibling.rule_component_id
+             ).proposed_component.source_scope_review_ref = "artifacts/evaluation_manifest/" + "b" * 64
+    elif change == "missing_mapping":
+        hydrated.component_drafts.remove(mapping)
+    else:
+        hydrated.component_drafts.append(mapping.model_copy(deep=True))
+    before, incoming = draft.model_dump(mode="json"), hydrated.model_dump(mode="json")
+    revised = _merge_feedback_hydration(
+        draft, hydrated, "EX-01",
+        target_component_id=draft.proposed_rules[1].components[0].rule_component_id,
+    )
+    revised_sibling = revised.proposed_rules[1].components[1]
+    assert revised_sibling.source_scope_review_ref != draft.proposed_rules[1].components[1].source_scope_review_ref
+    with pytest.raises(ValueError, match="未选中"):
+        ProtocolWorkbenchService._validate_source_error_scope(
+            draft, revised, target_rule_code="EX-01",
+            target_component_id=draft.proposed_rules[1].components[0].rule_component_id,
+        )
+    assert draft.model_dump(mode="json") == before
+    assert hydrated.model_dump(mode="json") == incoming
+
+
+def test_parent_feedback_does_not_inherit_old_scope_reviews():
+    source_input, draft = _scope_review_feedback_fixture()
+    hydrated = _hydrate_semantic_candidate(source_input, semantic_candidate_from_draft(draft))
+    revised = _merge_feedback_hydration(draft, hydrated, "EX-01")
+    assert all(item.source_scope_review_ref is None for item in revised.proposed_rules[1].components)
 
 
 def test_component_feedback_uses_compact_target_input():
