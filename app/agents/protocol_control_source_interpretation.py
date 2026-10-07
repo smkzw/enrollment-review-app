@@ -14,6 +14,7 @@ from pydantic import Field, model_validator
 from app.domain.contracts.common import ContractModel
 from app.domain.contracts.protocol_controls import (
     ControlObligationKind,
+    KnownOfficialRuleTarget,
     ProtocolControlDispositionBatch,
     ReviewNodeRole,
     StructureUnitDispositionKind,
@@ -1246,6 +1247,10 @@ def build_source_target_review_prompt(
         "只引用目录名称或名称的一部分，只能证明项目关联，不能证明具体操作已覆盖。"
         "除非宿主的 label_action_supported_target_ids 已提供该动作的来源依据，"
         "完整覆盖须引用目标来源中真正承载操作的原文，而不是只截取项目名称。"
+        "官方条件的名称可能就是整条标准：若条件带明确时间，可以引用同一冻结来源中完整的"
+        "条件原文，或把它开头的时间单独放入 target_time_excerpt，其余连续原文放入"
+        " target_action_excerpt；不能省略脚注标记、尾部条件，或从另一摘录借时间。"
+        "完整引用只是出处证明，仍须独立核对条件、对象、否定和例外是否相同，不表示患者符合。"
         "目录只有项目名称而无动作依据时，原文动作明确则选 additional_requirement；"
         "原文自身无法核清才选 unresolved；不得把系统无法证明对应关系说成受试者缺记录。"
         "目标原文按 source_refs 列出的摘录编号在目标来源摘录表中查找；相同位置相同原文只提供一次，"
@@ -1610,7 +1615,8 @@ def validate_source_target_review(
             if (covered and "action" in statement.decision_functions
                     and normalize_source_excerpt(_without_display_footnotes(item.target_action_excerpt or ""))
                     in normalize_source_excerpt(_without_display_footnotes(target.label))
-                    and not target_action_established(batch, statement, target)):
+                    and not target_action_established(batch, statement, target)
+                    and not _full_timed_official_clause_cited(item, target)):
                 reject(item, "TARGET_ACTION_LABEL_ONLY_UNPROVEN", "target_action_excerpt",
                        "目录名称只证明项目关联，尚未证明本条操作已被覆盖；须核对动作原文或保留增量要求")
         source_time = normalize_source_excerpt(item.source_time_excerpt or "")
@@ -1909,6 +1915,26 @@ def normalize_source_excerpt(value: str) -> str:
     return "".join(unicodedata.normalize("NFKC", value).translate(
         str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"'})
     ).split())
+
+
+def _full_timed_official_clause_cited(item, target) -> bool:
+    """Prove complete citation of a timed official clause, not semantic equivalence.
+
+    A time quoted elsewhere cannot turn a catalog name into a condition. Keep
+    footnote markers: removing them would conceal an uncited source dependency.
+    Untimed/name-only links continue to require the existing action proof.
+    """
+    if item.decision != "covered_by_official" or not isinstance(target, KnownOfficialRuleTarget):
+        return False
+    time = normalize_source_excerpt(item.target_time_excerpt or "")
+    action = normalize_source_excerpt(item.target_action_excerpt or "").rstrip("。；;.!！?？")
+    if not time or not action:
+        return False
+    return any(
+        time in (quote := normalize_source_excerpt(excerpt).rstrip("。；;.!！?？"))
+        and quote in {action, time + action}
+        for excerpt in target.source_excerpts if excerpt
+    )
 
 
 def target_action_established(batch, statement, target) -> bool:

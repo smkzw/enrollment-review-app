@@ -62,7 +62,7 @@ from app.protocols.source_time_fragments import (
 from app.protocols.control_scope_sources import validate_scope_citations
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v44"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v45"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",

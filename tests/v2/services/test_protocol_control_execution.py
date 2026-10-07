@@ -2681,6 +2681,8 @@ def test_pending_source_is_saved_but_not_reused_as_verified_source(data_paths, s
     (True, "repair_corrupt"), (True, "compiler_old"), (True, "wire_corrupt"),
     (True, "source_witness_compiler"), (True, "source_witness_repair"),
     (True, "source_witness_validator"), (True, "source_witness_old_gate"),
+    (True, "validator_only"), (True, "validator_corrupt_wire"),
+    (True, "source_witness_validator_rejects_wire"),
     (True, "source_witness_two_scopes"),
     (True, "source_witness_two_quotes"),
     (True, "source_witness_two_scopes_budget4"),
@@ -2728,7 +2730,7 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
             batch, prompt_template=kwargs["prompt_template"],
         )
         wire = parse_protocol_control_agent_wire(deep._response(prompt).text)
-        if reuse_change in {"source_witness_same_gate", "same_gate_without_witness"}:
+        if reuse_change in {"source_witness_same_gate", "same_gate_without_witness", "source_witness_validator_rejects_wire"}:
             wire.candidate_drafts[0].title = "injected-invalid-semantic-wire"
         interpretation = SourceInterpretation(
             version=SOURCE_INTERPRETATION_VERSION,
@@ -2815,15 +2817,17 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
                 component["compiler_versions"] = [version for version in component["compiler_versions"]
                                                    if version != protocol_control_execution_module.SOURCE_FUNCTION_RECHECK_VERSION]
                 record = dict(record, component_identity=component)
-            elif reuse_change == "source_witness_validator":
+            elif reuse_change in {"source_witness_validator", "validator_only", "validator_corrupt_wire", "source_witness_validator_rejects_wire"}:
                 record = dict(record, component_identity=dict(record["component_identity"], validator_version="previous gate"))
+                if reuse_change == "validator_corrupt_wire":
+                    record = dict(record, partial_wire={"unknown": "broken"})
             elif reuse_change == "wire_corrupt":
                 record = dict(record, partial_wire={"unknown": "broken"},
                               repair_contract_sha256=hashlib.sha256(b"old repair").hexdigest())
             return checkpoint_id, record
 
         monkeypatch.setattr(JobStore, "get_last_checkpoint", changed)
-        if reuse_change in {"repair_corrupt", "wire_corrupt"}:
+        if reuse_change in {"repair_corrupt", "wire_corrupt", "validator_corrupt_wire"}:
             with pytest.raises(protocol_control_execution_module.ProtocolControlExecutionError) as error:
                 service.create_from_deconstruction(
                     source_job_id=seed.source_job_id, deep_source_job_id=job.job_id,
@@ -2833,9 +2837,9 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
             assert deep.start_calls == 0
             return
         original_gate = protocol_control_execution_module._validate_deep_batch_output
-        if reuse_change in {"source_witness_old_gate", "source_witness_two_scopes", "source_witness_two_quotes", "source_witness_two_scopes_budget4", "source_witness_same_gate", "same_gate_without_witness"}:
+        if reuse_change in {"source_witness_old_gate", "source_witness_two_scopes", "source_witness_two_quotes", "source_witness_two_scopes_budget4", "source_witness_same_gate", "same_gate_without_witness", "source_witness_validator_rejects_wire"}:
             def reject_obsolete_author(*args):
-                if reuse_change == "source_witness_same_gate" and not any(
+                if reuse_change in {"source_witness_same_gate", "source_witness_validator_rejects_wire"} and not any(
                     candidate.title == "injected-invalid-semantic-wire"
                     for candidate in args[1].candidates
                 ):
@@ -2860,10 +2864,10 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
             deep_source_job_id=job.job_id,
             idempotency_key="deep-partial-resume-new-version",
         )
-        if reuse_change != "source_witness_same_gate":
+        if reuse_change not in {"source_witness_same_gate", "source_witness_validator_rejects_wire"}:
             monkeypatch.setattr(protocol_control_execution_module, "_validate_deep_batch_output", original_gate)
         _, payload = _job_snapshot_and_payload(session_factory, continued.job_id)
-        expected = ("refresh_required" if reuse_change and not reuse_change.startswith("source_witness")
+        expected = ("refresh_required" if reuse_change and reuse_change != "validator_only" and not reuse_change.startswith("source_witness")
                     else "resume_partial")
         assert expected in {
             entry["decision"] for entry in payload["deep_reuse_plan"]["decisions"].values()
@@ -2884,8 +2888,8 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
             (step.step_id, step.state, step.error_code)
             for step in snapshot.steps if step.state == "failed_final"
         ]
-    assert bool(resumed) == (reuse_change is None)
-    if reuse_change and reuse_change.startswith("source_witness"):
+    assert bool(resumed) == (reuse_change in {None, "validator_only", "source_witness_validator"})
+    if reuse_change and reuse_change.startswith("source_witness") and reuse_change != "source_witness_validator":
         assert source_resumed
         with session_factory() as session:
             checkpoint = JobStore(session, now=_now).get_last_checkpoint(target_job_id, "deep_0001")[1]
@@ -2899,7 +2903,10 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     if new_job:
         monkeypatch.setattr(JobStore, "get_last_checkpoint", original_checkpoint)
         assert _job_checkpoint_fingerprint(session_factory, job.job_id) == before_source
-    assert deep.start_calls == (1 if reuse_change in {"source_witness_two_scopes", "source_witness_two_quotes", "source_witness_two_scopes_budget4"} else 2 if reuse_change else 1)
+    assert deep.start_calls == (1 if reuse_change in {
+        None, "validator_only", "source_witness_validator", "source_witness_two_scopes",
+        "source_witness_two_quotes", "source_witness_two_scopes_budget4",
+    } else 2)
 
 
 @pytest.mark.parametrize("change", [

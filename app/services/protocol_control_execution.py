@@ -2441,7 +2441,9 @@ def _validated_deep_partial_source(
             or any(char not in "0123456789abcdef" for char in repair_identity)):
         raise ValueError("局部草稿修复合同身份缺失或损坏")
     source_seed_proof = None
-    changed_components = saved_components != current_components
+    changed_components = not _same_deep_components_with_current_gate(
+        saved_components, current_components,
+    )
     pending_source = any(
         isinstance(attempt, Mapping) and isinstance(attempt.get("error_detail"), Mapping)
         and attempt["error_detail"].get("workflow_phase") == "source_correction_pending"

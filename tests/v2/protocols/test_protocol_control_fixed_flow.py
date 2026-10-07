@@ -2094,6 +2094,81 @@ def test_baseline_saved_readback_cannot_adopt_a_catalog_name_as_a_complete_actio
     assert error.value.code == "TARGET_ACTION_LABEL_ONLY_UNPROVEN"
 
 
+def _timed_official_condition_review():
+    from app.agents.protocol_control_deconstructor import source_statement_coverage
+    from app.agents.protocol_control_fixed_flow import pending_front_wire
+
+    batch, inventory, review, _ = _covered_procedure_example()
+    statement = inventory.statements[0]
+    statement.quoted_text = "曾接受过某类治疗（简称A）且反应欠佳者"
+    statement.scope_quote = "既往"
+    statement.time_words = ["既往"]
+    statement.force = "prohibited"
+    statement.decision_functions = ["action", "time_validity"]
+    batch.owned_units[0].excerpt = "既往：" + statement.quoted_text + "。"
+    target_quote = "既往曾用A且反应欠佳者；"
+    batch.known_official_targets = [KnownOfficialRuleTarget(
+        catalog_item_id="official-history", official_code="EX-01", label=target_quote,
+        position=0, source_span_ids=["official-history-source"], source_excerpts=[target_quote],
+    )]
+    batch.known_procedure_targets = []
+    review.decision = "covered_by_official"
+    review.target_id = "EX-01"
+    review.source_action_excerpt = statement.quoted_text
+    review.source_time_excerpt = review.target_time_excerpt = "既往"
+    review.target_action_excerpt = "曾用A且反应欠佳者"
+    coverage = source_statement_coverage(batch, inventory, pending_front_wire(batch))
+    return batch, inventory, coverage, SourceTargetReview(
+        version=SOURCE_TARGET_REVIEW_VERSION, items=[review],
+    )
+
+
+@pytest.mark.parametrize("layout", ["separate_time", "full", "spacing"])
+def test_complete_timed_official_condition_is_not_only_a_catalog_name(layout):
+    from app.agents.protocol_control_source_interpretation import target_action_established
+
+    batch, inventory, coverage, result = _timed_official_condition_review()
+    if layout == "full":
+        result.items[0].target_action_excerpt = batch.known_official_targets[0].source_excerpts[0]
+    elif layout == "spacing":
+        batch.known_official_targets[0].source_excerpts[0] = "既往 曾用A且反应欠佳者；"
+    assert not target_action_established(batch, inventory.statements[0], batch.known_official_targets[0])
+    validate_source_target_review(batch, inventory, coverage, result)
+
+
+@pytest.mark.parametrize("damage,code", [
+    ("name_only", "TARGET_ACTION_LABEL_ONLY_UNPROVEN"),
+    ("missing_tail", "TARGET_ACTION_LABEL_ONLY_UNPROVEN"),
+    ("separate_time_source", "TARGET_ACTION_LABEL_ONLY_UNPROVEN"),
+    ("missing_footnote", "TARGET_ACTION_LABEL_ONLY_UNPROVEN"),
+    ("wrong_time", "TARGET_ACTION_LABEL_ONLY_UNPROVEN"),
+    ("extra_text", "TARGET_ACTION_UNGROUNDED"),
+    ("no_source", "TARGET_ACTION_UNGROUNDED"),
+])
+def test_official_condition_citation_cannot_lose_source_or_clinical_dimensions(damage, code):
+    batch, inventory, coverage, result = _timed_official_condition_review()
+    target = batch.known_official_targets[0]
+    if damage == "name_only":
+        result.items[0].target_action_excerpt = "A"
+    elif damage == "missing_tail":
+        result.items[0].target_action_excerpt = "曾用A"
+    elif damage == "separate_time_source":
+        target.source_excerpts = ["曾用A且反应欠佳者；", "既往"]
+        target.source_span_ids.append("another-official-source")
+    elif damage == "missing_footnote":
+        target.source_excerpts[0] += "^a"
+    elif damage == "wrong_time":
+        result.items[0].target_time_excerpt = "另一期间"
+    elif damage == "extra_text":
+        result.items[0].target_action_excerpt += "或其他无来源条件"
+    else:
+        target.source_excerpts = []
+        target.source_span_ids = []
+    with pytest.raises(SourceTargetReviewValidationError) as error:
+        validate_source_target_review(batch, inventory, coverage, result)
+    assert error.value.code == code
+
+
 @pytest.mark.parametrize("marker", ["^26", "^2^6"])
 def test_display_footnotes_do_not_turn_a_catalog_label_into_an_action(marker):
     from app.agents.protocol_control_deconstructor import source_statement_coverage

@@ -5,13 +5,22 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "full_timed_official_citation": {
+    "base_commit": "a4a26d3e",
+    "validator_version": "phase5/control-publication-gate/v45",
+    "scope": "Same complete frozen official timed clause, preserving footnote and tail; no semantic equivalence or patient fulfillment proof. Gate-only partial reuse is revalidated, not blindly accepted; other components and corrupt wire remain restricted",
+    "tests": {"passed": 1150, "seconds": 82.21, "exit_code": 0, "modules": 4, "warnings": "5 SWIG deprecations", "junit": "/Users/smkzw/tmp/rv1006-full-official-citation-connected-20261007-final.xml", "earlier_window": "1093pass/3fail80.67s: wrong-time first error and two source-read count assertions corrected; no gate weakening", "overlapping_windows_not_additive": true},
+    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session_id": "01a116cd-3f76-76c7-a080-481f9466d2e9", "provider_seconds": 67.777, "tool_calls": 8, "parsed_tool_results": 0, "exit_code": 0, "fallback": false, "owner_silent_completion_wait": true, "limits": "Contract only, no clinical/tests/final patch. Footnote stripping rejected; partial gate-only reuse mismatch found and fixed by owner"},
+    "readonly_replay": {"job_id": "45b48776005043a2bc213bf14ef8114c", "checkpoint_sha256": "8552a71a4c085b96ba60455637812957336dbc51d8bad58fb9f970ff67c4415b", "actual_indexes": [0,1,2,3], "expected_indexes": [0,1,2,3,4], "result": "REVIEW_SCOPE_INVALID", "model_calls": 0, "database_writes": 0, "database_unchanged": true, "diagnostic_first_failure": "Owner used nonexistent statement_id attribute, corrected to statement_index"},
+    "real_trial": "not_yet_run", "formal_joint_publication": false, "new_current_node_report": false
+  },
   "numeric_definition_dependency_permission": {
     "base_commit": "6a6507df029aee82585468ac0f20506822986c74",
     "method": "non-action-numeric-definition/v1",
     "scope": "Permit existing independent dependency review for source-clear descriptive definitions with numerical functions; action/imperative/ambiguity/foreign authority remain rejected. No source/numerical changes, no empty/unproven consumer release, no default workflow migration",
     "tests": {"modules": 4, "passed": 1137, "seconds": 69.64, "exit_code": 0, "warnings": "5 SWIG deprecations", "junit": "/Users/smkzw/tmp/rv1006-numeric-definition-connected-20261007-final.xml", "earlier_window": "1134passed74.73s before three FLOW variants", "overlapping_windows_not_additive": true},
     "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session_id": "01a116cd-3f76-76c7-a080-481f9466d2e9", "provider_seconds": 75.711, "tool_calls": 8, "parsed_tool_results": 0, "exit_code": 0, "fallback": false, "owner_silent_completion_wait": true, "limits": "Contract review only, one nonexistent publication path; actual publication/flow and final patch verified by owner; no clinical/test review"},
-    "real_trial": "not_yet_run", "formal_joint_publication": false, "new_current_node_report": false
+    "real_trial": {"source_commit": "a4a26d3e", "job_id": "45b48776005043a2bc213bf14ef8114c", "state": "failed_final", "error_code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID", "seconds": 406.073661417, "physical_calls": 16, "deep_planned": 90, "deep_completed": 3, "completed_steps": ["deep_0002","deep_0003","deep_0004"], "preserved_first_new_calls": 0, "input_tokens": 274478, "output_including_reasoning_tokens": 123398, "cache_tokens_included_input": 38784, "usage_missing_receipts": 0, "actual_model": "deepseek-v4.1-flash", "finish_reason": "stop", "fees": null, "reasoning_breakdown": null, "protected_unchanged": true, "source_database_unchanged": true, "old_jobs_unchanged": true, "private_directory": "rv1006-numeric-definition-review-resume-20261007-v1", "listed_chain_calls_including_readonly_diagnostics": 69, "first_cause": "TARGET_ACTION_LABEL_ONLY_UNPROVEN on complete timed official criterion whose label equals full criterion; not evidence of patient missing data"}, "formal_joint_publication": false, "new_current_node_report": false
   },
   "preserved_unresolved_independent_reads": {
     "base_commit": "ac6b720015dab77fb0eabe04eabc198632bc34ce",
