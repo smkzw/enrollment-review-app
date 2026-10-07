@@ -5,6 +5,16 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "source_seed_revalidation": {
+    "base_commit": "c55a528e",
+    "paths": ["app/services/protocol_control_execution.py", "app/agents/protocol_control_deconstructor.py", "tests/v2/services/test_protocol_control_execution.py", "tests/v2/protocols/test_slice58c_control_deconstructor.py"],
+    "scope": "Same source/base prompt/schema/route; changed compiler/validator/repair may revalidate actual source only. All downstream author/review/alignment/session discarded. Malformed present wire or response hash hard-fails; obsolete semantics not reused. Changed-engine in-place retry remains forbidden",
+    "scope_correction_provenance": "Exact integer sequence, actual answer hash and matching code/index/refs for each correction. Legacy first trigger may come from initial failure; missing second trigger refuses reuse",
+    "tests": {"passed": 1125, "seconds": 135.97, "exit_code": 0, "modules": 5, "junit": "/Users/smkzw/tmp/rv1006-source-seed-connected-20261007-v2.xml", "warnings": "5 SWIG deprecations", "earlier_failures": "Owner mocked fingerprint retrieval and omitted direct time in new fixture; producer assertion initially attached to wrong single-correction test; wrong test paths exited4; private audit lacked PYTHONPATH exited1. Actual two-correction consumer missing target-review service remains failed_final, not fake success", "overlapping_windows_not_additive": true},
+    "conference": {"route": "grok/grok-build/grok-4.7/high", "session_id": "2db23ea8-9d1c-4b83-b90f-c6d082b24fea", "round_seconds": [489.737,335.959], "exit_codes": [0,0], "fallback": false, "tool_count": null, "clinical_or_test_execution": false, "owner_silent_completion_wait": true, "owner_decisions": "Adopt wire structural/semantic separation and correction-trigger recording; keep versioned new-job requirement. Final producer-to-consumer test and compiler marker owner verified after final adviser read"},
+    "actual_readonly": {"source_job_id": "32ec0823e9e64468a0a72e9b10209620", "state": "failed_final", "checkpoint_sha256": "6cb48727e131c9ee3f4d2512e64c088c188113a8626ad60fbe77c5adf4e5bc73", "source_points": 17, "reuse_proved": false, "historical_second_trigger_missing": true, "new_model_calls": 0, "clinical_database_writes": 0, "database_unchanged": true, "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-source-seed-revalidation-readonly-20261007-v1.json", "access": "controlled_local_only"},
+    "formal_joint_publication": false, "new_current_node_report": false, "claims_complete": false
+  },
   "current_compiler_control_run": {
     "job_id": "32ec0823e9e64468a0a72e9b10209620", "source_commit": "c2df92bc", "state": "failed_final",
     "error_code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID", "seconds": 652.5374585829559, "physical_calls": 12,

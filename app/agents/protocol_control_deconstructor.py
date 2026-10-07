@@ -7068,6 +7068,15 @@ class ProtocolControlAgentRunner:
                                     raw_output_text=correction_response.text,
                                     outcome="parsed",
                                     issues=["单条来源范围经原文核对；整批仍须校验"],
+                                    error_detail={
+                                        "workflow_phase": "source_scope_correction",
+                                        "code": scope_issue.code,
+                                        "statement_id": scope_issue.statement_id,
+                                        "json_path": scope_issue.json_path,
+                                        "source_refs": scope_issue.source_refs,
+                                        "retry_class": scope_issue.retry_class,
+                                        "affected_dependents": scope_issue.affected_dependents,
+                                    },
                                 ))
                                 try:
                                     validate_source_interpretation(batch, source_interpretation)

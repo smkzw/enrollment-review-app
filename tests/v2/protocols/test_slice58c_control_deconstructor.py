@@ -2212,6 +2212,10 @@ def test_source_scope_repair_targets_statement_not_shared_unit_label() -> None:
     assert transport.corrected
     assert result.source_interpretation.statements[0] == invalid.statements[0]
     assert result.source_interpretation.statements[1].scope_quote is None
+    corrections = [attempt for attempt in result.attempts
+                   if attempt.error_detail and attempt.error_detail.get("workflow_phase") == "source_scope_correction"]
+    assert [attempt.error_detail["statement_id"] for attempt in corrections] == [1]
+    assert all(attempt.error_detail["source_refs"] for attempt in corrections)
     assert result.attempts[0].error_detail["statement_id"] == 1
 
 
@@ -4534,6 +4538,10 @@ def test_runner_repairs_two_source_scopes_without_rereading_other_statements() -
     assert result.source_interpretation is not None
     assert result.source_interpretation.statements[0].time_words == []
     assert result.source_interpretation.statements[1].scope_quote is None
+    corrections = [attempt for attempt in result.attempts
+                   if attempt.error_detail and attempt.error_detail.get("workflow_phase") == "source_scope_correction"]
+    assert [attempt.error_detail["statement_id"] for attempt in corrections] == [0, 1]
+    assert all(attempt.error_detail["source_refs"] for attempt in corrections)
 
 
 def test_runner_repairs_missing_stage_time_on_one_source_statement() -> None:

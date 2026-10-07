@@ -2630,6 +2630,9 @@ def test_manual_retry_reexecutes_failed_deep_instead_of_replaying_diagnostic(
 @pytest.mark.parametrize("new_job, reuse_change", [
     (False, None), (True, None), (True, "repair_expired"),
     (True, "repair_corrupt"), (True, "compiler_old"), (True, "wire_corrupt"),
+    (True, "source_witness_compiler"), (True, "source_witness_repair"),
+    (True, "source_witness_validator"), (True, "source_witness_old_gate"),
+    (True, "source_witness_two_scopes"),
 ])
 def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     data_paths, session_factory, monkeypatch, new_job: bool, reuse_change: str | None,
@@ -2640,7 +2643,7 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
         parse_protocol_control_agent_wire,
     )
     from app.agents.protocol_control_source_interpretation import (
-        SOURCE_INTERPRETATION_VERSION, SourceInterpretation,
+        SOURCE_INTERPRETATION_VERSION, SourceInterpretation, SourceStatement, SourceScopeCorrection,
     )
 
     seed = _seed_frozen_source(data_paths, session_factory, key="deep-partial-resume")
@@ -2653,10 +2656,13 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
     original_run = ProtocolControlAgentRunner.run
     resumed = []
+    source_resumed = []
     failed_once = False
 
     def fail_then_resume(self, batch, transport, **kwargs):
         nonlocal failed_once
+        if kwargs.get("resume_source_interpretation") is not None:
+            source_resumed.append(kwargs["resume_source_interpretation"])
         if kwargs.get("resume_wire") is not None:
             resumed.append(kwargs["resume_wire"].model_dump(mode="json"))
             return original_run(self, batch, transport, **kwargs)
@@ -2672,12 +2678,45 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
             statements=[],
             units_without_statement=list(batch.owned_structure_unit_ids),
         )
+        if reuse_change == "source_witness_two_scopes":
+            initial = SourceInterpretation(
+                version=SOURCE_INTERPRETATION_VERSION,
+                statements=[SourceStatement(structure_unit_id=unit.structure_unit_id,
+                                            quoted_text=unit.excerpt, scope_quote="不在原文的范围",
+                                            force="descriptive", decision_functions=["background"], time_words=[])
+                            for unit in batch.owned_units[:2]],
+                units_without_statement=list(batch.owned_structure_unit_ids[2:]),
+            )
+            class ScopeTransport(_FakeTransport):
+                correction_count = 0
+                def start_source_interpretation(self, *, prompt):
+                    return ProtocolControlAgentResponse(session_id="source", text=initial.model_dump_json())
+                def correct_source_scope(self, *, prompt):
+                    unit = batch.owned_units[self.correction_count]
+                    self.correction_count += 1
+                    return ProtocolControlAgentResponse(session_id=f"scope-{self.correction_count}",
+                        text=SourceScopeCorrection(version="phase5/control-source-scope-correction/v1",
+                            structure_unit_id=unit.structure_unit_id, scope_quote=None,
+                            affected_stage=None, time_words=[], unresolved=None).model_dump_json())
+            scope_transport = ScopeTransport([ProtocolControlAgentResponse(session_id="author", text=wire.model_dump_json())])
+            produced = original_run(self, batch, scope_transport, **kwargs)
+            assert scope_transport.correction_count == 2, [(a.outcome, a.error_classes) for a in produced.attempts]
+            assert produced.source_interpretation is not None
+            assert len([a for a in produced.attempts if a.error_detail
+                        and a.error_detail.get("workflow_phase") == "source_scope_correction"]) == 2
+            return produced.model_copy(update={"status": "需要核对", "final_output": None, "partial_wire": wire})
         return ProtocolControlAgentRunResult(
             status="需要核对", batch_id=batch.batch_id, session_id="deep-session",
             attempts=[ProtocolControlAgentAttempt(
                 attempt=1, session_id="deep-session",
-                raw_output_sha256=hashlib.sha256(wire.model_dump_json().encode()).hexdigest(),
-                outcome="publication_invalid",
+                raw_output_sha256=hashlib.sha256((
+                    interpretation if reuse_change and reuse_change.startswith("source_witness")
+                    else wire
+                ).model_dump_json().encode()).hexdigest(),
+                raw_output_text=(interpretation.model_dump_json()
+                                 if reuse_change and reuse_change.startswith("source_witness") else None),
+                outcome=("parsed" if reuse_change and reuse_change.startswith("source_witness")
+                         else "publication_invalid"),
             )],
             source_interpretation=interpretation, partial_wire=wire,
         )
@@ -2691,6 +2730,7 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     assert saved is not None
     assert saved[1]["partial_wire"] is not None
     assert saved[1]["source_interpretation"] is not None
+    before_source = _job_checkpoint_fingerprint(session_factory, job.job_id)
     if new_job:
         original_checkpoint = JobStore.get_last_checkpoint
 
@@ -2699,16 +2739,18 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
             if job_id != job.job_id or step_id != "deep_0001" or checkpoint is None:
                 return checkpoint
             checkpoint_id, record = checkpoint
-            if reuse_change in {"repair_expired", "repair_corrupt"}:
+            if reuse_change in {"repair_expired", "repair_corrupt", "source_witness_repair"}:
                 record = dict(record, repair_contract_sha256=(
                     "broken" if reuse_change == "repair_corrupt" else
                     hashlib.sha256(b"previous frozen repair contract").hexdigest()
                 ))
-            elif reuse_change == "compiler_old":
+            elif reuse_change in {"compiler_old", "source_witness_compiler", "source_witness_old_gate", "source_witness_two_scopes"}:
                 component = dict(record["component_identity"])
                 component["compiler_versions"] = [version for version in component["compiler_versions"]
                                                    if version != protocol_control_execution_module.SOURCE_FUNCTION_RECHECK_VERSION]
                 record = dict(record, component_identity=component)
+            elif reuse_change == "source_witness_validator":
+                record = dict(record, component_identity=dict(record["component_identity"], validator_version="previous gate"))
             elif reuse_change == "wire_corrupt":
                 record = dict(record, partial_wire={"unknown": "broken"},
                               repair_contract_sha256=hashlib.sha256(b"old repair").hexdigest())
@@ -2724,13 +2766,20 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
             assert error.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
             assert deep.start_calls == 0
             return
+        original_gate = protocol_control_execution_module._validate_deep_batch_output
+        if reuse_change in {"source_witness_old_gate", "source_witness_two_scopes"}:
+            def reject_obsolete_author(*args):
+                raise ValueError("旧作者结果在现行语义门禁不成立")
+            monkeypatch.setattr(protocol_control_execution_module, "_validate_deep_batch_output", reject_obsolete_author)
         continued = service.create_from_deconstruction(
             source_job_id=seed.source_job_id,
             deep_source_job_id=job.job_id,
             idempotency_key="deep-partial-resume-new-version",
         )
+        monkeypatch.setattr(protocol_control_execution_module, "_validate_deep_batch_output", original_gate)
         _, payload = _job_snapshot_and_payload(session_factory, continued.job_id)
-        expected = "refresh_required" if reuse_change else "resume_partial"
+        expected = ("refresh_required" if reuse_change and not reuse_change.startswith("source_witness")
+                    else "resume_partial")
         assert expected in {
             entry["decision"] for entry in payload["deep_reuse_plan"]["decisions"].values()
         }
@@ -2741,12 +2790,182 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
         target_job_id = job.job_id
     assert runner.run_job(target_job_id)
     snapshot, _ = _job_snapshot_and_payload(session_factory, target_job_id)
-    assert snapshot.state == "completed", [
-        (step.step_id, step.state, step.error_code)
-        for step in snapshot.steps if step.state == "failed_final"
-    ]
+    if reuse_change == "source_witness_two_scopes":
+        # Source replay reaches the real consumer; absent review is not fabricated success.
+        assert snapshot.state == "failed_final"
+        assert next(step for step in snapshot.steps if step.step_id == "deep_0001").error_code == "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNAVAILABLE"
+    else:
+        assert snapshot.state == "completed", [
+            (step.step_id, step.state, step.error_code)
+            for step in snapshot.steps if step.state == "failed_final"
+        ]
     assert bool(resumed) == (reuse_change is None)
-    assert deep.start_calls == (2 if reuse_change else 1)
+    if reuse_change and reuse_change.startswith("source_witness"):
+        assert source_resumed
+        with session_factory() as session:
+            checkpoint = JobStore(session, now=_now).get_last_checkpoint(target_job_id, "deep_0001")[1]
+        assert checkpoint["source_review_reuse"]["proof_scope"] == "revalidated_source_interpretation"
+        assert checkpoint["source_review_reuse"]["source_seed_proof"]["reused"] == ["source_interpretation"]
+        assert "partial_wire" in checkpoint["source_review_reuse"]["source_seed_proof"]["discarded"]
+    if new_job:
+        monkeypatch.setattr(JobStore, "get_last_checkpoint", original_checkpoint)
+        assert _job_checkpoint_fingerprint(session_factory, job.job_id) == before_source
+    assert deep.start_calls == (1 if reuse_change == "source_witness_two_scopes" else 2 if reuse_change else 1)
+
+
+@pytest.mark.parametrize("change", [
+    "compiler", "repair_only", "validator", "source", "prompt", "wire_schema", "route",
+    "changed_snapshot", "missing_raw", "corrupt_raw", "missing_session", "false_attempt",
+])
+def test_revalidated_source_seed_never_reuses_changed_material_or_author_approval(change):
+    from copy import deepcopy
+    from tests.v2.protocols.test_slice58c_control_deconstructor import (
+        _two_independent_candidate_linked_alignment_material,
+    )
+    module = protocol_control_execution_module
+    batch, inventory, _, wire, _ = _two_independent_candidate_linked_alignment_material()
+    current = module._deep_component_identity({}, module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE)
+    components = deepcopy(current)
+    if change == "compiler":
+        components["compiler_versions"] = ["previous compiler"]
+    elif change == "validator":
+        components["validator_version"] = "previous validator"
+    elif change in {"source", "prompt", "wire_schema", "route"}:
+        field = {"source": "source_sha256", "prompt": "prompt_material_sha256",
+                 "wire_schema": "wire_schema_sha256", "route": "requested_route_sha256"}[change]
+        components[field] = "0" * 64
+    raw = inventory.model_dump_json()
+    saved = dict(partial_wire=wire.model_dump(mode="json"), source_interpretation=inventory.model_dump(mode="json"),
+                 component_identity=components, prompt_template_sha256=current["prompt_material_sha256"],
+                 attempts=[dict(attempt=1, session_id="source-session", outcome="parsed", error_classes=[],
+                                raw_output_text=raw, raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest())])
+    if change == "changed_snapshot":
+        saved["source_interpretation"]["statements"][0]["unresolved"] = ["未核范围"]
+    elif change == "missing_raw":
+        saved["attempts"][0]["raw_output_text"] = None
+    elif change == "corrupt_raw":
+        saved["attempts"][0]["raw_output_sha256"] = "0" * 64
+    elif change == "missing_session":
+        saved["attempts"][0].pop("session_id")
+    elif change == "false_attempt":
+        saved["attempts"][0]["attempt"] = True
+    before = deepcopy(saved)
+    args = dict(source_job_id="source-job", step_id="deep_0001", checkpoint_id="source-checkpoint")
+    if change == "corrupt_raw":
+        with pytest.raises(ValueError, match="摘要损坏"):
+            module._revalidated_source_seed_proof(batch, saved, current, **args)
+    else:
+        proof = module._revalidated_source_seed_proof(batch, saved, current, **args)
+        assert bool(proof) is (change in {"compiler", "repair_only", "validator"})
+        if proof:
+            assert proof["reused"] == ["source_interpretation"]
+            assert set(proof["discarded"]) >= {"partial_wire", "source_target_review", "session_id"}
+    assert saved == before
+
+
+@pytest.mark.parametrize("change", ["same", "wrong_target", "wrong_reason", "changed_sibling", "corrupt_correction"])
+def test_revalidated_source_seed_replays_only_proven_scope_corrections(change):
+    from copy import deepcopy
+    from tests.v2.protocols.test_slice58c_control_deconstructor import (
+        _two_independent_candidate_linked_alignment_material,
+    )
+    from app.agents.protocol_control_source_interpretation import (
+        SourceScopeCorrection, SourceInterpretationValidationError, validate_source_interpretation,
+    )
+    module = protocol_control_execution_module
+    batch, inventory, _, wire, _ = _two_independent_candidate_linked_alignment_material()
+    original = inventory.model_copy(deep=True)
+    original.statements[0].scope_quote = "不存在的阶段"
+    with pytest.raises(SourceInterpretationValidationError) as error:
+        validate_source_interpretation(batch, original)
+    issue = error.value
+    correction = SourceScopeCorrection(
+        version="phase5/control-source-scope-correction/v1", structure_unit_id="su-01",
+        scope_quote=None, affected_stage=None, time_words=[], unresolved=None,
+    )
+    raw, corrected = original.model_dump_json(), correction.model_dump_json()
+    current = module._deep_component_identity({}, module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE)
+    components = dict(current, compiler_versions=["previous compiler"])
+    saved = dict(partial_wire=wire.model_dump(mode="json"), source_interpretation=inventory.model_dump(mode="json"),
+                 component_identity=components, prompt_template_sha256=current["prompt_material_sha256"],
+                 attempts=[
+                     dict(attempt=1, session_id="source-session", outcome="schema_invalid",
+                          error_classes=[issue.code], raw_output_text=raw,
+                          raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(),
+                          error_detail=dict(code=issue.code, statement_id=issue.statement_id, source_refs=issue.source_refs)),
+                     dict(attempt=2, session_id="scope-session", outcome="parsed", error_classes=[],
+                          raw_output_text=corrected, raw_output_sha256=hashlib.sha256(corrected.encode()).hexdigest()),
+                 ])
+    if change in {"wrong_target", "wrong_reason"}:
+        saved["attempts"][0]["error_detail"]["statement_id" if change == "wrong_target" else "code"] = (
+            1 if change == "wrong_target" else "SOURCE_QUOTE_UNGROUNDED")
+    elif change == "changed_sibling":
+        saved["source_interpretation"]["statements"][1]["quoted_text"] += "且不得调整"
+    elif change == "corrupt_correction":
+        saved["attempts"][1]["raw_output_sha256"] = "0" * 64
+    before = deepcopy(saved)
+    args = dict(source_job_id="source-job", step_id="deep_0001", checkpoint_id="source-checkpoint")
+    if change == "corrupt_correction":
+        with pytest.raises(ValueError, match="摘要损坏"):
+            module._revalidated_source_seed_proof(batch, saved, current, **args)
+    else:
+        proof = module._revalidated_source_seed_proof(batch, saved, current, **args)
+        assert bool(proof) is (change == "same")
+        if proof:
+            assert proof["scope_correction_indexes"] == [0]
+            assert len(proof["source_response_sha256"]) == 2
+    assert saved == before
+
+
+@pytest.mark.parametrize("change", ["same", "missing_trigger", "wrong_trigger", "wrong_sequence", "boolean_sequence"])
+def test_revalidated_source_seed_requires_second_correction_provenance(change):
+    from copy import deepcopy
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _two_independent_candidate_linked_alignment_material
+    from app.agents.protocol_control_source_interpretation import (
+        SourceScopeCorrection, SourceInterpretationValidationError, validate_source_interpretation,
+        apply_source_scope_correction,
+    )
+    module = protocol_control_execution_module
+    batch, inventory, _, _, _ = _two_independent_candidate_linked_alignment_material()
+    source = inventory.model_copy(deep=True)
+    for statement in source.statements:
+        statement.scope_quote = "不存在的范围"
+    raw = source.model_dump_json()
+    attempts = [dict(attempt=1, session_id="source", outcome="schema_invalid", raw_output_text=raw,
+                     raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest())]
+    for index in range(2):
+        with pytest.raises(SourceInterpretationValidationError) as error:
+            validate_source_interpretation(batch, source)
+        issue = error.value
+        detail = dict(code=issue.code, statement_id=issue.statement_id, source_refs=issue.source_refs)
+        if index == 0:
+            attempts[0]["error_detail"] = detail
+            attempts[0]["error_classes"] = [issue.code]
+        correction = SourceScopeCorrection(version="phase5/control-source-scope-correction/v1",
+                                           structure_unit_id=source.statements[index].structure_unit_id,
+                                           scope_quote=None, affected_stage=inventory.statements[index].affected_stage,
+                                           time_words=inventory.statements[index].time_words, unresolved=None)
+        text = correction.model_dump_json()
+        attempts.append(dict(attempt=index + 2, session_id=f"scope-{index}", outcome="parsed", error_classes=[],
+                             error_detail=detail, raw_output_text=text, raw_output_sha256=hashlib.sha256(text.encode()).hexdigest()))
+        source = apply_source_scope_correction(batch, source, index, correction)
+    current = module._deep_component_identity({}, module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE)
+    saved = dict(component_identity=dict(current, compiler_versions=["previous compiler"]),
+                 prompt_template_sha256=current["prompt_material_sha256"], attempts=attempts,
+                 source_interpretation=source.model_dump(mode="json"))
+    if change == "missing_trigger":
+        attempts[2].pop("error_detail")
+    elif change == "wrong_trigger":
+        attempts[2]["error_detail"]["statement_id"] = 0
+    elif change == "wrong_sequence":
+        attempts[2]["attempt"] = 4
+    elif change == "boolean_sequence":
+        attempts[2]["attempt"] = True
+    before = deepcopy(saved)
+    proof = module._revalidated_source_seed_proof(batch, saved, current, source_job_id="old",
+                                                 step_id="deep_0001", checkpoint_id="checkpoint")
+    assert bool(proof) is (change == "same")
+    assert saved == before
 
 
 @pytest.mark.parametrize("new_job, repair_changed", [(False, False), (True, False), (True, True)])

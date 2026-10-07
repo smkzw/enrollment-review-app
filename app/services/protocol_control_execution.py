@@ -66,6 +66,7 @@ from app.agents.protocol_control_source_interpretation import (
     SourceDefinitionConsumers,
     SourceInterpretation,
     SourceInterpretationValidationError,
+    SourceScopeCorrection,
     SourceStatementCoverage,
     SourceTargetReview,
     SourceTargetReviewValidationError,
@@ -74,6 +75,7 @@ from app.agents.protocol_control_source_interpretation import (
     source_definition_statement_indexes,
     normalize_source_excerpt,
     parse_product_source_interpretation,
+    apply_source_scope_correction,
     validate_source_definition_consumers,
     validate_source_interpretation,
     normalize_schedule_randomization_anchors,
@@ -1925,6 +1927,7 @@ def _deep_component_identity(
             "calendar-bound-frozen-stage-context/v1",
             "source-time-completeness/v1",
             "frequency-source-text-temporal-guard/v1",
+            "source-scope-correction-trigger-witness/v1",
         ],
         "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
         "requested_route_sha256": (
@@ -2214,6 +2217,117 @@ def _unrepaired_source_seed_proof(
     }
 
 
+def _revalidated_source_seed_proof(
+    batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
+    current_components: Mapping[str, Any], *, source_job_id: str,
+    step_id: str, checkpoint_id: str,
+) -> dict[str, Any] | None:
+    """Replay the actual source read only; never reuse its downstream author result."""
+    components = saved.get("component_identity")
+    if (not isinstance(components, Mapping) or set(components) != set(current_components)
+            or any(components[name] != value for name, value in current_components.items()
+                   if name not in {"compiler_versions", "validator_version"})
+            or not isinstance(components.get("compiler_versions"), list)
+            or not components["compiler_versions"]
+            or any(not isinstance(value, str) or not value for value in components["compiler_versions"])):
+        return None
+    attempts = saved.get("attempts")
+    if not isinstance(attempts, list) or not attempts:
+        return None
+
+    def actual_text(attempt: Mapping[str, Any]) -> str | None:
+        raw = attempt.get("raw_output_text")
+        if raw is None:
+            return None
+        if (not isinstance(raw, str) or not raw.strip()
+                or hashlib.sha256(raw.encode()).hexdigest() != attempt.get("raw_output_sha256")):
+            raise ValueError("来源读取的实际原答摘要损坏，不能作为缓存未命中处理")
+        if not isinstance(attempt.get("session_id"), str) or not attempt["session_id"].strip():
+            return None
+        return raw
+
+    first = attempts[0]
+    if (not isinstance(first, Mapping) or type(first.get("attempt")) is not int
+            or first["attempt"] != 1):
+        return None
+    raw = actual_text(first)
+    if raw is None:
+        return None
+    try:
+        actual = parse_product_source_interpretation(batch, raw)
+        actual, _ = normalize_schedule_randomization_anchors(batch, actual)
+        actual, _ = normalize_mixed_schedule_scopes(batch, actual)
+    except (ValueError, KeyError, TypeError):
+        return None
+    witnessed = [first["raw_output_sha256"]]
+    corrected: set[int] = set()
+    for offset in range(3):
+        try:
+            validate_source_interpretation(batch, actual)
+        except SourceInterpretationValidationError as issue:
+            if (offset == 2 or issue.code not in {
+                    "SOURCE_TIME_UNGROUNDED", "SOURCE_SCOPE_UNGROUNDED", "SOURCE_TIME_INCOMPLETE",
+                    "SOURCE_STAGE_TIME_MISSING", "STUDY_PHASE_NOT_VISIT_TIME", "STUDY_PHASE_NOT_VISIT_STAGE",
+                } or issue.statement_id in corrected or offset + 1 >= len(attempts)):
+                return None
+            if offset == 0:
+                detail = first.get("error_detail")
+                if (first.get("outcome") != "schema_invalid" or not isinstance(detail, Mapping)
+                        or detail.get("code") != issue.code
+                        or detail.get("statement_id") != issue.statement_id
+                        or detail.get("source_refs") != issue.source_refs):
+                    return None
+            correction_attempt = attempts[offset + 1]
+            if (not isinstance(correction_attempt, Mapping)
+                    or type(correction_attempt.get("attempt")) is not int
+                    or correction_attempt["attempt"] != offset + 2
+                    or correction_attempt.get("outcome") != "parsed"
+                    or correction_attempt.get("error_classes")):
+                return None
+            detail = correction_attempt.get("error_detail")
+            # Legacy first corrections have their trigger on the initial answer.
+            if detail is None and offset == 0:
+                detail = first.get("error_detail")
+            if (not isinstance(detail, Mapping) or detail.get("code") != issue.code
+                    or detail.get("statement_id") != issue.statement_id
+                    or detail.get("source_refs") != issue.source_refs):
+                return None
+            text = actual_text(correction_attempt)
+            if text is None:
+                return None
+            try:
+                correction = SourceScopeCorrection.model_validate_json(text)
+                statement = actual.statements[issue.statement_id]
+                if issue.code in {"STUDY_PHASE_NOT_VISIT_TIME", "SOURCE_TIME_INCOMPLETE"} and (
+                    correction.scope_quote != statement.scope_quote
+                    or correction.affected_stage != statement.affected_stage
+                ):
+                    return None
+                actual = apply_source_scope_correction(batch, actual, issue.statement_id, correction)
+            except (ValueError, KeyError, TypeError):
+                return None
+            corrected.add(issue.statement_id)
+            witnessed.append(correction_attempt["raw_output_sha256"])
+        else:
+            if not corrected and (first.get("outcome") != "parsed" or first.get("error_classes")):
+                return None
+            break
+    if actual.model_dump(mode="json") != saved.get("source_interpretation"):
+        return None
+    return {
+        "schema_version": "phase5/revalidated-source-seed-proof/v1",
+        "source_job_id": source_job_id, "step_id": step_id, "checkpoint_id": checkpoint_id,
+        "source_response_sha256": witnessed, "scope_correction_indexes": sorted(corrected),
+        "base_prompt_sha256": saved["prompt_template_sha256"],
+        "source_sha256": hashlib.sha256(actual.model_dump_json().encode()).hexdigest(),
+        "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
+        "changed_components": [name for name, value in current_components.items() if components[name] != value],
+        "current_source_equal": True, "reused": ["source_interpretation"],
+        "discarded": ["partial_wire", "source_target_review", "source_statement_coverage",
+                      "source_candidate_alignment", "session_id"],
+    }
+
+
 def _validated_deep_partial_source(
     store: JobStore,
     current_payload: Mapping[str, Any],
@@ -2261,12 +2375,10 @@ def _validated_deep_partial_source(
     if expected_route is not None and actual_route != expected_route:
         raise ValueError("局部草稿的实际模型线路与当前任务不一致")
     saved_components = saved.get("component_identity")
+    current_components = _deep_component_identity(current_payload, prompt_template)
     if (saved.get("prompt_template_sha256")
             != protocol_control_agent_prompt_template_sha256(prompt_template)
-            or not isinstance(saved_components, Mapping)
-            or not _same_deep_components_with_current_gate(
-                saved_components, _deep_component_identity(current_payload, prompt_template),
-            )):
+            or not isinstance(saved_components, Mapping)):
         return None
     source = saved.get("source_interpretation")
     repair_identity = saved.get("repair_contract_sha256")
@@ -2274,16 +2386,21 @@ def _validated_deep_partial_source(
             or any(char not in "0123456789abcdef" for char in repair_identity)):
         raise ValueError("局部草稿修复合同身份缺失或损坏")
     source_seed_proof = None
-    if repair_identity != protocol_control_agent_repair_contract_sha256():
+    changed_components = saved_components != current_components
+    if changed_components or repair_identity != protocol_control_agent_repair_contract_sha256():
         if saved.get("partial_wire") is not None:
-            # A present draft never falls through to the source-only shortcut.
-            wire = ProtocolControlAgentWire.model_validate(saved["partial_wire"])
-            _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(wire, batch))
-            return None
-        source_seed_proof = _unrepaired_source_seed_proof(
-            batch, saved, source_job_id=source_job_id, step_id=step_id,
-            checkpoint_id=checkpoint_id,
-        )
+            # A damaged wire hard-fails; outdated semantics are discarded, not reused.
+            ProtocolControlAgentWire.model_validate(saved["partial_wire"])
+        if not changed_components and saved.get("partial_wire") is None:
+            source_seed_proof = _unrepaired_source_seed_proof(
+                batch, saved, source_job_id=source_job_id, step_id=step_id,
+                checkpoint_id=checkpoint_id,
+            )
+        if source_seed_proof is None:
+            source_seed_proof = _revalidated_source_seed_proof(
+                batch, saved, current_components, source_job_id=source_job_id,
+                step_id=step_id, checkpoint_id=checkpoint_id,
+            )
         if source_seed_proof is None:
             return None
     if source is None and saved.get("partial_wire") is None:
@@ -2297,7 +2414,7 @@ def _validated_deep_partial_source(
                     source_statement_coverage=[], source_candidate_alignment=None,
                     session_id=None)
         return checkpoint_id, seed, _ResumedSourceReview(
-            state="absent", reason="repair_material_changed_source_only",
+            state="absent", reason="components_or_repair_changed_source_only",
             source_seed_proof=source_seed_proof,
         )
     wire = None
@@ -2513,7 +2630,11 @@ def _preflight_deep_source(
         }
         if (step is not None and step.state == "failed_final"
                 and partial is not None and partial[2].source_seed_proof is not None):
-            decisions[batch.batch_id]["reason"] = "verified_source_interpretation_repair_material_changed"
+            decisions[batch.batch_id]["reason"] = (
+                "verified_source_interpretation_components_revalidated"
+                if partial[2].source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v1"
+                else "verified_source_interpretation_repair_material_changed"
+            )
             decisions[batch.batch_id]["source_seed_proof"] = partial[2].source_seed_proof
     return {
         "schema_version": "phase5/deep-reuse-plan/v1",
@@ -3427,7 +3548,11 @@ def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str
         ),
     }
     if resume_review.source_seed_proof is not None:
-        record["proof_scope"] = "unrepaired_source_interpretation"
+        record["proof_scope"] = (
+            "revalidated_source_interpretation"
+            if resume_review.source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v1"
+            else "unrepaired_source_interpretation"
+        )
         record["source_seed_proof"] = dict(resume_review.source_seed_proof)
     return record
 
