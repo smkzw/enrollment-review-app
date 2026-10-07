@@ -10875,7 +10875,8 @@ def test_stage_bound_insert_uses_product_reader_and_keeps_original_candidate() -
     assert any(item.session_id == "stage-1" for item in result.attempts)
 
 
-def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window() -> None:
+@pytest.mark.parametrize("shared_time_word", [None, "筛选/导入期（D-7~D-1）", "D-7~D-1"])
+def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window(shared_time_word) -> None:
     batch, inventory, review, selection = _stage_bound_example()
     batch.owned_units[0].excerpt = (
         "筛选/导入期（D-7~D-1）：完成导入治疗后再次核查资格。"
@@ -10892,6 +10893,8 @@ def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_w
     inventory.statements[0].quoted_text = "完成导入治疗后再次核查资格"
     inventory.statements[0].scope_quote = "筛选/导入期（D-7~D-1）："
     inventory.statements[0].time_words = ["完成导入治疗后"]
+    if shared_time_word:
+        inventory.statements[0].time_words.insert(0, shared_time_word)
     review.source_action_excerpt = "完成导入治疗后再次核查资格"
     review.source_time_excerpt = "完成导入治疗后"
     review.target_id = "procedure-screening-1"
@@ -10917,10 +10920,35 @@ def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_w
     assert atom.evaluation.proposition == inventory.statements[0].quoted_text
     assert candidate.review_node_bindings[0].review_stage == ReviewStage.BASELINE
     assert candidate.cross_source_relations[0].affected_workflow_stage_id == "stage:screening:two"
+    assert source_statement_coverage(batch, inventory, _wire(candidate=candidate))[0].status == "expressed"
+    if shared_time_word:
+        missing_scope = candidate.model_copy(deep=True)
+        missing_scope.obligation_expression.groups[0].atoms[0].source_excerpts[0] = (
+            batch.owned_units[0].excerpt
+        )
+        assert source_statement_coverage(batch, inventory, _wire(candidate=missing_scope))[0].status == "candidate_linked"
+        wrong_scope_source = candidate.model_copy(deep=True)
+        wrong_scope_source.obligation_expression.groups[0].atoms[0].source_span_ids[0] = "unowned-span"
+        with pytest.raises(ValueError, match="source_span_ids"):
+            _wire(candidate=wrong_scope_source)
+        wrong_scope_source.source_span_ids.append("unowned-span")
+        assert source_statement_coverage(batch, inventory, _wire(candidate=wrong_scope_source))[0].status == "candidate_linked"
+        fragment_time = inventory.model_copy(deep=True)
+        fragment_time.statements[0].time_words[0] = "D-1"
+        assert not can_compile_relative_stage_requirement(batch, fragment_time, review)
+        assert source_statement_coverage(batch, fragment_time, _wire(candidate=candidate))[0].status == "candidate_linked"
 
     wrong_order = relative.model_copy(update={"workflow_stage_id": "stage:screening:one"})
     with pytest.raises(StageBoundCompilationGap, match="先后"):
         compile_stage_bound_requirement(batch, inventory, review, wrong_order)
+    wrong_scope = relative.model_copy(update={"stage_scope_excerpt": "治疗期"})
+    with pytest.raises(StageBoundCompilationGap):
+        compile_stage_bound_requirement(batch, inventory, review, wrong_scope)
+    invented_time = inventory.model_copy(deep=True)
+    invented_time.statements[0].time_words.append("给药前90分钟")
+    assert not can_compile_relative_stage_requirement(batch, invented_time, review)
+    with pytest.raises(StageBoundCompilationGap):
+        compile_stage_bound_requirement(batch, invented_time, review, relative)
 
 
 def test_two_sourced_actions_insert_together_without_rewriting_existing_draft() -> None:

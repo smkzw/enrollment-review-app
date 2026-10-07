@@ -5,6 +5,18 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "relative_shared_scope_package": {
+    "source_base": "96c9c44a",
+    "paths": ["app/agents/protocol_control_stage_compiler.py", "app/agents/protocol_control_deconstructor.py", "app/services/protocol_control_execution.py", "tests/v2/protocols/test_slice58c_control_deconstructor.py", "tests/v2/protocols/test_protocol_control_agent_transport.py"],
+    "compiler_version": "phase5/control-relative-stage-requirement/v9", "coverage_version": "source-statement-coverage/v5",
+    "tests": {"passed": 1026, "seconds": 66.31, "exit_code": 0, "modules": 5, "warnings": "5 third-party SWIG deprecations", "junit": "/Users/smkzw/tmp/rv1006-relative-shared-scope-connected-20261007-v3.xml", "overlapping_windows_not_additive": true},
+    "product_short_read": {"physical_calls": 1, "route": "ollama-cloud/deepseek-v4.1-flash/high", "output_budget": 65536, "seconds": 25.533474292, "finish_reason": "stop", "input_tokens": 3028, "completion_tokens_including_reasoning": 7612, "total_tokens": 10640, "cache_tokens": 0, "reasoning_tokens": null, "api_fee": null, "exit_code": 3, "first_cause": "Old source-time ledger required exact shared scope to repeat inside the action; legal response and assembly gate passed"},
+    "current_saved_answer_revalidation": {"physical_calls": 0, "database_writes": 0, "exit_code": 0, "candidate_count": 2, "merged_gate_valid": true, "statement_10_expressed": true, "current_target_review_valid": true, "restricted_consumer_accepts": false, "evaluation_artifact_hash": "d0e98da27a254d450a95286ca9f66b775587c1cb8efd391906b8195ec37bf607", "old_job_and_response_unchanged": true, "not_job_recovery_or_adoption": true},
+    "conference": {"agent": "grok", "provider": "grok-build", "model": "grok-4.7", "effort": "high", "session_id": "05b0757b-efa5-455f-b702-e828b7fb1011", "seconds": 482.279, "exit_code": 0, "fallback": false, "material_calls": 21, "material_call_limit": 20, "limit_exceeded": true, "owner_silent_until_terminal": true, "limitation": "Static code/synthetic review only; no tests or clinical sources; final exact scope-part protection owner-verified"},
+    "review_disposition": {"adopted": "Exact scope parts, no single-date substring credit", "not_blindly_adopted": "Saved additions status proposal: normal assembler removes expressed item and actual current review validator passes; neighboring full alignment hypothesis remains unproven", "existing_boundary": "Full source gate verifies actual span text; coverage alone is not clinical or source-position acceptance"},
+    "private_root": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003", "access": "controlled_local_only",
+    "formal_joint_publication": false, "claims_complete": false
+  },
   "unresolved_sibling_retention_package": {
     "source_base": "fe8826e9", "recovery_policy_version": "phase5/source-requirement-failure-policy/v4",
     "author_material_changed": false, "restricted_consumer_relaxed": false,

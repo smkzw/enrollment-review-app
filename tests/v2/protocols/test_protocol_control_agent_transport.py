@@ -1208,7 +1208,7 @@ def test_text_mode_source_insert_includes_actual_candidate_schema(multiple: bool
 @pytest.mark.parametrize(
     ("reader", "version"), [
         ("read_stage_bound_requirement", "phase5/control-stage-bound-requirement/v10"),
-        ("read_relative_stage_requirement", "phase5/control-relative-stage-requirement/v8"),
+        ("read_relative_stage_requirement", "phase5/control-relative-stage-requirement/v9"),
         ("read_shared_prohibition_requirement", "phase5/control-shared-prohibition-requirement/v3"),
     ],
 )

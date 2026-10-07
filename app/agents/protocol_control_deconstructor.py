@@ -4616,6 +4616,12 @@ def _candidate_preserves_source_time_words(
     if len(time_words) < 2:
         return True
     quote = normalize_source_excerpt(statement.quoted_text)
+    scope = normalize_source_excerpt(statement.scope_quote or "")
+    scope_words = {scope, scope.rstrip("：:")} | {
+        normalize_source_excerpt(part) for part in re.split(r"[（）()，,；;：:]", scope)
+        if normalize_source_excerpt(part)
+    }
+    scope_cited = False
     rendered: list[str] = []
     for group in candidate.obligation_expression.groups:
         for atom in group.atoms:
@@ -4625,9 +4631,18 @@ def _candidate_preserves_source_time_words(
             if not any(value and (value in quote or quote in value) for value in excerpts):
                 continue
             rendered.append(normalize_source_excerpt(atom.statement))
+            # A verified shared heading is a separate source excerpt, not text
+            # that the author must repeat inside the action itself.
+            if (scope and scope not in quote
+                    and normalize_source_excerpt(atom.statement).rstrip("。；;.!！?？") ==
+                    quote.rstrip("。；;.!！?？")
+                    and any(span in source_span_ids and normalize_source_excerpt(excerpt) == scope
+                            for span, excerpt in zip(atom.source_span_ids, atom.source_excerpts, strict=True))):
+                scope_cited = True
             if atom.continuing_obligation is not None:
                 rendered.append(normalize_source_excerpt(atom.continuing_obligation.statement))
-    return all(any(word in text for text in rendered) for word in time_words)
+    return all(any(word in text for text in rendered)
+               or (scope_cited and word in scope_words) for word in time_words)
 
 
 def _split_obligation_quotes_cover_statement(quote: str, atoms: Sequence[object]) -> bool:

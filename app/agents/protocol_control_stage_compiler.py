@@ -48,7 +48,7 @@ from .protocol_control_source_interpretation import (
 
 
 STAGE_BOUND_REQUIREMENT_VERSION = "phase5/control-stage-bound-requirement/v10"
-RELATIVE_STAGE_REQUIREMENT_VERSION = "phase5/control-relative-stage-requirement/v8"
+RELATIVE_STAGE_REQUIREMENT_VERSION = "phase5/control-relative-stage-requirement/v9"
 SHARED_PROHIBITION_REQUIREMENT_VERSION = "phase5/control-shared-prohibition-requirement/v3"
 
 
@@ -316,8 +316,9 @@ def can_compile_relative_stage_requirement(
         and review.source_time_excerpt
         and normalize_source_excerpt(review.source_time_excerpt)
         in normalize_source_excerpt(statement.quoted_text)
-        and all(normalize_source_excerpt(word) in normalize_source_excerpt(statement.quoted_text)
-                for word in statement.time_words)
+        and all(part in _time_parts(statement.scope_quote)
+                or part in normalize_source_excerpt(statement.quoted_text)
+                for word in statement.time_words for part in _time_parts(word))
     )
 
 
@@ -471,7 +472,7 @@ def relative_stage_requirement_response_format() -> dict[str, object]:
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": "protocol_control_relative_stage_requirement_v8",
+            "name": "protocol_control_relative_stage_requirement_v9",
             "strict": True,
             "schema": RelativeStageRequirement.model_json_schema(),
         },
@@ -695,7 +696,7 @@ def compile_stage_bound_requirement(
             not scope_parts or any(part not in previous_visit for part in scope_parts)
             or not relative or relative != normalize_source_excerpt(review.source_time_excerpt or "")
             or relative not in normalize_source_excerpt(statement.quoted_text)
-            or any(part not in relative for part in declared_time)
+            or any(part not in relative for part in declared_time if part not in scope_parts)
             or relative not in normalize_source_excerpt(selection.obligation_statement)
             or not target_action
             or not any(target_action in normalize_source_excerpt(value or "")
