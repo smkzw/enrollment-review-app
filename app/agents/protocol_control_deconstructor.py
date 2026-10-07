@@ -2269,7 +2269,7 @@ _OPTIONAL_ACTION_REPAIR_GUIDANCE_VERSION = "phase5/optional-action-repair-guidan
 _SOURCE_INSERT_GUIDANCE_VERSION = "phase5/source-insert-guidance/v7"
 _TREATMENT_DURATION_REPAIR_GUIDANCE_VERSION = "phase5/treatment-duration-repair-guidance/v2"
 _ATOM_REPAIR_GUIDANCE_VERSION = "phase5/atom-repair-guidance/v4"
-_SOURCE_SCOPE_CORRECTION_POLICY_VERSION = "phase5/source-scope-correction-policy/v3"
+_SOURCE_SCOPE_CORRECTION_POLICY_VERSION = "phase5/source-scope-correction-policy/v4"
 _CALENDAR_REPAIR_TARGET_SELECTION_VERSION = "phase5/calendar-repair-target-selection/v3"
 _TIME_OPERAND_REPAIR_PRIORITY_VERSION = "phase5/time-operand-repair-priority/v3"
 _OBSERVATION_SOURCE_REPAIR_GUIDANCE_VERSION = "phase5/observation-source-repair/v3"
@@ -6781,6 +6781,7 @@ def _source_statement_reuse_identity(statement: SourceStatement) -> tuple[object
         statement.structure_unit_id,
         statement.quoted_text,
         statement.scope_quote,
+        statement.scope_context_unit_id,
         statement.force,
         tuple(statement.decision_functions),
         statement.affected_stage,
@@ -7117,6 +7118,7 @@ class ProtocolControlAgentRunner:
                             if (not isinstance(scope_issue, SourceInterpretationValidationError)
                                     or scope_issue.code not in {
                                         "SOURCE_TIME_UNGROUNDED", "SOURCE_SCOPE_UNGROUNDED",
+                                        "SOURCE_SCOPE_CONTEXT_INVALID", "SOURCE_STAGE_UNGROUNDED",
                                         "SOURCE_TIME_INCOMPLETE",
                                         "SOURCE_STAGE_TIME_MISSING",
                                         "STUDY_PHASE_NOT_VISIT_TIME", "STUDY_PHASE_NOT_VISIT_STAGE",
@@ -7149,6 +7151,7 @@ class ProtocolControlAgentRunner:
                                 correction = SourceScopeCorrection.model_validate_json(correction_response.text)
                                 if scope_issue.code in {"STUDY_PHASE_NOT_VISIT_TIME", "SOURCE_TIME_INCOMPLETE"} and (
                                     correction.scope_quote != original_statement.scope_quote
+                                    or correction.scope_context_unit_id != original_statement.scope_context_unit_id
                                     or correction.affected_stage != original_statement.affected_stage
                                 ):
                                     raise ValueError("单条时间校正不得改变已核原文范围或审核阶段")
@@ -7971,6 +7974,7 @@ class ProtocolControlAgentRunner:
                                             time_response.text
                                         )
                                         if (time_correction.scope_quote != original_statement.scope_quote
+                                                or time_correction.scope_context_unit_id != original_statement.scope_context_unit_id
                                                 or time_correction.affected_stage != original_statement.affected_stage):
                                             raise ValueError("补全来源时间不得更改已核范围或阶段")
                                         corrected_source = apply_source_scope_correction(

@@ -276,6 +276,10 @@ def _coexisting_statement_proofs(
             return None
         excerpts = []
         for entry_index, quote, entry_offsets, citing in independent:
+            if interpretation.statements[entry_index].scope_context_unit_id is not None:
+                # Existing same-unit independence proofs do not prove borrowed
+                # label dependencies; retain the whole unit until they do.
+                return None
             if entry_offsets[0] < offsets[1] and offsets[0] < entry_offsets[1]:
                 return None
             excerpts.append(RestrictedStatementIndependentExcerpt(
@@ -475,6 +479,7 @@ def restricted_batch_from_review(
             ),
             independent_scope_proof=proofs.get(index),
             scope_quote=source.scope_quote,
+            scope_context_unit_id=source.scope_context_unit_id,
             time_words=list(source.time_words),
             exception_words=source.exception_words,
             affected_stage=source.affected_stage,

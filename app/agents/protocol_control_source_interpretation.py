@@ -20,6 +20,7 @@ from app.domain.contracts.protocol_controls import (
     StructureUnitDispositionKind,
 )
 from app.protocols.protocol_control_gate import _visit_scope_keys
+from app.protocols.control_scope_sources import immediate_cell_scope_label
 from app.protocols.procedure_catalog import (
     _without_display_footnotes,
     schedule_column_scope,
@@ -29,7 +30,7 @@ from app.protocols.source_time_fragments import intraday_time_fragments
 
 
 SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
-SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v20"
+SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v22"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
@@ -160,6 +161,7 @@ class SourceStatement(ContractModel):
     structure_unit_id: str = Field(min_length=1)
     quoted_text: str = Field(min_length=1)
     scope_quote: str | None = None
+    scope_context_unit_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     force: Literal["required", "prohibited", "recommended", "descriptive", "unclear"]
     decision_functions: list[Literal[
         "action", "definition", "calculation_input", "threshold",
@@ -209,7 +211,7 @@ def normalize_schedule_randomization_anchors(
         unit_id for unit_id, statements in grouped.items()
         if _is_schedule_randomization_anchor(
             units.get(unit_id), statements[0], require_statement_match=False,
-        ) and (len(statements) != 1 or any(
+        ) and not any(statement.scope_context_unit_id is not None for statement in statements) and (len(statements) != 1 or any(
             statement.quoted_text != units[unit_id].excerpt
             or statement.force != "descriptive"
             or statement.scope_quote is not None
@@ -254,7 +256,7 @@ def normalize_mixed_schedule_scopes(
         unit = units[statement.structure_unit_id]
         scope = normalize_source_excerpt(statement.scope_quote or "")
         if (
-            not scope or statement.time_words
+            not scope or statement.scope_context_unit_id is not None or statement.time_words
             or statement.affected_stage is not None or statement.exception_words is not None
             or statement.unresolved or scope in normalize_source_excerpt(unit.excerpt)
             or any(scope in normalize_source_excerpt(part) for part in unit.heading_path)
@@ -282,6 +284,7 @@ class SourceScopeCorrection(ContractModel):
     version: Literal["phase5/control-source-scope-correction/v1"]
     structure_unit_id: str = Field(min_length=1)
     scope_quote: str | None = None
+    scope_context_unit_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     affected_stage: str | None = None
     time_words: list[str] = Field(...)
     unresolved: str | None = None
@@ -299,8 +302,11 @@ def build_source_scope_correction_prompt(
         "动作摘录、条件、例外及其他陈述已经冻结，不得改写。"
         "time_words 只保留真正约束本条动作且逐字位于本条、其前置共同范围或所属标题的短语；"
         "冻结单元若含多条陈述，不得借同单元另一条陈述的时点；"
-        "相邻 context 单元和前一段的文字也不能填入本条 scope_quote 或 time_words。"
-        "上轮错误字段不可照抄：若共享范围不在本条动作前的同一来源单元、所属标题或表格标题中，"
+        "相邻 context 单元不能任意借用。仅当只读单元是同一单元格内紧邻在前、以冒号结束的完整项目标签，"
+        "而非动作、时间或例外句，且你核实它直接限定本条对象时，scope_quote 可逐字引用整个标签，"
+        "scope_context_unit_id 填该冻结单元ID；否则该ID填 null。这种引用不能补 time_words 或 affected_stage。"
+        "引用ID必须出现在本条可核只读标签列表；列表为空时必须填 null，不从其他 context 自选。"
+        "上轮错误字段不可照抄：若共享范围不在本条动作前的同一来源单元、所属标题或表格标题中，且无上述可核标签，"
         "scope_quote 填 null；本条没有对应时间原文则 time_words 填空数组。"
         "本条括号内的临床子条件若有独立回溯期限也要逐项列出，文献书名的版本年份不算；"
         "本条及所属标题直接写出的时间不得删除。无法确认时 unresolved 写原因，"
@@ -309,10 +315,11 @@ def build_source_scope_correction_prompt(
         "其余字段按原文填写；能够确认则 unresolved 为 null。"
         "只返回一个 JSON 对象，字段必须齐全，version 必须逐字填写"
         ' "phase5/control-source-scope-correction/v1"，不得写成 1.0 或其他缩写。'
-        "字段为 version、structure_unit_id、scope_quote、affected_stage、time_words、unresolved；"
+        "字段为 version、structure_unit_id、scope_quote、scope_context_unit_id、affected_stage、time_words、unresolved；"
         "可空字段无依据时填 null，time_words 无依据时填空数组。\n"
         f"上轮错误：{issue[:1000]}\n"
         f"冻结单元：{json.dumps({'structure_unit_id': unit.structure_unit_id, 'heading_path': unit.heading_path, 'excerpt': unit.excerpt, 'table_context': unit.table_context.model_dump(mode='json') if unit.table_context else None}, ensure_ascii=False)}\n"
+        f"可核只读标签：{json.dumps(_cell_scope_label_packet(batch, unit), ensure_ascii=False)}\n"
         f"原陈述：{statement.model_dump_json()}"
     )
 
@@ -365,6 +372,7 @@ def apply_source_scope_correction(
         for part in [statement.quoted_text, correction.scope_quote or "", *unit.heading_path]
     )
     updated.statements[statement_index].scope_quote = correction.scope_quote
+    updated.statements[statement_index].scope_context_unit_id = correction.scope_context_unit_id
     updated.statements[statement_index].affected_stage = (
         None if phase_supported and correction.affected_stage
         and is_study_phase_label(correction.affected_stage)
@@ -1184,6 +1192,10 @@ def build_source_target_review_prompt(
             "quoted_text": interpretation.statements[index].quoted_text,
             "force": interpretation.statements[index].force,
             "scope_quote": interpretation.statements[index].scope_quote,
+            **({"scope_context_source": _cell_scope_label_packet(batch, next(
+                unit for unit in batch.owned_units
+                if unit.structure_unit_id == interpretation.statements[index].structure_unit_id
+            ))} if interpretation.statements[index].scope_context_unit_id is not None else {}),
             "affected_stage": interpretation.statements[index].affected_stage,
             "time_words": interpretation.statements[index].time_words,
             "decision_functions": interpretation.statements[index].decision_functions,
@@ -1244,6 +1256,9 @@ def build_source_target_review_prompt(
         "unresolved_aspects 填 []。实际依赖哪些条件由后续冻结消费者登记及全范围核对决定；"
         "原文存在歧义或含未完成动作时仍选 unresolved，不得用此项绕过。"
         "同段已有候选并不等于所有动作已覆盖；目录名称相似也不等于时间、条件、例外都已覆盖。"
+        "若 scope_context_source 提供表内项目标签，宿主只核了位置；你须从原文独立核它是否"
+        "直接限定本条对象及适用分期，再核实际目标是否完整对应。标签是另一动作、存在冲突或"
+        "关系不明时必须保留 unresolved，不能仅因结构相邻就报完整覆盖。"
         "只引用目录名称或名称的一部分，只能证明项目关联，不能证明具体操作已覆盖。"
         "除非宿主的 label_action_supported_target_ids 已提供该动作的来源依据，"
         "完整覆盖须引用目标来源中真正承载操作的原文，而不是只截取项目名称。"
@@ -2268,6 +2283,15 @@ def validate_source_interpretation(
         ):
             reject("SOURCE_QUOTE_UNGROUNDED", "陈述摘录不属于冻结来源单元", "quoted_text", "correct_source_quote")
         scope = normalize_source_excerpt(item.scope_quote or "")
+        context_label = None
+        if item.scope_context_unit_id is not None:
+            try:
+                context_label = immediate_cell_scope_label(
+                    unit, item.scope_context_unit_id, item.scope_quote or "",
+                    batch.owned_units, batch.context_units,
+                )
+            except ValueError as exc:
+                reject("SOURCE_SCOPE_CONTEXT_INVALID", str(exc), "scope_context_unit_id", "correct_source_scope")
         if item.scope_quote is not None:
             source_excerpt = normalize_source_excerpt(unit.excerpt)
             scope_in_heading = bool(scope) and any(
@@ -2279,7 +2303,8 @@ def validate_source_interpretation(
                 for part in [*table.row_headers, *table.column_headers]
             )
             scope_in_visit_headers = False
-            if table is not None and unit.unit_kind in {"table_row", "table_note"} and bool(scope):
+            if (context_label is None and table is not None
+                    and unit.unit_kind in {"table_row", "table_note"} and bool(scope)):
                 columns = schedule_column_scope(unit, batch.context_units)
                 scope_in_visit_headers = bool(columns) and all(
                     column.header_source_refs
@@ -2292,7 +2317,7 @@ def validate_source_interpretation(
                     source_excerpt, scope, normalized_quote,
                 )
             )
-            if not (scope_in_heading or scope_in_table_header
+            if not (context_label is not None or scope_in_heading or scope_in_table_header
                     or scope_in_visit_headers or scope_before_statement):
                 reject("SOURCE_SCOPE_UNGROUNDED", "共享范围须来自陈述之前的原文、所属标题或本单元表格标题",
                        "scope_quote", "correct_source_scope")
@@ -2303,7 +2328,7 @@ def validate_source_interpretation(
             affected = normalize_source_excerpt(item.affected_stage)
             if not affected or not any(
                 affected in normalize_source_excerpt(part)
-                for part in [item.quoted_text, item.scope_quote or "", *unit.heading_path]
+                for part in [item.quoted_text, (item.scope_quote or "") if context_label is None else "", *unit.heading_path]
             ):
                 reject("SOURCE_STAGE_UNGROUNDED", "阶段措辞须来自本条陈述或其共享范围",
                        "affected_stage", "correct_source_scope")
@@ -2323,7 +2348,7 @@ def validate_source_interpretation(
             normalized_time = normalize_source_excerpt(time_quote)
             if not normalized_time or not any(
                 normalized_time in normalize_source_excerpt(part)
-                for part in [item.quoted_text, item.scope_quote or "", *unit.heading_path]
+                for part in [item.quoted_text, (item.scope_quote or "") if context_label is None else "", *unit.heading_path]
             ):
                 reject("SOURCE_TIME_UNGROUNDED", "时间措辞不属于本条陈述、共享范围或所属标题",
                        "time_words", "correct_source_scope")
@@ -2367,6 +2392,21 @@ def validate_source_interpretation(
                    "attribution_quote", "correct_source_scope")
 
 
+def _cell_scope_label_packet(batch: ProtocolControlDispositionBatch, unit) -> list[dict[str, str]]:
+    result = []
+    for candidate in batch.context_units:
+        try:
+            label = immediate_cell_scope_label(
+                unit, candidate.structure_unit_id, candidate.excerpt,
+                batch.owned_units, batch.context_units,
+            )
+        except ValueError:
+            continue
+        result.append({"structure_unit_id": label.structure_unit_id,
+                       "source_ref": label.source_ref, "excerpt": label.excerpt})
+    return result
+
+
 def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -> str:
     source = [
         {
@@ -2374,11 +2414,14 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
             "heading_path": unit.heading_path,
             "excerpt": unit.excerpt,
             "table_context": unit.table_context.model_dump(mode="json") if unit.table_context else None,
+            "possible_cell_scope_labels": _cell_scope_label_packet(batch, unit),
         }
         for unit in batch.owned_units
     ]
     context = [
         {
+            "structure_unit_id": unit.structure_unit_id,
+            "source_ref": unit.source_ref,
             "heading_path": unit.heading_path,
             "excerpt": unit.excerpt,
             "table_context": unit.table_context.model_dump(mode="json") if unit.table_context else None,
@@ -2394,7 +2437,12 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
         "不可再虚构一条无法回源的独立控制。"
         "若段首范围或本单元 table_context 的行列标题同时约束本条动作，scope_quote 逐字摘录其共同范围，"
         "正文中的范围须在本条动作之前；"
-        "相邻段落或 context 单元的适用说明不能直接填入本条 scope_quote、affected_stage 或 time_words；"
+        "相邻段落或 context 单元不能任意借用。possible_cell_scope_labels 只证明紧邻同格项目标签的位置，"
+        "不证明它适用；你须另核对象及原文关系。确认直接限定本条时，scope_quote 逐字填写完整标签、"
+        "scope_context_unit_id 填标签单元ID；不得拼接或删掉期别。不能确认则保留具体 unresolved。"
+        "该ID只能来自本条 possible_cell_scope_labels；空列表必须填 null，其他 context ID 不可填写。"
+        "其他情况 scope_context_unit_id 为 null，不借邻段动作、条件、时间或例外；"
+        "这个标签引用不授权补 affected_stage、time_words，也不等于已有目标覆盖。"
         "同一 owned 单元有多条陈述时，时间措辞也不能借自另一条陈述，除非本条动作之前有明确共同范围。"
         "不适用共同范围时填 null。quoted_text 只取本条动作；若另填资格先决原文，"
         "该先决短语须在 quoted_text 之前，不能把它并入动作摘录。"
@@ -2440,7 +2488,7 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
         '"statements":[{"structure_unit_id":"来源单元ID","quoted_text":"逐字原文",'
         '"force":"required|prohibited|recommended|descriptive|unclear",'
         '"decision_functions":["definition","calculation_input"],'
-        '"scope_quote":null,"affected_stage":null,"time_words":[], '
+        '"scope_quote":null,"scope_context_unit_id":null,"affected_stage":null,"time_words":[], '
         '"exception_words":null,"unresolved":[],"eligibility_sequence":"current_or_unknown|after_eligibility_decision",'
         '"eligibility_sequence_quote":null,"control_authority":"study_or_unknown|cited_external_rationale",'
         '"attribution_quote":null}],"units_without_statement":[]}。'

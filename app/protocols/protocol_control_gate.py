@@ -59,10 +59,10 @@ from app.protocols.source_time_fragments import (
     TREATMENT_PERIOD_SOURCE_PATTERN as _TREATMENT_PERIOD_CUE_RE,
     intraday_time_fragments,
 )
-from app.protocols.control_scope_sources import validate_scope_citations
+from app.protocols.control_scope_sources import immediate_cell_scope_label, validate_scope_citations
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v46"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v47"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -5139,6 +5139,20 @@ def _restricted_statement_scope_issues(
         for statement in statements:
             texts = [_compact_source_text(value) for value in [unit.excerpt, *unit.heading_path]]
             scope_texts = list(texts)
+            if statement.scope_context_unit_id is not None:
+                try:
+                    label = immediate_cell_scope_label(
+                        unit, statement.scope_context_unit_id, statement.scope_quote or "",
+                        batch.owned_units, batch.context_units,
+                    )
+                except ValueError:
+                    unit_issues.append(_scope_proof_failure(
+                        "RESTRICTED_SOURCE_CONTEXT_UNGROUNDED",
+                        "受限陈述的表内标签引用不属于可核的紧邻来源。",
+                        statement=statement, unit_id=unit_id,
+                    ))
+                    continue
+                scope_texts.append(_compact_source_text(label.excerpt))
             if unit.table_context is not None:
                 scope_texts.extend(_compact_source_text(value) for value in (
                     *unit.table_context.row_headers, *unit.table_context.column_headers,

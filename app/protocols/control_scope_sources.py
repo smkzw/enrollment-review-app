@@ -4,10 +4,58 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import unicodedata
 from collections.abc import Sequence
 
 from app.domain.contracts.protocol_controls import ControlScopeCitation, ProtocolStructureUnit
+from app.domain.contracts.enums import PhaseScope, StudyPhase
+
+
+def immediate_cell_scope_label(
+    unit: ProtocolStructureUnit, context_id: str, scope_quote: str,
+    owned_units: Sequence[ProtocolStructureUnit], context_units: Sequence[ProtocolStructureUnit],
+) -> ProtocolStructureUnit:
+    """Prove a literal preceding cell label, not its semantic applicability."""
+    all_units = [*owned_units, *context_units]
+    matches = [item for item in context_units if item.structure_unit_id == context_id]
+    if len(matches) != 1 or sum(item.structure_unit_id == context_id for item in all_units) != 1:
+        raise ValueError("表内范围引用须指向唯一只读来源单元")
+    label = matches[0]
+    selected_scope = {StudyPhase.PHASE_II: PhaseScope.PHASE_II,
+                      StudyPhase.PHASE_III: PhaseScope.PHASE_III}.get(unit.study_phase)
+    concrete_scopes = set(label.phase_scopes) & {PhaseScope.PHASE_II, PhaseScope.PHASE_III}
+    if (selected_scope is not None and concrete_scopes and selected_scope not in concrete_scopes
+            and not set(label.phase_scopes) & {PhaseScope.SHARED, PhaseScope.MIXED}):
+        raise ValueError("表内项目标签明确属于另一研究期别")
+    span_documents = [{ref.split("::", 1)[0] for ref in item.source_span_ids if "::" in ref}
+                      for item in (label, unit)]
+    left = re.fullmatch(r"(.+)\.p(\d+)", label.source_ref)
+    right = re.fullmatch(r"(.+)\.p(\d+)", unit.source_ref)
+    if (left is None or right is None or left[1] != right[1]
+            or int(left[2]) + 1 != int(right[2])
+            or label.source_order >= unit.source_order
+            or label.study_phase != unit.study_phase
+            or label.heading_path != unit.heading_path
+            or unit.table_context is None or label.table_context is None
+            or unit.table_context.table_path != label.table_context.table_path
+            or unit.table_context.member_cell_paths != [unit.table_context.table_path]
+            or label.table_context.member_cell_paths != [label.table_context.table_path]
+            or label.member_source_refs != [label.source_ref]
+            or unit.member_source_refs != [unit.source_ref]
+            or (any(span_documents) and (
+                len(span_documents[0]) != 1 or span_documents[0] != span_documents[1]))
+            or sum(item.source_ref == label.source_ref for item in all_units) != 1):
+        raise ValueError("表内范围须来自同一冻结单元格中紧邻在前的单段标签")
+    text = _text(label.excerpt)
+    # Colon-ended labels are a deliberately narrow structural family. A body
+    # sentence or obligation cannot gain authority merely by preceding a row.
+    if (not text.endswith(":") or not text[:-1] or ":" in text[:-1]
+            or any(mark in text[:-1] for mark in ".。!?！？;；\n")
+            or re.search(r"必须|不得|禁止|应当|至少|至多|不超过|完成|执行|进行|需|须|shall|must", text, re.I)
+            or _text(scope_quote) != text):
+        raise ValueError("表内范围只能逐字引用完整项目标签，不能借用邻段动作或条件")
+    return label
 
 
 def _text(value: str) -> str:

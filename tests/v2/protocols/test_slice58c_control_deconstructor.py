@@ -2078,6 +2078,115 @@ def test_shared_scope_can_quote_the_owned_table_row_header() -> None:
         validate_source_interpretation(batch, _source_inventory(payload))
 
 
+def _same_cell_label_source():
+    from app.domain.contracts.protocol_controls import StructureUnitKind
+    batch = _batch().model_copy(deep=True)
+    unit, label = batch.owned_units[0], batch.context_units[0]
+    for item, ordinal, text in ((label, 3, "项目甲（Ⅱ期和Ⅲ期）："),
+                                (unit, 4, "给药前采集一份样本。")):
+        item.source_ref = f"snapshot::body.t1.r2.c1.p{ordinal}"
+        item.member_source_refs = [item.source_ref]
+        item.member_texts = [text]
+        item.member_source_span_ids = [list(item.source_span_ids)]
+        item.source_order = ordinal * 10
+        item.excerpt = text
+        item.heading_path = ["样本采集"]
+        item.unit_kind = StructureUnitKind.TABLE_ROW
+        item.table_context = TableCellContext(
+            table_path=(2, 1), row_index=2, column_index=1,
+            member_cell_paths=[(2, 1)], row_headers=["采集安排"],
+        )
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(
+            structure_unit_id=unit.structure_unit_id, quoted_text=unit.excerpt,
+            scope_quote=label.excerpt, scope_context_unit_id=label.structure_unit_id,
+            force="required", decision_functions=["action"], time_words=["给药前"],
+        )], units_without_statement=[batch.owned_units[1].structure_unit_id])
+    return batch, inventory
+
+
+def test_same_cell_label_is_explicit_preserved_and_not_invented() -> None:
+    batch, inventory = _same_cell_label_source()
+    validate_source_interpretation(batch, inventory)
+    reloaded = SourceInterpretation.model_validate_json(inventory.model_dump_json())
+    assert reloaded == inventory
+    prompt = build_source_interpretation_prompt(batch)
+    packet = json.loads(prompt.split("冻结来源：", 1)[1])
+    assert packet["owned"][0]["possible_cell_scope_labels"][0]["structure_unit_id"] == "su-03"
+    assert '"scope_context_unit_id":null' in prompt
+    statement = inventory.statements[0]
+    corrected = apply_source_scope_correction(batch, inventory, 0, SourceScopeCorrection(
+        version="phase5/control-source-scope-correction/v1", structure_unit_id=statement.structure_unit_id,
+        scope_quote=statement.scope_quote, scope_context_unit_id=statement.scope_context_unit_id,
+        time_words=statement.time_words,
+    ))
+    assert corrected == inventory
+    from app.agents.protocol_control_deconstructor import _source_statement_reuse_identity
+    changed_reference = statement.model_copy(update={"scope_context_unit_id": "another-label"})
+    assert _source_statement_reuse_identity(statement) != _source_statement_reuse_identity(changed_reference)
+    legacy = statement.model_copy(deep=True)
+    legacy.scope_context_unit_id = None
+    assert "scope_context_unit_id" not in legacy.model_dump(mode="json")
+    with pytest.raises(ValueError, match="共享范围须来自"):
+        validate_source_interpretation(batch, inventory.model_copy(update={"statements": [legacy]}))
+
+
+@pytest.mark.parametrize("mutation", [
+    "missing", "wrong_cell", "wrong_document", "non_immediate", "later", "duplicate",
+    "wrong_phase", "other_phase_scope", "span_document", "partial_quote", "action", "sentence", "owned_label", "missing_quote",
+])
+def test_same_cell_label_rejects_unproven_context(mutation) -> None:
+    batch, inventory = _same_cell_label_source()
+    label, statement = batch.context_units[0], inventory.statements[0]
+    if mutation == "missing":
+        statement.scope_context_unit_id = "not-frozen"
+    elif mutation == "wrong_cell":
+        label.source_ref = "snapshot::body.t1.r2.c2.p3"
+        label.member_source_refs = [label.source_ref]
+    elif mutation == "wrong_document":
+        label.source_ref = "other::body.t1.r2.c1.p3"
+        label.member_source_refs = [label.source_ref]
+    elif mutation == "non_immediate":
+        label.source_ref = "snapshot::body.t1.r2.c1.p2"
+        label.member_source_refs = [label.source_ref]
+    elif mutation == "later":
+        label.source_order = 50
+    elif mutation == "duplicate":
+        batch.context_units.append(label.model_copy(deep=True))
+    elif mutation == "wrong_phase":
+        label.study_phase = StudyPhase.PHASE_III
+    elif mutation == "other_phase_scope":
+        label.phase_scopes = [PhaseScope.PHASE_III]
+    elif mutation == "span_document":
+        label.source_span_ids = ["wrong-snapshot::" + label.source_ref]
+        batch.owned_units[0].source_span_ids = ["snapshot::" + batch.owned_units[0].source_ref]
+    elif mutation == "partial_quote":
+        statement.scope_quote = "项目甲"
+    elif mutation in {"action", "sentence"}:
+        label.excerpt = "必须进行核查：" if mutation == "action" else "另一项操作。项目甲："
+        statement.scope_quote = label.excerpt
+    elif mutation == "owned_label":
+        batch.context_units = []
+        batch.owned_units.append(label)
+        inventory.units_without_statement.append(label.structure_unit_id)
+    else:
+        statement.scope_quote = None
+    with pytest.raises(SourceInterpretationValidationError) as caught:
+        validate_source_interpretation(batch, inventory)
+    assert caught.value.code == "SOURCE_SCOPE_CONTEXT_INVALID"
+
+
+@pytest.mark.parametrize("field", ["time_words", "affected_stage"])
+def test_same_cell_label_does_not_supply_visit_or_time(field) -> None:
+    batch, inventory = _same_cell_label_source()
+    label, statement = batch.context_units[0], inventory.statements[0]
+    label.excerpt = statement.scope_quote = "筛选期项目甲："
+    setattr(statement, field, ["筛选期"] if field == "time_words" else "筛选期")
+    with pytest.raises(SourceInterpretationValidationError) as caught:
+        validate_source_interpretation(batch, inventory)
+    assert caught.value.code in {"SOURCE_TIME_UNGROUNDED", "SOURCE_STAGE_UNGROUNDED"}
+
+
 def test_repair_guidance_distinguishes_same_stage_and_cross_stage() -> None:
     same = _repair_problem_guidance(
         "PROCEDURE_AFFECTED_STAGE_MISMATCH: 补充关系的受影响审核节点与所引用流程必做访视不一致"
@@ -2181,6 +2290,50 @@ def test_source_inventory_rechecks_unlocated_scope_once_without_inventing_it() -
     assert result.attempts[0].outcome == "schema_invalid"
     assert result.attempts[0].error_detail["json_path"] == "statements[0].scope_quote"
     assert result.source_interpretation == valid
+
+
+@pytest.mark.parametrize("invalid_field", ["context_reference", "stage"])
+@pytest.mark.parametrize("repeat_invalid", [False, True])
+def test_source_context_repair_uses_existing_local_budget(invalid_field, repeat_invalid) -> None:
+    batch, valid = _same_cell_label_source()
+    invalid = valid.model_copy(deep=True)
+    if invalid_field == "context_reference":
+        invalid.statements[0].scope_context_unit_id = "not-authorized"
+    else:
+        invalid.statements[0].affected_stage = "治疗后"
+
+    class ScopeTransport(_FakeTransport):
+        source_calls = 0
+        correction_calls = 0
+
+        def start_source_interpretation(self, *, prompt):
+            self.source_calls += 1
+            return ProtocolControlAgentResponse(session_id="source", text=invalid.model_dump_json())
+
+        def correct_source_scope(self, *, prompt):
+            self.correction_calls += 1
+            item = invalid.statements[0] if repeat_invalid else valid.statements[0]
+            return ProtocolControlAgentResponse(session_id="correction", text=SourceScopeCorrection(
+                version="phase5/control-source-scope-correction/v1",
+                structure_unit_id=item.structure_unit_id, scope_quote=item.scope_quote,
+                scope_context_unit_id=item.scope_context_unit_id, affected_stage=item.affected_stage,
+                time_words=item.time_words,
+            ).model_dump_json())
+
+    transport = ScopeTransport([ProtocolControlAgentResponse(
+        session_id="wire", text=_wire().model_dump_json())])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, transport)
+    assert transport.source_calls == 1
+    assert transport.correction_calls == 1
+    assert result.attempts[0].error_classes == [
+        "SOURCE_SCOPE_CONTEXT_INVALID" if invalid_field == "context_reference" else "SOURCE_STAGE_UNGROUNDED"]
+    if repeat_invalid:
+        assert result.status == "需要核对"
+        assert result.final_output is None
+        assert result.pending_source_interpretation is not None
+    else:
+        assert result.source_interpretation == valid
+        assert result.source_interpretation.units_without_statement == valid.units_without_statement
 
 
 def test_source_scope_repair_targets_statement_not_shared_unit_label() -> None:

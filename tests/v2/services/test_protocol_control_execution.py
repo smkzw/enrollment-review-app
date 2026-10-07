@@ -636,6 +636,42 @@ def test_restricted_table_header_does_not_ground_unrelated_qualifiers(field) -> 
     }
 
 
+def test_explicit_cell_label_survives_restricted_producer_gate_and_projection() -> None:
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _same_cell_label_source
+    from tests.v2.domain.test_control_catalog_restricted_contract import _catalog, _publication
+    from app.services.eligibility_review_projection import _restricted_control_projections
+    from app.protocols.protocol_control_gate import check_protocol_control_batch_candidates
+
+    batch, inventory = _same_cell_label_source()
+    _, result = _unresolved_batch_review()
+    first = inventory.statements[0]
+    first.unresolved = ["标签与目标的关系仍未核清"]
+    result.source_interpretation.statements[0] = first
+    result.source_target_review.items[0].source_action_excerpt = first.quoted_text
+    saved = ProtocolControlAgentRunResult.model_validate(result.model_dump(mode="json"))
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, saved)
+    assert output is not None
+    assert output.restricted_statements[0].scope_context_unit_id == "su-03"
+    assert output.restricted_statements[0].source_span_ids == batch.owned_units[0].source_span_ids
+    assert output.candidates == []
+    protocol_control_execution_module._validate_deep_batch_output(batch, output)
+    readback = type(output).model_validate_json(output.model_dump_json())
+    assert readback == output
+    projected = _restricted_control_projections(_publication(_catalog(
+        restricted=tuple(readback.restricted_statements), allowed=tuple(batch.owned_source_span_ids),
+    )))
+    assert all(item.obligations[0].status == "restricted" for item in projected)
+    corrupted = batch.model_copy(deep=True)
+    corrupted.context_units[0].source_ref = "another::body.t1.r2.c1.p3"
+    assert "RESTRICTED_SOURCE_CONTEXT_UNGROUNDED" in {
+        issue.code for issue in check_protocol_control_batch_candidates(corrupted, readback)
+    }
+    readback.restricted_statements[0].time_words = ["Ⅱ期"]
+    assert "RESTRICTED_SOURCE_CONTEXT_UNGROUNDED" in {
+        issue.code for issue in check_protocol_control_batch_candidates(batch, readback)
+    }
+
+
 @pytest.mark.parametrize("kind", ["interpretation", "temporal"])
 def test_same_unit_restriction_survives_real_checkpoint_and_rebuild(
     session_factory, monkeypatch, kind,
@@ -3133,6 +3169,61 @@ def test_revalidated_source_seed_replays_only_proven_scope_corrections(change):
         saved["attempts"][1]["raw_output_sha256"] = "0" * 64
     before = deepcopy(saved)
     args = dict(source_job_id="source-job", step_id="deep_0001", checkpoint_id="source-checkpoint")
+    if change == "corrupt_correction":
+        with pytest.raises(ValueError, match="摘要损坏"):
+            module._revalidated_source_seed_proof(batch, saved, current, **args)
+    else:
+        proof = module._revalidated_source_seed_proof(batch, saved, current, **args)
+        assert bool(proof) is (change == "same")
+        if proof:
+            assert proof["scope_correction_indexes"] == [0]
+            assert len(proof["source_response_sha256"]) == 2
+    assert saved == before
+
+
+@pytest.mark.parametrize("invalid_field", ["context_reference", "stage"])
+@pytest.mark.parametrize("change", ["same", "wrong_target", "changed_sibling", "corrupt_correction"])
+def test_cell_label_local_repair_has_actual_immutable_reuse_witness(invalid_field, change):
+    from copy import deepcopy
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _same_cell_label_source
+    from app.agents.protocol_control_source_interpretation import (
+        SourceScopeCorrection, SourceInterpretationValidationError, validate_source_interpretation,
+    )
+    module = protocol_control_execution_module
+    batch, inventory = _same_cell_label_source()
+    original = inventory.model_copy(deep=True)
+    if invalid_field == "context_reference":
+        original.statements[0].scope_context_unit_id = "not-authorized"
+    else:
+        original.statements[0].affected_stage = "治疗后"
+    with pytest.raises(SourceInterpretationValidationError) as caught:
+        validate_source_interpretation(batch, original)
+    issue = caught.value
+    item = inventory.statements[0]
+    correction = SourceScopeCorrection(
+        version="phase5/control-source-scope-correction/v1", structure_unit_id=item.structure_unit_id,
+        scope_quote=item.scope_quote, scope_context_unit_id=item.scope_context_unit_id,
+        time_words=item.time_words,
+    )
+    current = module._deep_component_identity({}, module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE)
+    saved = dict(source_interpretation=inventory.model_dump(mode="json"), partial_wire=None,
+                 component_identity=dict(current, compiler_versions=["previous compiler"]),
+                 prompt_template_sha256=current["prompt_material_sha256"], attempts=[])
+    detail = dict(code=issue.code, statement_id=issue.statement_id, source_refs=issue.source_refs)
+    for number, value in enumerate((original, correction), 1):
+        raw = value.model_dump_json()
+        saved["attempts"].append(dict(attempt=number, session_id=f"actual-{number}",
+            outcome="schema_invalid" if number == 1 else "parsed",
+            error_classes=[issue.code] if number == 1 else [], raw_output_text=raw,
+            raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(), error_detail=detail.copy()))
+    if change == "wrong_target":
+        saved["attempts"][1]["error_detail"]["statement_id"] = 1
+    elif change == "changed_sibling":
+        saved["source_interpretation"]["units_without_statement"] = []
+    elif change == "corrupt_correction":
+        saved["attempts"][1]["raw_output_sha256"] = "0" * 64
+    before = deepcopy(saved)
+    args = dict(source_job_id="source", step_id="deep_0001", checkpoint_id="checkpoint", max_source_corrections=1)
     if change == "corrupt_correction":
         with pytest.raises(ValueError, match="摘要损坏"):
             module._revalidated_source_seed_proof(batch, saved, current, **args)

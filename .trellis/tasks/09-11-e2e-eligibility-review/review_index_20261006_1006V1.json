@@ -5,6 +5,21 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "explicit_same_cell_scope_source": {
+    "base_commit": "dd766bc3",
+    "code_state": "explicit_owner_patch_not_yet_committed",
+    "identity": {"interpretation_schema": "v11", "interpretation_prompt": "v22", "scope_repair_policy": "v4", "gate": "v47"},
+    "scope": "Optional frozen immediate same-cell label ID and complete literal quote, exact document/cell/paragraph/phase proof; source and reviewer must establish applicability. No authority for time/stage/exception or clinical adoption",
+    "actual_api_preceding_run": {"job_id": "91a3bc421b2b4f0399092b5d104b549a", "source_commit": "dd766bc3", "state": "failed_final", "error": "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED", "planned": 90, "completed": 13, "physical_calls": 14, "seconds": 386.2356226249831, "input_tokens": 229486, "output_including_reasoning": 98487, "cache_included_in_input": 36992, "usage_missing": 0, "response_model": "deepseek-v4.1-flash", "new_calls_deep_0012": 0, "old_sources_jobs_hashes_unchanged": true},
+    "frozen_batch_first_probe": {"directory": "rv1006-cell-label-frozen-batch-20261007-v1", "physical_calls": 1, "seconds": 36.86507958301809, "state": "needs_verification", "first_error": "SOURCE_SCOPE_CONTEXT_INVALID", "full_gate_passed": false, "database_writes": 0, "source_protected_unchanged": true, "cause": "Model selected a non-immediate ID and study phase as visit stage; new typed error was not connected to existing local source repair"},
+    "local_recovery": {"directory": "rv1006-cell-label-local-recovery-20261007-v1", "state": "parsed", "seconds": 87.35883687500609, "new_physical_calls": 6, "prior_physical_calls": 1, "input_tokens": 61872, "output_including_reasoning": 25516, "cache_included_in_input": 40832, "usage_missing": 0, "source_statements": 4, "scope_reference_indexes": [1,2], "covered_procedure_points": 4, "candidates": 0, "full_gate_passed": true, "database_writes": 0, "source_protected_unchanged": true, "scope": "Hash-verified actual prior source answer, explicitly replayed not a new model receipt; existing product runner repairs only current scope fields under shared schema budget; source siblings and full validators preserved", "not_new_api_job": true},
+    "tests": {"modules": 3, "passed": 923, "seconds": 76.67, "exit_code": 0, "junit": "/Users/smkzw/tmp/rv1006-cell-label-source-runtime-connected-20261007-final.xml", "warnings": "5 SWIG", "earlier_overlapping_windows": "898pass11fail initial owner/fixture errors; 909pass; 911pass; 915pass. Not additive. No gate weakening"},
+    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "exit_code": 0, "fallback": false, "parent_wait_seconds": 143.486, "content_reads": 8, "oversized_reads_without_content": 3, "owner_silent_120min_completion_wait": true, "report": "runs/conference/rv1006-mixed-restricted-consumer-review-20261007/cell_label_patch_review.md", "limits": "Code only, no tests/raw clinical/clinical approval. Last snapshot/phase/reuse fingerprint/local recovery modifications owner verified. Reviewer projection-ID preservation claim not established: projection omits that ID; catalog retains it"},
+    "clinical_and_runtime_limits": ["Colon grammar is structural, not a semantic classifier", "Current review still owns object/phase relationship verification", "Eligibility projection has no context-ID field", "Old whole component identity cannot be silently promoted to new prompt", "First shared calculation/source family remains distinct", "No formal joint publication or current-node report"],
+    "private_root": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003",
+    "external_access": "controlled_local_only_external_unavailable",
+    "formal_adoption": false
+  },
   "restricted_table_header_scope": {
     "base_commit": "184bdb60",
     "validator_version": "phase5/control-publication-gate/v46",

@@ -2217,6 +2217,7 @@ class RestrictedProtocolControlStatement(Phase5ControlModel):
     independent_scope_proof: RestrictedStatementScopeProof | None = None
     #: 原解释的逐字限定语随受限记录保存，不从动作摘录猜测适用范围。
     scope_quote: str | None = None
+    scope_context_unit_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     time_words: list[str] = Field(default_factory=list)
     exception_words: str | None = None
     affected_stage: str | None = None

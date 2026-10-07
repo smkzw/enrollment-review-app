@@ -2295,6 +2295,7 @@ def _revalidated_source_seed_proof(
         except SourceInterpretationValidationError as issue:
             if (offset == max_source_corrections or issue.code not in {
                     "SOURCE_TIME_UNGROUNDED", "SOURCE_SCOPE_UNGROUNDED", "SOURCE_TIME_INCOMPLETE",
+                    "SOURCE_SCOPE_CONTEXT_INVALID", "SOURCE_STAGE_UNGROUNDED",
                     "SOURCE_STAGE_TIME_MISSING", "STUDY_PHASE_NOT_VISIT_TIME", "STUDY_PHASE_NOT_VISIT_STAGE",
                     "SOURCE_QUOTE_UNGROUNDED", "POST_ELIGIBILITY_SEQUENCE_UNGROUNDED",
                 } or issue.statement_id in corrected or offset + 1 >= len(attempts)):
@@ -2342,6 +2343,7 @@ def _revalidated_source_seed_proof(
                     statement = actual.statements[issue.statement_id]
                     if issue.code in {"STUDY_PHASE_NOT_VISIT_TIME", "SOURCE_TIME_INCOMPLETE"} and (
                         correction.scope_quote != statement.scope_quote
+                        or correction.scope_context_unit_id != statement.scope_context_unit_id
                         or correction.affected_stage != statement.affected_stage
                     ):
                         return None
