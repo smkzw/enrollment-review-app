@@ -6,7 +6,62 @@
   "runtime_state": "active",
   "claims_complete": false,
   "base_review_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
-  "delivered_snapshot_id": "S-14",
+  "delivered_snapshot_id": "S-15",
+  "source_binding_package": {
+    "base_commit": "f26cc4e5160485a4fdc1a9ad1ed865c40ca356c0",
+    "gate_version": "protocol-deconstruction-gate/2026-10-07.56",
+    "paths": ["app/protocols/deconstruction_gate.py", "tests/v2/protocols/test_deconstruction_gate_slice3.py", "tests/v2/protocols/test_obligation_scalar_regression.py"],
+    "tests": {"passed": 649, "seconds": 42.05, "exit_code": 0, "modules": 6, "junit": "/Users/smkzw/tmp/rv1006-source-binding-connected-20261007-v4.xml", "earlier": "v1 nonexistent test path exit4;v2 630pass/14fail retained and fixed;v3 649pass before final isinstance guard;not additive"},
+    "conference": {"route": "CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session_id": "01a1143c-ccca-7bf1-9575-05e7113136ec", "round_seconds": [267.592, 215.055], "reported_tools": [18, 10], "exit_code": 0, "fallback": false, "limits": "Read-only code/synthetic reasoning;no clinical or runtime acceptance;bounded source binding not semantic equivalence"},
+    "saved_draft_audit": {"revision": 4, "physical_calls": 0, "blocking_count": 16, "reminder_count": 2, "draft_unchanged": true, "protected_unchanged": true, "publishable": false, "new_gate_proof_saved": true, "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-current-gate-source-audit-20261007-v1", "access": "controlled_local_only"},
+    "scope": "No shorter shared-substring coverage;single complete retained period/object only enters explicit applicability gap;existing consumers stay UNKNOWN;not formal approval",
+    "formal_rules_published": false, "claims_complete": false
+  },
+  "current_component_feedback": {
+    "in06a": {"calls": 1, "seconds": 154.738934, "http_status": 200, "revision_after": 3},
+    "in06b": {"calls": 1, "seconds": 199.666209, "http_status": 200, "revision_after": 4},
+    "in06a_source_split_failure": {"calls": 2, "seconds": 148.435834, "http_status": 409, "exit_code": 3, "revision_unchanged": true, "repeated_branch_stopped": true},
+    "ex03": {"calls": 1, "seconds": 230.67618166701868, "http_status": 200, "exit_code": 0, "revision_after": 5, "blocking_after": 14, "old_revision_unchanged": true, "other_parents_unchanged": true, "protected_unchanged": true},
+    "route": "cms-router/glm-5.3-flash/high", "sdk_retries": 0,
+    "old_ledgers_preserved": true, "run_budget_not_reset": true, "formal_rules_published": false
+  },
+  "current_source_discovery": {
+    "job_id": "9841977fb4fb415283b8942ac36dcd22", "frozen_draft_revision": 4,
+    "source_units": 1927, "batches": 85, "route": "ollama-cloud/deepseek-v4.1-flash/high",
+    "sdk_retries": 0, "max_parallel": 2, "deep_calls": 0, "state": "queued_at_declared_deep_boundary",
+    "exit_code": 0, "seconds": 1650.051285833004, "physical_calls": 99,
+    "discovery_completed": 85, "closure_state": "completed", "deep_planned": 71,
+    "source_dispositions": {"candidate": 387, "uncertain": 5, "context_only": 107, "non_control": 1428},
+    "prompt_tokens": 1063264, "completion_tokens_including_reasoning": 826557, "total_tokens": 1889821,
+    "missing_usage_receipts": 0, "reasoning_tokens": null, "api_fee": null,
+    "protected_unchanged": true, "old_jobs_unchanged": true,
+    "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-current-source-discovery-20261007-v1",
+    "access": "controlled_local_only", "claims_complete": false
+  },
+  "current_draft_scope_review": {
+    "source_commit": "f26cc4e5160485a4fdc1a9ad1ed865c40ca356c0",
+    "job_id": "1153e25b4eba40db964202a1c3ed07c3",
+    "entry": "POST /api/v2/protocol/deconstructions/{job_id}/draft/feedback",
+    "target": "IN-04 parent scope only",
+    "physical_calls": 2, "seconds": 468.71652220899705, "http_status": 200, "exit_code": 0,
+    "route": "cms-router/glm-5.3-flash/high", "max_tokens": 65536,
+    "input_tokens": 21112, "completion_tokens_including_reasoning": 31746,
+    "total_tokens": 52858, "reasoning_tokens": null, "api_fee": null,
+    "revision_before": 1, "revision_after": 2, "blocking_before": 19, "blocking_after": 14,
+    "scope_gaps_after": 0, "old_revision_unchanged": true, "protected_unchanged": true,
+    "clinical_fields_rewritten": false, "formal_rules_published": false,
+    "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-current-draft-scope-review-20261007-v1",
+    "access": "controlled_local_only", "limits": "Same-model distinct sessions;not independent-model agreement or medical approval;window incomplete."
+  },
+  "current_control_reuse_preflight": {
+    "source_commit": "f26cc4e5160485a4fdc1a9ad1ed865c40ca356c0",
+    "previous_discovery_job_id": "acdc493c7ca54d9e8cc824b575f81f73",
+    "compatible": false, "error_code": "PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID",
+    "model_calls": 0, "new_jobs": 0, "source_units": 1927, "planned_batches": 85,
+    "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-current-control-reuse-preflight-20261007-v1.json",
+    "access": "controlled_local_only",
+    "note": "Same physical content hash is insufficient;actual new snapshot/phase/source/plan mismatch. No whitelist,old approval or source record rewritten."
+  },
   "period_replacement_package": {
     "snapshot_id": "S-14", "base_commit": "baf60b3a",
     "paths": ["app/agents/protocol_schema_repair.py", "app/agents/protocol_deconstructor.py", "tests/v2/agents/test_protocol_schema_repair.py", "tests/v2/protocols/joint_publication_helpers.py"],

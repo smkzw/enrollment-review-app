@@ -36,7 +36,7 @@ from app.domain.contracts.protocol_metadata import (
     InterpretationSource,
 )
 from app.domain.contracts.protocol_drafts import ParentRuleDiff
-from app.domain.contracts.rules import Rule, TimeUnit, iter_atomic_predicates
+from app.domain.contracts.rules import ProspectivePeriod, Rule, SourceDefinedProspectivePeriod, TimeUnit, iter_atomic_predicates
 from app.domain.interpretation import (
     InterpretationAuthorityError,
     clarification_anchor_resolutions,
@@ -73,7 +73,11 @@ CHECK_NAMES = (
 
 # 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
 # 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
-DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-10-05.55"
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-10-07.56"
+
+_SOURCED_PERIOD_LEAD = re.compile(
+    r"(?:整个)?(?:研究|治疗)期间(?:（[^（）()]+）|\([^（）()]+\))"
+)
 
 
 class ProtocolGateIssue(VersionedModel):
@@ -279,7 +283,7 @@ def _shared_period_lead_in(predicate, component_source: str) -> str:
     lead = clauses[0]
     source = re.sub(r"\s+", "", component_source)
     prefix = re.sub(r"\s+", "", lead)
-    period_pattern = re.compile(r"(?:整个)?(?:研究|治疗)期间[（(][^）)]+[）)]")
+    period_pattern = _SOURCED_PERIOD_LEAD
     if not period_pattern.fullmatch(prefix):
         return ""
     periods = list(period_pattern.finditer(source))
@@ -527,7 +531,27 @@ def _population_source_bound(expression) -> bool:
         if population in match.group("qualifier")
     ]
     if not notes:
-        return has_exact_prefix
+        if has_exact_prefix:
+            return True
+        # This only binds a quoted object, not its applicability to a patient.
+        # Keep the complete single source and its explicitly retained period.
+        period = predicate.prospective_period
+        clauses = predicate.exact_source_clauses
+        if (not isinstance(period, SourceDefinedProspectivePeriod)
+                or period.source_excerpts != clauses or len(clauses) != 1
+                or any(mark in population for mark in "（()）")):
+            return False
+        clause = re.sub(r"\s+", "", clauses[0])
+        target = re.sub(r"\s+", "", population)
+        subject = re.sub(r"\s+", "", predicate.subject)
+        proposition = re.sub(r"\s+", "", predicate.semantic_proposition or "")
+        lead = _SOURCED_PERIOD_LEAD.match(clause)
+        if lead is None or not subject.startswith(target) or not proposition.startswith(target):
+            return False
+        tail = clause[lead.end():]
+        separator_length = len(tail) - len(tail.lstrip("，,、；;：:"))
+        return (clause.find(target) == lead.end() + separator_length
+                and tail[separator_length:].startswith(subject))
     if any(match.group("qualifier").strip() != population for match in notes):
         return False
     quantities = [_source_time_quantities(match.group("quantity")) for match in notes]
@@ -1225,23 +1249,6 @@ def _substantive_obligation_segments(text: str) -> list[str]:
     )
 
 
-def _longest_common_run(first: str, second: str) -> int:
-    """Return the longest contiguous shared run without fuzzy semantics."""
-
-    if not first or not second:
-        return 0
-    previous = [0] * (len(second) + 1)
-    longest = 0
-    for left in first:
-        current = [0]
-        for position, right in enumerate(second, start=1):
-            value = previous[position - 1] + 1 if left == right else 0
-            current.append(value)
-            longest = max(longest, value)
-        previous = current
-    return longest
-
-
 def _predicate_binds_obligation(predicate, segment: str) -> bool:
     """Require both a verbatim locator and a semantic identity for a clause."""
 
@@ -1252,7 +1259,6 @@ def _predicate_binds_obligation(predicate, segment: str) -> bool:
     locator_overlaps = any(
         clause in normalized_segment
         or normalized_segment in clause
-        or _longest_common_run(clause, normalized_segment) >= 4
         for clause in clauses
     )
     if not locator_overlaps:
@@ -1277,11 +1283,27 @@ def _predicate_binds_obligation(predicate, segment: str) -> bool:
     if any(
         term in normalized_segment
         or normalized_segment in term
-        or _longest_common_run(term, normalized_segment) >= 2
         for term in semantic_terms
         if len(term) >= 2
     ):
         return True
+    # A retained named period can interrupt an otherwise exact action label.
+    # Remove only that one bound cue, not arbitrary intervening source words.
+    period = predicate.prospective_period
+    if (isinstance(period, ProspectivePeriod)
+            and normalized_segment in clauses):
+        patterns = (
+            (ProtocolPeriod.STUDY_PERIOD, STUDY_PERIOD_SOURCE_PATTERN),
+            (ProtocolPeriod.TREATMENT_PERIOD, TREATMENT_PERIOD_SOURCE_PATTERN),
+        )
+        cues = [(kind, match) for kind, pattern in patterns for match in pattern.finditer(segment)]
+        if len(cues) == 1 and cues[0][0] == period.period:
+            match = cues[0][1]
+            prefix = segment[:match.start()].rstrip()
+            if prefix.endswith("在"):
+                action = _normalized(prefix[:-1] + segment[match.end():])
+                if action and action in semantic_terms:
+                    return True
     if predicate.requires_professional_judgment and "研究者" in normalized_segment:
         return True
     values = predicate.value if isinstance(predicate.value, list) else [predicate.value]

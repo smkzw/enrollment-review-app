@@ -572,6 +572,99 @@ def test_existing_bare_population_subject_and_partner_source_is_preserved():
     assert _population_source_bound(AtomicExpression(predicate=predicate))
 
 
+def _period_prefixed_population_atom(text):
+    return AtomicExpression(predicate=AtomicPredicate(
+        predicate_id="population-period", subject="类别甲参与者及其伴侣",
+        attribute="同意采取措施", comparator=Comparator.EXISTS,
+        applicable_population="类别甲参与者", source_clauses=[text],
+        semantic_proposition="类别甲参与者及其伴侣同意在整个研究期间采取措施",
+        prospective_period=SourceDefinedProspectivePeriod(source_excerpts=[text]),
+    ))
+
+
+@pytest.mark.parametrize("prefix", [
+    "整个研究期间（从节点甲至节点乙），", "研究期间(从节点甲至节点乙)：",
+    "治疗期间（从节点甲至节点乙）；", "整个研究期间（从节点甲至节点乙）\n",
+])
+def test_period_prefixed_population_retains_complete_source_and_unknown_consumer(prefix):
+    text = prefix + "类别甲参与者及其伴侣同意采取措施"
+    atom = _period_prefixed_population_atom(text)
+    assert _population_source_bound(atom)
+    assert atom.predicate.exact_source_clauses == [text]
+    assert atom.predicate.prospective_period.source_excerpts == [text]
+    result = evaluate_expression(atom, EvaluationContext(
+        project_id="project", subject_id="subject", review_episode_id="episode",
+        evidence_snapshot_id="snapshot",
+    ))
+    assert result.truth == TruthValue.UNKNOWN
+    assert "applicable_population_unverified" in result.reason_codes
+
+
+@pytest.mark.parametrize("text", [
+    "整个研究期间（从节点甲至节点乙），除类别甲参与者外，所有参与者同意采取措施",
+    "整个研究期间（从类别甲参与者入组至末次访视），所有参与者同意采取措施",
+    "整个研究期间（从节点甲至节点乙），非类别甲参与者及其伴侣同意采取措施",
+    "整个研究期间（从节点甲至节点乙），使用类别甲参与者样本的治疗被禁止",
+    "整个研究期间（从节点甲至节点乙)，类别甲参与者及其伴侣同意采取措施",
+    "整个研究期间（从节点甲至节点乙）内，类别甲参与者及其伴侣同意采取措施",
+])
+def test_period_prefixed_population_rejects_negation_boundary_objects_and_unparsed_scope(text):
+    assert not _population_source_bound(_period_prefixed_population_atom(text))
+
+
+@pytest.mark.parametrize("mutation", ["missing_period", "missing_subject", "other_proposition", "borrowed_clause"])
+def test_period_prefixed_population_requires_its_own_complete_period_and_object(mutation):
+    text = "整个研究期间（从节点甲至节点乙），类别甲参与者及其伴侣同意采取措施"
+    atom = _period_prefixed_population_atom(text)
+    if mutation == "missing_period":
+        atom.predicate.prospective_period = None
+    elif mutation == "missing_subject":
+        atom.predicate.subject = "所有参与者"
+    elif mutation == "other_proposition":
+        atom.predicate.semantic_proposition = "类别乙参与者同意采取措施"
+    else:
+        atom.predicate.source_clauses.append("另一个条件的期间说明")
+    assert not _population_source_bound(atom)
+
+
+def test_period_prefixed_population_full_gate_preserves_explicit_applicability_gap():
+    source, draft, spans = _fixture()
+    text = "整个研究期间（从节点甲至节点乙），类别甲参与者及其伴侣同意采取措施"
+    atom = _period_prefixed_population_atom(text)
+    _replace_inclusion_source_and_expression(source, draft, text, atom)
+    draft.proposed_rules[0].source_text = text
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    issues = _issues(result, "boolean_logic")
+    assert not any(i.issue_code == "APPLICABLE_POPULATION_SOURCE_UNBOUND" for i in issues)
+    assert next(i for i in issues if i.issue_code == "APPLICABLE_POPULATION_NOT_EVALUATED").level == "提醒"
+
+
+@pytest.mark.parametrize("restricted", [False, True])
+def test_shared_words_do_not_hide_a_separate_obligation_from_full_coverage_gate(restricted):
+    source, draft, spans = _fixture()
+    text = "存在或疑似情况甲；存在或疑似情况乙"
+    atom = _exists_predicate("condition-a", "情况甲", "存在或疑似情况甲")
+    _replace_inclusion_source_and_expression(source, draft, text, atom)
+    rule = draft.proposed_rules[0]
+    rule.source_text = text
+    if restricted:
+        rule.restricted_components = [RestrictedRuleComponent(
+            rule_component_id="component-b-pending", display_code="IN-01b",
+            title="情况乙的含义待核", source_span_ids=["span-in"],
+            source_excerpts=["存在或疑似情况乙"], limitation_kind="interpretation_unresolved",
+            unresolved_dimensions=["情况乙的适用含义尚未核实"],
+        )]
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    codes = {i.issue_code for i in _issues(result, "source_coverage")}
+    if restricted:
+        assert "RESTRICTED_COMPONENT_SCOPE_INVALID" not in codes
+        assert "PARENT_RULE_OBLIGATION_NOT_COVERED" not in codes
+    else:
+        issue = next(i for i in _issues(result, "source_coverage")
+                     if i.issue_code == "PARENT_RULE_OBLIGATION_NOT_COVERED")
+        assert any("情况乙" in ref for ref in issue.affected_refs)
+
+
 def test_calendar_population_binding_day_legacy_and_half_life_paths():
     atom = _calendar_qualified_population_atom("Category A", 9,
         "9 weeks (Category A) / 3 weeks (Category B)")
@@ -839,13 +932,14 @@ def test_scoped_note_is_not_owned_by_a_sibling_with_shared_words():
         limitation_kind="consumer_unavailable",
         unresolved_dimensions=["尚不能核实本例是否属于限定人群"],
     )]
-    assert _predicate_binds_obligation(predicate, note)
+    assert not _predicate_binds_obligation(predicate, note)
     result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
     codes = {issue.issue_code for issue in _issues(result, "source_coverage")}
     assert "RESTRICTED_COMPONENT_SOURCE_INVALID" not in codes
     assert "RESTRICTED_COMPONENT_SCOPE_INVALID" not in codes
 
     predicate.source_clauses.append(note)
+    assert _predicate_binds_obligation(predicate, note)
     result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
     assert "RESTRICTED_COMPONENT_CAPABILITY_UNPROVEN" in {
         issue.issue_code for issue in _issues(result, "source_coverage")
