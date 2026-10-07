@@ -566,6 +566,9 @@ def test_full_deep_run_populates_the_declaration_from_frozen_identities() -> Non
     consumers = result.source_definition_consumers
     assert consumers is not None
     assert consumers.items[0].consumers[0].candidate_index == 0
+    # An accepted run uses the one existing registration path only.
+    assert result.pending_source_definition_consumers is None
+    assert result.pending_source_definition_consumer_attempts == []
 
 
 def test_full_deep_run_without_the_declaration_reader_is_not_accepted() -> None:
@@ -578,3 +581,250 @@ def test_full_deep_run_without_the_declaration_reader_is_not_accepted() -> None:
     last = result.attempts[-1]
     assert last.outcome == "transport_failed"
     assert last.error_classes == ["SOURCE_DEFINITION_CONSUMER_TRANSPORT_FAILED"]
+
+
+# -- an unresolved source run keeps one bounded declaration diagnostic ------
+
+
+class _PendingDeepTransport(_DeepTransport):
+    """Always-unresolved reviewer: the gate-valid run stops at the typed path."""
+
+    def start_source_target_review(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        self.review_calls += 1
+        review = SourceTargetReview.model_validate({
+            "version": SOURCE_TARGET_REVIEW_VERSION,
+            "items": [{
+                "statement_index": 0,
+                "decision": "unresolved",
+                "target_id": None,
+                "source_action_excerpt": "说明年龄记录来源",
+                "target_action_excerpt": None,
+                "source_time_excerpt": "筛选前",
+                "target_time_excerpt": None,
+                "unresolved_aspects": ["尚未确认对应目标"],
+            }],
+        })
+        return ProtocolControlAgentResponse(
+            session_id=f"target-{self.review_calls}", text=review.model_dump_json(),
+        )
+
+
+class _PendingDeepTransportWithoutDeclaration(_PendingDeepTransport):
+    start_source_definition_consumers = None
+
+
+class _PendingBrokenWireTransport(_PendingDeepTransport):
+    def start(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        return ProtocolControlAgentResponse(session_id="wire-bad", text="显然不是JSON")
+
+
+class _PendingBrokenSourceTransport(_PendingDeepTransport):
+    def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        return ProtocolControlAgentResponse(session_id="source-bad", text="显然不是JSON")
+
+
+class _PendingInvalidDeclarationTransport(_PendingDeepTransport):
+    def start_source_definition_consumers(
+        self, *, prompt: str,
+    ) -> ProtocolControlAgentResponse:
+        self.decl_prompts.append(prompt)
+        return ProtocolControlAgentResponse(session_id="def-bad", text="显然不是JSON")
+
+
+class _PendingFailingReaderTransport(_PendingDeepTransport):
+    def start_source_definition_consumers(
+        self, *, prompt: str,
+    ) -> ProtocolControlAgentResponse:
+        self.decl_prompts.append(prompt)
+        raise ProtocolControlAgentCallError("def-error", "connection refused")
+
+
+class _PendingNoDefinitionTransport(_PendingDeepTransport):
+    def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        _batch, inventory = _deep_fixtures()
+        inventory.statements[0].decision_functions = ["action"]
+        return ProtocolControlAgentResponse(session_id="source-1", text=inventory.model_dump_json())
+
+
+def _pending_run(transport: object):
+    batch, _inventory = _deep_fixtures()
+    return ProtocolControlAgentRunner().run(batch, transport)
+
+
+def _pending_official_declaration(*, official_code: str) -> str:
+    return SourceDefinitionConsumers(
+        version=SOURCE_DEFINITION_CONSUMER_VERSION,
+        items=[SourceDefinitionConsumerItem(
+            statement_index=0,
+            consumers=[SourceDefinitionAtomConsumer(
+                consumer_kind="official_predicate",
+                official_code=official_code,
+                rule_component_id="component-invented",
+                predicate_id="predicate-invented",
+                consumer_excerpt=DEEP_QUOTE,
+                relation_note=None,
+            )],
+            unresolved_aspects=[],
+        )],
+    ).model_dump_json()
+
+
+def test_pending_unresolved_run_saves_one_definition_declaration_without_adoption() -> None:
+    transport = _PendingDeepTransport(declaration=_deep_declaration())
+    result = _pending_run(transport)
+
+    # The original failure is untouched: still needs review, no accepted wire.
+    assert result.status == "需要核对"
+    assert result.final_output is None
+    assert result.source_definition_consumers is None
+    assert result.partial_wire is not None
+    assert result.source_interpretation is not None
+    assert [item.decision for item in result.source_target_review.items] == ["unresolved"]
+    last = result.attempts[-1]
+    assert last.outcome == "publication_invalid"
+    assert last.error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+
+    # Exactly one bounded declaration call, saved apart from the failure.
+    assert len(transport.decl_prompts) == 1
+    assert DEEP_QUOTE in transport.decl_prompts[0]
+    assert "年龄至少18岁" in transport.decl_prompts[0]
+    declaration = result.pending_source_definition_consumers
+    assert declaration is not None
+    assert declaration.items[0].consumers[0].candidate_index == 0
+    assert declaration.items[0].consumers[0].consumer_excerpt == "年龄至少18岁"
+    diagnostic = result.pending_source_definition_consumer_attempts
+    assert [(item.attempt, item.outcome, item.session_id) for item in diagnostic] == [
+        (1, "parsed", "def-1"),
+    ]
+
+
+def test_pending_declaration_never_disturbs_the_original_failure_receipt() -> None:
+    with_reader = _PendingDeepTransport(declaration=_deep_declaration())
+    without_reader = _PendingDeepTransportWithoutDeclaration(declaration=None)
+    saved = _pending_run(with_reader)
+    baseline = _pending_run(without_reader)
+
+    # Reader absent: no new call and no diagnostic instead of a fake receipt.
+    assert without_reader.decl_prompts == []
+    assert baseline.pending_source_definition_consumers is None
+    assert baseline.pending_source_definition_consumer_attempts == []
+
+    # Every original receipt stays field-for-field identical.
+    assert saved.attempts == baseline.attempts
+    assert saved.partial_wire == baseline.partial_wire
+    assert saved.source_interpretation == baseline.source_interpretation
+    assert saved.source_target_review == baseline.source_target_review
+    assert saved.source_statement_coverage == baseline.source_statement_coverage
+    assert saved.status == baseline.status == "需要核对"
+    assert saved.final_output is None and baseline.final_output is None
+    assert len(with_reader.decl_prompts) == 1
+    assert len(saved.pending_source_definition_consumer_attempts) == 1
+
+
+def test_pending_invalid_declaration_saves_a_failed_diagnostic_only() -> None:
+    transport = _PendingInvalidDeclarationTransport(declaration=_deep_declaration())
+    result = _pending_run(transport)
+    assert result.status == "需要核对"
+    assert result.final_output is None
+    assert result.source_definition_consumers is None
+    assert result.pending_source_definition_consumers is None
+    diagnostic = result.pending_source_definition_consumer_attempts
+    assert len(diagnostic) == 1
+    assert diagnostic[0].outcome == "publication_invalid"
+    assert diagnostic[0].error_classes == ["SOURCE_DEFINITION_CONSUMER_INVALID"]
+    assert diagnostic[0].raw_output_text == "显然不是JSON"
+    # The original source-failure attempt was not reordered or replaced.
+    assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+
+
+def test_pending_declaration_transport_failure_saves_a_failed_diagnostic_only() -> None:
+    transport = _PendingFailingReaderTransport(declaration=_deep_declaration())
+    result = _pending_run(transport)
+    assert result.status == "需要核对"
+    assert result.final_output is None
+    assert result.source_definition_consumers is None
+    assert result.pending_source_definition_consumers is None
+    diagnostic = result.pending_source_definition_consumer_attempts
+    assert len(diagnostic) == 1
+    assert diagnostic[0].attempt == 1
+    assert diagnostic[0].outcome == "transport_failed"
+    assert diagnostic[0].session_id == "def-error"
+    assert diagnostic[0].error_classes == ["SOURCE_DEFINITION_CONSUMER_INVALID"]
+    assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+
+
+def test_pending_declaration_cannot_reallocate_an_exhausted_logical_budget() -> None:
+    from app.llm.logical_call_budget import LogicalCallBudget, LogicalCallBudgetExhausted
+
+    budget = LogicalCallBudget("pending-definition", max_requests=1, max_output_tokens=128)
+    budget.reserve(request_sha256="previous-physical-request", max_tokens=128)
+    frozen = budget.snapshot()
+
+    class BudgetedTransport(_PendingDeepTransport):
+        sent = 0
+
+        def start_source_definition_consumers(self, *, prompt: str):
+            self.decl_prompts.append(prompt)
+            try:
+                budget.reserve(request_sha256="pending-definition-request", max_tokens=128)
+            except LogicalCallBudgetExhausted as exc:
+                raise ProtocolControlAgentCallError("def-budget", str(exc)) from exc
+            self.sent += 1
+            pytest.fail("An exhausted ledger must reject before a physical send")
+
+    transport = BudgetedTransport(declaration=_deep_declaration())
+    result = _pending_run(transport)
+    assert budget.snapshot() == frozen
+    assert transport.sent == 0
+    assert len(transport.decl_prompts) == 1
+    assert result.status == "需要核对"
+    assert result.final_output is None and result.source_definition_consumers is None
+    assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+    diagnostic = result.pending_source_definition_consumer_attempts
+    assert len(diagnostic) == 1
+    assert diagnostic[0].outcome == "transport_failed"
+    assert diagnostic[0].error_classes == ["LOGICAL_BUDGET_EXHAUSTED"]
+    assert diagnostic[0].raw_output_text is None
+
+
+def test_pending_official_identity_substitution_stays_a_failed_diagnostic_only() -> None:
+    # A frozen parent code plus invented wording must not become a consumer.
+    transport = _PendingDeepTransport(
+        declaration=_pending_official_declaration(official_code="EX-01"),
+    )
+    result = _pending_run(transport)
+    assert result.status == "需要核对"
+    assert result.source_definition_consumers is None
+    assert result.pending_source_definition_consumers is None
+    diagnostic = result.pending_source_definition_consumer_attempts
+    assert len(diagnostic) == 1
+    assert diagnostic[0].outcome == "publication_invalid"
+    assert diagnostic[0].error_detail is not None
+    assert diagnostic[0].error_detail["code"] == "SOURCE_DEFINITION_CONSUMER_IDENTITY_UNPROVEN"
+    assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+
+
+def test_pending_unresolved_run_without_a_definition_never_asks_the_reader() -> None:
+    transport = _PendingNoDefinitionTransport(declaration=_deep_declaration())
+    result = _pending_run(transport)
+    assert result.status == "需要核对"
+    assert result.final_output is None
+    assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+    assert transport.decl_prompts == []
+    assert result.pending_source_definition_consumers is None
+    assert result.pending_source_definition_consumer_attempts == []
+
+
+@pytest.mark.parametrize("broken", ["wire", "source"])
+def test_a_failed_author_or_source_run_never_reaches_the_pending_declaration(broken: str) -> None:
+    transport = (
+        _PendingBrokenWireTransport(declaration=_deep_declaration())
+        if broken == "wire" else
+        _PendingBrokenSourceTransport(declaration=_deep_declaration())
+    )
+    result = _pending_run(transport)
+    assert result.status == "需要核对"
+    assert result.final_output is None
+    assert transport.decl_prompts == []
+    assert result.pending_source_definition_consumers is None
+    assert result.pending_source_definition_consumer_attempts == []

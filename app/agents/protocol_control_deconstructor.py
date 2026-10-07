@@ -4244,6 +4244,18 @@ class ProtocolControlAgentRunResult(ContractModel):
     # identity and the exact basis excerpt, and an absent declaration keeps the
     # publication block instead of passing.
     source_definition_consumers: SourceDefinitionConsumers | None = None
+    # Diagnostic only: a gate-valid source run that stopped at an unresolved
+    # source/target correspondence keeps its declaration attempt here instead
+    # of the adoption field above. The declaration stays a proposal with its
+    # own 1-based attempt sequence; it never replaces the original failure and
+    # never makes the batch accepted. Both defaults stay out of the legacy
+    # serialized shape, so an old response round-trips unchanged.
+    pending_source_definition_consumers: SourceDefinitionConsumers | None = Field(
+        default=None, exclude_if=lambda value: value is None,
+    )
+    pending_source_definition_consumer_attempts: list[ProtocolControlAgentAttempt] = Field(
+        default_factory=list, exclude_if=lambda value: not value,
+    )
     partial_wire: ProtocolControlAgentWire | None = None
     # Diagnostic only: an unaccepted full wire with a typed consumer-capability
     # failure. The source restriction producer revalidates it on every read.
@@ -9252,6 +9264,34 @@ class ProtocolControlAgentRunner:
                                 else _temporal_scope_error_detail(exc)
                             ),
                         ))
+                        # The source and the hydrated author wire are both
+                        # valid; only the source/target correspondence stayed
+                        # unresolved. Keep the original failure untouched and
+                        # let the one bounded declaration step record, as a
+                        # strictly separate diagnostic, whether this definition
+                        # has provable consumers. A missing reader, a missing
+                        # definition, an invalid declaration or a transport
+                        # failure stays a diagnostic only: no adoption, no
+                        # status change, and no shared attempt sequence.
+                        pending_definition_consumers = None
+                        pending_definition_attempts: list[ProtocolControlAgentAttempt] = []
+                        if (
+                            isinstance(exc, SourceTargetReviewValidationError)
+                            and exc.code == "SOURCE_TARGET_REVIEW_UNRESOLVED"
+                            and source_interpretation is not None
+                            and output is not None
+                            and callable(getattr(
+                                transport, "start_source_definition_consumers", None,
+                            ))
+                        ):
+                            pending_definition_consumers, _pending_failed = (
+                                declare_source_definition_consumers(
+                                    batch, transport, source_interpretation, output,
+                                    pending_definition_attempts,
+                                    official_predicate_identities=official_predicate_identities,
+                                    official_predicate_sources=official_predicate_sources,
+                                )
+                            )
                         return build_result(
                             status="需要核对",
                             batch_id=batch.batch_id,
@@ -9262,6 +9302,8 @@ class ProtocolControlAgentRunner:
                             source_target_review=recovery_target_review(),
                             source_candidate_alignment=checkpoint_alignment(),
                             partial_wire=partial_wire,
+                            pending_source_definition_consumers=pending_definition_consumers,
+                            pending_source_definition_consumer_attempts=pending_definition_attempts,
                         )
                 definition_consumers, definition_failed = declare_source_definition_consumers(
                     batch, transport, source_interpretation, output, attempts,

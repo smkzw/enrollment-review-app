@@ -5,6 +5,17 @@
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
   "runtime_state": "active",
   "claims_complete": false,
+  "pending_definition_consumer_diagnostic": {
+    "base_commit": "d620670a20f0717005d9e2ccf89affeb42b0832b",
+    "identity": "pending-definition-consumer-diagnostic/v1",
+    "scope": "One existing declaration after gate-valid source and wire stop at typed unresolved correspondence. Same logical budget; separate pending proposal, attempts and private raw output; original failure and adoption fields unchanged",
+    "tests": {"modules": 5, "passed": 993, "seconds": 88.73, "exit_code": 0, "warnings": "5 inherited SWIG", "pydantic": "2.13.3", "pytest": "9.0.2", "earlier_windows": "990pass2fail incomplete fixture and changed diagnostic-call expectation; 992pass1fail owner empty-parsed declaration assertion. No gate weakened; overlapping windows not additive"},
+    "execution": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "fallback": false, "report": "runs/execution/rv1006-pending-definition-record-20261007/worker_01.md", "limits": "Worker broad search and heredoc test append recorded; no clinical files or product calls assigned"},
+    "conference": {"route": "zcode/zcode/GLM-5.3-Flash/max", "rounds_completed": 1, "exit_code": 0, "fallback": false, "owner_silent_120min_completion_wait": true, "report": "runs/conference/rv1006-pending-definition-record-review-20261008/evidence_single_object.md", "limits": "Code only; no tests/clinical reads. Reviewer dependency version assertion unverified and corrected by owner"},
+    "actual_runtime": {"directory": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-pending-definition-runtime-20261008-v4", "new_physical_calls": 2, "prior_v1_physical_calls": 1, "seconds": 98.40020891698077, "state": "needs_verification", "last_main_error": "SOURCE_TARGET_REVIEW_UNRESOLVED", "pending_definition_items": 4, "pending_attempts": 1, "accepted_definition_present": false, "database_writes": 0, "source_protected_unchanged": true, "limits": "Hash-verified saved answer replay plus one actual local review and one declaration; not new API Job, publication or clinical acceptance. V2 bootstrap and v3 diagnostic message-identity mismatch zero calls; v1 first causal gate error was TARGET_VISIT_SCOPE_UNPROVEN, not provider outage"},
+    "formal_joint_publication": false,
+    "new_current_node_report": false
+  },
   "compact_completed_source_reading": {
     "base_commit": "5b5d9e8b90183f6716965b1304d944d86be48f90",
     "scope": "Native collapsed details only for completed known full coverage without failure, closed scope, unknown counts or retry; original panel and actions retained. No qualification or model behavior changes",

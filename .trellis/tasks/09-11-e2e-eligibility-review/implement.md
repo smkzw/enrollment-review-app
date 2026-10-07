@@ -3,9 +3,13 @@
 
 ### 单一当前用户流程表
 
-源码5b5d9e8b已push，同格标题引用及已有单条恢复已提交；本次待提交为已完成识读默认收起的四个前端文件及合并记录。7份继承delivery修改未动。现场Goal active/claims_complete=false，无用户暂停。当前单所有者集成＋已完成单C03：混合定义/未决的来源消费有解释风险，需独立挑战；普通展示修复不重复会商。共享接入184bdb60已push，只修改入排侧，不改共享首屏/后端；共享侧真实binding仍缺，不宣称两个产品已贯通。
+源码d620670a已push，包括同格来源及恢复、已完成识读默认收起和证据页宽屏核对。7份继承delivery修改未动。现场Goal active/claims_complete=false，无用户暂停。本次执行＋独立审阅仅修已有来源定义关系的待核保存，未改采用保护；实际C03和所有者集中检查已完成。共享接入184bdb60已push，只修改入排侧，不改共享首屏/后端；共享侧真实binding仍缺，不宣称两个产品已贯通。
 
 ### 当前用户流程表（以下旧运行段落只作历史证据）
+
+相邻有界工作采用执行＋必要独立审阅：E03实际CodeBuddy/DeepSeek/max完成两处现有生产/保存接线及相关测试，无fallback；C03实际ZCode/GLM-5.3-Flash/max、新鲜上下文、1轮exit0/no fallback、120分钟完成等待期间静默。首错是来源目标未决提前返回，实际定义关系登记未运行。现仅在来源和候选均合法、明确SOURCE_TARGET_REVIEW_UNRESOLVED时运行一次已有登记，使用同一调用账本，另存pending字段与原答；主失败/顺序/final=None保持，不进入采用字段。无读道不虚构调用，预算用尽在发送前拒绝；身份增加pending-definition-consumer-diagnostic/v1，不改旧证明。所有者五相连原模块最终993passed/88.73s/exit0、5既有SWIG警告，实际Pydantic2.13.3/pytest9.0.2；不是临床验收。前窗990pass2fail为不完整测试替身及旧零调用断言，次窗992pass1fail为所有者误把空的已解析待核声明当非法，均修夹具/断言，不放宽门禁，窗口不累加。执行者曾宽搜runs且以heredoc追加测试，过程限制如实记录；此后所有者只用apply_patch，未撤销有效改动。独立审阅建议不扩定义总拦截、不为显示混写主失败，已采纳；其依赖版本2.13.4未实测，不采信。代码审阅报告与指标见reviews/codex_conference_rv1006-pending-definition-record-review-20261008_review.md及metrics同名文件。
+
+真实产品Runner诊断rv1006-pending-definition-runtime-20261008-v4：逐字hash和完整产品消息对账后重放原v1回答（非新调用），当前局部纠正1调用、定义登记1调用，共2新增/98.4002s；仍需要核对/SOURCE_TARGET_REVIEW_UNRESOLVED，4项待核关系保存/读回，正式定义字段为空、final=None，0库写，源库/保护库/来源/候选均不变。加原v1实际1调用累计3，不重置账本；不等于新API Job、共同发布或完整工作稿。v1首处偏离为模型把无访视依据的日内建议对应到流程项，TARGET_VISIT_SCOPE_UNPROVEN正确拦截；后续诊断单调用限制制造transport失败，不是供应商故障。v2诊断构造错误、v3诊断比较漏了产品Schema消息，均0实际调用；v4按实际完整消息修诊断而不松来源/语义保护。无需第五次无新证据重复；下一步是核真实定义范围/跨组对应的生产和采用消费者，不再只增加待核保存。
 
 | 用户步骤 | 当前实际入口、产物与证据 | 首个阻断及接续 |
 |---|---|---|

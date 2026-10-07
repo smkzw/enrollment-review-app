@@ -150,6 +150,7 @@ def test_deep_step_preserves_pending_cross_chapter_for_final_relation_check(monk
     result = SimpleNamespace(
         status="待跨章核验", final_output=SimpleNamespace(model_dump=lambda **_: {}),
         attempts=[],
+        pending_source_definition_consumer_attempts=[],
         model_dump=lambda **_: {"status": "待跨章核验", "batch_id": "batch-a"},
     )
     monkeypatch.setattr(module.ProtocolControlAgentRunner, "run", lambda *_ , **__: result)
@@ -4984,3 +4985,168 @@ def test_actual_alignment_runner_failure_checkpoint_roundtrip_and_bounded_resume
     assert len(transport.asked) == before + 1
     with session_factory() as session:
         assert JobStore(session, now=_now).get_last_checkpoint(job.job_id, "deep_0001") == checkpoint
+
+
+# -- pending definition-consumer diagnostics in the deep failure checkpoint --
+
+
+_PENDING_DEFINITION_RAW_TEXT = "待核定义原答"
+_PENDING_DEFINITION_RAW_SHA256 = hashlib.sha256(
+    _PENDING_DEFINITION_RAW_TEXT.encode("utf-8")
+).hexdigest()
+
+
+def _pending_definition_result(*, with_pending: bool):
+    from app.agents.protocol_control_deconstructor import (
+        ProtocolControlAgentAttempt,
+        ProtocolControlAgentRunResult,
+    )
+    from app.agents.protocol_control_source_interpretation import (
+        SOURCE_DEFINITION_CONSUMER_VERSION,
+        SourceDefinitionConsumers,
+    )
+
+    result = ProtocolControlAgentRunResult(
+        status="需要核对",
+        batch_id="batch-pending-definition",
+        session_id="author-1",
+        attempts=[ProtocolControlAgentAttempt(
+            attempt=1, session_id="author-1", raw_output_sha256="a" * 64,
+            outcome="publication_invalid",
+            error_classes=["SOURCE_TARGET_REVIEW_UNRESOLVED"],
+        )],
+    )
+    if not with_pending:
+        return result
+    return result.model_copy(update={
+        "pending_source_definition_consumers": SourceDefinitionConsumers(
+            version=SOURCE_DEFINITION_CONSUMER_VERSION, items=[],
+        ),
+        "pending_source_definition_consumer_attempts": [ProtocolControlAgentAttempt(
+            attempt=1, session_id="def-1", raw_output_sha256=_PENDING_DEFINITION_RAW_SHA256,
+            raw_output_chars=len(_PENDING_DEFINITION_RAW_TEXT),
+            raw_output_text=_PENDING_DEFINITION_RAW_TEXT,
+            outcome="parsed",
+        )],
+    })
+
+
+def _deep_failure_diagnostic(monkeypatch, result):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
+
+    module = protocol_control_execution_module
+    batch = SimpleNamespace(
+        batch_id=result.batch_id, owned_units=[], context_units=[],
+    )
+    monkeypatch.setattr(module, "_closure_checkpoint", lambda *_: {"deep_plan": {"batches": []}})
+    monkeypatch.setattr(
+        module.ProtocolControlDiscoveryToDeepPlan, "model_validate",
+        staticmethod(lambda payload: SimpleNamespace(batches=[batch])),
+    )
+    monkeypatch.setattr(module, "_deep_batch_for_step", lambda *_: batch)
+    monkeypatch.setattr(module, "_prompt_from_payload", lambda *_: "冻结提示")
+    monkeypatch.setattr(module, "_limits_from_payload", lambda *_: (1, 2))
+    monkeypatch.setattr(module, "_require_frozen_route", lambda *_, **__: None)
+    monkeypatch.setattr(module, "_deep_component_identity", lambda *_: {
+        "schema_version": "phase5/deep-component-identity/v3",
+        "validator_version": "gate",
+    })
+    monkeypatch.setattr(module, "_transport_identity", lambda *_, **__: {"route": "deep"})
+    monkeypatch.setattr(
+        module, "protocol_control_agent_prompt_template_sha256", lambda *_: "prompt",
+    )
+    monkeypatch.setattr(
+        module, "protocol_control_agent_repair_contract_sha256", lambda **_: "repair",
+    )
+    monkeypatch.setattr(module, "_require_schedule_member_sources", lambda *_: None)
+    monkeypatch.setattr(module, "_frozen_official_predicates", lambda *_: ({}, {}))
+    monkeypatch.setattr(module, "restricted_batch_from_review", lambda *_: None)
+    monkeypatch.setattr(module, "_validate_deep_batch_output", lambda *_: None)
+    monkeypatch.setattr(
+        module, "hydrate_protocol_control_agent_output",
+        lambda wire, batch: SimpleNamespace(batch_id=batch.batch_id),
+    )
+    monkeypatch.setattr(module, "_resolve_transport", lambda *_, **__: SimpleNamespace(
+        start_source_interpretation=lambda **_: None,
+        take_call_receipts=lambda: [],
+    ))
+    monkeypatch.setattr(ProtocolControlAgentRunner, "run", lambda *_, **__: result)
+    context = StepContext(
+        job_id="job-pending-definition", job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+        job_payload={}, step_id="deep_0001", name="深审", attempt=1,
+        last_checkpoint_id=None, last_checkpoint=None,
+    )
+    with pytest.raises(StepFailure) as raised:
+        module._execute_deep(context, SimpleNamespace())
+    diagnostic = raised.value.diagnostic_checkpoint
+    assert diagnostic is not None and diagnostic["stage"] == "deep_failure_diagnostic"
+    return diagnostic
+
+
+def test_failure_checkpoint_carries_the_pending_definition_diagnostic(monkeypatch) -> None:
+    diagnostic = _deep_failure_diagnostic(
+        monkeypatch, _pending_definition_result(with_pending=True),
+    )
+    assert diagnostic["pending_source_definition_consumers"]["items"] == []
+    pending_attempts = diagnostic["pending_source_definition_consumer_attempts"]
+    assert [
+        (item["attempt"], item["outcome"], item["session_id"], item["role"])
+        for item in pending_attempts
+    ] == [(1, "parsed", "def-1", "pending_source_definition_consumer")]
+    assert pending_attempts[0]["raw_output_text"] == "待核定义原答"
+    assert hashlib.sha256(
+        pending_attempts[0]["raw_output_text"].encode("utf-8")
+    ).hexdigest() == pending_attempts[0]["raw_output_sha256"]
+    # The original source failure keeps its own attempt sequence and receipt.
+    assert diagnostic["attempts"][-1]["error_classes"] == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+    assert "role" not in diagnostic["attempts"][-1]
+
+
+def test_failure_checkpoint_keeps_legacy_shape_without_a_pending_diagnostic(monkeypatch) -> None:
+    diagnostic = _deep_failure_diagnostic(
+        monkeypatch, _pending_definition_result(with_pending=False),
+    )
+    assert "pending_source_definition_consumers" not in diagnostic
+    assert "pending_source_definition_consumer_attempts" not in diagnostic
+
+
+def test_deep_attempt_raw_outputs_marks_only_pending_definition_answers() -> None:
+    from app.services.protocol_control_execution import _deep_attempt_raw_outputs
+
+    plain = _deep_attempt_raw_outputs(_pending_definition_result(with_pending=False))
+    assert plain == [{
+        "attempt": 1,
+        "session_id": "author-1",
+        "raw_output_sha256": "a" * 64,
+        "raw_output_chars": None,
+        "raw_output_text": None,
+    }]
+    marked = _deep_attempt_raw_outputs(_pending_definition_result(with_pending=True))
+    assert len(marked) == 2
+    assert marked[0] == plain[0]
+    assert marked[1]["role"] == "pending_source_definition_consumer"
+    assert marked[1]["attempt"] == 1
+    assert marked[1]["raw_output_text"] == "待核定义原答"
+
+
+def test_run_result_serialization_keeps_the_pending_diagnostic_optional() -> None:
+    plain = _pending_definition_result(with_pending=False)
+    dumped = plain.model_dump(mode="json")
+    assert "pending_source_definition_consumers" not in dumped
+    assert "pending_source_definition_consumer_attempts" not in dumped
+
+    pending = _pending_definition_result(with_pending=True)
+    dumped = pending.model_dump(mode="json")
+    assert dumped["pending_source_definition_consumers"]["items"] == []
+    assert "raw_output_text" not in dumped["pending_source_definition_consumer_attempts"][0]
+    restored = ProtocolControlAgentRunResult.model_validate_json(pending.model_dump_json())
+    assert [
+        (item.attempt, item.session_id, item.raw_output_sha256, item.outcome)
+        for item in restored.pending_source_definition_consumer_attempts
+    ] == [(1, "def-1", _PENDING_DEFINITION_RAW_SHA256, "parsed")]
+    assert restored.pending_source_definition_consumers is not None
+    # A pending diagnostic never releases the run for adoption.
+    assert restored.status == "需要核对"
+    assert restored.final_output is None
+    assert restored.source_definition_consumers is None
+    assert restored.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]

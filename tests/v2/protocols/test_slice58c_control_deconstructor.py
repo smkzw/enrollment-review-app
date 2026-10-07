@@ -3178,11 +3178,22 @@ def test_runner_reaffirmed_function_requires_one_valid_target_review(resolved: b
     )
     assert transport.function_calls == 1
     assert transport.target_calls == 2
-    assert transport.definition_calls == int(resolved)
+    assert transport.definition_calls == 1
     assert result.source_interpretation == original
     assert result.source_target_review == corrected
     assert result.partial_wire == wire
     assert (result.final_output is not None) == resolved
+    if not resolved:
+        assert result.status == "需要核对"
+        assert result.source_definition_consumers is None
+        assert result.pending_source_definition_consumers is not None
+        assert result.pending_source_definition_consumers.items == []
+        assert len(result.pending_source_definition_consumer_attempts) == 1
+        assert result.pending_source_definition_consumer_attempts[0].outcome == "parsed"
+        assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+    else:
+        assert result.source_definition_consumers is not None
+        assert result.pending_source_definition_consumer_attempts == []
     assert any("SOURCE_TARGET_REVIEW_INVALID" in attempt.error_classes
                for attempt in result.attempts)
     assert not any("SOURCE_FUNCTION_RECHECK_UNRESOLVED" in attempt.error_classes

@@ -1952,6 +1952,7 @@ def _deep_component_identity(
             "procedure-link-field-repair-before-repartition/v1",
             "procedure-link-selected-patch-host-merge/v1",
             "inline-scope-citation-assembly/v1",
+            "pending-definition-consumer-diagnostic/v1",
         ],
         "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
         "requested_route_sha256": (
@@ -3712,6 +3713,7 @@ def _execute_deep(
                     }
                     for item in result.attempts
                 ],
+                **_pending_definition_consumer_checkpoint(result),
             },
         )
     return {
@@ -3734,13 +3736,58 @@ def _execute_deep(
 def _deep_attempt_raw_outputs(result: ProtocolControlAgentRunResult) -> list[dict[str, Any]]:
     """Keep answer evidence in the private checkpoint, outside the public run model."""
 
-    return [{
+    outputs = [{
         "attempt": item.attempt,
         "session_id": item.session_id,
         "raw_output_sha256": item.raw_output_sha256,
         "raw_output_chars": item.raw_output_chars,
         "raw_output_text": item.raw_output_text,
     } for item in result.attempts]
+    # The pending definition-consumer diagnostic keeps its own 1-based attempt
+    # sequence. Only these entries carry a role, so an existing consumer of the
+    # author/source-target answers reads the unchanged legacy shape.
+    outputs.extend({
+        "attempt": item.attempt,
+        "session_id": item.session_id,
+        "raw_output_sha256": item.raw_output_sha256,
+        "raw_output_chars": item.raw_output_chars,
+        "raw_output_text": item.raw_output_text,
+        "role": "pending_source_definition_consumer",
+    } for item in result.pending_source_definition_consumer_attempts)
+    return outputs
+
+
+def _pending_definition_consumer_checkpoint(
+    result: ProtocolControlAgentRunResult,
+) -> dict[str, Any]:
+    """Persist the bounded pending declaration diagnostic, only when one exists.
+
+    The proposal and its own attempts stay separate from the original failure
+    fields, and raw answers stay in this private checkpoint instead of any
+    public result or log.
+    """
+
+    if (result.pending_source_definition_consumers is None
+            and not result.pending_source_definition_consumer_attempts):
+        return {}
+    return {
+        "pending_source_definition_consumers": (
+            result.pending_source_definition_consumers.model_dump(mode="json")
+            if result.pending_source_definition_consumers is not None else None
+        ),
+        "pending_source_definition_consumer_attempts": [{
+            "attempt": item.attempt,
+            "session_id": item.session_id,
+            "outcome": item.outcome,
+            "raw_output_sha256": item.raw_output_sha256,
+            "raw_output_chars": item.raw_output_chars,
+            "raw_output_text": item.raw_output_text,
+            "error_classes": item.error_classes,
+            "error_detail": item.error_detail,
+            "issues": item.issues,
+            "role": "pending_source_definition_consumer",
+        } for item in result.pending_source_definition_consumer_attempts],
+    }
 
 
 def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str, Any]:
