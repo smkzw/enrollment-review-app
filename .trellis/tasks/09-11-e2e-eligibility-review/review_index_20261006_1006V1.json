@@ -22,6 +22,8 @@
     "in06b": {"calls": 1, "seconds": 199.666209, "http_status": 200, "revision_after": 4},
     "in06a_source_split_failure": {"calls": 2, "seconds": 148.435834, "http_status": 409, "exit_code": 3, "revision_unchanged": true, "repeated_branch_stopped": true},
     "ex03": {"calls": 1, "seconds": 230.67618166701868, "http_status": 200, "exit_code": 0, "revision_after": 5, "blocking_after": 14, "old_revision_unchanged": true, "other_parents_unchanged": true, "protected_unchanged": true},
+    "ex15": {"calls": 1, "seconds": 356.82181812496856, "http_status": 200, "exit_code": 0, "revision_after": 6, "blocking_after": 12, "old_revision_unchanged": true, "other_parents_unchanged": true, "protected_unchanged": true},
+    "ex07_judgment_scope_rejected": {"calls": 2, "seconds": 632.0821076249704, "http_status": 409, "exit_code": 3, "revision_unchanged": true, "revision_after": 6, "blocking_after": 12, "old_revision_unchanged": true, "other_parents_unchanged": true, "protected_unchanged": true, "first_cause": "Component context contains a distinct sibling's investigator judgment; do not invent a judgment or duplicate the sibling to clear the guard.", "repeated_branch_stopped": true},
     "route": "cms-router/glm-5.3-flash/high", "sdk_retries": 0,
     "old_ledgers_preserved": true, "run_budget_not_reset": true, "formal_rules_published": false
   },
@@ -37,6 +39,15 @@
     "protected_unchanged": true, "old_jobs_unchanged": true,
     "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-current-source-discovery-20261007-v1",
     "access": "controlled_local_only", "claims_complete": false
+  },
+  "fresh_discovery_reuse_preflight": {
+    "source_commit": "798b396b25b734a26574d3652ad15d0eba27cb1d",
+    "draft_revision": 5, "job_id": "9841977fb4fb415283b8942ac36dcd22",
+    "compatible": true, "reusable_batches": 85,
+    "model_calls": 0, "new_jobs": 0, "published": false,
+    "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-fresh-discovery-reuse-20261007-v1.json",
+    "access": "controlled_local_only",
+    "limits": "Discovery compatibility is not deep-result compatibility; deep identity binds the official revision/content. Recheck before creating the actual deep continuation."
   },
   "current_draft_scope_review": {
     "source_commit": "f26cc4e5160485a4fdc1a9ad1ed865c40ca356c0",
