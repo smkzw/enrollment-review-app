@@ -7,13 +7,21 @@
   "claims_complete": false,
   "base_review_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
   "delivered_snapshot_id": "S-15",
+  "partial_coverage_comparison_package": {
+    "base_commit": "36225417", "paths": ["app/agents/protocol_deconstructor.py", "tests/v2/protocols/test_protocol_deconstructor_adapter_slice3.py"],
+    "behavior": "Only selected same-parent same-check same-severity grouped uncovered refs shrinking to a strict subset are comparison refinements; complete gate issues and publication are unchanged.",
+    "tests": {"passed": 342, "seconds": 60.09, "exit_code": 0, "modules": 6, "junit": "/Users/smkzw/tmp/rv1006-partial-coverage-connected-20261007-v2.xml", "earlier": "RED2fail/5pass;v1 336pass/6fail owner list<=set TypeError corrected by set conversion,not a model or old fixture failure;overlap not additive"},
+    "conference": {"route": "grok/grok-build/grok-4.7/high", "session_id": "80fcf27c-acae-4244-a729-84121f984525", "seconds": 127.146, "exit_code": 0, "fallback": false, "decision": "Bounded static acceptance; no tests,clinical reading or publication reread; type bug missed and final conversion owner-tested."},
+    "actual_saved_answer_replay": {"physical_calls": 0, "draft_persisted": false, "answers": 2, "prior_refs": 3, "current_refs": 2, "new_refs_added": 0, "comparator_regresses_after": [], "old_draft_unchanged": true, "protected_unchanged": true, "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-partial-coverage-readonly-20261007-v2.json", "access": "controlled_local_only", "clinical_repair_claimed": false},
+    "formal_rules_published": false, "claims_complete": false
+  },
   "pending_scope_draft_package": {
     "base_commit": "2d217fa0",
     "paths": ["app/services/protocol_workbench_service.py", "tests/v2/api/test_protocols_api.py", "tests/v2/protocols/test_official_scope_review.py"],
     "behavior": "Valid old receipt plus changed whole-parent basis may expire into a pending unpublished draft; stage-issue exclusion additionally freezes all child inputs except literal source_term. Previously failed scope refs are not excluded; actual integrity and publication consume unfiltered issues.",
     "tests": {"passed": 318, "seconds": 59.95, "exit_code": 0, "modules": 5, "junit": "/Users/smkzw/tmp/rv1006-pending-scope-connected-20261007-v2.xml", "earlier": "315pass/3fail: optional serialized repeat field missing in new owner projection; initialization/optional JSON test faults before it. Not additive."},
     "conference": {"route": "grok/grok-build/grok-4.7/high", "session_id": "80fcf27c-acae-4244-a729-84121f984525", "round_seconds": [330.176, 148.922], "exit_codes": [0, 0], "fallback": false, "decision": "First review rejected overbroad selected-item stage exclusion; final narrowed patch bounded accepted. No tests or clinical reading by adviser."},
-    "actual_product_recovery_run": false, "formal_rules_published": false, "claims_complete": false
+    "actual_product_recovery_run": true, "actual_revision_after": 10, "formal_rules_published": false, "claims_complete": false
   },
   "feedback_hydration_package": {
     "base_commit": "1e5f3e35",
@@ -44,7 +52,10 @@
     "ex07_judgment_scope_rejected": {"calls": 2, "seconds": 632.0821076249704, "http_status": 409, "exit_code": 3, "revision_unchanged": true, "revision_after": 6, "blocking_after": 12, "old_revision_unchanged": true, "other_parents_unchanged": true, "protected_unchanged": true, "first_cause": "Component context contains a distinct sibling's investigator judgment; do not invent a judgment or duplicate the sibling to clear the guard.", "repeated_branch_stopped": true},
     "ex07_source_attribution": {"calls": 1, "seconds": 68.67558666697564, "http_status": 200, "exit_code": 0, "revision_after": 8, "blocking_after": 10, "frozen_fields_unchanged": true, "allowed_field": "component_mapping.source_excerpts", "other_parents_unchanged": true, "protected_unchanged": true},
     "in04_correct_field_scope_expiry": {"calls": 1, "seconds": 39.30160395801067, "http_status": 409, "exit_code": 3, "revision_unchanged": true, "revision_after": 8, "frozen_fields_unchanged": true, "first_cause": "Correct local metric-name edit invalidated old whole-parent scope proof; draft comparison rejected expected expiry. No current approval claimed."},
-    "ex07_cardiac_literal_rejected": {"calls": 2, "seconds": 277.14126695797313, "http_status": 409, "exit_code": 3, "revision_unchanged": true, "revision_after": 8, "first_cause": "Changed object name introduced parent-source coverage issue; stop same question and inspect source/consumer cause."},
+    "ex07_cardiac_literal_rejected": {"calls": 2, "seconds": 277.14126695797313, "http_status": 409, "exit_code": 3, "revision_unchanged": true, "revision_after": 8, "first_cause": "Readonly replay confirmed same-parent uncovered refs shrink3to2 with no new refs; grouped fingerprint comparator wrongly rejected progress,not a new coverage error."},
+    "in04_prefixed_metric_rejected": {"calls": 1, "seconds": 81.408564875, "http_status": 409, "exit_code": 3, "revision_unchanged": true, "revision_after": 8, "first_cause": "Visit qualifier incorrectly included in source metric name; actual metric guard preserved."},
+    "in04_literal_metric_pending_saved": {"calls": 1, "seconds": 158.407317708, "http_status": 200, "exit_code": 0, "revision_after": 9, "blocking_after": 18, "old_revision_unchanged": true, "other_parents_unchanged": true, "protected_unchanged": true, "scope_approval_expired_not_inherited": true},
+    "in04_actual_parent_rereview": {"calls": 2, "seconds": 423.410043708, "http_status": 200, "exit_code": 0, "revision_after": 10, "blocking_after": 9, "reminders_after": 2, "old_revision_unchanged": true, "other_parents_unchanged": true, "protected_unchanged": true, "clinical_fields_rewritten": false, "model_independence": false},
     "route": "cms-router/glm-5.3-flash/high", "sdk_retries": 0,
     "old_ledgers_preserved": true, "run_budget_not_reset": true, "formal_rules_published": false
   },

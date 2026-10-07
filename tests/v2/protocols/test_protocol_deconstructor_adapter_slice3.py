@@ -2880,6 +2880,37 @@ def test_equal_count_issue_moved_to_another_predicate_is_regression():
     ) == {"EX-01"}
 
 
+@pytest.mark.parametrize("new_refs, new_level, new_check, extra, expected", [
+    (["EX-01", "source-A"], "阻止发布", "source_coverage", False, set()),
+    (["source-A", "EX-01"], "阻止发布", "source_coverage", False, set()),
+    (["EX-01", "source-C"], "阻止发布", "source_coverage", False, {"EX-01"}),
+    (["EX-01", "source-A", "source-C"], "阻止发布", "source_coverage", False, {"EX-01"}),
+    (["EX-01", "source-A"], "阻止发布", "numeric_semantics", False, {"EX-01"}),
+    (["EX-01", "source-A"], "阻止发布", "source_coverage", True, {"EX-01"}),
+])
+def test_source_coverage_group_can_shrink_without_becoming_a_new_failure(
+    new_refs, new_level, new_check, extra, expected,
+):
+    from app.agents.protocol_deconstructor import issue_reduced_for_rule
+    _source, draft, _spans = _fixture()
+    before = _gate_issue("PARENT_RULE_OBLIGATION_NOT_COVERED", ["EX-01", "source-A", "source-B"]).model_copy(
+        update={"check_name": "source_coverage"})
+    after = before.model_copy(update={"affected_refs": new_refs, "level": new_level, "check_name": new_check})
+    new_issues = [after, *([_gate_issue("NUMERIC_VALUE_NOT_IN_SOURCE", ["predicate-alt"])] if extra else [])]
+    assert regressing_rule_codes(draft, [before], draft, new_issues, ["EX-01"]) == expected
+    if not expected:
+        assert issue_reduced_for_rule(draft, [before], draft, new_issues, "EX-01")
+    assert after in new_issues and before.affected_refs == ["EX-01", "source-A", "source-B"]
+
+
+def test_shrunk_source_gap_cannot_hide_a_severity_promotion():
+    _source, draft, _spans = _fixture()
+    before = _gate_issue("PARENT_RULE_OBLIGATION_NOT_COVERED", ["EX-01", "source-A", "source-B"],
+        level="需要核对").model_copy(update={"check_name": "source_coverage"})
+    after = before.model_copy(update={"affected_refs": ["EX-01", "source-A"], "level": "阻止发布"})
+    assert regressing_rule_codes(draft, [before], draft, [after], ["EX-01"]) == {"EX-01"}
+
+
 def test_fewer_issues_cannot_replace_old_issues_with_new_failures():
     _source_input, draft, _spans = _fixture()
     previous = [

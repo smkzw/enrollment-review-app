@@ -5081,6 +5081,24 @@ def regressing_rule_codes(
         for prints in refined_prints.values()
         for fingerprint in prints
     }
+    # This gate groups all still-uncovered source points in one parent issue.
+    # Resolving one point changes the grouped fingerprint, not the failure kind.
+    # Compare opaque refs, never parse the displayed Chinese explanation.
+    for issue in revised_issues:
+        if (issue.check_name != "source_coverage"
+                or issue.issue_code != "PARENT_RULE_OBLIGATION_NOT_COVERED"):
+            continue
+        refs = set(issue.affected_refs)
+        codes = set(_affected_rule_codes(revised_draft, [issue], fallback_all=False))
+        if not codes or not codes <= set(selected_codes) or len(refs) <= len(codes):
+            continue
+        if any(previous.check_name == issue.check_name
+               and previous.issue_code == issue.issue_code
+               and previous.level == issue.level
+               and refs < set(previous.affected_refs)
+               and codes == set(_affected_rule_codes(previous_draft, [previous], fallback_all=False))
+               for previous in previous_issues):
+            refined_fingerprints.add((issue.issue_code, tuple(sorted(issue.affected_refs))))
     # A proven refinement is not a new problem: exclude it from both the
     # severity counts and the fingerprint comparison. Everything else —
     # including any fingerprint that merely moved — still regresses.
