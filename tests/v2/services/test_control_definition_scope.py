@@ -12,6 +12,7 @@ from app.agents.protocol_control_definition_scope import (
 )
 from app.domain.contracts.protocol_controls import (
     ProtocolControlDefinitionAtomConsumption, ProtocolControlDefinitionConsumerRecord,
+    RestrictedProtocolControlStatement,
 )
 from app.domain.publication import canonical_hash
 from app.services.protocol_control_definition_scope import (
@@ -54,8 +55,8 @@ def _candidate():
 def _basis(local=()):
     record = _record(local)
     outputs = {
-        "method-batch": SimpleNamespace(candidates=[]),
-        "other-batch": SimpleNamespace(candidates=[_candidate()]),
+        "method-batch": SimpleNamespace(candidates=[], restricted_statements=[]),
+        "other-batch": SimpleNamespace(candidates=[_candidate()], restricted_statements=[]),
     }
     official = {"IN-01": {
         ("component-official", "predicate-official"):
@@ -106,6 +107,36 @@ def test_global_scope_cannot_replace_unexecuted_local_registration():
     assert UNPROVEN in closed[0].unresolved_reasons
 
 
+def test_global_inventory_includes_restricted_consumers_without_resolving_their_meaning():
+    statement = RestrictedProtocolControlStatement(
+        restricted_statement_id="restricted:other-source", source_structure_unit_id="other-unit",
+        source_statement_index=0, source_quote="该期间的均值仍须核查",
+        source_span_ids=["span:restricted"], limitation_kind="interpretation_unresolved",
+        unresolved_dimensions=["适用期间未核清"],
+    )
+    record = _record()
+    outputs = {"other-batch": SimpleNamespace(candidates=[], restricted_statements=[statement])}
+    inventory, keyed = definition_scope_inputs([record], outputs, {})
+    assert len(keyed) == 1
+    entry = next(iter(keyed.values()))
+    assert entry.consumer_kind == "restricted_statement"
+    assert entry.key == ("restricted_statement", statement.restricted_statement_id)
+    assert inventory["consumers"][0]["unresolved_dimensions"] == statement.unresolved_dimensions
+    key = canonical_hash([record.batch_id, record.source_structure_unit_id, record.source_statement_index])
+    closed = close_definition_scope([record], _review(inventory, key, list(keyed)),
+                                    inventory, keyed, scope_unproven_reason=UNPROVEN)
+    assert closed[0].scope_complete and closed[0].consumers == [entry]
+    assert statement.unresolved_dimensions == ["适用期间未核清"]
+    ambiguous = record.model_copy(update={"unresolved_reasons": [UNPROVEN, "定义本身的期间未核清"]})
+    still_open = close_definition_scope([ambiguous], _review(inventory, key, list(keyed)),
+                                        inventory, keyed, scope_unproven_reason=UNPROVEN)
+    assert not still_open[0].scope_complete
+    assert "定义本身的期间未核清" in still_open[0].unresolved_reasons
+    empty, _ = definition_scope_inputs([record], {}, {})
+    with pytest.raises(ValueError, match="冻结来源清单"):
+        validate_definition_scope_review(_review(empty, key, [] , complete=False, unresolved=["未核清"]), inventory)
+
+
 def test_scope_rejects_stale_inventory_and_unlisted_consumer():
     _, inventory, keyed, definition_key = _basis()
     with pytest.raises(ValueError, match="冻结来源清单"):
@@ -126,7 +157,7 @@ def test_same_statement_index_in_distinct_source_units_keeps_distinct_identity()
         "source_structure_unit_id": "other-method-unit",
         "source_quote": "另一来源单元也有编号零的定义",
     })
-    outputs = {"method-batch": SimpleNamespace(candidates=[])}
+    outputs = {"method-batch": SimpleNamespace(candidates=[], restricted_statements=[])}
     inventory, _ = definition_scope_inputs([first, second], outputs, {})
     assert len({item["key"] for item in inventory["definitions"]}) == 2
 

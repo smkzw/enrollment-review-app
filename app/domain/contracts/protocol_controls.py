@@ -13,7 +13,7 @@
   5.8b 的独立适用性、触发、义务、例外 DNF 层、语义草稿/系统水合与逐项处置批次。
 - ``RestrictedProtocolControlStatement``
   跨章未决来源陈述的受限载体：保留原文单元/陈述序号/逐字摘录/片段身份、未决种类与
-  受限依赖，不产生任何可执行语义；只有受限采用目录（``control-catalog/v3``）可以携带。
+  受限依赖，不产生任何可执行语义；受限采用目录（``control-catalog/v3`` / ``v4``）可以携带。
 
 硬边界：
 
@@ -1992,7 +1992,7 @@ class ProtocolControlSourceUnitRelation(Phase5ControlModel):
 class ProtocolControlDefinitionAtomConsumption(Phase5ControlModel):
     """A verified consumer for one source calculation definition.
 
-    Two consumer kinds share this relation and never substitute for each other:
+    Consumer kinds share this relation and never substitute for each other:
 
     * ``control_atom`` — an atom inside one frozen hydrated control candidate,
       addressed by candidate id plus ``(layer, group_index, atom_index)`` and the
@@ -2001,6 +2001,8 @@ class ProtocolControlDefinitionAtomConsumption(Phase5ControlModel):
     * ``official_predicate`` — an ``AtomicPredicate`` inside the frozen RuleSet,
       addressed by its owning ``rule_component_id`` and its content-derived
       ``predicate_id``. The parent IN/EX code is never the consumer identity.
+    * ``restricted_statement`` — a source statement retained in the same frozen
+      catalog, addressed by its own restricted identity; never an executable atom.
 
     The relation keeps two independent source anchors: the definition quote on
     the record and this consumer's own excerpt. Each side is validated against
@@ -2011,7 +2013,8 @@ class ProtocolControlDefinitionAtomConsumption(Phase5ControlModel):
     proves it.
     """
 
-    consumer_kind: Literal["control_atom", "official_predicate"] = "control_atom"
+    consumer_kind: Literal["control_atom", "official_predicate", "restricted_statement"] = "control_atom"
+    restricted_statement_id: str | None = Field(default=None, min_length=1)
     control_candidate_id: str | None = Field(default=None, min_length=1)
     layer: Literal["applicability", "trigger", "obligation", "exception", "repeat_trigger"] | None = None
     condition_id: str | None = Field(default=None, min_length=1)
@@ -2025,15 +2028,21 @@ class ProtocolControlDefinitionAtomConsumption(Phase5ControlModel):
     @model_serializer(mode="wrap")
     def preserve_control_atom_shape(self, handler):
         value = handler(self)
+        if self.consumer_kind != "restricted_statement":
+            value.pop("restricted_statement_id", None)
         if self.consumer_kind == "control_atom":
             # Keep the historical control-atom bytes; the official variant is a
             # different consumer and must never be silently read as one.
             value.pop("consumer_kind", None)
             for name in ("rule_component_id", "predicate_id"):
                 value.pop(name, None)
-        else:
+        elif self.consumer_kind == "official_predicate":
             for name in ("control_candidate_id", "layer", "condition_id",
                          "group_index", "atom_index"):
+                value.pop(name, None)
+        else:
+            for name in ("control_candidate_id", "layer", "condition_id",
+                         "group_index", "atom_index", "rule_component_id", "predicate_id"):
                 value.pop(name, None)
         if self.relation_note is None:
             value.pop("relation_note", None)
@@ -2041,6 +2050,8 @@ class ProtocolControlDefinitionAtomConsumption(Phase5ControlModel):
 
     @property
     def key(self) -> tuple:
+        if self.consumer_kind == "restricted_statement":
+            return (self.consumer_kind, self.restricted_statement_id)
         if self.consumer_kind == "official_predicate":
             return (self.consumer_kind, self.rule_component_id, self.predicate_id)
         return (
@@ -2050,7 +2061,19 @@ class ProtocolControlDefinitionAtomConsumption(Phase5ControlModel):
 
     @model_validator(mode="after")
     def validate_reference(self) -> "ProtocolControlDefinitionAtomConsumption":
-        if self.consumer_kind == "official_predicate":
+        if self.consumer_kind == "restricted_statement":
+            if (self.restricted_statement_id is None
+                    or not self.restricted_statement_id.startswith("restricted:")
+                    or not self.restricted_statement_id[len("restricted:"):].strip()
+                    or any(value is not None for value in (
+                        self.control_candidate_id, self.layer, self.condition_id,
+                        self.group_index, self.atom_index, self.rule_component_id,
+                        self.predicate_id,
+                    ))):
+                raise ValueError("受限来源消费引用必须且只能携带受限陈述身份")
+        elif self.restricted_statement_id is not None:
+            raise ValueError("可执行条件消费引用不得夹带受限陈述身份")
+        elif self.consumer_kind == "official_predicate":
             if (self.rule_component_id is None or self.predicate_id is None
                     or any(value is not None for value in (
                         self.control_candidate_id, self.layer, self.condition_id,

@@ -204,6 +204,12 @@ def _require_valid_source_definition_consumers(
         candidate.control_candidate_id: candidate
         for batch in batches for candidate in batch.candidates
     }
+    restricted_by_id = {
+        statement.restricted_statement_id: statement
+        for batch in batches for statement in batch.restricted_statements
+    }
+    if len(restricted_by_id) != sum(len(batch.restricted_statements) for batch in batches):
+        raise ScopeViolationError("受限来源消费身份重复")
     for record in records:
         unit = units.get(record.source_structure_unit_id)
         quote = normalize_source_excerpt(record.source_quote)
@@ -214,7 +220,19 @@ def _require_valid_source_definition_consumers(
                            for part in [unit.excerpt, *unit.heading_path])):
             raise ScopeViolationError("来源定义消费关系未绑定当前冻结定义与原文")
         for consumer in record.consumers:
-            if consumer.consumer_kind == "official_predicate":
+            if consumer.consumer_kind == "restricted_statement":
+                statement = restricted_by_id.get(consumer.restricted_statement_id)
+                consumer_unit = (units.get(statement.source_structure_unit_id)
+                                 if statement is not None else None)
+                if (statement is None or consumer_unit is None
+                        or sorted(consumer_unit.source_span_ids) != statement.source_span_ids
+                        or consumer.consumer_excerpt != statement.source_quote
+                        or not any(normalize_source_excerpt(statement.source_quote)
+                                   in normalize_source_excerpt(part)
+                                   for part in [consumer_unit.excerpt, *consumer_unit.heading_path])):
+                    raise ScopeViolationError("受限来源消费引用未绑定冻结陈述与原文")
+                excerpts = [statement.source_quote]
+            elif consumer.consumer_kind == "official_predicate":
                 try:
                     excerpts = _definition_consumer_official_predicate(rule_set, consumer)
                 except ValueError as exc:
@@ -520,6 +538,10 @@ def prepare_control_catalog_publication(
     )
     return ControlCatalogPublication(
         schema_version=(
+            "control-catalog/v4" if any(
+                consumer.consumer_kind == "restricted_statement"
+                for record in definition_consumers for consumer in record.consumers
+            ) else
             "control-catalog/v3" if catalog.restricted_statements else
             "control-catalog/v2" if definition_consumers else "control-catalog/v1"
         ),

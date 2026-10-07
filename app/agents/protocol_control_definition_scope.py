@@ -11,7 +11,7 @@ from pydantic import Field, model_validator
 from app.domain.contracts.common import ContractModel
 from app.domain.publication import canonical_hash
 
-SCOPE_REVIEW_VERSION = "phase5/control-definition-scope/v1"
+SCOPE_REVIEW_VERSION = "phase5/control-definition-scope/v2"
 
 
 class DefinitionScopeChoice(ContractModel):
@@ -57,7 +57,9 @@ def build_definition_scope_prompt(inventory: Mapping[str, object]) -> str:
     return (
         "你是本系统内置方案 Agent 的全批次来源定义影响范围核对步骤。"
         "输入已包含本次冻结方案中全部已深审的来源定义（计算输入、时期与适用范围），"
-        "以及全部可选的官方子条件和补充要求原子。"
+        "以及全部可选的官方子条件、补充要求原子和保留的受限来源陈述。"
+        "受限陈述也是可能消费定义的对象，不能因其尚不可执行而漏掉；"
+        "对它登记依赖不改变其受限状态，也不证明原文含义已核清。"
         "逐项核对定义由哪些条件实际消费；只能返回清单中的 key，不修改定义、条件或原文，"
         "不判断受试者入排，不按相同词语、数值、父编号猜测依赖。"
         "每个 definition_key 必须恰好返回一次。只有在列出的全部冻结候选中已核清影响范围、"
@@ -73,7 +75,7 @@ def definition_scope_response_format() -> dict[str, object]:
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": "protocol_control_definition_scope_v1",
+            "name": "protocol_control_definition_scope_v2",
             "strict": True,
             "schema": DefinitionScopeReview.model_json_schema(),
         },

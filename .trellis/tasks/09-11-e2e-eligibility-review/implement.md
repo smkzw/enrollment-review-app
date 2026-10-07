@@ -1,9 +1,11 @@
 <!-- RV1006-CURRENT:BEGIN -->
-## 当前1006V1交付窗口（2026-10-07，连续实施中）
+## 当前1006V1交付窗口（2026-10-08，连续实施中）
 
 ### 单一当前用户流程表
 
-源码eb950865已push，包括待核定义关系的独立保存；同格来源恢复、识读收起及宽屏检查成果保留。7份继承delivery修改未动。现场Goal active/claims_complete=false，无用户暂停。共享接入184bdb60已push，只修改入排侧，不改共享首屏/后端；共享侧真实binding仍缺，不宣称两个产品已贯通。
+源码72fefee5已push，包括待核定义关系保存及来源绑定的检查点恢复；同格来源恢复、识读收起及宽屏检查成果保留。7份继承delivery修改未动。Goal active/claims_complete=false，无用户暂停。共享接入184bdb60已push，只修改入排侧，不改共享首屏/后端；共享侧真实binding仍缺，不宣称两个产品已贯通。
+
+本次相连功能包补定义全量清单中遗漏的受限消费者：第三种typed restricted_statement引用，不冒充候选/原子；原范围未知、缺登记及源含义未知继续拦截。现有生产清单→冻结核对→发布原文重验→v4正文保存/读回→冻结计算已接线；受限对象仍非可执行，只记录其依赖身份，不生成满足值。scope prompt/v2、evaluator/v40，新身份不追认旧回执。四相连原模块最终403passed/75.11s/exit0/5既有SWIG；初窗401pass2fail/79.03s均新测试替身/基类schema_version断言问题，修夹具不松门禁。C03实际ZCode/GLM/max/session sess_a8b45242…初审及同会话差异复核均exit0/no fallback，120min完成等待静默；初审SliceA仍无法进入工作稿的建议不采用，不能以诊断保留冒充交付。顾问末轮未找到本补丁缺陷，但其“遗漏会在下次发布自动发现”推论不采信，来源成员核对不能证明含义范围完整。实际混合producer/potential-same及不完整定义范围仍未解决，不新开整本作业、不声称病例完成。只读报告和指标在reviews/metrics对应rv1006-mixed-source-r1-consumer-20261008；原临床库/资料/旧Job未变，0新增产品模型调用。
 
 当前直接集成＋已完成有界E03/C03，不重复派发已完成工作。E03病例消费地图实际CodeBuddy/DeepSeek/max、exit0/no fallback；所有者核predicate_binding_input确实读取全部当前事实，零FactRuleLinks不能证明更正无法影响条款，故不强迫用户绑定条款、不加“一条关联才合法”的保护。clinical_adoption=True实际上抛无效ready错误而非静默隐藏，Reports已有重新准备入口及正确subject/episode参数，拒绝重复框架及推测性UI状态。更正的精确语义影响范围尚未实证，旧索引不能冒充完整依赖证明。
 

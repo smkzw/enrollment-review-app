@@ -516,6 +516,61 @@ def test_v3_still_rejects_an_unproven_definition_record() -> None:
         )
 
 
+def _restricted_consumer_record(statement):
+    return _definition_record(scope_complete=True).model_copy(update={
+        "consumers": [ProtocolControlDefinitionAtomConsumption(
+            consumer_kind="restricted_statement", restricted_statement_id=statement.restricted_statement_id,
+            consumer_excerpt=statement.source_quote,
+        )],
+    })
+
+
+def test_v4_restricted_consumer_roundtrips_without_executable_identity():
+    statement = _restricted_statement("restricted:generic-consumer")
+    record = _restricted_consumer_record(statement)
+    catalog = _catalog(restricted=(statement,))
+    publication = _publication(catalog, schema_version="control-catalog/v4", records=(record,))
+    payload = publication.model_dump(mode="json")
+    assert ControlCatalogPublication.model_validate(payload) == publication
+    entry = payload["definition_consumer_records"][0]["consumers"][0]
+    assert set(entry) == {"schema_version", "consumer_kind", "restricted_statement_id", "consumer_excerpt"}
+    assert _definition_records_for_review(publication, None) == [record]
+    assert catalog.controls == [] and catalog.restricted_statements == [statement]
+    for version in ("control-catalog/v2", "control-catalog/v3"):
+        with pytest.raises(ValidationError, match="旧版控制目录不能携带受限来源消费引用"):
+            _publication(catalog, schema_version=version, records=(record,))
+    with pytest.raises(ValidationError, match="实际受限消费引用"):
+        _publication(catalog, schema_version="control-catalog/v4", records=(_definition_record(scope_complete=True),))
+    with pytest.raises(ValidationError, match="影响范围尚未核清"):
+        _publication(catalog, schema_version="control-catalog/v4", records=(record.model_copy(update={
+            "scope_complete": False, "unresolved_reasons": ["定义本身未核清"],
+        }),))
+
+
+@pytest.mark.parametrize("overrides", [
+    {"restricted_statement_id": "restricted:foreign"},
+    {"consumer_excerpt": "语义相近但不是该条逐字来源"},
+])
+def test_v4_rejects_foreign_restricted_reference_or_excerpt(overrides):
+    statement = _restricted_statement("restricted:generic-consumer")
+    record = _restricted_consumer_record(statement)
+    record = record.model_copy(update={"consumers": [record.consumers[0].model_copy(update=overrides)]})
+    with pytest.raises(ValidationError, match="本目录的原文陈述"):
+        _publication(_catalog(restricted=(statement,)), schema_version="control-catalog/v4", records=(record,))
+
+
+@pytest.mark.parametrize("extra", [
+    {"control_candidate_id": "candidate"}, {"predicate_id": "predicate"},
+    {"layer": "obligation"}, {"condition_id": "condition"},
+])
+def test_restricted_consumer_cannot_impersonate_executable_reference(extra):
+    with pytest.raises(ValidationError, match="只能携带受限陈述身份"):
+        ProtocolControlDefinitionAtomConsumption(
+            consumer_kind="restricted_statement", restricted_statement_id="restricted:generic",
+            consumer_excerpt="真实原文", **extra,
+        )
+
+
 # -- 反向：受限记录本身不得携带可执行语义 ------------------------------------
 
 

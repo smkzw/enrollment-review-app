@@ -29,6 +29,7 @@ from app.domain.contracts.protocol_controls import (
     ProtocolControlDefinitionAtomConsumption,
     ProtocolControlDefinitionConsumerRecord,
     PublishedProtocolControlCatalog,
+    RestrictedProtocolControlStatement,
 )
 from app.domain.contracts.control_catalog_publication import ControlCatalogPublication
 from app.domain.contracts.enums import StudyPhase
@@ -610,7 +611,7 @@ def _publication_inputs(
         "source_definition_consumers": [record.model_dump(mode="json")],
     }
     plan = SimpleNamespace(batches=[SimpleNamespace(batch_id="batch-a")])
-    batches = [SimpleNamespace(candidates=[candidate] if include_candidate else [])]
+    batches = [SimpleNamespace(candidates=[candidate] if include_candidate else [], restricted_statements=[])]
     coverage = SimpleNamespace(units=[source_unit])
     return result, plan, batches, coverage, rule_set if rule_set is not None else _rule_set()
 
@@ -832,6 +833,88 @@ def test_work_draft_without_records_changes_nothing() -> None:
     assert calculation_module._definition_consumer_consumption(
         _pack(), _rule_set(), None,
     ) == ({}, {}, ())
+
+
+def _restricted_basis():
+    statement = RestrictedProtocolControlStatement(
+        restricted_statement_id="restricted:consumer", source_structure_unit_id="su-consumer",
+        source_statement_index=0, source_quote=CONSUMER_EXCERPT,
+        source_span_ids=["span:consumer"], limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["当前系统尚未支持原文要求的计算"],
+    )
+    record = _complete_record().model_copy(update={"consumers": [
+        ProtocolControlDefinitionAtomConsumption(
+            consumer_kind="restricted_statement", restricted_statement_id=statement.restricted_statement_id,
+            consumer_excerpt=statement.source_quote,
+        ),
+    ]})
+    return statement, record
+
+
+def test_restricted_definition_consumer_is_reverified_saved_and_consumed_without_calculation():
+    statement, record = _restricted_basis()
+    inputs = list(_publication_inputs(record, include_candidate=False))
+    inputs[2][0].restricted_statements = [statement]
+    inputs[3].units.append(SimpleNamespace(
+        structure_unit_id=statement.source_structure_unit_id, source_span_ids=statement.source_span_ids,
+        excerpt=statement.source_quote, heading_path=[],
+    ))
+    assert publication_module._require_valid_source_definition_consumers(*inputs) == [record]
+    base = _publication_with_definition_records()
+    catalog = base.catalog.model_copy(update={
+        "allowed_source_span_ids": ["span:consumer", "span:method"],
+        "restricted_statements": [statement],
+    })
+    payload = base.model_dump(mode="json", exclude={"publication_id"})
+    payload.update(schema_version="control-catalog/v4", catalog=catalog.model_dump(mode="json"),
+                   definition_consumer_records=[record.model_dump(mode="json")])
+    publication = ControlCatalogPublication.model_validate(payload)
+    restored = ControlCatalogPublication.model_validate_json(publication.model_dump_json())
+    records = calculation_module._definition_records_for_review(restored, None)
+    predicates, controls, consumed = calculation_module._definition_consumer_consumption(
+        _pack(control_publication=restored), _rule_set(), records,
+    )
+    assert predicates == {} and controls == {}
+    assert consumed[0].restricted_statement_ids == (statement.restricted_statement_id,)
+    assert consumed[0].control_atom_identities == () and consumed[0].predicate_ids == ()
+    assert restored.catalog.restricted_statements[0].limitation_kind == "consumer_unavailable"
+    assert restored.catalog.controls == []
+    official = _official_frozen_record()
+    mixed = record.model_copy(update={"consumers": [*record.consumers, *official.consumers]})
+    affected, _, mixed_consumed = calculation_module._definition_consumer_consumption(
+        _pack(control_publication=restored), _rule_set(), [mixed],
+    )
+    assert affected == {RULE_COMPONENT_ID: frozenset({PREDICATE_ID})}
+    assert mixed_consumed[0].restricted_statement_ids == (statement.restricted_statement_id,)
+    assert record.consumers[0].key != official.consumers[0].key
+
+
+@pytest.mark.parametrize("defect", ["foreign_id", "changed_excerpt", "changed_span", "missing_source"])
+def test_restricted_consumer_publication_rejects_bad_source(defect):
+    statement, record = _restricted_basis()
+    inputs = list(_publication_inputs(record, include_candidate=False))
+    inputs[2][0].restricted_statements = [statement]
+    unit = SimpleNamespace(structure_unit_id=statement.source_structure_unit_id,
+                           source_span_ids=statement.source_span_ids, excerpt=statement.source_quote, heading_path=[])
+    if defect != "missing_source":
+        inputs[3].units.append(unit)
+    if defect == "foreign_id":
+        inputs[2][0].restricted_statements = []
+    elif defect == "changed_excerpt":
+        unit.excerpt = "原件要求的另一个操作"
+    elif defect == "changed_span":
+        unit.source_span_ids = ["span:wrong"]
+    with pytest.raises(ScopeViolationError, match="受限来源消费引用"):
+        publication_module._require_valid_source_definition_consumers(*inputs)
+
+
+def test_work_draft_does_not_ignore_missing_restricted_consumer():
+    _, record = _restricted_basis()
+    publication = _publication_with_definition_records()
+    with pytest.raises(ValueError, match="本次发布的受限原文"):
+        calculation_module._definition_consumer_consumption(
+            _pack(control_publication=publication), _rule_set(), [record],
+        )
 
 
 def test_derived_control_truth_cannot_override_an_unverified_definition() -> None:

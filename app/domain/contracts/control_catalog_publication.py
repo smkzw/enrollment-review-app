@@ -83,7 +83,7 @@ class _ControlCatalogPublicationBody(ContractModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal[
-        "control-catalog/v1", "control-catalog/v2", "control-catalog/v3"
+        "control-catalog/v1", "control-catalog/v2", "control-catalog/v3", "control-catalog/v4"
     ] = "control-catalog/v1"
     project_id: str = Field(min_length=1)
     protocol_version_id: str = Field(min_length=1)
@@ -127,7 +127,23 @@ class _ControlCatalogPublicationBody(ContractModel):
             not record.scope_complete for record in self.definition_consumer_records
         ):
             raise ValueError("来源定义影响范围尚未核清，不能进入新版控制目录")
-        if self.schema_version == "control-catalog/v3":
+        restricted_consumers = [
+            consumer for record in self.definition_consumer_records
+            for consumer in record.consumers
+            if consumer.consumer_kind == "restricted_statement"
+        ]
+        if restricted_consumers and self.schema_version != "control-catalog/v4":
+            raise ValueError("旧版控制目录不能携带受限来源消费引用")
+        if self.schema_version == "control-catalog/v4":
+            if not restricted_consumers:
+                raise ValueError("受限来源消费版本须包含实际受限消费引用")
+            restricted = {item.restricted_statement_id: item
+                          for item in self.catalog.restricted_statements}
+            for consumer in restricted_consumers:
+                statement = restricted.get(consumer.restricted_statement_id)
+                if statement is None or consumer.consumer_excerpt != statement.source_quote:
+                    raise ValueError("受限来源消费引用未绑定本目录的原文陈述")
+        if self.schema_version in {"control-catalog/v3", "control-catalog/v4"}:
             if not self.catalog.restricted_statements:
                 raise ValueError("受限控制目录必须显式保留跨章未决来源陈述")
         elif self.catalog.restricted_statements:

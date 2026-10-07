@@ -31,7 +31,7 @@ from app.services.qualified_binding_selection import (
     assert_qualified_selections_match_review_context,
 )
 
-EVALUATOR_VERSION = "component-review/v39"
+EVALUATOR_VERSION = "component-review/v40"
 
 #: Reason attached to a consumer whose source definition has no proven
 #: consumer relation yet. It never replaces the evidence-based reason of an
@@ -48,6 +48,7 @@ class DefinitionConsumerConsumption:
     structure_unit_id: str
     predicate_ids: tuple[tuple[str, str], ...]
     control_atom_identities: tuple[str, ...]
+    restricted_statement_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -188,7 +189,7 @@ def _definition_records_for_review(
 ) -> Sequence[ProtocolControlDefinitionConsumerRecord] | None:
     if publication is None or publication.schema_version == "control-catalog/v1":
         return supplied
-    if publication.schema_version not in {"control-catalog/v2", "control-catalog/v3"}:
+    if publication.schema_version not in {"control-catalog/v2", "control-catalog/v3", "control-catalog/v4"}:
         raise ValueError("补充要求的发布版本尚不能用于本次审核")
     published = publication.definition_consumer_records
     if supplied is not None and [
@@ -267,6 +268,9 @@ def _definition_consumer_consumption(
                     )] = list(predicate.exact_source_clauses)
     publication = pack.control_publication
     catalog = None if publication is None else publication.catalog
+    restricted_by_id = {} if catalog is None else {
+        item.restricted_statement_id: item for item in catalog.restricted_statements
+    }
     controls_by_candidate: dict[str, str] = {}
     atom_identity_by_position: dict[tuple, str] = {}
     if catalog is not None:
@@ -287,8 +291,17 @@ def _definition_consumer_consumption(
     for record in records:
         record_predicates: list[tuple[str, str]] = []
         record_identities: list[str] = []
+        record_restricted: list[str] = []
         for consumer in record.consumers:
-            if consumer.consumer_kind == "official_predicate":
+            if consumer.consumer_kind == "restricted_statement":
+                statement = restricted_by_id.get(consumer.restricted_statement_id)
+                if (publication is None or publication.schema_version != "control-catalog/v4"
+                        or statement is None or consumer.consumer_excerpt != statement.source_quote):
+                    raise ValueError("来源定义消费陈述未绑定本次发布的受限原文")
+                # It already remains non-executable in the catalog. Never invent
+                # an atom identity or a satisfied result for this dependency.
+                record_restricted.append(statement.restricted_statement_id)
+            elif consumer.consumer_kind == "official_predicate":
                 if consumer.rule_component_id not in clause_components:
                     raise ValueError("来源定义消费条件不属于本次审核的冻结条款")
                 if consumer.predicate_id not in predicates_by_component.get(
@@ -317,7 +330,7 @@ def _definition_consumer_consumption(
                 if identity is None:
                     raise ValueError("来源定义消费原子未绑定冻结控制原子位置")
                 record_identities.append(identity)
-        if not record_predicates and not record_identities:
+        if not record_predicates and not record_identities and not record_restricted:
             continue
         for rule_component_id, predicate_id in record_predicates:
             predicate_unverified[rule_component_id] = (
@@ -334,6 +347,7 @@ def _definition_consumer_consumption(
             structure_unit_id=record.source_structure_unit_id,
             predicate_ids=tuple(sorted(record_predicates)),
             control_atom_identities=tuple(sorted(record_identities)),
+            restricted_statement_ids=tuple(sorted(record_restricted)),
         ))
     return predicate_unverified, control_unverified, tuple(consumed)
 
@@ -761,6 +775,8 @@ def calculate_frozen_review(
                 "structure_unit_id": item.structure_unit_id,
                 "predicate_ids": [list(pair) for pair in item.predicate_ids],
                 "control_atom_identities": list(item.control_atom_identities),
+                **({"restricted_statement_ids": list(item.restricted_statement_ids)}
+                   if item.restricted_statement_ids else {}),
             }
             for item in definition_consumption
         ]

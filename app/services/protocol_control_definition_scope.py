@@ -47,6 +47,17 @@ def definition_scope_inputs(
                           "source_excerpts": clauses, **context})
 
     for batch_id, output in sorted(outputs.items()):
+        for statement in output.restricted_statements:
+            entry = ProtocolControlDefinitionAtomConsumption(
+                consumer_kind="restricted_statement",
+                restricted_statement_id=statement.restricted_statement_id,
+                consumer_excerpt=statement.source_quote,
+            )
+            add(entry, [statement.source_quote], batch_id=batch_id,
+                structure_unit_id=statement.source_structure_unit_id,
+                source_span_ids=list(statement.source_span_ids),
+                limitation_kind=statement.limitation_kind,
+                unresolved_dimensions=list(statement.unresolved_dimensions))
         for candidate in output.candidates:
             for atom in definition_consumer_candidate_atoms(candidate):
                 excerpts = atom["excerpts"]
