@@ -781,7 +781,7 @@ def _insert_correction_direct(session, *, corr_id: str, op_id: str, raw_sha: str
     session.flush()
     return corr
 
-def _ensure_base_revision(session, base_id: str = "base-1", snapshot_id: str = "snap-1", scope=None):
+def _ensure_base_revision(session, base_id: str = "base-1", snapshot_id: str = "snap-1", scope=None, manifest_entries=None):
     from app.storage.ocr_models import EvidenceProcessingRevisionRecord
     from app.domain.contracts.evidence_processing import EvidenceProcessingRevision, EvidenceProcessingRevisionPage
     from app.domain.contracts.enums import PageArtifactStatus
@@ -792,19 +792,22 @@ def _ensure_base_revision(session, base_id: str = "base-1", snapshot_id: str = "
     # Check if exists
     if session.get(EvidenceProcessingRevisionRecord, base_id) is not None:
         return
-    # Create minimal manifest with one entry for op-1 / pa-1
+    # Default to the existing single-page fixture; multi-page reviews bind both.
+    if manifest_entries is None:
+        manifest_entries = [("doc-1", 1, "pa-1", "op-1")]
     manifest = [
         EvidenceProcessingRevisionPage(
-            entry_id="entry-1",
-            position=1,
-            source_document_version_id="doc-1",
-            page_number=1,
+            entry_id=f"entry-{index}",
+            position=index,
+            source_document_version_id=doc_id,
+            page_number=page_number,
             original_frame=None,
-            page_artifact_id="pa-1",
-            ocr_page_id="op-1",
+            page_artifact_id=page_id,
+            ocr_page_id=ocr_id,
             status=PageArtifactStatus.SUCCEEDED,
             failure_reason=None,
         )
+        for index, (doc_id, page_number, page_id, ocr_id) in enumerate(manifest_entries, start=1)
     ]
     m_sha = evidence_processing_manifest_hash(entries=[(e.source_document_version_id, e.page_number, e.original_frame, e.page_artifact_id, e.ocr_page_id, e.status.value) for e in manifest])
     rev = EvidenceProcessingRevision(
@@ -842,27 +845,24 @@ def _ensure_base_revision(session, base_id: str = "base-1", snapshot_id: str = "
     session.flush()
     # Also need to insert manifest page record
     from app.storage.ocr_models import EvidenceProcessingRevisionPageRecord
-    page_rec = EvidenceProcessingRevisionPageRecord(
-        revision_id=base_id,
-        position=1,
-        entry_id="entry-1",
-        source_document_version_id="doc-1",
-        page_number=1,
-        original_frame=None,
-        page_artifact_id="pa-1",
-        ocr_page_id="op-1",
-        status=PageArtifactStatus.SUCCEEDED.value,
-        failure_reason=None,
-        payload_json="{}",
-        payload_sha256="a"*64,
-        created_at=to_utc_naive(UTC_NOW),
-    )
-    # For simplicity, try to add and ignore failure if already exists or FK fails
-    try:
-        session.add(page_rec)
-        session.flush()
-    except Exception:
-        session.rollback()
+    for page in manifest:
+        page_json, page_sha = encode_contract(page)
+        session.add(EvidenceProcessingRevisionPageRecord(
+            revision_id=base_id,
+            position=page.position,
+            entry_id=page.entry_id,
+            source_document_version_id=page.source_document_version_id,
+            page_number=page.page_number,
+            original_frame=page.original_frame,
+            page_artifact_id=page.page_artifact_id,
+            ocr_page_id=page.ocr_page_id,
+            status=page.status.value,
+            failure_reason=page.failure_reason,
+            payload_json=page_json,
+            payload_sha256=page_sha,
+            created_at=to_utc_naive(UTC_NOW),
+        ))
+    session.flush()
 
 
 # --------------------------------------------------------------------------- Fixtures
@@ -1615,7 +1615,9 @@ def test_ocr_blocking_not_overlapping_accepted(migrated_session):
         assert outcome == GateOutcome.ACCEPTED
         session.rollback()
 
-def test_ocr_blocking_scoped_only_affected_candidate(migrated_session):
+@pytest.mark.parametrize("source_mode", ["strict", "scoped_text_v1"])
+@pytest.mark.parametrize("clear_page_review", [False, True])
+def test_ocr_blocking_scoped_only_affected_candidate(migrated_session, source_mode, clear_page_review):
     factory = migrated_session
     with factory() as session:
         from tests.v2.storage.test_ocr_repositories import make_blob, make_version, make_snapshot, make_artifact, make_ocr_page, make_profile
@@ -1695,12 +1697,31 @@ def test_ocr_blocking_scoped_only_affected_candidate(migrated_session):
             pass
         # Only page1 has blocking risk
         _insert_risk_scan_direct(session, scan_id="scan-1", op_id="op-1", raw_sha=op1.raw_text_sha256, flags=[{"risk_id": "r1", "kind": OcrRiskKind.LOW_CONFIDENCE, "level": OcrRiskLevel.BLOCKING, "text": RAW_TEXT[0:3], "text_start": 0, "text_end": 3}])
-        _insert_risk_scan_direct(session, scan_id="scan-2", op_id="op-2", raw_sha=op2.raw_text_sha256, flags=[])
+        _insert_risk_scan_direct(session, scan_id="scan-2", op_id="op-2", raw_sha=op2.raw_text_sha256,
+            flags=[{"risk_id": "r2", "kind": OcrRiskKind.NUMERIC_VALUE,
+                    "level": OcrRiskLevel.BLOCKING, "text": RAW_TEXT[4:7],
+                    "text_start": 4, "text_end": 7}] if clear_page_review else [])
+        review_ids = []
+        if clear_page_review:
+            from app.domain.contracts.evidence_locator import OCRRiskReview
+            from app.domain.contracts.enums import OcrRiskReviewDecision
+            from app.storage.evidence_locator_repositories import OCRRiskReviewRepository
+            _ensure_base_revision(session, scope=scope,
+                manifest_entries=[("doc-1", 1, "pa-1", "op-1"), ("doc-1", 2, "pa-2", "op-2")])
+            OCRRiskReviewRepository(session).create(OCRRiskReview(
+                review_id="review-clear-page", risk_flag_id="scan-2:r2",
+                decision=OcrRiskReviewDecision.CONFIRMED_AS_READ,
+                reason="Checked the source page", actor="tester",
+                base_processing_revision_id="base-1", expected_revision=1,
+                created_at=UTC_NOW,
+            ))
+            review_ids = ["review-clear-page"]
         rev = _make_revision(
             manifest_entries=[("doc-1", 1, "pa-1", "op-1"), ("doc-1", 2, "pa-2", "op-2")],
             locator_ids=["loc-1", "loc-2"],
             risk_scan_ids=["scan-1", "scan-2"],
-        )
+            risk_review_ids=review_ids,
+        ).model_copy(update={"source_qualification_mode": source_mode})
         cand_blocked = _make_fact_candidate(candidate_id="fact-1", locator_ids=["loc-1"], basis_locator="loc-1", basis_hash=op1.raw_text_sha256)
         cand_ok = _make_fact_candidate(candidate_id="fact-2", locator_ids=["loc-2"], basis_locator="loc-2", basis_hash=op2.raw_text_sha256)
         b1, _, _ = validate_blocking_ocr_for_candidate(session, cand_blocked, rev)

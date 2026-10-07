@@ -577,10 +577,10 @@ def validate_blocking_ocr_for_candidate(
         return GateOutcome.BLOCKED, list(closure_errors), sorted(set(locator_ids))
     if not blocking_by_page:
         return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
-    if revision.source_qualification_mode == "scoped_text_v1" and _has_unlocated_value_dependencies(candidate):
-        return GateOutcome.BLOCKED, [
-            "资料仍有未核实读数，候选数值或日期尚无逐项来源核实依据"
-        ], sorted(set(locator_ids))
+    requires_clear_source_page = (
+        revision.source_qualification_mode == "scoped_text_v1"
+        and _has_unlocated_value_dependencies(candidate)
+    )
 
     blocked_locators: set[str] = set()
     reasons: list[str] = []
@@ -592,8 +592,6 @@ def validate_blocking_ocr_for_candidate(
             reasons.append(f"定位 {lid} 无法还原：{exc}")
             blocked_locators.add(lid)
             continue
-        if locator.source_layer == LocatorSourceLayer.PAGE_REVIEW_VISUAL:
-            continue  # The independent visual provenance gate remains mandatory.
         page_entry = next((entry for entry in revision.manifest if entry.page_artifact_id == locator.page_artifact_id), None)
         if page_entry is None:
             reasons.append(f"定位 {lid} 不属于当前资料页清单")
@@ -605,6 +603,12 @@ def validate_blocking_ocr_for_candidate(
             blocked_locators.add(lid)
             continue
         flags = blocking_by_page.get(ocr_pid, [])
+        if requires_clear_source_page and flags:
+            reasons.append(f"定位 {lid} 所在原件页仍有未核实读数，候选数值或日期尚无逐项来源核实依据")
+            blocked_locators.add(lid)
+            continue
+        if locator.source_layer == LocatorSourceLayer.PAGE_REVIEW_VISUAL:
+            continue  # The independent visual provenance gate remains mandatory.
         for scan_id, flag in flags:
             loc_start = getattr(locator, "text_start", None)
             loc_end = getattr(locator, "text_end", None)

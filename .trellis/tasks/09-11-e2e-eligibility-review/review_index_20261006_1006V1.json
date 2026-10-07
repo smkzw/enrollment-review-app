@@ -6,7 +6,26 @@
   "runtime_state": "active",
   "claims_complete": false,
   "base_review_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
-  "delivered_snapshot_id": "S-15",
+  "delivered_snapshot_id": "S-16",
+  "selected_review_source_scope_package": {
+    "base_commit": "c018cfb2940d5953cb048b8f4b87f4aa4ad013dc",
+    "paths": ["app/domain/gates/fact_evidence_closure.py", "tests/v2/domain/test_scoped_source_risk_boundaries.py", "tests/v2/domain/test_fact_evidence_closure.py"],
+    "behavior": "scoped_text_v1 value dependencies require all their own source pages clear of remaining blocking risk; unrelated pages cannot block; same-page nonoverlap cannot bypass; closure/manifest/OCR/visual qualification retained.",
+    "tests": {"passed": 164, "seconds": 68.09, "exit_code": 0, "modules": 6, "junit": "/Users/smkzw/tmp/rv1006-selected-review-boundary-20261007-v3.xml", "earlier": "v1/v2 162pass2fail owner new two-page base fixture incomplete; source relations and serialized rows fixed, not production boundary relaxation; overlapping windows not additive"},
+    "execution": {"route": "pi/cursor/default", "runtime_model_verified": false, "session_id": "01a114b5-cd6d-7000-902e-043e2b616bcb", "exit_code": 0, "fallback": false, "limits": "Read-only consumer mapping; missed existing OCRRiskReview producer; owner refuted no-manual-route claim with actual source; not product acceptance"},
+    "conference": {"route": "grok/grok-build/grok-4.7/high", "session_id": "9f51c779-770f-46b6-8d61-1e80aae1dcc5", "wait_seconds": 215.6236, "exit_code": 0, "fallback": false, "limits": "Conditional pre-patch source review,10 material reads; no clinical/tests; final patch owner verified"},
+    "case_effect": {"pages_with_own_risk": 24, "numeric_date_candidates_with_own_risk": 355, "blocked_only_by_other_page": 0, "numeric_candidates_released_by_this_patch": 0},
+    "formal_fact_adoption": false, "claims_complete": false
+  },
+  "official_local_recovery_after_revision10": {
+    "actual_saved_revision": 18, "parents": 23, "blocking_count": 2, "reminder_count": 2,
+    "eight_feedback_invocations_saved": true, "all_eight_saved_path_audit_completed": true,
+    "saved_path_audit": {"physical_calls": 0, "database_writes": 0, "old_history_hashes_match": true, "actual_saved_matches_receipts": true, "paths": ["rv1006-saved-local-changes-readonly-20261007-v2.json", "rv1006-saved-local-changes-readonly-20261007-v3.json"], "eighth_fields": "source_term only; no new time,threshold,judgment or extra predicate"},
+    "remaining": ["IN03 shared natural-period binding", "EX06 unproven restricted-component capability", "EX04 prior unauthorized extra independent predicate must be corrected before adoption"],
+    "in03_repeated_feedback": {"physical_calls": 2, "seconds": 309.6667972499854, "http_status": 409, "exit_code": 3, "revision_unchanged": true, "protected_unchanged": true, "next": "inspect representation/coverage/consumer first cause,not repeat the same author request"},
+    "formal_rules_published": false, "claims_complete": false,
+    "evidence_root": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003", "access": "controlled_local_only"
+  },
   "partial_coverage_comparison_package": {
     "base_commit": "36225417", "paths": ["app/agents/protocol_deconstructor.py", "tests/v2/protocols/test_protocol_deconstructor_adapter_slice3.py"],
     "behavior": "Only selected same-parent same-check same-severity grouped uncovered refs shrinking to a strict subset are comparison refinements; complete gate issues and publication are unchanged.",
