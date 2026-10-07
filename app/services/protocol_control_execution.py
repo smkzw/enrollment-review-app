@@ -1932,6 +1932,7 @@ def _deep_component_identity(
             "source-scope-correction-trigger-witness/v1",
             "source-quote-correction-trigger-replay/v1",
             "source-and-author-shared-repair-budget/v1",
+            "procedure-link-field-repair-before-repartition/v1",
         ],
         "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
         "requested_route_sha256": (

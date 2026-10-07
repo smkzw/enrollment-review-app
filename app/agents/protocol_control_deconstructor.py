@@ -3364,7 +3364,6 @@ def _validate_known_targets(
                     "补充关系的受影响审核节点与所引用流程必做访视不一致"
                 ),
                 structure_unit_ids=candidate.source_structure_unit_ids,
-                allow_candidate_repartition=mixed_execution_stages,
                 validation_findings=[{
                     "code": "PROCEDURE_AFFECTED_STAGE_MISMATCH",
                     "json_path": f"cross_source_relations.{relation_index}.affected_workflow_stage_id",

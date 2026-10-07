@@ -87,7 +87,7 @@ def test_mixed_decision_stage_control_authorizes_candidate_repartition() -> None
     assert "MIXED_DECISION_STAGE_CONTROL" in str(error)
 
 
-def test_two_execution_visits_allow_source_bounded_repartition() -> None:
+def test_two_execution_visits_do_not_authorize_repartition_for_a_link_defect() -> None:
     batch = _batch_with_baseline()
     baseline_procedure = KnownRequiredProcedureTarget(
         catalog_item_id="procedure-baseline-1",
@@ -130,7 +130,7 @@ def test_two_execution_visits_allow_source_bounded_repartition() -> None:
         match="PROCEDURE_AFFECTED_STAGE_MISMATCH",
     ) as failure:
         _validate_known_targets(candidate, batch=batch)
-    assert failure.value.allow_candidate_repartition is True
+    assert failure.value.allow_candidate_repartition is False
     finding = failure.value.validation_findings[0]
     assert finding["external_target_id"] == "procedure-screening-1"
     assert finding["execution_workflow_stage_id"] == "stage:screening:one"
