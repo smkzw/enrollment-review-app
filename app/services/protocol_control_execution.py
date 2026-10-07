@@ -3261,6 +3261,28 @@ def _bind_control_request_budget(
                           detail="累计请求记录缺失、回退或读取范围已变，未发送请求；请保留原记录，从方案整理建立有据的新任务。") from exc
 
 
+def _restricted_deep_checkpoint(
+    context: StepContext, batch: ProtocolControlDispositionBatch, transport: Any,
+    prompt_template: str, result: ProtocolControlAgentRunResult,
+    restricted_batch: ProtocolControlBatchDispositionHydrated,
+    model_call_receipts: list[dict[str, Any]], resume_review: _ResumedSourceReview,
+) -> dict[str, Any]:
+    return {
+        "stage": "deep",
+        "workflow_variant": context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
+        "model_call_receipts": model_call_receipts,
+        "batch_id": batch.batch_id,
+        "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(prompt_template),
+        "transport_identity": _transport_identity(transport, stage="deep"),
+        "component_identity": _deep_component_identity(context.job_payload, prompt_template),
+        "repair_contract_sha256": protocol_control_agent_repair_contract_sha256(),
+        "run_result": result.model_dump(mode="json"),
+        "attempt_raw_outputs": _deep_attempt_raw_outputs(result),
+        "source_review_reuse": _source_review_reuse_record(resume_review),
+        "restricted_batch": restricted_batch.model_dump(mode="json"),
+    }
+
+
 def _execute_deep(
     context: StepContext,
     config: ProtocolControlExecutorConfig,
@@ -3411,7 +3433,31 @@ def _execute_deep(
             if proof is None or proof != entry.get("unresolved_review_proof"):
                 raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
                                   detail="原未决与入队前证明不一致，未发送请求。")
-            checkpoint_id, diagnostic, _ = partial
+            checkpoint_id, diagnostic, prior_review = partial
+            try:
+                prior_result = ProtocolControlAgentRunResult.model_validate({
+                    **{key: value for key, value in diagnostic.items()
+                       if key in ProtocolControlAgentRunResult.model_fields},
+                    "status": "需要核对", "batch_id": batch.batch_id,
+                })
+                restricted = restricted_batch_from_review(batch, prior_result)
+            except ValueError as exc:
+                raise StepFailure(
+                    retryable=False, error_code="PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID",
+                    detail="已保存的未决来源未通过当前逐项重核，原记录保持。",
+                ) from exc
+            if restricted is not None:
+                return {
+                    **_restricted_deep_checkpoint(
+                        context, batch, transport, prompt_template, prior_result,
+                        restricted, [], prior_review,
+                    ),
+                    "revalidated_restricted_from": {
+                        "job_id": deep_source_job_id, "checkpoint_id": checkpoint_id,
+                        "proof": proof,
+                    },
+                    "new_model_calls": 0, "adopted": False,
+                }
             raise StepFailure(
                 retryable=False, error_code=proof["error_code"],
                 detail="原文对应关系仍未核清，本次保留原未决且不重复读取；其他独立来源可继续核查。",
@@ -3537,20 +3583,10 @@ def _execute_deep(
     except ValueError as exc:
         restricted_error = exc
     if restricted_batch is not None:
-        return {
-            "stage": "deep",
-            "workflow_variant": context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
-            "model_call_receipts": model_call_receipts,
-            "batch_id": batch.batch_id,
-            "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(prompt_template),
-            "transport_identity": _transport_identity(transport, stage="deep"),
-            "component_identity": _deep_component_identity(context.job_payload, prompt_template),
-            "repair_contract_sha256": protocol_control_agent_repair_contract_sha256(),
-            "run_result": result.model_dump(mode="json"),
-            "attempt_raw_outputs": _deep_attempt_raw_outputs(result),
-            "source_review_reuse": _source_review_reuse_record(resume_review),
-            "restricted_batch": restricted_batch.model_dump(mode="json"),
-        }
+        return _restricted_deep_checkpoint(
+            context, batch, transport, prompt_template, result, restricted_batch,
+            model_call_receipts, resume_review,
+        )
     if (restricted_error is not None or result.status not in {"已解析", "待跨章核验"}
             or result.final_output is None):
         source_review_failure_codes = {

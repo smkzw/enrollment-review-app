@@ -3834,6 +3834,114 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
     assert _job_checkpoint_fingerprint(session_factory, first.job_id) == old_history
 
 
+@pytest.mark.parametrize("failure", [None, "source_clear", "changed_proof", "restriction_error"])
+def test_preserved_failure_revalidates_restricted_source_through_actual_job_checkpoint(
+    data_paths, session_factory, monkeypatch, failure,
+) -> None:
+    from app.evidence.artifacts import ArtifactStore
+    from app.services.eligibility_review_projection import _restricted_control_projections
+    from tests.v2.domain.test_control_catalog_restricted_contract import _catalog, _publication
+
+    module = protocol_control_execution_module
+    batch, result = _independent_candidate_and_unresolved_review()
+    if failure == "source_clear":
+        result.source_interpretation.statements[1].unresolved = []
+    result.attempts[-1].error_detail = {
+        "code": "SOURCE_TARGET_REVIEW_UNRESOLVED", "statement_ids": [1],
+        "source_refs": ["span:02"], "json_path": "/items",
+    }
+    diagnostic = {**result.model_dump(mode="json"), "stage": "deep_failure_diagnostic"}
+    diagnostic.pop("status")
+    proof = module._preserved_unresolved_review_proof(batch, diagnostic)
+    assert proof is not None
+    old = JobService(session_factory, now=_now).create_job(
+        idempotency_key="old-restricted-failure", job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+        payload={"synthetic": True}, steps=[StepSpec(step_id="deep_0001", name="核对")],
+    )
+    def fail_old(_):
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED",
+                          detail="保留原未决", diagnostic_checkpoint=diagnostic)
+    assert JobRunner(session_factory, {PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: fail_old},
+                     worker_id="old-restriction", now=_now).run_job(old.job_id)
+    history = _job_checkpoint_fingerprint(session_factory, old.job_id)
+    with session_factory() as session:
+        checkpoint = JobStore(session, now=_now).get_last_checkpoint(old.job_id, "deep_0001")
+    proof = module._preserved_unresolved_review_proof(batch, checkpoint[1])
+    assert proof is not None
+    plan_data = {"batches": [batch.model_dump(mode="json")]}
+    plan = {
+        "schema_version": "phase5/deep-reuse-plan/v1",
+        "current_plan_sha256": hashlib.sha256(json.dumps(
+            plan_data, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest(),
+        "expected_prompt_sha256": module.protocol_control_agent_prompt_template_sha256("冻结提示"),
+        "component_identity": {}, "decisions": {batch.batch_id: {
+            "step_id": "deep_0001", "decision": "preserve_unresolved",
+            "unresolved_review_proof": dict(proof, diagnostic_sha256="bad")
+                if failure == "changed_proof" else proof,
+        }},
+    }
+    ref = ArtifactStore(data_paths).put("evaluation_manifest", json.dumps(plan).encode()).storage_ref
+    current = JobService(session_factory, now=_now).create_job(
+        idempotency_key="current-restricted-revalidation", job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+        payload={"deep_source_job_id": old.job_id, "deep_reuse_plan": plan,
+                 "deep_reuse_plan_artifact_ref": ref,
+                 "execution_control": {"continue_after_final_failure": module._INDEPENDENT_DEEP_READ_POLICY}},
+        steps=[StepSpec(step_id="deep_0001", name="重新核对已保存来源")],
+    )
+    closure = {"deep_plan": plan_data,
+               "deep_step_ids": [{"step_id": "deep_0001", "batch_id": batch.batch_id}]}
+    monkeypatch.setattr(module, "_closure_checkpoint", lambda *_: closure)
+    monkeypatch.setattr(module.ProtocolControlDiscoveryToDeepPlan, "model_validate", staticmethod(
+        lambda _: SimpleNamespace(batches=[batch], model_dump=lambda **_: plan_data)))
+    monkeypatch.setattr(module, "_deep_batch_for_step", lambda *_: batch)
+    monkeypatch.setattr(module, "_frozen_official_predicates", lambda *_: ({}, {}))
+    monkeypatch.setattr(module, "_prompt_from_payload", lambda *_: "冻结提示")
+    monkeypatch.setattr(module, "_limits_from_payload", lambda *_: (0, 2))
+    monkeypatch.setattr(module, "_resolve_transport", lambda *_, **__: SimpleNamespace())
+    monkeypatch.setattr(module, "_require_frozen_route", lambda *_, **__: None)
+    monkeypatch.setattr(module, "_deep_component_identity", lambda *_: {})
+    monkeypatch.setattr(module, "_transport_identity", lambda *_, **__: {})
+    monkeypatch.setattr(module, "_validated_deep_partial_source", lambda *_: (
+        checkpoint[0], checkpoint[1], module._ResumedSourceReview(
+            state="reused", reason="saved_source_review_still_current")))
+    monkeypatch.setattr(module.ProtocolControlAgentRunner, "run",
+                        lambda *_, **__: pytest.fail("保存的未决不得再调用作者或核对模型"))
+    if failure == "restriction_error":
+        def invalid_restriction(*_):
+            raise ValueError("逐项来源证明损坏")
+        monkeypatch.setattr(module, "restricted_batch_from_review", invalid_restriction)
+    config = SimpleNamespace(data_paths=data_paths, session_factory=session_factory, now=_now)
+    runner = JobRunner(session_factory,
+        {PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: lambda context: module._execute_deep(context, config)},
+        worker_id="restricted-revalidation", now=_now)
+    assert runner.run_job(current.job_id)
+    with session_factory() as session:
+        store = JobStore(session, now=_now)
+        job = store.get_job(current.job_id)
+        assert store.get_job(old.job_id).state == "failed_final"
+        saved = store.get_last_checkpoint(current.job_id, "deep_0001")
+    assert _job_checkpoint_fingerprint(session_factory, old.job_id) == history
+    if failure is not None:
+        assert job.state == "failed_final"
+        assert job.error_code == {
+            "changed_proof": "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+            "source_clear": "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED",
+            "restriction_error": "PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID",
+        }[failure]
+        return
+    assert job.state == "completed"
+    assert saved[1]["new_model_calls"] == 0 and saved[1]["adopted"] is False
+    assert saved[1]["model_call_receipts"] == []
+    assert saved[1]["run_result"]["source_target_review"] == result.source_target_review.model_dump(mode="json")
+    rebuilt, _, _ = module._deep_results(SimpleNamespace(job_id=current.job_id), config, closure)
+    output = rebuilt[batch.batch_id]
+    assert len(output.candidates) == 1 and len(output.restricted_statements) == 1
+    projection = _restricted_control_projections(_publication(_catalog(
+        restricted=tuple(output.restricted_statements), allowed=tuple(batch.owned_source_span_ids))))
+    assert projection[0].obligations[0].status == "restricted"
+
+
 def test_continuation_plan_refreshes_a_changed_saved_source_review(
     data_paths, session_factory, monkeypatch,
 ) -> None:

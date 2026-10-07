@@ -16,6 +16,15 @@
     "formal_joint_publication": false,
     "new_current_node_report": false
   },
+  "preserved_restricted_runtime_consumer": {
+    "base_commit": "a017f27e",
+    "scope": "Artifact-verified existing preserve_unresolved new-job plan plus matching actual source/proof/route; rederive restricted batch through current full gate, preserve unresolved and originals, zero new model receipts/calls, adopted=false. Nonrestrictable failure stays failed; source corruption stays technical",
+    "tests": {"modules": 3, "passed": 313, "seconds": 84.04, "exit_code": 0, "warnings": "5 SWIG deprecations", "junit": "/Users/smkzw/tmp/rv1006-preserved-restricted-consumer-connected-20261007-v2.xml", "first_window": "310pass2fail82.65s: synthetic proof frozen before Runner-added attempt; corrected by hashing actual persisted checkpoint, no gate weakening"},
+    "consumer_evidence": "Synthetic frozen identity adapters, actual JobRunner/JobStore save/readback -> deep_results -> restricted projection; old failed checkpoint fingerprint unchanged. Not actual API/clinical/publication proof",
+    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session_id": "01a11777-3278-7d44-aa47-1be375649815", "exit_code": 0, "fallback": false, "owner_silent_completion_wait": true, "limits": "Source-only review; owner subsequently added explicit technical exception classification instead of swallowing ValueError. No tests/clinical independent acceptance"},
+    "formal_joint_publication": false,
+    "new_current_node_report": false
+  },
   "full_timed_official_citation": {
     "base_commit": "a4a26d3e",
     "validator_version": "phase5/control-publication-gate/v45",
