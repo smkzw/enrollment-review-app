@@ -412,6 +412,145 @@ def test_whole_unit_coverage_keeps_joiners_without_proving_independence(separato
     )
 
 
+@pytest.mark.parametrize("with_scope", [False, True])
+@pytest.mark.parametrize("sibling_unresolved", [False, True])
+def test_whole_temporal_unit_preserves_time_and_scope_without_executable_siblings(
+    with_scope, sibling_unresolved,
+):
+    from app.services.eligibility_review_projection import _restricted_control_projections
+    from tests.v2.domain.test_control_catalog_restricted_contract import _catalog, _publication
+
+    batch, result = _independent_candidate_and_temporal_gap(same_unit=True)
+    temporal = result.source_interpretation.statements[1]
+    temporal.decision_functions.append("time_validity")
+    if with_scope:
+        batch.owned_units[0].excerpt = "筛选期：" + batch.owned_units[0].excerpt
+        for statement in result.source_interpretation.statements:
+            statement.scope_quote = "筛选期："
+    if sibling_unresolved:
+        from app.agents.protocol_control_source_interpretation import SourceTargetReviewItem
+        sibling_quote = _SAME_UNIT_INDEPENDENT + "且登记完整"
+        batch.owned_units[0].excerpt = batch.owned_units[0].excerpt.replace(
+            _SAME_UNIT_INDEPENDENT, sibling_quote,
+        )
+        result.source_interpretation.statements[0].quoted_text = sibling_quote
+        result.source_target_review.items.append(SourceTargetReviewItem(
+            statement_index=0, decision="unresolved", source_action_excerpt=sibling_quote,
+            unresolved_aspects=["与既有要求的适用范围尚未核清"],
+        ))
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire,
+    )
+    frozen = result.model_dump(mode="json")
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert output is not None and not output.candidates
+    assert len(output.restricted_statements) == 2
+    assert all(item.independent_scope_proof is None for item in output.restricted_statements)
+    assert all(item.limitation_kind == (
+        "interpretation_unresolved" if sibling_unresolved else "consumer_unavailable"
+    ) for item in output.restricted_statements)
+    assert output.restricted_statements[1].time_words == ["7天"]
+    assert output.restricted_statements[1].decision_functions == ["action", "time_validity"]
+    assert all(item.scope_quote == ("筛选期：" if with_scope else None)
+               for item in output.restricted_statements)
+    assert result.model_dump(mode="json") == frozen
+    reloaded = type(result).model_validate(frozen)
+    assert protocol_control_execution_module.restricted_batch_from_review(batch, reloaded) == output
+    protocol_control_execution_module._validate_deep_batch_output(batch, output)
+    projections = _restricted_control_projections(_publication(_catalog(
+        restricted=tuple(output.restricted_statements), allowed=tuple(batch.owned_source_span_ids),
+    )))
+    assert len(projections) == 2
+    assert all(item.obligations[0].status == "restricted"
+               and not item.obligations[0].fact_refs for item in projections)
+
+
+@pytest.mark.parametrize("defect", ["wrong_ids", "bool_ids", "wrong_refs", "missing_detail",
+                                  "missing_scope", "unread_exception", "wrong_value", "extra_error"])
+def test_whole_temporal_unit_rejects_damaged_witness_or_unread_source(defect):
+    batch, result = _independent_candidate_and_temporal_gap(same_unit=True)
+    result.source_interpretation.statements[1].decision_functions.append("time_validity")
+    detail = result.attempts[-1].error_detail
+    if defect in {"wrong_ids", "bool_ids"}:
+        detail["statement_ids"] = detail["affected_dependents"] = [0 if defect == "wrong_ids" else True]
+    elif defect == "wrong_refs":
+        detail["source_refs"] = ["foreign-span"]
+    elif defect == "missing_detail":
+        result.attempts[-1].error_detail = None
+    elif defect in {"missing_scope", "unread_exception"}:
+        batch.owned_units[0].excerpt = "仅适用于特定人群：" + batch.owned_units[0].excerpt
+    elif defect == "wrong_value":
+        result.partial_wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0].evaluation.predicate.value = 19
+    else:
+        result.attempts[-1].error_classes.append("POST_HYDRATION_INVALID")
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire,
+    )
+    assert protocol_control_execution_module.restricted_batch_from_review(batch, result) is None
+
+
+@pytest.mark.parametrize("change", [None, "source", "prompt", "schema", "repair",
+    "missing_wire", "bad_wire", "boolean_ids", "coverage", "unread_source", "executable_sibling"])
+def test_changed_compiler_revalidates_only_wholly_nonexecuting_temporal_source(monkeypatch, change):
+    module = protocol_control_execution_module
+    batch, result = _independent_candidate_and_temporal_gap(same_unit=change != "executable_sibling")
+    result.source_interpretation.statements[1].decision_functions.append("time_validity")
+    prompt = module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE
+    identity = {"synthetic": "explicit-model-route"}
+    payload = {"frozen_model_routes": {"deep": hashlib.sha256(json.dumps(
+        identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode()).hexdigest()}}
+    current = module._deep_component_identity(payload, prompt)
+    previous = dict(current, compiler_versions=["previous-compiler-material"])
+    if change in {"source", "prompt", "schema"}:
+        key = {"source": "source_sha256", "prompt": "prompt_text_sha256",
+               "schema": "wire_schema_sha256"}[change]
+        previous[key] = "f" * 64
+    saved = dict(result.model_dump(mode="json"),
+        stage="deep_failure_diagnostic", schema_version="phase5/deep-failure-diagnostic/v3",
+        component_identity=previous, transport_identity=identity,
+        prompt_template_sha256=module.protocol_control_agent_prompt_template_sha256(prompt),
+        repair_contract_sha256=("e" * 64 if change == "repair"
+                                else module.protocol_control_agent_repair_contract_sha256()))
+    if change == "missing_wire":
+        saved["partial_wire"] = None
+    elif change == "bad_wire":
+        saved["partial_wire"] = {"invalid": True}
+    elif change == "boolean_ids":
+        saved["attempts"][-1]["error_detail"]["statement_ids"] = [True]
+    elif change == "coverage":
+        saved["source_statement_coverage"] = []
+    elif change == "unread_source":
+        batch.owned_units[0].excerpt += "；另有未读取的例外"
+    frozen = json.dumps(saved, ensure_ascii=False, sort_keys=True)
+
+    class Store:
+        def get_job(self, _):
+            return SimpleNamespace(payload_json=json.dumps(payload))
+
+        def list_steps(self, _):
+            return [SimpleNamespace(step_id="deep_0001", state="failed_final")]
+
+        def get_last_checkpoint(self, _, step):
+            return ("closure", {"stage": "closure", "deep_plan": {}}) if step == module.STEP_CLOSURE else ("failure", saved)
+
+    monkeypatch.setattr(module.ProtocolControlDiscoveryToDeepPlan, "model_validate",
+                        staticmethod(lambda _: SimpleNamespace(batches=[batch])))
+    monkeypatch.setattr(module, "_revalidated_source_seed_proof", lambda *_, **__: None)
+    if change == "bad_wire":
+        with pytest.raises(ValueError):
+            module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
+    else:
+        partial = module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
+        assert (partial is not None) == (change is None)
+        if partial is not None:
+            assert partial[1] is saved and partial[2].source_seed_proof is None
+            proof = module._preserved_source_review_proof(batch, partial[1])
+            assert proof is not None and proof["adopted"] is False
+            assert proof["schema_version"] == "phase5/preserved-temporal-restriction-proof/v1"
+    assert json.dumps(saved, ensure_ascii=False, sort_keys=True) == frozen
+
+
 def _mixed_definition_declared_result():
     from app.agents.protocol_control_source_interpretation import (
         SOURCE_DEFINITION_CONSUMER_VERSION, SourceDefinitionAtomConsumer,
@@ -619,7 +758,15 @@ def test_temporal_restriction_does_not_approve_unproven_error_ranges(failure: st
     result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
         batch, result.source_interpretation, result.partial_wire,
     )
-    assert protocol_control_execution_module.restricted_batch_from_review(batch, result) is None
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    if failure == "shared_scope":
+        # Shared meaning cannot keep an executable sibling. Complete frozen
+        # source may instead remain wholly non-executable, not be discarded.
+        assert output is not None and not output.candidates
+        assert len(output.restricted_statements) == 2
+        assert all(item.independent_scope_proof is None for item in output.restricted_statements)
+    else:
+        assert output is None
 
 
 def test_same_unit_independent_requirement_keeps_source_proven_candidate() -> None:
@@ -700,7 +847,12 @@ def test_same_unit_shared_scope_cannot_be_proved_by_disjoint_actions() -> None:
     batch, result = _same_unit_two_requirement_review()
     batch.owned_units[0].excerpt = "符合下述条件者：" + batch.owned_units[0].excerpt
     result.source_interpretation.statements[1].scope_quote = "符合下述条件者"
-    assert protocol_control_execution_module.restricted_batch_from_review(batch, result) is None
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert output is not None and output.candidates == []
+    assert len(output.restricted_statements) == 2
+    assert all(item.independent_scope_proof is None for item in output.restricted_statements)
+    assert output.restricted_statements[1].scope_quote == "符合下述条件者"
+    protocol_control_execution_module._validate_deep_batch_output(batch, output)
 
 
 @pytest.mark.parametrize("position", ["before", "between", "after"])
@@ -955,6 +1107,25 @@ def test_capability_restriction_keeps_source_and_rejects_unproven_failures(failu
 
 
 def _restriction_case(kind: str):
+    if kind == "whole_temporal_definition":
+        from app.agents.protocol_control_source_interpretation import (
+            SOURCE_DEFINITION_CONSUMER_VERSION, SourceDefinitionAtomConsumer,
+            SourceDefinitionConsumerItem, SourceDefinitionConsumers,
+        )
+        batch, result = _independent_candidate_and_temporal_gap(same_unit=True)
+        result.source_interpretation.statements[0].decision_functions.append("definition")
+        result.source_interpretation.statements[1].decision_functions.append("time_validity")
+        output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+        assert output is not None and output.candidates == []
+        target = output.restricted_statements[1]
+        result.source_definition_consumers = SourceDefinitionConsumers(
+            version=SOURCE_DEFINITION_CONSUMER_VERSION,
+            items=[SourceDefinitionConsumerItem(statement_index=0, consumers=[SourceDefinitionAtomConsumer(
+                consumer_kind="restricted_statement", restricted_statement_id=target.restricted_statement_id,
+                consumer_excerpt=target.source_quote,
+            )])],
+        )
+        return batch, result
     if kind == "mixed_definition":
         batch, result, _ = _mixed_definition_declared_result()
         return batch, result
@@ -964,7 +1135,46 @@ def _restriction_case(kind: str):
             else _unresolved_batch_review())
 
 
-@pytest.mark.parametrize("kind", ["unresolved", "independent", "clock", "temporal", "mixed_definition"])
+@pytest.mark.parametrize("defect", [None, "missing_detail", "missing_ids", "boolean_ids", "foreign_refs", "missing_raw", "changed_raw"])
+def test_temporal_preservation_proof_rehydrates_definition_and_checks_typed_witness(defect):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentAttempt
+
+    module = protocol_control_execution_module
+    batch, result = _restriction_case("whole_temporal_definition")
+    raw = result.source_definition_consumers.model_dump_json()
+    result.restricted_source_definition_consumer_attempts = [ProtocolControlAgentAttempt(
+        attempt=1, session_id="actual-private-definition", outcome="parsed",
+        raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(), raw_output_chars=len(raw),
+        raw_output_text=raw, issues=[],
+    )]
+    saved = dict(result.model_dump(mode="json"), attempt_raw_outputs=module._deep_attempt_raw_outputs(result))
+    if defect == "missing_detail":
+        saved["attempts"][-1]["error_detail"] = None
+    elif defect == "missing_ids":
+        del saved["attempts"][-1]["error_detail"]["statement_ids"]
+    elif defect == "boolean_ids":
+        saved["attempts"][-1]["error_detail"]["statement_ids"] = [True]
+    elif defect == "foreign_refs":
+        saved["attempts"][-1]["error_detail"]["source_refs"] = ["another-source"]
+    elif defect == "missing_raw":
+        saved["attempt_raw_outputs"] = []
+    elif defect == "changed_raw":
+        saved["attempt_raw_outputs"][-1]["raw_output_text"] += " "
+    frozen = json.dumps(saved, ensure_ascii=False, sort_keys=True)
+    if defect in {"missing_raw", "changed_raw"}:
+        with pytest.raises(ValueError, match="原答"):
+            module._preserved_temporal_restriction_proof(batch, saved)
+    else:
+        proof = module._preserved_temporal_restriction_proof(batch, saved)
+        assert (proof is not None) == (defect is None)
+        if proof is not None:
+            assert proof["statement_ids"] == [1]
+            assert proof["source_refs"] == ["span:01"]
+            assert proof["adopted"] is False
+    assert json.dumps(saved, ensure_ascii=False, sort_keys=True) == frozen
+
+
+@pytest.mark.parametrize("kind", ["unresolved", "independent", "clock", "temporal", "mixed_definition", "whole_temporal_definition"])
 def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
     monkeypatch, kind: str,
 ) -> None:
@@ -972,9 +1182,10 @@ def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
     batch, result = _restriction_case(kind)
     independent_candidate = kind in {"independent", "clock", "temporal"}
     declarations_called = []
+    has_definition = kind in {"mixed_definition", "whole_temporal_definition"}
     declaration_text = (result.source_definition_consumers.model_dump_json()
-                        if kind == "mixed_definition" else None)
-    if kind == "mixed_definition":
+                        if has_definition else None)
+    if has_definition:
         result.source_definition_consumers = None
         result.restricted_source_definition_consumer_attempts = []
 
@@ -1009,8 +1220,8 @@ def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
     saved = module._execute_deep(context, SimpleNamespace())
     assert len(saved["restricted_batch"]["candidates"]) == int(independent_candidate)
     assert len(saved["restricted_batch"]["restricted_statements"]) == 2 - int(independent_candidate)
-    assert len(declarations_called) == int(kind == "mixed_definition")
-    if kind == "mixed_definition":
+    assert len(declarations_called) == int(has_definition)
+    if has_definition:
         assert saved["run_result"]["status"] == "需要核对"
         assert saved["run_result"]["final_output"] is None
         assert len(saved["run_result"]["restricted_source_definition_consumer_attempts"]) == 1
@@ -1114,11 +1325,14 @@ def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
         )
         assert outputs[batch.batch_id].candidates == expected.candidates[:1]
     assert relations == []
-    if kind == "mixed_definition":
+    if has_definition:
         assert len(definition_consumers) == 1
         assert definition_consumers[0].consumers[0].consumer_kind == "restricted_statement"
         assert not definition_consumers[0].scope_complete
-        assert "与已有目标的关系未核清" in definition_consumers[0].unresolved_reasons
+        if kind == "mixed_definition":
+            assert "与已有目标的关系未核清" in definition_consumers[0].unresolved_reasons
+        else:
+            assert definition_consumers[0].unresolved_reasons
         original_answers = saved["attempt_raw_outputs"]
         saved["attempt_raw_outputs"] = None
         with pytest.raises(StepFailure) as corrupt_error:
@@ -4354,25 +4568,40 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
     assert _job_checkpoint_fingerprint(session_factory, first.job_id) == old_history
 
 
-@pytest.mark.parametrize("failure", [None, "source_clear", "changed_proof", "restriction_error"])
+@pytest.mark.parametrize("kind,failure", [
+    ("unresolved", None), ("unresolved", "source_clear"),
+    ("unresolved", "changed_proof"), ("unresolved", "restriction_error"),
+    ("temporal", None), ("temporal", "changed_proof"), ("temporal", "restriction_error"),
+    ("whole_temporal_definition", None),
+])
 def test_preserved_failure_revalidates_restricted_source_through_actual_job_checkpoint(
-    data_paths, session_factory, monkeypatch, failure,
+    data_paths, session_factory, monkeypatch, kind, failure,
 ) -> None:
     from app.evidence.artifacts import ArtifactStore
     from app.services.eligibility_review_projection import _restricted_control_projections
     from tests.v2.domain.test_control_catalog_restricted_contract import _catalog, _publication
 
     module = protocol_control_execution_module
-    batch, result = _independent_candidate_and_unresolved_review()
+    declaration_text = None
+    if kind == "whole_temporal_definition":
+        batch, result = _restriction_case(kind)
+        declaration_text = result.source_definition_consumers.model_dump_json()
+        result.source_definition_consumers = None
+    else:
+        batch, result = (_independent_candidate_and_temporal_gap(same_unit=True)
+                         if kind == "temporal" else _independent_candidate_and_unresolved_review())
+    if kind == "temporal":
+        result.source_interpretation.statements[1].decision_functions.append("time_validity")
     if failure == "source_clear":
         result.source_interpretation.statements[1].unresolved = []
-    result.attempts[-1].error_detail = {
-        "code": "SOURCE_TARGET_REVIEW_UNRESOLVED", "statement_ids": [1],
-        "source_refs": ["span:02"], "json_path": "/items",
-    }
+    if kind == "unresolved":
+        result.attempts[-1].error_detail = {
+            "code": "SOURCE_TARGET_REVIEW_UNRESOLVED", "statement_ids": [1],
+            "source_refs": ["span:02"], "json_path": "/items",
+        }
     diagnostic = {**result.model_dump(mode="json"), "stage": "deep_failure_diagnostic"}
     diagnostic.pop("status")
-    proof = module._preserved_unresolved_review_proof(batch, diagnostic)
+    proof = module._preserved_source_review_proof(batch, diagnostic)
     assert proof is not None
     old = JobService(session_factory, now=_now).create_job(
         idempotency_key="old-restricted-failure", job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
@@ -4386,7 +4615,7 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
     history = _job_checkpoint_fingerprint(session_factory, old.job_id)
     with session_factory() as session:
         checkpoint = JobStore(session, now=_now).get_last_checkpoint(old.job_id, "deep_0001")
-    proof = module._preserved_unresolved_review_proof(batch, checkpoint[1])
+    proof = module._preserved_source_review_proof(batch, checkpoint[1])
     assert proof is not None
     plan_data = {"batches": [batch.model_dump(mode="json")]}
     plan = {
@@ -4418,7 +4647,15 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
     monkeypatch.setattr(module, "_frozen_official_predicates", lambda *_: ({}, {}))
     monkeypatch.setattr(module, "_prompt_from_payload", lambda *_: "冻结提示")
     monkeypatch.setattr(module, "_limits_from_payload", lambda *_: (0, 2))
-    monkeypatch.setattr(module, "_resolve_transport", lambda *_, **__: SimpleNamespace())
+    declarations_called = []
+    def declare(*, prompt):
+        assert declaration_text is not None and "restricted_statement" in prompt
+        declarations_called.append(prompt)
+        return ProtocolControlAgentResponse(session_id="fresh-preserved-definition", text=declaration_text)
+    monkeypatch.setattr(module, "_resolve_transport", lambda *_, **__: SimpleNamespace(
+        start_source_definition_consumers=declare,
+        take_call_receipts=lambda: [{"request_id": "fresh-definition"}],
+    ))
     monkeypatch.setattr(module, "_require_frozen_route", lambda *_, **__: None)
     monkeypatch.setattr(module, "_deep_component_identity", lambda *_: {})
     monkeypatch.setattr(module, "_transport_identity", lambda *_, **__: {})
@@ -4451,12 +4688,16 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
         }[failure]
         return
     assert job.state == "completed"
-    assert saved[1]["new_model_calls"] == 0 and saved[1]["adopted"] is False
-    assert saved[1]["model_call_receipts"] == []
+    assert saved[1]["new_model_calls"] == int(declaration_text is not None)
+    assert len(declarations_called) == int(declaration_text is not None)
+    assert saved[1]["adopted"] is False
+    assert saved[1]["model_call_receipts"] == ([{"request_id": "fresh-definition"}]
+                                               if declaration_text else [])
     assert saved[1]["run_result"]["source_target_review"] == result.source_target_review.model_dump(mode="json")
     rebuilt, _, _ = module._deep_results(SimpleNamespace(job_id=current.job_id), config, closure)
     output = rebuilt[batch.batch_id]
-    assert len(output.candidates) == 1 and len(output.restricted_statements) == 1
+    assert len(output.candidates) == int(kind == "unresolved")
+    assert len(output.restricted_statements) == (1 if kind == "unresolved" else 2)
     projection = _restricted_control_projections(_publication(_catalog(
         restricted=tuple(output.restricted_statements), allowed=tuple(batch.owned_source_span_ids))))
     assert projection[0].obligations[0].status == "restricted"

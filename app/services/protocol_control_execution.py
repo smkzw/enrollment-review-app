@@ -108,6 +108,7 @@ from app.services.protocol_control_definition_scope import (
 )
 from app.llm.logical_call_budget import LogicalCallBudget
 from app.services.protocol_control_restricted_source import (
+    _temporal_restriction_indexes,
     TEMPORAL_RESTRICTION_VERSION,
     WHOLE_UNIT_RESTRICTION_VERSION,
     restricted_batch_from_review,
@@ -2559,6 +2560,25 @@ def _validated_deep_partial_source(
         and attempt["error_detail"].get("workflow_phase") == "source_correction_pending"
         for attempt in saved.get("attempts", [])
     )
+    # A changed compiler cannot justify reusing executable semantics. It may
+    # rederive a wholly non-executable disposition from unchanged source and
+    # request materials, checked again by the current validators.
+    if (changed_components and not pending_source
+            and repair_identity == protocol_control_agent_repair_contract_sha256()
+            and set(saved_components) == set(current_components)
+            and isinstance(saved_components.get("compiler_versions"), list)
+            and bool(saved_components["compiler_versions"])
+            and all(isinstance(value, str) and value
+                    for value in saved_components["compiler_versions"])
+            and isinstance(saved_components.get("validator_version"), str)
+            and bool(saved_components["validator_version"])
+            and all(saved_components[name] == value for name, value in current_components.items()
+                    if name not in {"compiler_versions", "validator_version"})
+            and _preserved_temporal_restriction_proof(batch, saved) is not None):
+        interpretation = SourceInterpretation.model_validate(source)
+        resumed_review = _resumable_saved_source_review(batch, interpretation, saved)
+        if resumed_review.state == "reused":
+            return checkpoint_id, saved, resumed_review
     if (changed_components or pending_source
             or repair_identity != protocol_control_agent_repair_contract_sha256()):
         if saved.get("partial_wire") is not None:
@@ -2671,6 +2691,50 @@ def _preserved_unresolved_review_proof(
         "error_code": "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED",
         "adopted": False,
     }
+
+
+def _preserved_temporal_restriction_proof(
+    batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Revalidate a typed temporal failure as a wholly non-executable result."""
+    attempts = saved.get("attempts")
+    if (not isinstance(attempts, list) or not attempts
+            or not isinstance(attempts[-1], Mapping)
+            or attempts[-1].get("error_classes") != ["TEMPORAL_SCOPE_UNRESOLVED"]):
+        return None
+    if not isinstance(saved.get("partial_wire"), Mapping):
+        return None
+    result = _saved_failed_deep_run_result(batch, saved)
+    proven = _temporal_restriction_indexes(batch, result, whole_unit=True)
+    if proven is None:
+        return None
+    restricted = restricted_batch_from_review(batch, result)
+    if (restricted is None or restricted.candidates
+            or not restricted.restricted_statements
+            or any(item.independent_scope_proof is not None
+                   for item in restricted.restricted_statements)):
+        return None
+    _validate_deep_batch_output(batch, restricted)
+    return {
+        "schema_version": "phase5/preserved-temporal-restriction-proof/v1",
+        "diagnostic_sha256": hashlib.sha256(json.dumps(
+            saved, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest(),
+        "restricted_batch_sha256": hashlib.sha256(json.dumps(
+            restricted.model_dump(mode="json"), ensure_ascii=False, sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")).hexdigest(),
+        "statement_ids": sorted(proven),
+        "source_refs": result.attempts[-1].error_detail["source_refs"],
+        "error_code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID", "adopted": False,
+    }
+
+
+def _preserved_source_review_proof(
+    batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    return (_preserved_unresolved_review_proof(batch, saved)
+            or _preserved_temporal_restriction_proof(batch, saved))
 
 
 def _preflight_deep_source(
@@ -2872,7 +2936,7 @@ def _preflight_deep_source(
                 if (isinstance(control, Mapping)
                         and control.get("continue_after_final_failure") == _INDEPENDENT_DEEP_READ_POLICY
                         and partial[2].source_seed_proof is None):
-                    preserved = _preserved_unresolved_review_proof(batch, partial[1])
+                    preserved = _preserved_source_review_proof(batch, partial[1])
                     if preserved is not None:
                         decision, reason = "preserve_unresolved", "same_material_failed_review_no_new_inference"
         decisions[batch.batch_id] = {
@@ -3395,6 +3459,58 @@ def _restricted_deep_checkpoint(
     }
 
 
+def _complete_restricted_deep_source(
+    context: StepContext, config: ProtocolControlExecutorConfig,
+    batch: ProtocolControlDispositionBatch, transport: Any,
+    prompt_template: str, result: ProtocolControlAgentRunResult,
+    restricted_batch: ProtocolControlBatchDispositionHydrated,
+    model_call_receipts: list[dict[str, Any]], resume_review: _ResumedSourceReview,
+    *, official_predicate_identities: Mapping[str, Any],
+    official_predicate_sources: Mapping[str, Any],
+    bind_budget: bool = False,
+) -> dict[str, Any]:
+    if (source_definition_statement_indexes(result.source_interpretation)
+            and result.source_definition_consumers is None):
+        from app.agents.protocol_control_deconstructor import declare_source_definition_consumers
+        if bind_budget:
+            _bind_control_request_budget(context, config, transport, request_basis=lambda: {
+                "batch": batch.model_dump(mode="json"),
+                "prompt": protocol_control_agent_prompt_template_sha256(prompt_template),
+            })
+        declarations: list[ProtocolControlAgentAttempt] = []
+        declaration, failed = declare_source_definition_consumers(
+            batch, transport, result.source_interpretation, restricted_batch, declarations,
+            official_predicate_identities=official_predicate_identities,
+            official_predicate_sources=official_predicate_sources,
+        )
+        result = result.model_copy(update={
+            "source_definition_consumers": declaration,
+            "restricted_source_definition_consumer_attempts": declarations,
+        })
+        take_receipts = getattr(transport, "take_call_receipts", None)
+        model_call_receipts.extend(take_receipts() if callable(take_receipts) else [])
+        if failed:
+            raise StepFailure(
+                retryable=False,
+                error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                detail="受限原文已保留，但定义依赖尚未实际登记，不能作为完整采用依据。",
+                diagnostic_checkpoint=_restricted_deep_checkpoint(
+                    context, batch, transport, prompt_template, result, restricted_batch,
+                    model_call_receipts, resume_review,
+                ),
+            )
+        if restricted_batch_from_review(batch, result) != restricted_batch:
+            raise StepFailure(
+                retryable=False,
+                error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                detail="定义登记后受限来源发生变化，未保存为可消费结果。",
+            )
+    return _restricted_deep_checkpoint(
+        context, batch, transport, prompt_template, result, restricted_batch,
+        model_call_receipts, resume_review,
+    )
+
+
 def _execute_deep(
     context: StepContext,
     config: ProtocolControlExecutorConfig,
@@ -3535,23 +3651,25 @@ def _execute_deep(
                     or control.get("continue_after_final_failure") != _INDEPENDENT_DEEP_READ_POLICY):
                 raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
                                   detail="保留原未决仅限已冻结的独立来源核查，未发送请求。")
-            with config.session_factory() as session:
-                partial = _validated_deep_partial_source(
-                    JobStore(session, now=config.now), context.job_payload,
-                    deep_source_job_id, batch, context.step_id, prompt_template,
-                )
-            proof = (_preserved_unresolved_review_proof(batch, partial[1])
-                     if partial is not None and partial[2].source_seed_proof is None else None)
+            try:
+                with config.session_factory() as session:
+                    partial = _validated_deep_partial_source(
+                        JobStore(session, now=config.now), context.job_payload,
+                        deep_source_job_id, batch, context.step_id, prompt_template,
+                    )
+                proof = (_preserved_source_review_proof(batch, partial[1])
+                         if partial is not None and partial[2].source_seed_proof is None else None)
+            except ValueError as exc:
+                raise StepFailure(
+                    retryable=False, error_code="PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID",
+                    detail="已保存的未决来源未通过当前逐项重核，原记录保持。",
+                ) from exc
             if proof is None or proof != entry.get("unresolved_review_proof"):
                 raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
                                   detail="原未决与入队前证明不一致，未发送请求。")
             checkpoint_id, diagnostic, prior_review = partial
             try:
-                prior_result = ProtocolControlAgentRunResult.model_validate({
-                    **{key: value for key, value in diagnostic.items()
-                       if key in ProtocolControlAgentRunResult.model_fields},
-                    "status": "需要核对", "batch_id": batch.batch_id,
-                })
+                prior_result = _saved_failed_deep_run_result(batch, diagnostic)
                 restricted = restricted_batch_from_review(batch, prior_result)
             except ValueError as exc:
                 raise StepFailure(
@@ -3559,16 +3677,20 @@ def _execute_deep(
                     detail="已保存的未决来源未通过当前逐项重核，原记录保持。",
                 ) from exc
             if restricted is not None:
+                checkpoint = _complete_restricted_deep_source(
+                    context, config, batch, transport, prompt_template, prior_result,
+                    restricted, [], prior_review,
+                    official_predicate_identities=official_predicate_identities,
+                    official_predicate_sources=official_predicate_sources,
+                    bind_budget=True,
+                )
                 return {
-                    **_restricted_deep_checkpoint(
-                        context, batch, transport, prompt_template, prior_result,
-                        restricted, [], prior_review,
-                    ),
+                    **checkpoint,
                     "revalidated_restricted_from": {
                         "job_id": deep_source_job_id, "checkpoint_id": checkpoint_id,
                         "proof": proof,
                     },
-                    "new_model_calls": 0, "adopted": False,
+                    "new_model_calls": len(checkpoint["model_call_receipts"]), "adopted": False,
                 }
             raise StepFailure(
                 retryable=False, error_code=proof["error_code"],
@@ -3695,39 +3817,11 @@ def _execute_deep(
     except ValueError as exc:
         restricted_error = exc
     if restricted_batch is not None:
-        if (source_definition_statement_indexes(result.source_interpretation)
-                and result.source_definition_consumers is None):
-            from app.agents.protocol_control_deconstructor import declare_source_definition_consumers
-            declarations: list[ProtocolControlAgentAttempt] = []
-            declaration, failed = declare_source_definition_consumers(
-                batch, transport, result.source_interpretation, restricted_batch, declarations,
-                official_predicate_identities=official_predicate_identities,
-                official_predicate_sources=official_predicate_sources,
-            )
-            result = result.model_copy(update={
-                "source_definition_consumers": declaration,
-                "restricted_source_definition_consumer_attempts": declarations,
-            })
-            model_call_receipts.extend(take_receipts() if callable(take_receipts) else [])
-            if failed:
-                raise StepFailure(
-                    retryable=False,
-                    error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
-                    detail="受限原文已保留，但定义依赖尚未实际登记，不能作为完整采用依据。",
-                    diagnostic_checkpoint=_restricted_deep_checkpoint(
-                        context, batch, transport, prompt_template, result, restricted_batch,
-                        model_call_receipts, resume_review,
-                    ),
-                )
-            if restricted_batch_from_review(batch, result) != restricted_batch:
-                raise StepFailure(
-                    retryable=False,
-                    error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
-                    detail="定义登记后受限来源发生变化，未保存为可消费结果。",
-                )
-        return _restricted_deep_checkpoint(
-            context, batch, transport, prompt_template, result, restricted_batch,
+        return _complete_restricted_deep_source(
+            context, config, batch, transport, prompt_template, result, restricted_batch,
             model_call_receipts, resume_review,
+            official_predicate_identities=official_predicate_identities,
+            official_predicate_sources=official_predicate_sources,
         )
     if (restricted_error is not None or result.status not in {"已解析", "待跨章核验"}
             or result.final_output is None):
@@ -3930,6 +4024,19 @@ def _saved_deep_run_result(payload: Mapping[str, Any]) -> ProtocolControlAgentRu
             raise ValueError("受限定义登记原答损坏")
         restored.append(attempt.model_copy(update={"raw_output_text": raw}))
     return result.model_copy(update={"restricted_source_definition_consumer_attempts": restored})
+
+
+def _saved_failed_deep_run_result(
+    batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
+) -> ProtocolControlAgentRunResult:
+    return _saved_deep_run_result({
+        "run_result": {
+            **{key: value for key, value in saved.items()
+               if key in ProtocolControlAgentRunResult.model_fields},
+            "status": "需要核对", "batch_id": batch.batch_id,
+        },
+        "attempt_raw_outputs": saved.get("attempt_raw_outputs"),
+    })
 
 
 def _pending_definition_consumer_checkpoint(

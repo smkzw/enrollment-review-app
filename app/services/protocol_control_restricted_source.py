@@ -44,12 +44,14 @@ from app.agents.protocol_control_stage_compiler import requires_temporal_resolut
 
 
 TEMPORAL_RESTRICTION_VERSION = "source-temporal-restricted-disposition/v2"
-WHOLE_UNIT_RESTRICTION_VERSION = "source-whole-unit-restricted-disposition/v1"
+WHOLE_UNIT_RESTRICTION_VERSION = "source-whole-unit-restricted-disposition/v2"
 
 
 def _temporal_restriction_indexes(
     batch: ProtocolControlDispositionBatch,
     result: ProtocolControlAgentRunResult,
+    *,
+    whole_unit: bool = False,
 ) -> set[int] | None:
     """Prove the typed compiler failure range; no inference from error prose."""
 
@@ -77,14 +79,18 @@ def _temporal_restriction_indexes(
     spans = sorted({span for index in ids
                     for span in units[interpretation.statements[index].structure_unit_id].source_span_ids})
     if (additional != indexes or detail.get("source_refs") != spans
-            or any(item.decision not in {
+            or (not whole_unit and any(item.decision not in {
                 "covered_by_official", "covered_by_procedure", "additional_requirement",
-            } for item in review.items)):
+            } for item in review.items))):
         return None
     for index in ids:
         statement = interpretation.statements[index]
-        if (statement.unresolved or not source_statement_is_standalone_action(statement)
-                or not source_statement_context_is_self_contained(statement)
+        source_action = ("action" in statement.decision_functions
+                         and "definition" not in statement.decision_functions
+                         and statement.force in {"required", "prohibited"})
+        if (statement.unresolved
+                or not (source_action if whole_unit else source_statement_is_standalone_action(statement))
+                or (not whole_unit and not source_statement_context_is_self_contained(statement))
                 or not requires_temporal_resolution(interpretation, index)):
             return None
     return indexes
@@ -323,7 +329,9 @@ def _whole_unit_restriction(
     if (result.partial_wire is None
             or (result.source_definition_consumers is not None
                 and not result.restricted_source_definition_consumer_attempts)
-            or set(result.attempts[-1].error_classes) != {"SOURCE_TARGET_REVIEW_UNRESOLVED"}):
+            or set(result.attempts[-1].error_classes) not in (
+                {"SOURCE_TARGET_REVIEW_UNRESOLVED"}, {"TEMPORAL_SCOPE_UNRESOLVED"},
+            )):
         return None
     interpretation = result.source_interpretation
     review = result.source_target_review
@@ -335,10 +343,19 @@ def _whole_unit_restriction(
     units = {unit.structure_unit_id: unit for unit in batch.owned_units}
     reviewed = {item.statement_index: item for item in review.items}
     uncertain = [item for item in review.items if item.decision == "unresolved"]
-    if not uncertain or any(not item.unresolved_aspects for item in uncertain):
+    temporal_indexes = set()
+    if set(result.attempts[-1].error_classes) == {"TEMPORAL_SCOPE_UNRESOLVED"}:
+        proven = _temporal_restriction_indexes(batch, result, whole_unit=True)
+        if proven is None:
+            return None
+        temporal_indexes = proven
+    if ((not uncertain and not temporal_indexes)
+            or any(not item.unresolved_aspects for item in uncertain)):
         return None
-    restricted_units = {interpretation.statements[item.statement_index].structure_unit_id
-                        for item in uncertain}
+    uncertain_indexes = {item.statement_index for item in uncertain}
+    restricted_indexes = uncertain_indexes | temporal_indexes
+    restricted_units = {interpretation.statements[index].structure_unit_id
+                        for index in restricted_indexes}
     by_unit: dict[str, list[int]] = {}
     for index, statement in enumerate(interpretation.statements):
         by_unit.setdefault(statement.structure_unit_id, []).append(index)
@@ -352,8 +369,29 @@ def _whole_unit_restriction(
                 return None
             ranges = [locate_source_quote_offsets(units[unit_id].excerpt,
                        interpretation.statements[index].quoted_text) for index in indexes]
-            if any(bounds is None for bounds in ranges) or not source_statement_ranges_cover_unit(
-                units[unit_id].excerpt, [bounds for bounds in ranges if bounds is not None],
+            if any(bounds is None for bounds in ranges):
+                return None
+            ordered = sorted(ranges)
+            if any(left[1] > right[0] for left, right in zip(ordered, ordered[1:])):
+                return None
+            # Exact, already-validated local headings cover source text only.
+            # They do not establish independence between sibling requirements.
+            scope_ranges = [locate_source_quote_offsets(units[unit_id].excerpt,
+                            interpretation.statements[index].scope_quote)
+                            for index in indexes
+                            if interpretation.statements[index].scope_quote is not None
+                            and interpretation.statements[index].scope_context_unit_id is None]
+            if any(bounds is None for bounds in scope_ranges):
+                return None
+            extra_scope_ranges = []
+            for bounds in sorted(set(scope_ranges)):
+                if any(start <= bounds[0] and bounds[1] <= end for start, end in ranges):
+                    continue
+                if any(start < bounds[1] and bounds[0] < end for start, end in ranges):
+                    return None
+                extra_scope_ranges.append(bounds)
+            if not source_statement_ranges_cover_unit(
+                units[unit_id].excerpt, [*ranges, *extra_scope_ranges],
                 allow_joining_punctuation=True,
             ):
                 return None
@@ -392,6 +430,7 @@ def _whole_unit_restriction(
         return None
     statements = []
     for unit_id in sorted(restricted_units):
+        temporal_only = not uncertain_indexes.intersection(by_unit[unit_id])
         aspects = list(dict.fromkeys(
             aspect for index in by_unit[unit_id]
             for aspect in [*interpretation.statements[index].unresolved,
@@ -406,9 +445,11 @@ def _whole_unit_restriction(
                 restricted_statement_id=f"restricted:{digest}",
                 source_structure_unit_id=unit_id, source_statement_index=index,
                 source_quote=source.quoted_text, source_span_ids=sorted(units[unit_id].source_span_ids),
-                limitation_kind="interpretation_unresolved",
+                limitation_kind="consumer_unavailable" if temporal_only else "interpretation_unresolved",
                 unresolved_dimensions=[
-                    "同一原文单元的对应关系尚未核清，未证明各要求可独立采用；本单元整体保留待核",
+                    ("同一原文单元的持续期或跨节点要求尚未完成核对，未证明各要求可独立采用；本单元整体保留待核"
+                     if temporal_only else
+                     "同一原文单元的对应关系尚未核清，未证明各要求可独立采用；本单元整体保留待核"),
                     *aspects,
                 ],
                 scope_quote=source.scope_quote, scope_context_unit_id=source.scope_context_unit_id,
