@@ -157,6 +157,7 @@ from .protocol_control_source_interpretation import (
     validate_source_interpretation,
     normalize_schedule_randomization_anchors,
     normalize_mixed_schedule_scopes,
+    native_schedule_time_excerpt_is_grounded,
     validate_source_target_review,
     validated_source_review_seed,
     source_unit_comparison_as_review,
@@ -8151,30 +8152,52 @@ class ProtocolControlAgentRunner:
                                         unit for unit in batch.owned_units
                                         if unit.structure_unit_id == source_interpretation.statements[invalid_index].structure_unit_id
                                     )
-                                    if review_error.code == "SOURCE_TIME_INCOMPLETE":
+                                    native_time_recheck = (
+                                        review_error.code == "SOURCE_TIME_UNGROUNDED"
+                                        and native_schedule_time_excerpt_is_grounded(
+                                            batch, source_interpretation.statements[invalid_index],
+                                            overclaimed.source_time_excerpt,
+                                        )
+                                    )
+                                    if review_error.code == "SOURCE_TIME_INCOMPLETE" or native_time_recheck:
                                         scope_corrector = getattr(transport, "correct_source_scope", None)
-                                        if not callable(scope_corrector):
+                                        if not callable(scope_corrector) or source_repairs >= self._max_schema_repairs:
                                             raise review_error
                                         original_statement = source_interpretation.statements[invalid_index]
                                         review_response = None
+                                        source_repairs += 1
                                         time_response = scope_corrector(prompt=(
                                             build_source_scope_correction_prompt(
                                                 batch, original_statement, str(review_error)
                                             )
-                                            + "\n本次只补全 time_words；scope_quote 与 affected_stage "
-                                            "须与原陈述相同，其他陈述和医学含义不变。"
+                                            + ("\n本次核对原生标记列中的遗漏范围；只能补本条的范围、阶段、时间。"
+                                               "scope_quote须引用完整原生标题格文字或完整有源列标题，不能只取一个字。"
+                                               "后续仍须重新核对目标，不能将上一项时间声明当作已采信结论。"
+                                               if native_time_recheck else
+                                               "\n本次只补全 time_words；scope_quote 与 affected_stage "
+                                               "须与原陈述相同，其他陈述和医学含义不变。")
                                         ))
                                         review_response = time_response
                                         time_correction = SourceScopeCorrection.model_validate_json(
                                             time_response.text
                                         )
-                                        if (time_correction.scope_quote != original_statement.scope_quote
+                                        if not native_time_recheck and (
+                                                time_correction.scope_quote != original_statement.scope_quote
                                                 or time_correction.scope_context_unit_id != original_statement.scope_context_unit_id
                                                 or time_correction.affected_stage != original_statement.affected_stage):
                                             raise ValueError("补全来源时间不得更改已核范围或阶段")
                                         corrected_source = apply_source_scope_correction(
                                             batch, source_interpretation, invalid_index, time_correction
                                         )
+                                        if native_time_recheck:
+                                            corrected_statement = corrected_source.statements[invalid_index]
+                                            if (corrected_statement.scope_context_unit_id != original_statement.scope_context_unit_id
+                                                    or not corrected_statement.time_words
+                                                    or not corrected_statement.scope_quote
+                                                    or not native_schedule_time_excerpt_is_grounded(
+                                                        batch, corrected_statement, corrected_statement.scope_quote,
+                                                    )):
+                                                raise ValueError("原生访视列范围尚未逐字核清，不能借目标核对补造时间")
                                         if _unreported_time_fragments(corrected_source.statements[invalid_index]):
                                             raise ValueError("本条原文时间仍未逐项列全")
                                         source_interpretation = corrected_source
@@ -8196,6 +8219,13 @@ class ProtocolControlAgentRunner:
                                             raw_output_chars=len(time_response.text),
                                             outcome="parsed",
                                             issues=["仅补核本条来源时间；逐项目标仍须重新核验"],
+                                            error_detail={
+                                                "workflow_phase": "source_scope_correction",
+                                                "code": review_error.code,
+                                                "statement_id": invalid_index,
+                                                "source_refs": list(source_unit.source_span_ids),
+                                                "precondition_sha256": _sha256(original_statement.model_dump_json()),
+                                            },
                                         ))
                                     corrected = None
                                     correction_response = None

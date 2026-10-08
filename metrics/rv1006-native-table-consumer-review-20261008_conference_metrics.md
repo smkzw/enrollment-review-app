@@ -6,6 +6,7 @@ Date: 2026-10-08 UTC / 2026-10-09 CST
 |---|---|---|---|---:|---:|---:|---|
 | `evidence_single_object` 首审 | `codebuddy-cli` | `deepseek-v4.1-flash:max` | completed / returncode0 | 194.256秒 | unknown | unknown | sorted缺陷；复用风险 |
 | 同会话差异复核 | `codebuddy-cli` | `deepseek-v4.1-flash:max` | completed / returncode0 | 86.082秒 | unknown | unknown | 未找到必修反例；静态范围 |
+| 同会话来源时间恢复 | `codebuddy-cli` | `deepseek-v4.1-flash:max` | completed / returncode0 | 79.969秒 | unknown | unknown | 子串风险采纳；未测试/临床 |
 
 ## Timeout And Retry Evidence
 

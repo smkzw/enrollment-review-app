@@ -6602,6 +6602,138 @@ def test_schedule_columns_close_only_existing_enrollment_visits() -> None:
     assert schedule_column_links(batch, mixed.structure_unit_id, mixed.excerpt) == []
 
 
+def _native_time_recheck_batch():
+    def row(index, values):
+        refs = [f"body.t0.r{index}.c{col}.p0" for col, _ in values]
+        return ProtocolStructureUnit(
+            structure_unit_id=f"native-row-{index}", source_ref=f"body.t0.r{index}",
+            member_source_refs=refs, member_texts=[text for _, text in values],
+            source_span_ids=[f"snapshot::{ref}" for ref in refs],
+            unit_kind="table_row", heading_path=["访视表"], source_order=index,
+            study_phase=StudyPhase.PHASE_II, phase_scopes=[PhaseScope.SHARED],
+            excerpt=" | ".join(text for _, text in values),
+            table_context=TableCellContext(
+                table_path=(index, 0), row_index=index, column_index=0,
+                member_cell_paths=[(index, col) for col, _ in values],
+            ),
+        )
+    header = row(0, [(0, "试验阶段"), (1, "筛选期"), (2, "基线期")])
+    visits = row(1, [(0, "访视"), (1, "V1"), (2, "V2")])
+    days = row(2, [(0, "日期"), (1, "D-1"), (2, "D0")])
+    action = row(3, [(0, "完成用药核对"), (2, "X")])
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units = [action]
+    batch.context_units = [header, visits, days]
+    batch.owned_structure_unit_ids = [action.structure_unit_id]
+    batch.owned_source_span_ids = action.source_span_ids
+    batch.context_structure_unit_ids = [source.structure_unit_id for source in batch.context_units]
+    batch.context_source_span_ids = [span for source in batch.context_units for span in source.source_span_ids]
+    batch.known_official_targets = []
+    batch.known_procedure_targets = []
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": action.structure_unit_id,
+                        "quoted_text": action.excerpt, "force": "required", "time_words": []}],
+        "units_without_statement": [],
+    })
+    return batch, inventory
+
+
+@pytest.mark.parametrize("variant", ["valid", "other_column", "mixed", "partial_quote", "footnote", "no_header", "subword"])
+def test_native_table_time_selects_recheck_without_authorizing_review_time(variant):
+    from app.agents.protocol_control_source_interpretation import native_schedule_time_excerpt_is_grounded
+    batch, inventory = _native_time_recheck_batch()
+    unit = batch.owned_units[0]
+    if variant == "mixed":
+        unit.member_source_refs.append("body.t0.r3.c1.p0")
+        unit.member_texts.append("X")
+        unit.source_span_ids.append("snapshot::body.t0.r3.c1.p0")
+        unit.table_context.member_cell_paths.append((3, 1))
+        unit.excerpt += " | X"
+        inventory.statements[0].quoted_text = unit.excerpt
+    elif variant == "partial_quote":
+        inventory.statements[0].quoted_text = "完成用药核对"
+    elif variant == "footnote":
+        unit.member_texts[-1] = "X^4"
+        unit.excerpt = "完成用药核对 | X^4"
+        inventory.statements[0].quoted_text = unit.excerpt
+    elif variant == "no_header":
+        batch.context_units = []
+    value = "筛选期" if variant == "other_column" else "期" if variant == "subword" else "D0"
+    assert native_schedule_time_excerpt_is_grounded(batch, inventory.statements[0], value) == (variant == "valid")
+    wire = ProtocolControlAgentWire(wire_version=CONTROL_AGENT_WIRE_VERSION,
+        dispositions=[ProtocolControlAgentWireDisposition(
+            structure_unit_id=unit.structure_unit_id,
+            disposition=StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+            linked_official_code=None, linked_procedure_catalog_item_id=None,
+            linked_procedure_catalog_item_ids=[], notes="尚待来源对应核对",
+        )], candidate_drafts=[])
+    coverage = source_statement_coverage(batch, inventory, wire)
+    review = SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[SourceTargetReviewItem(
+        statement_index=0, decision="additional_requirement", target_id=None,
+        source_action_excerpt=inventory.statements[0].quoted_text, target_action_excerpt=None,
+        source_time_excerpt=value, target_time_excerpt=None, unresolved_aspects=["无对应操作要求"],
+    )])
+    with pytest.raises(SourceTargetReviewValidationError) as rejected:
+        validate_source_target_review(batch, inventory, coverage, review)
+    assert rejected.value.code == "SOURCE_TIME_UNGROUNDED"
+
+
+@pytest.mark.parametrize("fault", [None, "transport", "wrong_scope", "empty_time", "budget", "repeated"])
+def test_runner_native_table_time_recheck_preserves_source_and_retry_boundary(fault):
+    batch, inventory = _native_time_recheck_batch()
+    unit = batch.owned_units[0]
+    wire = ProtocolControlAgentWire(wire_version=CONTROL_AGENT_WIRE_VERSION,
+        dispositions=[ProtocolControlAgentWireDisposition(
+            structure_unit_id=unit.structure_unit_id,
+            disposition=StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+            linked_official_code=None, linked_procedure_catalog_item_id=None,
+            linked_procedure_catalog_item_ids=[], notes="尚待来源对应核对",
+        )], candidate_drafts=[])
+    claim = SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[SourceTargetReviewItem(
+        statement_index=0, decision="unresolved", target_id=None,
+        source_action_excerpt=unit.excerpt, target_action_excerpt=None,
+        source_time_excerpt="D0", target_time_excerpt=None, unresolved_aspects=["操作定义尚待核对"],
+    )])
+    class Transport(_FakeTransport):
+        scope_calls = 0
+        target_calls = 0
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="source-1", text=inventory.model_dump_json())
+        def start_source_target_review(self, *, prompt):
+            self.target_calls += 1
+            answer = claim.model_copy(deep=True)
+            if fault == "repeated" and self.target_calls > 1:
+                answer.items[0].source_time_excerpt = "D99"
+            return ProtocolControlAgentResponse(session_id=f"review-{self.target_calls}", text=answer.model_dump_json())
+        def correct_source_scope(self, *, prompt):
+            self.scope_calls += 1
+            assert self.scope_calls == 1
+            assert "标记列原生来源" in prompt
+            if fault == "transport":
+                raise OSError("injected source scope failure")
+            scope = "筛选期" if fault == "wrong_scope" else "基线期 / V2 / D0"
+            return ProtocolControlAgentResponse(session_id="scope-1", text=SourceScopeCorrection(
+                version="phase5/control-source-scope-correction/v1", structure_unit_id=unit.structure_unit_id,
+                scope_quote=scope, affected_stage=None,
+                time_words=[] if fault == "empty_time" else [scope],
+            ).model_dump_json())
+    transport = Transport([ProtocolControlAgentResponse(session_id="wire-1", text=wire.model_dump_json())])
+    runner = ProtocolControlAgentRunner(max_schema_repairs=0) if fault == "budget" else ProtocolControlAgentRunner()
+    result = runner.run(batch, transport)
+    assert transport.scope_calls == (0 if fault == "budget" else 1)
+    assert transport.target_calls == (2 if fault in {None, "repeated"} else 1)
+    assert result.final_output is None and result.status == "需要核对"
+    assert result.source_interpretation.statements[0].quoted_text == inventory.statements[0].quoted_text
+    assert inventory.statements[0].scope_quote is None
+    if fault in {None, "repeated"}:
+        assert result.source_interpretation.statements[0].scope_quote == "基线期 / V2 / D0"
+        if fault is None:
+            assert result.source_target_review.items[0].decision == "unresolved"
+    else:
+        assert result.source_interpretation == inventory
+
+
 def test_split_schedule_row_uses_only_complete_source_cells() -> None:
     from app.protocols.procedure_catalog import schedule_column_scope, schedule_row_values
 

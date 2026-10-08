@@ -6,8 +6,9 @@
   "runtime_state": "active",
   "claims_complete": false,
   "current_resume_20261008": {
-    "base_head": "e628d4f0dddd33683fe1bc76ec56e27d27cb50f2",
-    "scope": "Native source positions in target review and sorted host-owned whole-row provenance; semantic atoms unchanged; gate-only revalidation with actual saved-wire equality",
+    "base_head": "9d91bbd45a759747249db8aebd3936807f5cfb21",
+    "scope": "Native table time omission routed to existing single-source correction, then target re-review; exact native header-cell or complete column text; source/target gates unchanged",
+    "current_runtime": {"job_id": "42e5473962fe4a44929b1d96ea14926f", "state": "failed_final", "code": "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID", "source_head": "9d91bbd45a759747249db8aebd3936807f5cfb21", "physical_calls": 7, "seconds": 199.18211841699667, "completed": 16, "failed_step": "deep_0017", "queued_unexecuted": 73, "checkpoint_id": "894d0a0a20da4060838a7364608991ee", "first_cause": "Native marked-column time absent from source interpretation; source-target review correctly rejects undeclared time", "old_jobs_and_protected_unchanged": true},
     "prior_runtime": {"job_id": "53021ad0f43d4ea9a587ba977fadc543", "state": "failed_final", "code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID", "physical_calls": 36, "seconds": 1129.7735104169697, "completed": 19, "failed_steps": ["deep_0017", "deep_0021"], "unread": 69, "old_jobs_and_protected_unchanged": true},
     "tests": {
       "c": {"passed": 1125, "seconds": 101.66, "exit_code": 0, "junit": "artifacts/rv1006-source-citation-stop-connected-20261008-v1.xml", "before_native_note_patch": true},
@@ -18,13 +19,16 @@
       "windows_not_additive": true,
       "c_b_frontend_are_prior_snapshot_checks": true,
       "current_connected": {"passed": 1203, "seconds": 96.30, "exit_code": 0, "junit": "artifacts/rv1006-native-table-consumer-connected-20261008-v4.xml", "warnings": "5 inherited SWIG"},
+      "native_scope_recovery": {"passed": 1215, "seconds": 100.45, "exit_code": 0, "junit": "artifacts/rv1006-native-table-scope-recovery-connected-20261008-v1.xml", "before_subword_hardening": true, "final_hardening_passed": 13, "final_hardening_seconds": 1.06, "final_hardening_exit_code": 0, "final_hardening_junit": "artifacts/rv1006-native-table-scope-recovery-hardening-20261008-v1.xml", "earlier_selected_windows": "9pass10fail missing fixture nullable fields; 15pass4fail wrong resume parameter; 15pass4fail missing recovery session/validator; final selected19pass1.28s. No gate weakened"},
       "current_earlier_windows": "1198pass4fail fixture construction; filename diagnostic exit4 no tests; v3 1202pass1fail109.71s non-first span fixture; two 5pass1fail fixture scopes; final6pass0.76s. Not additive, no guard weakened"
     },
     "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session": "01a11c53-1d24-71c2-8a28-568da7aaea2e", "initial_seconds": 194.256, "followup_seconds": 86.082, "exit_code": 0, "fallback": false, "owner_silent_120min_completion_wait": true, "limits": "Code-only, no tests/clinical. Initial13 reads over10 budget. Followup did not read actual rendered request hash; owner private receipts not submitted"},
     "current_readonly_preflight": {"reusable": 19, "resume_partial": 2, "refresh_required": 69, "model_calls": 0, "database_writes": 0, "database_unchanged": true, "ordinary_saved_wires_recompiled_identical": 18, "restricted_current_gate_equal": 1, "independent_reads_after_unresolved": false, "partial_steps": ["deep_0017", "deep_0021"], "private_record": "rv1006-native-table-consumer-preflight-20261008-v2.json"},
     "browser": {"browser": "Ego Lite", "space": 147, "mode": "actual non-Mock readonly prepared case", "viewports": ["1920x1080", "2560x1440", "3840x2160"], "workspace_top_px": 323, "horizontal_overflow": false, "actions": ["select source", "original text switch", "zoom and fit", "return correct subject"], "owned_server_port": 63305, "owned_server_exit_code": 143, "full_Q3": false, "clinical_writes": 0},
     "owner_disposition": "reviews/codex_conference_rv1006-native-table-consumer-review-20261008_review.md",
-    "runtime_execution": "native_note_api_attempt_failed; new_native_table_consumer_attempt_not_started",
+    "native_scope_conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session": "01a11c53-1d24-71c2-8a28-568da7aaea2e", "duration_seconds": 79.969, "exit_code": 0, "fallback": false, "owner_silent_120min_completion_wait": true, "same_session_not_new_model_independence": true, "report": "runs/conference/rv1006-native-table-consumer-review-20261008/native_scope_recovery_followup.md", "owner_disposition": "Adopt subword risk with physical-cell text equality, not textual split; limit upstream no-header claim because original context/table_context exist; no clinical approval"},
+    "native_scope_preflight": {"private_record": "rv1006-native-scope-recovery-preflight-20261008-v1.json", "source_job": "42e5473962fe4a44929b1d96ea14926f", "reusable": 19, "resume_partial": 2, "refresh_required": 69, "native_time_selects_scope_recheck": true, "database_unchanged": true, "database_writes": 0, "model_calls": 0},
+    "runtime_execution": "native_table_consumer_api_attempt_failed; native_scope_recovery_attempt_not_started",
     "formal_joint_publication": false,
     "new_current_node_report": false
   },

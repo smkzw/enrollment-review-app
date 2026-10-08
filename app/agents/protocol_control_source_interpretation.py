@@ -315,6 +315,31 @@ class SourceScopeCorrection(ContractModel):
     unresolved: str | None = None
 
 
+def native_schedule_time_excerpt_is_grounded(
+    batch: ProtocolControlDispositionBatch, statement: SourceStatement, excerpt: str | None,
+) -> bool:
+    """Select an existing scope recheck, never authorize a reviewer-supplied time."""
+    unit = next((unit for unit in batch.owned_units
+                 if unit.structure_unit_id == statement.structure_unit_id), None)
+    value = normalize_source_excerpt(excerpt or "")
+    if (unit is None or not value or statement.scope_context_unit_id is not None
+            or normalize_source_excerpt(statement.quoted_text) != normalize_source_excerpt(unit.excerpt)):
+        return False
+    columns = schedule_column_scope(unit, batch.context_units)
+    source_texts = {
+        ref: normalize_source_excerpt(text)
+        for source_unit in [*batch.owned_units, *batch.context_units]
+        if source_unit.member_texts is not None
+        for ref, text in zip(source_unit.member_source_refs, source_unit.member_texts or [], strict=True)
+    }
+    return bool(columns) and all(
+        column.header_source_refs and not column.visit_unresolved and not column.marker_footnotes
+        and (value == normalize_source_excerpt(column.header_text)
+             or value in {source_texts.get(ref) for ref in column.header_source_refs})
+        for column in columns
+    )
+
+
 def build_source_scope_correction_prompt(
     batch: ProtocolControlDispositionBatch, statement: SourceStatement, issue: str,
 ) -> str:

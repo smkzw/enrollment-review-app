@@ -3,7 +3,9 @@
 
 ### 单一当前用户流程表
 
-**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。e628d4f0产品Job53021ad0f43d4ea9a587ba977fadc543已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，36物理调用1129.773510秒/exit3，19组completed（1–16、18–20）、17来源对应未决、21结构失败、69未读；scope/hydrate/gate依赖失败，旧Job/原件/保护库保持。不能把19完成当完整要求采用。当前直接集成＋单个C03：首错17 reviewer缺原生表头/格位置，21多候选各自引用合法格却未列整行出处。最小修复补只读native_table_source，并由宿主补候选整行来源排序闭包；原子/含义/时点/证据政策不改，非法引用先拒绝。不得将这两项软件缺口叫研究者医学判断。
+**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。源码9d91bbd4的合法接续Job42e5473962fe4a44929b1d96ea14926f已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID，7新物理调用199.182118秒/exit3，16组completed、17失败、73未执行；18–20仍为前置已证可复用，不能冒称本Job已完成。上游53021仍19完成/36调用1129.773510秒；两运行分开。新首错是来源解释遗漏原生表头时间，后核对读到真实时点被正确拒绝；只读定位证明仅一个标记列及有源标题，而schedule_column_links空仅说明缺匹配已有目标。当前直接集成＋同C03：只将这一类有源时点遗漏送回既有单条scope修正，再重新核目标；不放宽来源/目标门，不补药物/病种特例。
+
+**本相连包实证：** 三原模块1215passed/100.45秒/exit0/5SWIG，JUnit artifacts/rv1006-native-table-scope-recovery-connected-20261008-v1.xml；末加固13passed/1.06秒/exit0，改用整列标题或原生标题格文字的等值，不用任意子串，覆盖“期”退化反例。早窄窗分别9pass10fail（夹具缺必填空字段）、15pass4fail（错误恢复参数）、15pass4fail（恢复夹具缺会话/validator）；按实际新生产入口修夹具，未松门，最终窄窗19pass。独审同CodeBuddy/DeepSeek/max/session01a11c53…79.969秒/exit0/no fallback、120min静默等待；顾问未测试/临床，采纳子串风险，使用原生格对应而非按字符切分；其“上游无表头”的断言须限为未保留成员位置，上游实际已有context/table_context。合法source修正仍不证明操作完成或临床采用。已保存源码/测试，原答/库本机保留；不复活旧Job，不触共享服务。
 
 **入队前实际比对：** native-table-consumer-preflight-v2为0模型/0写/DBhash保持，19reusable/2resume_partial/69refresh。18普通已完成partial_wire用当前装配重放与原final_output对象/hash完全相同，1受限结果通过当前完整门。整行出处原门已经要求，不是新语义编译；新增normalization标记进入validator identity，旧compiler/schema/source/route变化拒绝仍保留，旧历史不改。新合法Job关闭既有可选continue-after-unresolved，避免17直接preserve旧未决；保留17草稿及21来源解释继续核查。首审CodeBuddy/DeepSeek/max194.256秒、同会话差异复核86.082秒/exit0/no fallback，120min完成等待静默；首审sorted缺陷采纳，末审未见必修但不代替测试/临床。首审约13读取超10预算如实记，末审未核实际调用hash落点，所有者原始请求/回执仍本地保存。相连三模块最终v4为1203passed/96.30秒/exit0/5SWIG；v3为1202pass/1fail109.71秒，新增非首span夹具内部出处不一致，后两个fixture窗各5pass1fail为冻结赋值/闭包问题，修夹具不松门，最终6局部例通过0.76秒。首v2为1198pass4fail，新增构造错误；文件名诊断exit4无测试。窗口不累加。前端/Ego上一窗口60组件及正式build、三宽屏无溢出是历史有效局部证据，不是本轮新规则Q3。共享服务保持，7份继承dirty不动。
 
