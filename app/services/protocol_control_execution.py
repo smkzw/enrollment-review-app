@@ -68,6 +68,7 @@ from app.agents.protocol_control_source_interpretation import (
     SOURCE_TARGET_REVIEW_VERSION,
     SourceDefinitionConsumers,
     SourceInterpretation,
+    NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
     SourceInterpretationValidationError,
     SourceScopeCorrection,
     SourceQuoteCorrection,
@@ -2071,6 +2072,7 @@ def _deep_component_identity(
                                        "native-author-note-projection-and-procedure-row-gate/v1",
                                        "invalid-wire-scoped-post-enrollment-repair/v1",
                                        NATIVE_ROW_ACTION_COVERAGE_VERSION,
+                                       NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
                                        NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION)),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}

@@ -368,7 +368,10 @@ def build_source_scope_correction_prompt(
     column_sources = [{
         "cell_path": column.cell_path, "cell_source_ref": column.cell_source_ref,
         "header_text": column.header_text, "header_source_refs": column.header_source_refs,
-        "boundary_side": column.boundary_side, "visit_unresolved": column.visit_unresolved,
+        "runtime_projection": {
+            "boundary_side": column.boundary_side,
+            "fixed_visit_or_date_unmapped": column.visit_unresolved,
+        },
         "marker_footnotes": column.marker_footnotes,
     } for column in columns]
     return (
@@ -384,7 +387,12 @@ def build_source_scope_correction_prompt(
         "不是前述同格项目标签。可核只读标签为空不表示没有访视列标题。"
         "若原文范围逐字存在于本行全部标记列的有源标题中，可在 scope_quote 引用该共同短语，"
         "scope_context_unit_id 仍为 null；affected_stage/time_words 仅可引用该范围内的原词。"
-        "不同标记列没有同一范围时不得压成一个阶段；保留具体疑问。缺标题来源、访视未清或脚注有疑问时不能猜。"
+        "不同标记列没有同一范围时不得压成一个阶段；scope_quote/affected_stage/time_words 可为空，"
+        "原生逐列关系仍原样保留，没有共同阶段本身不是原文歧义。"
+        "runtime_projection 是程序的执行映射状态，不是原文判断。fixed_visit_or_date_unmapped 为 true"
+        "只表示程序未识别固定访视编号或日期，不能据此说标题文字或动作适用关系不清。"
+        "标题明确的事件触发列不得猜成固定日期，也不得删除或并入另一列；不在本步骤判断程序能否执行。"
+        "缺标题来源、原文脚注或动作与列之间确有两种不同含义时保留具体原文疑问。"
         "只有一个标记列且可确认时，scope_quote 保留该列完整 header_text，不只摘一个时期或日数；"
         "完整表头共同说明同一次访视，不把组成短语数量当访视次数。"
         "上轮错误字段不可照抄：若共享范围不在本条动作前的同一来源单元、所属标题或表格标题中，且无上述可核标签，"
@@ -407,6 +415,7 @@ def build_source_scope_correction_prompt(
 
 
 SOURCE_SCOPE_QUESTION_RECHECK_VERSION = "phase5/source-scope-question-recheck/v1"
+NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION = "native-scope-source-runtime-separation/v1"
 
 
 def can_recheck_source_scope_question(
@@ -447,10 +456,14 @@ def build_source_scope_question_prompt(
         "返回原 SourceInterpretation JSON：version 原样，statements 恰为指定一条，"
         "units_without_statement 为空。普通原句仅 unresolved 可改变；若下方有原生标记列来源，"
         "另可按单条来源范围核对规则补 scope_quote/affected_stage/time_words，scope_context_unit_id 不变，"
-        "不得删除原句已有时间词，只能引用全部标记列共有的原文范围。无共同范围、脚注或真实关系未清时保留疑问。"
+        "不得删除原句已有时间词；填写共同范围时只能引用全部标记列共有的原文范围。"
+        "没有共同范围就保留字段为空及原有逐列关系，不因此新增或保留原文疑问。"
+        "程序不能映射固定访视/日期不等于原文不清，不写成原文 unresolved。"
+        "只有源文字、脚注或动作与列关系本身未清时才保留具体疑问。"
         "不存在既有流程项不能作为忽略原文访视列的理由，也不得借另一个动作的流程项。此提案还须完整来源与目标核对，"
         "不是采用证明。\n"
         + json.dumps({"recheck_version": SOURCE_SCOPE_QUESTION_RECHECK_VERSION,
+                      "native_guidance_version": NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
                       "version": interpretation.version,
                       "frozen_statement": statement.model_dump(mode="json"),
                       "source_unit": unit.model_dump(mode="json"),
@@ -2387,7 +2400,10 @@ def native_schedule_action_cell_is_preserved(batch, statement, unit, atoms) -> b
     labels = native_schedule_label_sources(batch, unit, source_quote=statement.quoted_text)
     nonempty = {index for index, text, _refs in values if text.strip() and index != 0}
     if (not labels or not nonempty or nonempty != {column.column_index for column in columns}
-            or any(column.marker_footnotes or column.visit_unresolved for column in columns)):
+            or any(column.marker_footnotes or not column.header_source_refs
+                   or column.boundary_side == "unresolved"
+                   or (column.boundary_side == "at_or_before_baseline" and column.visit_unresolved)
+                   for column in columns)):
         return False
     for atom in atoms:
         if len(atom.source_span_ids) != len(atom.source_excerpts):
@@ -2405,12 +2421,12 @@ def native_schedule_action_cell_is_preserved(batch, statement, unit, atoms) -> b
 
 
 def native_schedule_visit_scope_is_preserved(batch, statement, candidate) -> bool:
-    """Prove one marked column against its frozen, physically sourced visit node."""
+    """Prove every current-node mark; later columns remain frozen, not executable."""
     if (statement.force not in {"required", "descriptive"}
             or not set(statement.decision_functions) <= {"action", "time_validity"}
             or "action" not in statement.decision_functions
             or statement.exception_words or statement.unresolved
-            or statement.scope_context_unit_id is not None or not statement.time_words
+            or statement.scope_context_unit_id is not None
             or _unreported_time_fragments(statement)):
         return False
     unit = next((unit for unit in batch.owned_units
@@ -2422,19 +2438,26 @@ def native_schedule_visit_scope_is_preserved(batch, statement, candidate) -> boo
             or normalize_source_excerpt(statement.quoted_text) != normalize_source_excerpt(unit.excerpt)):
         return False
     columns = schedule_column_scope(unit, batch.context_units)
-    if len(columns) != 1:
+    if (not columns or any(not column.header_source_refs or column.marker_footnotes
+                           or column.boundary_side == "unresolved" for column in columns)):
         return False
-    column = columns[0]
+    current_columns = [column for column in columns if column.boundary_side == "at_or_before_baseline"]
+    if not current_columns or any(column.visit_unresolved for column in current_columns):
+        return False
     scope = normalize_source_excerpt(statement.scope_quote or "")
-    if (not column.header_source_refs or column.visit_unresolved or column.marker_footnotes
-            or column.boundary_side != "at_or_before_baseline"
-            or scope != normalize_source_excerpt(column.header_text)
-            or any(normalize_source_excerpt(word) not in scope for word in statement.time_words)
-            or (statement.affected_stage and normalize_source_excerpt(statement.affected_stage) not in scope)):
+    if len(columns) == 1:
+        if (not statement.time_words or scope != normalize_source_excerpt(columns[0].header_text)
+                or any(normalize_source_excerpt(word) not in scope for word in statement.time_words)
+                or (statement.affected_stage and normalize_source_excerpt(statement.affected_stage) not in scope)):
+            return False
+    elif (scope or statement.affected_stage or statement.time_words
+          or set(statement.decision_functions) != {"action"}):
+        # A shared scalar scope cannot stand in for several independently bound visits.
         return False
     header_sources = {}
+    expected_header_refs = {ref for column in columns for ref in column.header_source_refs}
     for header in batch.context_units:
-        if not set(header.member_source_refs) & set(column.header_source_refs):
+        if not set(header.member_source_refs) & expected_header_refs:
             continue
         if header.member_texts is None or len(header.member_source_refs) != len(header.member_texts):
             return False
@@ -2444,32 +2467,45 @@ def native_schedule_visit_scope_is_preserved(batch, statement, candidate) -> boo
         for index, (ref, text) in enumerate(zip(
             header.member_source_refs, header.member_texts or [], strict=True,
         )):
-            if ref not in column.header_source_refs:
+            if ref not in expected_header_refs:
                 continue
             spans = (header.member_source_span_ids[index] if header.member_source_span_ids is not None
                      else [span for span in header.source_span_ids if span.endswith(f"::{ref}")])
             if len(spans) != 1 or ref in header_sources or spans[0] not in header.source_span_ids:
                 return False
             header_sources[ref] = (spans[0], normalize_source_excerpt(text))
-    if set(header_sources) != set(column.header_source_refs):
+    if set(header_sources) != expected_header_refs:
         return False
     nodes = [node for node in candidate.review_node_bindings if node.role == ReviewNodeRole.DECIDE_AT_NODE]
-    if len(nodes) != 1:
+    if len(nodes) != len(current_columns):
         return False
-    stages = [stage for stage in batch.known_workflow_stage_targets
-              if stage.workflow_stage_id == nodes[0].workflow_stage_id]
-    if len(stages) != 1:
+    if len({node.workflow_stage_id for node in nodes}) != len(nodes):
         return False
-    stage = stages[0]
-    if (stage.review_stage != column.review_stage
-            or normalize_source_excerpt(stage.visit_instance or "") != scope
-            or len(stage.source_span_ids) != len(stage.source_excerpts)):
-        return False
-    stage_sources = set(zip(stage.source_span_ids,
-                            map(normalize_source_excerpt, stage.source_excerpts), strict=True))
-    if stage_sources != set(header_sources.values()):
-        return False
+    unmatched_nodes = list(nodes)
+    for column in current_columns:
+        expected_sources = {header_sources[ref] for ref in column.header_source_refs}
+        matches = []
+        for node in unmatched_nodes:
+            stages = [stage for stage in batch.known_workflow_stage_targets
+                      if stage.workflow_stage_id == node.workflow_stage_id]
+            if len(stages) != 1:
+                continue
+            stage = stages[0]
+            if (node.review_stage != column.review_stage or stage.review_stage != column.review_stage
+                    or normalize_source_excerpt(stage.visit_instance or "") != normalize_source_excerpt(column.header_text)
+                    or len(stage.source_span_ids) != len(stage.source_excerpts)):
+                continue
+            stage_sources = set(zip(stage.source_span_ids,
+                                    map(normalize_source_excerpt, stage.source_excerpts), strict=True))
+            if stage_sources == expected_sources:
+                matches.append(node)
+        if len(matches) != 1:
+            return False
+        unmatched_nodes.remove(matches[0])
     row_sources = set()
+    current_refs = {column.cell_source_ref for column in current_columns}
+    label_refs = {span for span, _text in native_schedule_label_sources(
+        batch, unit, source_quote=statement.quoted_text)}
     if unit.member_texts is None or len(unit.member_texts) != len(unit.member_source_refs):
         return False
     if unit.member_source_span_ids is not None and len(unit.member_source_span_ids) != len(unit.member_source_refs):
@@ -2481,7 +2517,10 @@ def native_schedule_visit_scope_is_preserved(batch, statement, candidate) -> boo
                  else [span for span in unit.source_span_ids if span.endswith(f"::{ref}")])
         if len(spans) != 1 or spans[0] not in unit.source_span_ids:
             return False
-        row_sources.add((spans[0], normalize_source_excerpt(text)))
+        if ref in current_refs or spans[0] in label_refs:
+            row_sources.add((spans[0], normalize_source_excerpt(text)))
+    if not label_refs or len(row_sources) != len(label_refs) + len(current_columns):
+        return False
     return any(
         atom.kind == ControlObligationKind.COMPLETE_OR_VERIFY
         and (normalize_source_excerpt(atom.statement) == normalize_source_excerpt(statement.quoted_text)

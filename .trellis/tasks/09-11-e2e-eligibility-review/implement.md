@@ -3,6 +3,14 @@
 
 Goal active；claims_complete=false。本表是唯一现行流程状态；下方过去的“当前/未运行”均为各自时点的历史记录，不据此重跑。
 
+**现行实际终态：** 源码49498d3b的合法Job924a91d389114811a575e70cddccac4e已failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，7物理调用256.077392秒；20深审完成、21失败、69未读。85发现及20成功组实际零新调用。检查点986acffba9774daf8bd42dd4f3a49013，产物rv1006-native-action-api-20261009-v1。旧私有包装器没有传播driver退出码，shell0不是产品成功；新包装器必须传播。原终态/来源/账本不改，0共同发布/启用/签发。
+
+**当前相连修订与证据：** 直接集成＋既有单C03独审。首因是提示把“程序没有固定日期映射”当作“原文关系不清”，要求不同访视必须具有一个共同范围；改为明确区分原文疑问与运行投影。新native指导版本只进入验证身份，旧实际核对仍计总预算，原答及hash不改。实际单条产品提示诊断1调用7.269450秒，原问题消除、共同范围保持空，0库写/DBhash保持；不是规则采用。当前访视来源证明逐列核全部当前标记、真实表头/节点一一对应及原子精确来源集合，不把后续访视一起采用；candidate_linked仍需真实语义核对，不提升为完成。四相连原模块最终1200passed/99.88秒/exit0、5既有SWIG，JUnit rv1006-native-current-source-connected-20261009-v3.xml。旧窗口与新窗口不累加。真实零调用预检20reusable/1resume_partial/69refresh、库hash保持，下一新Job尚未启动。详见reviews/rv1006-native-current-source-owner-disposition-20261009.md。
+
+**独审处置与残余：** CodeBuddy/deepseek-v4.1-flash/max同批准会话两次增量审阅完成，无fallback/临床/测试；采纳来源/运行分离与累计历史检查。顾问关于restricted检查方向的旧意见已撤回；“精确集合仍可接纳超集”由实际等式和额外标记反例否证，不要求在临床命题写X。后续列的既有位置投影不能证明提前退出事件一定晚于基线；本补丁仅证明有源的当前固定访视，不抹掉其他列/脚注和真实疑问。原件、保护库、数字资格及签发权限不变。
+
+### 历史运行与相连包证据（以下不覆盖上方现行状态）
+
 **现行实际终态与接续：** 已push源码9abf0e32的合法Jobf627bda50c7c475694664afd1be8fbfd已failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，18物理调用650.138923秒/exit3；20深审completed、第21failed、69未读。第17–20实际完成，旧16组及85发现零新调用；旧终态不改，0共同发布/激活/签发。当前最小包将已证唯一访视的动作单元格文字与显示标记分离，仍核原命题/全部物理来源；动作证明不能代清多访视或脚注未决。可读提前退出表头只进入原有单条取证，不证明已知节点。直接集成＋单C03独审；末版三相连模块1155passed/101.66秒/exit0，非临床验收。当前零模型复用预检20reusable/1resume_partial/69refresh，0写/库hash保持；下一新Job未启动，不复活失败作业。详见reviews/rv1006-native-row-action-owner-disposition-20261009.md。
 
 **病例并行准备与交付缺口：** 五份原件只读来源清单已准备并核全部hash、PDF实际24页，0调用/0库写；私有rv1006-current-case-upload-source-manifest-20261009-v1.json。完整共同发布后走现有新项目/上传/资格入口，不SQL改旧患者归属，不移植旧批准。新完整要求下的当前节点工作稿、UI有源更正与重算、新旧结果/Q3仍未完成。独审曾漏读集合条件，已以正例运行反证并同会话撤回；保留当前门重验而非无故重读成功组。不同模型/测试/工程审阅层证据不混用。

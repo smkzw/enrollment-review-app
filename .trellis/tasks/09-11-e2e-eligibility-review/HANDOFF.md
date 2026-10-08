@@ -12,15 +12,15 @@
 |---|---|
 | 唯一worktree | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；09-11-e2e-eligibility-review |
-| 当前代码基础 | 9abf0e32已push；当前原生动作/访视增量及测试见所有者处置，末版相连三模块1155pass101.66秒；不得将补丁测试归给旧HEAD |
-| 当前最新真实Job | f627bda50c7c475694664afd1be8fbfd，failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED |
-| 最新真实运行 | 源码9abf0e32，18物理调用/650.138923秒/exit3；20completed、21failed、69未读；17–20实际完成，旧16组和85发现零新调用 |
-| 第21组失败检查点 | 74eaec265d634850ac60117cb204147f；全部实际原答/请求/hash及原范围疑问保留 |
+| 当前代码基础 | 49498d3b已push；当前来源/运行分离及多当前列增量末版四模块1200pass99.88秒；不得将补丁测试归给旧HEAD |
+| 当前最新真实Job | 924a91d389114811a575e70cddccac4e，failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED |
+| 最新真实运行 | 源码49498d3b，7物理调用/256.077392秒；20completed、21failed、69未读；85发现及20成功组零新调用。旧包装器shell0未传播driver失败，不是成功 |
+| 第21组失败检查点 | 986acffba9774daf8bd42dd4f3a49013；全部实际原答/请求/hash及原范围疑问保留 |
 | 当前隔离DB | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 真实产物 | 同根/rv1006-invalid-wire-scope-api-20261009-v1，目录存在，不覆盖/重跑 |
+| 真实产物 | 同根/rv1006-native-action-api-20261009-v1，目录存在，不覆盖/重跑 |
 | 模型路线 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high，输出65536，产品自己的harness直连 |
-| 当前新预检 | 同根/rv1006-native-action-preflight-20261009-v1.json：20reusable/1resume_partial/69refresh，0调用/0写/DBhash保持 |
-| 新代码实际临床运行 | 9ab已实跑；动作/访视增量尚未新Job运行，预检不算临床通过 |
+| 当前新预检 | 同根/rv1006-current-columns-preflight-20261009-v1.json：20reusable/1resume_partial/69refresh，0调用/0写/DBhash保持 |
+| 新代码实际临床运行 | 49498d3b已实跑；来源/运行分离单条诊断1调用7.269450秒/0写，非Job/采用；多当前列增量尚未新Job运行 |
 | 继承dirty | 7份旧delivery文件未动，不stage；大量继承untracked不清理/不批量stage |
 | 外部可复查范围 | Git源码/合成用例/净化工程报告；真实原件、DB、提示、原答和病例截图仅本机受控可读，外部审阅不可读 |
 
@@ -39,6 +39,10 @@
 病例准备根：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-prepared-review-current-node-20261008-v1/data。subject rv29-preparation-20261001，筛选episode e8615813d75b452489579ff9606781b4，旧project draft-project09b593a721e7。完整新官方源draft-project1153…与旧病例不是同一个项目。必须用合法发布/新项目/资料上传或有身份核验的既有再解构入口，不能SQL改project_id、复制旧采用或借旧政策批准。
 
 ## 本包首因与修复
+
+现行包将“运行时没有固定日期”与“原文真歧义”分开；无共同访视范围时保持空字段及逐列关系，不人为制造疑问。多当前列证明核真实表头/节点的一一对应及精确动作/标记格来源，后续列保留但不一起采用；source coverage仍candidate_linked，实际语义核对和完整采用门不变。新native指导版本进入validator身份，旧问答仍计总预算。相连四模块1200pass99.88秒/exit0；当前只读预检保留20成功。C03两增量审阅完成，无fallback/临床/测试；错误restricted方向意见已撤回，精确集合接受超集的意见被反例否证，不盲加X词面要求。详见reviews/rv1006-native-current-source-owner-disposition-20261009.md。下一实际新Job来源仅924，私有run_rv1006_current_columns_20261009.py传播driver退出码，输出目录rv1006-current-columns-api-20261009-v1。原历史不得清零；新测试总限16是本次授权边界，不改旧已耗账本。
+
+以下为之前功能包的历史证据，不覆盖上表或现行接续步骤。
 
 现行包：第21完整行合取检查误把显示串标记当动作内容，但来源亦保留多访视/脚注未决，不可只修文字后宣布可执行。仅唯一访视完整物理来源已证时允许可读动作表达；未知在来源投影前拒绝。提前退出表头可读允许局部问源，不是采用。末相连1155pass，实际零模型预检保留20成功、21局部源及69未读；不是新Job终态。C03同会话首/续已完成，读码集合误判经实际正例反证撤回；报告未实测临床、Bash不可用、首读超限如实记录。详见reviews/rv1006-native-row-action-owner-disposition-20261009.md。
 
@@ -76,7 +80,7 @@ C03：CodeBuddy/codebuddy-cli/deepseek-v4.1-flash:max，session01a11d4f-08dd-746
 
 ## 接续步骤与退出
 
-1. 核本包提交/dirty和真实零调用预检；沿最新6a4来源从合法API创建新受控Job，复用16成功、17仅证实来源，完整90范围不缩。旧Job终态不改；新独立输出目录不可覆盖。读取新prepare/execute实际账本而非凭stdout安静猜失败。
+1. 核本包提交/dirty和真实零调用预检；沿最新924来源从合法API创建新受控Job，复用20成功、21仅证实来源，完整90范围不缩。旧Job终态不改；新独立输出目录不可覆盖。读取新prepare/execute实际账本及累计核对，不以包装器退出0或stdout安静猜成败。
 2. 无新证据同失败两次停该分支，归因来源→解释→装配→验证→采用→界面首错；推进独立病例消费者，不把所有模型输出都UNKNOWN或以扩大整包预算恢复格式错误。
 3. 完整官方+跨章同源包成立后从合法入口共同发布隔离项目；来源身份及正式采用权限分别核。原政策齐全的新141条件进入消费者，不沿用旧81组件缺policy作结论。
 4. 新合法项目下继承有源资料/候选并实际核资格→全当前节点工作稿；未核或不可读范围具体限制，独立有据结果保持可用，不授予未批准自动数值采用。

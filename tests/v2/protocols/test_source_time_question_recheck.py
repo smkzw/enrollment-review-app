@@ -360,6 +360,51 @@ def test_history_checkpoint_consumer_retains_actual_answers_and_never_duplicates
         execution._saved_source_scope_question_history({"source_scope_question_history": "broken"})
 
 
+@pytest.mark.parametrize("current_guidance,budget", [(False, 1), (False, 2), (True, 2)])
+def test_native_question_guidance_change_keeps_paid_history_and_source_gates(current_guidance, budget):
+    from app.agents.protocol_control_source_interpretation import NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner, ProtocolControlAgentResponse
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _native_visit_candidate_material
+
+    batch, source, _wire = _native_visit_candidate_material(label="材料核查")
+    statement = source.statements[0]
+    statement.scope_quote = statement.affected_stage = None
+    statement.time_words = []
+    statement.unresolved = ["没有共同执行阶段"]
+    old_proposal = SourceInterpretation(version=source.version,
+        statements=[statement.model_copy(deep=True)], units_without_statement=[])
+    record = question_record(batch, statement, old_proposal)
+    if current_guidance:
+        record["error_detail"]["native_guidance_version"] = NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION
+    proposal = SourceInterpretation(version=source.version,
+        statements=[statement.model_copy(update={"unresolved": []})], units_without_statement=[])
+
+    class Transport:
+        calls = 0
+
+        def start_source_interpretation(self, *, prompt):
+            self.calls += 1
+            return ProtocolControlAgentResponse(session_id="current-question", text=proposal.model_dump_json())
+
+        def start(self, *, prompt):
+            raise RuntimeError("no author output; source clarification is not adoption")
+
+    transport = Transport()
+    result = ProtocolControlAgentRunner(max_schema_repairs=budget, max_transport_retries=0).run(
+        batch, transport, resume_source_interpretation=source,
+        resume_source_scope_question_history=[record])
+    asked = not current_guidance and budget > 1
+    assert transport.calls == int(asked)
+    assert result.source_scope_question_history[0] == record
+    assert len(result.source_scope_question_history) == 1 + int(asked)
+    if asked:
+        detail = result.source_scope_question_history[-1]["error_detail"]
+        assert detail["native_guidance_version"] == NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION
+        assert len(detail["prompt_sha256"]) == 64
+    assert result.final_output is None
+    assert result.status == "需要核对"
+
+
 def test_changed_source_cannot_reuse_unqualified_old_covered_item_beside_a_valid_sibling():
     import json
     from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner, ProtocolControlAgentResponse, source_statement_coverage

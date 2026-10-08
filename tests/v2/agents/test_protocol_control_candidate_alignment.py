@@ -28,9 +28,14 @@ from app.agents.protocol_control_source_interpretation import (
     SourceInterpretation,
     SourceTargetReview,
     can_recheck_source_scope_question,
+    build_source_scope_question_prompt,
+    build_source_scope_correction_prompt,
+    apply_source_scope_question_recheck,
     simple_visit_action_preserves_time,
 )
 from app.domain.contracts.protocol_controls import ControlObligationKind
+from app.domain.contracts.protocol_controls import KnownWorkflowStageTarget
+from app.domain.contracts.enums import ReviewStage
 from app.services.protocol_control_execution import _validate_saved_source_review
 from tests.v2.protocols.test_slice58c_control_deconstructor import (
     _batch, _candidate, _candidate_for_second_unit, _wire, _wire_with_two_candidates,
@@ -151,6 +156,128 @@ def test_readable_native_exit_header_allows_question_not_adoption(readable):
         batch.context_units = []
     assert can_recheck_source_scope_question(source.statements[0], batch) is readable
     with pytest.raises(ValueError, match="未核清范围"):
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+
+
+def test_native_source_question_separates_missing_runtime_mapping_from_source_meaning():
+    batch, source, wire, coverage, alignment = _native_action_material()
+    statement = source.statements[0]
+    statement.scope_quote = statement.affected_stage = None
+    statement.time_words = []
+    statement.unresolved = ["标题未映射到固定日期"]
+    for context in batch.context_units:
+        context.member_texts[-1] = "退出时"
+        context.excerpt = " | ".join(text for text in context.member_texts if text.strip())
+    prompt = build_source_scope_question_prompt(batch, source, 0)
+    assert "没有共同阶段本身不是原文歧义" in prompt
+    native_prompt = build_source_scope_correction_prompt(batch, statement, "映射尚未建立")
+    assert '"fixed_visit_or_date_unmapped": true' in native_prompt
+    assert "程序不能映射固定访视/日期不等于原文不清" in prompt
+    assert "只有源文字、脚注或动作与列关系本身未清" in prompt
+    proposal = SourceInterpretation(version=source.version,
+        statements=[statement.model_copy(update={"unresolved": []})], units_without_statement=[])
+    revised = apply_source_scope_question_recheck(batch, source, 0, proposal)
+    assert revised.statements[0].scope_quote is None
+    assert revised.statements[0].time_words == []
+    # A source clarification still does not supply a usable runtime visit.
+    alignment.items[0].source_excerpt = revised.statements[0].quoted_text
+    with pytest.raises(ValueError):
+        validate_candidate_alignment(batch, revised, coverage, wire, alignment)
+
+
+def _multi_native_action_material():
+    batch, source, wire, coverage, alignment = _native_action_material()
+    unit, statement = batch.owned_units[0], source.statements[0]
+    statement.scope_quote = statement.affected_stage = None
+    statement.time_words = []
+    unit.member_source_refs.append("body.t0.r3.c1.p0")
+    unit.source_span_ids.append("snapshot::body.t0.r3.c1.p0")
+    unit.member_texts.append("X")
+    unit.table_context.member_cell_paths.append((3, 1))
+    unit.excerpt += " | X"
+    statement.quoted_text = unit.excerpt
+    stage = KnownWorkflowStageTarget(workflow_stage_id="stage:screen:native",
+        review_stage=ReviewStage.SCREENING, display_name="筛选期 / V1 / D-1",
+        visit_instance="筛选期 / V1 / D-1",
+        source_span_ids=[f"snapshot::body.t0.r{row}.c1.p0" for row in range(3)],
+        source_excerpts=["筛选期", "V1", "D-1"])
+    batch.known_workflow_stage_targets.append(stage)
+    candidate = wire.candidate_drafts[0]
+    candidate.review_node_bindings.append(candidate.review_node_bindings[0].model_copy(update={
+        "workflow_stage_id": stage.workflow_stage_id, "review_stage": stage.review_stage}))
+    candidate.source_span_ids.append(unit.source_span_ids[-1])
+    atom = candidate.obligation_expression.groups[0].atoms[0]
+    atom.source_span_ids.append(unit.source_span_ids[-1])
+    atom.source_excerpts.append("X")
+    atom.statement = "在筛选期和基线期分别完成材料分发及回收"
+    atom.evaluation = atom.evaluation.model_copy(update={"proposition": atom.statement})
+    alignment.items[0].source_excerpt = statement.quoted_text
+    alignment.items[0].candidate_atom_quotes = [atom.statement]
+    return batch, source, wire, coverage, alignment
+
+
+@pytest.mark.parametrize("mutation", [None, "missing_node", "duplicate_node", "wrong_header",
+    "missing_marker", "partial_action", "unresolved", "shared_scope", "extra_content"])
+def test_all_current_native_marks_need_their_own_sourced_visit(mutation):
+    batch, source, wire, coverage, alignment = _multi_native_action_material()
+    candidate, statement, unit = wire.candidate_drafts[0], source.statements[0], batch.owned_units[0]
+    atom = candidate.obligation_expression.groups[0].atoms[0]
+    if mutation == "missing_node":
+        candidate.review_node_bindings.pop()
+    elif mutation == "duplicate_node":
+        candidate.review_node_bindings[-1] = candidate.review_node_bindings[0].model_copy()
+    elif mutation == "wrong_header":
+        batch.known_workflow_stage_targets[-1].source_excerpts[-1] = "D-2"
+    elif mutation == "missing_marker":
+        atom.source_span_ids.pop()
+        atom.source_excerpts.pop()
+    elif mutation == "partial_action":
+        atom.evaluation = atom.evaluation.model_copy(update={"proposition": "分别完成材料分发"})
+    elif mutation == "unresolved":
+        statement.unresolved = ["原文脚注存在两种动作含义"]
+    elif mutation == "shared_scope":
+        statement.scope_quote = "基线期 / V2 / D0"
+    elif mutation == "extra_content":
+        unit.member_texts[-1] = "完成后3天"
+        unit.excerpt = " | ".join(unit.member_texts)
+        statement.quoted_text = unit.excerpt
+        alignment.items[0].source_excerpt = unit.excerpt
+    if mutation is None:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+
+
+def test_later_native_columns_are_retained_but_not_adopted_as_current_visits():
+    batch, source, wire, coverage, alignment = _multi_native_action_material()
+    unit = batch.owned_units[0]
+    for column, label in ((3, "治疗后 / V3 / D7"), (4, "退出时")):
+        unit.member_source_refs.append(f"body.t0.r3.c{column}.p0")
+        unit.source_span_ids.append(f"snapshot::body.t0.r3.c{column}.p0")
+        unit.member_texts.append("X")
+        unit.table_context.member_cell_paths.append((3, column))
+        for row, context in enumerate(batch.context_units):
+            context.member_source_refs.append(f"body.t0.r{row}.c{column}.p0")
+            context.source_span_ids.append(f"snapshot::body.t0.r{row}.c{column}.p0")
+            context.member_texts.append(label if row == 0 else "")
+            context.table_context.member_cell_paths.append((row, column))
+            context.excerpt = " | ".join(text for text in context.member_texts if text.strip())
+    unit.excerpt = " | ".join(unit.member_texts)
+    source.statements[0].quoted_text = unit.excerpt
+    alignment.items[0].source_excerpt = unit.excerpt
+    before = unit.model_dump_json()
+    validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    assert unit.model_dump_json() == before
+    assert len(wire.candidate_drafts[0].review_node_bindings) == 2
+    assert all("c3" not in span and "c4" not in span for atom in
+        wire.candidate_drafts[0].obligation_expression.groups[0].atoms for span in atom.source_span_ids)
+    assert source_statement_coverage(batch, source, wire)[0].status == "candidate_linked"
+    # A later marker cannot become adopted by merely adding it to the atom's sources.
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    atom.source_span_ids.append("snapshot::body.t0.r3.c3.p0")
+    atom.source_excerpts.append("X")
+    with pytest.raises(ValueError):
         validate_candidate_alignment(batch, source, coverage, wire, alignment)
 
 

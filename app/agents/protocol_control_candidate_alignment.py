@@ -19,7 +19,7 @@ from app.protocols.control_scope_sources import resolve_ancestor_scope_citation,
 SOURCE_CANDIDATE_ALIGNMENT_VERSION = "phase5/control-source-candidate-alignment/v8"
 EVIDENCE_POLICY_ALIGNMENT_VERSION = "phase5/control-evidence-policy-alignment/v2"
 NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION = "native-table-review-scope/v3"
-NATIVE_ROW_ACTION_COVERAGE_VERSION = "native-row-action-coverage/v1"
+NATIVE_ROW_ACTION_COVERAGE_VERSION = "native-row-action-coverage/v2"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):

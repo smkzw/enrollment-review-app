@@ -124,6 +124,7 @@ from .protocol_control_source_interpretation import (
     SOURCE_INTERPRETATION_PROMPT_VERSION,
     SOURCE_QUOTE_RECOVERY_VERSION,
     SOURCE_SCOPE_QUESTION_RECHECK_VERSION,
+    NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
     SOURCE_TARGET_REVIEW_VERSION,
     SOURCE_TARGET_REVIEW_POLICY_VERSION,
     SourceDefinitionConsumers,
@@ -7220,7 +7221,9 @@ class ProtocolControlAgentRunner:
                 if (proposal.version != source_interpretation.version or len(proposal.statements) != 1
                         or proposal.units_without_statement):
                     raise ValueError("来源疑问的历史答复不是单条有源提案")
-                if proposal.statements[0] == statement:
+                if (proposal.statements[0] == statement
+                        and (unit.table_context is None
+                             or detail.get("native_guidance_version") == NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION)):
                     seen_questions.add(index)
         # These are prior paid attempts, not fresh calls in this invocation.
         source_repairs = len(question_history)
@@ -7617,6 +7620,7 @@ class ProtocolControlAgentRunner:
                         or source_repairs >= self._max_schema_repairs):
                     continue
                 question_response = None
+                question_prompt = build_source_scope_question_prompt(batch, source_interpretation, index)
                 detail = {
                     "workflow_phase": "source_scope_question_recheck",
                     "code": "SOURCE_SCOPE_QUESTION_RECHECK",
@@ -7625,13 +7629,13 @@ class ProtocolControlAgentRunner:
                                              if unit.structure_unit_id == statement.structure_unit_id)),
                     "retry_class": "source_semantic_review", "affected_dependents": [index],
                     "precondition_sha256": _sha256(statement.model_dump_json()),
+                    "prompt_sha256": _sha256(question_prompt),
+                    "native_guidance_version": NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
                 }
                 try:
                     source_repairs += 1
                     repair_used = True
-                    question_response = source_reader(prompt=build_source_scope_question_prompt(
-                        batch, source_interpretation, index,
-                    ))
+                    question_response = source_reader(prompt=question_prompt)
                     proposal = SourceInterpretation.model_validate_json(question_response.text)
                     source_interpretation = apply_source_scope_question_recheck(
                         batch, source_interpretation, index, proposal,
