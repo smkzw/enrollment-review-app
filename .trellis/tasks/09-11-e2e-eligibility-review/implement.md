@@ -3,11 +3,17 @@
 
 ### 单一当前用户流程表
 
-当前结果（覆盖下方各历史快照）：2a4dac02516a424182fb9be296801f7d已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，23物理调用1091.778922s，90深审18completed（1–16、18、19）/2failed（17、20）/70queued，scope/hydrate/gate依赖失败。冻结源码f205bf54，私有产物rv1006-scope-question-recovery-api-20261008-v1。原15成功组零调用复用；12本轮完成，17四次来源疑问用尽共享额度、最后一条未核；20来源时间字段非法。不是端点断线或研究者缺件。原Job/payload、保护库、来源库保持，0发布/激活/签发，完整同源包/当前节点工作稿尚未完成，claims_complete=false。
+当前结果（覆盖下方各历史快照）：dc6fb4710dc44067b76848116139564d已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED，2物理调用119.24971979s，90深审16completed/17失败/73queued，scope/hydrate/gate依赖失败。冻结源码9ac573ad，私有产物rv1006-saved-scope-question-recovery-api-20261008-v1。1–16零调用复用；17最后一条来源范围疑问已实际核清，原四次及本轮一次均保存，随后发现作者把一个操作错关联到共用脚注的另一流程项。18/19尚未在本Job执行，前置计划沿已声明来源可复用；不能把它们写成本Jobcompleted。20旧来源时间错误尚待接续。原Job/payload、保护库、来源库保持，0发布/激活/签发，完整同源包/当前节点工作稿尚未完成，claims_complete=false。
 
 当前最小恢复包：私人source_scope_question_history保存实际旧调用并在接续扣除；已见证且当前来源完全相等的疑问不重核，失败保留partial_wire；来源变化撤销对应旧目标结论，包括covered/background，合法兄弟仍保留。无新框架、无全局基础提示升级、无采用门放宽。新有限上限8包含旧4，非换目录清零。主集成＋C03 Grok/grok-build/grok-4.7/high、17ee3ff0…958.163s/exit0/1轮/no fallback、120min静默等待；只审f205旧码和提案，非最终补丁独审。采纳账本/草稿/来源身份保护，不采纳重复问已批准测试调用或未读JobStore即推断历史覆盖。
 
-当前验证：三相连模块首窗1024pass/5fail/102.13s；四项新夹具原文缺失、一项旧空历史替身触发多余model_copy，补真实夹具和空历史无操作，未放门。受影响27pass；恢复家族首窗52pass/1fail为新增导入位置错误，修后最终53passed/339deselected/25.05s/exit0/5SWIG，JUnit artifacts/rv1006-source-question-saved-wire-recovery-family-20261008-final.xml。末版未重跑全三模块，不累加通过数。真实零模型零写预检18reusable/1resume_partial（17）/71refresh_required（20及70未执行），旧四次问题调用可读、库hash不变。下一步固定源码后合法新Job接续，不复活旧终态或重读十八份成功。
+当前最小对应修复：复用原生行标签逐成员来源证明；已有流程覆盖须包含同一行项目来源，共用脚注/时点不能冒充项目归属。来源位置已经证实错链时，仅在该条实际请求附类型化负证据，引导作者核是否需增量；程序不将unresolved自动改成additional。来源目标validator身份v2，原基础作者/解释/政策身份不变，旧合格产物须在新门重验，不机械重读十八组。来源明确、错链或软件缺口不能转嫁研究者。
+
+当前独审续轮：同一C03 Grok会话17ee3ff0…267.94s/exit0/no fallback，120min静默完成等待；仅读四处冻结源码，不含临床、不运行测试，报告target_correspondence_followup.md。采纳不能仅加旧未决提示及错链可能绕过覆盖校验的风险；不采信未读受限生产者即称其能阻断已covered答复，也不将前五条全部当未核。实际受限生产者仅处理未决分支，不是新覆盖答复的防线；故在共用来源核对门直接拒绝错行。
+
+当前对应功能包验证：v1为19pass/6fail，所有者提取助手遗漏parts引用及新夹具table_path长度不合法；v2为21pass/4fail，夹具坐标与路径仍不一致；v3为46pass/3fail，正例只给目录名称，被原有动作证据门正确拒绝，补真实动作脚注反例而非松门。最终三个相连模块选择窗49passed/985deselected/1.83s/exit0/5SWIG，JUnit artifacts/rv1006-native-procedure-row-connected-20261008-v4.xml，含同源正确、共用脚注错行、hash定位、格内分隔、局部增量、已保存证明拒绝及既有补入/兄弟保护。git diff --check通过；不是临床验收，不把次数相加。下一步只读核dc6当前复用计划后合法新Job接续；旧终态不复活。
+
+当前真实只读预检rv1006-native-row-link-preflight-20261008-v1：18reusable/1resume_partial/71refresh_required，5次已付来源疑问保存，DBhash不变/0写/0调用。实际17保存来源/覆盖构建产品提示，仅待核第5项，原生错行诊断也仅第5项；不是用人工临床答案测试或自动补入。后继范围保持1–16/18/19成功复用、17已有来源与草稿接续、20及未读范围按合法计划处理。
 
 以下旧运行按各自时间/源码保留，不作为当前终态：
 
@@ -149,7 +155,7 @@ C03 mixed_dependency_review：批准CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/
 
 | 用户步骤 | 实际入口与已证 | 当前首阻断/下一动作 |
 |---|---|---|
-| 完整要求快照 | DOCX内置Agent1153e25b…rev21/23官方父条，草稿publishable；9841977f…85发现复用；2a4dac…90深审18组完成、17/20失败、70未执行。 | 17最后来源疑问与20非法时间阻断；草稿/历史调用/旧结论身份恢复包已验证，准备合法续接。官方草稿可预览不是完整已发布规则。 |
+| 完整要求快照 | DOCX内置Agent1153e25b…rev21/23官方父条，草稿publishable；9841977f…85发现复用；dc6…90深审16组完成、17失败、73未执行，18/19沿声明链可复用。 | 17来源疑问已清，流程错关联须修；20非法时间仍待读取。新行身份保护下预检18可复用/1局部续接/71需读取，5来源问题账不清零。官方草稿可预览不是完整已发布规则。 |
 | 资料完成 | 5PDF/24页、14组来源任务完成，458候选→407事实/40事件/11暴露保存，原件保持。 | 保存非临床核清；手写对象/数值定位未决仍具体保留，不以未核作无记录。 |
 | 事实资格/消费 | 32资格只关联30事实；426候选受限、584疑问、5冲突、130资料期望；正式消费者/来源门禁保留。 | 数值自动采用仍仅隔离验证授权；完整新要求共同消费尚未完成。 |
 | 当前节点工作稿 | 工作稿/资格/冻结计算入口已有软件消费者证据。 | 本例work_draft_state仍not_started；旧81官方组件/0controls不是新链。 |

@@ -13,3 +13,5 @@ Session 17ee3ff0-3b08-4b97-9418-e6f14ec49e9d, one round, no fallback. 120-minute
 ## Quality Decision
 
 Frozen f205bf54 plus proposal only; reviewer did not inspect final patch, clinical material or browser, or run tests. Owner accepted persisted paid-question history, failed-wire retention and invalidation of all changed-source target decisions. User already authorized test calls; another approval is unnecessary. See owner review for evidence boundaries.
+
+Follow-up same route/session:267.94s/exit0/no fallback,120-minute silent completion wait. Report target_correspondence_followup.md; actual input133391/cache_read523520/output10302 including reasoning8892/total667213. Cost and normalized tool counts unknown. Four-source-read task boundary; no clinical material, tests or final patch review. First command used unsupported --task and exited2 before dispatch; corrected --role-id executed one follow-up only. Engineering receipts are not product token costs.

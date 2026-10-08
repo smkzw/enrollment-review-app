@@ -33,7 +33,7 @@ SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
 SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v22"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
 SOURCE_COVERAGE_VALIDATION_VERSION = "source-owned-inventory-validation/v1"
-SOURCE_TARGET_REVIEW_VALIDATION_VERSION = "source-pending-disposition-validation/v1"
+SOURCE_TARGET_REVIEW_VALIDATION_VERSION = "source-native-procedure-row-validation/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
 
@@ -693,6 +693,37 @@ def schedule_column_links(
         for part in parts[1:]
     ):
         return []
+    label_sources = _schedule_label_sources(batch, unit, row_values, sibling_rows)
+    if not label_sources:
+        return []
+    links: list[ScheduleColumnLink] = []
+    for column in columns:
+        target_id = None
+        if column.boundary_side == "at_or_before_baseline":
+            if column.marker_footnotes:
+                return []
+            matches = [target for target in batch.known_procedure_targets
+                       if target.visit_instance == column.header_text
+                       and target.review_stage == column.review_stage
+                       and _target_contains_row_label(target, label_sources)]
+            if len(matches) != 1:
+                return []
+            target_id = matches[0].catalog_item_id
+        links.append(ScheduleColumnLink(
+            column_index=column.column_index,
+            cell_source_ref=column.cell_source_ref,
+            header_source_refs=list(column.header_source_refs),
+            visit_instance=column.header_text,
+            boundary_side=column.boundary_side,
+            procedure_target_id=target_id,
+            marker_footnotes=list(column.marker_footnotes),
+        ))
+    return links if any(link.procedure_target_id for link in links) else []
+
+
+def _schedule_label_sources(batch, unit, row_values, sibling_rows=()) -> list[tuple[str, str]]:
+    if not row_values or row_values[0][0] != 0:
+        return []
     label_refs = set(row_values[0][2])
     label_sources: list[tuple[str, str]] = []
     mapped_refs: set[str] = set()
@@ -714,40 +745,36 @@ def schedule_column_links(
         label_ref = row_values[0][2][0]
         label_span = next((span for span in unit.source_span_ids if span.endswith(f"::{label_ref}")), None)
         if label_span is not None:
-            label_sources = [(label_span, parts[0])]
+            label_sources = [(label_span, row_values[0][1])]
     if not label_sources:
         return []
-    links: list[ScheduleColumnLink] = []
-    for column in columns:
-        target_id = None
-        if column.boundary_side == "at_or_before_baseline":
-            if column.marker_footnotes:
-                return []
-            matches = [target for target in batch.known_procedure_targets
-                       if target.visit_instance == column.header_text
-                       and target.review_stage == column.review_stage
-                       and target.source_excerpts
-                       and all(
-                           any(span == target_span and normalize_source_excerpt(text)
-                               in normalize_source_excerpt(excerpt or "")
-                               for target_span, excerpt in zip(
-                                   target.source_span_ids, target.source_excerpts, strict=True,
-                               ))
-                           for span, text in label_sources
-                       )]
-            if len(matches) != 1:
-                return []
-            target_id = matches[0].catalog_item_id
-        links.append(ScheduleColumnLink(
-            column_index=column.column_index,
-            cell_source_ref=column.cell_source_ref,
-            header_source_refs=list(column.header_source_refs),
-            visit_instance=column.header_text,
-            boundary_side=column.boundary_side,
-            procedure_target_id=target_id,
-            marker_footnotes=list(column.marker_footnotes),
-        ))
-    return links if any(link.procedure_target_id for link in links) else []
+    return label_sources
+
+
+def _target_contains_row_label(target, label_sources) -> bool:
+    return bool(target.source_excerpts) and all(
+        any(span == target_span and normalize_source_excerpt(text)
+            in normalize_source_excerpt(excerpt or "")
+            for target_span, excerpt in zip(target.source_span_ids, target.source_excerpts, strict=True))
+        for span, text in label_sources
+    )
+
+
+def _statement_schedule_label_sources(batch, statement) -> list[tuple[str, str]]:
+    unit = next((item for item in batch.owned_units
+                 if item.structure_unit_id == statement.structure_unit_id), None)
+    if unit is None or unit.table_context is None:
+        return []
+    table_root = unit.source_ref.rpartition(".r")[0]
+    siblings = [item for item in batch.owned_units
+                if item.structure_unit_id != unit.structure_unit_id
+                and item.source_ref.rpartition(".r")[0] == table_root]
+    values = schedule_row_values(unit, [*batch.context_units, *siblings])
+    if (not values or not values[0][1].strip()
+            or normalize_source_excerpt(values[0][1])
+            not in normalize_source_excerpt(statement.quoted_text)):
+        return []
+    return _schedule_label_sources(batch, unit, values, siblings)
 
 
 class SourceTargetReviewItem(ContractModel):
@@ -1364,6 +1391,24 @@ def build_source_target_review_prompt(
         }
         for index in indexes
     ]
+    procedures = {target.catalog_item_id: target for target in batch.known_procedure_targets}
+    for packet in source:
+        statement = interpretation.statements[packet["statement_index"]]
+        labels = _statement_schedule_label_sources(batch, statement)
+        mismatches = [target_id for target_id in packet["linked_procedure_target_ids"]
+                      if target_id in procedures and labels
+                      and not _target_contains_row_label(procedures[target_id], labels)]
+        if mismatches:
+            packet["native_row_link_diagnostic"] = {
+                "version": SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
+                "rejected_target_ids": mismatches,
+                "label_sources": [{"source_span_id": span, "excerpt": text}
+                                  for span, text in labels],
+                "reason": "已有链接没有包含本行项目的原始来源；共用脚注不能证明是同一项目。"
+                          "不得宣称这些目标已覆盖。本条动作和时期明确但没有对应目标时，"
+                          "选 additional_requirement；只有本条原文自身无法核清时保留 unresolved。"
+                          "同一链接覆盖的约束不要求坚持已被此来源核查拒绝的链接。",
+            }
     targets, target_excerpts = _target_review_source_packet(batch, comparison_target_id)
     read_only_sources = [
         {
@@ -1781,6 +1826,11 @@ def validate_source_target_review(
             )
             if item.target_id not in linked_ids:
                 reject(item, "TARGET_LINK_MISMATCH", "target_id", f"第{item.statement_index}条覆盖目标与草稿链接不一致")
+        if item.decision == "covered_by_procedure" and target is not None:
+            labels = _statement_schedule_label_sources(batch, statement)
+            if labels and not _target_contains_row_label(target, labels):
+                reject(item, "TARGET_PROCEDURE_ROW_UNPROVEN", "target_id",
+                       "流程项目未包含本行项目的来源；共用说明、时点或脚注不能代替项目归属")
         if target is None:
             target_excerpts: list[str] = []
         else:
@@ -2157,6 +2207,10 @@ def target_action_established(batch, statement, target) -> bool:
     """Proof for a label-only link, not a general semantic equivalence test."""
     from app.protocols.protocol_control_planning import detect_required_action_kinds
 
+    if hasattr(target, "catalog_item_id") and not hasattr(target, "official_code"):
+        labels = _statement_schedule_label_sources(batch, statement)
+        if labels and not _target_contains_row_label(target, labels):
+            return False
     source = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
     required = set(batch.owned_required_action_kinds_by_structure_unit_id.get(
         statement.structure_unit_id, []))

@@ -1,6 +1,7 @@
 """Synthetic source questions; no model, protocol originals or adoption."""
 
 import hashlib
+import json
 from dataclasses import asdict
 
 import pytest
@@ -13,6 +14,86 @@ from app.agents.protocol_control_source_interpretation import (
 )
 from app.services import protocol_control_execution as execution
 from tests.v2.protocols.test_slice58c_control_deconstructor import _batch, _wire, _candidate
+
+
+def _native_row_target_material(*, wrong_row=False, label="操作甲^7", hashed=False):
+    from app.domain.contracts.protocol_controls import (
+        ProtocolStructureUnit, TableCellContext, KnownRequiredProcedureTarget,
+    )
+    from app.agents.protocol_control_source_interpretation import (
+        SourceStatementCoverage, SourceTargetReview, SourceTargetReviewItem,
+        SOURCE_TARGET_REVIEW_VERSION,
+    )
+    refs = ["body.t0.r4.c0.p0", "body.t0.r4.c1.p0"]
+    spans = ["sha-label", "sha-mark"] if hashed else [f"snapshot::{ref}" for ref in refs]
+    unit = ProtocolStructureUnit(
+        structure_unit_id="action-row", source_ref="body.t0.r4",
+        member_source_refs=refs, member_texts=[label, "X"],
+        member_source_span_ids=[[spans[0]], [spans[1]]], source_span_ids=spans,
+        unit_kind="table_row", heading_path=["流程表"], source_order=4,
+        study_phase="phase_ii", phase_scopes=["shared"], excerpt=f"{label} | X",
+        table_context=TableCellContext(table_path=(4, 0), row_index=4, column_index=0,
+                                      member_cell_paths=[(4, 0), (4, 1)]),
+    )
+    footnote = "操作甲与操作乙均在同一访视执行。"
+    target = KnownRequiredProcedureTarget(
+        catalog_item_id="existing-action", label="操作乙" if wrong_row else label,
+        visit_instance="baseline", review_stage="baseline", position=1,
+        source_span_ids=sorted(["common-note", "other-row-label" if wrong_row else spans[0]]),
+        source_excerpts=[footnote, "操作乙" if wrong_row else label],
+    )
+    batch = _batch().model_copy(update={
+        "owned_units": [unit], "context_units": [], "owned_structure_unit_ids": [unit.structure_unit_id],
+        "context_structure_unit_ids": [], "owned_source_span_ids": sorted(spans),
+        "context_source_span_ids": [], "known_official_targets": [], "known_procedure_targets": [target],
+    })
+    source = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id=unit.structure_unit_id,
+            quoted_text=unit.excerpt, force="required", decision_functions=["action"], time_words=[])],
+        units_without_statement=[])
+    coverage = [SourceStatementCoverage(statement_index=0, structure_unit_id=unit.structure_unit_id,
+        disposition="required_procedure", status="linked_only", linked_procedure_target_ids=[target.catalog_item_id])]
+    review = SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[SourceTargetReviewItem(
+        statement_index=0, decision="covered_by_procedure", target_id=target.catalog_item_id,
+        source_action_excerpt="操作甲", target_action_excerpt=footnote, unresolved_aspects=[])])
+    return batch, source, coverage, review
+
+
+@pytest.mark.parametrize("label,hashed", [("操作甲^7", False), ("操作甲^7", True), ("操作甲 | 记录^7", True)])
+def test_native_procedure_target_uses_row_identity_not_shared_note(label, hashed):
+    from app.agents.protocol_control_source_interpretation import (
+        validate_source_target_review, validated_source_review_seed,
+        SourceTargetReviewValidationError, target_action_established,
+        build_source_target_review_prompt,
+    )
+    batch, source, coverage, review = _native_row_target_material(label=label, hashed=hashed)
+    validate_source_target_review(batch, source, coverage, review)
+    assert "native_row_link_diagnostic" not in build_source_target_review_prompt(batch, source, coverage)
+    wrong, source, coverage, review = _native_row_target_material(wrong_row=True, label=label, hashed=hashed)
+    with pytest.raises(SourceTargetReviewValidationError) as error:
+        validate_source_target_review(wrong, source, coverage, review)
+    assert error.value.code == "TARGET_PROCEDURE_ROW_UNPROVEN"
+    assert error.value.statement_index == 0 and error.value.retry_class == "single_statement"
+    assert error.value.source_refs == tuple(wrong.owned_units[0].source_span_ids)
+    assert validated_source_review_seed(wrong, source, coverage, review) is None
+    assert not target_action_established(wrong, source.statements[0], wrong.known_procedure_targets[0])
+    prompt = build_source_target_review_prompt(wrong, source, coverage)
+    packet = json.loads(next(line.removeprefix("待核陈述：") for line in prompt.splitlines()
+                             if line.startswith("待核陈述：")))[0]
+    assert packet["native_row_link_diagnostic"]["rejected_target_ids"] == ["existing-action"]
+    # Only the model can propose an increment; the host does not rewrite the saved wire.
+    increment = review.model_copy(deep=True)
+    increment.items[0].decision = "additional_requirement"
+    increment.items[0].unresolved_aspects = ["原文操作未被该流程项目覆盖"]
+    validate_source_target_review(wrong, source, coverage, increment)
+    assert coverage[0].linked_procedure_target_ids == ["existing-action"]
+
+
+def test_native_row_guard_does_not_replace_narrative_semantic_review():
+    from app.agents.protocol_control_source_interpretation import validate_source_target_review
+    batch, source, coverage, review = _native_row_target_material(wrong_row=True)
+    batch.owned_units[0].table_context = None
+    validate_source_target_review(batch, source, coverage, review)
 
 
 def material():
