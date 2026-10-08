@@ -3,8 +3,18 @@
   "document_kind": "delivery_record",
   "round_id": "1006V1",
   "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
-  "runtime_state": "paused",
+  "runtime_state": "active",
   "claims_complete": false,
+  "current_resume_20261008": {
+    "base_head": "ed4f5c4a0bb997649e40395733f379a7a8025d96",
+    "scope": "Single source insert delta for official/procedure-linked statements; host keeps original candidates and target links; no gate relaxation",
+    "tests": {"passed": 1121, "seconds": 135.88, "exit_code": 0, "junit": "artifacts/rv1006-source-insert-delta-connected-20261008-v3.xml"},
+    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session": "01a11bf8-22f7-7c3a-8a0e-7a2ab312e3a7", "seconds": 328.64, "exit_code": 0, "fallback": false, "limits": "Read-only code review; Bash diff denied; owner verified diff; no clinical or test verification"},
+    "current_readonly_preflight": {"reusable": 16, "refresh_required": 74, "model_calls": 0, "database_writes": 0, "database_unchanged": true},
+    "runtime_execution": "not_started",
+    "formal_joint_publication": false,
+    "new_current_node_report": false
+  },
   "pause_checkpoint_20261008": {
     "user_requested": true,
     "product_source_commit": "56cf740a17ac2f6c4d79a8a664392bb58e37c6c5",

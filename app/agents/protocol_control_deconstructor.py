@@ -2285,7 +2285,7 @@ _CONTROL_REPAIR_CONTRACT = (
 _CALENDAR_BOUND_REPAIR_PROMPT_VERSION = "phase5/calendar-bound-repair-prompt/v4"
 _AFFECTED_STAGE_REPAIR_GUIDANCE_VERSION = "phase5/affected-stage-repair-guidance/v5"
 _OPTIONAL_ACTION_REPAIR_GUIDANCE_VERSION = "phase5/optional-action-repair-guidance/v2"
-_SOURCE_INSERT_GUIDANCE_VERSION = "phase5/source-insert-guidance/v7"
+_SOURCE_INSERT_GUIDANCE_VERSION = "phase5/source-insert-guidance/v8"
 _TREATMENT_DURATION_REPAIR_GUIDANCE_VERSION = "phase5/treatment-duration-repair-guidance/v2"
 _ATOM_REPAIR_GUIDANCE_VERSION = "phase5/atom-repair-guidance/v4"
 _SOURCE_SCOPE_CORRECTION_POLICY_VERSION = "phase5/source-scope-correction-policy/v6"
@@ -3129,13 +3129,27 @@ def build_protocol_control_repair_prompt(
         if source_closure_rewrite and source_statement_inventory else ""
     )
     insert_guidance = (
-        "这是遗漏要求的来源限定补入，不是改写旧候选。旧候选必须按原顺序逐字保留，"
-        "旧处置除授权结构单元外不得改变；只可在 candidate_drafts 末尾新增引用授权原文的候选。"
+        "这是遗漏要求的来源限定补入，不是改写旧候选。"
+        + (
+            "系统原样保留旧候选与全部范围外处置；本次只提交新增候选，"
+            "不得照抄旧候选、目标目录或未获授权的其他原文单元。"
+            "系统将新增候选追加到旧候选之后，再完整核验。"
+            if source_insert_candidate_only or source_insert_candidates_only else
+            "旧候选必须按原顺序逐字保留，旧处置除授权结构单元外不得改变；"
+            "只可在 candidate_drafts 末尾新增引用授权原文的候选。"
+        )
+        +
         "校验问题中列出的每项增量要求均须在新增候选的义务原文摘录中表达，不能只补第一项。"
         "新增候选的义务陈述也须逐字保留相应有源陈述，不能只在来源摘录中重复原句"
         "而把义务对象、否定、数量、时间或连接关系改写。"
-        "若授权单元原先关联官方条款或访视流程，须将该单元改为其他控制候选，"
-        "清除原处置链接，并在新增候选的 cross_source_relations 中逐一保留原目标关系；"
+        + (
+            "若授权单元原先关联官方条款或访视流程，系统会将该单元改为其他控制候选"
+            "并清除原处置链接；"
+            if source_insert_candidate_only or source_insert_candidates_only else
+            "若授权单元原先关联官方条款或访视流程，须将该单元改为其他控制候选"
+            "并清除原处置链接；"
+        )
+        + "新增候选的 cross_source_relations 须逐一保留原目标关系；"
         "原目标已覆盖的动作不应伪装成新增要求。"
         "新增义务带 time_constraint 时，evaluation.time_operand_attribute 须写明"
         "原文支持的待核日期属性；无法从原文确定时不得猜测，应保持待核。"
@@ -10303,6 +10317,8 @@ class ProtocolControlAgentRunner:
                         item.disposition in {
                             StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
                             StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+                            StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+                            StructureUnitDispositionKind.REQUIRED_PROCEDURE,
                         }
                         for item in repair_baseline_wire.dispositions
                         if item.structure_unit_id in mutable_structure_unit_ids

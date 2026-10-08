@@ -1,7 +1,11 @@
 <!-- RV1006-CURRENT:BEGIN -->
-## 当前1006V1交付窗口（2026-10-08，用户要求无损暂停）
+## 当前1006V1交付窗口（2026-10-08，用户已解除暂停）
 
 ### 单一当前用户流程表
+
+**恢复包实质验证与下一运行：** 所有者完整相连三模块1121passed/135.88s/exit0/5SWIG，JUnit artifacts/rv1006-source-insert-delta-connected-20261008-v3.xml，不累加v1/v2。不放宽旧目标/来源/兄弟保护。C03实际CodeBuddy/DeepSeek/max、session01a11bf8-22f7-7c3a-8a0e-7a2ab312e3a7、328.64s/exit0/no fallback，120min完成等待；顾问无Bash差异访问、未运行测试/临床，所有者逐文件核，取舍见reviews/rv1006-source-insert-delta-owner-disposition-20261008.md。当前零模型只读预检16reusable/74refresh_required、DBhash不变：1–16通过；17源种子/18及19旧repair证明不兼容v8，不强行拼接或白名单。旧18/1/71计划为历史，新作业将按实际冻结计划接续而不复活add37084。新私有OUT rv1006-source-insert-delta-recovery-api-20261008-v1未运行，正式发布/新病例结果仍未达。
+
+**本次恢复现行状态：** 用户已授权继续1006V1，运行时Goal实查active；以下暂停记录保留为历史。选择所有者直接实施＋单个C03独立工程审阅：新增要求的输出范围与旧成果复用身份涉及采用保护，需独立挑战；不派实施/检查子Agent，不新建Phase。当前首错是单条遗漏且原单元已关联流程/官方条款时，未选择现有单候选增量接口，且增量提示仍要求重发旧候选。最小补丁只分离delta/full-wire提示并扩展既有合法处置类型，来源/兄弟/旧目标关联门不放宽。v2相连三模块选窗32passed/1089deselected/2.55s/exit0，JUnit artifacts/rv1006-source-insert-delta-connected-20261008-v2.xml；v1的27pass/5fail如实保留：新增流程夹具缺节点、四项旧模拟输出仍给整包，改为真实delta接口输出而保留反例。尚无本轮产品调用/库写；旧失败Job不复活，claims_complete=false。独审packet rv1006-source-insert-delta-review-20261008仅已初始化，尚未执行，不计完成。
 
 **暂停现行记录（2026-10-08T08:46:11+02:00，优先于以下历史运行）：** 源码56cf740a17ac2f6c4d79a8a664392bb58e37c6c5的合法接续Job add37084f6704cbc9421e8715f7ee6c6已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID；6物理调用294.365496s，90深审16completed/17失败/73queued，definition_scope/hydrate/gate依赖失败。1–16实际零调用复用，18/19未在本Job执行。17错关联核对已进入additional要求处理，随后SOURCE_INSERT_INVALID结构恢复失败；这是生产结构失败，不是研究者判断缺失，也未证明新增临床要求已合法。停止新调用、修订和下一组，没有把失败改成功或取消。
 

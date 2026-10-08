@@ -1,6 +1,6 @@
-# HANDOFF｜1006V1｜无损暂停，成功部分保留，当前补入结构失败
+# HANDOFF｜1006V1｜已恢复，来源限定增量补入修订
 
-记录：2026-10-08T08:46:11+02:00，Europe/Rome。用户明确要求“完成手头工作后无损暂停，后续能恢复继续不重跑”。现场Goal已查询paused；Trellis仍in_progress，execution_paused_by_user=true，completedAt=null。本窗口未达，claims_complete=false。此文替代旧HANDOFF的现行状态；旧内容可从Git历史查阅，不删除原件、旧回执或失败记录，不把历史active当恢复授权。
+现行状态：2026-10-08用户已授权恢复1006V1，Goal实查active；Trellis in_progress，execution_paused_by_user=false。本窗口未达，claims_complete=false。补丁只处理当前首错：一条有源遗漏且已关联官方/流程时使用现有单候选增量；delta与整包提示区分，宿主保留兄弟/原目标并完整校验，不自动采用。相连三个模块1121passed/135.88s/exit0，5既有SWIG；artifacts/rv1006-source-insert-delta-connected-20261008-v3.xml。C03实际CodeBuddy/DeepSeek/max、328.64s、exit0/no fallback；顾问无Bash差异访问及临床/测试验证，所有者已核差异，具体取舍见reviews/rv1006-source-insert-delta-owner-disposition-20261008.md。当前只读预检16reusable/74refresh，不把旧18/1/71计划沿用；17partial与18/19旧修订因身份变化未获复用证明。旧Job/失败回执/原件保持；合法新作业尚未运行。以下暂停段落及结果是恢复起点历史，不作为当前暂停指令。
 
 ## 1. 一句话回答用户
 

@@ -9437,6 +9437,103 @@ def test_source_insert_prompt_names_only_frozen_missing_prohibition() -> None:
     assert "su-02" not in prompt.split("已由本批来源清单识别、但尚未形成独立候选的原句")[1].split("候选草稿位置")[0]
 
 
+@pytest.mark.parametrize("multiple", [False, True])
+def test_delta_source_insert_prompt_does_not_request_baseline_reproduction(multiple) -> None:
+    prompt = build_protocol_control_repair_prompt(
+        _batch(), problem="SOURCE_TARGET_ADDITIONAL_REQUIREMENT",
+        structure_unit_ids=["su-01"], source_insert=True,
+        source_insert_candidate_only=not multiple,
+        source_insert_candidates_only=multiple,
+    )
+    assert "本次只提交新增候选" in prompt
+    assert "旧候选必须按原顺序逐字保留" not in prompt
+    assert "系统会将该单元改为其他控制候选" in prompt
+    assert "系统将新增候选追加到旧候选之后，再完整核验" in prompt
+
+
+@pytest.mark.parametrize("target_kind", ["official_rule", "required_procedure"])
+@pytest.mark.parametrize("escape", [False, True])
+def test_resumed_single_linked_source_insert_uses_one_delta_and_preserves_siblings(
+    target_kind, escape,
+) -> None:
+    batch = _batch().model_copy(deep=True)
+    quote = "须记录年龄资料来源"
+    batch.owned_units[0].excerpt = f"年龄至少18岁；{quote}"
+    batch.known_official_targets[0].source_excerpts = ["年龄至少18岁"]
+    batch.known_procedure_targets[0].source_excerpts = ["年龄至少18岁"]
+    target_id = "EX-01" if target_kind == "official_rule" else "procedure-screening-1"
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-01", "quoted_text": quote,
+                        "force": "required", "time_words": []}],
+        "units_without_statement": ["su-02"],
+    })
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "additional_requirement",
+                   "target_id": target_id, "source_action_excerpt": quote,
+                   "target_action_excerpt": "年龄至少18岁", "source_time_excerpt": None,
+                   "target_time_excerpt": None, "unresolved_aspects": ["未要求记录资料来源"]}],
+    })
+    original = _wire().model_dump(mode="json")
+    original["dispositions"][0].update(
+        disposition="official_eligibility" if target_kind == "official_rule" else "required_procedure",
+        linked_official_code=target_id if target_kind == "official_rule" else None,
+        linked_procedure_catalog_item_id=target_id if target_kind == "required_procedure" else None,
+    )
+    baseline = ProtocolControlAgentWire.model_validate(original)
+    candidate = _candidate().model_dump(mode="json")
+    candidate.update(title="资料来源记录", applicability_expression=None, exception_expression=None)
+    atom = candidate["obligation_expression"]["groups"][0]["atoms"][0]
+    atom.update(kind="must_record", statement=quote, source_excerpts=[quote],
+                evaluation=_evaluation(quote, "span:01", quote))
+    candidate["minimum_evidence"][0]["description"] = quote
+    candidate["minimum_evidence"][0]["source_policy"]["source_excerpts"] = [quote]
+    candidate["cross_source_relations"] = [{
+        "kind": "supplementary_requirement", "external_target_kind": target_kind,
+        "external_target_id": target_id, "candidate_side": "left",
+        "affected_workflow_stage_id": "stage:screening:one" if target_kind == "required_procedure" else None,
+        "notes": None,
+    }]
+    if escape:
+        candidate["source_structure_unit_ids"] = ["su-02"]
+
+    class Transport(_FakeTransport):
+        insert_calls = 0
+
+        def start_source_insert(self, *, prompt, multiple):
+            self.insert_calls += 1
+            assert not multiple
+            assert "本次只提交新增候选" in prompt
+            return ProtocolControlAgentResponse(
+                session_id="insert-delta", text=json.dumps({"candidate_draft": candidate}, ensure_ascii=False),
+            )
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target", text=review.model_dump_json())
+
+        def continue_session(self, **kwargs):
+            pytest.fail("A source delta must not request a complete wire")
+
+    transport = Transport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=0).run(
+        batch, transport, resume_wire=baseline, resume_source_interpretation=inventory,
+        resume_source_target_review=review, resume_session_id="saved",
+        resume_source_statement_coverage=source_statement_coverage(batch, inventory, baseline),
+        output_validator=lambda _output: None,
+    )
+    assert transport.insert_calls == 1
+    if escape:
+        assert result.final_output is None
+        assert result.partial_wire == baseline
+        assert any("SOURCE_INSERT_INVALID" in item.error_classes for item in result.attempts)
+    else:
+        assert result.status == "已解析", [item.issues for item in result.attempts]
+        assert result.final_output is not None
+        assert len(result.final_output.candidates) == 1
+        assert result.final_output.dispositions[1].structure_unit_id == baseline.dispositions[1].structure_unit_id
+
+
 def test_partial_same_source_prohibition_uses_bounded_regrouping() -> None:
     from app.agents.protocol_control_deconstructor import build_protocol_control_repair_prompt
 
@@ -9638,7 +9735,10 @@ def test_successful_source_insert_allows_one_bounded_candidate_correction(drop_t
 
     transport = CandidateTransport([
         ProtocolControlAgentResponse(session_id="insert-correct", text=initial.model_dump_json()),
-        ProtocolControlAgentResponse(session_id="insert-correct", text=json.dumps(inserted, ensure_ascii=False)),
+        ProtocolControlAgentResponse(
+            session_id="insert-correct",
+            text=json.dumps({"candidate_draft": inserted["candidate_drafts"][-1]}, ensure_ascii=False),
+        ),
         ProtocolControlAgentResponse(
             session_id="insert-correct",
             text=json.dumps({"candidate_draft": corrected}, ensure_ascii=False),

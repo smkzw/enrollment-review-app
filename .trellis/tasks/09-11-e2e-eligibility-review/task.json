@@ -40,14 +40,14 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "2026-10-08按用户要求无损暂停，Goal实查paused。源码56cf740a；Job add37084 failed_final/DEEP_OUTPUT_INVALID，6调用294.365496s，16深审完成、17结构补入失败、73未执行；只读18可复用/1部分/71刷新。运行器与暂停观察退出，租约空，失败草稿/累计账本/原件/旧库/上游结果保留。完整同源发布、工作稿、更正后新报告未达。恢复唯一现行入口HANDOFF.md及implement文头；以下historical_notes保留原记录，不作为当前状态。",
+  "notes": "2026-10-08用户解除暂停，Goal active。来源限定增量补入修订，保持来源/兄弟/原目标门；相连三模块1121passed135.88s，C03实际CodeBuddy/DeepSeek/max328.64s无fallback。当前零调用只读16可复用/74需刷新，旧17partial与18/19修订因提示身份变化不强用；原失败Job/库/原答保留。合法新作业尚未运行，完整同源发布、工作稿、更正后报告未达。现行入口HANDOFF.md及implement当前块。",
   "meta": {
-    "execution_paused_by_user": true,
+    "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",
     "current_scope": "1006V1 frozen delivery window: complete same-source requirements, isolated current-node work draft, source navigation, one UI correction/supplement, affected recalculation and old/new history; R1/1001V1 retained.",
     "claims_complete": false,
-    "review_packet_status": "paused_delivery_window_unmet_source_insert_structure",
-    "runtime_goal_status_observed": "paused",
+    "review_packet_status": "active_source_insert_delta_connected_verified_runtime_pending",
+    "runtime_goal_status_observed": "active",
     "current_handoff": "HANDOFF.md",
     "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",
     "last_verified_source_commit": "56cf740a17ac2f6c4d79a8a664392bb58e37c6c5",
