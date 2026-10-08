@@ -3637,10 +3637,25 @@ def _restricted_deep_checkpoint(
         "component_identity": _deep_component_identity(context.job_payload, prompt_template),
         "repair_contract_sha256": protocol_control_agent_repair_contract_sha256(),
         "run_result": run_view,
+        **({"source_scope_question_history": result.source_scope_question_history}
+           if result.source_scope_question_history else {}),
         "attempt_raw_outputs": _deep_attempt_raw_outputs(result),
         "source_review_reuse": _source_review_reuse_record(resume_review),
         "restricted_batch": restricted_batch.model_dump(mode="json"),
     }
+
+
+def _saved_source_scope_question_history(saved: Mapping[str, Any] | None) -> list[dict[str, object]]:
+    if saved is None:
+        return []
+    history = saved.get("source_scope_question_history")
+    if history is None:
+        history = [attempt for attempt in saved.get("attempts", [])
+                   if isinstance(attempt, Mapping) and isinstance(attempt.get("error_detail"), Mapping)
+                   and attempt["error_detail"].get("workflow_phase") == "source_scope_question_recheck"]
+    if not isinstance(history, list) or any(not isinstance(item, Mapping) for item in history):
+        raise ValueError("来源疑问的历史核对账损坏")
+    return [dict(item) for item in history]
 
 
 def _complete_restricted_deep_source(
@@ -4041,6 +4056,7 @@ def _execute_deep(
             resume_review.coverage if resume_interpretation is not None else ()
         ),
         resume_source_candidate_alignment=resume_candidate_alignment,
+        resume_source_scope_question_history=_saved_source_scope_question_history(resume_alignment_saved),
         official_predicate_identities=official_predicate_identities,
         official_predicate_sources=official_predicate_sources,
         workflow_variant=context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
@@ -4188,6 +4204,8 @@ def _execute_deep(
                     }
                     for item in result.attempts
                 ],
+                **({"source_scope_question_history": result.source_scope_question_history}
+                   if result.source_scope_question_history else {}),
                 **_pending_definition_consumer_checkpoint(result),
             },
         )
@@ -4243,6 +4261,9 @@ def _deep_attempt_raw_outputs(result: ProtocolControlAgentRunResult) -> list[dic
 def _saved_deep_run_result(payload: Mapping[str, Any]) -> ProtocolControlAgentRunResult:
     """Restore only source-bound private answers; public result bytes stay unchanged."""
     result = ProtocolControlAgentRunResult.model_validate(payload.get("run_result"))
+    question_history = _saved_source_scope_question_history(payload)
+    if question_history:
+        result = result.model_copy(update={"source_scope_question_history": question_history})
     attempts = result.restricted_source_definition_consumer_attempts
     if not attempts:
         return result
@@ -4278,6 +4299,7 @@ def _saved_failed_deep_run_result(
             "status": "需要核对", "batch_id": batch.batch_id,
         },
         "attempt_raw_outputs": saved.get("attempt_raw_outputs"),
+        "source_scope_question_history": _saved_source_scope_question_history(saved),
     })
 
 

@@ -12,7 +12,7 @@ from app.agents.protocol_control_source_interpretation import (
     SourceScopeCorrection, apply_source_scope_correction,
 )
 from app.services import protocol_control_execution as execution
-from tests.v2.protocols.test_slice58c_control_deconstructor import _batch
+from tests.v2.protocols.test_slice58c_control_deconstructor import _batch, _wire, _candidate
 
 
 def material():
@@ -190,3 +190,139 @@ def test_runner_recheck_shares_budget_retains_failure_and_cannot_complete_withou
     if budget:
         assert result.attempts[0].error_detail["workflow_phase"] == "source_scope_question_recheck"
         assert result.attempts[0].outcome == ("schema_invalid" if malicious else "parsed")
+
+
+def question_record(batch, statement, proposal, index=0):
+    text = proposal.model_dump_json()
+    return dict(attempt=1, session_id="old-question", outcome="parsed", error_classes=[],
+        raw_output_text=text, raw_output_chars=len(text),
+        raw_output_sha256=hashlib.sha256(text.encode()).hexdigest(),
+        error_detail=dict(workflow_phase="source_scope_question_recheck", code="SOURCE_SCOPE_QUESTION_RECHECK",
+            statement_id=index, json_path=f"statements[{index}].unresolved",
+            source_refs=list(batch.owned_units[index].source_span_ids),
+            precondition_sha256=hashlib.sha256(statement.model_dump_json().encode()).hexdigest()))
+
+
+@pytest.mark.parametrize("kind,budget", [("valid", 2), ("transport", 2), ("malicious", 2), ("valid", 1)])
+def test_saved_wire_continues_only_unwitnessed_question_without_resetting_paid_history(kind, budget):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner, ProtocolControlAgentResponse
+    batch, source, _ = material()
+    batch.owned_units[0].excerpt = _batch().owned_units[0].excerpt + "；" + batch.owned_units[0].excerpt
+    source.units_without_statement = []
+    second_quote = "既往发生丙事件或准备期发现丁结果。"
+    batch.owned_units[1].excerpt = second_quote
+    source.statements.append(source.statements[0].model_copy(update={
+        "structure_unit_id": batch.owned_units[1].structure_unit_id, "quoted_text": second_quote}))
+    old_proposal = SourceInterpretation(version=source.version,
+        statements=[source.statements[0].model_copy(deep=True)], units_without_statement=[])
+    history = [question_record(batch, source.statements[0], old_proposal)]
+    proposal = SourceInterpretation(version=source.version,
+        statements=[source.statements[1].model_copy(update={"unresolved": []})], units_without_statement=[])
+    if kind == "malicious":
+        proposal.statements[0].quoted_text = second_quote.replace("或", "且")
+    wire = _wire(candidate=_candidate())
+    before = wire.model_dump_json()
+
+    class Transport:
+        question_calls = 0
+
+        def start_source_interpretation(self, *, prompt):
+            self.question_calls += 1
+            assert second_quote in prompt
+            if kind == "transport":
+                raise RuntimeError("synthetic connection failure")
+            return ProtocolControlAgentResponse(session_id="new-question", text=proposal.model_dump_json())
+
+        def start(self, *, prompt):
+            pytest.fail("已过门禁的草稿不能因为补核来源问题而全组重新生成")
+
+    transport = Transport()
+    result = ProtocolControlAgentRunner(max_schema_repairs=budget, max_transport_retries=0).run(
+        batch, transport, resume_wire=wire, resume_source_interpretation=source,
+        resume_source_scope_question_history=history, resume_session_id="saved-wire",
+        output_validator=lambda _: None)
+    assert transport.question_calls == (budget > 1)
+    assert result.partial_wire.model_dump_json() == before
+    assert source.statements[1].unresolved
+    assert result.source_interpretation.statements[0] == source.statements[0]
+    assert bool(result.source_interpretation.statements[1].unresolved) == (kind != "valid" or budget == 1)
+    assert len(result.source_scope_question_history) == (2 if budget > 1 else 1)
+    assert "source_scope_question_history" not in result.model_dump()
+    assert result.final_output is None
+    if kind in {"malicious", "transport"}:
+        assert result.session_id == "saved-wire"
+
+
+@pytest.mark.parametrize("change", ["raw", "refs", "index"])
+def test_corrupt_saved_question_history_is_rejected_before_any_model_call(change):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
+    batch, source, proposal = material()
+    record = question_record(batch, source.statements[0], proposal)
+    if change == "raw":
+        record["raw_output_sha256"] = "0" * 64
+    elif change == "refs":
+        record["error_detail"]["source_refs"] = ["another-source"]
+    else:
+        record["error_detail"]["statement_id"] = 999
+    with pytest.raises(ValueError, match="历史核对"):
+        ProtocolControlAgentRunner().run(batch, object(), resume_source_interpretation=source,
+            resume_source_scope_question_history=[record])
+
+
+def test_history_checkpoint_consumer_retains_actual_answers_and_never_duplicates_them():
+    batch, source, proposal = material()
+    history = [question_record(batch, source.statements[0], proposal)]
+    assert execution._saved_source_scope_question_history({"attempts": history}) == history
+    assert execution._saved_source_scope_question_history({
+        "attempts": history, "source_scope_question_history": history}) == history
+    with pytest.raises(ValueError, match="核对账"):
+        execution._saved_source_scope_question_history({"source_scope_question_history": "broken"})
+
+
+def test_changed_source_cannot_reuse_unqualified_old_covered_item_beside_a_valid_sibling():
+    import json
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner, ProtocolControlAgentResponse, source_statement_coverage
+    from app.agents.protocol_control_source_interpretation import (
+        SOURCE_TARGET_REVIEW_VERSION, SourceTargetReview, SourceTargetReviewItem,
+    )
+    batch, source, _ = material()
+    source.statements[0].force = "descriptive"
+    source.statements[0].decision_functions = ["background"]
+    source.units_without_statement = []
+    source.statements.append(SourceStatement(structure_unit_id=batch.owned_units[1].structure_unit_id,
+        quoted_text=batch.owned_units[1].excerpt, force="descriptive", decision_functions=["background"],
+        time_words=[], unresolved=[]))
+    wire = _wire()
+    coverage = source_statement_coverage(batch, source, wire)
+    old = SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[
+        SourceTargetReviewItem(statement_index=index, decision="background_context",
+            source_action_excerpt=statement.quoted_text, non_control_basis_excerpt=statement.quoted_text)
+        for index, statement in enumerate(source.statements)])
+    proposal = SourceInterpretation(version=source.version,
+        statements=[source.statements[0].model_copy(update={"unresolved": []})], units_without_statement=[])
+
+    class Transport:
+        calls = 0
+
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="question", text=proposal.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            self.calls += 1
+            packet = json.loads(prompt.split("待核陈述：", 1)[1].split("\n冻结已有目标：", 1)[0])
+            assert [item["statement_index"] for item in packet] == [0]
+            reviewed = SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[
+                SourceTargetReviewItem(statement_index=0, decision="unresolved",
+                    source_action_excerpt=source.statements[0].quoted_text,
+                    unresolved_aspects=["来源疑问已变，旧覆盖不能替代本次核查"])])
+            return ProtocolControlAgentResponse(session_id="review", text=reviewed.model_dump_json())
+
+    transport = Transport()
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        batch, transport, resume_wire=wire, resume_source_interpretation=source,
+        resume_session_id="saved-wire", resume_source_target_review=old,
+        resume_source_statement_coverage=coverage, output_validator=lambda _: None)
+    assert transport.calls == 1
+    assert result.final_output is None and result.partial_wire == wire
+    assert {item.statement_index: item.decision for item in result.source_target_review.items} == {
+        0: "unresolved", 1: "background_context"}

@@ -3,6 +3,14 @@
 
 ### 单一当前用户流程表
 
+当前结果（覆盖下方各历史快照）：2a4dac02516a424182fb9be296801f7d已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，23物理调用1091.778922s，90深审18completed（1–16、18、19）/2failed（17、20）/70queued，scope/hydrate/gate依赖失败。冻结源码f205bf54，私有产物rv1006-scope-question-recovery-api-20261008-v1。原15成功组零调用复用；12本轮完成，17四次来源疑问用尽共享额度、最后一条未核；20来源时间字段非法。不是端点断线或研究者缺件。原Job/payload、保护库、来源库保持，0发布/激活/签发，完整同源包/当前节点工作稿尚未完成，claims_complete=false。
+
+当前最小恢复包：私人source_scope_question_history保存实际旧调用并在接续扣除；已见证且当前来源完全相等的疑问不重核，失败保留partial_wire；来源变化撤销对应旧目标结论，包括covered/background，合法兄弟仍保留。无新框架、无全局基础提示升级、无采用门放宽。新有限上限8包含旧4，非换目录清零。主集成＋C03 Grok/grok-build/grok-4.7/high、17ee3ff0…958.163s/exit0/1轮/no fallback、120min静默等待；只审f205旧码和提案，非最终补丁独审。采纳账本/草稿/来源身份保护，不采纳重复问已批准测试调用或未读JobStore即推断历史覆盖。
+
+当前验证：三相连模块首窗1024pass/5fail/102.13s；四项新夹具原文缺失、一项旧空历史替身触发多余model_copy，补真实夹具和空历史无操作，未放门。受影响27pass；恢复家族首窗52pass/1fail为新增导入位置错误，修后最终53passed/339deselected/25.05s/exit0/5SWIG，JUnit artifacts/rv1006-source-question-saved-wire-recovery-family-20261008-final.xml。末版未重跑全三模块，不累加通过数。真实零模型零写预检18reusable/1resume_partial（17）/71refresh_required（20及70未执行），旧四次问题调用可读、库hash不变。下一步固定源码后合法新Job接续，不复活旧终态或重读十八份成功。
+
+以下旧运行按各自时间/源码保留，不作为当前终态：
+
 当前主集成＋已实际C03：恢复实际完成结果涉及来源资格，单独只读审阅已完成Grok/grok-build/grok-4.7/high，同会话7ded3405…733.312s/exit0/no fallback，120min静默完成等待。采纳锁定实际根检查点与失去证明不回退模型调用；不采纳搜索未声明兄弟历史作否决的建议。报告/所有者取舍见rv1006-unexecuted-source-lineage-20261008；非临床批准。7份继承delivery不动，共享首屏184bdb60适配已push，不重复派发或修改共享首页。恢复源码038b5acd已push；Goal active/claims_complete=false。
 
 当前实际终态b8781db03e414145a1dd0d3be4c1fe89：failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED，40物理调用1694.033920s，90深审15completed（1–11及13–16）/2failed（12、17）/73queued，scope/hydrate/gate依赖失败。从640780a6合法新建，入队先核10reusable（2–11）、2resume_partial（1及12）、78refresh及实际根回执摘要；85发现零调用复用、十份已完成深审未重读。冻结app源码038b5acd；原Job状态/payload、来源库、保护库均不变，0共同发布/激活/签发，claims_complete=false。私有产物rv1006-lineage-pinned-recovery-api-20261008-v1，不复活旧failed_final。
@@ -141,7 +149,7 @@ C03 mixed_dependency_review：批准CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/
 
 | 用户步骤 | 实际入口与已证 | 当前首阻断/下一动作 |
 |---|---|---|
-| 完整要求快照 | DOCX内置Agent1153e25b…rev21/23官方父条，草稿publishable；9841977f…85发现复用；91a3bc…完整90深审中13组实际完成，第12组0读取受限处理保存/读回。 | 第一共享单元/计算依赖与第15组同格标签对应仍受限；当前局部真实恢复执行中，未共同采用/激活；官方草稿可预览不是完整已发布规则。 |
+| 完整要求快照 | DOCX内置Agent1153e25b…rev21/23官方父条，草稿publishable；9841977f…85发现复用；2a4dac…90深审18组完成、17/20失败、70未执行。 | 17最后来源疑问与20非法时间阻断；草稿/历史调用/旧结论身份恢复包已验证，准备合法续接。官方草稿可预览不是完整已发布规则。 |
 | 资料完成 | 5PDF/24页、14组来源任务完成，458候选→407事实/40事件/11暴露保存，原件保持。 | 保存非临床核清；手写对象/数值定位未决仍具体保留，不以未核作无记录。 |
 | 事实资格/消费 | 32资格只关联30事实；426候选受限、584疑问、5冲突、130资料期望；正式消费者/来源门禁保留。 | 数值自动采用仍仅隔离验证授权；完整新要求共同消费尚未完成。 |
 | 当前节点工作稿 | 工作稿/资格/冻结计算入口已有软件消费者证据。 | 本例work_draft_state仍not_started；旧81官方组件/0controls不是新链。 |

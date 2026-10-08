@@ -4255,6 +4255,9 @@ class ProtocolControlAgentRunResult(ContractModel):
     batch_id: str = Field(min_length=1)
     session_id: str = Field(min_length=1)
     attempts: list[ProtocolControlAgentAttempt] = Field(min_length=1)
+    source_scope_question_history: list[dict[str, object]] = Field(
+        default_factory=list, exclude=True,
+    )
     final_output: ProtocolControlBatchDispositionHydrated | None = None
     source_interpretation: SourceInterpretation | None = None
     # Failed source corrections are diagnostics, not authoring/adoption input.
@@ -6925,6 +6928,7 @@ class ProtocolControlAgentRunner:
         resume_source_target_review: SourceTargetReview | None = None,
         resume_source_statement_coverage: Sequence[SourceStatementCoverage] = (),
         resume_source_candidate_alignment: SourceCandidateAlignment | None = None,
+        resume_source_scope_question_history: Sequence[Mapping[str, object]] = (),
         official_predicate_identities: Mapping[str, Sequence[tuple[str, str]]] | None = None,
         official_predicate_sources: Mapping[str, Mapping[tuple[str, str], Sequence[str]]] | None = None,
         workflow_variant: str = "RV1001-BASELINE",
@@ -6979,6 +6983,12 @@ class ProtocolControlAgentRunner:
         front_candidate_alignment: SourceCandidateAlignment | None = None
         workflow_path_executed = "not_started"
         def build_result(**values) -> ProtocolControlAgentRunResult:
+            values.setdefault("source_scope_question_history", [
+                *question_history,
+                *[{**attempt.model_dump(mode="json"), "raw_output_text": attempt.raw_output_text}
+                  for attempt in attempts
+                  if attempt.error_detail and attempt.error_detail.get("workflow_phase") == "source_scope_question_recheck"],
+            ])
             if any(attempt.error_detail and attempt.error_detail.get("workflow_phase") == "source_scope_question_recheck"
                    for attempt in attempts):
                 values.setdefault("repair_used", True)
@@ -7087,7 +7097,33 @@ class ProtocolControlAgentRunner:
             source_interpretation = resume_source_interpretation
         source_reader = getattr(transport, "start_source_interpretation", None)
         source_batch_reader = getattr(transport, "start_source_interpretation_batch", None)
-        source_repairs = 0
+        question_history = [dict(item) for item in resume_source_scope_question_history]
+        seen_questions: set[int] = set()
+        for record in question_history:
+            attempt = ProtocolControlAgentAttempt.model_validate(record)
+            detail = attempt.error_detail or {}
+            index = detail.get("statement_id")
+            if (source_interpretation is None or detail.get("workflow_phase") != "source_scope_question_recheck"
+                    or detail.get("code") != "SOURCE_SCOPE_QUESTION_RECHECK"
+                    or type(index) is not int or not 0 <= index < len(source_interpretation.statements)):
+                raise ValueError("来源疑问的历史核对范围无效，未发送请求")
+            statement = source_interpretation.statements[index]
+            unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == statement.structure_unit_id)
+            if (detail.get("source_refs") != list(unit.source_span_ids)
+                    or detail.get("json_path") != f"statements[{index}].unresolved"
+                    or not isinstance(detail.get("precondition_sha256"), str)
+                    or len(detail["precondition_sha256"]) != 64
+                    or (attempt.raw_output_text is not None and _sha256(attempt.raw_output_text) != attempt.raw_output_sha256)):
+                raise ValueError("来源疑问的历史核对见证损坏，未发送请求")
+            if attempt.outcome == "parsed" and not attempt.error_classes and attempt.raw_output_text:
+                proposal = SourceInterpretation.model_validate_json(attempt.raw_output_text)
+                if (proposal.version != source_interpretation.version or len(proposal.statements) != 1
+                        or proposal.units_without_statement):
+                    raise ValueError("来源疑问的历史答复不是单条有源提案")
+                if proposal.statements[0] == statement:
+                    seen_questions.add(index)
+        # These are prior paid attempts, not fresh calls in this invocation.
+        source_repairs = len(question_history)
         if source_interpretation is None and callable(source_reader):
             source_response: ProtocolControlAgentResponse | None = None
             source_prompt = build_source_interpretation_prompt(batch)
@@ -7411,9 +7447,10 @@ class ProtocolControlAgentRunner:
                         "逐字定位时填写 scope_quote；否则留空。仍须返回全部原文陈述，"
                         "不得改写原文、推断医学含义或遗漏其他单元。"
                     )
-        if source_interpretation is not None and not resuming_partial and callable(source_reader):
+        if source_interpretation is not None and callable(source_reader):
             for index, statement in enumerate(source_interpretation.statements):
-                if not can_recheck_source_scope_question(statement, batch) or source_repairs >= self._max_schema_repairs:
+                if (index in seen_questions or not can_recheck_source_scope_question(statement, batch)
+                        or source_repairs >= self._max_schema_repairs):
                     continue
                 question_response = None
                 detail = {
@@ -7455,9 +7492,10 @@ class ProtocolControlAgentRunner:
                         issues=["单条时间疑问核对失败，原陈述保留：" + str(question_error)[:1000]],
                     ))
                     return build_result(status="需要核对", batch_id=batch.batch_id,
-                                        session_id=question_response.session_id if question_response else "source-time-question-failed",
+                                        session_id=session_id or (question_response.session_id if question_response else "source-time-question-failed"),
                                         attempts=attempts,
-                                        source_interpretation=source_interpretation)
+                                        source_interpretation=source_interpretation,
+                                        partial_wire=partial_wire)
         if (workflow_variant == FIXED_FLOW and raw_text is None
                 and source_interpretation is not None
                 and output_validator is not None
@@ -7602,6 +7640,7 @@ class ProtocolControlAgentRunner:
             {entry.statement_index: entry for entry in resume_source_statement_coverage}
             if resumed_review_items else {}
         )
+        validated_target_source_identity = dict(resumed_review_identity)
         if front_flow_assembled and front_target_review is not None:
             front_wire = parse_protocol_control_agent_wire(raw_text)
             front_coverage = source_statement_coverage(batch, source_interpretation, front_wire)
@@ -7636,6 +7675,10 @@ class ProtocolControlAgentRunner:
                 )
             latest_source_target_review = covered_review if covered_review.items else None
             validated_target_coverage = {entry.statement_index: entry for entry in front_coverage}
+            validated_target_source_identity = {
+                index: _source_statement_reuse_identity(statement)
+                for index, statement in enumerate(source_interpretation.statements)
+            }
         latest_source_statement_coverage: list[SourceStatementCoverage] = []
         latest_source_candidate_alignment: SourceCandidateAlignment | None = None
 
@@ -7964,6 +8007,10 @@ class ProtocolControlAgentRunner:
                             )
 
                         def reuse_inputs_unchanged(index: int) -> bool:
+                            if validated_target_source_identity.get(index) != _source_statement_reuse_identity(
+                                source_interpretation.statements[index]
+                            ):
+                                return False
                             # A restored cross-run decision is bound to its exact
                             # saved coverage entry; any candidate or coverage
                             # change invalidates only that statement's reuse.
@@ -8648,6 +8695,10 @@ class ProtocolControlAgentRunner:
                         validated_target_coverage = {
                             entry.statement_index: entry for entry in coverage
                             if entry.statement_index in review_indexes
+                        }
+                        validated_target_source_identity = {
+                            index: _source_statement_reuse_identity(statement)
+                            for index, statement in enumerate(source_interpretation.statements)
                         }
                         unresolved_indexes = [
                             item.statement_index for item in target_review.items
