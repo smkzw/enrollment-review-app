@@ -6978,6 +6978,7 @@ def test_procedure_disposition_checks_native_row_before_additive_repair(variant)
         assert rejected.value.code == "PROCEDURE_ROW_SOURCE_MISMATCH"
         assert rejected.value.structure_unit_ids == (unit.structure_unit_id,)
         assert rejected.value.allow_candidate_repartition is True
+        assert rejected.value.allow_post_enrollment_reclassification is True
         assert not rejected.value.allow_source_insert
     else:
         assert hydrate_protocol_control_agent_output(wire, batch).dispositions[0].linked_procedure_catalog_item_id == target.catalog_item_id
@@ -7036,6 +7037,72 @@ def test_wrong_native_procedure_link_is_repaired_before_it_becomes_insert_author
     assert len(transport.prompts) == 2
     assert result.partial_wire.candidate_drafts[0] == corrected.candidate_drafts[0]
     _validate_saved_source_review(batch, type(result).model_validate_json(result.model_dump_json()))
+
+
+@pytest.mark.parametrize("variant", ["after_enrollment", "current_node", "background", "missing_reason"])
+def test_invalid_native_link_repair_preserves_sibling_and_keeps_source_coverage(variant):
+    batch, inventory, _ = _native_visit_candidate_material()
+    unit = batch.owned_units[0]
+    if variant != "current_node":
+        for header, text in zip(batch.context_units, ("治疗期", "V9", "D7"), strict=True):
+            header.member_texts[-1] = text
+            header.excerpt = " | ".join(header.member_texts)
+    sibling = _batch().owned_units[0]
+    batch.known_workflow_stage_targets.extend(_batch().known_workflow_stage_targets)
+    batch.owned_units.append(sibling)
+    batch.owned_structure_unit_ids.append(sibling.structure_unit_id)
+    batch.owned_source_span_ids = [*batch.owned_source_span_ids, *sibling.source_span_ids]
+    target = _batch().known_procedure_targets[0]
+    batch.known_procedure_targets = [target]
+    initial = ProtocolControlAgentWire(wire_version=CONTROL_AGENT_WIRE_VERSION,
+        dispositions=[
+            ProtocolControlAgentWireDisposition(structure_unit_id=unit.structure_unit_id,
+                disposition=StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+                linked_official_code=None, linked_procedure_catalog_item_id=target.catalog_item_id,
+                linked_procedure_catalog_item_ids=[], notes=None),
+            ProtocolControlAgentWireDisposition(structure_unit_id=sibling.structure_unit_id,
+                disposition=StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+                linked_official_code=None, linked_procedure_catalog_item_id=None,
+                linked_procedure_catalog_item_ids=[], notes=None),
+        ], candidate_drafts=[_candidate()])
+    if variant == "current_node":
+        matching = target.model_copy(deep=True)
+        matching.catalog_item_id = "procedure:matching-native-row"
+        matching.source_span_ids = list(unit.source_span_ids)
+        matching.source_excerpts = list(unit.member_texts)
+        matching.visit_instance = inventory.statements[0].scope_quote
+        matching.review_stage = ReviewStage.BASELINE
+        batch.known_procedure_targets.append(matching)
+    corrected = initial.model_copy(deep=True)
+    corrected.dispositions[0].disposition = (
+        StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT if variant == "background"
+        else StructureUnitDispositionKind.POST_TREATMENT_EXECUTION)
+    corrected.dispositions[0].linked_procedure_catalog_item_id = None
+    corrected.dispositions[0].notes = None if variant == "missing_reason" else "仅在治疗期执行，保留原文范围"
+    frozen = initial.model_dump_json(), batch.model_dump_json()
+    transport = _FakeTransport([
+        ProtocolControlAgentResponse(session_id="native-link-repair", text=initial.model_dump_json()),
+        ProtocolControlAgentResponse(session_id="native-link-repair", text=corrected.model_dump_json()),
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, transport)
+    assert "PROCEDURE_ROW_SOURCE_MISMATCH" in result.attempts[0].error_classes
+    if variant in {"after_enrollment", "current_node"}:
+        assert result.status == "已解析", [a.issues for a in result.attempts]
+        assert result.final_output.candidates[0].frozen_structure_unit_ids == [sibling.structure_unit_id]
+        assert result.partial_wire.candidate_drafts == initial.candidate_drafts
+        assert result.partial_wire.dispositions[1] == initial.dispositions[1]
+        if variant == "current_node":
+            # A repair proposal is not adoption: the unchanged source consumer
+            # still rejects discarding a marked current-node procedure.
+            with pytest.raises(ProtocolControlAgentWireValidationError) as rejected:
+                source_statement_coverage(batch, inventory, result.partial_wire)
+            assert rejected.value.code == "SCHEDULE_ENROLLMENT_COLUMN_DISCARDED"
+        else:
+            assert source_statement_coverage(batch, inventory, result.partial_wire)[0].disposition == "post_treatment_execution"
+    else:
+        assert result.status == "需要核对"
+        assert "REPAIR_SCOPE_ESCAPE" in result.attempts[-1].error_classes
+    assert (initial.model_dump_json(), batch.model_dump_json()) == frozen
 
 
 def test_native_visit_candidate_alignment_is_saved_and_context_changes_invalidate_proof():

@@ -2068,6 +2068,7 @@ def _deep_component_identity(
                                        "validated-snapshot-scoped-session/v1",
                                        SOURCE_FUNCTION_FIELD_REPAIR_VERSION,
                                        "native-author-note-projection-and-procedure-row-gate/v1",
+                                       "invalid-wire-scoped-post-enrollment-repair/v1",
                                        NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION)),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}

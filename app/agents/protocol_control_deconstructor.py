@@ -3667,6 +3667,7 @@ def validate_protocol_control_agent_wire(
                     "PROCEDURE_ROW_SOURCE_MISMATCH",
                     "流程处置的目标不含本表格项目的原始行来源；须核实本行处置，不能借其他项目的共同脚注。",
                     structure_unit_ids=[unit_id], allow_candidate_repartition=True,
+                    allow_post_enrollment_reclassification=True,
                 )
         elif disposition.linked_official_code or procedure_target_ids:
             raise ProtocolControlAgentWireValidationError(
@@ -10149,6 +10150,7 @@ class ProtocolControlAgentRunner:
                             if set(candidate.source_structure_unit_ids) & closure_units
                         )
                         allow_candidate_repartition = True
+                        allow_post_enrollment_reclassification = error.allow_post_enrollment_reclassification
                 elif (
                     wire is not None
                     and output is None

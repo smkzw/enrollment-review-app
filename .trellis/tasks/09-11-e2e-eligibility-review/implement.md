@@ -7,9 +7,11 @@ Goal active；claims_complete=false。本表是唯一现行流程状态；下方
 
 **集中验证与反证：** 三相连模块v1 1223pass/4fail/118.61s，v2 1234pass/1fail/123.75s；失败分别为新正例漏目标/核对接口、单目标数组断言、非表格多投影元数据，均按实际合同修，不删危险反例。末受影响族38pass/1081deselected/22.91s/exit0；含生产Runner→保存核对读回、坏hash/来源缺失/同名异行/已改正/原生格内分项、旧合法部分恢复。非末版全三模块复跑，不相加。5既有SWIG。C03 CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max，同session01a11d4f…两轮实际回执117.924/134.589s、exit0/no fallback；首轮13工具调用含被拒Bash，续轮12，两轮解析tool_result_count均0，不据次数声称读取已证明。Bash/HEAD无证及未读取函数的限制见报告。采纳保留路径不得绕过已知错误基础；作者主线程另以真实旧第15组证明整格子项合法并保持原摘录条件。该末小修由所有者及真实预检验证，不追称顾问已审。取舍reviews/rv1006-author-context-owner-disposition-20261009.md。
 
-**最新实际临床运行仍是旧源码21fce0f5的Job6a4d049fec2e4c9088766ec67e22613b：** 14新增物理调用/393.448554s/exit3，16completed、17failed_final/SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED、73未执行。检查点a0b8841570024459821acd23494c745a；初答用途合法，上一用途补正未实际触发。作者收到了脚注正文，却未收到编号映射；不相符流程关联被补入保护冻结，末核对指出未表达脚注细节。不是provider故障或临床缺证。旧Job/payload/原件/保护库/来源库不变，0共同发布/激活/签发。
+**最新实际运行：** 已push源码b3bfe41d的Jobff3068b3450a41518d3b731488d242cb已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，2物理调用/145.511335s/exit3；16completed、17failed、73未执行。检查点ba077440c241467e910b7426efb29c5e；85发现及16成功组零新增调用复用。首答被PROCEDURE_ROW_SOURCE_MISMATCH拒绝；第二答保留独立候选、把错误关联改为入组后执行提案，被修复分支未传播现有许可误拒REPAIR_SCOPE_ESCAPE。这不证明改后医学含义正确。旧Job/payload、原件、保护库及来源库保持；0共同发布/激活/签发。
 
-**新代码入队前实际预检：** 6a4源16reusable/1resume_partial/73refresh；17只保留证实来源及五次scope_question_recheck，discard未核作者/核对/会话，原source_repair_limit=8。0模型/0数据库写、库hash保持；实际闭合编号映射保留且选phase_iii，不把二期段落变成三期义务。私有rv1006-author-context-preflight-20261009-v1.json。首诊断漏PYTHONPATH、空WAL存在误当writer以及前移检查漏原摘录适用条件均如实保留；无模型/无写，最后lsof无owner、WAL0，实际active租约查询为空。最终预检保留16，不绕过新门。新请求仍需实际运行，不以预检代完成。
+**当前最小插入与集中检查：** 影响完整要求快照；沿既有错误对象向既有修复分支传递allow_post_enrollment_reclassification，不扩大兄弟/来源范围、不自动采用。直接集成＋沿批准C03增量独审，因为修改范围涉及来源处置。当前节点正例仍由source_statement_coverage拒绝错误排除；后续not_current_control必须同单元逐字先后依据、已核after_eligibility_decision、无候选动作且无未决，空列映射不是排除依据。v3三相连模块1239pass/1fail130.50s，失败为新夹具共享数组污染，末受影响窗15pass/1108deselected4.97s/exit0；末版不冒称全窗复跑。真实两答零调用重放已越过范围误拒、兄弟不变，下一既有门TIME_ANCHOR_MISSING仍拒，未到完整来源采用。C03首增量31.677s/exit3/Max turns2，8工具但关键函数正文未得到；同会话收尾44.033s/exit0/0工具，仅有限意见，不冒称完整独审。所有者读取实际修复与来源消费者拒绝“没有筛选列就能排除”的建议。取舍reviews/rv1006-invalid-wire-scope-owner-disposition-20261009.md。
+
+**当前入队前实际预检：** ff306源16reusable/1resume_partial/73refresh，0模型/0数据库写、库hash保持，终态无租约。私有rv1006-invalid-wire-scope-preflight-20261009-v1.json；17只保留证实来源及原核查/预算，未核作者不提升为采用。此前6a4预检和b3运行分别为历史证据。新许可补丁尚未实跑，不以零调用重放或预检代完成。
 
 | 用户流程节点 | 已有入口/证据 | 首个尚未完成项与接续 |
 |---|---|---|

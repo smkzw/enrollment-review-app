@@ -12,15 +12,15 @@
 |---|---|
 | 唯一worktree | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；09-11-e2e-eligibility-review |
-| 当前代码基础 | 21fce0f5，已push；本功能包提交前的准确补丁见下方文件清单，测试不得冒称远端基线测试 |
-| 当前最新真实Job | 6a4d049fec2e4c9088766ec67e22613b，failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED |
-| 最新真实运行 | 源码21fce0f5，14物理调用/393.448554秒/exit3；16completed、17failed、73未读，scope/hydrate/gate依赖失败 |
-| 第17组失败检查点 | a0b8841570024459821acd23494c745a；全部实际原答/请求/负核对/hash保留 |
+| 当前代码基础 | b3bfe41d，已push；当前增量为修复分支传递已有处置权限，准确文件见implement；测试绑定本机补丁而非旧基线 |
+| 当前最新真实Job | ff3068b3450a41518d3b731488d242cb，failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID |
+| 最新真实运行 | 源码b3bfe41d，2物理调用/145.511335秒/exit3；16completed、17failed、73未读，scope/hydrate/gate依赖失败 |
+| 第17组失败检查点 | ba077440c241467e910b7426efb29c5e；全部实际原答/请求/hash保留 |
 | 当前隔离DB | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 真实产物 | 同根/rv1006-source-function-field-api-20261008-v1，目录存在，不覆盖/重跑 |
+| 真实产物 | 同根/rv1006-native-author-context-api-20261009-v1，目录存在，不覆盖/重跑 |
 | 模型路线 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high，输出65536，产品自己的harness直连 |
-| 当前新预检 | 同根/rv1006-author-context-preflight-20261009-v1.json：16reusable/1resume_partial/73refresh，0调用/0写/DBhash保持 |
-| 新代码实际临床运行 | 尚未运行；预检不算运行，软件通过不算临床通过 |
+| 当前新预检 | 同根/rv1006-invalid-wire-scope-preflight-20261009-v1.json：16reusable/1resume_partial/73refresh，0调用/0写/DBhash保持 |
+| 新代码实际临床运行 | b3已实跑；当前权限传递增量尚未运行，预检及重放不算临床通过 |
 | 继承dirty | 7份旧delivery文件未动，不stage；大量继承untracked不清理/不批量stage |
 | 外部可复查范围 | Git源码/合成用例/净化工程报告；真实原件、DB、提示、原答和病例截图仅本机受控可读，外部审阅不可读 |
 
@@ -39,6 +39,8 @@
 病例准备根：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-prepared-review-current-node-20261008-v1/data。subject rv29-preparation-20261001，筛选episode e8615813d75b452489579ff9606781b4，旧project draft-project09b593a721e7。完整新官方源draft-project1153…与旧病例不是同一个项目。必须用合法发布/新项目/资料上传或有身份核验的既有再解构入口，不能SQL改project_id、复制旧采用或借旧政策批准。
 
 ## 本包首因与修复
+
+最新ff306首答已在原生来源门拒绝错误关联，第二答提案在修改范围恢复处误拒。当前增量只向现有修复器传递现有许可；兄弟冻结及完整核对不变。真实两答零调用重放越过REPAIR_SCOPE_ESCAPE，随后随机候选的TIME_ANCHOR_MISSING仍拒，未到来源/采用终点。三个相连模块1239pass/1fail为新夹具数组别名问题，末15pass4.97s/exit0，不冒称末全窗。批准C03增量先因Max turns2退出3，随后同上下文收尾退出0；关键正文未读取，只有有限工程意见。所有者核实际消费者不允许凭空列图关闭未来执行项。详见implement及reviews/rv1006-invalid-wire-scope-owner-disposition-20261009.md。下一接续只使用ff306实际保存源，保留16成功和旧核查账本，不重跑旧目录。
 
 真实6a4初答用途合法，上一包用途补正没有触发，不能据本次调用宣称修复效果已证。作者收到了脚注正文，缺的是原生编号→单元映射；错误流程关联随后成为补入的不可变基础，合法未带错误关联的新提案被REPAIR_SCOPE_ESCAPE拒绝；最后alignment指出脚注细节未表达。不是端点故障，也不是“没有脚注正文”。单个案例不能证明映射是唯一原因。
 
