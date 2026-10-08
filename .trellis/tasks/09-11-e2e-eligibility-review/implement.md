@@ -3,7 +3,11 @@
 
 ### 单一当前用户流程表
 
-**现行里程碑（覆盖下方各历史“当前/未运行”）：** Goal active/claims_complete=false。d51f5c9e合法Job664a74a63376450a8688d8632e42a15b实际12新物理调用/400.544216秒/exit3，16深审completed、17 failed_final/SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED、73未执行，scope/hydrate/gate依赖失败。检查点17=6a3eb542c5704917aea476a2fb132cb7；旧Job/payload、来源库和保护库保持，0共同发布/激活/签发。上游1319的20组完成是旧材料下的成果，不直接变成新上下文的批准。
+**现行里程碑（覆盖下方各历史“当前/未运行”）：** Goal active/claims_complete=false。35325f50合法Job7904e95740cf4896bb5dfeefc05a7a25实际6新物理调用/245.441759584秒/exit3，16深审completed、17 failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID、73未执行，scope/hydrate/gate依赖失败。检查点17=a06490ab7a69466d9dfaf1d70b50f6ed；17原答用途unclassified且无具体疑问，parse在赋值前拒绝（SOURCE_FUNCTION_UNRESOLVED），不是provider故障或临床缺证。标题脚注闭合已送达并完成受影响16；旧Job/payload、来源库和保护库保持，0共同发布/激活/签发。
+
+**当前最小插入及分工：** 影响完整要求快照。沿既有来源合同，仅针对已定位的初答用途字段补正：整份原答先核来源，宿主保留原文/时间/范围/兄弟及原有每项疑问，只合并用途/新增具体疑问，再过完整parse/来源/目标/采用门；不默认action或background、不把格式错改名研究者判断。来源/作者共享预算、原答/提案/hash账本保持，传输和无效提案分码，validator单列v1。直接集成＋单C03独审，因恢复/复用边界变化；不另开Phase/框架或执行节点。最终相连三模块1217passed/127.56秒/exit0/5SWIG，JUnit rv1006-source-function-field-repair-connected-20261008-v2.xml。首54pass1fail及1215pass2fail分别为新正例漏目标核对接口、显式validator期望；用既有生产/保存消费者补足，未放宽门。顾问CodeBuddy/DeepSeek/max/session01a11d32…343.946秒/exit0/no fallback，60工具，Bash/diff被拒；未测试/临床，较广路径发现如实记。主线程核差分原parse/背景门未改；采纳不删原疑问及错误分码，其他非阻断不扩展。取舍reviews/rv1006-source-function-field-owner-disposition-20261008.md。
+
+**现行运行前预检：** 源7904、16reusable/74refresh，0调用/0写/DBhash保持/exit0，私有rv1006-source-function-field-preflight-20261008-v1.json。新局部用途补正尚未产品实跑；多缺陷中途失败尚无跨作业合并自动回放，不冒称零重读。完整共同包、当前节点工作稿、有源更正→受影响重算→新旧审核报告仍未达。下面标题脚注包预检/尚未实跑均为当时快照。
 
 **当前最小插入与分工：** 影响完整要求快照；真实核对提出标题脚注缺失，而冻结全清单已有实际编号映射，分包只送项目行脚注、漏已选只读标题的脚注。最小修复：已有context标题的实际链接闭合到同批只读原文，编号映射贯通解释/对应核对并进入proof，scope/v3；原owned/发现处置、非表格及无关批次保持，不推断医学含义。直接集成＋单新C03，因为来源关系改变核对及复用边界；不另开Phase/框架。四相连模块1242passed/110.10秒/exit0，末只加合成测试后相关7例0.53秒/58deselected/exit0，不累加或重复整库。C03实际CodeBuddy/DeepSeek/max/session01a11d1e…9只读/父174.178秒/exit0/no fallback，120min静默完成等待；未测试/临床，额外读取材料比较函数如实记。拒绝“所有全清单脚注必须深审”的过度扩展，补同编号跨表、多owned、错误/缺失context反例；取舍reviews/rv1006-header-note-closure-owner-disposition-20261008.md。
 

@@ -118,6 +118,8 @@ from app.agents.protocol_control_source_interpretation import (
     is_study_phase_label,
 )
 from app.agents.protocol_control_source_function import (
+    apply_source_function_field_repair,
+    build_source_function_field_repair_prompt,
     apply_source_function_recheck,
     build_source_function_recheck_prompt,
     can_recheck_source_function,
@@ -3046,6 +3048,151 @@ def test_source_function_recheck_preserves_original_and_all_siblings() -> None:
     assert revised.statements[1] == original.statements[1]
     validate_source_target_review(batch, revised, [entry], review)
     assert '"frozen_statement"' in build_source_function_recheck_prompt(batch, original, 0)
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_source_function_field_repair_preserves_raw_siblings_and_requires_explicit_proposal(missing):
+    batch, inventory, _, _, _ = _function_disagreement()
+    inventory.statements.append(SourceStatement(
+        structure_unit_id="su-01", quoted_text="年龄至少18岁", force="required",
+        decision_functions=["threshold"], time_words=[],
+    ))
+    inventory.units_without_statement = []
+    raw = inventory.model_dump(mode="json")
+    raw["statements"][0]["decision_functions"] = ["unclassified"]
+    if missing:
+        del raw["statements"][0]["decision_functions"]
+    text = json.dumps(raw, ensure_ascii=False)
+    with pytest.raises(SourceInterpretationValidationError) as caught:
+        parse_product_source_interpretation(batch, text)
+    proposal = inventory.model_copy(update={
+        "statements": [inventory.statements[0]], "units_without_statement": [],
+    })
+    prompt = build_source_function_field_repair_prompt(batch, text, caught.value)
+    assert "只补正指定原陈述" in prompt and "年龄至少18岁" in prompt
+    merged_text = apply_source_function_field_repair(batch, text, caught.value, proposal.model_dump_json())
+    merged = json.loads(merged_text)
+    assert merged["statements"][1] == raw["statements"][1]
+    assert merged["units_without_statement"] == raw["units_without_statement"]
+    result = parse_product_source_interpretation(batch, merged_text)
+    validate_source_interpretation(batch, result)
+    assert result == inventory
+    unknown = proposal.model_copy(deep=True)
+    unknown.statements[0].decision_functions = ["unclassified"]
+    unknown.statements[0].unresolved = ["原文没有说明本条用途是否限定当前审核"]
+    merged_unknown = parse_product_source_interpretation(batch, apply_source_function_field_repair(
+        batch, text, caught.value, unknown.model_dump_json(),
+    ))
+    assert merged_unknown.statements[0].unresolved == unknown.statements[0].unresolved
+    unknown.statements[0].unresolved = []
+    with pytest.raises(SourceInterpretationValidationError):
+        apply_source_function_field_repair(batch, text, caught.value, unknown.model_dump_json())
+    for field, value in [("quoted_text", "另一个摘录"), ("force", "required"),
+                         ("time_words", ["筛选期"]), ("structure_unit_id", "su-01")]:
+        changed = proposal.model_copy(deep=True)
+        setattr(changed.statements[0], field, value)
+        with pytest.raises(ValueError):
+            apply_source_function_field_repair(batch, text, caught.value, changed.model_dump_json())
+    foreign_issue = SourceInterpretationValidationError(
+        caught.value.code, "错误目标", statement_id=1, structure_unit_id="su-01",
+        json_path="/statements/1/decision_functions", source_refs=["span:01"], retry_class="source_interpretation",
+    )
+    with pytest.raises(ValueError):
+        build_source_function_field_repair_prompt(batch, text, foreign_issue)
+    broken_source = json.loads(text)
+    broken_source["statements"][0]["quoted_text"] = "无源内容"
+    with pytest.raises(SourceInterpretationValidationError):
+        build_source_function_field_repair_prompt(batch, json.dumps(broken_source), caught.value)
+    if missing:
+        existing_question = json.loads(text)
+        existing_question["statements"][0]["unresolved"] = ["本条是否限定当前审核尚不清楚"]
+        questioned_text = json.dumps(existing_question, ensure_ascii=False)
+        for questions in ([], ["替换原有疑问"]):
+            changed = proposal.model_copy(deep=True)
+            changed.statements[0].unresolved = questions
+            with pytest.raises(ValueError, match="原有疑问"):
+                apply_source_function_field_repair(batch, questioned_text, caught.value, changed.model_dump_json())
+        retained = proposal.model_copy(deep=True)
+        retained.statements[0].unresolved = existing_question["statements"][0]["unresolved"]
+        assert parse_product_source_interpretation(batch, apply_source_function_field_repair(
+            batch, questioned_text, caught.value, retained.model_dump_json(),
+        )).statements[0].unresolved == retained.statements[0].unresolved
+
+
+@pytest.mark.parametrize("mode", ["valid", "unchanged", "changed_source", "transport", "no_budget"])
+def test_runner_source_function_field_repair_is_local_bounded_and_not_adoption(mode):
+    batch = _batch()
+    inventory = SourceInterpretation(
+        version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-01", quoted_text="年龄至少18岁",
+                                    force="required", decision_functions=["threshold"], time_words=[])],
+        units_without_statement=["su-02"],
+    )
+    invalid = inventory.model_copy(deep=True)
+    invalid.statements[0].decision_functions = ["unclassified"]
+    proposal = inventory.model_copy(update={"units_without_statement": []}, deep=True)
+    if mode == "unchanged":
+        proposal.statements[0].decision_functions = ["unclassified"]
+    if mode == "changed_source":
+        proposal.statements[0].quoted_text = "改变原文"
+
+    class Transport(_FakeTransport):
+        source_prompts = None
+
+        def start_source_interpretation(self, *, prompt):
+            if self.source_prompts is None:
+                self.source_prompts = []
+            self.source_prompts.append(prompt)
+            if len(self.source_prompts) == 1:
+                return ProtocolControlAgentResponse(session_id="source-initial", text=invalid.model_dump_json())
+            assert "只补正指定原陈述" in prompt
+            if mode == "transport":
+                raise TimeoutError("读取服务暂不可用")
+            return ProtocolControlAgentResponse(session_id="source-field", text=proposal.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target", text=SourceTargetReview.model_validate({
+                "version": SOURCE_TARGET_REVIEW_VERSION,
+                "items": [{"statement_index": 0, "decision": "additional_requirement",
+                           "source_action_excerpt": "年龄至少18岁", "unresolved_aspects": ["既有目录未覆盖"]}],
+            }).model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            from app.agents.protocol_control_candidate_alignment import SOURCE_CANDIDATE_ALIGNMENT_VERSION
+            return ProtocolControlAgentResponse(session_id="alignment", text=json.dumps({
+                "version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+                "items": [{"statement_index": 0, "candidate_index": 0, "decision": "fully_expressed",
+                           "source_excerpt": "年龄至少18岁", "candidate_atom_quotes": ["年龄达到18岁"],
+                           "unresolved_dimensions": []}],
+            }, ensure_ascii=False))
+
+    wire = _wire(candidate=_candidate().model_copy(update={"exception_expression": None}))
+    transport = Transport([ProtocolControlAgentResponse(session_id="wire", text=wire.model_dump_json())])
+    result = ProtocolControlAgentRunner(max_schema_repairs=0 if mode == "no_budget" else 1).run(
+        batch, transport, output_validator=lambda _output: None,
+    )
+    if mode == "valid":
+        assert len(transport.source_prompts) == 2
+        assert len(transport.prompts) == 1
+        assert result.source_interpretation == inventory
+        assert any(attempt.error_detail and attempt.error_detail.get("merged_sha256")
+                   for attempt in result.attempts)
+        restored = type(result).model_validate_json(result.model_dump_json())
+        assert restored.source_interpretation == inventory
+        assert result.final_output is not None
+        assert result.repair_used
+        from app.services.protocol_control_execution import _validate_saved_source_review
+        _validate_saved_source_review(batch, restored)
+    else:
+        assert len(transport.source_prompts) == (1 if mode == "no_budget" else 2)
+        assert not transport.prompts
+        assert result.status == "需要核对" and result.final_output is None
+        assert result.pending_source_interpretation is None
+        if mode == "transport":
+            assert result.attempts[-1].outcome == "transport_failed"
+            assert result.attempts[-1].error_classes == ["SOURCE_FUNCTION_FIELD_REPAIR_TRANSPORT_FAILED"]
+    assert any(attempt.raw_output_text == invalid.model_dump_json() and attempt.outcome == "schema_invalid"
+               for attempt in result.attempts)
 
 
 def test_source_function_recheck_can_reaffirm_without_approving_background() -> None:

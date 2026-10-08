@@ -1,4 +1,4 @@
-# HANDOFF｜1006V1｜标题脚注补齐来源关系，继续执行
+# HANDOFF｜1006V1｜保留已完成范围，局部补正来源用途，继续执行
 
 2026-10-08，用户已解除暂停；Goal实查active，Trellis in_progress，execution_paused_by_user=false。窗口未达，claims_complete=false。本记录是相连功能包里程碑，不是暂停。只维护本HANDOFF、implement当前表及review_index；历史运行在implement附录和Git保留，不按旧“当前/暂停”恢复。
 
@@ -10,13 +10,13 @@
 |---|---|
 | 唯一工作树 | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；.trellis/tasks/09-11-e2e-eligibility-review |
-| 本功能包基础代码 | d51f5c9e；scope输入已实跑，补已选只读标题的真实脚注及编号关系，不替医学采用 |
-| 当前终态/上游 | 664a74a63376450a8688d8632e42a15b，failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED；声明上游13191716ea054d0d9ed026c189b574e6 |
-| 失败检查点 | 17=6a3eb542c5704917aea476a2fb132cb7；已有草稿、实际核对、原答和累计账本保留，不改旧终态 |
+| 本功能包基础代码 | 35325f50；标题脚注实际送达并完成第16组；用途补正只改原答的用途/新增具体疑问，不替医学采用 |
+| 当前终态/上游 | 7904e95740cf4896bb5dfeefc05a7a25，failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID；声明上游13191716ea054d0d9ed026c189b574e6 |
+| 失败检查点 | 17=a06490ab7a69466d9dfaf1d70b50f6ed；初答SOURCE_FUNCTION_UNRESOLVED，原答和累计账本保留，不改旧终态 |
 | 产品模型 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high、65536输出；产品harness直接访问端点 |
 | 当前隔离库 | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 最新已执行产物 | 同上根目录/rv1006-native-review-scope-api-20261008-v1；12新物理调用/400.544216秒/exit3，源码d51f5c9e；16 completed、17失败、73未执行，旧Job/payload/来源库/保护库保持 |
-| 私有当前预检 | 同上根目录/rv1006-header-note-closure-preflight-20261008-v1.json；源1319，15reusable/75refresh，标题脚注影响表格材料，0调用/0写/DBhash保持/exit0 |
+| 最新已执行产物 | 同上根目录/rv1006-header-note-closure-api-20261008-v1；6新物理调用/245.441759584秒/exit3，源码35325f50；16 completed、17失败、73未执行，旧Job/payload/来源库/保护库保持 |
+| 私有当前预检 | 同上根目录/rv1006-source-function-field-preflight-20261008-v1.json；源7904，16reusable/74refresh，0调用/0写/DBhash保持/exit0 |
 | 外部可复查范围 | Git源码、合成测试、净化工程报告/索引；原件、DB、实际临床提示/原答与截图仅本机可读，不提交，hash不证明临床含义 |
 
 五分钟入口：本HANDOFF → implement当前表 → delivery_1006V1/03_ACCEPTANCE.md → review_index_20261006_1006V1.json → 新合法作业prepare/execute回执。不要重读全部历史，不复活旧失败Job。
@@ -34,6 +34,10 @@
 病例根/准备副本：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-prepared-review-current-node-20261008-v1/data；subject rv29-preparation-20261001，筛选episode e8615813d75b452489579ff9606781b4。
 
 ## 3. 当前首错与最小修复
+
+7904第17组初答用途为unclassified、未说明具体疑问，严格解析在赋值前拒绝；现有下游用途分歧核对只能保留原用途或有据排除背景，不能借来给初答乱填用途。最小修复复用现有单条来源运输/Schema，仅对结构化定位的初答用途及新增疑问提出补正，宿主冻结所有其他字段、原答兄弟及已有每项疑问；成功仍回完整来源/目标/消费门。明确未决保留，不改名技术能力为医学判断。共享预算/失败账本和validator身份保持；未解多缺陷跨作业合并回放如实保留局限。三相连模块最终1217通过/127.56秒/exit0；原正例漏目标核对及版本期望的失败已逐项修，未弱化消费者。单C03实际343.946秒/exit0/no fallback，未测试/临床，Bash/diff被拒由主线程补差分；60工具较广路径发现不冒称严格五文件独审。取舍reviews/rv1006-source-function-field-owner-disposition-20261008.md。7904合法预检16/74，补正新产品运行尚未开始；完整包/工作稿/更正报告仍未达。
+
+### 标题脚注功能包（前一快照，已实跑7904）
 
 664a实际核对提出标题脚注未核清。只读完整冻结清单证实标题编号→原文关系存在，但分包仅跟随owned项目行，不跟随已选context表头，alignment也漏编号映射。最小修复沿已有原生链接补同批只读原文，不扩大owned或临床要求；原文、来源范围及映射进入proof/scope-v3。前一scope-v2范围补充仍保留，未知、例外及当前对后续的真实依赖不能删除。四相连模块1242passed/110.10秒/exit0；顾问后仅合成测试增强，7相关例0.53秒/exit0，不累加。C03实际CodeBuddy/DeepSeek/max/session01a11d1e…9只读/父174.178秒/exit0/no fallback，未测试/临床；其额外服务函数读取和不采纳全量脚注深审建议如实见reviews/rv1006-header-note-closure-owner-disposition-20261008.md。源1319新15/75预检0调用/0写/DB保持，新API运行尚未开始。上游20完成不能跨材料机械复用，claims_complete=false。
 

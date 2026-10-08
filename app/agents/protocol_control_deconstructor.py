@@ -112,6 +112,8 @@ from .protocol_control_source_function import (
     SOURCE_FUNCTION_RECHECK_VERSION,
     SourceFunctionRecheckUnresolved,
     apply_source_function_recheck,
+    apply_source_function_field_repair,
+    build_source_function_field_repair_prompt,
     build_source_function_recheck_prompt,
     can_recheck_source_function,
 )
@@ -7051,7 +7053,9 @@ class ProtocolControlAgentRunner:
                   for attempt in attempts
                   if attempt.error_detail and attempt.error_detail.get("workflow_phase") == "source_scope_question_recheck"],
             ])
-            if any(attempt.error_detail and attempt.error_detail.get("workflow_phase") == "source_scope_question_recheck"
+            if any(attempt.error_detail and attempt.error_detail.get("workflow_phase") in {
+                "source_scope_question_recheck", "source_function_field_repair",
+            }
                    for attempt in attempts):
                 values.setdefault("repair_used", True)
             values.setdefault("source_front_target_review", front_target_review)
@@ -7202,9 +7206,72 @@ class ProtocolControlAgentRunner:
                     source_response = (source_batch_reader(prompt=source_prompt, batch=batch)
                                        if callable(source_batch_reader)
                                        else source_reader(prompt=source_prompt))
-                    source_interpretation = parse_product_source_interpretation(
-                        batch, source_response.text
-                    )
+                    source_text = source_response.text
+                    corrected_function_indexes: set[int] = set()
+                    while True:
+                        try:
+                            source_interpretation = parse_product_source_interpretation(batch, source_text)
+                            break
+                        except SourceInterpretationValidationError as function_issue:
+                            if (function_issue.code not in {
+                                "SOURCE_FUNCTION_UNSTATED", "SOURCE_FUNCTION_UNRESOLVED",
+                            } or source_repairs >= self._max_schema_repairs
+                                    or function_issue.statement_id in corrected_function_indexes):
+                                raise
+                            detail = {
+                                "workflow_phase": "source_function_field_repair",
+                                "code": function_issue.code,
+                                "statement_id": function_issue.statement_id,
+                                "structure_unit_id": function_issue.structure_unit_id,
+                                "json_path": function_issue.json_path,
+                                "source_refs": function_issue.source_refs,
+                                "retry_class": function_issue.retry_class,
+                                "affected_dependents": function_issue.affected_dependents,
+                                "precondition_sha256": _sha256(source_text),
+                            }
+                            repair_prompt = build_source_function_field_repair_prompt(
+                                batch, source_text, function_issue,
+                            )
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1, session_id=source_response.session_id,
+                                raw_output_sha256=_sha256(source_text), raw_output_text=source_text,
+                                raw_output_chars=len(source_text), outcome="schema_invalid",
+                                error_classes=[function_issue.code], error_detail=detail,
+                                issues=["来源用途字段不完整；只补正指定字段，不重读整组"],
+                            ))
+                            repair_response = None
+                            source_repairs += 1
+                            try:
+                                repair_response = source_reader(prompt=repair_prompt)
+                                source_text = apply_source_function_field_repair(
+                                    batch, source_text, function_issue, repair_response.text,
+                                )
+                            except Exception as repair_error:
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=repair_response.session_id if repair_response else "source-function-field-failed",
+                                    raw_output_sha256=_sha256(repair_response.text if repair_response else str(repair_error)),
+                                    raw_output_text=repair_response.text if repair_response else None,
+                                    raw_output_chars=len(repair_response.text) if repair_response else None,
+                                    outcome="schema_invalid" if repair_response else "transport_failed",
+                                    error_classes=[protocol_control_call_failure_code(repair_error)
+                                                   or ("SOURCE_FUNCTION_FIELD_REPAIR_TRANSPORT_FAILED"
+                                                       if repair_response is None else "SOURCE_FUNCTION_FIELD_REPAIR_INVALID")],
+                                    error_detail=detail, issues=[str(repair_error)[:1200]],
+                                ))
+                                return build_result(
+                                    status="需要核对", batch_id=batch.batch_id,
+                                    session_id=source_response.session_id, attempts=attempts,
+                                )
+                            corrected_function_indexes.add(function_issue.statement_id)
+                            repair_used = True
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1, session_id=repair_response.session_id,
+                                raw_output_sha256=_sha256(repair_response.text), raw_output_text=repair_response.text,
+                                raw_output_chars=len(repair_response.text), outcome="parsed",
+                                error_detail={**detail, "merged_sha256": _sha256(source_text)},
+                                issues=["单条用途提案仅合并授权字段；完整来源仍须核对"],
+                            ))
                     source_interpretation, anchor_ids = normalize_schedule_randomization_anchors(
                         batch, source_interpretation
                     )
@@ -7215,11 +7282,12 @@ class ProtocolControlAgentRunner:
                     attempts.append(ProtocolControlAgentAttempt(
                         attempt=len(attempts) + 1,
                         session_id=source_response.session_id,
-                        raw_output_sha256=_sha256(source_response.text),
-                        raw_output_chars=len(source_response.text),
-                        raw_output_text=source_response.text,
+                        raw_output_sha256=_sha256(source_text),
+                        raw_output_chars=len(source_text),
+                        raw_output_text=source_text,
                         outcome="parsed",
-                        issues=["有源陈述：实际回答，尚未采用"] +
+                        issues=["有源陈述：局部授权字段合并后的来源，尚未采用"
+                                if corrected_function_indexes else "有源陈述：实际回答，尚未采用"] +
                                (["日程表纯随机节点标记按原文结构保留为流程背景：" + ",".join(anchor_ids)]
                                 if anchor_ids else []) +
                                (["混合访视行错误共享范围按原列来源拆除：" + ",".join(mixed_scope_ids)]

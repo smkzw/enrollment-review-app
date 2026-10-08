@@ -10,11 +10,13 @@ from app.domain.contracts.protocol_controls import ProtocolControlDispositionBat
 from .protocol_control_source_interpretation import (
     SOURCE_TARGET_REVIEW_VERSION,
     SourceInterpretation,
+    SourceInterpretationValidationError,
     SourceStatementCoverage,
     SourceTargetReview,
     SourceTargetReviewItem,
     build_source_interpretation_prompt,
     normalize_source_excerpt,
+    parse_product_source_interpretation,
     source_requires_temporal_resolution,
     validate_source_interpretation,
     validate_source_target_review,
@@ -22,6 +24,89 @@ from .protocol_control_source_interpretation import (
 
 
 SOURCE_FUNCTION_RECHECK_VERSION = "phase5/source-function-recheck/v3"
+SOURCE_FUNCTION_FIELD_REPAIR_VERSION = "phase5/source-function-field-repair/v1"
+
+
+def _function_field_repair_source(batch, text, issue):
+    if (not isinstance(issue, SourceInterpretationValidationError)
+            or issue.code not in {"SOURCE_FUNCTION_UNSTATED", "SOURCE_FUNCTION_UNRESOLVED"}):
+        raise ValueError("只可补正已定位的来源用途字段")
+    payload = json.loads(text)
+    # This object is only a repair input, never an accepted interpretation.
+    interpretation = SourceInterpretation.model_validate(payload)
+    validate_source_interpretation(batch, interpretation)
+    index = issue.statement_id
+    if type(index) is not int or not 0 <= index < len(interpretation.statements):
+        raise ValueError("来源用途补正位置无效")
+    statement = interpretation.statements[index]
+    unit = next(unit for unit in batch.owned_units
+                if unit.structure_unit_id == statement.structure_unit_id)
+    raw = payload["statements"][index]
+    missing = "decision_functions" not in raw
+    unqualified = raw.get("decision_functions") == ["unclassified"] and not raw.get("unresolved")
+    if (issue.structure_unit_id != unit.structure_unit_id
+            or issue.source_refs != list(unit.source_span_ids)
+            or issue.json_path != f"/statements/{index}/decision_functions"
+            or issue.code != ("SOURCE_FUNCTION_UNSTATED" if missing else "SOURCE_FUNCTION_UNRESOLVED")
+            or not (missing or unqualified)):
+        raise ValueError("来源用途补正与原答或来源见证不一致")
+    context = [other for other in [*batch.owned_units, *batch.context_units]
+               if other.structure_unit_id != unit.structure_unit_id]
+    local = batch.model_copy(update={
+        "owned_units": [unit], "context_units": context,
+        "owned_structure_unit_ids": [unit.structure_unit_id],
+        "context_structure_unit_ids": [other.structure_unit_id for other in context],
+        "owned_source_span_ids": list(unit.source_span_ids),
+        "context_source_span_ids": list(dict.fromkeys(
+            span for other in context for span in other.source_span_ids)),
+    })
+    return payload, statement, local
+
+
+def build_source_function_field_repair_prompt(
+    batch: ProtocolControlDispositionBatch, text: str,
+    issue: SourceInterpretationValidationError,
+) -> str:
+    _, statement, local = _function_field_repair_source(batch, text, issue)
+    return (
+        build_source_interpretation_prompt(local)
+        + "\n本次只补正指定原陈述的 decision_functions 和 unresolved。"
+        "依据冻结原文和上下文说明实际用途，不重读或重写其他陈述。"
+        "不能确认用途时可保留 unclassified，但必须写出具体原文疑问；"
+        "原有 unresolved 每项疑问均须原样保留，本次不能删除或替换。"
+        "不得将接口错误称为研究者医学判断，也不得为了通过而默认 action 或 background。"
+        "只返回原 SourceInterpretation 格式：statements 恰一条、"
+        "units_without_statement 为空。除这两个字段外所有原字段必须原样保留，"
+        "不改摘录、时间、范围、例外、语气和先后关系。提案不是采用依据。\n"
+        + json.dumps({"repair_version": SOURCE_FUNCTION_FIELD_REPAIR_VERSION,
+                      "statement_index": issue.statement_id,
+                      "frozen_statement": statement.model_dump(mode="json")},
+                     ensure_ascii=False, sort_keys=True)
+    )
+
+
+def apply_source_function_field_repair(
+    batch: ProtocolControlDispositionBatch, text: str,
+    issue: SourceInterpretationValidationError, proposal_text: str,
+) -> str:
+    payload, original, local = _function_field_repair_source(batch, text, issue)
+    proposal = parse_product_source_interpretation(local, proposal_text)
+    if len(proposal.statements) != 1 or proposal.units_without_statement:
+        raise ValueError("来源用途补正只能返回指定的一条原陈述")
+    revised = proposal.statements[0]
+    if original.model_dump(mode="json", exclude={"decision_functions", "unresolved"}) != revised.model_dump(
+        mode="json", exclude={"decision_functions", "unresolved"},
+    ):
+        raise ValueError("来源用途补正不得改动摘录、范围、时点、例外或兄弟陈述")
+    if not set(original.unresolved) <= set(revised.unresolved):
+        raise ValueError("来源用途补正不得删除或替换原有疑问")
+    validate_source_interpretation(local, proposal)
+    # Preserve every raw sibling, including its explicit/omitted fields. The
+    # caller must parse and validate the complete merged answer again.
+    payload["statements"][issue.statement_id].update(
+        decision_functions=revised.decision_functions, unresolved=revised.unresolved,
+    )
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
 class SourceFunctionRecheckUnresolved(ValueError):

@@ -93,7 +93,10 @@ from app.agents.protocol_control_source_interpretation import (
     target_review_indexes,
     _time_words_cover_stage_label,
 )
-from app.agents.protocol_control_source_function import SOURCE_FUNCTION_RECHECK_VERSION
+from app.agents.protocol_control_source_function import (
+    SOURCE_FUNCTION_FIELD_REPAIR_VERSION,
+    SOURCE_FUNCTION_RECHECK_VERSION,
+)
 from app.agents.protocol_control_candidate_alignment import (
     NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
     SOURCE_CANDIDATE_ALIGNMENT_VERSION,
@@ -2062,6 +2065,7 @@ def _deep_component_identity(
                                        "native-table-visit-correspondence/v1",
                                        "reviewed-source-type-field-recovery/v1",
                                        "validated-snapshot-scoped-session/v1",
+                                       SOURCE_FUNCTION_FIELD_REPAIR_VERSION,
                                        NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION)),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}
@@ -4104,6 +4108,7 @@ def _execute_deep(
             "SOURCE_FUNCTION_RECHECK_SCHEMA_INVALID",
             "SOURCE_FUNCTION_RECHECK_INVALID",
             "SOURCE_FUNCTION_RECHECK_UNRESOLVED",
+            "SOURCE_FUNCTION_FIELD_REPAIR_TRANSPORT_FAILED", "SOURCE_FUNCTION_FIELD_REPAIR_INVALID",
             "SOURCE_TARGET_REVIEW_TRANSPORT_FAILED",
             "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED",
             "SOURCE_TARGET_FOCUSED_INVALID",
@@ -4129,6 +4134,7 @@ def _execute_deep(
                        and source_review_failure in {
                            "FLOW_TRANSPORT_FAILED",
                            "SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED",
+                           "SOURCE_FUNCTION_FIELD_REPAIR_TRANSPORT_FAILED",
                            "SOURCE_TARGET_REVIEW_TRANSPORT_FAILED",
                            "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED",
                            "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED",
