@@ -6,9 +6,10 @@
   "runtime_state": "active",
   "claims_complete": false,
   "current_resume_20261008": {
-    "base_head": "9d91bbd45a759747249db8aebd3936807f5cfb21",
-    "scope": "Native table time omission routed to existing single-source correction, then target re-review; exact native header-cell or complete column text; source/target gates unchanged",
-    "current_runtime": {"job_id": "42e5473962fe4a44929b1d96ea14926f", "state": "failed_final", "code": "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID", "source_head": "9d91bbd45a759747249db8aebd3936807f5cfb21", "physical_calls": 7, "seconds": 199.18211841699667, "completed": 16, "failed_step": "deep_0017", "queued_unexecuted": 73, "checkpoint_id": "894d0a0a20da4060838a7364608991ee", "first_cause": "Native marked-column time absent from source interpretation; source-target review correctly rejects undeclared time", "old_jobs_and_protected_unchanged": true},
+    "base_head": "065e8544",
+    "scope": "Source dependency correction precedes the same single target repair regardless of first invalid field; only previously unscoped exact native header text qualifies; adoption gates unchanged",
+    "current_runtime": {"job_id": "7c5d744d6ad341bc9f6b4ece4d751f48", "state": "failed_final", "code": "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID", "source_head": "065e8544", "physical_calls": 2, "seconds": 116.30410683399532, "completed": 16, "failed_step": "deep_0017", "queued_unexecuted": 73, "checkpoint_id": "0f163f5f8b3040d29208ef3938510383", "first_cause": "Missing unresolved-aspects field reported before undeclared native time; code-gated scope repair did not run before the only target repair", "old_jobs_and_protected_unchanged": true},
+    "preceding_runtime": {"job_id": "42e5473962fe4a44929b1d96ea14926f", "state": "failed_final", "source_head": "9d91bbd45a759747249db8aebd3936807f5cfb21", "physical_calls": 7, "seconds": 199.18211841699667, "completed": 16, "queued_unexecuted": 73},
     "prior_runtime": {"job_id": "53021ad0f43d4ea9a587ba977fadc543", "state": "failed_final", "code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID", "physical_calls": 36, "seconds": 1129.7735104169697, "completed": 19, "failed_steps": ["deep_0017", "deep_0021"], "unread": 69, "old_jobs_and_protected_unchanged": true},
     "tests": {
       "c": {"passed": 1125, "seconds": 101.66, "exit_code": 0, "junit": "artifacts/rv1006-source-citation-stop-connected-20261008-v1.xml", "before_native_note_patch": true},
@@ -28,7 +29,8 @@
     "owner_disposition": "reviews/codex_conference_rv1006-native-table-consumer-review-20261008_review.md",
     "native_scope_conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session": "01a11c53-1d24-71c2-8a28-568da7aaea2e", "duration_seconds": 79.969, "exit_code": 0, "fallback": false, "owner_silent_120min_completion_wait": true, "same_session_not_new_model_independence": true, "report": "runs/conference/rv1006-native-table-consumer-review-20261008/native_scope_recovery_followup.md", "owner_disposition": "Adopt subword risk with physical-cell text equality, not textual split; limit upstream no-header claim because original context/table_context exist; no clinical approval"},
     "native_scope_preflight": {"private_record": "rv1006-native-scope-recovery-preflight-20261008-v1.json", "source_job": "42e5473962fe4a44929b1d96ea14926f", "reusable": 19, "resume_partial": 2, "refresh_required": 69, "native_time_selects_scope_recheck": true, "database_unchanged": true, "database_writes": 0, "model_calls": 0},
-    "runtime_execution": "native_table_consumer_api_attempt_failed; native_scope_recovery_attempt_not_started",
+    "native_scope_ordering": {"validator_version": "native-table-scope-recovery/v2", "selected_passed": 15, "selected_seconds": 1.16, "connected_passed": 1218, "connected_seconds": 102.41, "junit": "artifacts/rv1006-native-scope-ordering-connected-20261008-v1.xml", "exit_code": 0, "new_clinical_policy": false, "new_retry_allowance": false, "prior_conference_did_not_review_this_ordering": true},
+    "runtime_execution": "native_scope_recovery_v1_failed; source_dependency_ordering_v2_connected_checks_passed",
     "formal_joint_publication": false,
     "new_current_node_report": false
   },

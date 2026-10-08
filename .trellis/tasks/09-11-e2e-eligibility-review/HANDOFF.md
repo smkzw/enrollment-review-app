@@ -1,4 +1,4 @@
-# HANDOFF｜1006V1｜原生表头时间来源恢复，继续执行
+# HANDOFF｜1006V1｜先核来源依赖再局部修复，继续执行
 
 2026-10-08，用户已解除暂停；Goal实查active，Trellis in_progress，execution_paused_by_user=false。窗口未达，claims_complete=false。本记录是相连功能包里程碑，不是暂停。只维护本HANDOFF、implement当前表及review_index；历史运行在implement附录和Git保留，不按旧“当前/暂停”恢复。
 
@@ -10,12 +10,12 @@
 |---|---|
 | 唯一工作树 | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；.trellis/tasks/09-11-e2e-eligibility-review |
-| 本功能包基础代码 | 9d91bbd45a759747249db8aebd3936807f5cfb21；五个源码/测试补丁及同名审阅提示明确冻结 |
-| 当前终态/上游 | 42e5473962fe4a44929b1d96ea14926f，failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID；声明上游53021ad0f43d4ea9a587ba977fadc543 |
-| 失败检查点 | 17=894d0a0a20da4060838a7364608991ee；10累计attempt不等于7新调用。上游21=328f986fdeba472c9009f457bd1bd269；原答/来源/草稿/累计账本保留，不改旧终态 |
+| 本功能包基础代码 | 065e8544；现最小排序补丁见源码/测试显式差异，不把先前独审当本增量审阅 |
+| 当前终态/上游 | 7c5d744d6ad341bc9f6b4ece4d751f48，failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID；声明上游42e5473962fe4a44929b1d96ea14926f |
+| 失败检查点 | 17=0f163f5f8b3040d29208ef3938510383；4累计attempt不等于2新调用。上游21=328f986fdeba472c9009f457bd1bd269；原答/来源/草稿/累计账本保留，不改旧终态 |
 | 产品模型 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high、65536输出；产品harness直接访问端点 |
 | 当前隔离库 | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 最新已执行产物 | 同上根目录/rv1006-native-table-consumer-recovery-api-20261008-v1；7新物理调用/199.182118秒/exit3，源码9d91bbd4，不归到后续补丁 |
+| 最新已执行产物 | 同上根目录/rv1006-native-scope-recovery-api-20261008-v1；2新物理调用/116.304107秒/exit3，源码065e8544，不归到后续排序补丁 |
 | 私有当前预检 | 同上根目录/rv1006-native-table-consumer-preflight-20261008-v2.json；19reusable/2resume_partial/69refresh，0调用/0写/DBhash保持 |
 | 外部可复查范围 | Git源码、合成测试、净化工程报告/索引；原件、DB、实际临床提示/原答与截图仅本机可读，不提交，hash不证明临床含义 |
 
@@ -34,6 +34,10 @@
 病例根/准备副本：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-prepared-review-current-node-20261008-v1/data；subject rv29-preparation-20261001，筛选episode e8615813d75b452489579ff9606781b4。
 
 ## 3. 当前首错与最小修复
+
+065e实际运行揭示前一修复未执行：初答先报UNRESOLVED_ASPECTS_MISSING，同答已有真实标题格时点；一次目标纠正后才报SOURCE_TIME_UNGROUNDED，同条机会已用完。只按错误代码选择scope修正错误地依赖校验顺序。现来源scope/stage/time均缺且核对时点恰为原生完整标题格/列时，先以原有scope修正核依赖，再使用原来的一次目标修正；既有范围不改写、假时点不送此路，不加调用上限/重试次数，不放宽源/目标门。15项窄窗包含这个真实顺序的合成复现及非原生时间反例通过，集中检查按implement记录。控制流修订由所有者直接做，先前C03报告仍仅覆盖当时版本。validator标记升v2，旧来源、Schema和编译器身份不反算。
+
+以下v1功能包结果为历史，不能据其“未执行”重跑原目录：
 
 9d91真实运行已送达原生表格位置，出现新的明确首错：17第5条来源解释scope/stage/time_words全空，但唯一标记格的完整原生表头明确给出时点。核对者保留该时间被SOURCE_TIME_UNGROUNDED正确拒绝；不能删时间让错误解释通过。native_schedule_time_excerpt_is_grounded仅定位已有scope修正入口，要求整行摘录、全部标记列有源且无访视/标记脚注未决，完整原生标题格/整列标题等值，不从“期”等子串推断范围。模型仍须单条提出范围/阶段/时间、通过原来源门、再核目标；兄弟/动作/用途/例外不改。共享source_repairs限制与同条一次修正不清零，故障/重复错误保留草稿，不自动采用。
 
@@ -75,11 +79,11 @@
 
 支持的解释：来源未完整送达与宿主补入条件相互放大，重试不等于更多医学信息；先无调用复现、补实际来源，再局部重验，比反复整本新作业更有据。替代解释：模型仍可能在新增上下文后遗漏临床时期，不能以此次软件测试断言模型已解决。
 
-仍未证明：最新scope修订后17/21实际恢复、完整90组、同源共同发布、真实新工作稿与更正后新报告、独立留出/Q3/恢复验收。上游完成19和当前完成16分开。协议库尚无project/subject，病例准备副本是旧81组件项目；最终须经合法首次发布/新个例上传或既有有据迁移入口汇合，不能SQL拼身份/借旧规则验收。C摘录含相邻动作时可能保守待核；列标题脚注/拆表/缺续行有残余范围缺口。原答及位置不得以schema通过代替医学核实。
+仍未证明：v2排序修订后17/21实际恢复、完整90组、同源共同发布、真实新工作稿与更正后新报告、独立留出/Q3/恢复验收。上游完成19和当前完成16分开。协议库尚无project/subject，病例准备副本是旧81组件项目；最终须经合法首次发布/新个例上传或既有有据迁移入口汇合，不能SQL拼身份/借旧规则验收。C摘录含相邻动作时可能保守待核；列标题脚注/拆表/缺续行有残余范围缺口。原答及位置不得以schema通过代替医学核实。
 
 ## 6. 连续接续（不是暂停点）
 
-1. 当前相连测试及加固通过，冻结受限源码及显式线路，通过既有control-executions API从42e54739…合法新建；新OUT不得覆盖。1–16/18–20须现场核来源链与当前门后复用，17草稿和21来源解释接续；关闭旧未决冻结选项，保留原账本和终态，不把前置计划当执行成果。
+1. 完成当前排序包相连验证，冻结源码及显式线路，通过既有control-executions API从7c5d744d…合法新建；新OUT不得覆盖。1–16/18–20须现场核来源链与当前门后复用，17草稿和21来源解释接续；关闭旧未决冻结选项，保留原账本和终态，不把前置计划当执行成果。
 2. 按1006窗口保留局部真实未决和能力缺口，不让独立结果饥饿，但已知错义/未读来源不能换标签发布。失败两次无新信息停止该分支，推进可独立节点；不复活旧Job，不重置历史调用。
 3. 同源完整采用合同成立后接当前节点工作稿→确切原件→UI有源更正/补证→相关重算→新旧结果。窗口完成先回交，不扩模型横评/新框架。
 

@@ -8153,12 +8153,16 @@ class ProtocolControlAgentRunner:
                                         if unit.structure_unit_id == source_interpretation.statements[invalid_index].structure_unit_id
                                     )
                                     native_time_recheck = (
-                                        review_error.code == "SOURCE_TIME_UNGROUNDED"
+                                        source_interpretation.statements[invalid_index].scope_quote is None
+                                        and source_interpretation.statements[invalid_index].affected_stage is None
+                                        and not source_interpretation.statements[invalid_index].time_words
                                         and native_schedule_time_excerpt_is_grounded(
                                             batch, source_interpretation.statements[invalid_index],
                                             overclaimed.source_time_excerpt,
                                         )
                                     )
+                                    # Repair the source dependency before spending the one target repair,
+                                    # even when another invalid target field is reported first.
                                     if review_error.code == "SOURCE_TIME_INCOMPLETE" or native_time_recheck:
                                         scope_corrector = getattr(transport, "correct_source_scope", None)
                                         if not callable(scope_corrector) or source_repairs >= self._max_schema_repairs:

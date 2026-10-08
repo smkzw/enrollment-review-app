@@ -2057,7 +2057,7 @@ def _deep_component_identity(
                                        SOURCE_COVERAGE_VALIDATION_VERSION,
                                        SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
                                        "native-row-source-normalization/v1",
-                                       "native-table-scope-recovery/v1")),
+                                       "native-table-scope-recovery/v2")),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}
         ).get("deep"),
