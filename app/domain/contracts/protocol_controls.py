@@ -2558,6 +2558,9 @@ class ProtocolControlDispositionBatch(Phase5ControlModel):
     table_context_reading_bounds: dict[str, TableContextReadingBound] = Field(
         default_factory=dict, exclude_if=lambda value: not value,
     )
+    table_footnote_context_links: dict[str, dict[str, list[str]]] = Field(
+        default_factory=dict, exclude_if=lambda value: not value,
+    )
     owned_structure_unit_ids: list[str] = Field(min_length=1)
     context_structure_unit_ids: list[str] = Field(default_factory=list)
     owned_source_span_ids: list[str] = Field(min_length=1)
@@ -2618,6 +2621,20 @@ class ProtocolControlDispositionBatch(Phase5ControlModel):
             raise ValueError("context_structure_unit_ids 必须与 context_units 顺序和身份一致")
         if set(owned_ids) & set(context_ids):
             raise ValueError("同一批次的 owned/context 结构单元不得重叠")
+        if not set(self.table_footnote_context_links) <= set(owned_ids):
+            raise ValueError("表格脚注引用只能属于本批原文单元")
+        available = {unit.structure_unit_id: unit for unit in (*self.owned_units, *self.context_units)}
+        for unit_id, notes in self.table_footnote_context_links.items():
+            if available[unit_id].table_context is None or not notes:
+                raise ValueError("脚注引用缺少表格来源或编号")
+            for number, linked_ids in notes.items():
+                if (not number.isdigit() or int(number) < 1 or not linked_ids
+                        or len(linked_ids) != len(set(linked_ids))
+                        or not set(linked_ids) <= set(available)
+                        or unit_id in linked_ids):
+                    raise ValueError("脚注编号与只读来源单元无法闭合")
+                if any(available[item].table_context is not None for item in linked_ids):
+                    raise ValueError("表后脚注不得引用其他表格项目")
         if not set(self.table_context_reading_bounds) <= set(owned_ids):
             raise ValueError("相邻原文读取范围只能属于本批原文引言")
         for intro_id, bound in self.table_context_reading_bounds.items():
@@ -2935,6 +2952,14 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
             raise ValueError("深析批次 owned 结构单元不得重复")
         for batch in self.batches:
             actual_context_ids = set(batch.context_structure_unit_ids)
+            note_ids = {
+                context_id
+                for notes in batch.table_footnote_context_links.values()
+                for linked_ids in notes.values()
+                for context_id in linked_ids
+            }
+            if not note_ids <= expected_set:
+                raise ValueError("表格脚注只读来源越出完整清单")
             expected_context_ids = {
                 context_id
                 for owned_id in batch.owned_structure_unit_ids
@@ -2945,7 +2970,7 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
                 context_id
                 for owned_id in batch.owned_structure_unit_ids
                 for context_id in self.related_context_ids_by_owned.get(owned_id, ())
-            }
+            } | note_ids
             expected_context_ids -= set(batch.owned_structure_unit_ids)
             def table_row_key(unit: ProtocolStructureUnit) -> tuple[str, int] | None:
                 if unit.table_context is None:
@@ -2972,7 +2997,7 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
                     and (row_key in owned_rows or 0 <= row_key[1] < 5)
                 ):
                     table_context_ids.add(unit.structure_unit_id)
-            if actual_context_ids & (non_control_ids - table_context_ids):
+            if actual_context_ids & (non_control_ids - table_context_ids - note_ids):
                 raise ValueError("深析批次 context_units 不得包含非表格前置语境的 non_control 单元")
             if actual_context_ids != expected_context_ids | (actual_context_ids & table_context_ids):
                 raise ValueError("深析批次上下文必须精确闭合到发现阶段声明")

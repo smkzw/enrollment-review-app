@@ -5914,7 +5914,9 @@ def test_source_target_addition_enters_bounded_repair_without_accepting_unchange
 
 
 @pytest.mark.parametrize("restored", [False, True])
-def test_cited_but_unexpressed_candidate_does_not_request_duplicate_insert(restored: bool) -> None:
+def test_cited_but_unexpressed_candidate_does_not_request_duplicate_insert(
+    restored: bool,
+) -> None:
     batch = _batch()
     inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
@@ -5970,6 +5972,53 @@ def test_cited_but_unexpressed_candidate_does_not_request_duplicate_insert(resto
         assert failure.session_id == "wire"
         assert failure.raw_output_chars is None
         assert failure.raw_output_text is None
+
+
+def test_literal_action_citation_does_not_claim_temporal_coverage():
+    from app.agents.protocol_control_deconstructor import _literally_cited_action_candidates
+
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[0].excerpt = "筛选期、基线期：年龄至少18岁"
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁",
+                        "force": "required", "time_words": ["筛选期", "基线期"],
+                        "scope_quote": "筛选期、基线期"}],
+        "units_without_statement": ["su-02"],
+    })
+    wire = _wire(candidate=_candidate())
+    coverage = source_statement_coverage(batch, inventory, wire)[0]
+    assert coverage.status == "candidate_linked"
+    assert coverage.action_candidate_indexes == []
+    assert _literally_cited_action_candidates(batch, inventory.statements[0], wire) == [0]
+
+
+@pytest.mark.parametrize("mismatch", ["sibling_quote", "source_span", "unit"])
+def test_duplicate_insert_guard_requires_same_literal_action_and_source(mismatch):
+    from app.agents.protocol_control_deconstructor import _literally_cited_action_candidates
+
+    batch = _batch().model_copy(deep=True)
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁",
+                        "force": "required", "time_words": []}],
+        "units_without_statement": ["su-02"],
+    })
+    candidate = _candidate().model_copy(deep=True)
+    wire = _wire(candidate=candidate)
+    assert _literally_cited_action_candidates(batch, inventory.statements[0], wire) == [0]
+    if mismatch == "sibling_quote":
+        inventory.statements[0].quoted_text = "完成肺功能检查"
+        batch.owned_units[0].excerpt += "；完成肺功能检查"
+    elif mismatch == "source_span":
+        candidate.source_span_ids.append("span:02")
+        for group in candidate.obligation_expression.groups:
+            for atom in group.atoms:
+                atom.source_span_ids = ["span:02"]
+    else:
+        candidate.source_structure_unit_ids = ["su-02"]
+    wire = _wire(candidate=candidate)
+    assert _literally_cited_action_candidates(batch, inventory.statements[0], wire) == []
 
 
 def test_source_candidate_alignment_closes_only_verified_existing_candidate() -> None:

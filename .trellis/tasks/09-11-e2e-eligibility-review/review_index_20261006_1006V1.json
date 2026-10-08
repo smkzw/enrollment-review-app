@@ -6,12 +6,22 @@
   "runtime_state": "active",
   "claims_complete": false,
   "current_resume_20261008": {
-    "base_head": "ed4f5c4a0bb997649e40395733f379a7a8025d96",
-    "scope": "Single source insert delta for official/procedure-linked statements; host keeps original candidates and target links; no gate relaxation",
-    "tests": {"passed": 1121, "seconds": 135.88, "exit_code": 0, "junit": "artifacts/rv1006-source-insert-delta-connected-20261008-v3.xml"},
-    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session": "01a11bf8-22f7-7c3a-8a0e-7a2ab312e3a7", "seconds": 328.64, "exit_code": 0, "fallback": false, "limits": "Read-only code review; Bash diff denied; owner verified diff; no clinical or test verification"},
-    "current_readonly_preflight": {"reusable": 16, "refresh_required": 74, "model_calls": 0, "database_writes": 0, "database_unchanged": true},
-    "runtime_execution": "not_started",
+    "base_head": "4e5edf3c2d25a3bc990711028017c81ebbdf74ca",
+    "scope": "Literal per-statement insertion stop; frozen native table-note readonly context; same preflight/execution, scoped reuse; compact actual evidence UI",
+    "prior_runtime": {"job_id": "e5c95389e6c84bbb944e14302692cfd0", "state": "failed_final", "code": "PROTOCOL_CONTROL_SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED", "physical_calls": 12, "seconds": 509.42476808297215, "completed": 16, "unread": 73, "old_jobs_and_protected_unchanged": true},
+    "tests": {
+      "c": {"passed": 1125, "seconds": 101.66, "exit_code": 0, "junit": "artifacts/rv1006-source-citation-stop-connected-20261008-v1.xml", "before_native_note_patch": true},
+      "b": {"passed": 1135, "seconds": 116.31, "exit_code": 0, "junit": "artifacts/rv1006-native-note-context-connected-20261008-v2.xml"},
+      "first_b": {"passed": 1130, "failed": 3, "seconds": 114.40, "causes": "Owner assertion placement; exact closure missing native note context"},
+      "post_wording": {"passed": 31, "seconds": 0.46, "exit_code": 0},
+      "frontend": {"passed": 60, "seconds": 10.86, "exit_code": 0, "production_build_exit_code": 0},
+      "windows_not_additive": true
+    },
+    "conference": {"route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session": "01a11c13-8595-7ee1-b8cf-9efb0e066a4e", "initial_seconds": 158.46, "followup_seconds": 228.167, "exit_code": 0, "fallback": false, "owner_silent_120min_completion_wait": true, "limits": "Source-only, no tests/clinical. Followup18 tool calls/0 parsed result count; owner verifies actual reasons"},
+    "current_readonly_preflight": {"reusable": 15, "refresh_required": 75, "model_calls": 0, "database_writes": 0, "database_unchanged": true, "reasons": {"same_restricted_source_and_current_gate": 1, "same_material_and_current_gate": 14, "planning_material_changed": 1, "new_or_incomplete_batch": 74}, "changed_completed_step": "deep_0016"},
+    "browser": {"browser": "Ego Lite", "space": 147, "mode": "actual non-Mock readonly prepared case", "viewports": ["1920x1080", "2560x1440", "3840x2160"], "workspace_top_px": 323, "horizontal_overflow": false, "actions": ["select source", "original text switch", "zoom and fit", "return correct subject"], "owned_server_port": 63305, "owned_server_exit_code": 143, "full_Q3": false, "clinical_writes": 0},
+    "owner_disposition": "reviews/rv1006-source-context-loop-owner-disposition-20261008.md",
+    "runtime_execution": "prior_api_attempt_failed; new_native_note_attempt_not_started",
     "formal_joint_publication": false,
     "new_current_node_report": false
   },

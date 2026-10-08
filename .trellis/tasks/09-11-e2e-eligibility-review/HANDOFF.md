@@ -1,73 +1,72 @@
-# HANDOFF｜1006V1｜已恢复，来源限定增量补入修订
+# HANDOFF｜1006V1｜原生脚注读取与防重复补入已接线，继续执行
 
-现行状态：2026-10-08用户已授权恢复1006V1，Goal实查active；Trellis in_progress，execution_paused_by_user=false。本窗口未达，claims_complete=false。补丁只处理当前首错：一条有源遗漏且已关联官方/流程时使用现有单候选增量；delta与整包提示区分，宿主保留兄弟/原目标并完整校验，不自动采用。相连三个模块1121passed/135.88s/exit0，5既有SWIG；artifacts/rv1006-source-insert-delta-connected-20261008-v3.xml。C03实际CodeBuddy/DeepSeek/max、328.64s、exit0/no fallback；顾问无Bash差异访问及临床/测试验证，所有者已核差异，具体取舍见reviews/rv1006-source-insert-delta-owner-disposition-20261008.md。当前只读预检16reusable/74refresh，不把旧18/1/71计划沿用；17partial与18/19旧修订因身份变化未获复用证明。旧Job/失败回执/原件保持；合法新作业尚未运行。以下暂停段落及结果是恢复起点历史，不作为当前暂停指令。
+2026-10-08，用户已解除暂停；Goal实查active，Trellis in_progress，execution_paused_by_user=false。窗口未达，claims_complete=false。本记录是相连功能包里程碑，不是暂停。只维护本HANDOFF、implement当前表及review_index；历史运行在implement附录和Git保留，不按旧“当前/暂停”恢复。
 
-## 1. 一句话回答用户
+## 1. 用户动作与身份
 
-已经保存已完成的读取、失败组的草稿与原答，并确认没有继续运行的本任务；下次可以核验后复用成功部分、从当前失败处接续。**尚未在完整官方＋跨章要求下生成本例工作稿，也没有更正后的新审核报告。**
+真实资料页已改善：能在紧凑抬头下连续查看24页原图、切换文件和原始文字、缩放并返回正确受试者。尚未在完整新官方＋跨章要求下生成该例工作稿，也未完成更正后的新审核报告。
 
 | 身份 | 实际值 |
 |---|---|
 | 唯一工作树 | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；.trellis/tasks/09-11-e2e-eligibility-review |
-| 当前产品冻结源码 | 56cf740a17ac2f6c4d79a8a664392bb58e37c6c5，已普通commit/push；其后本次仅暂停文档/元数据 |
-| 当前失败Job/上游 | add37084f6704cbc9421e8715f7ee6c6；声明上游dc6fb4710dc44067b76848116139564d，不搜索历史挑答案 |
-| 当前末检查点 | 55e130a544214d899d81ce4493c61873；sha256=609bd5e39d711fa5b1b20a28fdd0adf78ceb175db9f24616d2c534ea89bfc670 |
-| 产品模型线路 | 官方OmniRouter/cms-router/glm-5.3-flash/high；本次跨章Ollama cloud/deepseek-v4.1-flash/high，65536输出预算，直接产品harness，不用个人CLI读取病例 |
-| 当前隔离数据库 | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 当前私有产物 | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-native-row-link-recovery-api-20261008-v1 |
-| 外部可审阅/本机边界 | Git源码、合成测试、净化review_index及工程顾问报告可审阅；tmp原件/DB/模型原答/截图仅本机可读，未公开提交，hash不是临床正确证明 |
+| 本功能包基础代码 | 4e5edf3c2d25a3bc990711028017c81ebbdf74ca；当前修改清单以Git受限提交为准，不追文档自身hash |
+| 当前终态/上游 | e5c95389e6c84bbb944e14302692cfd0，failed_final；声明上游add37084f6704cbc9421e8715f7ee6c6 |
+| 末检查点 | d8b1537c971144cbaa27dd2f200e655b；原答、partial_wire、5份来源疑问及14累计attempt记录保留，非14新增调用 |
+| 产品模型 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high、65536输出；产品harness直接访问端点 |
+| 当前隔离库 | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
+| 最新已执行产物 | 同上根目录/rv1006-source-insert-delta-recovery-api-20261008-v1；12物理调用/509.424768秒/exit3 |
+| 私有预检/审计 | 同上根目录/rv1006-native-note-context-preflight-20261008-v1.json、rv1006-native-note-context-audit-20261008-v1.json |
+| 外部可复查范围 | Git源码、合成测试、净化工程报告/索引；原件、DB、实际临床提示/原答与截图仅本机可读，不提交，hash不证明临床含义 |
 
-五分钟入口：本HANDOFF → implement.md文头当前表 → delivery_1006V1/03_ACCEPTANCE.md → review_index_20261006_1006V1.json → 当前产物prepare_record.json、execute_record.json、pause_audit.json。只按当前首错展开对应源码，不重读全部历史。
+五分钟入口：本HANDOFF → implement当前表 → delivery_1006V1/03_ACCEPTANCE.md → review_index_20261006_1006V1.json → 新合法作业prepare/execute回执。不要重读全部历史，不复活旧失败Job。
 
-## 2. 同一用户流程的结果
+## 2. 同一流程的实况
 
-| 节点 | 已证结果与范围 | 未达 |
+| 用户节点 | 已证 | 未达 |
 |---|---|---|
-| 完整要求快照/同源采用 | 官方Job1153e25b4eba40db964202a1c3ed07c3草稿修订21，23父条/86组件/141谓词，草稿publishable；85发现与冻结90组计划已保存 | publishable不是共同发布。当前16组completed、17failed、73queued；scope/hydrate/gate依赖失败，未有完整跨章目录或新共同采用 |
-| 资料完成/事实资格/Profile | 继承5份24页/14组来源处置及实际保存恢复；最后已记录407事实/40事件/11暴露，与458候选/32资格候选→30合格事实/426受限的分母和库版本不同，不能相加 | 本次没有重新核病例或授予资格。584疑问/5冲突/130资料期望是旧记录，不是本次新QC；全部临床QC和新要求消费未完成 |
-| 工作稿/原件导航 | 正式Ego页面、病例原图和源读数可定位；行政噪声收起、宽屏空白修复已局部验证 | 新完整141谓词＋跨章包的当前节点工作稿未生成；旧81组件/0controls病例库不能冒充新链 |
-| 更正/新旧结果 | 已实际UI做一处有源描述更正，Profile3→4，旧记录hash保留 | 该更正0规则关联，不能称新审核报告已重算；完整“更正/补证→相关重算→新旧审核结果”仍未验收 |
-| 共享首屏接入 | 子系统来源绑定/返回上下文184bdb60已push；临床正文收起8acd30c7已push，未修改医学经理工作台首屏 | 合成接入验证不等于真实跨子系统绑定及Q3；不重复派发已完成包 |
+| 完整有源要求包 | 内置DOCX官方Job1153e25b4eba40db964202a1c3ed07c3草稿修订21，23父条/86组件/141谓词，publishable；85发现/90深审计划冻结 | 最新实跑16完成、17失败、73未读，scope/hydrate/gate依赖失败。publishable不是共同发布 |
+| 资料与事实 | 继承5文件24页/14组实际保存，458候选→407事实/40事件/11暴露；32资格候选关联30合格事实、426受限 | 不同分母非准确率。手写对象/数字位置仍有具体未决，新完整要求消费未证，不授予自动事实采用 |
+| 工作稿与原件 | 既有冻结计算/资格消费者，Ego真实原件导航；已收紧重复抬头及大空白 | 病例准备副本仍旧81组件/0controls；旧REVIEW_SOURCE_POLICY_NOT_READY不证明新141谓词失败；完整新工作稿未生成 |
+| 更正与历史 | 正式UI一次有源描述更正、Profile3→4、旧记录hash保持 | 该更正0规则关联；不是新完整审核结果重算，新旧审核报告闭环尚未达 |
+| 共享首屏适配 | 184bdb60已提交入排侧来源绑定/返回；共享首页未改 | 合成接入不等于真实跨系统与Q3，不重复派工 |
 
-病例私有根：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2。最后工作稿准备副本rv1006-prepared-review-current-node-20261008-v1/data；subject rv29-preparation-20261001，episode e8615813d75b452489579ff9606781b4。该准备失败为旧81组件/89未核谓词的REVIEW_SOURCE_POLICY_NOT_READY，不能说新141谓词失败。上述病例数值是前已保存记录，本轮暂停只审当前方案Job及身份，未全量重算病例。
+病例根/准备副本：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-prepared-review-current-node-20261008-v1/data；subject rv29-preparation-20261001，筛选episode e8615813d75b452489579ff9606781b4。
 
-## 3. 本轮处理的阻断与当前第一处失败
+## 3. 本功能包首错与修复
 
-| 问题 | 实际证据/最小修订 | 进度边界 |
+1. 已引用动作因时期未证明而没有action_candidate_indexes，原防重复插入条件永远不满足。C最小修复以同单元、原span交集及逐字摘录限定候选引用，进入已有SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED；不把引用当临床已表达，兄弟不能仅凭同单元被拦。
+2. 表格引用的真实脚注未送给来源读取。B复用已验证原生snapshot及表后编号解析，将编号→原单元关系冻结于Job，预检和closure共用规划；脚注只读、自己的发现处置不变，不借另一流程项解释，不改覆盖清单/旧原件。
+3. 旧新版兼容看实际batch材料，而非新字段导致全量失效。真实只读预检15可复用/75需读取：已完成1–15重验通过，16新增脚注重读，17起未完整。原因14完整材料重验、1受限重验、1规划变化、74未完成；没有整体prompt/component失效。
+4. 资料页收紧已读状态/重复抬头/孤立操作空白，保留失败与待核提醒；项目名称省略但完整title可查，没有临床门变更。
+
+具体所有者取舍、残余与调用证据：reviews/rv1006-source-context-loop-owner-disposition-20261008.md。不新增框架、疾病阈值、A/B伪造或采用捷径。
+
+## 4. 同版本验证与独审边界
+
+| 验证 | 实际结果 | 范围 |
 |---|---|---|
-| 已核来源疑问反复重读、来源改变沿用旧答 | 9ac573ad保存私人source_scope_question_history、失败partial_wire；当前来源与见证相等才免重核，变更撤销目标旧结论，兄弟保留 | 旧4＋实际新1=5份疑问历史保留，不能换Job/目录清零 |
-| 共用脚注使另一流程项目被误称已覆盖 | 56cf740a复用原生行标签逐成员位置证明，目标必须包含本行项目来源；validator source-native-procedure-row-validation/v2；仅实际错链条目附负诊断 | 共用时间/脚注不证明动作对象；程序不自动补临床要求，不放宽采用 |
-| 当前第17组补入失败 | add37084由正确对应核对转入SOURCE_TARGET_ADDITIONAL_REQUIREMENT，再有SOURCE_INSERT_INVALID；新6物理调用，累积attempt记录10 | 来源解释、目标核对和partial_wire均保存；新项尚未合法组装，不能以此称已覆盖或研究者待判断；暂停时未继续修补 |
+| C三原模块 | 1125passed/101.66秒/exit0，5SWIG，artifacts/rv1006-source-citation-stop-connected-20261008-v1.xml | 在B之前，不冒称B末版 |
+| B五相连模块 | 1135passed/116.31秒/exit0，5SWIG，artifacts/rv1006-native-note-context-connected-20261008-v2.xml | 编号/续行/科学计数/背景/越界、实际payload→closure→preflight同hash及历史不变；不是全临床验收 |
+| 末说明修订 | test_protocol_control_generalization.py 31passed/0.46秒/exit0 | 改脚注归属说明，未无谓重跑全库 |
+| B首窗 | 1130pass/3fail/114.40秒 | 两测试尾断言误放、桥接合同未接context，修断言位置和合同，危险反例未删 |
+| 前端 | 四组件模块60passed/10.86秒；TS+正式Vite build exit0 | 既有chunk警告，非全部前端或Q3 |
+| 真实预检/审计 | 0模型/0写，DBhash保持；6763/9997来源提示字符、10885/14973 UTF-8字节，token未知 | 不以字符估算代用量，不宣称新版已执行 |
+| 独审 | CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max，session01a11c13-8595-7ee1-b8cf-9efb0e066a4e，初158.46秒、续228.167秒/exit0/no fallback | 120min完成等待，主线程静默；仅源码、无临床/测试。续轮18工具/解析结果0，不能称医学批准 |
+| Ego Lite | space147真实非Mock资料页，1920×1080/2560×1440/3840×2160，顶323px，均无横向溢出；选择来源、全文开关、缩放、返回正确个例 | 临床截图仅本机；旧规则准备库，不代表完整新链/签发。专用只读63305已TERM、session66572 exit143，共享服务不动 |
 
-原dc6：2调用119.24971979秒，16completed、17未决、73queued；17来源疑问已清。新add37084：6调用294.36549620795995秒，16completed、17结构失败、73queued。两个作业成本分开，不把preflight记成模型零成本的整项完成，不把累计attempt数当新增调用数。
+首次B预检contract错误、私有脚本PYTHONPATH/import错误、Ego过时元素/不支持选项单列工程诊断，不归因模型。有效历史测试不删除，重叠结果不相加。
 
-## 4. 验证、停止和恢复证据
+## 5. 反思与残余
 
-- 最新相连源码检查：三个模块选择窗49passed/985deselected/1.83s/exit0，5既有SWIG警告；artifacts/rv1006-native-procedure-row-connected-20261008-v4.xml。正同行、错同行共脚注、hash定位、格内分隔、保存证明拒绝、局部增量和兄弟保护。初v1/v2/v3失败和改动归因见implement，不累加通过总数，不称全库或临床验收。
-- 代码冻结与真实运行：prepare_record.json记录56cf740a及实际app文件hash；SDK/transport重试0、step attempt1、schema repairs8，共用已有账本，未新增全局恢复框架。实际测试调用无总体硬上限不等于自动重复失败。
-- 当前运行器77524终止exit3；暂停边界观察85298终止exit0。当前组自行failed_final，观察记录cancel_changed=false，没有改旧终态。没有开始新读取/新修订。进程47584已不存在。
-- 最新零调用只读审计79781退出0：当前Job lease_owner/lease_expires_at均null，owned DB无running/cancel_requested/持有租约Job；DB/WAL hash不变。旧未租用queued发现Job保留，不替其他任务取消。
-- pause_audit.json保存完整步骤状态、检查点ID/hash、当前依赖和复用计划。**18reusable/1resume_partial/71refresh_required**：1–16本Job真正completed；18/19仅沿已声明上游可复用，本Job没有执行；17部分接续；20与未读范围仍需相应处置。90总计划与73queued/71refresh是不同状态分母。
-- 末检查点保存原答、partial_wire、source_interpretation、source_statement_coverage、source_target_review、model_call_receipts、source_scope_question_history等；不删除失败原答或重写hash。原Job/payload、保护库、来源库保持true，execute_record.json有最终保护结果。
-- 审计遇到旧字段error_message不存在和路径假设，已按现场表结构纠正；私有脚本第一次未带PYTHONPATH退出1、次次禁止WAL存在后退出1，改为普通只读SQLite读一致视图并同时核DB/WAL及无租约，未删除WAL、不改数据库、不调用模型。这些是审计环境/脚本问题，不是产品失败。
-- 工程独审C03 Grok/grok-build/grok-4.7/high同会话17ee3ff0-3b08-4b97-9418-e6f14ec49e9d初轮958.163秒、续轮267.94秒，均exit0/no fallback、120分钟完成等待。续轮仅读四处旧冻结源码，不含临床/测试/末版补丁。报告runs/conference/rv1006-source-question-partial-resume-review-20261008/target_correspondence_followup.md；所有者采纳错链防线，不采信未读生产者的推论，不称医学批准。
-- 既有Ego147只读原件显示/1920、2560、3840局部检查有效，但本轮未重跑Q3；完整规则、真实当前节点新工作稿、新旧报告、独立留出、启动/恢复验收仍未运行完。
+支持的解释：来源未完整送达与宿主补入条件相互放大，重试不等于更多医学信息；先无调用复现、补实际来源，再局部重验，比反复整本新作业更有据。替代解释：模型仍可能在新增上下文后遗漏临床时期，不能以此次软件测试断言模型已解决。
 
-## 5. 复盘与恢复约束
+仍未证明：新版真实第16/17组、其余完整深审、同源共同发布、真实新工作稿与更正后新报告、独立留出/Q3/恢复验收。C摘录含相邻动作时可能保守待核；列标题脚注/拆表/缺续行有残余范围缺口。无映射不是“没有脚注”的证明；实际首阻断出现时再作最小修复，不预先新增平台。
 
-事实：来源疑问已清，错误的目标关联被拒，随后补入结构又失败；已合格1–16没有付费重读。当前停滞从“原文能否确定”转到“新要求能否被现有构造器合法保存”，不能继续把所有失败称模型不理解或研究者没有记录。
+## 6. 连续接续（不是暂停点）
 
-建议（非已实施）：恢复时先用现存补入提案及构造器做无模型最小复现，区分提案越界/装配错误/能力缺口；只有缺少真实来源或语义才局部调用。不从SOURCE_INSERT_INVALID的中文句子猜授权对象，不新增病例/方案专用正则，不先重开整个90组。若正确现有结构可表达，修直接合同；否则准确保留软件能力缺口，不能改成临床未决。
+1. 冻结受限源码及显式线路，通过既有control-executions API从e5c95389…合法新建；新OUT不得覆盖。1–15仅核合格证明复用，16起按真实新context读取，成功/失败/未读分别记录，沿既有共享账本。
+2. 按1006窗口保留局部真实未决和能力缺口，不让独立结果饥饿，但已知错义/未读来源不能换标签发布。失败两次无新信息停止该分支，推进可独立节点；不复活旧Job，不重置历史调用。
+3. 同源完整采用合同成立后接当前节点工作稿→确切原件→UI有源更正/补证→相关重算→新旧结果。窗口完成先回交，不扩模型横评/新框架。
 
-支持：现有attempt和原答已保存；替代解释仍可能是模型补入提案本身不合法，而非宿主装配缺陷。本轮暂停未完成该归因，不宣称通用机制胜出、已过拟合或已证明泛化。
-
-继承7份delivery tracked dirty、约1500未跟踪材料保留不stage/clean；旧PRD、回执、数据库不做“整洁化”删除。保护共享服务，当前任务没有关停8001/8002/8900等服务，也没有加载本地模型。
-
-## 6. 解除暂停后的最多三步
-
-1. 只读核worktree/HEAD/dirty、prepare源码hash、环境线路、owned DB/租约、当前检查点和pause_audit；不要调用已跑私有入口覆盖同名OUT。先复现第17组保存补入的首错，沿现行来源/兄弟/额度合同作最小修复。
-2. 修复获证后，通过既有POST /api/v2/protocol/control-executions声明deep_source_job_id=add37084f6704cbc9421e8715f7ee6c6、同一official/draft及discovery身份，生成新的版本化恢复作业。当前是failed_final，不适用取消续跑；不直接修改旧Job，不随意POST retry复活终态。入队前与执行时双核复用：成功部分只在当前来源/语义/编译/门禁/模型依赖仍相容时复用或重验；17从已保存来源、partial_wire及账本接续，20等按实际计划。身份改变只重算受影响范围，不能承诺任何改动都绝不重读。
-3. 完整同源采用成立后，回到1006V1现有5份24页当前节点工作稿→原件导航→正式UI一次有源更正/补证→相关重算→新旧报告。不要把病例旧版本结果拼接成新完整链。窗口结束先回交，不自动扩展模型榜单/新框架。
-
-本次未共同发布规则、未激活、未新增正式事实自动采用、未签发、未修改原件/旧临床库。普通代码push与临床采用分开。暂停记录的更新不解除暂停；仅用户明确恢复后才继续。已完成且仍相容部分可核验复用，失败和历史保持，不重新从头运行。
+规则共同发布/激活、数字正式自动采用、临床签发未授权自动放行。当前0新共同发布/激活/签发；Goal保持active，任务未完成。继承7份旧delivery dirty及大量未跟踪材料不stage/clean，原件/旧报告/失败hash不改。

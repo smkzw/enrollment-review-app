@@ -4408,6 +4408,32 @@ def declare_source_definition_consumers(
     return declaration, False
 
 
+def _literally_cited_action_candidates(
+    batch: ProtocolControlDispositionBatch,
+    statement: SourceStatement,
+    wire: ProtocolControlAgentWire,
+) -> list[int]:
+    """Find an existing action citation without claiming its scope is verified."""
+    spans = {
+        span for unit in batch.owned_units
+        if unit.structure_unit_id == statement.structure_unit_id
+        for span in unit.source_span_ids
+    }
+    quote = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
+    if not quote:
+        return []
+    return [
+        index for index, candidate in enumerate(wire.candidate_drafts)
+        if statement.structure_unit_id in candidate.source_structure_unit_ids
+        and any(
+            set(atom.source_span_ids) & spans
+            and any(quote in normalize_source_excerpt(text)
+                    for text in [atom.statement, *atom.source_excerpts])
+            for group in candidate.obligation_expression.groups for atom in group.atoms
+        )
+    ]
+
+
 def source_statement_coverage(
     batch: ProtocolControlDispositionBatch,
     interpretation: SourceInterpretation,
@@ -9207,14 +9233,20 @@ class ProtocolControlAgentRunner:
                             additional = pending_additional
                             latest_source_target_review = target_review
                             latest_source_statement_coverage = coverage
+                            cited_candidates = {
+                                entry.statement_index: sorted(set(
+                                    entry.action_candidate_indexes
+                                    + _literally_cited_action_candidates(
+                                        batch,
+                                        source_interpretation.statements[entry.statement_index],
+                                        wire,
+                                    )
+                                ))
+                                for entry in coverage if entry.status == "candidate_linked"
+                            }
                             cited_unexpressed = [
                                 item.statement_index for item in additional
-                                if any(
-                                    entry.statement_index == item.statement_index
-                                    and entry.status == "candidate_linked"
-                                    and entry.action_candidate_indexes
-                                    for entry in coverage
-                                )
+                                if cited_candidates.get(item.statement_index)
                             ]
                             if cited_unexpressed:
                                 affected = [
@@ -9223,7 +9255,7 @@ class ProtocolControlAgentRunner:
                                 ]
                                 candidate_indexes = sorted({
                                     index for entry in affected
-                                    for index in entry.action_candidate_indexes
+                                    for index in cited_candidates[entry.statement_index]
                                 })
                                 attempts.append(ProtocolControlAgentAttempt(
                                     attempt=len(attempts) + 1,

@@ -37,9 +37,9 @@ export function ContextBand({
   return (
     <header className="evidence-band" aria-label="当前资料上下文">
       <dl className="evidence-band__items">
-        <div className="evidence-band__item">
+        <div className="evidence-band__item evidence-band__item--project">
           <dt>项目</dt>
-          <dd>{projectLabel}</dd>
+          <dd title={projectLabel}>{projectLabel}</dd>
         </div>
         <div className="evidence-band__item">
           <dt>受试者</dt>

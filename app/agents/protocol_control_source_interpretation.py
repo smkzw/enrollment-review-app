@@ -2681,6 +2681,8 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
             "excerpt": unit.excerpt,
             "table_context": unit.table_context.model_dump(mode="json") if unit.table_context else None,
             "possible_cell_scope_labels": _cell_scope_label_packet(batch, unit),
+            **({"referenced_table_notes": batch.table_footnote_context_links[unit.structure_unit_id]}
+               if unit.structure_unit_id in batch.table_footnote_context_links else {}),
         }
         for unit in batch.owned_units
     ]
@@ -2765,6 +2767,13 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
            if batch.table_context_reading_bounds else "")
         +
         f"冻结来源：{json.dumps({'owned': source, 'context': context}, ensure_ascii=False, sort_keys=True)}"
+        + ("\nreferenced_table_notes 由原生表格标记及表后编号清单对应到只读原文单元，"
+           "只证明引用位置，不证明其中全部内容都适用于本行、本期或本访视。"
+           "先读所列 context 原文再核适用范围；不得借用另一行项目的动作或条件。"
+           "摘录仍来自 owned，不能把脚注中的独立要求复制为本行的新要求；"
+           "脚注独立内容的处置以完整清单中的发现记录为准，不在本行重复创建；"
+           "引用未列出或内容不足时保留明确疑问。"
+           if batch.table_footnote_context_links else "")
     )
 
 

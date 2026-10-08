@@ -152,7 +152,7 @@ from app.protocols.full_protocol_coverage import (
     FullProtocolCoverageError,
     build_full_protocol_coverage_manifest,
 )
-from app.protocols.procedure_catalog import schedule_row_values
+from app.protocols.procedure_catalog import schedule_row_values, table_footnote_context_links
 from app.protocols.protocol_control_gate import (
     CONTROL_PUBLICATION_GATE_VERSION,
     ProtocolControlGateError,
@@ -349,6 +349,7 @@ class _PreparedSource:
     workflow_stages: tuple[WorkflowStage, ...]
     coverage_manifest: ProtocolSectionCoverageManifest
     discovery_plan: ProtocolControlDiscoveryPlan
+    table_footnote_context_links: dict[str, dict[str, list[str]]]
     draft_revision_id: str | None = None
     draft_content_sha256: str | None = None
 
@@ -796,6 +797,7 @@ class ProtocolControlJobService:
             workflow_stages=workflow_stages,
             coverage_manifest=coverage_manifest,
             discovery_plan=discovery_plan,
+            table_footnote_context_links=table_footnote_context_links(blocks, coverage_manifest.units),
             draft_revision_id=draft_revision_id,
             draft_content_sha256=draft_content_sha256,
         )
@@ -962,6 +964,8 @@ class ProtocolControlJobService:
                 for span in prepared.source_spans
             },
             "coverage_manifest": prepared.coverage_manifest.model_dump(mode="json"),
+            **({"table_footnote_context_links": prepared.table_footnote_context_links}
+               if prepared.table_footnote_context_links else {}),
             "discovery_plan": prepared.discovery_plan.model_dump(mode="json"),
             "discovery_step_ids": discovery_steps,
             "max_deep_units_per_batch": self.max_deep_units_per_batch,
@@ -1794,6 +1798,7 @@ def _execute_closure(
         max_owned_units_per_batch=int(context.job_payload["max_deep_units_per_batch"]),
         workflow_stages=workflow_stages,
         source_materials=source_input.source_materials,
+        table_footnote_context_links=context.job_payload.get("table_footnote_context_links"),
     )
     publication_plan = _build_publication_plan(coverage_manifest, deep_plan)
     deep_steps = [
@@ -2917,6 +2922,7 @@ def _preflight_deep_source(
             for item in current_payload.get("workflow_stages", [])
         ],
         source_materials=source_input.source_materials,
+        table_footnote_context_links=current_payload.get("table_footnote_context_links"),
     )
     source_steps = {item.step_id: item for item in store.list_steps(source_job_id)}
     old_batches_by_number = {

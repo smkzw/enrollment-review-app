@@ -42,6 +42,43 @@
   min-height: 0;
 }
 
+.evidence-page--reading .evidence-page__head {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.evidence-page--reading > .persistent-task {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: 0;
+  padding: var(--space-2) var(--space-3);
+}
+
+.evidence-page--reading > .persistent-task .tasks-section__head {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.evidence-page--reading > .persistent-task .tasks-section__title {
+  font-size: var(--font-size-small);
+}
+
+.evidence-page--reading > .persistent-task .job-detail__actions {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.evidence-page--reading > .persistent-task > [role="alert"] {
+  flex-basis: 100%;
+}
+
 /* ---------------------------------------------------------------- 上下文带 */
 
 .evidence-band {
@@ -87,6 +124,26 @@
   font-weight: 600;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.evidence-page--reading .evidence-band__item--project {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.evidence-page--reading .evidence-band__item--project dt {
+  flex-shrink: 0;
+}
+
+.evidence-page--reading .evidence-band__item--project dd {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-size-small);
+  font-weight: 400;
 }
 
 .evidence-band__item--pending dd {
@@ -136,6 +193,8 @@
 }
 
 .evidence-upload--status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
 }
@@ -149,7 +208,9 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-3);
-  padding: var(--space-2) var(--space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .evidence-upload--status .evidence-commit__detail {

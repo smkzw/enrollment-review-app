@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import Counter, defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from difflib import SequenceMatcher
 
 from app.domain.contracts.enums import CatalogKind, PhaseScope, StudyPhase
@@ -1210,6 +1210,7 @@ def plan_protocol_control_deep_batches_from_discovery(
     max_owned_units_per_batch: int = 12,
     workflow_stages: Sequence[WorkflowStage] | None = None,
     source_materials: Sequence[ProtocolSourceMaterial] | None = None,
+    table_footnote_context_links: Mapping[str, Mapping[str, Sequence[str]]] | None = None,
 ) -> ProtocolControlDiscoveryToDeepPlan:
     """Build deep batches only for candidate/uncertain discovery outcomes."""
 
@@ -1269,6 +1270,18 @@ def plan_protocol_control_deep_batches_from_discovery(
         unit_id: tuple(dict.fromkeys((*context_ids_by_unit_id[unit_id], *similar_context.get(unit_id, ()))))
         for unit_id in context_ids_by_unit_id
     }
+    note_links = table_footnote_context_links or {}
+    if (not set(note_links) <= set(unit_by_id)
+            or any(not set(ids) <= set(unit_by_id)
+                   for notes in note_links.values() for ids in notes.values())):
+        raise ProtocolControlPlanningError("table_note_source_unknown", "表格脚注不属于冻结原文清单。")
+    context_ids_by_unit_id = {
+        unit_id: tuple(dict.fromkeys((
+            *ids, *(context_id for linked in note_links.get(unit_id, {}).values()
+                    for context_id in linked),
+        )))
+        for unit_id, ids in context_ids_by_unit_id.items()
+    }
     continuation_bounds: dict[str, dict] = {}
     chunks = _deep_batch_chunks(
         deep_units,
@@ -1320,6 +1333,10 @@ def plan_protocol_control_deep_batches_from_discovery(
                 context_units=list(context),
                 table_context_reading_bounds={unit_id: continuation_bounds[unit_id]
                                              for unit_id in owned_ids if unit_id in continuation_bounds},
+                table_footnote_context_links={
+                    unit_id: {number: list(ids) for number, ids in note_links[unit_id].items()}
+                    for unit_id in owned_ids if unit_id in note_links
+                },
                 owned_structure_unit_ids=owned_ids,
                 context_structure_unit_ids=context_ids,
                 owned_source_span_ids=sorted(

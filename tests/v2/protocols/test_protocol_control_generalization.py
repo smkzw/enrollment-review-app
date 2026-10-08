@@ -103,6 +103,68 @@ def test_cross_chapter_short_text_is_not_promoted_to_context() -> None:
     assert _cross_chapter_readonly_context([first], [first, second]) == {}
 
 
+@pytest.mark.parametrize("note_disposition", [
+    ProtocolControlDiscoveryDisposition.CANDIDATE,
+    ProtocolControlDiscoveryDisposition.NON_CONTROL,
+])
+def test_native_table_notes_are_readonly_and_change_only_affected_batch_identity(note_disposition):
+    from app.domain.contracts.protocol_controls import TableCellContext
+    from app.agents.protocol_control_source_interpretation import build_source_interpretation_prompt
+    from app.services.protocol_control_execution import _same_deep_batch_material
+
+    manifest = _manifest(3)
+    row, note, unrelated = manifest.units
+    row.source_ref = "body.t0.r10.c0.p0"
+    row.member_source_refs = [row.source_ref]
+    row.excerpt = "完成检查^2"
+    row.unit_kind = StructureUnitKind.TABLE_ROW
+    row.table_context = TableCellContext(table_path=(10, 0), row_index=10,
+                                        column_index=0, member_cell_paths=[(10, 0)])
+    note.excerpt = "本表检查可在规定访视内完成；另一个项目的说明不适用。"
+    note.heading_path = ["表后说明"]
+    unrelated.heading_path = ["其他独立章节"]
+    discovery = plan_protocol_control_discovery(manifest, max_units_per_batch=3)
+    decisions = [[ProtocolControlDiscoveryDecision(
+        structure_unit_id=unit.structure_unit_id,
+        disposition=(note_disposition if unit == note
+                     else ProtocolControlDiscoveryDisposition.CANDIDATE),
+        rationale="独立有源要求",
+    ) for unit in manifest.units]]
+    old = plan_protocol_control_deep_batches_from_discovery(
+        manifest, discovery, decisions, max_owned_units_per_batch=1,
+    )
+    new = plan_protocol_control_deep_batches_from_discovery(
+        manifest, discovery, decisions, max_owned_units_per_batch=1,
+        table_footnote_context_links={row.structure_unit_id: {"2": [note.structure_unit_id]}},
+    )
+    assert old.plan_id != new.plan_id
+    assert not _same_deep_batch_material(old.batches[0], new.batches[0])
+    assert all(_same_deep_batch_material(a, b) for a, b in zip(old.batches[1:], new.batches[1:]))
+    assert new.batches[0].context_structure_unit_ids == [note.structure_unit_id]
+    assert new.batches[0].owned_structure_unit_ids == [row.structure_unit_id]
+    assert (note.structure_unit_id in new.deep_structure_unit_ids) == (
+        note_disposition == ProtocolControlDiscoveryDisposition.CANDIDATE
+    )
+    prompt = build_source_interpretation_prompt(new.batches[0])
+    assert '"referenced_table_notes": {"2": ["unit-001"]}' in prompt
+    assert note.excerpt in prompt and "不证明其中全部内容都适用" in prompt
+    frozen = new.model_dump(mode="json")
+    assert ProtocolControlDiscoveryToDeepPlan.model_validate(frozen) == new
+    missing_link = new.model_dump(mode="json")
+    missing_link["batches"][0].pop("table_footnote_context_links")
+    with pytest.raises(ValueError, match="精确闭合|非表格前置语境"):
+        ProtocolControlDiscoveryToDeepPlan.model_validate(missing_link)
+    broken = new.batches[0].model_dump(mode="json")
+    broken["table_footnote_context_links"][row.structure_unit_id]["2"] = ["foreign"]
+    with pytest.raises(ValueError, match="无法闭合"):
+        ProtocolControlDispositionBatch.model_validate(broken)
+    with pytest.raises(ValueError, match="冻结原文清单"):
+        plan_protocol_control_deep_batches_from_discovery(
+            manifest, discovery, decisions,
+            table_footnote_context_links={row.structure_unit_id: {"2": ["foreign"]}},
+        )
+
+
 def test_deep_plan_preserves_source_action_and_exact_procedure_targets() -> None:
     action = "在筛选及基线访视完成症状评估；非到院日建议于给药前1 h内进行评估，每日均需评估。"
     owned = _unit(0).model_copy(update={"excerpt": action})

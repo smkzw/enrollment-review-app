@@ -460,6 +460,46 @@ def _flow_footnote_refs(
     }
 
 
+def table_footnote_context_links(
+    blocks: Sequence[StructureBlock],
+    units: Sequence[ProtocolStructureUnit],
+) -> dict[str, dict[str, list[str]]]:
+    """Resolve native table markers to read-only note units, not clinical scope."""
+    blocks_by_ref = {block.source_ref: block for block in blocks}
+    units_by_ref: dict[str, list[ProtocolStructureUnit]] = {}
+    for unit in units:
+        for ref in unit.member_source_refs or [unit.source_ref]:
+            units_by_ref.setdefault(ref, []).append(unit)
+    notes_by_table = {
+        block.source_ref: _flow_footnote_refs(blocks, block)
+        for block in blocks if block.kind == BlockKind.TABLE
+    }
+    links: dict[str, dict[str, list[str]]] = {}
+    for unit in units:
+        if unit.table_context is None:
+            continue
+        table_ref, marker, _ = unit.source_ref.rpartition(".r")
+        if not marker or table_ref not in notes_by_table:
+            continue
+        numbers = tuple(dict.fromkeys(
+            number for ref in unit.member_source_refs or [unit.source_ref]
+            if ref in blocks_by_ref
+            for number in _display_footnote_numbers(blocks_by_ref[ref].text)
+        ))
+        for number in numbers:
+            refs = notes_by_table[table_ref].get(number, ())
+            # A partial note would conceal a continuation or exception.
+            if not refs or any(not units_by_ref.get(ref) for ref in refs):
+                continue
+            linked = sorted({
+                item.structure_unit_id: item for ref in refs for item in units_by_ref[ref]
+            }.values(), key=lambda item: (item.source_order, item.structure_unit_id))
+            links.setdefault(unit.structure_unit_id, {})[str(number)] = [
+                item.structure_unit_id for item in linked
+            ]
+    return links
+
+
 def _operation_labels_named_by_note(
     note_text: str,
     operation_labels: Sequence[str],

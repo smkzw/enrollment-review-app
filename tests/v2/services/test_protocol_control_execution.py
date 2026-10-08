@@ -2024,8 +2024,9 @@ class _Seed:
     workflow_stages: tuple[WorkflowStage, ...]
 
 
-def _seed_frozen_source(data_paths, session_factory, *, key: str, waiting_at: str | None = None) -> _Seed:
-    fixture = _synthetic_fixture()
+def _seed_frozen_source(data_paths, session_factory, *, key: str, waiting_at: str | None = None,
+                        fixture=None) -> _Seed:
+    fixture = fixture or _synthetic_fixture()
     blocks = fixture.extraction.blocks
     serialized = serialize_blocks(blocks)
     content_sha256 = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
@@ -5292,6 +5293,73 @@ def test_preflight_marks_changed_action_gate_batch_for_refresh_before_model_call
     assert snapshot.state == "failed_final"
     assert snapshot.error_code != "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
     assert deep.start_calls > before
+
+
+def test_native_note_payload_closure_and_reuse_preflight_share_the_same_source(
+    data_paths, session_factory,
+):
+    from dataclasses import replace
+    from app.protocols.docx_structure import NumberingRef
+    from tests.v2.protocols.test_deconstruction_service import (
+        _paragraph, _synthetic_spans, _synthetic_phase_graph,
+    )
+
+    fixture = _synthetic_fixture()
+    blocks = tuple(
+        block.model_copy(update={"text": "血生化检查^1"})
+        if block.source_ref == "body.t0.r2.c0.p0" else block
+        for block in fixture.extraction.blocks
+    ) + (_paragraph(22, "按本表相应访视完成检查，不适用于其他操作。",
+                    numbering=NumberingRef(num_id=41, level=0, start=1,
+                                           num_fmt="decimal", lvl_text="%1.")),)
+    fixture = replace(
+        fixture, extraction=StructureExtraction(blocks=blocks, snapshot=fixture.extraction.snapshot),
+        spans=_synthetic_spans(blocks), phase_graph=_synthetic_phase_graph(blocks),
+    )
+    seed = _seed_frozen_source(data_paths, session_factory, key="native-note-source", fixture=fixture)
+    service = _build_service(data_paths, session_factory, seed)
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="native-note-control",
+    )
+    _, payload = _job_snapshot_and_payload(session_factory, source.job_id)
+    manifest = protocol_control_execution_module.ProtocolSectionCoverageManifest.model_validate(
+        payload["coverage_manifest"]
+    )
+    row = next(unit for unit in manifest.units if "血生化检查^1" in unit.excerpt)
+    note = next(unit for unit in manifest.units if unit.source_ref == "body.p22")
+    assert payload["table_footnote_context_links"] == {
+        row.structure_unit_id: {"1": [note.structure_unit_id]},
+    }
+    discovery = _DiscoveryTransport()
+    discovery.routing = {
+        unit.structure_unit_id: (
+            ProtocolControlDiscoveryDisposition.CANDIDATE if unit == row
+            else ProtocolControlDiscoveryDisposition.NON_CONTROL
+        ) for unit in manifest.units
+    }
+    deep = _DeepTransport(seed.source_span_excerpts, invalid=True)
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+    assert runner.run_job(source.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, source.job_id)
+    assert snapshot.state == "failed_final"
+    with session_factory() as session:
+        store = JobStore(session, now=_now)
+        closure = store.get_last_checkpoint(source.job_id, "deterministic_closure")[1]
+        before = protocol_control_execution_module._deep_source_checkpoint_proof(
+            store.get_last_checkpoint(source.job_id, "deterministic_closure")
+        )
+        preflight = protocol_control_execution_module._preflight_deep_source(
+            store, payload, source.job_id, payload["prompt_templates"]["deep"],
+        )
+        after = protocol_control_execution_module._deep_source_checkpoint_proof(
+            store.get_last_checkpoint(source.job_id, "deterministic_closure")
+        )
+    assert before == after
+    assert preflight["source_plan_sha256"] == preflight["current_plan_sha256"]
+    batch = closure["deep_plan"]["batches"][0]
+    assert batch["table_footnote_context_links"] == payload["table_footnote_context_links"]
+    assert note.structure_unit_id in batch["context_structure_unit_ids"]
+    assert batch["owned_structure_unit_ids"] == [row.structure_unit_id]
 
 
 def test_unused_repair_wording_does_not_rerun_completed_deep_batches(
