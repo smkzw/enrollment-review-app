@@ -74,6 +74,7 @@ from app.domain.contracts.protocol_controls import (
     ProtocolControlDispositionBatch,
     ProtocolStructureUnit,
     TableContextReadingBound,
+    validate_table_footnote_context_links,
     ProtocolControlUnitDispositionDraft,
     ReviewNodeBinding,
     ReviewNodeRole,
@@ -339,6 +340,7 @@ class ProtocolControlAgentInput(ContractModel):
     owned_units: list[ProtocolStructureUnit] = Field(min_length=1)
     context_units: list[ProtocolStructureUnit] = Field(default_factory=list)
     table_context_reading_bounds: dict[str, TableContextReadingBound] = Field(default_factory=dict)
+    table_footnote_context_links: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     pre_enrollment_structure_unit_ids: list[str] = Field(default_factory=list)
     owned_visit_instance_by_structure_unit_id: dict[str, str] = Field(
         default_factory=dict
@@ -363,6 +365,9 @@ class ProtocolControlAgentInput(ContractModel):
             raise ValueError("Agent 输入给药前结构单元必须属于 owned_units")
         if not set(self.owned_visit_instance_by_structure_unit_id) <= set(owned_ids):
             raise ValueError("Agent 输入执行访视归属只能引用 owned_units")
+        validate_table_footnote_context_links(
+            self.table_footnote_context_links, self.owned_units, self.context_units,
+        )
         return self
 
 
@@ -377,6 +382,7 @@ class ProtocolControlAgentInput(ContractModel):
             owned_units=list(batch.owned_units),
             context_units=list(batch.context_units),
             table_context_reading_bounds=dict(batch.table_context_reading_bounds),
+            table_footnote_context_links=deepcopy(batch.table_footnote_context_links),
             pre_enrollment_structure_unit_ids=list(
                 batch.pre_enrollment_structure_unit_ids
             ),
@@ -2933,6 +2939,8 @@ def build_protocol_control_agent_prompt(
     input_view = frozen_input.model_dump(mode="json")
     if not frozen_input.table_context_reading_bounds:
         input_view.pop("table_context_reading_bounds")
+    if not frozen_input.table_footnote_context_links:
+        input_view.pop("table_footnote_context_links")
     for units_key in ("owned_units", "context_units"):
         for unit_view in input_view[units_key]:
             unit_view.pop("member_source_span_ids", None)
@@ -2958,6 +2966,9 @@ def build_protocol_control_agent_prompt(
             "semantic_family": target.semantic_family,
             "covered_action_kinds": target.covered_action_kinds,
             "source_excerpts": target.source_excerpts,
+            **({"source_span_ids": target.source_span_ids}
+               if any(unit.table_context is not None
+                      for unit in [*frozen_input.owned_units, *frozen_input.context_units]) else {}),
         }
         for target in frozen_input.known_procedure_targets
     ]
@@ -3641,6 +3652,21 @@ def validate_protocol_control_agent_wire(
                     "UNKNOWN_PROCEDURE_TARGET",
                     "处置引用了本批未知流程目标：" + ",".join(unknown_procedure_ids),
                     structure_unit_ids=[unit_id],
+                )
+            # Apply the existing coverage check before a wrong native-row link
+            # becomes the immutable basis of a later additive source repair.
+            from .protocol_control_source_interpretation import (
+                native_schedule_label_sources, _target_contains_row_label,
+            )
+            unit = next(item for item in batch.owned_units if item.structure_unit_id == unit_id)
+            labels = native_schedule_label_sources(batch, unit, source_quote=unit.excerpt)
+            targets = {item.catalog_item_id: item for item in batch.known_procedure_targets}
+            if labels and any(not _target_contains_row_label(targets[target_id], labels)
+                              for target_id in procedure_target_ids):
+                raise ProtocolControlAgentWireValidationError(
+                    "PROCEDURE_ROW_SOURCE_MISMATCH",
+                    "流程处置的目标不含本表格项目的原始行来源；须核实本行处置，不能借其他项目的共同脚注。",
+                    structure_unit_ids=[unit_id], allow_candidate_repartition=True,
                 )
         elif disposition.linked_official_code or procedure_target_ids:
             raise ProtocolControlAgentWireValidationError(

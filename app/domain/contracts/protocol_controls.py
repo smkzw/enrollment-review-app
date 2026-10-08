@@ -2535,6 +2535,28 @@ class TableContextReadingBound(Phase5ControlModel):
                          "cell_boundary", "character_limit", "unit_limit", "next_intro"]
 
 
+def validate_table_footnote_context_links(
+    links: dict[str, dict[str, list[str]]],
+    owned_units: Sequence[ProtocolStructureUnit],
+    context_units: Sequence[ProtocolStructureUnit],
+) -> None:
+    """Validate the same frozen note closure for planning and author inputs."""
+    available = {unit.structure_unit_id: unit for unit in (*owned_units, *context_units)}
+    if not set(links) <= set(available):
+        raise ValueError("表格脚注引用只能属于本批原文或只读上下文单元")
+    for unit_id, notes in links.items():
+        if available[unit_id].table_context is None or not notes:
+            raise ValueError("脚注引用缺少表格来源或编号")
+        for number, linked_ids in notes.items():
+            if (not number.isdigit() or int(number) < 1 or not linked_ids
+                    or len(linked_ids) != len(set(linked_ids))
+                    or not set(linked_ids) <= set(available)
+                    or unit_id in linked_ids):
+                raise ValueError("脚注编号与只读来源单元无法闭合")
+            if any(available[item].table_context is not None for item in linked_ids):
+                raise ValueError("表后脚注不得引用其他表格项目")
+
+
 class ProtocolControlDispositionBatch(Phase5ControlModel):
     """Deterministic planner output for one bounded owned-unit batch.
 
@@ -2621,20 +2643,9 @@ class ProtocolControlDispositionBatch(Phase5ControlModel):
             raise ValueError("context_structure_unit_ids 必须与 context_units 顺序和身份一致")
         if set(owned_ids) & set(context_ids):
             raise ValueError("同一批次的 owned/context 结构单元不得重叠")
-        if not set(self.table_footnote_context_links) <= set(owned_ids) | set(context_ids):
-            raise ValueError("表格脚注引用只能属于本批原文或只读上下文单元")
-        available = {unit.structure_unit_id: unit for unit in (*self.owned_units, *self.context_units)}
-        for unit_id, notes in self.table_footnote_context_links.items():
-            if available[unit_id].table_context is None or not notes:
-                raise ValueError("脚注引用缺少表格来源或编号")
-            for number, linked_ids in notes.items():
-                if (not number.isdigit() or int(number) < 1 or not linked_ids
-                        or len(linked_ids) != len(set(linked_ids))
-                        or not set(linked_ids) <= set(available)
-                        or unit_id in linked_ids):
-                    raise ValueError("脚注编号与只读来源单元无法闭合")
-                if any(available[item].table_context is not None for item in linked_ids):
-                    raise ValueError("表后脚注不得引用其他表格项目")
+        validate_table_footnote_context_links(
+            self.table_footnote_context_links, self.owned_units, self.context_units,
+        )
         if not set(self.table_context_reading_bounds) <= set(owned_ids):
             raise ValueError("相邻原文读取范围只能属于本批原文引言")
         for intro_id, bound in self.table_context_reading_bounds.items():

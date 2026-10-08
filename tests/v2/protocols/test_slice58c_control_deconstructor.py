@@ -6902,6 +6902,142 @@ def test_native_visit_components_require_complete_physical_correspondence(mutati
     assert (batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()) == frozen
 
 
+@pytest.mark.parametrize("mutation", [None, "foreign_row", "duplicate_note", "missing_note", "note_is_table"])
+def test_author_projection_preserves_only_closed_native_note_context(mutation):
+    batch, _ = _native_time_recheck_batch()
+    note = _batch().context_units[0].model_copy(deep=True)
+    note.structure_unit_id = "note-native"
+    note.source_ref = "body.p80"
+    note.source_span_ids = ["snapshot::body.p80"]
+    note.excerpt = "Ⅱ期按原分组操作；Ⅲ期按对应分组操作。"
+    note.table_context = None
+    batch.context_units.append(note)
+    batch.context_structure_unit_ids.append(note.structure_unit_id)
+    batch.context_source_span_ids.extend(note.source_span_ids)
+    unit_id = batch.owned_units[0].structure_unit_id
+    batch.table_footnote_context_links = {unit_id: {"9": [note.structure_unit_id]}}
+    if mutation == "foreign_row":
+        batch.table_footnote_context_links = {"foreign-row": {"9": [note.structure_unit_id]}}
+    elif mutation == "duplicate_note":
+        batch.table_footnote_context_links[unit_id]["9"].append(note.structure_unit_id)
+    elif mutation == "missing_note":
+        batch.table_footnote_context_links[unit_id]["9"] = ["missing-note"]
+    elif mutation == "note_is_table":
+        note.table_context = batch.context_units[0].table_context
+    frozen = batch.model_dump_json()
+    if mutation is not None:
+        with pytest.raises(ValueError):
+            ProtocolControlAgentInput.from_batch(batch)
+        assert batch.model_dump_json() == frozen
+        return
+    projected = ProtocolControlAgentInput.from_batch(batch)
+    assert projected.table_footnote_context_links == batch.table_footnote_context_links
+    prompt = build_protocol_control_agent_prompt(projected)
+    payload = json.JSONDecoder().raw_decode(prompt.split("本次冻结输入：", 1)[1])[0]
+    assert payload["study_phase"] == batch.study_phase.value
+    assert payload["table_footnote_context_links"] == batch.table_footnote_context_links
+    assert payload["context_units"][-1]["excerpt"] == note.excerpt
+    assert all(item["structure_unit_id"] != note.structure_unit_id for item in payload["owned_units"])
+    projected.table_footnote_context_links[unit_id]["9"].append("mutated-projection")
+    assert batch.model_dump_json() == frozen
+
+
+@pytest.mark.parametrize("variant", ["same_row", "other_row", "same_label_other_row", "non_table", "partial_cell"])
+def test_procedure_disposition_checks_native_row_before_additive_repair(variant):
+    batch, _, _ = _native_visit_candidate_material()
+    unit = batch.owned_units[0]
+    target = _batch().known_procedure_targets[0].model_copy(deep=True)
+    target.source_span_ids = list(unit.source_span_ids)
+    target.source_excerpts = list(unit.member_texts)
+    target.label = unit.member_texts[0]
+    if variant in {"other_row", "same_label_other_row"}:
+        target.source_span_ids = [span.replace(".r3.", ".r8.") for span in target.source_span_ids]
+    if variant == "other_row":
+        target.source_excerpts[0] = "另一项核对"
+    if variant == "non_table":
+        unit.table_context = None
+    if variant == "partial_cell":
+        # A cell's subitem can legitimately cite a procedure outside the parent row.
+        unit.excerpt = "另一个分项"
+        unit.source_ref = "body.t0.r3.c2.p1"
+        unit.member_source_refs = [unit.source_ref]
+        unit.member_texts = [unit.excerpt]
+        unit.member_source_span_ids = [["snapshot::" + unit.source_ref]]
+        unit.source_span_ids = ["snapshot::" + unit.source_ref]
+        unit.table_context.member_cell_paths = [(3, 2)]
+    batch.known_procedure_targets = [target]
+    wire = ProtocolControlAgentWire(wire_version=CONTROL_AGENT_WIRE_VERSION,
+        dispositions=[ProtocolControlAgentWireDisposition(structure_unit_id=unit.structure_unit_id,
+            disposition=StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+            linked_official_code=None, linked_procedure_catalog_item_id=target.catalog_item_id,
+            linked_procedure_catalog_item_ids=[], notes=None)], candidate_drafts=[])
+    frozen = batch.model_dump_json(), wire.model_dump_json()
+    if variant in {"other_row", "same_label_other_row"}:
+        with pytest.raises(ProtocolControlAgentWireValidationError) as rejected:
+            hydrate_protocol_control_agent_output(wire, batch)
+        assert rejected.value.code == "PROCEDURE_ROW_SOURCE_MISMATCH"
+        assert rejected.value.structure_unit_ids == (unit.structure_unit_id,)
+        assert rejected.value.allow_candidate_repartition is True
+        assert not rejected.value.allow_source_insert
+    else:
+        assert hydrate_protocol_control_agent_output(wire, batch).dispositions[0].linked_procedure_catalog_item_id == target.catalog_item_id
+    assert (batch.model_dump_json(), wire.model_dump_json()) == frozen
+
+
+def test_wrong_native_procedure_link_is_repaired_before_it_becomes_insert_authority():
+    from app.agents.protocol_control_candidate_alignment import (
+        SOURCE_CANDIDATE_ALIGNMENT_VERSION, SourceCandidateAlignment,
+    )
+    from app.services.protocol_control_execution import _validate_saved_source_review
+    from app.protocols.protocol_control_gate import validate_protocol_control_batch_candidates
+    batch, inventory, corrected = _native_visit_candidate_material()
+    target = _batch().known_procedure_targets[0]
+    batch.known_procedure_targets = [target]
+    initial = corrected.model_copy(deep=True)
+    initial.candidate_drafts = []
+    initial.dispositions[0] = ProtocolControlAgentWireDisposition(
+        structure_unit_id=batch.owned_units[0].structure_unit_id,
+        disposition=StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+        linked_official_code=None, linked_procedure_catalog_item_id=target.catalog_item_id,
+        linked_procedure_catalog_item_ids=[], notes=None,
+    )
+    source = inventory.statements[0].quoted_text
+    alignment = SourceCandidateAlignment.model_validate({
+        "version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+        "items": [{"statement_index": 0, "candidate_index": 0, "decision": "fully_expressed",
+            "source_excerpt": source, "candidate_atom_quotes": [source], "unresolved_dimensions": []}],
+    })
+    class Transport(_FakeTransport):
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="native-target", text=SourceTargetReview(
+                version=SOURCE_TARGET_REVIEW_VERSION, items=[SourceTargetReviewItem(
+                    statement_index=0, decision="additional_requirement", source_action_excerpt=source,
+                    source_time_excerpt=inventory.statements[0].scope_quote,
+                    unresolved_aspects=["已有目录未完整覆盖这行要求"],
+                )]).model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="native-corrected-alignment",
+                text=alignment.model_dump_json(exclude={"proofs"}))
+
+        def start_source_insert(self, **kwargs):
+            pytest.fail("A known wrong row link cannot become additive insert authority")
+
+    transport = Transport([
+        ProtocolControlAgentResponse(session_id="native-author", text=initial.model_dump_json()),
+        ProtocolControlAgentResponse(session_id="native-author", text=corrected.model_dump_json()),
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        batch, transport, resume_source_interpretation=inventory,
+        output_validator=lambda output: validate_protocol_control_batch_candidates(batch, output),
+    )
+    assert result.status == "已解析", [item.issues for item in result.attempts]
+    assert "PROCEDURE_ROW_SOURCE_MISMATCH" in result.attempts[0].error_classes
+    assert len(transport.prompts) == 2
+    assert result.partial_wire.candidate_drafts[0] == corrected.candidate_drafts[0]
+    _validate_saved_source_review(batch, type(result).model_validate_json(result.model_dump_json()))
+
+
 def test_native_visit_candidate_alignment_is_saved_and_context_changes_invalidate_proof():
     from app.agents.protocol_control_candidate_alignment import (
         SOURCE_CANDIDATE_ALIGNMENT_VERSION, SourceCandidateAlignment,

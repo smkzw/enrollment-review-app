@@ -1,114 +1,80 @@
-# HANDOFF｜1006V1｜保留已完成范围，局部补正来源用途，继续执行
+# HANDOFF｜1006V1｜当前继续执行，不是暂停
 
-2026-10-08，用户已解除暂停；Goal实查active，Trellis in_progress，execution_paused_by_user=false。窗口未达，claims_complete=false。本记录是相连功能包里程碑，不是暂停。只维护本HANDOFF、implement当前表及review_index；历史运行在implement附录和Git保留，不按旧“当前/暂停”恢复。
+更新2026-10-09。Goal active，claims_complete=false；用户已授权1006V1隔离实现、真实产品调用和工程Git里程碑。正式事实自动采用、临床签发另守权限。历史“当前/未运行”以implement附录对应时间点理解，不能覆盖本表。
 
-## 1. 用户动作与身份
+## 五分钟入口
 
-真实资料页已改善：能在紧凑抬头下连续查看24页原图、切换文件和原始文字、缩放并返回正确受试者。尚未在完整新官方＋跨章要求下生成该例工作稿，也未完成更正后的新审核报告。
+本HANDOFF → implement单一当前用户流程表 → delivery_1006V1/03_ACCEPTANCE.md → review_index_20261006_1006V1.json current_state → 具体prepare/execute回执。先核HEAD/dirty/来源/租约；不要重读所有历史，不重跑已有目录或复活旧失败终态。
 
-| 身份 | 实际值 |
+## 当前身份
+
+| 项目 | 实际身份/证据 |
 |---|---|
-| 唯一工作树 | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
-| 分支/任务 | codex/phase5-clinical-facts-profile；.trellis/tasks/09-11-e2e-eligibility-review |
-| 本功能包基础代码 | 35325f50；标题脚注实际送达并完成第16组；用途补正只改原答的用途/新增具体疑问，不替医学采用 |
-| 当前终态/上游 | 7904e95740cf4896bb5dfeefc05a7a25，failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID；声明上游13191716ea054d0d9ed026c189b574e6 |
-| 失败检查点 | 17=a06490ab7a69466d9dfaf1d70b50f6ed；初答SOURCE_FUNCTION_UNRESOLVED，原答和累计账本保留，不改旧终态 |
-| 产品模型 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high、65536输出；产品harness直接访问端点 |
-| 当前隔离库 | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 最新已执行产物 | 同上根目录/rv1006-header-note-closure-api-20261008-v1；6新物理调用/245.441759584秒/exit3，源码35325f50；16 completed、17失败、73未执行，旧Job/payload/来源库/保护库保持 |
-| 私有当前预检 | 同上根目录/rv1006-source-function-field-preflight-20261008-v1.json；源7904，16reusable/74refresh，0调用/0写/DBhash保持/exit0 |
-| 外部可复查范围 | Git源码、合成测试、净化工程报告/索引；原件、DB、实际临床提示/原答与截图仅本机可读，不提交，hash不证明临床含义 |
+| 唯一worktree | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
+| 分支/任务 | codex/phase5-clinical-facts-profile；09-11-e2e-eligibility-review |
+| 当前代码基础 | 21fce0f5，已push；本功能包提交前的准确补丁见下方文件清单，测试不得冒称远端基线测试 |
+| 当前最新真实Job | 6a4d049fec2e4c9088766ec67e22613b，failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED |
+| 最新真实运行 | 源码21fce0f5，14物理调用/393.448554秒/exit3；16completed、17failed、73未读，scope/hydrate/gate依赖失败 |
+| 第17组失败检查点 | a0b8841570024459821acd23494c745a；全部实际原答/请求/负核对/hash保留 |
+| 当前隔离DB | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
+| 真实产物 | 同根/rv1006-source-function-field-api-20261008-v1，目录存在，不覆盖/重跑 |
+| 模型路线 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high，输出65536，产品自己的harness直连 |
+| 当前新预检 | 同根/rv1006-author-context-preflight-20261009-v1.json：16reusable/1resume_partial/73refresh，0调用/0写/DBhash保持 |
+| 新代码实际临床运行 | 尚未运行；预检不算运行，软件通过不算临床通过 |
+| 继承dirty | 7份旧delivery文件未动，不stage；大量继承untracked不清理/不批量stage |
+| 外部可复查范围 | Git源码/合成用例/净化工程报告；真实原件、DB、提示、原答和病例截图仅本机受控可读，外部审阅不可读 |
 
-五分钟入口：本HANDOFF → implement当前表 → delivery_1006V1/03_ACCEPTANCE.md → review_index_20261006_1006V1.json → 新合法作业prepare/execute回执。不要重读全部历史，不复活旧失败Job。
+## 用户流程与未完成
 
-## 2. 同一流程的实况
-
-| 用户节点 | 已证 | 未达 |
+| 用户动作 | 已实现/已证 | 首个未完成 |
 |---|---|---|
-| 完整有源要求包 | 内置DOCX官方Job1153e25b4eba40db964202a1c3ed07c3草稿修订21，23父条/86组件/141谓词，publishable；85发现/90深审计划冻结 | 最新实跑16完成、17失败、73未执行，scope/hydrate/gate依赖失败；上游20完成属于旧材料，新15/75预检不等于新Job完成，publishable不是共同发布 |
-| 资料与事实 | 继承5文件24页/14组实际保存，458候选→407事实/40事件/11暴露；32资格候选关联30合格事实、426受限 | 不同分母非准确率。手写对象/数字位置仍有具体未决，新完整要求消费未证，不授予自动事实采用 |
-| 工作稿与原件 | 既有冻结计算/资格消费者，Ego真实原件导航；已收紧重复抬头及大空白 | 病例准备副本仍旧81组件/0controls；旧REVIEW_SOURCE_POLICY_NOT_READY不证明新141谓词失败；完整新工作稿未生成 |
-| 更正与历史 | 正式UI一次有源描述更正、Profile3→4、旧记录hash保持 | 该更正0规则关联；不是新完整审核结果重算，新旧审核报告闭环尚未达 |
-| 共享首屏适配 | 184bdb60已提交入排侧来源绑定/返回；共享首页未改 | 合成接入不等于真实跨系统与Q3，不重复派工 |
+| 从DOCX准备完整要求 | 官方1153e25b4eba40db964202a1c3ed07c3草稿rev21，23父条/86组件/141条件；200有源资料政策草稿覆盖141条件；发现9841977fb4fb415283b8942ac36dcd22共85发现/90深审 | 跨章17及73未读；publishable只是官方草稿门，不是同源共同发布 |
+| 读取整例资料 | 5PDF24页、14组已实读保存；458候选→407事实/40事件/11暴露；32资格候选关联30事实、426候选受限 | 不同分母不代表准确率；新完整要求消费/数字位置/手写归属仍有具体待核 |
+| 使用当前节点工作稿 | 冻结资格与R1正常/风险/受限消费者已接线 | 现准备病例仍旧81组件/0controls；旧REVIEW_SOURCE_POLICY_NOT_READY不说明新141条件失败 |
+| 回看原件 | Ego147正式非Mock，连续24页/切文件/文字/缩放/返回正确个例；行政噪声收起，临床内容保留；宽屏局部无横溢出 | 新完整报告回源和完整Q3尚未完成；无坐标不造框 |
+| 一次有源更正 | 旧正式UI描述更正追加写，Profile3→4，旧hash保持 | 旧更正0规则关联，不能算新完整要求下的受影响重算 |
+| 更正后新旧报告 | 原图、历史档案和失败回执保留 | 新包完整当前节点→UI更正/补证→相关重算→新结果→旧历史回看仍未达 |
+| 医学经理首屏适配 | 入排侧184bdb60与8acd30c7已push，共享首页没有改 | 合成来源绑定不等于真实跨系统接入；不重复派工 |
 
-病例根/准备副本：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-prepared-review-current-node-20261008-v1/data；subject rv29-preparation-20261001，筛选episode e8615813d75b452489579ff9606781b4。
+病例准备根：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-prepared-review-current-node-20261008-v1/data。subject rv29-preparation-20261001，筛选episode e8615813d75b452489579ff9606781b4，旧project draft-project09b593a721e7。完整新官方源draft-project1153…与旧病例不是同一个项目。必须用合法发布/新项目/资料上传或有身份核验的既有再解构入口，不能SQL改project_id、复制旧采用或借旧政策批准。
 
-## 3. 当前首错与最小修复
+## 本包首因与修复
 
-7904第17组初答用途为unclassified、未说明具体疑问，严格解析在赋值前拒绝；现有下游用途分歧核对只能保留原用途或有据排除背景，不能借来给初答乱填用途。最小修复复用现有单条来源运输/Schema，仅对结构化定位的初答用途及新增疑问提出补正，宿主冻结所有其他字段、原答兄弟及已有每项疑问；成功仍回完整来源/目标/消费门。明确未决保留，不改名技术能力为医学判断。共享预算/失败账本和validator身份保持；未解多缺陷跨作业合并回放如实保留局限。三相连模块最终1217通过/127.56秒/exit0；原正例漏目标核对及版本期望的失败已逐项修，未弱化消费者。单C03实际343.946秒/exit0/no fallback，未测试/临床，Bash/diff被拒由主线程补差分；60工具较广路径发现不冒称严格五文件独审。取舍reviews/rv1006-source-function-field-owner-disposition-20261008.md。7904合法预检16/74，补正新产品运行尚未开始；完整包/工作稿/更正报告仍未达。
+真实6a4初答用途合法，上一包用途补正没有触发，不能据本次调用宣称修复效果已证。作者收到了脚注正文，缺的是原生编号→单元映射；错误流程关联随后成为补入的不可变基础，合法未带错误关联的新提案被REPAIR_SCOPE_ESCAPE拒绝；最后alignment指出脚注细节未表达。不是端点故障，也不是“没有脚注正文”。单个案例不能证明映射是唯一原因。
 
-### 标题脚注功能包（前一快照，已实跑7904）
+本包复用原验证，不新建语义裁决合同：
+- 作者输入保存已冻结脚注映射；原生表格输入投影已知流程来源，非表格提示保持。
+- 整行REQUIRED_PROCEDURE检查前移到作者合法装配之前。保留原摘录包含行标签的适用条件；格内子项可合法引用表外定义，不误套整个父行。不把物理对应当语义等价，不删候选关系。
+- 对旧失败，只有实际初作者原答/hash被新门拒绝、同错误目标仍传播且negative alignment未闭合，才弃未采用作者草稿；沿原来源证明重放初答及5次scope_question_recheck。来源/旧预算8/失败账本/历史保持，不伪造旧会话。
+- 原source-insert合法关联保全、完整来源/语义/消费/发布门保持。只有validator材料变化，旧成功结果当前重核，不反算旧请求或加版本白名单。
 
-664a实际核对提出标题脚注未核清。只读完整冻结清单证实标题编号→原文关系存在，但分包仅跟随owned项目行，不跟随已选context表头，alignment也漏编号映射。最小修复沿已有原生链接补同批只读原文，不扩大owned或临床要求；原文、来源范围及映射进入proof/scope-v3。前一scope-v2范围补充仍保留，未知、例外及当前对后续的真实依赖不能删除。四相连模块1242passed/110.10秒/exit0；顾问后仅合成测试增强，7相关例0.53秒/exit0，不累加。C03实际CodeBuddy/DeepSeek/max/session01a11d1e…9只读/父174.178秒/exit0/no fallback，未测试/临床；其额外服务函数读取和不采纳全量脚注深审建议如实见reviews/rv1006-header-note-closure-owner-disposition-20261008.md。源1319新15/75预检0调用/0写/DB保持，新API运行尚未开始。上游20完成不能跨材料机械复用，claims_complete=false。
+实际新预检证明16成功仍当前可复用，17仅来源恢复、73未读；17的proof/v5含5已核问题索引0/1/2/3/5、6实际回答hash、rejected_author_basis。新输入仍phase_iii，二期段落只读上下文不自动成为三期义务。
 
-### 已通过实际运行的前一接续包（历史）
+## 修改与验证
 
-f1首错在读取服务接续而非医学语义：Runner恢复了合法full wire，重启适配器却没有原作者历史。当前只在来源和完整装配门通过后绑定batch/source/wire身份，使原五个自足字段接口可接续；不假造历史user/assistant消息，整包及依赖历史的候选修订仍严格要求实际历史。预算、来源/兄弟、proof、新语义核查及采用保护保持。21族例包含真实适配器与坏源/门故障零请求；三相连模块1205pass/145.32秒/exit0。C03同会话8只读/34.667秒/exit0/no fallback，未跑测试/病例；没有必须修，限制与所有者逐层反证见原取舍新增节。新接续尚未真实运行。不要把负核对通道技术可用写成完整包已通过。
+当前 owned 文件：
+app/domain/contracts/protocol_controls.py；
+app/agents/protocol_control_deconstructor.py；
+app/agents/protocol_control_source_interpretation.py；
+app/services/protocol_control_execution.py；
+tests/v2/protocols/test_slice58c_control_deconstructor.py；
+tests/v2/services/test_protocol_control_execution.py；
+本HANDOFF/implement/review_index、docs/PROJECT_CONTEXT及净化独审报告/所有者取舍/窗口JUnit。无原件、DB或.env交付。
 
-### 上一字段修订功能包的证据
+集中三原模块命令：pytest tests/v2/protocols/test_slice58c_control_deconstructor.py tests/v2/protocols/test_protocol_control_agent_transport.py tests/v2/services/test_protocol_control_execution.py -q。
+v1 1223pass4fail118.61s；v2 1234pass1fail123.75s。末受影响族38pass1081deselected22.91s/exit0/5SWIG，JUnit artifacts/rv1006-native-author-affected-family-20261009-v4.xml。最终完整三模块未再次运行，不累加数量。正例原漏目标/核对接口、单ID数组断言及非表格元数据误投影分别修；未删危险反例或放松门。
 
-1342实际三请求零网络精确重放证明已有alignment已运行，指出候选把常见记录种类误设为原文强制限制。首因不再是候选选择。复用原字段提案合同：绑定当前来源、候选和实际原答的负核对仅授权位置；模型重新提案，宿主保全兄弟/其他字段，完整结构、来源及新语义核查再运行。旧proof不批准新候选，同路径本次不循环，现有共享预算保持。validator增加reviewed-source-type-field-recovery/v1，不改基础语义编译身份。族窗15pass；三相连模块1196pass/1fail106.82秒，唯一旧版本期望修正后单例1pass2.04秒（不冒称末版全窗）；首新夹具8失败及命令目录错误如实见implement。C03首12/续6只读，CodeBuddy/DeepSeek/max同会话exit0/no fallback，条件resume风险已按实际生产/恢复签名关闭，未跑测试/临床。取舍reviews/rv1006-reviewed-source-types-owner-disposition-20261008.md。新字段修复尚未真实运行；真不完整、来源歧义、其他关联问题仍拒，不能自动清空政策求通过。
+C03：CodeBuddy/codebuddy-cli/deepseek-v4.1-flash:max，session01a11d4f-08dd-746f-8b23-5f171e128dd2，两轮117.924/134.589s/return0/no fallback，120min完成等待主线程静默。首13工具（含被拒Bash）超过12限制，续12工具；parsed_tool_result_count=0，不能据日志计数宣称读取成功。只读工程，未测试/未临床/未核HEAD；函数预算限制和首次错误函数名如实见报告。采纳保留路径不能绕过已知错误基础；末摘录适用条件由主线程用真实旧15组、合成反例、当前完整预检核，不追称顾问审过后改。取舍reviews/rv1006-author-context-owner-disposition-20261009.md。
 
-### 以下为之前局部恢复的历史证据
+预检诊断首漏PYTHONPATH、空WAL误认writer，均0调用/0写；后lsof无DB所有者、WAL0、租约空。新前移检查首错把格内子项套父行，实际旧15组反证后恢复原摘录条件，16/1/73完整通过、DBhash保持。失败记录不删除、不称provider故障。
 
-最新b9实际执行scope纠正，但模型在JSON字段间插入自我修改文字；未应用来源。只对json_invalid重交一次原范围，扣同source_repairs，错误ID/来源/字段/传输不借此扩读；最后仍技术失败，新码贯通实际服务，受限消费者拒绝。有效后才能过原来源及一次目标门。v4恢复身份，旧成功重验/旧终态保持。全历史scope计数完备性仍是既有残余，不称已修。三模块1224pass/1fail102.85秒，旧v3断言修v4后单项1pass2秒；不冒称末版全三模块。C03同会话8静态读取/exit0/no fallback，无必须修，未读临床/跑测试。取舍reviews/rv1006-scope-json-recovery-owner-disposition-20261008.md。新产品恢复尚待从b9合法入队；以下为原v3及更早快照。
+## 接续步骤与退出
 
-a7de实际初答缺unresolved_aspects且未写时间，局部格式纠正才提真实原生时点。v2仍依赖模型先说时间，未运行scope修正。v3只依据冻结结构中的有源共同标题和尚未解释的来源范围选择既有scope修正；不依赖核对者措辞或错误顺序。旧一次目标纠正/source_repairs预算保持，原句/用途/例外/兄弟不改，错误目标仍完整拒绝。已有scope/stage/time任何一个不空不由此扩写。
+1. 核本包提交/dirty和真实零调用预检；沿最新6a4来源从合法API创建新受控Job，复用16成功、17仅证实来源，完整90范围不缩。旧Job终态不改；新独立输出目录不可覆盖。读取新prepare/execute实际账本而非凭stdout安静猜失败。
+2. 无新证据同失败两次停该分支，归因来源→解释→装配→验证→采用→界面首错；推进独立病例消费者，不把所有模型输出都UNKNOWN或以扩大整包预算恢复格式错误。
+3. 完整官方+跨章同源包成立后从合法入口共同发布隔离项目；来源身份及正式采用权限分别核。原政策齐全的新141条件进入消费者，不沿用旧81组件缺policy作结论。
+4. 新合法项目下继承有源资料/候选并实际核资格→全当前节点工作稿；未核或不可读范围具体限制，独立有据结果保持可用，不授予未批准自动数值采用。
+5. Ego Lite正式入口一次有源更正/补证→相关失效/重算→新工作稿→旧报告回看，原件/旧hash不变。集中宽屏和恢复验收按03_ACCEPTANCE，达到后按窗口回交，不擅扩新优化。
+6. 当前没有完整共同发布/新工作稿/规则关联更正/新旧审核报告/Q3；claims_complete=false。
 
-1220passed/100.75秒/exit0/5SWIG集中三模块；17窄窗是选择断言前快照，末集中窗覆盖新增断言。不累加。C03同CodeBuddy/DeepSeek/max会话91.262秒/exit0/no fallback、120min静默完成等待，9次只读，未测试/未临床。source_scope修复不能证明脚注完整含义：所有者只读核完整冻结清单有相关表头脚注原单元，但未进入此行局部上下文；完整包及依赖门仍不可绕过。合法未决首答不触发这条失败恢复，是明确残余，不宣称上游解释已全面修复。报告/取舍见reviews/rv1006-native-dependency-order-owner-disposition-20261008.md。validator v3，只升级局部恢复身份，不反算历史。
-
-以下v1/v2为历史反证，按各快照理解“现/未执行”，不覆盖本节：
-
-065e实际运行揭示前一修复未执行：初答先报UNRESOLVED_ASPECTS_MISSING，同答已有真实标题格时点；一次目标纠正后才报SOURCE_TIME_UNGROUNDED，同条机会已用完。只按错误代码选择scope修正错误地依赖校验顺序。现来源scope/stage/time均缺且核对时点恰为原生完整标题格/列时，先以原有scope修正核依赖，再使用原来的一次目标修正；既有范围不改写、假时点不送此路，不加调用上限/重试次数，不放宽源/目标门。15项窄窗包含这个真实顺序的合成复现及非原生时间反例通过，集中检查按implement记录。控制流修订由所有者直接做，先前C03报告仍仅覆盖当时版本。validator标记升v2，旧来源、Schema和编译器身份不反算。
-
-以下v1功能包结果为历史，不能据其“未执行”重跑原目录：
-
-9d91真实运行已送达原生表格位置，出现新的明确首错：17第5条来源解释scope/stage/time_words全空，但唯一标记格的完整原生表头明确给出时点。核对者保留该时间被SOURCE_TIME_UNGROUNDED正确拒绝；不能删时间让错误解释通过。native_schedule_time_excerpt_is_grounded仅定位已有scope修正入口，要求整行摘录、全部标记列有源且无访视/标记脚注未决，完整原生标题格/整列标题等值，不从“期”等子串推断范围。模型仍须单条提出范围/阶段/时间、通过原来源门、再核目标；兄弟/动作/用途/例外不改。共享source_repairs限制与同条一次修正不清零，故障/重复错误保留草稿，不自动采用。
-
-当前三相连模块1215passed/100.45秒/exit0；末整格等值加固13passed/1.06秒/exit0。前窄窗夹具必填/恢复参数/恢复权限错误单列implement，不累加。C03同会话79.969秒/exit0/no fallback，静默120min完成等待；只读工程未测试/未临床。采纳子串风险，以真实格对应修，未照抄按空白拆词。先前全局source prompt已有表格context但缺逐成员关系，不能照顾问文字说完全无表头。validator追加native-table-scope-recovery/v1；基础提示/Schema/旧历史摘要不反算。新合法接续尚未执行，先现场前置重验，保留上游来源链。
-
-下列为前一功能包已证成果（不归到本次新修订）：
-
-17原生行标签/X/表头已在batch，但reviewer仅收到平面摘录，无法核位置；补只读native_table_source，含真实source_ref/span/member refs/格路径，不把位置当覆盖证明。21合法候选各引用不同标记格而候选级整行来源缺失；精确原子引用验证后宿主补所属整行完整出处，sorted-unique、复制输入、幂等，原子/逻辑/时点/政策不动，越界/伪造原文仍拒。无需关闭TABLE_ROW_SOURCE_CLOSURE_PARTIAL。
-
-先前草案两项compiler标记会使全部成功结果失效，已撤回未提交设计。当前只升级结构validator identity；原采用门本来要求同一整行闭包，不改语义编译。18份真实已完成partial_wire按当前编译重放与旧final_output完全相同，1受限结果当前重推相同；旧compiler/schema/source/route拒复用反例保留，不加白名单。当前预检19/2/69。关闭既有可选continue-after-unresolved才能让17实际复核；若保持True，预检会preserve_unresolved，已识别，不静默继承。
-
-最终三相连原模块1203passed/96.30秒/exit0/5SWIG，JUnit artifacts/rv1006-native-table-consumer-connected-20261008-v4.xml。v3为1202pass/1fail109.71秒，新增非首span正例夹具内部来源错误；其后两个5pass1fail窗口暴露冻结赋值及候选原子闭包不一致，修夹具不松门。6个最终局部例0.76秒exit0，不累加。首v2为1198pass4fail新增构造问题，文件名诊断exit4无测试。独审CodeBuddy/DeepSeek/max/session01a11c53-1d24-71c2-8a28-568da7aaea2e，首194.256秒、续86.082秒/exit0/no fallback，120min静默完成等待。采纳排序缺陷；末审未见必修，不等于已运行测试/临床。首审约13读超10预算，续审实际hash落点未读到，所有者原请求/回执继续私有保留。详见同名reviews/metrics。
-
-### 上一功能包（历史证据）
-
-1. 已引用动作因时期未证明而没有action_candidate_indexes，原防重复插入条件永远不满足。C最小修复以同单元、原span交集及逐字摘录限定候选引用，进入已有SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED；不把引用当临床已表达，兄弟不能仅凭同单元被拦。
-2. 表格引用的真实脚注未送给来源读取。B复用已验证原生snapshot及表后编号解析，将编号→原单元关系冻结于Job，预检和closure共用规划；脚注只读、自己的发现处置不变，不借另一流程项解释，不改覆盖清单/旧原件。
-3. 旧新版兼容看实际batch材料，而非新字段导致全量失效。真实只读预检15可复用/75需读取：已完成1–15重验通过，16新增脚注重读，17起未完整。原因14完整材料重验、1受限重验、1规划变化、74未完成；没有整体prompt/component失效。
-4. 资料页收紧已读状态/重复抬头/孤立操作空白，保留失败与待核提醒；项目名称省略但完整title可查，没有临床门变更。
-
-具体所有者取舍、残余与调用证据：reviews/rv1006-source-context-loop-owner-disposition-20261008.md。不新增框架、疾病阈值、A/B伪造或采用捷径。
-
-## 4. 上一功能包验证与独审边界（非当前补丁快照）
-
-| 验证 | 实际结果 | 范围 |
-|---|---|---|
-| C三原模块 | 1125passed/101.66秒/exit0，5SWIG，artifacts/rv1006-source-citation-stop-connected-20261008-v1.xml | 在B之前，不冒称B末版 |
-| B五相连模块 | 1135passed/116.31秒/exit0，5SWIG，artifacts/rv1006-native-note-context-connected-20261008-v2.xml | 编号/续行/科学计数/背景/越界、实际payload→closure→preflight同hash及历史不变；不是全临床验收 |
-| 末说明修订 | test_protocol_control_generalization.py 31passed/0.46秒/exit0 | 改脚注归属说明，未无谓重跑全库 |
-| B首窗 | 1130pass/3fail/114.40秒 | 两测试尾断言误放、桥接合同未接context，修断言位置和合同，危险反例未删 |
-| 前端 | 四组件模块60passed/10.86秒；TS+正式Vite build exit0 | 既有chunk警告，非全部前端或Q3 |
-| 真实预检/审计 | 0模型/0写，DBhash保持；6763/9997来源提示字符、10885/14973 UTF-8字节，token未知 | 不以字符估算代用量，不宣称新版已执行 |
-| 独审 | CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max，session01a11c13-8595-7ee1-b8cf-9efb0e066a4e，初158.46秒、续228.167秒/exit0/no fallback | 120min完成等待，主线程静默；仅源码、无临床/测试。续轮18工具/解析结果0，不能称医学批准 |
-| Ego Lite | space147真实非Mock资料页，1920×1080/2560×1440/3840×2160，顶323px，均无横向溢出；选择来源、全文开关、缩放、返回正确个例 | 临床截图仅本机；旧规则准备库，不代表完整新链/签发。专用只读63305已TERM、session66572 exit143，共享服务不动 |
-
-首次B预检contract错误、私有脚本PYTHONPATH/import错误、Ego过时元素/不支持选项单列工程诊断，不归因模型。有效历史测试不删除，重叠结果不相加。
-
-## 5. 反思与残余
-
-支持的解释：来源未完整送达与宿主补入条件相互放大，重试不等于更多医学信息；先无调用复现、补实际来源，再局部重验，比反复整本新作业更有据。替代解释：模型仍可能在新增上下文后遗漏临床时期，不能以此次软件测试断言模型已解决。
-
-仍未证明：v3修订后17/21实际恢复、完整90组、同源共同发布、真实新工作稿与更正后新报告、独立留出/Q3/恢复验收。上游完成19和当前完成16分开。协议库尚无project/subject，病例准备副本是旧81组件项目；最终须经合法首次发布/新个例上传或既有有据迁移入口汇合，不能SQL拼身份/借旧规则验收。C摘录含相邻动作时可能保守待核；列标题脚注/拆表/缺续行有残余范围缺口。原答及位置不得以schema通过代替医学核实。
-
-## 6. 连续接续（不是暂停点）
-
-1. 当前终态源13191716…；已有20完成，当前新scope/v2预检19/1/70，17旧证明需要新核对，21来源/草稿接续，其余69未读。通过既有control-executions API合法新建并核实际计划与当前组成，新OUT不得覆盖；不复活失败Job、不重置原账本。已有候选仍须真实alignment，已知政策/关系差额不能标签采用。
-2. 按1006窗口保留局部真实未决和能力缺口，不让独立结果饥饿，但已知错义/未读来源不能换标签发布。失败两次无新信息停止该分支，推进可独立节点；不复活旧Job，不重置历史调用。
-3. 同源完整采用合同成立后接当前节点工作稿→确切原件→UI有源更正/补证→相关重算→新旧结果。窗口完成先回交，不扩模型横评/新框架。
-
-规则共同发布/激活、数字正式自动采用、临床签发未授权自动放行。当前0新共同发布/激活/签发；Goal保持active，任务未完成。继承7份旧delivery dirty及大量未跟踪材料不stage/clean，原件/旧报告/失败hash不改。
+历史完整账本留implement附录、Git历史及原受控回执；本机绝对路径只证明本机可读。测试数量、候选数量、正常stop、HTTP200或同模型会商一致都不是临床批准。

@@ -3953,6 +3953,79 @@ def test_revalidated_source_seed_never_reuses_changed_material_or_author_approva
     assert saved == before
 
 
+@pytest.mark.parametrize("variant", ["retained", "corrected", "same_row", "same_gate", "accepted", "tampered", "missing_source", "non_table"])
+def test_obsolete_native_author_reuses_only_witnessed_source(monkeypatch, variant):
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _native_visit_candidate_material, _batch
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentWireDisposition, ProtocolControlAgentWireRelation
+    from app.domain.contracts.protocol_controls import ControlRelationTargetKind, CrossSourceRelationKind
+    module = protocol_control_execution_module
+    batch, inventory, partial = _native_visit_candidate_material()
+    unit = batch.owned_units[0]
+    target = _batch().known_procedure_targets[0].model_copy(deep=True)
+    if variant == "same_row":
+        target.source_span_ids = list(unit.source_span_ids)
+        target.source_excerpts = list(unit.member_texts)
+    if variant == "non_table":
+        unit.table_context = None
+    batch.known_procedure_targets = [target]
+    initial = partial.model_copy(deep=True)
+    initial.candidate_drafts = []
+    initial.dispositions[0] = ProtocolControlAgentWireDisposition(
+        structure_unit_id=unit.structure_unit_id, disposition=StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+        linked_official_code=None, linked_procedure_catalog_item_id=target.catalog_item_id,
+        linked_procedure_catalog_item_ids=[], notes=None)
+    if variant != "corrected":
+        partial.candidate_drafts[0].cross_source_relations = [ProtocolControlAgentWireRelation(
+            kind=CrossSourceRelationKind.FURTHER_EXPLANATION, external_target_kind=ControlRelationTargetKind.REQUIRED_PROCEDURE,
+            external_target_id=target.catalog_item_id, candidate_side="left", affected_workflow_stage_id=None, notes=None)]
+    prompt = module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE
+    payload = {}
+    current = module._deep_component_identity(payload, prompt)
+    def actual(index, obj):
+        raw = obj.model_dump_json()
+        return dict(attempt=index, session_id=f"session-{index}", outcome="parsed", error_classes=[],
+                    raw_output_text=raw, raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest())
+    saved = dict(stage="deep_failure_diagnostic", schema_version="phase5/deep-failure-diagnostic/v3",
+        batch_id=batch.batch_id, session_id="author", transport_identity={},
+        component_identity=dict(current, validator_version=(current["validator_version"] if variant == "same_gate" else "previous-gate")),
+        prompt_template_sha256=current["prompt_material_sha256"],
+        repair_contract_sha256=module.protocol_control_agent_repair_contract_sha256(),
+        source_interpretation=inventory.model_dump(mode="json"), partial_wire=partial.model_dump(mode="json"),
+        attempts=[actual(1, inventory), actual(2, initial)],
+        source_candidate_alignment={"items": [{"decision": "fully_expressed" if variant == "accepted" else "incomplete"}]})
+    if variant == "tampered":
+        saved["attempts"][1]["raw_output_sha256"] = "0" * 64
+    if variant == "missing_source":
+        saved["attempts"][0]["raw_output_text"] = None
+    before = json.dumps(saved, sort_keys=True)
+    class Store:
+        def get_job(self, _):
+            text = json.dumps(payload)
+            return SimpleNamespace(payload_json=text, payload_sha256=hashlib.sha256(text.encode()).hexdigest())
+        def list_steps(self, _):
+            return [SimpleNamespace(step_id="deep_0001", state="failed_final")]
+        def get_last_checkpoint(self, _, step):
+            return ("closure", {"stage": "closure", "deep_plan": {}}) if step == module.STEP_CLOSURE else ("failure", saved)
+    monkeypatch.setattr(module.ProtocolControlDiscoveryToDeepPlan, "model_validate",
+                        staticmethod(lambda _: SimpleNamespace(batches=[batch])))
+    if variant == "tampered":
+        with pytest.raises(ValueError, match="摘要损坏"):
+            module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
+    elif variant in {"retained", "missing_source"}:
+        recovered = module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
+        assert (recovered is not None) is (variant == "retained")
+        if recovered:
+            assert recovered[1]["partial_wire"] is None and recovered[1]["session_id"] is None
+            proof = recovered[2].source_seed_proof
+            assert proof["reused"] == ["source_interpretation"]
+            assert proof["rejected_author_basis"]["initial_author_sha256"] == saved["attempts"][1]["raw_output_sha256"]
+            assert proof["source_repair_limit"] == module.DEFAULT_MAX_SCHEMA_REPAIRS
+    else:
+        assert (module._obsolete_native_author_basis(batch, saved) is not None) is (variant == "same_gate")
+        # Detection alone never authorizes recovery or bypasses route/source/gate identity.
+    assert json.dumps(saved, sort_keys=True) == before
+
+
 @pytest.mark.parametrize("change", [
     "same", "wrong_index", "wrong_path", "wrong_ref", "wrong_phase", "wrong_error",
     "author_present", "changed_snapshot", "corrupt_raw", "missing_stage", "full_label_not_list",
@@ -5701,6 +5774,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "reviewed-source-type-field-recovery/v1",
                   "validated-snapshot-scoped-session/v1",
                   "phase5/source-function-field-repair/v1",
+                  "native-author-note-projection-and-procedure-row-gate/v1",
                   "native-table-review-scope/v3"))
     )
 

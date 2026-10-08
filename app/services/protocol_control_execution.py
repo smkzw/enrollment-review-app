@@ -125,6 +125,7 @@ from app.domain.contracts.agent_io import ProtocolDeconstructionInput
 from app.domain.contracts.enums import ExtractionStatus, PhaseScope, StudyPhase
 from app.domain.contracts.protocol_controls import (
     CONTROL_CONTINUATION_SOURCE_VERSION,
+    ControlRelationTargetKind,
     KnownOfficialRuleTarget,
     ProtocolControlBatchDispositionHydrated,
     ProtocolControlBatchPlan,
@@ -2066,6 +2067,7 @@ def _deep_component_identity(
                                        "reviewed-source-type-field-recovery/v1",
                                        "validated-snapshot-scoped-session/v1",
                                        SOURCE_FUNCTION_FIELD_REPAIR_VERSION,
+                                       "native-author-note-projection-and-procedure-row-gate/v1",
                                        NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION)),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}
@@ -2560,6 +2562,69 @@ def _revalidated_source_seed_proof(
     }
 
 
+def _obsolete_native_author_basis(
+    batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Locate an unaccepted row link inherited from an invalid initial author answer."""
+    if not isinstance(saved.get("partial_wire"), Mapping):
+        return None
+    alignment = saved.get("source_candidate_alignment")
+    if not isinstance(alignment, Mapping) or not any(
+        isinstance(item, Mapping) and item.get("decision") in {"incomplete", "uncertain"}
+        for item in alignment.get("items", [])
+    ):
+        return None
+    partial = ProtocolControlAgentWire.model_validate(saved["partial_wire"])
+    attempts = saved.get("attempts")
+    if not isinstance(attempts, list):
+        return None
+    for attempt in attempts:
+        if not isinstance(attempt, Mapping):
+            raise ValueError("作者读取的诊断结构损坏")
+        raw = attempt.get("raw_output_text")
+        if raw is None:
+            continue
+        if (not isinstance(raw, str)
+                or hashlib.sha256(raw.encode()).hexdigest() != attempt.get("raw_output_sha256")):
+            raise ValueError("作者读取的实际原答摘要损坏")
+        try:
+            initial = ProtocolControlAgentWire.model_validate_json(raw)
+        except ValueError:
+            continue
+        try:
+            hydrate_protocol_control_agent_output(initial, batch)
+        except ProtocolControlAgentWireValidationError as error:
+            if error.code != "PROCEDURE_ROW_SOURCE_MISMATCH":
+                return None
+            affected = set(error.structure_unit_ids)
+            links = {
+                entry.structure_unit_id: sorted(set(entry.linked_procedure_catalog_item_ids)
+                    | ({entry.linked_procedure_catalog_item_id}
+                       if entry.linked_procedure_catalog_item_id else set()))
+                for entry in initial.dispositions if entry.structure_unit_id in affected
+            }
+            retained = []
+            for entry in partial.dispositions:
+                unit_id = entry.structure_unit_id
+                if unit_id not in links or not links[unit_id]:
+                    continue
+                actual_links = set(entry.linked_procedure_catalog_item_ids) | (
+                    {entry.linked_procedure_catalog_item_id} if entry.linked_procedure_catalog_item_id else set())
+                actual_links.update(relation.external_target_id
+                    for candidate in partial.candidate_drafts if unit_id in candidate.source_structure_unit_ids
+                    for relation in candidate.cross_source_relations
+                    if relation.external_target_kind == ControlRelationTargetKind.REQUIRED_PROCEDURE)
+                if set(links[unit_id]) <= actual_links:
+                    retained.append(unit_id)
+            if not retained:
+                return None
+            return {"code": error.code, "structure_unit_ids": sorted(retained),
+                    "initial_author_sha256": attempt["raw_output_sha256"],
+                    "retained_procedure_links": {unit: links[unit] for unit in retained}}
+        return None
+    return None
+
+
 def _validated_deep_partial_source(
     store: JobStore,
     current_payload: Mapping[str, Any],
@@ -2636,10 +2701,15 @@ def _validated_deep_partial_source(
         and attempt["error_detail"].get("workflow_phase") == "source_correction_pending"
         for attempt in saved.get("attempts", [])
     )
+    obsolete_basis = (
+        _obsolete_native_author_basis(batch, saved)
+        if saved_components.get("validator_version") != current_components["validator_version"]
+        else None
+    )
     # A changed compiler cannot justify reusing executable semantics. It may
     # rederive a wholly non-executable disposition from unchanged source and
     # request materials, checked again by the current validators.
-    if (changed_components and not pending_source
+    if (changed_components and not pending_source and obsolete_basis is None
             and repair_identity == protocol_control_agent_repair_contract_sha256()
             and set(saved_components) == set(current_components)
             and isinstance(saved_components.get("compiler_versions"), list)
@@ -2655,7 +2725,7 @@ def _validated_deep_partial_source(
         resumed_review = _resumable_saved_source_review(batch, interpretation, saved)
         if resumed_review.state == "reused":
             return checkpoint_id, saved, resumed_review
-    if (changed_components or pending_source
+    if (changed_components or pending_source or obsolete_basis is not None
             or repair_identity != protocol_control_agent_repair_contract_sha256()):
         if saved.get("partial_wire") is not None:
             # A damaged wire hard-fails; outdated semantics are discarded, not reused.
@@ -2673,6 +2743,8 @@ def _validated_deep_partial_source(
             )
         if source_seed_proof is None:
             return None
+        if obsolete_basis is not None:
+            source_seed_proof = dict(source_seed_proof, rejected_author_basis=obsolete_basis)
     if source_seed_proof is not None:
         if source_seed_proof.get("source_snapshot_field") == "pending_source_interpretation":
             source = saved.get("pending_source_interpretation")
@@ -2695,8 +2767,8 @@ def _validated_deep_partial_source(
         if not isinstance(saved.get("session_id"), str):
             raise ValueError("局部草稿缺少会话身份")
         wire = ProtocolControlAgentWire.model_validate(saved["partial_wire"])
-        output = hydrate_protocol_control_agent_output(wire, batch)
         try:
+            output = hydrate_protocol_control_agent_output(wire, batch)
             _validate_deep_batch_output(batch, output)
         except (ProtocolControlGateError, ProtocolControlAgentWireValidationError):
             proof = _revalidated_source_seed_proof(

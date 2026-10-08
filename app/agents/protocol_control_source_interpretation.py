@@ -804,10 +804,9 @@ def _target_contains_row_label(target, label_sources) -> bool:
     )
 
 
-def _statement_schedule_label_sources(batch, statement) -> list[tuple[str, str]]:
-    unit = next((item for item in batch.owned_units
-                 if item.structure_unit_id == statement.structure_unit_id), None)
-    if unit is None or unit.table_context is None:
+def native_schedule_label_sources(batch, unit, *, source_quote=None) -> list[tuple[str, str]]:
+    """Locate a native row's label; this never establishes semantic coverage."""
+    if unit.table_context is None:
         return []
     table_root = unit.source_ref.rpartition(".r")[0]
     siblings = [item for item in batch.owned_units
@@ -815,10 +814,18 @@ def _statement_schedule_label_sources(batch, statement) -> list[tuple[str, str]]
                 and item.source_ref.rpartition(".r")[0] == table_root]
     values = schedule_row_values(unit, [*batch.context_units, *siblings])
     if (not values or not values[0][1].strip()
-            or normalize_source_excerpt(values[0][1])
-            not in normalize_source_excerpt(statement.quoted_text)):
+            or (source_quote is not None and normalize_source_excerpt(values[0][1])
+                not in normalize_source_excerpt(source_quote))):
         return []
     return _schedule_label_sources(batch, unit, values, siblings)
+
+
+def _statement_schedule_label_sources(batch, statement) -> list[tuple[str, str]]:
+    unit = next((item for item in batch.owned_units
+                 if item.structure_unit_id == statement.structure_unit_id), None)
+    if unit is None:
+        return []
+    return native_schedule_label_sources(batch, unit, source_quote=statement.quoted_text)
 
 
 class SourceTargetReviewItem(ContractModel):
