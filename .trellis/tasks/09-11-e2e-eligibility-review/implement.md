@@ -5,7 +5,11 @@
 
 当前主集成＋已完成有界C03：最近source-review-pending-input两轮见下文，原来源登记审阅569.594s/173.798s/106.056s仍只作相应快照历史证据；均不认证临床采用。7份继承delivery不动，共享首屏184bdb60适配已push，不重复派发或修改共享首页。源码9e09ba12已push，含来源疑问传递、非法核对保存及当前资格重验；Goal active/claims_complete=false。
 
-当前实际Job a7276ce3ff9f4b5fa32cf4aeefa1e20a（9e09ba12）已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，受控产物rv1006-source-pending-review-recovery-api-20261008-v1：6物理调用288.5069996s，90组0completed/第1组failed/89queued，scope/hydrate/gate依赖失败。原Job状态/payload、保护库、来源库均不变，0共同发布/激活/签发。第2–11组虽入队前已当前核验可复用，但本Job未执行到它们，不能将其queued写成completed。此前bb59749a仍保存这十组最新实际成功结果。
+当前实际Job49948dafabb44d3c915b0480344abac6（已push源码5fe38255）已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，受控产物rv1006-frozen-decision-relation-recovery-api-20261008-v1：2物理调用127.4753153s，90组0completed/第1组failed/89queued。失败发生在来源读取，尚未进入关联修订，不能据此判断关联修复无效或临床通过。原Job状态/payload、保护库、来源库均不变，0共同发布/激活/签发。第2–11组虽入队前核验可复用，本Job未执行，仍不能写成completed。
+
+窗口插入项：第1组仍阻断完整要求快照；首因SOURCE_STAGE_TIME_MISSING要求补时间，现有局部校正却允许同时删已核scope_quote，下一门正确拒绝SOURCE_STAGE_UNGROUNDED。最小修复把该时间缺项与既有SOURCE_TIME_INCOMPLETE共用时间字段权限；提示及实际执行/恢复证明同时保留范围、标签来源身份及阶段，校正仍核完整来源，不补日期或访视。修复合同v5，不重置旧调用；当前主集成直接处理客观字段权限，不新增临床含义裁定或框架。两个相连模块集中993passed/87.31s/exit0/5既有SWIG，JUnit artifacts/rv1006-source-time-field-scope-connected-20261008-v1.xml；新增阶段窗口正常保留和越界删除反例，既有日内时间/消费者/恢复证明同时运行，git diff --check通过。下一受控运行仍先核当前复用范围，不能把本次源答失败当忠实未决。
+
+前次实际Job a7276ce3ff9f4b5fa32cf4aeefa1e20a（9e09ba12）failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，受控产物rv1006-source-pending-review-recovery-api-20261008-v1：6物理调用288.5069996s，90组0completed/第1组failed/89queued，scope/hydrate/gate依赖失败。原Job状态/payload、保护库、来源库均不变，0共同发布/激活/签发。此前bb59749a仍保存第2–11组最新实际成功结果。
 
 窗口插入项：第1组阻断完整要求快照；首轮把研究分期当访视已单条纠正，作者两个结构错已局部修复，随后关系单字段纠正移到候选没有decide_at_node的节点，产生相邻AFFECTED_STAGE_DECISION_MISSING。最小修复为在现有单字段修订中显式投影冻结候选已有判定节点，支持该能力的现有直连transport将其收窄到实际输出Schema，其他读道仍走同一提示＋完整门，不扩写兄弟、证据、时点或临床值。主集成直接做此客观已有门禁的输入约束，无新增语义裁定或框架；已有候选条件/节点不改，非相容关联可由模型提出删除，之后仍做完整来源与含义核对，不由程序自行删除。候选无本节点判定时只允许空关联输出，不能靠关联创造节点。
 

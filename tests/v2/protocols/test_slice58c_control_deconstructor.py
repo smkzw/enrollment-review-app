@@ -5019,13 +5019,17 @@ def test_runner_repairs_intraday_omission_locally_without_rewriting_sibling() ->
 
 
 @pytest.mark.parametrize("drop_scope", [False, True])
-def test_runner_preserves_scope_only_intraday_limit_during_time_correction(drop_scope) -> None:
+@pytest.mark.parametrize("stage_scope", [False, True])
+def test_runner_preserves_scope_only_intraday_limit_during_time_correction(drop_scope, stage_scope) -> None:
     batch = _batch().model_copy(deep=True)
-    batch.owned_units[1].excerpt = "给药前90分钟完成标本采集"
+    scope = "筛选期（首次给药前2天）" if stage_scope else "给药前90分钟"
+    affected = scope if stage_scope else None
+    batch.owned_units[1].excerpt = scope + "完成标本采集"
     original = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-02", "quoted_text": "完成标本采集",
-                        "scope_quote": "给药前90分钟", "force": "required", "time_words": []}],
+                        "scope_quote": scope, "affected_stage": affected,
+                        "force": "required", "time_words": []}],
         "units_without_statement": ["su-01"],
     })
 
@@ -5040,8 +5044,8 @@ def test_runner_preserves_scope_only_intraday_limit_during_time_correction(drop_
             assert "scope_quote 和 affected_stage" in prompt
             return ProtocolControlAgentResponse(session_id="correction", text=SourceScopeCorrection(
                 version="phase5/control-source-scope-correction/v1",
-                structure_unit_id="su-02", scope_quote=None if drop_scope else "给药前90分钟",
-                affected_stage=None, time_words=[] if drop_scope else ["给药前90分钟"], unresolved=None,
+                structure_unit_id="su-02", scope_quote=None if drop_scope else scope,
+                affected_stage=affected, time_words=[] if drop_scope else [scope], unresolved=None,
             ).model_dump_json())
 
     transport = ScopeTransport([
@@ -5055,8 +5059,9 @@ def test_runner_preserves_scope_only_intraday_limit_during_time_correction(drop_
         assert any("不得改变已核原文范围" in issue for attempt in result.attempts for issue in attempt.issues)
     else:
         assert result.source_interpretation is not None
-        assert result.source_interpretation.statements[0].scope_quote == "给药前90分钟"
-        assert result.source_interpretation.statements[0].time_words == ["给药前90分钟"]
+        assert result.source_interpretation.statements[0].scope_quote == scope
+        assert result.source_interpretation.statements[0].affected_stage == affected
+        assert result.source_interpretation.statements[0].time_words == [scope]
 
 
 def test_source_stage_requires_complete_original_time_word() -> None:

@@ -2284,7 +2284,7 @@ _OPTIONAL_ACTION_REPAIR_GUIDANCE_VERSION = "phase5/optional-action-repair-guidan
 _SOURCE_INSERT_GUIDANCE_VERSION = "phase5/source-insert-guidance/v7"
 _TREATMENT_DURATION_REPAIR_GUIDANCE_VERSION = "phase5/treatment-duration-repair-guidance/v2"
 _ATOM_REPAIR_GUIDANCE_VERSION = "phase5/atom-repair-guidance/v4"
-_SOURCE_SCOPE_CORRECTION_POLICY_VERSION = "phase5/source-scope-correction-policy/v4"
+_SOURCE_SCOPE_CORRECTION_POLICY_VERSION = "phase5/source-scope-correction-policy/v5"
 _CALENDAR_REPAIR_TARGET_SELECTION_VERSION = "phase5/calendar-repair-target-selection/v3"
 _TIME_OPERAND_REPAIR_PRIORITY_VERSION = "phase5/time-operand-repair-priority/v3"
 _OBSERVATION_SOURCE_REPAIR_GUIDANCE_VERSION = "phase5/observation-source-repair/v3"
@@ -7181,7 +7181,7 @@ class ProtocolControlAgentRunner:
                                         "\n本次只将方案期别从 time_words 中移除；"
                                         "scope_quote 和 affected_stage 必须原样保留。"
                                     )
-                                elif scope_issue.code == "SOURCE_TIME_INCOMPLETE":
+                                elif scope_issue.code in {"SOURCE_TIME_INCOMPLETE", "SOURCE_STAGE_TIME_MISSING"}:
                                     correction_prompt += (
                                         "\n本次只补全 time_words；已核 scope_quote 和 affected_stage"
                                         "必须原样保留，不得删除共同范围或缩短时间限制。"
@@ -7189,7 +7189,9 @@ class ProtocolControlAgentRunner:
                                 source_repairs += 1
                                 correction_response = scope_corrector(prompt=correction_prompt)
                                 correction = SourceScopeCorrection.model_validate_json(correction_response.text)
-                                if scope_issue.code in {"STUDY_PHASE_NOT_VISIT_TIME", "SOURCE_TIME_INCOMPLETE"} and (
+                                if scope_issue.code in {
+                                    "STUDY_PHASE_NOT_VISIT_TIME", "SOURCE_TIME_INCOMPLETE", "SOURCE_STAGE_TIME_MISSING",
+                                } and (
                                     correction.scope_quote != original_statement.scope_quote
                                     or correction.scope_context_unit_id != original_statement.scope_context_unit_id
                                     or correction.affected_stage != original_statement.affected_stage

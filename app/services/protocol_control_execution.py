@@ -2471,7 +2471,9 @@ def _revalidated_source_seed_proof(
                 else:
                     correction = SourceScopeCorrection.model_validate_json(text)
                     statement = actual.statements[issue.statement_id]
-                    if issue.code in {"STUDY_PHASE_NOT_VISIT_TIME", "SOURCE_TIME_INCOMPLETE"} and (
+                    if issue.code in {
+                        "STUDY_PHASE_NOT_VISIT_TIME", "SOURCE_TIME_INCOMPLETE", "SOURCE_STAGE_TIME_MISSING",
+                    } and (
                         correction.scope_quote != statement.scope_quote
                         or correction.scope_context_unit_id != statement.scope_context_unit_id
                         or correction.affected_stage != statement.affected_stage
