@@ -5,7 +5,13 @@
 
 当前主集成＋已实际C03：恢复实际完成结果涉及来源资格，单独只读审阅已完成Grok/grok-build/grok-4.7/high，同会话7ded3405…733.312s/exit0/no fallback，120min静默完成等待。采纳锁定实际根检查点与失去证明不回退模型调用；不采纳搜索未声明兄弟历史作否决的建议。报告/所有者取舍见rv1006-unexecuted-source-lineage-20261008；非临床批准。7份继承delivery不动，共享首屏184bdb60适配已push，不重复派发或修改共享首页。恢复源码038b5acd已push；Goal active/claims_complete=false。
 
-当前受控运行b8781db03e414145a1dd0d3be4c1fe89从640780a6合法新建，入队先核10reusable（2–11）、2resume_partial（1及12）、78refresh及实际根回执摘要；85发现步骤零新调用复用完成。冻结app源码为038b5acd，实际首深审仍running，未把queued或预检写成完成。私有产物rv1006-lineage-pinned-recovery-api-20261008-v1，既有18点读取被显式禁止重读；沿现有产品transport继续作者/局部核对。等待真实终态后核完整账本及保护库，非恢复旧failed_final。
+当前实际终态b8781db03e414145a1dd0d3be4c1fe89：failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED，40物理调用1694.033920s，90深审15completed（1–11及13–16）/2failed（12、17）/73queued，scope/hydrate/gate依赖失败。从640780a6合法新建，入队先核10reusable（2–11）、2resume_partial（1及12）、78refresh及实际根回执摘要；85发现零调用复用、十份已完成深审未重读。冻结app源码038b5acd；原Job状态/payload、来源库、保护库均不变，0共同发布/激活/签发，claims_complete=false。私有产物rv1006-lineage-pinned-recovery-api-20261008-v1，不复活旧failed_final。
+
+当前首因与修订：第12组冻结来源疑问要求异时分支共同阶段，第17组已有原生访视列却缺合法范围引用。未改产品提示的两次独立来源诊断48.333848/61.264897s仍重现这两类问题，不是端点不可用。最小修订仅升级repair合同：现有范围校正提示给标记列及标题引用；局部来源疑问提案仅可改该条疑问，表格另可通过既有范围门补范围/阶段/时间，原句/用途/例外/相邻条目冻结，不用正则推断OR，不自动清疑问或写共同阶段。共同修复预算、真实提案hash/前置hash、失败保留及v5实际回放证明贯通Runner与恢复；后续仍需作者、目标/定义、采用门核对。
+
+当前有界产物rv1006-local-scope-question-diagnostic-20261008-v1：Ollama cloud/deepseek-v4.1-flash/high，2物理调用，5.346091/26.873748s，两提案均完整来源门通过且目标条疑问为空；总input4194/output含思考7703/cache256（已含input）、费用/思考拆分unknown。数据库hash不变/0写入/0采用；不是新Job或临床批准。C03实际Grok/grok-4.7/high、af3fc53a…824.197s/exit0/1轮/no fallback，120min静默完成等待，超过八次读取预算如实保留。采纳原生列/异时来源取证，拒绝OR正则路由、程序自动补临床scope和全局提示升级；顾问只看旧代码与合成材料，未审最终补丁，详见同名review/metrics。
+
+当前源码相连集中窗：v1原三模块1003pass/13fail/104.29s，13项均新合成夹具误用不存在的decision_functions及exception数组，修夹具不放门。focused v2为15pass/1fail，暴露所有者新增失败返回session_id=None，修真实返回；v3为16pass、v4增原生多列正反例18pass。三相连模块1021passed/100.99s/exit0/5SWIG，JUnit artifacts/rv1006-source-question-and-scope-20261008-v5.xml；随后只补新核对路径的repair_used记录（成功/失败都绑定局部合同），18受影响反例0.61s/exit0，未冒称最后此小修重跑全三模块。不累加窗口或称临床验收。零模型/零写入实际预检15reusable/1resume_partial（17）/74refresh_required（含12和73未执行），十五份成功不重读，原失败wire/review不继承。下一步合法新Job及实际消费者；旧终态不动，claims_complete=false。
 
 同期正式Ego147只读61124检查：检验表格确已保存，首屏抬头较长与内滚动不是漏识别；原页面原文长度1046、默认摘录1027。纯“主检/审核”、网址及括号页码未收起，最小展示修复扩精确行政标签，混同行临床时点/患者信息/单位/CS·NCS保持。新增微摩尔混同行反例暴露既有词边界错误，修Unicode单位边界，不改源偏移、风险资格或事实。4相连前端模块初窗73pass/1fail，末窗74passed/9.21s/exit0，正式TS/Vite2094模块build exit0/既有bundle体积提示。Ego最终检验页默认963字、普通人员及网址不显示、69.20 kUA/L与报告日期仍在；原图/完整模式可达，1920/2560/3840局部无溢出，截图实际查看。首个最终读数476为reload重置到病历页，非检验漏读，选回实际检验页后才作结论。只读PID24748/session65512已退出130，全部非GET禁止/Runner关闭，0临床修改或模型调用，共享服务未动；不是完整Q3或当前节点工作稿验收。
 

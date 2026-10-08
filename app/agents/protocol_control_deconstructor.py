@@ -119,6 +119,7 @@ from .protocol_control_source_interpretation import (
     SOURCE_DEFINITION_CONSUMER_VERSION,
     SOURCE_INTERPRETATION_PROMPT_VERSION,
     SOURCE_QUOTE_RECOVERY_VERSION,
+    SOURCE_SCOPE_QUESTION_RECHECK_VERSION,
     SOURCE_TARGET_REVIEW_VERSION,
     SOURCE_TARGET_REVIEW_POLICY_VERSION,
     SourceDefinitionConsumers,
@@ -136,6 +137,9 @@ from .protocol_control_source_interpretation import (
     SourceTargetReviewValidationError,
     apply_source_quote_correction,
     apply_source_scope_correction,
+    apply_source_scope_question_recheck,
+    can_recheck_source_scope_question,
+    build_source_scope_question_prompt,
     build_source_definition_consumers_prompt,
     build_source_interpretation_prompt,
     build_source_quote_correction_prompt,
@@ -2284,7 +2288,7 @@ _OPTIONAL_ACTION_REPAIR_GUIDANCE_VERSION = "phase5/optional-action-repair-guidan
 _SOURCE_INSERT_GUIDANCE_VERSION = "phase5/source-insert-guidance/v7"
 _TREATMENT_DURATION_REPAIR_GUIDANCE_VERSION = "phase5/treatment-duration-repair-guidance/v2"
 _ATOM_REPAIR_GUIDANCE_VERSION = "phase5/atom-repair-guidance/v4"
-_SOURCE_SCOPE_CORRECTION_POLICY_VERSION = "phase5/source-scope-correction-policy/v5"
+_SOURCE_SCOPE_CORRECTION_POLICY_VERSION = "phase5/source-scope-correction-policy/v6"
 _CALENDAR_REPAIR_TARGET_SELECTION_VERSION = "phase5/calendar-repair-target-selection/v3"
 _TIME_OPERAND_REPAIR_PRIORITY_VERSION = "phase5/time-operand-repair-priority/v3"
 _OBSERVATION_SOURCE_REPAIR_GUIDANCE_VERSION = "phase5/observation-source-repair/v3"
@@ -2898,6 +2902,7 @@ def protocol_control_agent_repair_contract_sha256(
         parts.append(_OBSERVATION_SOURCE_REPAIR_GUIDANCE_VERSION)
         parts.append(SOURCE_TARGET_REPAIR_VERSION)
         parts.append(SOURCE_QUOTE_RECOVERY_VERSION)
+        parts.append(SOURCE_SCOPE_QUESTION_RECHECK_VERSION)
         parts.append(SOURCE_FUNCTION_RECHECK_VERSION)
         parts.append(PUBLICATION_REPAIR_SCOPE_VERSION)
         parts.append(_CANDIDATE_FIELD_REPAIR_VERSION)
@@ -6974,6 +6979,9 @@ class ProtocolControlAgentRunner:
         front_candidate_alignment: SourceCandidateAlignment | None = None
         workflow_path_executed = "not_started"
         def build_result(**values) -> ProtocolControlAgentRunResult:
+            if any(attempt.error_detail and attempt.error_detail.get("workflow_phase") == "source_scope_question_recheck"
+                   for attempt in attempts):
+                values.setdefault("repair_used", True)
             values.setdefault("source_front_target_review", front_target_review)
             values.setdefault("workflow_variant_requested", workflow_variant)
             values.setdefault("workflow_path_executed", workflow_path_executed)
@@ -7403,6 +7411,53 @@ class ProtocolControlAgentRunner:
                         "逐字定位时填写 scope_quote；否则留空。仍须返回全部原文陈述，"
                         "不得改写原文、推断医学含义或遗漏其他单元。"
                     )
+        if source_interpretation is not None and not resuming_partial and callable(source_reader):
+            for index, statement in enumerate(source_interpretation.statements):
+                if not can_recheck_source_scope_question(statement, batch) or source_repairs >= self._max_schema_repairs:
+                    continue
+                question_response = None
+                detail = {
+                    "workflow_phase": "source_scope_question_recheck",
+                    "code": "SOURCE_SCOPE_QUESTION_RECHECK",
+                    "statement_id": index, "json_path": f"statements[{index}].unresolved",
+                    "source_refs": list(next(unit.source_span_ids for unit in batch.owned_units
+                                             if unit.structure_unit_id == statement.structure_unit_id)),
+                    "retry_class": "source_semantic_review", "affected_dependents": [index],
+                    "precondition_sha256": _sha256(statement.model_dump_json()),
+                }
+                try:
+                    source_repairs += 1
+                    repair_used = True
+                    question_response = source_reader(prompt=build_source_scope_question_prompt(
+                        batch, source_interpretation, index,
+                    ))
+                    proposal = SourceInterpretation.model_validate_json(question_response.text)
+                    source_interpretation = apply_source_scope_question_recheck(
+                        batch, source_interpretation, index, proposal,
+                    )
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1, session_id=question_response.session_id,
+                        raw_output_sha256=_sha256(question_response.text),
+                        raw_output_chars=len(question_response.text), raw_output_text=question_response.text,
+                        outcome="parsed", error_detail=detail,
+                        issues=["本条时间疑问经原文局部核对；完整要求仍须独立核验"],
+                    ))
+                except Exception as question_error:  # noqa: BLE001 - retain the frozen source on failure
+                    code = protocol_control_call_failure_code(question_error) or "SOURCE_SCOPE_QUESTION_RECHECK_INVALID"
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=question_response.session_id if question_response else "source-time-question-failed",
+                        raw_output_sha256=_sha256(question_response.text if question_response else str(question_error)),
+                        raw_output_text=question_response.text if question_response else None,
+                        raw_output_chars=len(question_response.text) if question_response else None,
+                        outcome="schema_invalid" if question_response else "transport_failed",
+                        error_classes=[code], error_detail=detail,
+                        issues=["单条时间疑问核对失败，原陈述保留：" + str(question_error)[:1000]],
+                    ))
+                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                                        session_id=question_response.session_id if question_response else "source-time-question-failed",
+                                        attempts=attempts,
+                                        source_interpretation=source_interpretation)
         if (workflow_variant == FIXED_FLOW and raw_text is None
                 and source_interpretation is not None
                 and output_validator is not None

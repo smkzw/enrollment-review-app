@@ -322,6 +322,13 @@ def build_source_scope_correction_prompt(
                  if item.structure_unit_id == statement.structure_unit_id), None)
     if unit is None:
         raise ValueError("待校正陈述不属于冻结来源")
+    columns = schedule_column_scope(unit, batch.context_units)
+    column_sources = [{
+        "cell_path": column.cell_path, "cell_source_ref": column.cell_source_ref,
+        "header_text": column.header_text, "header_source_refs": column.header_source_refs,
+        "boundary_side": column.boundary_side, "visit_unresolved": column.visit_unresolved,
+        "marker_footnotes": column.marker_footnotes,
+    } for column in columns]
     return (
         "你是内置方案 Agent 的单条来源范围核对步骤。只核原文动作的适用范围、阶段和时间；"
         "动作摘录、条件、例外及其他陈述已经冻结，不得改写。"
@@ -331,6 +338,11 @@ def build_source_scope_correction_prompt(
         "而非动作、时间或例外句，且你核实它直接限定本条对象时，scope_quote 可逐字引用整个标签，"
         "scope_context_unit_id 填该冻结单元ID；否则该ID填 null。这种引用不能补 time_words 或 affected_stage。"
         "引用ID必须出现在本条可核只读标签列表；列表为空时必须填 null，不从其他 context 自选。"
+        "日程表另有下方逐列来源：标记所在单元格与访视列标题具有原生行列关系，"
+        "不是前述同格项目标签。可核只读标签为空不表示没有访视列标题。"
+        "若原文范围逐字存在于本行全部标记列的有源标题中，可在 scope_quote 引用该共同短语，"
+        "scope_context_unit_id 仍为 null；affected_stage/time_words 仅可引用该范围内的原词。"
+        "不同标记列没有同一范围时不得压成一个阶段；保留具体疑问。缺标题来源、访视未清或脚注有疑问时不能猜。"
         "上轮错误字段不可照抄：若共享范围不在本条动作前的同一来源单元、所属标题或表格标题中，且无上述可核标签，"
         "scope_quote 填 null；本条没有对应时间原文则 time_words 填空数组。"
         "本条括号内的临床子条件若有独立回溯期限也要逐项列出，文献书名的版本年份不算；"
@@ -345,8 +357,89 @@ def build_source_scope_correction_prompt(
         f"上轮错误：{issue[:1000]}\n"
         f"冻结单元：{json.dumps({'structure_unit_id': unit.structure_unit_id, 'heading_path': unit.heading_path, 'excerpt': unit.excerpt, 'table_context': unit.table_context.model_dump(mode='json') if unit.table_context else None}, ensure_ascii=False)}\n"
         f"可核只读标签：{json.dumps(_cell_scope_label_packet(batch, unit), ensure_ascii=False)}\n"
+        f"标记列原生来源：{json.dumps(column_sources, ensure_ascii=False)}\n"
         f"原陈述：{statement.model_dump_json()}"
     )
+
+
+SOURCE_SCOPE_QUESTION_RECHECK_VERSION = "phase5/source-scope-question-recheck/v1"
+
+
+def can_recheck_source_scope_question(
+    statement: SourceStatement, batch: ProtocolControlDispositionBatch | None = None,
+) -> bool:
+    """Select a source question, never infer the clinical relationship of its times."""
+    literal_times = (len(set(statement.time_words)) >= 2
+            and all(normalize_source_excerpt(word) in normalize_source_excerpt(statement.quoted_text)
+                    for word in statement.time_words))
+    columns = ()
+    if batch is not None:
+        unit = next((unit for unit in batch.owned_units
+                     if unit.structure_unit_id == statement.structure_unit_id), None)
+        if unit is not None:
+            columns = schedule_column_scope(unit, batch.context_units)
+    native_scope = bool(columns) and all(column.header_source_refs and column.header_text
+                                        and not column.visit_unresolved for column in columns)
+    return bool(statement.unresolved) and statement.affected_stage is None and (literal_times or native_scope)
+
+
+def build_source_scope_question_prompt(
+    batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation, index: int,
+) -> str:
+    statement = interpretation.statements[index]
+    if not can_recheck_source_scope_question(statement, batch):
+        raise ValueError("本条不属于多时间来源疑问核对范围")
+    unit = next(unit for unit in batch.owned_units
+                if unit.structure_unit_id == statement.structure_unit_id)
+    return (
+        "你是内置方案 Agent 的单条原文范围疑问核对步骤。只核 unresolved 中的疑问是否"
+        "确实由原文引起，不生成规则、不判断受试者。不同子条件可以各有自己的时间限定，"
+        "没有共同 affected_stage 本身不构成原文歧义；也不能因此把所有分支套到同一阶段。"
+        "逐项核原句的并列/选择、否定、对象与各自时间关系；若确有两种影响临床含义的解释，"
+        "保留具体 unresolved，不能为了通过检查删除。仅当原文明确、疑问仅来自要求统一阶段时"
+        "才可提出 unresolved 为空数组。原文、逻辑、时间词、范围、用途及其余字段逐项原样保留。"
+        "返回原 SourceInterpretation JSON：version 原样，statements 恰为指定一条，"
+        "units_without_statement 为空。普通原句仅 unresolved 可改变；若下方有原生标记列来源，"
+        "另可按单条来源范围核对规则补 scope_quote/affected_stage/time_words，scope_context_unit_id 不变，"
+        "不得删除原句已有时间词，只能引用全部标记列共有的原文范围。无共同范围、脚注或真实关系未清时保留疑问。"
+        "不存在既有流程项不能作为忽略原文访视列的理由，也不得借另一个动作的流程项。此提案还须完整来源与目标核对，"
+        "不是采用证明。\n"
+        + json.dumps({"recheck_version": SOURCE_SCOPE_QUESTION_RECHECK_VERSION,
+                      "version": interpretation.version,
+                      "frozen_statement": statement.model_dump(mode="json"),
+                      "source_unit": unit.model_dump(mode="json"),
+                      "native_scope_instruction": build_source_scope_correction_prompt(batch, statement, "原有来源范围疑问")
+                          if schedule_column_scope(unit, batch.context_units) else None}, ensure_ascii=False)
+    )
+
+
+def apply_source_scope_question_recheck(
+    batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation,
+    index: int, proposal: SourceInterpretation,
+) -> SourceInterpretation:
+    original = interpretation.statements[index]
+    if (not can_recheck_source_scope_question(original, batch) or proposal.version != interpretation.version
+            or len(proposal.statements) != 1 or proposal.units_without_statement):
+        raise ValueError("时间疑问核对必须只返回指定原陈述")
+    revised = proposal.statements[0]
+    unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == original.structure_unit_id)
+    native = bool(schedule_column_scope(unit, batch.context_units))
+    allowed = {"unresolved", "scope_quote", "affected_stage", "time_words"} if native else {"unresolved"}
+    if (original.model_dump(mode="json", exclude=allowed)
+            != revised.model_dump(mode="json", exclude=allowed)):
+        raise ValueError("时间疑问核对不得改变原文、逻辑、范围、时间或其他来源字段")
+    if native:
+        # Reuse the existing scope gate and preservation rules, not a new adoption policy.
+        apply_source_scope_correction(batch, interpretation, index, SourceScopeCorrection(
+            version="phase5/control-source-scope-correction/v1",
+            structure_unit_id=revised.structure_unit_id, scope_quote=revised.scope_quote,
+            scope_context_unit_id=revised.scope_context_unit_id,
+            affected_stage=revised.affected_stage, time_words=revised.time_words,
+        ))
+    result = interpretation.model_copy(deep=True)
+    result.statements[index] = revised.model_copy(deep=True)
+    validate_source_interpretation(batch, result)
+    return result
 
 
 def source_scope_correction_response_format() -> dict[str, object]:

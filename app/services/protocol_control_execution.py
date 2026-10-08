@@ -81,6 +81,7 @@ from app.agents.protocol_control_source_interpretation import (
     normalize_source_excerpt,
     parse_product_source_interpretation,
     apply_source_scope_correction,
+    apply_source_scope_question_recheck,
     apply_source_quote_correction,
     validate_source_definition_consumers,
     validate_source_interpretation,
@@ -2488,10 +2489,41 @@ def _revalidated_source_seed_proof(
             if not corrected and (first.get("outcome") != "parsed" or first.get("error_classes")):
                 return None
             break
+    question_corrected: set[int] = set()
+    for attempt in attempts[len(witnessed):]:
+        detail = attempt.get("error_detail") if isinstance(attempt, Mapping) else None
+        if not isinstance(detail, Mapping) or detail.get("workflow_phase") != "source_scope_question_recheck":
+            break
+        index = detail.get("statement_id")
+        if (len(corrected) + len(question_corrected) >= max_source_corrections
+                or type(index) is not int or not 0 <= index < len(actual.statements)
+                or index in question_corrected or attempt.get("outcome") != "parsed"
+                or attempt.get("error_classes") or attempt.get("attempt") != len(witnessed) + 1):
+            return None
+        statement = actual.statements[index]
+        unit = next(unit for unit in batch.owned_units
+                    if unit.structure_unit_id == statement.structure_unit_id)
+        if (detail.get("code") != "SOURCE_SCOPE_QUESTION_RECHECK"
+                or detail.get("json_path") != f"statements[{index}].unresolved"
+                or detail.get("source_refs") != list(unit.source_span_ids)
+                or detail.get("precondition_sha256") != hashlib.sha256(statement.model_dump_json().encode()).hexdigest()):
+            return None
+        text = actual_text(attempt)
+        if text is None:
+            return None
+        try:
+            actual = apply_source_scope_question_recheck(
+                batch, actual, index, SourceInterpretation.model_validate_json(text),
+            )
+        except (ValueError, KeyError, TypeError):
+            return None
+        question_corrected.add(index)
+        witnessed.append(attempt["raw_output_sha256"])
     if actual.model_dump(mode="json") != source_snapshot:
         return None
     return {
-        "schema_version": ("phase5/revalidated-source-seed-proof/v4"
+        "schema_version": ("phase5/revalidated-source-seed-proof/v5" if question_corrected else
+                           "phase5/revalidated-source-seed-proof/v4"
                            if snapshot_field == "pending_source_interpretation"
                            else "phase5/revalidated-source-seed-proof/v3"),
         **({"source_snapshot_field": snapshot_field}
@@ -2501,6 +2533,7 @@ def _revalidated_source_seed_proof(
         "source_response_sha256": witnessed,
         "scope_correction_indexes": sorted(corrected - quote_corrected),
         "quote_correction_indexes": sorted(quote_corrected),
+        **({"scope_question_indexes": sorted(question_corrected)} if question_corrected else {}),
         "base_prompt_sha256": saved["prompt_template_sha256"],
         "source_sha256": hashlib.sha256(actual.model_dump_json().encode()).hexdigest(),
         "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
@@ -3092,7 +3125,8 @@ def _preflight_deep_source(
             decisions[batch.batch_id]["reason"] = (
                 "verified_source_interpretation_components_revalidated"
                 if partial[2].source_seed_proof["schema_version"] in {
-                    "phase5/revalidated-source-seed-proof/v3", "phase5/revalidated-source-seed-proof/v4"}
+                    "phase5/revalidated-source-seed-proof/v3", "phase5/revalidated-source-seed-proof/v4",
+                    "phase5/revalidated-source-seed-proof/v5"}
                 else "verified_source_interpretation_repair_material_changed"
             )
             decisions[batch.batch_id]["source_seed_proof"] = partial[2].source_seed_proof
@@ -4297,7 +4331,8 @@ def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str
         record["proof_scope"] = (
             "revalidated_source_interpretation"
             if resume_review.source_seed_proof["schema_version"] in {
-                "phase5/revalidated-source-seed-proof/v3", "phase5/revalidated-source-seed-proof/v4"}
+                "phase5/revalidated-source-seed-proof/v3", "phase5/revalidated-source-seed-proof/v4",
+                "phase5/revalidated-source-seed-proof/v5"}
             else "unrepaired_source_interpretation"
         )
         record["source_seed_proof"] = dict(resume_review.source_seed_proof)
