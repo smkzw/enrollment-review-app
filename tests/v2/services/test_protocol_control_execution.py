@@ -540,7 +540,8 @@ def test_changed_compiler_revalidates_only_wholly_nonexecuting_temporal_source(m
 
     class Store:
         def get_job(self, _):
-            return SimpleNamespace(payload_json=json.dumps(payload))
+            text = json.dumps(payload)
+            return SimpleNamespace(payload_json=text, payload_sha256=hashlib.sha256(text.encode()).hexdigest())
 
         def list_steps(self, _):
             return [SimpleNamespace(step_id="deep_0001", state="failed_final")]
@@ -1478,7 +1479,7 @@ def test_completed_restricted_source_reuse_rechecks_saved_review(monkeypatch, ki
 
     class FakeStore:
         def get_job(self, _job_id):
-            return SimpleNamespace(payload_json="{}")
+            return SimpleNamespace(payload_json="{}", payload_sha256=hashlib.sha256(b"{}").hexdigest())
 
         def get_last_checkpoint(self, _job_id, step_id):
             if step_id == module.STEP_CLOSURE:
@@ -2831,6 +2832,139 @@ def test_new_job_can_reuse_discovery_and_deep_from_same_verified_source(
     assert mismatch.value.code == "PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID"
 
 
+@pytest.mark.parametrize("case", ["valid", "failed_queued", "refresh", "plan_hash", "cycle", "missing_receipt", "changed_after_intake", "receipt_changed", "validation_changed", "root_payload_corrupt"])
+def test_unexecuted_reuse_lineage_revalidates_actual_source_not_queued_success(
+    data_paths, session_factory, monkeypatch, case,
+) -> None:
+    from app.storage.codecs import encode_value
+
+    module = protocol_control_execution_module
+    seed = _seed_frozen_source(data_paths, session_factory, key="queued-lineage")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed,
+        route_identity_factory=lambda stage: module._transport_identity_digest(
+            discovery if stage == "discovery" else deep, stage=stage,
+        ))
+    source = service.create_from_deconstruction(source_job_id=seed.source_job_id, idempotency_key="lineage-root")
+    runner, executor = _build_runner(data_paths, session_factory, discovery, deep)
+    assert runner.run_job(source.job_id)
+    root_history = _job_checkpoint_fingerprint(session_factory, source.job_id)
+    before_calls = deep.start_calls
+    prior_id = source.job_id
+    for number in range(2):
+        child = service.create_from_deconstruction(
+            source_job_id=seed.source_job_id, idempotency_key=f"lineage-interrupted-{number}",
+            discovery_source_job_id=source.job_id, deep_source_job_id=prior_id,
+        )
+
+        def stop_after_closure(context):
+            result = executor(context)
+            if context.step_id == module.STEP_CLOSURE:
+                interrupted.request_stop()
+            return result
+
+        interrupted = JobRunner(session_factory, {PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: stop_after_closure},
+                                worker_id="lineage-interruption", now=_now)
+        assert interrupted.run_job(child.job_id)
+        if case == "failed_queued":
+            with session_factory() as session, session.begin():
+                store = JobStore(session, now=_now)
+                store.create_step(job_id=child.job_id, step_id="isolated_failure", name="故障注入")
+                lease = store.claim_job(child.job_id, "lineage-failure")
+                store.start_step(lease, "isolated_failure")
+                store.fail_step(lease, "isolated_failure", error_code="TEST_FAILURE", retryable=False)
+        else:
+            assert service.jobs.cancel(child.job_id).state == "cancelled"
+        snapshot, _ = _job_snapshot_and_payload(session_factory, child.job_id)
+        assert snapshot.state == ("failed_final" if case == "failed_queued" else "cancelled")
+        assert all(step.state == ("queued" if case == "failed_queued" else "cancelled")
+                   for step in snapshot.steps if step.step_id.startswith("deep_"))
+        prior_id = child.job_id
+    assert deep.start_calls == before_calls
+
+    if case in {"refresh", "plan_hash", "cycle"}:
+        with session_factory() as session, session.begin():
+            row = JobStore(session, now=_now).get_job(prior_id)
+            payload = verify_payload_sha256(row.payload_json, row.payload_sha256)
+            first = next(item for item in payload["deep_reuse_plan"]["decisions"].values()
+                         if item["step_id"] == "deep_0001")
+            if case == "refresh":
+                first["decision"] = "refresh_required"
+            elif case == "plan_hash":
+                payload["deep_reuse_plan"]["source_plan_sha256"] = "0" * 64
+            else:
+                payload["deep_source_job_id"] = prior_id
+                payload["deep_reuse_plan"]["source_job_id"] = prior_id
+            row.payload_json, row.payload_sha256 = encode_value(payload)
+    original_checkpoint = JobStore.get_last_checkpoint
+
+    def missing_receipt(self, job_id, step_id):
+        if job_id == source.job_id and step_id == "deep_0001":
+            return None
+        return original_checkpoint(self, job_id, step_id)
+
+    if case == "missing_receipt":
+        monkeypatch.setattr(JobStore, "get_last_checkpoint", missing_receipt)
+    if case in {"plan_hash", "cycle", "missing_receipt"}:
+        with pytest.raises(ProtocolControlExecutionError) as rejected:
+            service.create_from_deconstruction(source_job_id=seed.source_job_id,
+                deep_source_job_id=prior_id, idempotency_key="lineage-rejected")
+        assert rejected.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+        assert deep.start_calls == before_calls
+        return
+    restored = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, discovery_source_job_id=source.job_id,
+        deep_source_job_id=prior_id, idempotency_key="lineage-restored",
+    )
+    _, payload = _job_snapshot_and_payload(session_factory, restored.job_id)
+    first = next(item for item in payload["deep_reuse_plan"]["decisions"].values()
+                 if item["step_id"] == "deep_0001")
+    if case == "refresh":
+        assert first["decision"] == "refresh_required"
+        assert "source_lineage" not in first
+    else:
+        assert first["decision"] == "reusable"
+        assert first["effective_source_job_id"] == source.job_id
+        assert len(first["source_lineage"]) == 2
+    if case == "changed_after_intake":
+        with session_factory() as session, session.begin():
+            row = JobStore(session, now=_now).get_job(prior_id)
+            changed = verify_payload_sha256(row.payload_json, row.payload_sha256)
+            changed["deep_reuse_plan"]["source_plan_sha256"] = "0" * 64
+            row.payload_json, row.payload_sha256 = encode_value(changed)
+    if case == "receipt_changed":
+        def replaced_receipt(self, job_id, step_id):
+            saved = original_checkpoint(self, job_id, step_id)
+            if saved is not None and job_id == source.job_id and step_id == "deep_0001":
+                return "replacement-checkpoint", saved[1]
+            return saved
+        monkeypatch.setattr(JobStore, "get_last_checkpoint", replaced_receipt)
+    if case == "validation_changed":
+        monkeypatch.setattr(module, "_validated_deep_source", lambda *args, **kwargs: (None, None))
+    if case == "root_payload_corrupt":
+        def corrupt_before_deep(context):
+            if context.step_id == "deep_0001":
+                with session_factory() as session, session.begin():
+                    JobStore(session, now=_now).get_job(source.job_id).payload_sha256 = "0" * 64
+            return executor(context)
+        runner = JobRunner(session_factory, {PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: corrupt_before_deep},
+                           worker_id="lineage-corrupt-root", now=_now)
+    assert runner.run_job(restored.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, restored.job_id)
+    failed = case in {"changed_after_intake", "receipt_changed", "validation_changed", "root_payload_corrupt"}
+    assert snapshot.state == ("failed_final" if failed else "completed")
+    if failed:
+        assert snapshot.error_code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+    assert deep.start_calls == before_calls + (case == "refresh")
+    assert _job_checkpoint_fingerprint(session_factory, source.job_id) == root_history
+    if case in {"valid", "failed_queued"}:
+        with session_factory() as session:
+            saved = JobStore(session, now=_now).get_last_checkpoint(restored.job_id, "deep_0001")[1]
+        assert saved["adopted_from"]["job_id"] == source.job_id
+        assert saved["adopted_from"]["source_lineage"] == first["source_lineage"]
+
+
 def test_frozen_model_route_rejects_changed_discovery_before_call(
     data_paths, session_factory
 ) -> None:
@@ -4045,7 +4179,8 @@ def test_source_reuse_rejects_corrupt_frozen_runner_budget_before_checkpoint_rea
     class Store:
         def get_job(self, job_id):
             assert job_id == job.job_id
-            return SimpleNamespace(payload_json=json.dumps(broken))
+            text = json.dumps(broken)
+            return SimpleNamespace(payload_json=text, payload_sha256=hashlib.sha256(text.encode()).hexdigest())
 
         def list_steps(self, job_id):
             pytest.fail("Malformed frozen allowance must fail before checkpoint or model access")

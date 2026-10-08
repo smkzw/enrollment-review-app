@@ -3,7 +3,13 @@
 
 ### 单一当前用户流程表
 
-当前主集成＋已完成有界C03：最近source-review-pending-input两轮见下文，原来源登记审阅569.594s/173.798s/106.056s仍只作相应快照历史证据；均不认证临床采用。7份继承delivery不动，共享首屏184bdb60适配已push，不重复派发或修改共享首页。源码9e09ba12已push，含来源疑问传递、非法核对保存及当前资格重验；Goal active/claims_complete=false。
+当前主集成＋已实际C03：恢复实际完成结果涉及来源资格，单独只读审阅已完成Grok/grok-build/grok-4.7/high，同会话7ded3405…733.312s/exit0/no fallback，120min静默完成等待。采纳锁定实际根检查点与失去证明不回退模型调用；不采纳搜索未声明兄弟历史作否决的建议。报告/所有者取舍见rv1006-unexecuted-source-lineage-20261008；非临床批准。7份继承delivery不动，共享首屏184bdb60适配已push，不重复派发或修改共享首页。源码be9903dd已push；Goal active/claims_complete=false。
+
+当前实际Job640780a62e2f450b9cfa8a1b53d51b1c（be9903dd）已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，受控产物rv1006-time-only-source-recovery-api-20261008-v1：6物理调用237.8054817s，90组0completed/第1组failed/89queued。来源18点已合法保存，两个时间字段局部纠正保留范围；后续作者缺观察政策，修第0项后第1项整体重答声明无时间约束的计算用途，被既有门拒绝。不是来源范围修复失败或临床未决。原Job状态/payload、保护库、来源库均不变，0共同发布/激活/签发。
+
+窗口插入项：完整要求恢复若只看最近Job的queued状态，会丢失其冻结计划指向的第2–11组十份实际成功回执，改用旧Job又丢失当前第1组已核18点。最小修复沿明确上游链核payload/分包/范围，仅追溯未执行且无检查点的终止步骤，入队和执行双重核验实际根回执，不查历史挑答案、不提升queued为成功、不修改历史。六个真实合成JobStore/Runner反例6passed/7.63s/exit0；前三次新夹具问题为遗漏路由、误用取消返回属性、误称取消后仍queued；按真实cancelled状态修复，未松临床门。实际只读当前640来源预检10reusable/2resume_partial/78refresh，11继承范围仅沿明确bb来源，0模型/0库写。
+
+顾问后集中验证：v1路径误写exit4/no tests；v2三相连模块1099pass15fail109.32s/exit1，10项为所有者误将重新派生证明当原始回执导致拒绝合法恢复，5项旧替身缺payload摘要，分别修产品及夹具。v3原三模块1098pass16fail106.69s/exit1，仅两族旧替身缺新增摘要；按真实完整记录补夹具，不松门。末版受影响四族31passed15.95s/exit0/5SWIG，含failed_final/queued、取消未启动、循环/缺回执、刷新范围、入队后plan/回执/资格/根payload变化，以及16旧失败和5受限消费者。新增损坏根测试首轮30pass1fail因在前置发现步破坏根而未触达目标深审，改在目标步骤前注入，产品拒绝不变。JUnit rv1006-lineage-affected-family-20261008-v5.xml，三个窗口不累加或冒称末版全库重跑。git diff --check通过；真实整包及病例尚未完成。
 
 当前实际Job49948dafabb44d3c915b0480344abac6（已push源码5fe38255）已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，受控产物rv1006-frozen-decision-relation-recovery-api-20261008-v1：2物理调用127.4753153s，90组0completed/第1组failed/89queued。失败发生在来源读取，尚未进入关联修订，不能据此判断关联修复无效或临床通过。原Job状态/payload、保护库、来源库均不变，0共同发布/激活/签发。第2–11组虽入队前核验可复用，本Job未执行，仍不能写成completed。
 

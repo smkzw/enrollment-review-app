@@ -193,7 +193,7 @@ from app.services.protocol_workbench_service import (
     STEP_AWAIT_REVIEW as SOURCE_STEP_AWAIT_REVIEW,
     STEP_PUBLISH as SOURCE_STEP_PUBLISH,
 )
-from app.storage.codecs import utc_now, verify_payload_sha256
+from app.storage.codecs import PersistedContractInvalid, utc_now, verify_payload_sha256
 from app.storage.config import DataPaths
 from app.storage.models import JobCheckpointRecord
 from app.storage.repositories import NotFoundError, ProtocolDraftRevisionRepository
@@ -532,7 +532,7 @@ class ProtocolControlJobService:
                         recompute_missing_diagnostic_steps=recompute_missing_diagnostic_steps,
                     )
                 except (JobNotFoundError, ValueError, KeyError, TypeError,
-                        ValidationError, StepFailure) as exc:
+                        ValidationError, StepFailure, PersistedContractInvalid) as exc:
                     raise ProtocolControlExecutionError(
                         "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
                         "既有深审结果与本次原件、版本或模型线路不一致，未建立新任务。",
@@ -2522,7 +2522,7 @@ def _validated_deep_partial_source(
     """Resume a verified source interpretation or gate-valid draft, never its failed result."""
 
     source_job = store.get_job(source_job_id)
-    source_payload = json.loads(source_job.payload_json)
+    source_payload = verify_payload_sha256(source_job.payload_json, source_job.payload_sha256)
     _require_compatible_deep_source(current_payload, source_payload)
     limits = source_payload.get("runner_limits")
     if limits is not None and not isinstance(limits, Mapping):
@@ -2775,6 +2775,65 @@ def _missing_failed_diagnostic_proof(store: JobStore, source_job_id: str, step_i
             "missing_diagnostic": True, "reused": False}
 
 
+def _resolve_unexecuted_deep_source(
+    store: JobStore, current_payload: Mapping[str, Any], source_job_id: str,
+    batch: ProtocolControlDispositionBatch, step_id: str,
+) -> tuple[str, list[dict[str, Any]]]:
+    """Follow frozen reuse provenance, never search history for a better answer."""
+    visited: set[str] = set()
+    lineage: list[dict[str, Any]] = []
+    while True:
+        if source_job_id in visited:
+            raise ValueError("深审复用来源形成循环")
+        visited.add(source_job_id)
+        job = store.get_job(source_job_id)
+        payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+        _require_compatible_deep_source(current_payload, payload)
+        step = next((item for item in store.list_steps(source_job_id) if item.step_id == step_id), None)
+        if step is None:
+            raise ValueError("来源任务缺少深审批次")
+        if (step.state not in {"queued", "cancelled"}
+                or job.state not in {"failed_final", "cancelled"}):
+            return source_job_id, lineage
+        reuse = payload.get("deep_reuse_plan")
+        entry = reuse.get("decisions", {}).get(batch.batch_id) if isinstance(reuse, Mapping) else None
+        if not isinstance(entry, Mapping) or entry.get("decision") == "refresh_required":
+            return source_job_id, lineage
+        if (entry.get("step_id") != step_id
+                or entry.get("decision") not in {"reusable", "resume_partial", "preserve_unresolved"}
+                or store.get_last_checkpoint(source_job_id, step_id) is not None
+                or step.attempt != 0):
+            raise ValueError("尚未执行的批次缺少合法冻结复用范围")
+        upstream_id = payload.get("deep_source_job_id")
+        if (not isinstance(upstream_id, str) or not upstream_id
+                or reuse.get("source_job_id") != upstream_id):
+            raise ValueError("冻结复用计划与来源任务不一致")
+        upstream = store.get_job(upstream_id)
+        upstream_payload = verify_payload_sha256(upstream.payload_json, upstream.payload_sha256)
+        _require_compatible_deep_source(payload, upstream_payload)
+        for job_id, hash_key in ((source_job_id, "current_plan_sha256"), (upstream_id, "source_plan_sha256")):
+            closure = store.get_last_checkpoint(job_id, STEP_CLOSURE)
+            if closure is None or closure[1].get("stage") != "closure":
+                raise ValueError("冻结复用来源缺少分包检查点")
+            plan = ProtocolControlDiscoveryToDeepPlan.model_validate(closure[1].get("deep_plan"))
+            digest = hashlib.sha256(json.dumps(
+                plan.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
+            matching = [item for item in plan.batches if item.batch_number == batch.batch_number]
+            if (reuse.get(hash_key) != digest or len(matching) != 1
+                    or not _same_deep_batch_material(matching[0], batch)):
+                raise ValueError("冻结复用分包或来源范围已改变")
+        lineage.append({"job_id": source_job_id, "payload_sha256": job.payload_sha256,
+                        "source_job_id": upstream_id, "step_id": step_id})
+        source_job_id = upstream_id
+
+
+def _deep_source_checkpoint_proof(checkpoint: tuple[str, dict[str, Any]]) -> dict[str, str]:
+    return {"checkpoint_id": checkpoint[0], "payload_sha256": hashlib.sha256(json.dumps(
+        checkpoint[1], ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()}
+
+
 def _preflight_deep_source(
     store: JobStore,
     current_payload: Mapping[str, Any],
@@ -2844,12 +2903,21 @@ def _preflight_deep_source(
         raise ValueError("重新读取范围不属于当前完整分包")
     for batch in current_plan.batches:
         step_id = f"{_DEEP_STEP_PREFIX}{batch.batch_number:04d}"
-        step = source_steps.get(step_id)
+        batch_source_id, source_lineage = _resolve_unexecuted_deep_source(
+            store, current_payload, source_job_id, batch, step_id,
+        )
+        step = (source_steps.get(step_id) if batch_source_id == source_job_id else
+                next((item for item in store.list_steps(batch_source_id) if item.step_id == step_id), None))
         decision = "refresh_required"
         reason = "new_or_incomplete_batch"
         review_state = "not_applicable"
         partial = None
+        checkpoint = None
         old_batch = old_batches_by_number.get(batch.batch_number)
+        if source_lineage:
+            inherited_closure = store.get_last_checkpoint(batch_source_id, STEP_CLOSURE)
+            inherited_plan = ProtocolControlDiscoveryToDeepPlan.model_validate(inherited_closure[1]["deep_plan"])
+            old_batch = next(item for item in inherited_plan.batches if item.batch_number == batch.batch_number)
         if step_id in acknowledged:
             if (old_batch is None
                     or old_batch.owned_structure_unit_ids != batch.owned_structure_unit_ids):
@@ -2864,7 +2932,7 @@ def _preflight_deep_source(
         if old_batch is not None and step is None:
             raise ValueError("来源任务缺少深审批次定义")
         if step is not None and step.state == "completed":
-            checkpoint = store.get_last_checkpoint(source_job_id, step_id)
+            checkpoint = store.get_last_checkpoint(batch_source_id, step_id)
             if checkpoint is None:
                 raise ValueError("已完成的来源批次缺少检查点")
             saved = checkpoint[1]
@@ -2921,18 +2989,24 @@ def _preflight_deep_source(
                     reason = "legacy_component_identity_unproven"
                     decisions[batch.batch_id] = {
                         "step_id": step_id, "decision": decision, "reason": reason,
+                        **({"effective_source_job_id": batch_source_id, "source_lineage": source_lineage}
+                           if source_lineage else {}),
                     }
                     continue
                 if not _same_deep_components_with_current_gate(saved_components, current_components):
                     reason = "component_material_changed"
                     decisions[batch.batch_id] = {
                         "step_id": step_id, "decision": decision, "reason": reason,
+                        **({"effective_source_job_id": batch_source_id, "source_lineage": source_lineage}
+                           if source_lineage else {}),
                     }
                     continue
                 if not _repair_material_matches(saved):
                     reason = "repair_material_changed_or_unproven"
                     decisions[batch.batch_id] = {
                         "step_id": step_id, "decision": decision, "reason": reason,
+                        **({"effective_source_job_id": batch_source_id, "source_lineage": source_lineage}
+                           if source_lineage else {}),
                     }
                     continue
                 result = _saved_deep_run_result(saved)
@@ -2975,8 +3049,9 @@ def _preflight_deep_source(
                             else:
                                 decision, reason = "reusable", "same_material_and_current_gate"
         elif step is not None and step.state == "failed_final":
+            checkpoint = store.get_last_checkpoint(batch_source_id, step_id)
             partial = _validated_deep_partial_source(
-                store, current_payload, source_job_id, batch, step_id, prompt_template,
+                store, current_payload, batch_source_id, batch, step_id, prompt_template,
             )
             if partial is not None:
                 decision = "resume_partial"
@@ -3004,6 +3079,12 @@ def _preflight_deep_source(
             "step_id": step_id, "decision": decision, "reason": reason,
             "source_review": review_state,
         }
+        if source_lineage:
+            decisions[batch.batch_id].update(
+                effective_source_job_id=batch_source_id, source_lineage=source_lineage,
+            )
+        if decision in {"reusable", "resume_partial", "preserve_unresolved"}:
+            decisions[batch.batch_id]["source_checkpoint_proof"] = _deep_source_checkpoint_proof(checkpoint)
         if decision == "preserve_unresolved":
             decisions[batch.batch_id]["unresolved_review_proof"] = preserved
         if (step is not None and step.state == "failed_final"
@@ -3294,7 +3375,7 @@ def _validated_deep_source(
     try:
         source_job = store.get_job(source_job_id)
         _require_compatible_deep_source(
-            current_payload, json.loads(source_job.payload_json)
+            current_payload, verify_payload_sha256(source_job.payload_json, source_job.payload_sha256)
         )
         closure = store.get_last_checkpoint(source_job_id, STEP_CLOSURE)
         if closure is None or closure[1].get("stage") != "closure":
@@ -3354,7 +3435,8 @@ def _validated_deep_source(
             return None, None
         _validate_deep_batch_output(batch, result.final_output)
         return checkpoint_id, saved
-    except (JobNotFoundError, ValueError, KeyError, TypeError, ValidationError, ProtocolControlGateError) as exc:
+    except (JobNotFoundError, ValueError, KeyError, TypeError, ValidationError,
+            ProtocolControlGateError, PersistedContractInvalid) as exc:
         raise StepFailure(
             retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
             detail="既有深审批次无法证明与当前来源和校验要求一致：" + str(exc)[:900],
@@ -3728,6 +3810,27 @@ def _execute_deep(
                 raise StepFailure(retryable=False,
                     error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
                     detail="深审复用计划的批次处置无效。")
+            try:
+                with config.session_factory() as session:
+                    actual_source, actual_lineage = _resolve_unexecuted_deep_source(
+                        JobStore(session, now=config.now), context.job_payload,
+                        deep_source_job_id, batch, context.step_id,
+                    )
+                if (entry.get("effective_source_job_id", deep_source_job_id) != actual_source
+                        or entry.get("source_lineage", []) != actual_lineage):
+                    raise ValueError("实际来源关系与入队前证明不一致")
+                deep_source_job_id = actual_source
+                if entry.get("source_checkpoint_proof") is not None:
+                    with config.session_factory() as session:
+                        frozen_checkpoint = JobStore(session, now=config.now).get_last_checkpoint(
+                            deep_source_job_id, context.step_id,
+                        )
+                    if (frozen_checkpoint is None or _deep_source_checkpoint_proof(frozen_checkpoint)
+                            != entry["source_checkpoint_proof"]):
+                        raise ValueError("已核检查点与入队前证明不一致")
+            except (JobNotFoundError, ValueError, KeyError, TypeError, PersistedContractInvalid) as exc:
+                raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                                  detail="已核来源的复用关系无法核实，未发送请求。") from exc
             if entry.get("missing_failed_diagnostic_proof") is not None:
                 try:
                     if decision != "refresh_required":
@@ -3804,6 +3907,10 @@ def _execute_deep(
                     deep_source_job_id, batch, context.step_id, transport,
                     prompt_template,
                 )
+            if (saved is None or (entry.get("source_checkpoint_proof") is not None
+                    and _deep_source_checkpoint_proof((checkpoint_id, saved)) != entry["source_checkpoint_proof"])):
+                raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                                  detail="已核结果与入队前证明不一致，未发送请求。")
         if saved is not None:
             current_components = _deep_component_identity(context.job_payload, prompt_template)
             prior_components = saved["component_identity"]
@@ -3814,6 +3921,8 @@ def _execute_deep(
                         else None
                     ), "adopted_from": {
                 "job_id": deep_source_job_id, "checkpoint_id": checkpoint_id,
+                **({"source_lineage": entry["source_lineage"]}
+                   if isinstance(plan, Mapping) and entry.get("source_lineage") else {}),
             }}
         if decision == "resume_partial" and resume_wire is None:
             with config.session_factory() as session:
