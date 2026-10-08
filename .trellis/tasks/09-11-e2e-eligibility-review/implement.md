@@ -1,9 +1,13 @@
 <!-- RV1006-CURRENT:BEGIN -->
-## 当前1006V1交付窗口（2026-10-08，连续实施中）
+## 当前1006V1交付窗口（2026-10-08，用户要求无损暂停）
 
 ### 单一当前用户流程表
 
-当前结果（覆盖下方各历史快照）：dc6fb4710dc44067b76848116139564d已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED，2物理调用119.24971979s，90深审16completed/17失败/73queued，scope/hydrate/gate依赖失败。冻结源码9ac573ad，私有产物rv1006-saved-scope-question-recovery-api-20261008-v1。1–16零调用复用；17最后一条来源范围疑问已实际核清，原四次及本轮一次均保存，随后发现作者把一个操作错关联到共用脚注的另一流程项。18/19尚未在本Job执行，前置计划沿已声明来源可复用；不能把它们写成本Jobcompleted。20旧来源时间错误尚待接续。原Job/payload、保护库、来源库保持，0发布/激活/签发，完整同源包/当前节点工作稿尚未完成，claims_complete=false。
+**暂停现行记录（2026-10-08T08:46:11+02:00，优先于以下历史运行）：** 源码56cf740a17ac2f6c4d79a8a664392bb58e37c6c5的合法接续Job add37084f6704cbc9421e8715f7ee6c6已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID；6物理调用294.365496s，90深审16completed/17失败/73queued，definition_scope/hydrate/gate依赖失败。1–16实际零调用复用，18/19未在本Job执行。17错关联核对已进入additional要求处理，随后SOURCE_INSERT_INVALID结构恢复失败；这是生产结构失败，不是研究者判断缺失，也未证明新增临床要求已合法。停止新调用、修订和下一组，没有把失败改成功或取消。
+
+**无损恢复实证：** 原Job/payload、保护库、来源库未变；运行器77524已exit3，暂停边界观察85298已exit0，用户暂停发生前本步自行终止，cancel_changed=false。只读pause_audit.json核本Job租约为空、隔离库无running/cancel_requested/持有租约的Job；当前检查点55e130a544214d899d81ce4493c61873及hash609bd5e39d711fa5b1b20a28fdd0adf78ceb175db9f24616d2c534ea89bfc670保留原答、partial_wire、已核来源、5次来源疑问历史及累计10条attempt记录。当前来源预检18reusable/1resume_partial/71refresh_required，0模型/0数据库写，DB及WAL hash不变。73queued不等于71refresh：18/19是沿声明上游可复用但本次未执行的两组。失败旧Job不得原地复活；恢复先读HANDOFF/本表及prepare/execute/pause_audit，核当前代码、来源、依赖和线路身份，再以现有control-executions合法入口声明本Job为来源，保留成功结果和累计账本，先处理17局部补入结构首错。暂停审计79781已exit0，未再建Job。共享服务未关停，7份继承dirty及未跟踪材料未清理；Goal已实查paused，任务in_progress但execution_paused_by_user=true，claims_complete=false。没有共同发布、激活、签发或完整当前节点工作稿。当前HANDOFF及既有review_index为恢复入口，以下“下一步/active”均为各历史快照，不能据其自动恢复。
+
+上一作业快照（已被上方暂停记录覆盖）：dc6fb4710dc44067b76848116139564d已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED，2物理调用119.24971979s，90深审16completed/17失败/73queued，scope/hydrate/gate依赖失败。冻结源码9ac573ad，私有产物rv1006-saved-scope-question-recovery-api-20261008-v1。1–16零调用复用；17最后一条来源范围疑问已实际核清，原四次及本轮一次均保存，随后发现作者把一个操作错关联到共用脚注的另一流程项。18/19尚未在本Job执行，前置计划沿已声明来源可复用；不能把它们写成本Jobcompleted。20旧来源时间错误尚待接续。原Job/payload、保护库、来源库保持，0发布/激活/签发，完整同源包/当前节点工作稿尚未完成，claims_complete=false。
 
 当前最小恢复包：私人source_scope_question_history保存实际旧调用并在接续扣除；已见证且当前来源完全相等的疑问不重核，失败保留partial_wire；来源变化撤销对应旧目标结论，包括covered/background，合法兄弟仍保留。无新框架、无全局基础提示升级、无采用门放宽。新有限上限8包含旧4，非换目录清零。主集成＋C03 Grok/grok-build/grok-4.7/high、17ee3ff0…958.163s/exit0/1轮/no fallback、120min静默等待；只审f205旧码和提案，非最终补丁独审。采纳账本/草稿/来源身份保护，不采纳重复问已批准测试调用或未读JobStore即推断历史覆盖。
 
@@ -11,7 +15,7 @@
 
 当前独审续轮：同一C03 Grok会话17ee3ff0…267.94s/exit0/no fallback，120min静默完成等待；仅读四处冻结源码，不含临床、不运行测试，报告target_correspondence_followup.md。采纳不能仅加旧未决提示及错链可能绕过覆盖校验的风险；不采信未读受限生产者即称其能阻断已covered答复，也不将前五条全部当未核。实际受限生产者仅处理未决分支，不是新覆盖答复的防线；故在共用来源核对门直接拒绝错行。
 
-当前对应功能包验证：v1为19pass/6fail，所有者提取助手遗漏parts引用及新夹具table_path长度不合法；v2为21pass/4fail，夹具坐标与路径仍不一致；v3为46pass/3fail，正例只给目录名称，被原有动作证据门正确拒绝，补真实动作脚注反例而非松门。最终三个相连模块选择窗49passed/985deselected/1.83s/exit0/5SWIG，JUnit artifacts/rv1006-native-procedure-row-connected-20261008-v4.xml，含同源正确、共用脚注错行、hash定位、格内分隔、局部增量、已保存证明拒绝及既有补入/兄弟保护。git diff --check通过；不是临床验收，不把次数相加。下一步只读核dc6当前复用计划后合法新Job接续；旧终态不复活。
+当前对应功能包验证：v1为19pass/6fail，所有者提取助手遗漏parts引用及新夹具table_path长度不合法；v2为21pass/4fail，夹具坐标与路径仍不一致；v3为46pass/3fail，正例只给目录名称，被原有动作证据门正确拒绝，补真实动作脚注反例而非松门。最终三个相连模块选择窗49passed/985deselected/1.83s/exit0/5SWIG，JUnit artifacts/rv1006-native-procedure-row-connected-20261008-v4.xml，含同源正确、共用脚注错行、hash定位、格内分隔、局部增量、已保存证明拒绝及既有补入/兄弟保护。git diff --check通过；不是临床验收，不把次数相加。该计划已实际在add37084执行并失败；现行恢复仅见上方暂停记录；旧终态不复活。
 
 当前真实只读预检rv1006-native-row-link-preflight-20261008-v1：18reusable/1resume_partial/71refresh_required，5次已付来源疑问保存，DBhash不变/0写/0调用。实际17保存来源/覆盖构建产品提示，仅待核第5项，原生错行诊断也仅第5项；不是用人工临床答案测试或自动补入。后继范围保持1–16/18/19成功复用、17已有来源与草稿接续、20及未读范围按合法计划处理。
 
