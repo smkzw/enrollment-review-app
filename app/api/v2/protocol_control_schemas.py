@@ -16,6 +16,7 @@ class StartProtocolControlExecutionRequest(_StrictModel):
     idempotency_key: str = Field(min_length=1, max_length=256)
     discovery_source_job_id: str | None = Field(default=None, min_length=1, max_length=128)
     deep_source_job_id: str | None = Field(default=None, min_length=1, max_length=128)
+    recompute_missing_diagnostic_steps: list[str] = Field(default_factory=list)
 
 
 class StartProtocolControlExecutionResponse(_StrictModel):

@@ -73,6 +73,7 @@ from app.domain.contracts.protocol_controls import (
     ProtocolControlCandidateSemanticDraft,
     ProtocolControlDispositionBatch,
     ProtocolStructureUnit,
+    TableContextReadingBound,
     ProtocolControlUnitDispositionDraft,
     ReviewNodeBinding,
     ReviewNodeRole,
@@ -328,6 +329,7 @@ class ProtocolControlAgentInput(ContractModel):
     study_phase: StudyPhase
     owned_units: list[ProtocolStructureUnit] = Field(min_length=1)
     context_units: list[ProtocolStructureUnit] = Field(default_factory=list)
+    table_context_reading_bounds: dict[str, TableContextReadingBound] = Field(default_factory=dict)
     pre_enrollment_structure_unit_ids: list[str] = Field(default_factory=list)
     owned_visit_instance_by_structure_unit_id: dict[str, str] = Field(
         default_factory=dict
@@ -365,6 +367,7 @@ class ProtocolControlAgentInput(ContractModel):
             study_phase=batch.study_phase,
             owned_units=list(batch.owned_units),
             context_units=list(batch.context_units),
+            table_context_reading_bounds=dict(batch.table_context_reading_bounds),
             pre_enrollment_structure_unit_ids=list(
                 batch.pre_enrollment_structure_unit_ids
             ),
@@ -2906,6 +2909,8 @@ def build_protocol_control_agent_prompt(
         else ProtocolControlAgentInput.from_batch(batch)
     )
     input_view = frozen_input.model_dump(mode="json")
+    if not frozen_input.table_context_reading_bounds:
+        input_view.pop("table_context_reading_bounds")
     for units_key in ("owned_units", "context_units"):
         for unit_view in input_view[units_key]:
             unit_view.pop("member_source_span_ids", None)
@@ -2943,6 +2948,10 @@ def build_protocol_control_agent_prompt(
         f"{prompt_template.strip()}\n\n"
         f"{_CONTROL_AGENT_SYSTEM_CONTRACT}\n\n"
         f"{schema_block}"
+        + ("相邻表格原文仅为有界只读片段；table_context_reading_bounds记录实际读取范围及停止原因，"
+           "不证明清单已完整。不可把预算截断或位置边界解释为清单结尾；范围不能核清时保留具体未决。\n\n"
+           if frozen_input.table_context_reading_bounds else "")
+        +
         f"本次冻结输入：{_stable_json(input_view)}\n\n"
         + (
             "已逐字定位的来源陈述（仅供核对，不替代原文或结构门禁）："

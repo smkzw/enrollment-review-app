@@ -41,9 +41,11 @@ from app.domain.contracts.protocol_controls import (
     ProtocolReviewControl,
     ProtocolSectionCoverageManifest,
     ProtocolStructureUnit,
+    TableCellContext,
     ReviewNodeBinding,
     ReviewNodeRole,
     StructureUnitDispositionKind,
+    StructureUnitKind,
     stable_protocol_control_atom_id,
     stable_protocol_control_batch_id,
     stable_protocol_control_candidate_id,
@@ -102,6 +104,98 @@ def _manifest(*units: ProtocolStructureUnit) -> ProtocolSectionCoverageManifest:
         snapshot_id=_SNAPSHOT,
         units=list(units),
     )
+
+
+@pytest.mark.parametrize("boundary", [None, "unit_limit", "no_intro", "plain_paragraph", "gap", "other_cell", "cell_metadata", "heading", "next_intro"])
+def test_atomized_table_intro_keeps_bounded_following_sources_readonly(boundary):
+    from app.protocols.protocol_control_planning import _deep_batch_chunks, _MAX_SCHEDULE_ROW_CONTEXT_CHARS
+    from app.domain.contracts.protocol_controls import MAX_SOURCE_LIST_GROUP_UNITS
+
+    units = []
+    for number in range(64 if boundary == "unit_limit" else 32):
+        source_ref = f"body.t0.r10.c1.p{number}"
+        unit = _unit(number, "资料要求")
+        unit.source_ref = source_ref
+        unit.member_source_refs = [source_ref]
+        unit.unit_kind = StructureUnitKind.TABLE_ROW
+        unit.table_context = TableCellContext(table_path=(10, 1), row_index=10,
+                                              column_index=1, member_cell_paths=[(10, 1)])
+        unit.excerpt = "包括以下事项：" if number == 0 else f"第{number}项。" + "来源内容" * 100
+        units.append(unit)
+    if boundary == "no_intro":
+        units[0].excerpt = "完整独立陈述。"
+    elif boundary == "plain_paragraph":
+        units[0].table_context = None
+        units[0].unit_kind = StructureUnitKind.PARAGRAPH
+    elif boundary == "gap":
+        units[1].source_ref = "body.t0.r10.c1.p2"
+    elif boundary == "other_cell":
+        units[1].source_ref = "body.t0.r10.c2.p1"
+    elif boundary == "cell_metadata":
+        units[1].table_context = units[1].table_context.model_copy(update={"column_headers": ["另一个项目"]})
+    elif boundary == "heading":
+        units[1].heading_path = ["下一节"]
+    elif boundary == "next_intro":
+        units[1].excerpt = "下一个独立清单："
+    elif boundary == "unit_limit":
+        for unit in units[1:]:
+            unit.excerpt = "有源独立事项。"
+    frozen = [unit.model_dump(mode="json") for unit in units]
+    bounds = {}
+    chunks = _deep_batch_chunks(
+        units, {unit.structure_unit_id: () for unit in units},
+        max_owned_units_per_batch=1, all_units=units,
+        continuation_bounds=bounds,
+    )
+    owned, context = chunks[0]
+    assert owned == (units[0],)
+    assert len({unit.structure_unit_id for batch, _ in chunks for unit in batch}) == len(units)
+    if boundary in {"no_intro", "plain_paragraph", "gap", "other_cell", "cell_metadata", "heading"}:
+        assert context == ()
+    elif boundary == "next_intro":
+        assert context == (units[1],)
+    else:
+        assert context and context[0] == units[1]
+        assert len(context) <= MAX_SOURCE_LIST_GROUP_UNITS
+        assert sum(len(unit.excerpt) for unit in context) <= _MAX_SCHEDULE_ROW_CONTEXT_CHARS
+        assert all(unit.structure_unit_id != owned[0].structure_unit_id for unit in context)
+    assert [unit.model_dump(mode="json") for unit in units] == frozen
+    if boundary not in {"no_intro", "plain_paragraph"}:
+        bound = bounds[units[0].structure_unit_id]
+        assert bound["complete_list_asserted"] is False
+        assert bound["stop_reason"] == {
+            None: "character_limit", "unit_limit": "unit_limit", "gap": "coordinate_boundary",
+            "other_cell": "coordinate_boundary", "cell_metadata": "cell_boundary",
+            "heading": "heading_boundary", "next_intro": "next_intro",
+        }[boundary]
+        assert bound["included_structure_unit_ids"] == [unit.structure_unit_id for unit in context]
+        batch = ProtocolControlDispositionBatch(
+            batch_id="bound-table", coverage_manifest_id="manifest:generic-58b",
+            protocol_version_id=_PROTOCOL, study_phase=StudyPhase.PHASE_II,
+            batch_number=1, batch_total=len(chunks), owned_units=list(owned), context_units=list(context),
+            owned_structure_unit_ids=[owned[0].structure_unit_id],
+            context_structure_unit_ids=[unit.structure_unit_id for unit in context],
+            owned_source_span_ids=owned[0].source_span_ids,
+            context_source_span_ids=sorted({span for unit in context for span in unit.source_span_ids}),
+            table_context_reading_bounds={owned[0].structure_unit_id: bound},
+        )
+        from app.agents.protocol_control_deconstructor import build_protocol_control_agent_prompt
+        from app.agents.protocol_control_source_interpretation import build_source_interpretation_prompt
+
+        for prompt in (build_protocol_control_agent_prompt(batch, include_schema=False),
+                       build_source_interpretation_prompt(batch)):
+            assert "不证明清单" in prompt and bound["stop_reason"] in prompt
+            assert "complete_list_asserted" in prompt
+        saved = batch.model_dump(mode="json")
+        assert ProtocolControlDispositionBatch.model_validate(saved) == batch
+        saved["table_context_reading_bounds"][owned[0].structure_unit_id]["complete_list_asserted"] = True
+        with pytest.raises(ValidationError):
+            ProtocolControlDispositionBatch.model_validate(saved)
+        if context:
+            changed = batch.model_dump(mode="json")
+            changed["table_context_reading_bounds"][owned[0].structure_unit_id]["included_structure_unit_ids"] = ["foreign"]
+            with pytest.raises(ValidationError, match="同格连续原文"):
+                ProtocolControlDispositionBatch.model_validate(changed)
 
 
 def _catalog(

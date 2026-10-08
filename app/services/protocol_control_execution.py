@@ -111,6 +111,7 @@ from app.services.protocol_control_restricted_source import (
     _temporal_restriction_indexes,
     TEMPORAL_RESTRICTION_VERSION,
     WHOLE_UNIT_RESTRICTION_VERSION,
+    RESTRICTED_DEFINITION_VALIDATION_VERSION,
     restricted_batch_from_review,
 )
 from app.domain.contracts.agent_io import ProtocolDeconstructionInput
@@ -467,6 +468,7 @@ class ProtocolControlJobService:
         draft_revision_id: str | None = None,
         discovery_source_job_id: str | None = None,
         deep_source_job_id: str | None = None,
+        recompute_missing_diagnostic_steps: Sequence[str] = (),
     ) -> ProtocolControlExecutionResult:
         """Freeze the source chain and create the durable execution job atomically."""
 
@@ -481,6 +483,15 @@ class ProtocolControlJobService:
                 "PROTOCOL_CONTROL_IDEMPOTENCY_MISSING",
                 "幂等标识不能为空。",
                 status_code=422,
+            )
+        if (len(set(recompute_missing_diagnostic_steps)) != len(recompute_missing_diagnostic_steps)
+                or any(not isinstance(step, str) or len(step) != 9
+                       or not step.startswith("deep_") or not step[5:].isdigit()
+                       for step in recompute_missing_diagnostic_steps)
+                or (recompute_missing_diagnostic_steps and deep_source_job_id is None)):
+            raise ProtocolControlExecutionError(
+                "PROTOCOL_CONTROL_RECOMPUTE_SCOPE_INVALID",
+                "重新读取范围必须明确对应缺少失败记录的原深审批次。", status_code=422,
             )
 
         with self.session_factory() as session, session.begin():
@@ -516,6 +527,7 @@ class ProtocolControlJobService:
                     reuse_plan = _preflight_deep_source(
                         store, payload, deep_source_job_id,
                         self.deep_prompt_template,
+                        recompute_missing_diagnostic_steps=recompute_missing_diagnostic_steps,
                     )
                 except (JobNotFoundError, ValueError, KeyError, TypeError,
                         ValidationError, StepFailure) as exc:
@@ -1149,6 +1161,11 @@ def _replay_checkpoint(
     """Validate a completed checkpoint without re-calling a model or source file."""
 
     checkpoint = dict(context.last_checkpoint or {})
+    if checkpoint.get("restricted_registration_failed"):
+        raise StepFailure(
+            retryable=False, error_code="PROTOCOL_CONTROL_CHECKPOINT_INVALID",
+            detail="定义登记失败的记录仅供恢复诊断，不是已完成结果。",
+        )
     stage = checkpoint.get("stage")
     if stage == "discovery":
         run_result = ProtocolControlDiscoveryAgentRunResult.model_validate(
@@ -1203,6 +1220,9 @@ def _replay_checkpoint(
             )
         try:
             run_result = _saved_deep_run_result(checkpoint)
+            if (run_result.source_definition_consumers is None
+                    and run_result.restricted_source_definition_consumer_attempts):
+                raise ValueError("定义登记尝试未形成合法登记，不是已完成结果")
         except (TypeError, ValueError) as exc:
             raise StepFailure(
                 retryable=False, error_code="PROTOCOL_CONTROL_CHECKPOINT_INVALID",
@@ -2024,7 +2044,8 @@ def _deep_component_identity(
             "inline-scope-citation-assembly/v1",
             "pending-definition-consumer-diagnostic/v1",
         ],
-        "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
+        "validator_version": "/".join((CONTROL_PUBLICATION_GATE_VERSION,
+                                       RESTRICTED_DEFINITION_VALIDATION_VERSION)),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}
         ).get("deep"),
@@ -2737,11 +2758,23 @@ def _preserved_source_review_proof(
             or _preserved_temporal_restriction_proof(batch, saved))
 
 
+def _missing_failed_diagnostic_proof(store: JobStore, source_job_id: str, step_id: str) -> dict[str, Any]:
+    step = next((item for item in store.list_steps(source_job_id) if item.step_id == step_id), None)
+    if (step is None or step.state != "failed_final"
+            or store.get_last_checkpoint(source_job_id, step_id) is not None):
+        raise ValueError("仅可显式重新读取缺少诊断检查点的失败范围，不得跳过已有或损坏回执")
+    return {"source_job_id": source_job_id, "step_id": step_id,
+            "source_job_payload_sha256": store.get_job(source_job_id).payload_sha256,
+            "state": step.state, "error_code": step.error_code,
+            "missing_diagnostic": True, "reused": False}
+
+
 def _preflight_deep_source(
     store: JobStore,
     current_payload: Mapping[str, Any],
     source_job_id: str,
     prompt_template: str,
+    *, recompute_missing_diagnostic_steps: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Plan reuse before creating a long job, without inference or rewriting history."""
 
@@ -2800,6 +2833,9 @@ def _preflight_deep_source(
     ):
         raise ValueError("当前深审模型线路身份无效")
     decisions: dict[str, dict[str, Any]] = {}
+    acknowledged = set(recompute_missing_diagnostic_steps)
+    if not acknowledged <= {f"{_DEEP_STEP_PREFIX}{batch.batch_number:04d}" for batch in current_plan.batches}:
+        raise ValueError("重新读取范围不属于当前完整分包")
     for batch in current_plan.batches:
         step_id = f"{_DEEP_STEP_PREFIX}{batch.batch_number:04d}"
         step = source_steps.get(step_id)
@@ -2808,6 +2844,17 @@ def _preflight_deep_source(
         review_state = "not_applicable"
         partial = None
         old_batch = old_batches_by_number.get(batch.batch_number)
+        if step_id in acknowledged:
+            if (old_batch is None
+                    or old_batch.owned_structure_unit_ids != batch.owned_structure_unit_ids):
+                raise ValueError("缺诊断重新读取范围的来源归属已改变，不能按旧步骤编号授权")
+            proof = _missing_failed_diagnostic_proof(store, source_job_id, step_id)
+            decisions[batch.batch_id] = {
+                "step_id": step_id, "decision": "refresh_required",
+                "reason": "missing_failed_diagnostic_explicit_recompute",
+                "missing_failed_diagnostic_proof": proof,
+            }
+            continue
         if old_batch is not None and step is None:
             raise ValueError("来源任务缺少深审批次定义")
         if step is not None and step.state == "completed":
@@ -3442,9 +3489,16 @@ def _restricted_deep_checkpoint(
     prompt_template: str, result: ProtocolControlAgentRunResult,
     restricted_batch: ProtocolControlBatchDispositionHydrated,
     model_call_receipts: list[dict[str, Any]], resume_review: _ResumedSourceReview,
+    *, failed: bool = False,
 ) -> dict[str, Any]:
+    run_view = result.model_dump(mode="json")
     return {
-        "stage": "deep",
+        **({**run_view,
+            "schema_version": "phase5/deep-failure-diagnostic/v3",
+            "failure_reason_version": SOURCE_REQUIREMENT_FAILURE_REASON_VERSION,
+            "restricted_registration_failed": True,
+        } if failed else {}),
+        "stage": "deep_failure_diagnostic" if failed else "deep",
         "workflow_variant": context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
         "model_call_receipts": model_call_receipts,
         "batch_id": batch.batch_id,
@@ -3452,7 +3506,7 @@ def _restricted_deep_checkpoint(
         "transport_identity": _transport_identity(transport, stage="deep"),
         "component_identity": _deep_component_identity(context.job_payload, prompt_template),
         "repair_contract_sha256": protocol_control_agent_repair_contract_sha256(),
-        "run_result": result.model_dump(mode="json"),
+        "run_result": run_view,
         "attempt_raw_outputs": _deep_attempt_raw_outputs(result),
         "source_review_reuse": _source_review_reuse_record(resume_review),
         "restricted_batch": restricted_batch.model_dump(mode="json"),
@@ -3496,14 +3550,30 @@ def _complete_restricted_deep_source(
                 detail="受限原文已保留，但定义依赖尚未实际登记，不能作为完整采用依据。",
                 diagnostic_checkpoint=_restricted_deep_checkpoint(
                     context, batch, transport, prompt_template, result, restricted_batch,
-                    model_call_receipts, resume_review,
+                    model_call_receipts, resume_review, failed=True,
                 ),
             )
-        if restricted_batch_from_review(batch, result) != restricted_batch:
+        try:
+            revalidated = restricted_batch_from_review(batch, result)
+        except ValueError as exc:
+            raise StepFailure(
+                retryable=False,
+                error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                detail="定义登记未通过原答与来源核验，原文和失败记录保留。",
+                diagnostic_checkpoint=_restricted_deep_checkpoint(
+                    context, batch, transport, prompt_template, result, restricted_batch,
+                    model_call_receipts, resume_review, failed=True,
+                ),
+            ) from exc
+        if revalidated != restricted_batch:
             raise StepFailure(
                 retryable=False,
                 error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
                 detail="定义登记后受限来源发生变化，未保存为可消费结果。",
+                diagnostic_checkpoint=_restricted_deep_checkpoint(
+                    context, batch, transport, prompt_template, result, restricted_batch,
+                    model_call_receipts, resume_review, failed=True,
+                ),
             )
     return _restricted_deep_checkpoint(
         context, batch, transport, prompt_template, result, restricted_batch,
@@ -3644,6 +3714,19 @@ def _execute_deep(
                 raise StepFailure(retryable=False,
                     error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
                     detail="深审复用计划的批次处置无效。")
+            if entry.get("missing_failed_diagnostic_proof") is not None:
+                try:
+                    if decision != "refresh_required":
+                        raise ValueError("缺记录范围不得复用")
+                    with config.session_factory() as session:
+                        actual = _missing_failed_diagnostic_proof(
+                            JobStore(session, now=config.now), deep_source_job_id, context.step_id,
+                        )
+                    if actual != entry["missing_failed_diagnostic_proof"]:
+                        raise ValueError("缺记录范围与前置证明不一致")
+                except ValueError as exc:
+                    raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                                      detail="原失败记录状态已变化，未继续重新读取。") from exc
         checkpoint_id, saved = None, None
         if decision == "preserve_unresolved":
             control = context.job_payload.get("execution_control")

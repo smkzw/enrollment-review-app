@@ -124,10 +124,12 @@ def test_start_checks_requested_deep_source_before_creating_job(client, monkeypa
     response = client.post(_ENDPOINT, json={
         "source_job_id": seed.source_job_id, "idempotency_key": "api-control-deep-reuse",
         "deep_source_job_id": "missing-deep-source",
+        "recompute_missing_diagnostic_steps": ["deep_0001"],
     })
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
     assert calls[0]["deep_source_job_id"] == "missing-deep-source"
+    assert calls[0]["recompute_missing_diagnostic_steps"] == ["deep_0001"]
     with client.app.state.session_factory() as session:
         assert session.connection().exec_driver_sql("select count(*) from jobs").scalar_one() == before
 

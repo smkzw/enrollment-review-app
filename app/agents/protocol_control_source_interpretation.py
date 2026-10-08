@@ -2585,6 +2585,11 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
         '"eligibility_sequence_quote":null,"control_authority":"study_or_unknown|cited_external_rationale",'
         '"attribution_quote":null}],"units_without_statement":[]}。'
         "枚举字段只能取其中一个值；可空字段在原文未写时填 null，不得省略。\n"
+        + ("相邻表格原文仅为有界只读片段，不证明清单完整；预算截断或位置边界不是清单结尾。"
+           "范围不能核清时保留具体 unresolved。实际读取范围与停止原因："
+           f"{json.dumps({key: value.model_dump(mode='json') for key, value in batch.table_context_reading_bounds.items()}, ensure_ascii=False, sort_keys=True)}\n"
+           if batch.table_context_reading_bounds else "")
+        +
         f"冻结来源：{json.dumps({'owned': source, 'context': context}, ensure_ascii=False, sort_keys=True)}"
     )
 

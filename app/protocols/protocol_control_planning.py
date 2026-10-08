@@ -30,6 +30,7 @@ from app.domain.contracts.protocol_controls import (
     ProtocolControlDispositionBatch,
     ProtocolSectionCoverageManifest,
     ProtocolStructureUnit,
+    MAX_SOURCE_LIST_GROUP_UNITS,
     is_source_list_continuation_group,
     stable_protocol_control_discovery_batch_id,
     stable_protocol_control_manifest_structure_unit_ids_sha256,
@@ -950,6 +951,7 @@ def _deep_batch_chunks(
     *,
     max_owned_units_per_batch: int,
     all_units: Sequence[ProtocolStructureUnit] | None = None,
+    continuation_bounds: dict[str, dict] | None = None,
 ) -> list[
     tuple[tuple[ProtocolStructureUnit, ...], tuple[ProtocolStructureUnit, ...]]
 ]:
@@ -1041,6 +1043,47 @@ def _deep_batch_chunks(
                     *table_context_by_unit.get(owned_id, ()),
                 )
             } - set(owned_ids)
+            # Atomized table paragraphs retain table_row kind, so the ordinary
+            # paragraph/list grouping cannot carry a following list. Read only
+            # a bounded adjacent same-cell range; this does not assert that the
+            # list is complete or transfer ownership from another batch.
+            for unit in owned:
+                prefix, marker, paragraph = unit.source_ref.rpartition(".p")
+                if (unit.table_context is None or not marker or not paragraph.isdigit()
+                        or not unit.excerpt.rstrip().endswith(("：", ":"))):
+                    continue
+                position = source_position[unit.structure_unit_id]
+                next_paragraph = int(paragraph) + 1
+                chars = 0
+                included_ids = []
+                stop_reason = "source_end"
+                for following in list(all_units or units)[position + 1:
+                        position + 1 + MAX_SOURCE_LIST_GROUP_UNITS]:
+                    stop_reason = (
+                        "coordinate_boundary" if following.source_ref != f"{prefix}.p{next_paragraph}" else
+                        "heading_boundary" if following.heading_path != unit.heading_path else
+                        "cell_boundary" if following.table_context != unit.table_context else
+                        "character_limit" if chars + len(following.excerpt) > _MAX_SCHEDULE_ROW_CONTEXT_CHARS else None
+                    )
+                    if stop_reason is not None:
+                        break
+                    chars += len(following.excerpt)
+                    next_paragraph += 1
+                    included_ids.append(following.structure_unit_id)
+                    if following.structure_unit_id not in owned_ids:
+                        required_context_ids.add(following.structure_unit_id)
+                    if following.excerpt.rstrip().endswith(("：", ":")):
+                        stop_reason = "next_intro"
+                        break
+                else:
+                    stop_reason = ("unit_limit" if len(included_ids) == MAX_SOURCE_LIST_GROUP_UNITS
+                                   and position + 1 + len(included_ids) < len(all_units or units)
+                                   else "source_end")
+                if continuation_bounds is not None:
+                    continuation_bounds[unit.structure_unit_id] = {
+                        "included_structure_unit_ids": included_ids,
+                        "complete_list_asserted": False, "stop_reason": stop_reason,
+                    }
             context = tuple(
                 sorted(
                     (unit_by_id[context_id] for context_id in required_context_ids),
@@ -1226,11 +1269,13 @@ def plan_protocol_control_deep_batches_from_discovery(
         unit_id: tuple(dict.fromkeys((*context_ids_by_unit_id[unit_id], *similar_context.get(unit_id, ()))))
         for unit_id in context_ids_by_unit_id
     }
+    continuation_bounds: dict[str, dict] = {}
     chunks = _deep_batch_chunks(
         deep_units,
         context_ids_by_unit_id,
         max_owned_units_per_batch=max_owned_units_per_batch,
         all_units=coverage_manifest.units,
+        continuation_bounds=continuation_bounds,
     )
     official_targets = _catalog_targets(
         official_parent_catalog,
@@ -1273,6 +1318,8 @@ def plan_protocol_control_deep_batches_from_discovery(
                 priority_rank=max(unit.priority_rank for unit in owned),
                 owned_units=list(owned),
                 context_units=list(context),
+                table_context_reading_bounds={unit_id: continuation_bounds[unit_id]
+                                             for unit_id in owned_ids if unit_id in continuation_bounds},
                 owned_structure_unit_ids=owned_ids,
                 context_structure_unit_ids=context_ids,
                 owned_source_span_ids=sorted(

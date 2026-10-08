@@ -45,6 +45,7 @@ from app.agents.protocol_control_stage_compiler import requires_temporal_resolut
 
 TEMPORAL_RESTRICTION_VERSION = "source-temporal-restricted-disposition/v2"
 WHOLE_UNIT_RESTRICTION_VERSION = "source-whole-unit-restricted-disposition/v2"
+RESTRICTED_DEFINITION_VALIDATION_VERSION = "restricted-definition-registration-validation/v1"
 
 
 def _temporal_restriction_indexes(
@@ -471,6 +472,15 @@ def _whole_unit_restriction(
     )
     if check_protocol_control_batch_candidates(batch, output):
         return None
+    return output
+
+
+def _validate_restricted_definition_registration(
+    batch: ProtocolControlDispositionBatch,
+    result: ProtocolControlAgentRunResult,
+    output: ProtocolControlBatchDispositionHydrated,
+) -> None:
+    """Recheck the actual registration without changing the source disposition."""
     if result.source_definition_consumers is not None:
         attempts = result.restricted_source_definition_consumer_attempts
         if len(attempts) != 1:
@@ -485,11 +495,10 @@ def _whole_unit_restriction(
         if (declaration.version != SOURCE_DEFINITION_CONSUMER_VERSION
                 or declaration != result.source_definition_consumers):
             raise ValueError("受限定义登记字段与实际原答不一致")
-        validate_source_definition_consumers(batch, interpretation, declaration)
+        validate_source_definition_consumers(batch, result.source_interpretation, declaration)
         validate_restricted_definition_consumers(
-            batch, interpretation, declaration, output.restricted_statements,
+            batch, result.source_interpretation, declaration, output.restricted_statements,
         )
-    return output
 
 
 def _restricted_statement_batch_from_review(
@@ -532,7 +541,8 @@ def _restricted_statement_batch_from_review(
     temporal_indexes = _temporal_restriction_indexes(batch, result) or set()
     has_wire = result.partial_wire is not None
     if has_wire:
-        if (result.source_definition_consumers is not None
+        if ((result.source_definition_consumers is not None
+             and not result.restricted_source_definition_consumer_attempts)
                 or any("calculation_input" in item.decision_functions
                        for item in interpretation.statements)
                 or any(item.decision not in covered | {"unresolved"}
@@ -713,6 +723,7 @@ def restricted_batch_from_review(
 ) -> ProtocolControlBatchDispositionHydrated | None:
     output = _restricted_statement_batch_from_review(batch, result)
     if output is not None:
+        _validate_restricted_definition_registration(batch, result, output)
         return output
     if (result.status != "需要核对" or result.final_output is not None
             or result.source_interpretation is None or result.source_target_review is None
@@ -728,4 +739,7 @@ def restricted_batch_from_review(
         batch, result.source_interpretation, result.source_statement_coverage,
         result.source_target_review,
     )
-    return _whole_unit_restriction(batch, result)
+    output = _whole_unit_restriction(batch, result)
+    if output is not None:
+        _validate_restricted_definition_registration(batch, result, output)
+    return output

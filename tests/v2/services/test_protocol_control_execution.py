@@ -584,10 +584,13 @@ def _mixed_definition_declared_result():
     return batch, result, output
 
 
+@pytest.mark.parametrize("kind", ["mixed_definition", "single_definition"])
 @pytest.mark.parametrize("defect", [None, "missing", "duplicate", "changed_text", "changed_hash", "changed_declaration", "malformed_list"])
-def test_fresh_restricted_registration_private_save_readback_and_source_recheck(defect):
+def test_fresh_restricted_registration_private_save_readback_and_source_recheck(defect, kind):
     module = protocol_control_execution_module
-    batch, result, output = _mixed_definition_declared_result()
+    batch, result = _restriction_case(kind)
+    output = module.restricted_batch_from_review(batch, result)
+    assert output is not None
     checkpoint = {"run_result": result.model_dump(mode="json"),
                   "attempt_raw_outputs": module._deep_attempt_raw_outputs(result)}
     assert "raw_output_text" not in checkpoint["run_result"]["restricted_source_definition_consumer_attempts"][0]
@@ -615,6 +618,73 @@ def test_fresh_restricted_registration_private_save_readback_and_source_recheck(
         assert records[0].consumers[0].consumer_kind == "restricted_statement"
         assert not records[0].scope_complete
         assert records[0].unresolved_reasons  # target correspondence remains unknown
+
+
+@pytest.mark.parametrize("failure", ["changed_disposition", "invalid_registration", "declaration_rejected"])
+def test_restricted_registration_failure_keeps_actual_answer_and_source(monkeypatch, failure):
+    from dataclasses import replace
+
+    module = protocol_control_execution_module
+    batch, result = _restriction_case("single_definition")
+    output = module.restricted_batch_from_review(batch, result)
+    raw = result.source_definition_consumers.model_dump_json()
+    if failure == "declaration_rejected":
+        raw = "{"
+    result.source_definition_consumers = None
+    result.restricted_source_definition_consumer_attempts = []
+    frozen = result.model_dump(mode="json")
+    calls = []
+
+    def declare(*, prompt):
+        calls.append(prompt)
+        return ProtocolControlAgentResponse(session_id="actual-registration", text=raw)
+
+    def reject(*_args):
+        if failure == "invalid_registration":
+            raise ValueError("来源身份不一致")
+        return None
+
+    monkeypatch.setattr(module, "restricted_batch_from_review", reject)
+    monkeypatch.setattr(module, "_deep_component_identity", lambda *_: {})
+    monkeypatch.setattr(module, "_transport_identity", lambda *_, **__: {})
+    context = StepContext(job_id="isolated", job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+                          job_payload={}, step_id="deep_0001", name="深审", attempt=1,
+                          last_checkpoint_id=None, last_checkpoint=None)
+    transport = SimpleNamespace(start_source_definition_consumers=declare,
+                                take_call_receipts=lambda: [{"request_id": "actual-one"}])
+    with pytest.raises(StepFailure) as caught:
+        module._complete_restricted_deep_source(
+            context, SimpleNamespace(), batch, transport, "冻结提示", result, output, [],
+            module._ResumedSourceReview(state="absent", reason="no_saved_source_review"),
+            official_predicate_identities={}, official_predicate_sources={},
+        )
+    assert caught.value.error_code == "PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID"
+    assert not caught.value.retryable and len(calls) == 1
+    saved = caught.value.diagnostic_checkpoint
+    assert saved["stage"] == "deep_failure_diagnostic"
+    assert saved["schema_version"] == "phase5/deep-failure-diagnostic/v3"
+    assert saved["restricted_registration_failed"] is True
+    assert saved["source_interpretation"] == frozen["source_interpretation"]
+    assert saved["source_statement_coverage"] == frozen["source_statement_coverage"]
+    assert saved["source_target_review"] == frozen["source_target_review"]
+    assert saved["attempts"] == frozen["attempts"]
+    assert saved["run_result"] == {key: value for key, value in saved.items()
+                                   if key in ProtocolControlAgentRunResult.model_fields}
+    assert saved["restricted_batch"] == output.model_dump(mode="json")
+    assert saved["model_call_receipts"] == [{"request_id": "actual-one"}]
+    assert saved["run_result"]["final_output"] is None
+    assert saved["run_result"]["status"] == "需要核对"
+    assert saved["attempt_raw_outputs"][-1]["raw_output_text"] == raw
+    assert saved["attempt_raw_outputs"][-1]["role"] == "restricted_source_definition_consumer"
+    restored = module._saved_failed_deep_run_result(batch, saved)
+    assert restored.source_interpretation == result.source_interpretation
+    assert restored.restricted_source_definition_consumer_attempts[-1].raw_output_text == raw
+    for stage in ("deep_failure_diagnostic", "deep"):
+        replay = replace(context, last_checkpoint={**saved, "stage": stage})
+        with pytest.raises(StepFailure) as rejected:
+            module._replay_checkpoint(replay, SimpleNamespace())
+        assert rejected.value.error_code == "PROTOCOL_CONTROL_CHECKPOINT_INVALID"
+    assert result.model_dump(mode="json") == frozen
 
 
 def test_restricted_registration_cannot_use_self_reference_or_legacy_contract():
@@ -1107,6 +1177,33 @@ def test_capability_restriction_keeps_source_and_rejects_unproven_failures(failu
 
 
 def _restriction_case(kind: str):
+    if kind == "single_definition":
+        from app.agents.protocol_control_source_interpretation import (
+            SOURCE_DEFINITION_CONSUMER_VERSION, SourceDefinitionAtomConsumer,
+            SourceDefinitionConsumerItem, SourceDefinitionConsumers,
+        )
+        from app.agents.protocol_control_deconstructor import ProtocolControlAgentAttempt
+
+        batch, result = _independent_candidate_and_unresolved_review()
+        result.source_interpretation.statements[0].decision_functions.append("definition")
+        output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+        assert output is not None and len(output.candidates) == 1
+        target = output.restricted_statements[0]
+        result.source_definition_consumers = SourceDefinitionConsumers(
+            version=SOURCE_DEFINITION_CONSUMER_VERSION,
+            items=[SourceDefinitionConsumerItem(statement_index=0, consumers=[SourceDefinitionAtomConsumer(
+                consumer_kind="restricted_statement", restricted_statement_id=target.restricted_statement_id,
+                consumer_excerpt=target.source_quote,
+            )])],
+        )
+        raw = result.source_definition_consumers.model_dump_json()
+        result.restricted_source_definition_consumer_attempts = [ProtocolControlAgentAttempt(
+            attempt=1, session_id="single-unit-registration", outcome="parsed",
+            raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(), raw_output_chars=len(raw),
+            raw_output_text=raw, issues=[],
+        )]
+        assert protocol_control_execution_module.restricted_batch_from_review(batch, result) == output
+        return batch, result
     if kind == "whole_temporal_definition":
         from app.agents.protocol_control_source_interpretation import (
             SOURCE_DEFINITION_CONSUMER_VERSION, SourceDefinitionAtomConsumer,
@@ -1174,15 +1271,15 @@ def test_temporal_preservation_proof_rehydrates_definition_and_checks_typed_witn
     assert json.dumps(saved, ensure_ascii=False, sort_keys=True) == frozen
 
 
-@pytest.mark.parametrize("kind", ["unresolved", "independent", "clock", "temporal", "mixed_definition", "whole_temporal_definition"])
+@pytest.mark.parametrize("kind", ["unresolved", "independent", "clock", "temporal", "mixed_definition", "whole_temporal_definition", "single_definition"])
 def test_unresolved_source_survives_deep_checkpoint_and_rejects_changed_quote(
     monkeypatch, kind: str,
 ) -> None:
     module = protocol_control_execution_module
     batch, result = _restriction_case(kind)
-    independent_candidate = kind in {"independent", "clock", "temporal"}
+    independent_candidate = kind in {"independent", "clock", "temporal", "single_definition"}
     declarations_called = []
-    has_definition = kind in {"mixed_definition", "whole_temporal_definition"}
+    has_definition = kind in {"mixed_definition", "whole_temporal_definition", "single_definition"}
     declaration_text = (result.source_definition_consumers.model_dump_json()
                         if has_definition else None)
     if has_definition:
@@ -4703,6 +4800,89 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
     assert projection[0].obligations[0].status == "restricted"
 
 
+@pytest.mark.parametrize("case", ["missing", "explicit", "wrong_scope", "existing_diagnostic", "state_changed", "changed_ownership"])
+def test_missing_failed_diagnostic_requires_explicit_fresh_read_scope(
+    data_paths, session_factory, monkeypatch, case,
+):
+    module = protocol_control_execution_module
+    seed = _seed_frozen_source(data_paths, session_factory, key="missing-failed-diagnostic")
+    service = _build_service(data_paths, session_factory, seed, max_deep_units_per_batch=1)
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts)
+    first = service.create_from_deconstruction(source_job_id=seed.source_job_id,
+                                              idempotency_key="missing-diagnostic-old")
+    _, executor = _build_runner(data_paths, session_factory, discovery, deep)
+
+    def fail_selected(context):
+        if context.step_id == "deep_0002":
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                              detail="登记失败，旧版本未保存诊断",
+                              diagnostic_checkpoint={"damaged": True} if case == "existing_diagnostic" else None)
+        return executor(context)
+
+    assert JobRunner(session_factory, {PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: fail_selected},
+                    worker_id="missing-diagnostic-old", now=_now).run_job(first.job_id)
+    old_history = _job_checkpoint_fingerprint(session_factory, first.job_id)
+    before_calls = deep.start_calls
+    acknowledged = [] if case == "missing" else ["deep_0001" if case == "wrong_scope" else "deep_0002"]
+    kwargs = dict(source_job_id=seed.source_job_id, deep_source_job_id=first.job_id,
+                  idempotency_key="missing-diagnostic-new", recompute_missing_diagnostic_steps=acknowledged)
+    if case == "changed_ownership":
+        original_planner = module.plan_protocol_control_deep_batches_from_discovery
+
+        def changed_plan(*args, **kwargs):
+            plan = original_planner(*args, **kwargs)
+            return plan.model_copy(update={"batches": [
+                batch.model_copy(update={"owned_structure_unit_ids": ["changed-source"]})
+                if batch.batch_number == 2 else batch for batch in plan.batches
+            ]})
+
+        monkeypatch.setattr(module, "plan_protocol_control_deep_batches_from_discovery", changed_plan)
+    if case in {"missing", "wrong_scope", "existing_diagnostic", "changed_ownership"}:
+        with pytest.raises(ProtocolControlExecutionError) as rejected:
+            service.create_from_deconstruction(**kwargs)
+        assert rejected.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+        assert deep.start_calls == before_calls
+        assert _job_checkpoint_fingerprint(session_factory, first.job_id) == old_history
+        return
+    created = service.create_from_deconstruction(**kwargs)
+    _, payload = _job_snapshot_and_payload(session_factory, created.job_id)
+    decisions = list(payload["deep_reuse_plan"]["decisions"].values())
+    assert next(item for item in decisions if item["step_id"] == "deep_0001")["decision"] == "reusable"
+    selected = next(item for item in decisions if item["step_id"] == "deep_0002")
+    assert selected["decision"] == "refresh_required"
+    assert selected["reason"] == "missing_failed_diagnostic_explicit_recompute"
+    assert selected["missing_failed_diagnostic_proof"]["reused"] is False
+    if case == "state_changed":
+        from app.storage.repositories import JobRepository
+        with session_factory() as session, session.begin():
+            JobRepository(session).create_checkpoint(checkpoint_id="later-receipt", job_id=first.job_id,
+                                                    step_id="deep_0002", payload={"later": True})
+
+    def observe(context):
+        result = executor(context)
+        if context.step_id == "deep_0002":
+            runner.request_stop()
+        return result
+
+    runner = JobRunner(session_factory, {PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: observe},
+                       worker_id="missing-diagnostic-new", now=_now)
+    assert runner.run_job(created.job_id)
+    with session_factory() as session:
+        store = JobStore(session, now=_now)
+        current = store.get_job(created.job_id)
+        assert store.get_job(first.job_id).state == "failed_final"
+        if case == "state_changed":
+            assert current.state == "failed_final"
+            assert current.error_code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+            assert deep.start_calls == before_calls
+        else:
+            assert current.state == "queued"
+            assert store.get_last_checkpoint(created.job_id, "deep_0002")[1]["stage"] == "deep"
+            assert deep.start_calls == before_calls + 1
+            assert _job_checkpoint_fingerprint(session_factory, first.job_id) == old_history
+
+
 def test_continuation_plan_refreshes_a_changed_saved_source_review(
     data_paths, session_factory, monkeypatch,
 ) -> None:
@@ -5153,7 +5333,8 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
     assert checkpoint is not None
     assert checkpoint[1]["revalidated_from_gate_version"] == old_gate
     assert checkpoint[1]["component_identity"]["validator_version"] == (
-        protocol_control_execution_module.CONTROL_PUBLICATION_GATE_VERSION
+        "/".join((protocol_control_execution_module.CONTROL_PUBLICATION_GATE_VERSION,
+                  protocol_control_execution_module.RESTRICTED_DEFINITION_VALIDATION_VERSION))
     )
 
 

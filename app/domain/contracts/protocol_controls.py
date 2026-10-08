@@ -2526,6 +2526,15 @@ def is_source_list_continuation_group(units: Sequence[ProtocolStructureUnit]) ->
     )
 
 
+class TableContextReadingBound(Phase5ControlModel):
+    """A host-selected adjacent excerpt range, never a complete-list claim."""
+
+    included_structure_unit_ids: list[str] = Field(default_factory=list)
+    complete_list_asserted: Literal[False] = False
+    stop_reason: Literal["source_end", "coordinate_boundary", "heading_boundary",
+                         "cell_boundary", "character_limit", "unit_limit", "next_intro"]
+
+
 class ProtocolControlDispositionBatch(Phase5ControlModel):
     """Deterministic planner output for one bounded owned-unit batch.
 
@@ -2546,6 +2555,9 @@ class ProtocolControlDispositionBatch(Phase5ControlModel):
     priority_rank: int = Field(default=0, ge=0)
     owned_units: list[ProtocolStructureUnit] = Field(min_length=1)
     context_units: list[ProtocolStructureUnit] = Field(default_factory=list)
+    table_context_reading_bounds: dict[str, TableContextReadingBound] = Field(
+        default_factory=dict, exclude_if=lambda value: not value,
+    )
     owned_structure_unit_ids: list[str] = Field(min_length=1)
     context_structure_unit_ids: list[str] = Field(default_factory=list)
     owned_source_span_ids: list[str] = Field(min_length=1)
@@ -2606,6 +2618,21 @@ class ProtocolControlDispositionBatch(Phase5ControlModel):
             raise ValueError("context_structure_unit_ids 必须与 context_units 顺序和身份一致")
         if set(owned_ids) & set(context_ids):
             raise ValueError("同一批次的 owned/context 结构单元不得重叠")
+        if not set(self.table_context_reading_bounds) <= set(owned_ids):
+            raise ValueError("相邻原文读取范围只能属于本批原文引言")
+        for intro_id, bound in self.table_context_reading_bounds.items():
+            intro = next(unit for unit in self.owned_units if unit.structure_unit_id == intro_id)
+            prefix, marker, paragraph = intro.source_ref.rpartition(".p")
+            if intro.table_context is None or not marker or not paragraph.isdigit():
+                raise ValueError("相邻原文读取范围缺少原生单元格位置")
+            if len(bound.included_structure_unit_ids) > MAX_SOURCE_LIST_GROUP_UNITS:
+                raise ValueError("相邻原文读取范围超过单位上限")
+            following = {unit.structure_unit_id: unit for unit in (*self.owned_units, *self.context_units)}
+            for offset, unit_id in enumerate(bound.included_structure_unit_ids, start=1):
+                unit = following.get(unit_id)
+                if (unit is None or unit.source_ref != f"{prefix}.p{int(paragraph) + offset}"
+                        or unit.table_context != intro.table_context or unit.heading_path != intro.heading_path):
+                    raise ValueError("相邻原文读取范围必须逐项对应同格连续原文")
         if not set(self.pre_enrollment_structure_unit_ids) <= set(owned_ids):
             raise ValueError("给药前结构单元必须属于本批 owned_units")
         if self.pre_enrollment_structure_unit_ids != [
