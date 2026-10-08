@@ -3,9 +3,9 @@
 
 ### 单一当前用户流程表
 
-**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。4e5edf3c产品Job e5c95389e6c84bbb944e14302692cfd0已实际12调用/509.424768秒/exit3，16组完成、17补入上限失败、73未读；旧Job/原件/保护库保持。其后独立实现C引用限定防重复，再实现B原生脚注只读context，预检与执行共用实际材料、不借其他流程项解释、不放宽来源/时期/采用。C三个原模块1125pass/101.66秒；B五模块1135pass/116.31秒；末提示说明31pass/0.46秒，均exit0/5SWIG，窗口重叠不相加。初B窗1130pass/3fail为两新测试尾断言误放及桥接合同未接新context，已修，不删危险反例。C03同CodeBuddy/DeepSeek/max/session01a11c13…初158.46秒、续228.167秒/exit0/no fallback，120min静默等待，仅源码审阅；取舍/残余见reviews/rv1006-source-context-loop-owner-disposition-20261008.md。
+**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。e628d4f0产品Job53021ad0f43d4ea9a587ba977fadc543已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，36物理调用1129.773510秒/exit3，19组completed（1–16、18–20）、17来源对应未决、21结构失败、69未读；scope/hydrate/gate依赖失败，旧Job/原件/保护库保持。不能把19完成当完整要求采用。当前直接集成＋单个C03：首错17 reviewer缺原生表头/格位置，21多候选各自引用合法格却未列整行出处。最小修复补只读native_table_source，并由宿主补候选整行来源排序闭包；原子/含义/时点/证据政策不改，非法引用先拒绝。不得将这两项软件缺口叫研究者医学判断。
 
-**入队前实际比对：** 0模型/0写/DBhash保持，15reusable/75refresh：原完成1–15当前门重验可复用，16新增脚注重读，17起新或未完整。原因1受限来源重验、14完整材料重验、1规划材料变化、74未完成，没有整体prompt/component失效。第16/17来源提示6763/9997字符、真实token未知。新版真实Job尚未创建，不把1135通过或只读预检当完成采用。前端60组件测试及正式build通过，Ego147非Mock真实24页原件在1920×1080、2560×1440、3840×2160查看，工作区顶323px、无横向溢出；来源选择/全文开关/缩放/返回正确个例已实际操作，非完整Q3，新规则工作稿与更正后新报告仍未达。仅停止本任务只读服务63305，共享服务不动。
+**入队前实际比对：** native-table-consumer-preflight-v2为0模型/0写/DBhash保持，19reusable/2resume_partial/69refresh。18普通已完成partial_wire用当前装配重放与原final_output对象/hash完全相同，1受限结果通过当前完整门。整行出处原门已经要求，不是新语义编译；新增normalization标记进入validator identity，旧compiler/schema/source/route变化拒绝仍保留，旧历史不改。新合法Job关闭既有可选continue-after-unresolved，避免17直接preserve旧未决；保留17草稿及21来源解释继续核查。首审CodeBuddy/DeepSeek/max194.256秒、同会话差异复核86.082秒/exit0/no fallback，120min完成等待静默；首审sorted缺陷采纳，末审未见必修但不代替测试/临床。首审约13读取超10预算如实记，末审未核实际调用hash落点，所有者原始请求/回执仍本地保存。相连三模块最终v4为1203passed/96.30秒/exit0/5SWIG；v3为1202pass/1fail109.71秒，新增非首span夹具内部出处不一致，后两个fixture窗各5pass1fail为冻结赋值/闭包问题，修夹具不松门，最终6局部例通过0.76秒。首v2为1198pass4fail，新增构造错误；文件名诊断exit4无测试。窗口不累加。前端/Ego上一窗口60组件及正式build、三宽屏无溢出是历史有效局部证据，不是本轮新规则Q3。共享服务保持，7份继承dirty不动。
 
 ### 历史运行与验证（以下“当前/未运行/暂停”均限原记录时点，不覆盖上方现行状态）
 

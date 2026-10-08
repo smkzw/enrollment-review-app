@@ -3688,6 +3688,17 @@ def validate_protocol_control_agent_wire(
                 candidate_indexes=[candidate_index],
             )
         candidate = _validate_exact_atom_sources(candidate, batch=batch)
+        # Whole-row provenance is host-owned; atom citations and meaning stay local.
+        row_spans = [
+            span
+            for unit_id in candidate.source_structure_unit_ids
+            if units_by_id[unit_id].unit_kind in {"table_header", "table_row", "table_note"}
+            for span in units_by_id[unit_id].source_span_ids
+        ]
+        if row_spans:
+            candidate = candidate.model_copy(update={
+                "source_span_ids": sorted({*candidate.source_span_ids, *row_spans}),
+            })
         wire.candidate_drafts[candidate_index] = candidate
         fingerprint = _stable_json(candidate.model_dump(mode="json"))
         if fingerprint in fingerprints:

@@ -1317,6 +1317,19 @@ def _is_schedule_randomization_anchor(
     )
 
 
+def _native_table_source_packet(unit) -> dict[str, object]:
+    if unit.table_context is None:
+        return {}
+    return {"native_table_source": {
+        "source_ref": unit.source_ref,
+        "source_span_ids": list(unit.source_span_ids),
+        "member_source_refs": list(unit.member_source_refs),
+        "member_source_span_ids": unit.member_source_span_ids,
+        "member_texts": unit.member_texts,
+        "table_context": unit.table_context.model_dump(mode="json"),
+    }}
+
+
 def _target_review_source_packet(batch, comparison_target_id):
     excerpts, by_source, positions = [], {}, {}
     targets = {"official": [], "procedure": []}
@@ -1391,6 +1404,9 @@ def build_source_target_review_prompt(
         }
         for index in indexes
     ]
+    owned_by_id = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    for packet in source:
+        packet.update(_native_table_source_packet(owned_by_id[packet["structure_unit_id"]]))
     procedures = {target.catalog_item_id: target for target in batch.known_procedure_targets}
     for packet in source:
         statement = interpretation.statements[packet["statement_index"]]
@@ -1416,6 +1432,7 @@ def build_source_target_review_prompt(
             "source_ref": unit.source_ref,
             "heading_path": unit.heading_path,
             "excerpt": unit.excerpt,
+            **_native_table_source_packet(unit),
         }
         for unit in batch.context_units
     ]
@@ -1442,6 +1459,10 @@ def build_source_target_review_prompt(
         "不能为了让流程通过而添加无源要求。"
         "若只因未找到条款或不确定用途，选 unresolved，不得当作背景。"
         "流程节点原始表头只供核查时期定义与上下文；它不是操作已被完整覆盖或患者已完成操作的证明。"
+        "native_table_source 保留冻结原文的单元格路径、逐格文字和来源；"
+        "同一表中标记单元格与表头的列位置可用于核查本行动作适用的访视，"
+        "不得仅因标记文字没有重复写出表头就说原文未给时期。"
+        "位置关系本身不证明已有目标覆盖，不补造缺失表头、合并关系或临床例外。"
         "没有表头原文时不能以派生访视名称补造来源；表头未写出的时长、锚点、例外继续保留具体未决。"
         "此步骤仍不得把流程节点编号填作官方或必做项目 target_id，也不得把时期定义改成患者义务。"
         "仅当 definition_dependency_allowed 为 true，且本条是有源、含义明确的定义而非动作，"

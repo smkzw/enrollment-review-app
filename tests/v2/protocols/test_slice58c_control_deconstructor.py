@@ -12643,6 +12643,103 @@ def test_target_review_prompt_supplies_force_without_declaring_coverage():
     assert "shared_visit_source_positions" in prompt
 
 
+def _native_candidate_row_batch():
+    batch = _batch().model_copy(deep=True)
+    row = batch.owned_units[0]
+    row.source_ref = "body.t0.r2"
+    row.unit_kind = type(row.unit_kind).TABLE_ROW
+    row.member_source_refs = ["body.t0.r2.c0.p0", "body.t0.r2.c1.p0"]
+    row.member_texts = [row.excerpt, "X"]
+    row.member_source_span_ids = [["span:01"], ["span:row-mark"]]
+    row.source_span_ids.append("span:row-mark")
+    row.excerpt += " | X"
+    row.table_context = TableCellContext(
+        table_path=(2, 0), row_index=2, column_index=0,
+        member_cell_paths=[(2, 0), (2, 1)],
+    )
+    batch.owned_source_span_ids.append("span:row-mark")
+    return batch
+
+
+@pytest.mark.parametrize("cited_span", ["span:01", "span:row-mark"])
+def test_native_row_provenance_is_completed_without_rewriting_atoms(cited_span):
+    from app.agents.protocol_control_deconstructor import wire_to_protocol_control_batch_disposition
+
+    batch, wire = _native_candidate_row_batch(), _wire(candidate=_candidate())
+    if cited_span == "span:row-mark":
+        batch.owned_units[0].member_source_span_ids = [[cited_span], ["span:01"]]
+
+        def replace_span(value):
+            if isinstance(value, dict):
+                return {key: ([cited_span if span == "span:01" else span for span in item]
+                              if key == "source_span_ids" else replace_span(item))
+                        for key, item in value.items()}
+            if isinstance(value, list):
+                return [replace_span(item) for item in value]
+            return value
+
+        wire.candidate_drafts[0] = ProtocolControlAgentWireCandidate.model_validate(
+            replace_span(wire.candidate_drafts[0].model_dump(mode="json")))
+    before = wire.model_dump_json()
+    atom = wire.candidate_drafts[0].obligation_expression.model_dump_json()
+    validated = validate_protocol_control_agent_wire(wire, batch)
+    assert validated.candidate_drafts[0].source_span_ids == ["span:01", "span:row-mark"]
+    assert validated.candidate_drafts[0].obligation_expression.model_dump_json() == atom
+    assert "span:03" not in validated.candidate_drafts[0].source_span_ids
+    assert wire.model_dump_json() == before
+    assert validate_protocol_control_agent_wire(validated, batch) == validated
+    domain = wire_to_protocol_control_batch_disposition(wire, batch)
+    assert domain.candidate_drafts[0].source_span_ids == ["span:01", "span:row-mark"]
+
+
+@pytest.mark.parametrize("invalid", ["context_span", "unknown_unit", "atom_quote"])
+def test_native_row_provenance_completion_does_not_repair_invalid_sources(invalid):
+    batch, wire = _native_candidate_row_batch(), _wire(candidate=_candidate())
+    candidate = wire.candidate_drafts[0]
+    if invalid == "context_span":
+        candidate.source_span_ids.append("span:03")
+    elif invalid == "unknown_unit":
+        candidate.source_structure_unit_ids.append("unowned-unit")
+    else:
+        candidate.obligation_expression.groups[0].atoms[0].source_excerpts = ["原文没有的条件"]
+    with pytest.raises(ValueError):
+        validate_protocol_control_agent_wire(wire, batch)
+
+
+def test_target_review_keeps_native_position_without_claiming_coverage():
+    batch = _native_candidate_row_batch()
+    header = batch.context_units[0]
+    header.source_ref = "body.t0.r0"
+    header.unit_kind = type(header.unit_kind).TABLE_HEADER
+    header.excerpt = "项目 | 基线期"
+    header.member_source_refs = ["body.t0.r0.c0.p0", "body.t0.r0.c1.p0"]
+    header.member_texts = ["项目", "基线期"]
+    header.table_context = TableCellContext(
+        table_path=(0, 0), row_index=0, column_index=0,
+        member_cell_paths=[(0, 0), (0, 1)],
+    )
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-01", quoted_text="年龄至少18岁",
+            force="required", decision_functions=["action"], time_words=[],
+            unresolved=["尚未核清时期关系"])], units_without_statement=["su-02"])
+    coverage = [SourceStatementCoverage(statement_index=0, structure_unit_id="su-01",
+        disposition="other_control_candidate", status="not_located")]
+    frozen = batch.model_dump_json(), inventory.model_dump_json()
+    prompt = build_source_target_review_prompt(batch, inventory, coverage)
+    lines = prompt.splitlines()
+    source = json.loads(next(line.removeprefix("待核陈述：") for line in lines
+                             if line.startswith("待核陈述：")))[0]
+    context = json.loads(next(line.removeprefix("只读来源线索：") for line in lines
+                              if line.startswith("只读来源线索：")))[0]
+    assert source["native_table_source"]["member_texts"][-1] == "X"
+    assert source["native_table_source"]["table_context"]["member_cell_paths"] == [[2, 0], [2, 1]]
+    assert context["native_table_source"]["member_source_refs"][-1] == "body.t0.r0.c1.p0"
+    assert source["unresolved"] == ["尚未核清时期关系"]
+    assert "位置关系本身不证明已有目标覆盖" in prompt
+    assert "procedure_target_id" not in source["native_table_source"]
+    assert (batch.model_dump_json(), inventory.model_dump_json()) == frozen
+
+
 def _inline_scope_citation_example(*, separator="", quote="自筛选日起接受研究处理并持续11天"):
     batch = _batch()
     scope = "筛选期（V0）："
