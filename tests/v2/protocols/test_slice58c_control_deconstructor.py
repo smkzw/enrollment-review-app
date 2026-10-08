@@ -1796,6 +1796,28 @@ def test_verified_source_only_resume_skips_source_reader_but_rebuilds_wire() -> 
         )
 
 
+@pytest.mark.parametrize("empty_ids", [["su-01"], ["su-01", "su-02", "context-only"]])
+def test_source_inventory_coverage_failure_is_structured_and_keeps_raw_answer(empty_ids) -> None:
+    batch = _batch()
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+                                     statements=[], units_without_statement=empty_ids)
+
+    class Transport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="invalid-inventory", text=inventory.model_dump_json())
+
+    transport = Transport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=0).run(batch, transport)
+    assert result.status == "需要核对"
+    assert result.final_output is None
+    assert result.source_interpretation is None
+    assert result.pending_source_interpretation == inventory
+    assert result.attempts[-1].error_classes == ["SOURCE_COVERAGE_INVALID"]
+    assert result.attempts[-1].error_detail["retry_class"] == "source_inventory"
+    assert result.attempts[0].raw_output_text == inventory.model_dump_json()
+    assert transport.prompts == []
+
+
 def test_source_interpretation_is_source_bound_and_not_a_rule() -> None:
     batch = _batch()
     payload = {

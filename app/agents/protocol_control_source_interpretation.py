@@ -32,6 +32,7 @@ from app.protocols.source_time_fragments import intraday_time_fragments
 SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
 SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v22"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
+SOURCE_COVERAGE_VALIDATION_VERSION = "source-owned-inventory-validation/v1"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
 
@@ -2356,7 +2357,19 @@ def validate_source_interpretation(
     statement_ids = {item.structure_unit_id for item in interpretation.statements}
     empty_ids = set(interpretation.units_without_statement)
     if statement_ids | empty_ids != set(owned) or statement_ids & empty_ids:
-        raise ValueError("每个冻结来源单元必须由陈述或无独立陈述说明覆盖")
+        affected = sorted((statement_ids | empty_ids) - set(owned)
+                          or set(owned) - (statement_ids | empty_ids)
+                          or statement_ids & empty_ids)
+        unit_id = affected[0]
+        index = next((index for index, item in enumerate(interpretation.statements)
+                      if item.structure_unit_id == unit_id), 0)
+        raise SourceInterpretationValidationError(
+            "SOURCE_COVERAGE_INVALID",
+            "每个冻结来源单元必须由陈述或无独立陈述说明覆盖，参考单元不得列入",
+            statement_id=index, structure_unit_id=unit_id, json_path="/statements",
+            source_refs=list(owned[unit_id].source_span_ids) if unit_id in owned else [],
+            retry_class="source_inventory",
+        )
     for statement_id, item in enumerate(interpretation.statements):
         unit = owned[item.structure_unit_id]
         def reject(code: str, message: str, field: str, retry_class: str) -> None:
@@ -2594,13 +2607,19 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
     )
 
 
-def source_interpretation_response_format() -> dict[str, object]:
+def source_interpretation_response_format(
+    batch: ProtocolControlDispositionBatch | None = None,
+) -> dict[str, object]:
     schema = SourceInterpretation.model_json_schema()
     statement_schema = schema["$defs"]["SourceStatement"]
     statement_schema["properties"]["decision_functions"].pop("default", None)
     statement_schema["required"] = [
         *statement_schema.get("required", []), "decision_functions",
     ]
+    if batch is not None:
+        owned_ids = list(batch.owned_structure_unit_ids)
+        statement_schema["properties"]["structure_unit_id"]["enum"] = owned_ids
+        schema["properties"]["units_without_statement"]["items"]["enum"] = owned_ids
     return {
         "type": "json_schema",
         "json_schema": {

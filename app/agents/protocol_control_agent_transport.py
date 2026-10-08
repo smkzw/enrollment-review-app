@@ -1202,7 +1202,9 @@ class OpenAICompatibleProtocolControlAgentTransport:
             raise ValueError("方案来源解释提示不能为空")
         session_id = f"protocol-control-source-{uuid4().hex}"
         try:
-            response_format = source_interpretation_response_format()
+            response_format = source_interpretation_response_format(
+                getattr(self._receipt_local, "source_batch", None)
+            )
             text = self._complete(
                 self._single_requirement_messages(prompt, response_format),
                 response_format=response_format,
@@ -1214,6 +1216,17 @@ class OpenAICompatibleProtocolControlAgentTransport:
                 uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
             ) from exc
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def start_source_interpretation_batch(
+        self, *, prompt: str, batch: ProtocolControlDispositionBatch,
+    ) -> ProtocolControlAgentResponse:
+        """Bind the output inventory to this call's owned sources, not its context."""
+        previous = getattr(self._receipt_local, "source_batch", None)
+        self._receipt_local.source_batch = batch
+        try:
+            return self.start_source_interpretation(prompt=prompt)
+        finally:
+            self._receipt_local.source_batch = previous
 
     def read_semantic_points(self, *, prompt: str) -> ProtocolControlAgentResponse:
         """Isolated source-bound reading; it does not enter the publication path."""

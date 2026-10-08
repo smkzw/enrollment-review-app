@@ -3,7 +3,11 @@
 
 ### 单一当前用户流程表
 
-当前主集成＋单C03：来源登记/恢复存在解释风险，批准CodeBuddy/deepseek-v4.1-flash/max已完成初审569.594s、同会话复核173.798s及缺诊断复核106.056s，均exit0/no fallback；顾问未读全部消费者、不认证测试或临床采用。7份继承delivery不动，共享首屏184bdb60适配已push，不重复派发或修改共享首页。源码基线8b1cb65e已push；当前增量尚未提交，Goal active/claims_complete=false。
+当前主集成＋已完成单C03：来源登记/恢复存在解释风险，批准CodeBuddy/deepseek-v4.1-flash/max已完成初审569.594s、同会话复核173.798s及缺诊断复核106.056s，均exit0/no fallback；顾问未读全部消费者、不认证测试或临床采用。7份继承delivery不动，共享首屏184bdb60适配已push，不重复派发或修改共享首页。源码582cd8eb已push，含登记/上下文/明确缺诊断新读及审阅限制；Goal active/claims_complete=false。
+
+最新实际Job22418c0d8f43468f8ee8dd37f31fde55（582cd8eb，受控原隔离目录）：7物理调用310.9939s，deep_0001/2/4复用、deep_0003六调用完成，第5组一次来源读后failed_final/PROTOCOL_CONTROL_CHECKPOINT_INVALID；90组4completed/1failed/85queued，原Job状态/payload、保护库、来源库均不变，0共同发布/激活/签发。所列直接两次链43+7=50新增调用不是全历史总数。
+
+窗口插入项：第5组阻断完整要求快照；冻结原答将一个context-only ID列入units_without_statement，且嵌套重验抛普通ValueError使失败诊断未保存；最小修复是结构化SOURCE_COVERAGE_INVALID并沿已有失败保存路径退出，按当前owned IDs收窄来源输出Schema，未知/参考ID仍拒，不删除模型内容或代填事实。此客观编号/控制流修复由所有者直接实施，无新增语义采用或会议要求；此前C03不宣称审过本增量。三相连模块末窗1097passed/89.77s/exit0/5既有SWIG，JUnit rv1006-source-inventory-scope-connected-20261008-v2.xml；首窗1095pass/2fail/86.00s为新文字Schema测试误按空格匹配JSON、既有validator版本断言未更新，修结构解析/期望，不松产品门，窗口不累加。SOURCE_COVERAGE_VALIDATION_VERSION进入validator身份；旧合法来源当前重验，实际请求Schema/预算保存，不强制全组重读。带batch读道调用原有source reader，异常后恢复线程范围，旧接口和覆盖完整性门保留。下一次以最新失败22418c0d…四组当前完成结果作唯一来源，明确重新读缺记录第5组；旧六组历史不删除，不跨两个Job挑选回答拼接新链。正常生成/保存仍不是共同发布。
 
 实际作业1f79e0e7b20442f3b66edde7a2ed6fa1已failed_final，不再是运行中：首步1实际登记105.0591115s，续读42调用1697.4065287s，合计43新增调用；90深审9completed、2failed（第9组来源对应未决，第11组登记后派生拒绝）、79queued未读，scope/hydrate/gate依赖失败。原Job/原答/原件/保护库/来源库保持，0共同发布/激活/签发。9 completed不等于完整要求包。
 

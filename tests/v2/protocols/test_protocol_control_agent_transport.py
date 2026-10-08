@@ -1726,6 +1726,42 @@ def test_text_mode_source_reads_include_their_actual_schema() -> None:
                for call in completions.calls)
 
 
+@pytest.mark.parametrize("mode", ["json_schema", "text"])
+def test_source_inventory_schema_uses_only_current_owned_ids_and_releases_scope(mode) -> None:
+    from app.agents.protocol_control_source_interpretation import SOURCE_INTERPRETATION_VERSION
+    batch = _batch()
+    client, completions = _client([json.dumps({"version": SOURCE_INTERPRETATION_VERSION,
+                                              "statements": [], "units_without_statement": []})] * 2)
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="ollama-cloud", model="deepseek-v4.1-flash",
+        reasoning_effort="high", max_tokens=16384, response_format_mode=mode)
+    transport.start_source_interpretation_batch(prompt="冻结本组来源", batch=batch)
+    if mode == "json_schema":
+        schema = completions.calls[0]["response_format"]["json_schema"]["schema"]
+        assert schema["$defs"]["SourceStatement"]["properties"]["structure_unit_id"]["enum"] == batch.owned_structure_unit_ids
+        assert schema["properties"]["units_without_statement"]["items"]["enum"] == batch.owned_structure_unit_ids
+    else:
+        schema = json.loads(completions.calls[0]["messages"][0]["content"].split("常量值：", 1)[1])
+        assert schema["properties"]["units_without_statement"]["items"]["enum"] == batch.owned_structure_unit_ids
+    assert getattr(transport._receipt_local, "source_batch", None) is None
+    transport.start_source_interpretation(prompt="旧接口无批次范围")
+    if mode == "json_schema":
+        schema = completions.calls[1]["response_format"]["json_schema"]["schema"]
+        assert "enum" not in schema["properties"]["units_without_statement"]["items"]
+
+
+def test_source_inventory_scope_is_released_after_overridden_reader_failure() -> None:
+    class FailingTransport(OpenAICompatibleProtocolControlAgentTransport):
+        def start_source_interpretation(self, *, prompt):
+            raise RuntimeError("synthetic reader failure")
+
+    client, _ = _client([])
+    transport = FailingTransport(client=client, backend="ollama-cloud", model="deepseek-v4.1-flash")
+    with pytest.raises(RuntimeError, match="synthetic reader failure"):
+        transport.start_source_interpretation_batch(prompt="冻结来源", batch=_batch())
+    assert getattr(transport._receipt_local, "source_batch", None) is None
+
+
 def test_source_scope_correction_uses_bounded_schema() -> None:
     client, completions = _client(['{"version":"phase5/control-source-scope-correction/v1",'
                                     '"structure_unit_id":"su-01","scope_quote":null,'

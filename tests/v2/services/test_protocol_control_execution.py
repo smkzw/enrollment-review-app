@@ -4883,6 +4883,44 @@ def test_missing_failed_diagnostic_requires_explicit_fresh_read_scope(
             assert _job_checkpoint_fingerprint(session_factory, first.job_id) == old_history
 
 
+def test_source_inventory_scope_failure_saves_diagnostic_and_requires_fresh_read(
+    data_paths, session_factory,
+):
+    seed = _seed_frozen_source(data_paths, session_factory, key="inventory-scope-diagnostic")
+    service = _build_service(data_paths, session_factory, seed)
+    deep = _DeepTransport(seed.source_span_excerpts)
+    reads = []
+
+    def bad_inventory(*, prompt):
+        units = _prompt_payload(prompt, "冻结来源：")["owned"]
+        text = json.dumps({"version": SOURCE_INTERPRETATION_VERSION, "statements": [],
+                           "units_without_statement": [unit["structure_unit_id"] for unit in units] + ["context-only"]})
+        reads.append(text)
+        return ProtocolControlAgentResponse(session_id="inventory-outside-scope", text=text)
+
+    deep.start_source_interpretation = bad_inventory
+    job = service.create_from_deconstruction(source_job_id=seed.source_job_id,
+                                            idempotency_key="inventory-invalid")
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    assert runner.run_job(job.job_id)
+    with session_factory() as session:
+        store = JobStore(session, now=_now)
+        failed = next(item for item in store.list_steps(job.job_id) if item.error_code == "PROTOCOL_CONTROL_SOURCE_COVERAGE_INVALID")
+        saved = store.get_last_checkpoint(job.job_id, failed.step_id)[1]
+    assert len(reads) == 1 and deep.start_calls == 0
+    assert saved["stage"] == "deep_failure_diagnostic"
+    assert saved["pending_source_interpretation"]["units_without_statement"][-1] == "context-only"
+    assert saved["source_interpretation"] is None
+    assert saved["partial_wire"] is None
+    continued = service.create_from_deconstruction(source_job_id=seed.source_job_id,
+                                                  deep_source_job_id=job.job_id,
+                                                  idempotency_key="inventory-new-read")
+    _, payload = _job_snapshot_and_payload(session_factory, continued.job_id)
+    selected = next(item for item in payload["deep_reuse_plan"]["decisions"].values()
+                    if item["step_id"] == failed.step_id)
+    assert selected["decision"] == "refresh_required"
+
+
 def test_continuation_plan_refreshes_a_changed_saved_source_review(
     data_paths, session_factory, monkeypatch,
 ) -> None:
@@ -5334,7 +5372,8 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
     assert checkpoint[1]["revalidated_from_gate_version"] == old_gate
     assert checkpoint[1]["component_identity"]["validator_version"] == (
         "/".join((protocol_control_execution_module.CONTROL_PUBLICATION_GATE_VERSION,
-                  protocol_control_execution_module.RESTRICTED_DEFINITION_VALIDATION_VERSION))
+                  protocol_control_execution_module.RESTRICTED_DEFINITION_VALIDATION_VERSION,
+                  protocol_control_execution_module.SOURCE_COVERAGE_VALIDATION_VERSION))
     )
 
 

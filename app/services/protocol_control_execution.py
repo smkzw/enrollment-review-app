@@ -62,6 +62,7 @@ from app.agents.protocol_control_discovery_transport import (
     protocol_control_discovery_transport_from_environment,
 )
 from app.agents.protocol_control_source_interpretation import (
+    SOURCE_COVERAGE_VALIDATION_VERSION,
     SOURCE_QUOTE_RECOVERY_VERSION,
     SOURCE_TARGET_REVIEW_VERSION,
     SourceDefinitionConsumers,
@@ -2045,7 +2046,8 @@ def _deep_component_identity(
             "pending-definition-consumer-diagnostic/v1",
         ],
         "validator_version": "/".join((CONTROL_PUBLICATION_GATE_VERSION,
-                                       RESTRICTED_DEFINITION_VALIDATION_VERSION)),
+                                       RESTRICTED_DEFINITION_VALIDATION_VERSION,
+                                       SOURCE_COVERAGE_VALIDATION_VERSION)),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}
         ).get("deep"),
@@ -3909,6 +3911,7 @@ def _execute_deep(
     if (restricted_error is not None or result.status not in {"已解析", "待跨章核验"}
             or result.final_output is None):
         source_review_failure_codes = {
+            "SOURCE_COVERAGE_INVALID",
             "LOGICAL_BUDGET_EXHAUSTED",
             "FLOW_TRANSPORT_FAILED", "FLOW_COMPLETION_UNCERTAIN", "FLOW_RESPONSE_INVALID", "FLOW_ASSEMBLY_INVALID",
             "FLOW_SOURCE_SCOPE_UNRESOLVED", "FLOW_TARGET_ALREADY_COVERED",

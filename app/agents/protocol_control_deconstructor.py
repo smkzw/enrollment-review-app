@@ -7066,6 +7066,7 @@ class ProtocolControlAgentRunner:
             validate_source_interpretation(batch, resume_source_interpretation)
             source_interpretation = resume_source_interpretation
         source_reader = getattr(transport, "start_source_interpretation", None)
+        source_batch_reader = getattr(transport, "start_source_interpretation_batch", None)
         source_repairs = 0
         if source_interpretation is None and callable(source_reader):
             source_response: ProtocolControlAgentResponse | None = None
@@ -7073,7 +7074,9 @@ class ProtocolControlAgentRunner:
             for source_attempt in range(2):
                 source_response = None
                 try:
-                    source_response = source_reader(prompt=source_prompt)
+                    source_response = (source_batch_reader(prompt=source_prompt, batch=batch)
+                                       if callable(source_batch_reader)
+                                       else source_reader(prompt=source_prompt))
                     source_interpretation = parse_product_source_interpretation(
                         batch, source_response.text
                     )
