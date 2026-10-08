@@ -422,8 +422,10 @@ def can_recheck_source_scope_question(
                      if unit.structure_unit_id == statement.structure_unit_id), None)
         if unit is not None:
             columns = schedule_column_scope(unit, batch.context_units)
+    # A readable header is enough to ask a question, not to prove its scope.
+    # Early-exit columns may legitimately have no fixed visit/date mapping.
     native_scope = bool(columns) and all(column.header_source_refs and column.header_text
-                                        and not column.visit_unresolved for column in columns)
+                                        for column in columns)
     return bool(statement.unresolved) and statement.affected_stage is None and (literal_times or native_scope)
 
 
@@ -2374,6 +2376,34 @@ def shared_prohibition_preserves_source(statement, atom) -> bool:
     )
 
 
+def native_schedule_action_cell_is_preserved(batch, statement, unit, atoms) -> bool:
+    """Prove action-cell text only; markers and visit scope stay independently checked."""
+    if (statement.unresolved or statement.exception_words
+            or set(statement.decision_functions) != {"action"}
+            or normalize_source_excerpt(statement.quoted_text) != normalize_source_excerpt(unit.excerpt)):
+        return False
+    values = schedule_row_values(unit, batch.context_units)
+    columns = schedule_column_scope(unit, batch.context_units)
+    labels = native_schedule_label_sources(batch, unit, source_quote=statement.quoted_text)
+    nonempty = {index for index, text, _refs in values if text.strip() and index != 0}
+    if (not labels or not nonempty or nonempty != {column.column_index for column in columns}
+            or any(column.marker_footnotes or column.visit_unresolved for column in columns)):
+        return False
+    for atom in atoms:
+        if len(atom.source_span_ids) != len(atom.source_excerpts):
+            continue
+        sources = set(zip(atom.source_span_ids, map(normalize_source_excerpt, atom.source_excerpts), strict=True))
+        rendered = [normalize_source_excerpt(atom.statement)]
+        proposition = getattr(getattr(atom, "evaluation", None), "proposition", None)
+        if proposition is not None:
+            rendered.append(normalize_source_excerpt(proposition))
+        if all((span, normalize_source_excerpt(text)) in sources
+               and all(normalize_source_excerpt(text) in value for value in rendered)
+               for span, text in labels):
+            return True
+    return False
+
+
 def native_schedule_visit_scope_is_preserved(batch, statement, candidate) -> bool:
     """Prove one marked column against its frozen, physically sourced visit node."""
     if (statement.force not in {"required", "descriptive"}
@@ -2454,7 +2484,8 @@ def native_schedule_visit_scope_is_preserved(batch, statement, candidate) -> boo
         row_sources.add((spans[0], normalize_source_excerpt(text)))
     return any(
         atom.kind == ControlObligationKind.COMPLETE_OR_VERIFY
-        and normalize_source_excerpt(atom.statement) == normalize_source_excerpt(statement.quoted_text)
+        and (normalize_source_excerpt(atom.statement) == normalize_source_excerpt(statement.quoted_text)
+             or native_schedule_action_cell_is_preserved(batch, statement, unit, [atom]))
         and set(atom.source_span_ids) <= set(unit.source_span_ids)
         and set(atom.source_span_ids) & set(unit.source_span_ids)
         and len(atom.source_span_ids) == len(atom.source_excerpts)

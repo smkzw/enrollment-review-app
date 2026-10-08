@@ -27,13 +27,131 @@ from app.agents.protocol_control_source_interpretation import (
     SOURCE_TARGET_REVIEW_VERSION,
     SourceInterpretation,
     SourceTargetReview,
+    can_recheck_source_scope_question,
     simple_visit_action_preserves_time,
 )
 from app.domain.contracts.protocol_controls import ControlObligationKind
 from app.services.protocol_control_execution import _validate_saved_source_review
 from tests.v2.protocols.test_slice58c_control_deconstructor import (
     _batch, _candidate, _candidate_for_second_unit, _wire, _wire_with_two_candidates,
+    _native_visit_candidate_material,
 )
+
+
+def _native_action_material():
+    batch, source, wire = _native_visit_candidate_material(label="材料分发及回收")
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    atom.statement = "在基线期 V2 D0 完成材料分发及回收"
+    atom.evaluation = atom.evaluation.model_copy(update={"proposition": atom.statement})
+    source.statements[0].decision_functions = ["action"]
+    coverage = source_statement_coverage(batch, source, wire)
+    coverage[0] = coverage[0].model_copy(update={
+        "status": "candidate_linked", "action_candidate_indexes": [0], "candidate_indexes": [0],
+    })
+    alignment = SourceCandidateAlignment.model_validate({
+        "version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+        "items": [{"statement_index": 0, "candidate_index": 0,
+                   "decision": "fully_expressed", "source_excerpt": source.statements[0].quoted_text,
+                   "candidate_atom_quotes": [atom.statement], "unresolved_dimensions": []}],
+    })
+    return batch, source, wire, coverage, alignment
+
+
+@pytest.mark.parametrize("label", ["材料分发及回收", "资料发放并回收", "资料发放及回收确认"])
+def test_native_action_text_need_not_include_schedule_markers(label):
+    batch, source, wire, coverage, alignment = _native_action_material()
+    unit, statement = batch.owned_units[0], source.statements[0]
+    unit.member_texts[0] = label
+    unit.excerpt = f"{label} | X"
+    statement.quoted_text = unit.excerpt
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    atom.statement = f"在基线期 V2 D0 完成{label}"
+    atom.evaluation = atom.evaluation.model_copy(update={"proposition": atom.statement})
+    atom.source_excerpts[0] = label
+    alignment.items[0].source_excerpt = unit.excerpt
+    alignment.items[0].candidate_atom_quotes = [atom.statement]
+    validate_candidate_alignment(batch, source, coverage, wire, alignment)
+
+
+@pytest.mark.parametrize("mutation", ["missing_action", "partial_proposition", "wrong_row",
+    "unresolved", "marker_footnote", "nonmarker_value", "exception", "wrong_scope", "no_scope"])
+def test_native_action_text_does_not_prove_unknown_or_changed_content(mutation):
+    batch, source, wire, coverage, alignment = _native_action_material()
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    unit, statement = batch.owned_units[0], source.statements[0]
+    if mutation == "missing_action":
+        atom.statement = "在基线期 V2 D0 完成材料分发"
+        alignment.items[0].candidate_atom_quotes = [atom.statement]
+    elif mutation == "partial_proposition":
+        atom.evaluation = atom.evaluation.model_copy(update={"proposition": "在基线期 V2 D0 完成材料分发"})
+    elif mutation == "wrong_row":
+        atom.source_span_ids[0] = "snapshot::body.t0.r4.c0.p0"
+    elif mutation == "unresolved":
+        statement.unresolved = ["适用访视尚待核对"]
+    elif mutation == "marker_footnote":
+        unit.member_texts[-1] = "X^5"
+        unit.excerpt = "材料分发及回收 | X^5"
+        statement.quoted_text = unit.excerpt
+        alignment.items[0].source_excerpt = unit.excerpt
+        atom.source_excerpts[-1] = "X^5"
+    elif mutation == "nonmarker_value":
+        unit.member_texts[-1] = "完成后3天"
+        unit.excerpt = "材料分发及回收 | 完成后3天"
+        statement.quoted_text = unit.excerpt
+        alignment.items[0].source_excerpt = unit.excerpt
+        atom.source_excerpts[-1] = "完成后3天"
+    elif mutation == "exception":
+        statement.exception_words = "未完成时除外"
+    elif mutation == "wrong_scope":
+        statement.time_words.append("V1")
+    elif mutation == "no_scope":
+        statement.scope_quote = None
+        statement.affected_stage = None
+        statement.time_words = []
+    with pytest.raises(ValueError):
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+
+
+def test_native_action_alignment_survives_save_and_read_without_erasing_scope():
+    batch, source, wire, coverage, alignment = _native_action_material()
+    output = hydrate_protocol_control_agent_output(wire, batch)
+    coverage = hydrated_source_coverage_indexes(batch, wire, output, coverage)
+    coverage[0] = coverage[0].model_copy(update={"status": "semantically_aligned"})
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "additional_requirement",
+                   "source_action_excerpt": "材料分发及回收", "unresolved_aspects": ["既有目录未覆盖"]}],
+    })
+    alignment = bind_candidate_alignment(batch, source, coverage, wire, alignment,
+                                        alignment.model_dump_json(exclude={"proofs"}))
+    result = ProtocolControlAgentRunResult(status="已解析", batch_id=batch.batch_id,
+        session_id="native-action", attempts=[ProtocolControlAgentAttempt(attempt=1,
+        session_id="native-action", raw_output_sha256="a" * 64, outcome="parsed")],
+        source_interpretation=source, source_target_review=review,
+        source_statement_coverage=coverage, partial_wire=wire, final_output=output,
+        source_candidate_alignment=alignment)
+    restored = ProtocolControlAgentRunResult.model_validate(result.model_dump(mode="json"))
+    _validate_saved_source_review(batch, restored)
+    restored.source_interpretation.statements[0].unresolved = ["适用访视尚待核对"]
+    with pytest.raises(ValueError, match="未核清范围"):
+        _validate_saved_source_review(batch, restored)
+
+
+@pytest.mark.parametrize("readable", [True, False])
+def test_readable_native_exit_header_allows_question_not_adoption(readable):
+    batch, source, wire, coverage, alignment = _native_action_material()
+    source.statements[0].affected_stage = None
+    source.statements[0].scope_quote = None
+    source.statements[0].time_words = []
+    source.statements[0].unresolved = ["提前退出列的时点尚待核对"]
+    for context in batch.context_units:
+        context.member_texts[-1] = "提前退出" if readable else ""
+        context.excerpt = " | ".join(text for text in context.member_texts if text.strip())
+    if not readable:
+        batch.context_units = []
+    assert can_recheck_source_scope_question(source.statements[0], batch) is readable
+    with pytest.raises(ValueError, match="未核清范围"):
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
 
 
 def _material():

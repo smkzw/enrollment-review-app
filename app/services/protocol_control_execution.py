@@ -99,6 +99,7 @@ from app.agents.protocol_control_source_function import (
 )
 from app.agents.protocol_control_candidate_alignment import (
     NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
+    NATIVE_ROW_ACTION_COVERAGE_VERSION,
     SOURCE_CANDIDATE_ALIGNMENT_VERSION,
     SourceCandidateAlignment,
     SourceCandidateAlignmentItem,
@@ -2069,6 +2070,7 @@ def _deep_component_identity(
                                        SOURCE_FUNCTION_FIELD_REPAIR_VERSION,
                                        "native-author-note-projection-and-procedure-row-gate/v1",
                                        "invalid-wire-scoped-post-enrollment-repair/v1",
+                                       NATIVE_ROW_ACTION_COVERAGE_VERSION,
                                        NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION)),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}

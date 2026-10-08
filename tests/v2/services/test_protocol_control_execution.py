@@ -5776,6 +5776,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "phase5/source-function-field-repair/v1",
                   "native-author-note-projection-and-procedure-row-gate/v1",
                   "invalid-wire-scoped-post-enrollment-repair/v1",
+                  "native-row-action-coverage/v1",
                   "native-table-review-scope/v3"))
     )
 

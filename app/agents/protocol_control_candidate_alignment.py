@@ -19,6 +19,7 @@ from app.protocols.control_scope_sources import resolve_ancestor_scope_citation,
 SOURCE_CANDIDATE_ALIGNMENT_VERSION = "phase5/control-source-candidate-alignment/v8"
 EVIDENCE_POLICY_ALIGNMENT_VERSION = "phase5/control-evidence-policy-alignment/v2"
 NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION = "native-table-review-scope/v3"
+NATIVE_ROW_ACTION_COVERAGE_VERSION = "native-row-action-coverage/v1"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
@@ -513,6 +514,7 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
         normalize_source_excerpt,
         simple_visit_action_preserves_time,
         native_schedule_visit_scope_is_preserved,
+        native_schedule_action_cell_is_preserved,
         shared_prohibition_preserves_source,
     )
 
@@ -543,6 +545,8 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 or normalize_source_excerpt(item.source_excerpt) != normalize_source_excerpt(statement.quoted_text)):
             raise ValueError("候选语义核对未绑定本条原文与已有动作候选")
         unit = units[statement.structure_unit_id]
+        if item.decision == "fully_expressed" and statement.unresolved and unit.table_context is not None:
+            raise ValueError("表格来源仍有未核清范围，动作文字对应不能代替来源核对")
         native_visit_scope = native_schedule_visit_scope_is_preserved(batch, statement, candidate)
         validate_scope_citations(
             candidate.review_node_bindings,
@@ -593,7 +597,10 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                    for group in candidate.obligation_expression.groups):
                 raise ValueError("候选存在未覆盖本条要求的另一义务分支")
             obligation_selected = [atom for atom in selected_atoms if atom in obligation_atoms]
-            if not (native_visit_scope and any(
+            action_cell_preserved = native_visit_scope and native_schedule_action_cell_is_preserved(
+                batch, statement, unit, obligation_selected,
+            )
+            if not action_cell_preserved and not (native_visit_scope and any(
                 normalize_source_excerpt(atom.statement) == source for atom in obligation_selected
             )) and not any(source in normalize_source_excerpt(quote)
                        for atom in obligation_selected for quote in atom.source_excerpts):
