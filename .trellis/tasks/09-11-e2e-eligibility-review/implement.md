@@ -3,6 +3,8 @@
 
 ### 单一当前用户流程表
 
+当前相邻功能包选择直接集成＋单C03：恢复有源解释涉及实际来源资格，需要有界独立挑战。首个新API试跑7104caf5...四调用230.374s仍failed_final/DEEP_OUTPUT_INVALID：原文同时列两个时期，分别保留在time_words却被要求再次合成整串，真实日期遗漏第9/10点已由原两次局部更正保留。修通用完整词项列表覆盖，不丢逻辑、否定、日期或范围；pending源仅在无作者/核对产物、实际原答与校正hash重放相等、完整当前验证成立时生成v4 source-only新证明，旧终态不改，定义/规则不自动采用。C03实际CodeBuddy/DeepSeek/max01a118cb...239.920s/1轮/exit0/no fallback，120min完成等待静默；顾问不能用shell核hash，所有者核；采纳完整词项边界和实际消费者反例，不放宽首错重放护栏。新实际API79849a40...已在调用前证明resume_partial/v4、原修订[9,10]/原限4/三见证hash、source_equal=true；85发现零调用复用，首组源重读显式拒绝，后续作者/核对运行中，不称完成。最终两相连原模块930passed/77.56s/exit0/5SWIG（rv1006-literal-stage-source-connected-20261008-v2.xml）；此前925pass及929pass/1fail不累加，唯一新增失败为所有者夹具缺必填身份，短诊断又误取不存在StepView.error_detail，均修测试不松产品保护；新实际JobStore/Runner消费者例也证明两原更正可重放、待核不能伪造成功。当前源码基于bfc18f83，前包已push；此增量待同一里程碑提交，7份继承改动不动。Goal active/claims_complete=false。
+
 本轮当前增量（不是暂停）：主集成＋有界独立工程审阅。whole-unit-restricted/v1仅将真实未决所在的完整来源单元保留为非可执行，所有语义点/出处/期别及跨单元依赖不丢；局部定义生产者consumer/v3、prompt/v4允许真实restricted_statement目标，不冒充原子或旧批准。真实生产→保存→读回→恢复已接线；缺失/损坏私有原答转为明确不可恢复错误。五相连原模块最终1038passed/77.18s/exit0；审阅后错误分类小修的三相连模块393passed/76.33s/exit0，不累加、不冒称后一快照重跑全部模块。CodeBuddy/DeepSeek/max同会话01a11890…两轮只读工程审阅，无fallback；第二轮建议中仅错误分类采纳并验证，不扩大错义的受限放行范围。
 
 真实产品局部登记rv1006-actual-restricted-definition-20261008-v1：Ollama cloud/deepseek-v4.1-flash/high，1物理调用114.0005s（整步114.6697s），input15553/output含思考25954/total41507/cache0/stop；6条真实定义依赖保存并读回，6条仍incomplete_scope，不清原疑问/主失败/待核关系，不写库、不采用。原始batch/result及库hash不变；两次诊断导入错误均0调用，修既有导入，不安装新依赖。私人产物仅受控本机，不提交临床原答。新官方rev21经实际规则树和当前消费者只读核对：23父条/86组件/141条件，141条件都有精确资料政策，0不就绪组件；200平铺草稿字段中41空并不等于实际树缺政策。旧81组件消费失败不转嫁新草稿，但新完整同源包仍未发布、病例新工作稿及规则相关更正未完成。

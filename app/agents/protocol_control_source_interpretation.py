@@ -137,6 +137,29 @@ def _scope_carries_stage_fragment(statement: "SourceStatement", fragment: str) -
     )
 
 
+def _time_words_cover_stage_label(stage: str, time_words: Sequence[str]) -> bool:
+    """Keep legacy containing phrases; split lists require whole literal members."""
+    words = [normalize_source_excerpt(word) for word in time_words]
+    if any(stage in word for word in words if word):
+        return True
+    ranges = []
+    for word in words:
+        if not word:
+            continue
+        start = stage.find(word)
+        if start < 0 or stage.find(word, start + 1) >= 0:
+            continue
+        end = start + len(word)
+        if (start and stage[start - 1] not in "、，,") or (end < len(stage) and stage[end] not in "、，,"):
+            continue
+        ranges.append((start, end))
+    if len(ranges) < 2:
+        return False
+    covered = set(position for start, end in ranges for position in range(start, end))
+    return all(position in covered or character in "、，,"
+               for position, character in enumerate(stage))
+
+
 def _unreported_time_fragments(statement: "SourceStatement") -> list[str]:
     reported = [normalize_source_excerpt(word) for word in statement.time_words]
     fragments = {
@@ -2402,10 +2425,9 @@ def validate_source_interpretation(
             ):
                 reject("SOURCE_STAGE_UNGROUNDED", "阶段措辞须来自本条陈述或其共享范围",
                        "affected_stage", "correct_source_scope")
-            if not any(
-                affected in normalize_source_excerpt(part)
-                for part in item.time_words if normalize_source_excerpt(part)
-            ) and not (scope and affected in scope and not _unreported_time_fragments(item)):
+            if not _time_words_cover_stage_label(affected, item.time_words) and not (
+                scope and affected in scope and not _unreported_time_fragments(item)
+            ):
                 reject("SOURCE_STAGE_TIME_MISSING", "明确阶段范围不得从时间措辞中遗漏",
                        "time_words", "correct_source_scope")
         for time_quote in item.time_words:

@@ -3259,6 +3259,111 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     } else 2)
 
 
+def test_pending_stage_witness_with_two_corrections_reaches_real_recovery_consumer(
+    data_paths, session_factory, monkeypatch,
+):
+    from dataclasses import replace
+    from tests.v2.protocols.test_deconstruction_service import _synthetic_spans, _synthetic_phase_graph
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner, ProtocolControlAgentAttempt
+    from app.agents.protocol_control_source_interpretation import (
+        SourceInterpretation, SourceStatement, SourceScopeCorrection,
+        SourceInterpretationValidationError, validate_source_interpretation,
+        apply_source_scope_correction,
+    )
+    fixture = _synthetic_fixture()
+    blocks = tuple(block.model_copy(update={"text": block.text + "。准备期、评价期核对资料。"})
+                   if block.source_ref == "body.p1" else block for block in fixture.extraction.blocks)
+    fixture = replace(fixture, extraction=StructureExtraction(blocks=blocks, snapshot=fixture.extraction.snapshot),
+                      spans=_synthetic_spans(blocks), phase_graph=_synthetic_phase_graph(blocks))
+    monkeypatch.setattr(__import__(__name__, fromlist=["_synthetic_fixture"]), "_synthetic_fixture", lambda: fixture)
+    seed = _seed_frozen_source(data_paths, session_factory, key="pending-two-scope-source")
+    service = _build_service(data_paths, session_factory, seed, deep_max_schema_repairs=4)
+    old = service.create_from_deconstruction(source_job_id=seed.source_job_id, idempotency_key="pending-two-scope-old")
+    deep = _DeepTransport(seed.source_span_excerpts)
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    original_run, resumed = ProtocolControlAgentRunner.run, []
+    produced = False
+
+    def run(self, batch, transport, **kwargs):
+        nonlocal produced
+        if produced:
+            resumed.append(kwargs["resume_source_interpretation"])
+            assert kwargs["resume_wire"] is None and kwargs["resume_session_id"] is None
+            return original_run(self, batch, transport, **kwargs)
+        produced = True
+        units = batch.owned_units[:2]
+        source = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION, statements=[
+            SourceStatement(structure_unit_id=unit.structure_unit_id,
+                            quoted_text=unit.excerpt.split("。", 1)[0], scope_quote="不存在的范围",
+                            force="descriptive", decision_functions=["background"], time_words=[])
+            for unit in units
+        ] + [SourceStatement(structure_unit_id=units[1].structure_unit_id, quoted_text="准备期、评价期核对资料",
+                             force="descriptive", decision_functions=["background"],
+                             affected_stage="准备期、评价期", time_words=["准备期", "评价期"])],
+            units_without_statement=list(batch.owned_structure_unit_ids[2:]))
+        attempts = []
+        with pytest.raises(SourceInterpretationValidationError) as first:
+            validate_source_interpretation(batch, source)
+
+        def record(value, outcome, detail=None):
+            raw = value.model_dump_json()
+            attempts.append(ProtocolControlAgentAttempt(attempt=len(attempts) + 1,
+                session_id=f"observed-{len(attempts)}", outcome=outcome, raw_output_text=raw,
+                raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(), error_detail=detail,
+                error_classes=[detail["code"]] if outcome == "schema_invalid" else []))
+
+        issue = first.value
+        record(source, "schema_invalid", dict(code=issue.code, statement_id=issue.statement_id,
+                                             source_refs=issue.source_refs))
+        for index in (0, 1):
+            with pytest.raises(SourceInterpretationValidationError) as caught:
+                validate_source_interpretation(batch, source)
+            issue = caught.value
+            assert issue.statement_id == index
+            correction = SourceScopeCorrection(version="phase5/control-source-scope-correction/v1",
+                structure_unit_id=units[index].structure_unit_id, scope_quote=None, affected_stage=None, time_words=[])
+            record(correction, "parsed", dict(code=issue.code, statement_id=index, source_refs=issue.source_refs))
+            source = apply_source_scope_correction(batch, source, index, correction)
+        validate_source_interpretation(batch, source)
+        attempts.append(ProtocolControlAgentAttempt(attempt=4, session_id="observed-0",
+            raw_output_sha256=hashlib.sha256(b"historical pending stage validation").hexdigest(), outcome="schema_invalid",
+            error_classes=["SOURCE_STAGE_TIME_MISSING"], error_detail=dict(
+                workflow_phase="source_correction_pending", code="SOURCE_STAGE_TIME_MISSING",
+                statement_id=2, source_refs=list(units[1].source_span_ids), json_path="statements[2].time_words")))
+        return ProtocolControlAgentRunResult(status="需要核对", batch_id=batch.batch_id, session_id="observed-0",
+            attempts=attempts, pending_source_interpretation=source)
+
+    failures = []
+    def observed_run(*args, **kwargs):
+        try:
+            return run(*args, **kwargs)
+        except Exception as exc:
+            failures.append(repr(exc))
+            raise
+    monkeypatch.setattr(ProtocolControlAgentRunner, "run", observed_run)
+    assert runner.run_job(old.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, old.job_id)
+    with session_factory() as session:
+        checkpoint = JobStore(session, now=_now).get_last_checkpoint(old.job_id, "deep_0001")
+    assert checkpoint is not None, failures
+    before = _job_checkpoint_fingerprint(session_factory, old.job_id)
+    new = service.create_from_deconstruction(source_job_id=seed.source_job_id, deep_source_job_id=old.job_id,
+                                             idempotency_key="pending-two-scope-new")
+    _, payload = _job_snapshot_and_payload(session_factory, new.job_id)
+    first = next(item for item in payload["deep_reuse_plan"]["decisions"].values() if item["step_id"] == "deep_0001")
+    assert first["decision"] == "resume_partial"
+    assert first["source_seed_proof"]["schema_version"] == "phase5/revalidated-source-seed-proof/v4"
+    assert first["source_seed_proof"]["scope_correction_indexes"] == [0, 1]
+    assert runner.run_job(new.job_id)
+    assert resumed and deep.start_calls == 1
+    snapshot, _ = _job_snapshot_and_payload(session_factory, new.job_id)
+    assert snapshot.state == "failed_final"  # No reviewer is fabricated to approve these source statements.
+    with session_factory() as session:
+        checkpoint = JobStore(session, now=_now).get_last_checkpoint(new.job_id, "deep_0001")[1]
+    assert checkpoint["source_review_reuse"]["source_seed_proof"] == first["source_seed_proof"]
+    assert _job_checkpoint_fingerprint(session_factory, old.job_id) == before
+
+
 @pytest.mark.parametrize("change", [
     "same", "legacy_first", "missing_second", "wrong_statement", "wrong_unit",
     "wrong_phase", "wrong_reason", "corrupt_response", "changed_snapshot",
@@ -3385,6 +3490,69 @@ def test_revalidated_source_seed_never_reuses_changed_material_or_author_approva
         if proof:
             assert proof["reused"] == ["source_interpretation"]
             assert set(proof["discarded"]) >= {"partial_wire", "source_target_review", "session_id"}
+    assert saved == before
+
+
+@pytest.mark.parametrize("change", [
+    "same", "wrong_index", "wrong_path", "wrong_ref", "wrong_phase", "wrong_error",
+    "author_present", "changed_snapshot", "corrupt_raw", "missing_stage", "full_label_not_list",
+])
+def test_pending_literal_stage_source_recovery_proves_raw_read_not_authority(change):
+    from copy import deepcopy
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _two_independent_candidate_linked_alignment_material
+    module = protocol_control_execution_module
+    batch, inventory, _, wire, _ = _two_independent_candidate_linked_alignment_material()
+    statement = inventory.statements[0]
+    unit = next(item for item in batch.owned_units if item.structure_unit_id == statement.structure_unit_id)
+    unit.excerpt = "准备期、评价期核对年龄资料"
+    statement.quoted_text = unit.excerpt
+    statement.affected_stage = "准备期、评价期"
+    statement.time_words = ["准备期", "评价期"]
+    statement.scope_quote = None
+    raw = inventory.model_dump_json()
+    current = module._deep_component_identity({}, module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE)
+    detail = dict(workflow_phase="source_correction_pending", code="SOURCE_STAGE_TIME_MISSING",
+                  statement_id=0, source_refs=list(unit.source_span_ids),
+                  json_path="statements[0].time_words")
+    saved = dict(component_identity=dict(current, compiler_versions=["previous compiler"]),
+                 prompt_template_sha256=current["prompt_material_sha256"], source_interpretation=None,
+                 partial_wire=None, pending_source_interpretation=inventory.model_dump(mode="json"),
+                 attempts=[dict(attempt=1, session_id="real-source", outcome="parsed", error_classes=[],
+                                raw_output_text=raw, raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest()),
+                           dict(attempt=2, outcome="schema_invalid", raw_output_text=None, error_detail=detail)])
+    if change == "wrong_index":
+        detail["statement_id"] = True
+    elif change == "wrong_path":
+        detail["json_path"] = "statements[1].time_words"
+    elif change == "wrong_ref":
+        detail["source_refs"] = ["unrelated-source"]
+    elif change == "wrong_phase":
+        detail["workflow_phase"] = "source_target_review"
+    elif change == "wrong_error":
+        detail["code"] = "SOURCE_QUOTE_UNGROUNDED"
+    elif change == "author_present":
+        saved["partial_wire"] = wire.model_dump(mode="json")
+    elif change == "changed_snapshot":
+        saved["pending_source_interpretation"]["statements"][1]["unresolved"] = ["unwitnessed change"]
+    elif change == "corrupt_raw":
+        saved["attempts"][0]["raw_output_sha256"] = "0" * 64
+    elif change == "missing_stage":
+        saved["pending_source_interpretation"]["statements"][0]["time_words"] = ["准备期"]
+    elif change == "full_label_not_list":
+        saved["pending_source_interpretation"]["statements"][0]["time_words"] = [statement.affected_stage]
+    before = deepcopy(saved)
+    args = dict(source_job_id="old", step_id="deep_0001", checkpoint_id="original")
+    if change == "corrupt_raw":
+        with pytest.raises(ValueError, match="摘要损坏"):
+            module._revalidated_source_seed_proof(batch, saved, current, **args)
+    else:
+        proof = module._revalidated_source_seed_proof(batch, saved, current, **args)
+        assert bool(proof) is (change == "same")
+        if proof:
+            assert proof["schema_version"] == "phase5/revalidated-source-seed-proof/v4"
+            assert proof["source_snapshot_field"] == "pending_source_interpretation"
+            assert proof["reused"] == ["source_interpretation"]
+            assert "partial_wire" in proof["discarded"]
     assert saved == before
 
 

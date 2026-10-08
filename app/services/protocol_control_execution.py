@@ -88,6 +88,7 @@ from app.agents.protocol_control_source_interpretation import (
     validate_source_target_review,
     validated_source_review_seed,
     target_review_indexes,
+    _time_words_cover_stage_label,
 )
 from app.agents.protocol_control_source_function import SOURCE_FUNCTION_RECHECK_VERSION
 from app.agents.protocol_control_candidate_alignment import (
@@ -1993,6 +1994,7 @@ def _deep_component_identity(
             "source-interpretation-local-scope/v2",
             "source-unresolved-covered-review/v1",
             "source-stage-time-complete/v1",
+            "source-stage-literal-list-time-coverage/v1",
             "restricted-nonreview-unit-preservation/v1",
             "restricted-independent-candidate-preservation/v1",
             TEMPORAL_RESTRICTION_VERSION,
@@ -2330,6 +2332,40 @@ def _revalidated_source_seed_proof(
     if not isinstance(attempts, list) or not attempts:
         return None
 
+    source_snapshot = saved.get("source_interpretation")
+    snapshot_field = "source_interpretation"
+    if source_snapshot is None and saved.get("pending_source_interpretation") is not None:
+        last = attempts[-1]
+        detail = last.get("error_detail") if isinstance(last, Mapping) else None
+        if (any(saved.get(name) is not None for name in (
+                "partial_wire", "capability_wire", "source_target_review", "source_front_target_review",
+                "source_candidate_alignment"))
+                or not isinstance(detail, Mapping)
+                or detail.get("workflow_phase") != "source_correction_pending"
+                or detail.get("code") != "SOURCE_STAGE_TIME_MISSING"
+                or last.get("outcome") != "schema_invalid"
+                or last.get("raw_output_text") is not None):
+            return None
+        source_snapshot = saved["pending_source_interpretation"]
+        try:
+            pending = SourceInterpretation.model_validate(source_snapshot)
+        except (TypeError, ValueError):
+            return None
+        index = detail.get("statement_id")
+        if type(index) is not int or not 0 <= index < len(pending.statements):
+            return None
+        statement = pending.statements[index]
+        unit = next((item for item in batch.owned_units
+                     if item.structure_unit_id == statement.structure_unit_id), None)
+        stage = normalize_source_excerpt(statement.affected_stage or "")
+        if (unit is None or not stage
+                or detail.get("source_refs") != list(unit.source_span_ids)
+                or detail.get("json_path") != f"statements[{index}].time_words"
+                or not _time_words_cover_stage_label(stage, statement.time_words)
+                or any(stage in normalize_source_excerpt(word) for word in statement.time_words)):
+            return None
+        snapshot_field = "pending_source_interpretation"
+
     def actual_text(attempt: Mapping[str, Any]) -> str | None:
         raw = attempt.get("raw_output_text")
         if raw is None:
@@ -2424,10 +2460,14 @@ def _revalidated_source_seed_proof(
             if not corrected and (first.get("outcome") != "parsed" or first.get("error_classes")):
                 return None
             break
-    if actual.model_dump(mode="json") != saved.get("source_interpretation"):
+    if actual.model_dump(mode="json") != source_snapshot:
         return None
     return {
-        "schema_version": "phase5/revalidated-source-seed-proof/v3",
+        "schema_version": ("phase5/revalidated-source-seed-proof/v4"
+                           if snapshot_field == "pending_source_interpretation"
+                           else "phase5/revalidated-source-seed-proof/v3"),
+        **({"source_snapshot_field": snapshot_field}
+           if snapshot_field == "pending_source_interpretation" else {}),
         "source_repair_limit": max_source_corrections,
         "source_job_id": source_job_id, "step_id": step_id, "checkpoint_id": checkpoint_id,
         "source_response_sha256": witnessed,
@@ -2537,6 +2577,9 @@ def _validated_deep_partial_source(
             )
         if source_seed_proof is None:
             return None
+    if source_seed_proof is not None:
+        if source_seed_proof.get("source_snapshot_field") == "pending_source_interpretation":
+            source = saved.get("pending_source_interpretation")
     if source is None and saved.get("partial_wire") is None:
         return None
     if not isinstance(source, Mapping):
@@ -2544,7 +2587,7 @@ def _validated_deep_partial_source(
     interpretation = SourceInterpretation.model_validate(source)
     validate_source_interpretation(batch, interpretation)
     if source_seed_proof is not None:
-        seed = dict(saved, partial_wire=None, source_target_review=None,
+        seed = dict(saved, source_interpretation=source, partial_wire=None, source_target_review=None,
                     source_statement_coverage=[], source_candidate_alignment=None,
                     session_id=None)
         return checkpoint_id, seed, _ResumedSourceReview(
@@ -2842,7 +2885,8 @@ def _preflight_deep_source(
                 and partial is not None and partial[2].source_seed_proof is not None):
             decisions[batch.batch_id]["reason"] = (
                 "verified_source_interpretation_components_revalidated"
-                if partial[2].source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v3"
+                if partial[2].source_seed_proof["schema_version"] in {
+                    "phase5/revalidated-source-seed-proof/v3", "phase5/revalidated-source-seed-proof/v4"}
                 else "verified_source_interpretation_repair_material_changed"
             )
             decisions[batch.batch_id]["source_seed_proof"] = partial[2].source_seed_proof
@@ -3937,7 +3981,8 @@ def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str
     if resume_review.source_seed_proof is not None:
         record["proof_scope"] = (
             "revalidated_source_interpretation"
-            if resume_review.source_seed_proof["schema_version"] == "phase5/revalidated-source-seed-proof/v3"
+            if resume_review.source_seed_proof["schema_version"] in {
+                "phase5/revalidated-source-seed-proof/v3", "phase5/revalidated-source-seed-proof/v4"}
             else "unrepaired_source_interpretation"
         )
         record["source_seed_proof"] = dict(resume_review.source_seed_proof)

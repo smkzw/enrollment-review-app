@@ -1947,6 +1947,53 @@ def test_shared_scope_must_precede_the_action_and_survive_target_review() -> Non
     validate_source_interpretation(batch, _source_inventory(payload))
 
 
+@pytest.mark.parametrize("label,words,expected", [
+    ("准备期、评价期", ["准备期", "评价期"], True),
+    ("准备期，评价期", ["评价期", "准备期"], True),
+    ("准备期、评价期", ["准备期、评价期"], True),
+    ("准备期、评价期", ["准备期"], False),
+    ("准备期或评价期", ["准备期", "评价期"], False),
+    ("非准备期、评价期", ["准备期", "评价期"], False),
+    ("准备期（D-9~D-2）、评价期", ["准备期", "评价期"], False),
+    ("给药前、评价期", ["给药后", "评价期"], False),
+    ("给药前、评价期", ["给药前", "评价期"], True),
+    ("准备期、评价期", ["准备期、评", "价期"], False),
+    ("准备期、准备期", ["准备期", "准备期"], False),
+])
+def test_literal_stage_list_time_coverage_does_not_drop_operators_or_windows(label, words, expected):
+    from app.agents.protocol_control_source_interpretation import _time_words_cover_stage_label
+    assert _time_words_cover_stage_label(label, words) is expected
+
+
+@pytest.mark.parametrize("label,words", [("准备期", ["非准备期"]), ("评价期", ["评价期后"])])
+def test_time_phrase_coverage_preserves_legacy_containment_not_semantic_equivalence(label, words):
+    from app.agents.protocol_control_source_interpretation import _time_words_cover_stage_label
+    # This coverage check is not a polarity/anchor judgment; exact source grounding still runs.
+    assert _time_words_cover_stage_label(label, words)
+
+
+def test_literal_stage_list_keeps_the_exact_sourced_label_and_full_validation():
+    batch = _batch().model_copy(deep=True)
+    quote = "准备期、评价期均核对记录。"
+    batch.owned_units[1].excerpt = quote
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-02", "quoted_text": quote,
+                        "force": "required", "decision_functions": ["action"],
+                        "affected_stage": "准备期、评价期", "time_words": ["准备期", "评价期"]}],
+        "units_without_statement": ["su-01"],
+    })
+    before = inventory.model_dump(mode="json")
+    validate_source_interpretation(batch, inventory)
+    assert inventory.model_dump(mode="json") == before
+    inventory.statements[0].time_words = ["准备期"]
+    with pytest.raises(ValueError, match="明确阶段范围不得从时间措辞中遗漏"):
+        validate_source_interpretation(batch, inventory)
+    inventory.statements[0].time_words = ["准备期", "评价期", "给药后"]
+    with pytest.raises(ValueError, match="时间措辞不属于"):
+        validate_source_interpretation(batch, inventory)
+
+
 def test_previous_action_time_is_not_a_shared_scope_across_clause_boundary() -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[1].excerpt = "筛选时记录末次用药日期；治疗后七天核对其他资料。"
