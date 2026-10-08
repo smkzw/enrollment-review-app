@@ -158,6 +158,7 @@ from .protocol_control_source_interpretation import (
     normalize_schedule_randomization_anchors,
     normalize_mixed_schedule_scopes,
     native_schedule_time_excerpt_is_grounded,
+    native_schedule_scope_requires_recheck,
     validate_source_target_review,
     validated_source_review_seed,
     source_unit_comparison_as_review,
@@ -8152,14 +8153,8 @@ class ProtocolControlAgentRunner:
                                         unit for unit in batch.owned_units
                                         if unit.structure_unit_id == source_interpretation.statements[invalid_index].structure_unit_id
                                     )
-                                    native_time_recheck = (
-                                        source_interpretation.statements[invalid_index].scope_quote is None
-                                        and source_interpretation.statements[invalid_index].affected_stage is None
-                                        and not source_interpretation.statements[invalid_index].time_words
-                                        and native_schedule_time_excerpt_is_grounded(
-                                            batch, source_interpretation.statements[invalid_index],
-                                            overclaimed.source_time_excerpt,
-                                        )
+                                    native_time_recheck = native_schedule_scope_requires_recheck(
+                                        batch, source_interpretation.statements[invalid_index],
                                     )
                                     # Repair the source dependency before spending the one target repair,
                                     # even when another invalid target field is reported first.

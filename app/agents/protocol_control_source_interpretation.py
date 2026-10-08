@@ -315,6 +315,23 @@ class SourceScopeCorrection(ContractModel):
     unresolved: str | None = None
 
 
+def native_schedule_scope_requires_recheck(
+    batch: ProtocolControlDispositionBatch, statement: SourceStatement,
+) -> bool:
+    """Select a missing source dependency from native structure, not reviewer wording."""
+    if statement.scope_quote is not None or statement.affected_stage is not None or statement.time_words:
+        return False
+    unit = next((item for item in batch.owned_units
+                 if item.structure_unit_id == statement.structure_unit_id), None)
+    if unit is None:
+        return False
+    columns = schedule_column_scope(unit, batch.context_units)
+    return bool(columns) and all(
+        native_schedule_time_excerpt_is_grounded(batch, statement, column.header_text)
+        for column in columns
+    )
+
+
 def native_schedule_time_excerpt_is_grounded(
     batch: ProtocolControlDispositionBatch, statement: SourceStatement, excerpt: str | None,
 ) -> bool:

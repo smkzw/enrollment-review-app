@@ -6641,7 +6641,9 @@ def _native_time_recheck_batch():
 
 @pytest.mark.parametrize("variant", ["valid", "other_column", "mixed", "partial_quote", "footnote", "no_header", "subword"])
 def test_native_table_time_selects_recheck_without_authorizing_review_time(variant):
-    from app.agents.protocol_control_source_interpretation import native_schedule_time_excerpt_is_grounded
+    from app.agents.protocol_control_source_interpretation import (
+        native_schedule_scope_requires_recheck, native_schedule_time_excerpt_is_grounded,
+    )
     batch, inventory = _native_time_recheck_batch()
     unit = batch.owned_units[0]
     if variant == "mixed":
@@ -6661,6 +6663,9 @@ def test_native_table_time_selects_recheck_without_authorizing_review_time(varia
         batch.context_units = []
     value = "筛选期" if variant == "other_column" else "期" if variant == "subword" else "D0"
     assert native_schedule_time_excerpt_is_grounded(batch, inventory.statements[0], value) == (variant == "valid")
+    assert native_schedule_scope_requires_recheck(batch, inventory.statements[0]) == (
+        variant in {"valid", "other_column", "subword"}
+    )
     wire = ProtocolControlAgentWire(wire_version=CONTROL_AGENT_WIRE_VERSION,
         dispositions=[ProtocolControlAgentWireDisposition(
             structure_unit_id=unit.structure_unit_id,
@@ -6679,9 +6684,12 @@ def test_native_table_time_selects_recheck_without_authorizing_review_time(varia
     assert rejected.value.code == "SOURCE_TIME_UNGROUNDED"
 
 
-@pytest.mark.parametrize("fault", [None, "transport", "wrong_scope", "empty_time", "budget", "repeated", "missing_aspects_first", "ungrounded_time_first"])
+@pytest.mark.parametrize("fault", [None, "transport", "wrong_scope", "empty_time", "budget", "repeated", "missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first", "already_scoped"])
 def test_runner_native_table_time_recheck_preserves_source_and_retry_boundary(fault):
     batch, inventory = _native_time_recheck_batch()
+    if fault == "already_scoped":
+        inventory.statements[0].scope_quote = "基线期 / V2 / D0"
+        inventory.statements[0].time_words = ["D0"]
     unit = batch.owned_units[0]
     wire = ProtocolControlAgentWire(wire_version=CONTROL_AGENT_WIRE_VERSION,
         dispositions=[ProtocolControlAgentWireDisposition(
@@ -6703,11 +6711,13 @@ def test_runner_native_table_time_recheck_preserves_source_and_retry_boundary(fa
         def start_source_target_review(self, *, prompt):
             self.target_calls += 1
             answer = claim.model_copy(deep=True)
-            if fault in {"missing_aspects_first", "ungrounded_time_first"} and self.target_calls == 1:
+            if fault in {"missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first"} and self.target_calls == 1:
                 answer.items[0].decision = "additional_requirement"
                 answer.items[0].unresolved_aspects = []
                 if fault == "ungrounded_time_first":
                     answer.items[0].source_time_excerpt = "D99"
+                elif fault == "missing_aspects_no_time_first":
+                    answer.items[0].source_time_excerpt = None
             if fault == "repeated" and self.target_calls > 1:
                 answer.items[0].source_time_excerpt = "D99"
             return ProtocolControlAgentResponse(session_id=f"review-{self.target_calls}", text=answer.model_dump_json())
@@ -6726,16 +6736,16 @@ def test_runner_native_table_time_recheck_preserves_source_and_retry_boundary(fa
     transport = Transport([ProtocolControlAgentResponse(session_id="wire-1", text=wire.model_dump_json())])
     runner = ProtocolControlAgentRunner(max_schema_repairs=0) if fault == "budget" else ProtocolControlAgentRunner()
     result = runner.run(batch, transport)
-    assert transport.scope_calls == (0 if fault in {"budget", "ungrounded_time_first"} else 1)
-    assert transport.target_calls == (2 if fault in {None, "repeated", "missing_aspects_first", "ungrounded_time_first"} else 1)
+    assert transport.scope_calls == (0 if fault in {"budget", "already_scoped"} else 1)
+    assert transport.target_calls == (2 if fault in {None, "repeated", "missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first"} else 1)
     assert result.final_output is None and result.status == "需要核对"
     assert result.source_interpretation.statements[0].quoted_text == inventory.statements[0].quoted_text
-    assert inventory.statements[0].scope_quote is None
-    if fault in {None, "repeated", "missing_aspects_first"}:
+    assert inventory.statements[0].scope_quote == ("基线期 / V2 / D0" if fault == "already_scoped" else None)
+    if fault in {None, "repeated", "missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first"}:
         assert result.source_interpretation.statements[0].scope_quote == "基线期 / V2 / D0"
-        if fault in {None, "missing_aspects_first"}:
+        if fault in {None, "missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first"}:
             assert result.source_target_review.items[0].decision == "unresolved"
-            if fault == "missing_aspects_first":
+            if fault in {"missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first"}:
                 errors = [attempt.error_detail.get("code") for attempt in result.attempts if attempt.error_detail]
                 assert "UNRESOLVED_ASPECTS_MISSING" in errors
     else:
