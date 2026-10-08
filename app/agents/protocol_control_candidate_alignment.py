@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import hashlib
 import re
+from dataclasses import asdict
 from typing import Literal
 
 from pydantic import Field, StrictBool, model_serializer, model_validator
@@ -17,6 +18,7 @@ from app.protocols.control_scope_sources import resolve_ancestor_scope_citation,
 
 SOURCE_CANDIDATE_ALIGNMENT_VERSION = "phase5/control-source-candidate-alignment/v8"
 EVIDENCE_POLICY_ALIGNMENT_VERSION = "phase5/control-evidence-policy-alignment/v2"
+NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION = "native-table-review-scope/v2"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
@@ -259,6 +261,8 @@ def candidate_alignment_response_format() -> dict[str, object]:
 
 
 def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
+    from app.protocols.procedure_catalog import schedule_column_scope
+
     units = {unit.structure_unit_id: unit for unit in batch.owned_units}
     selected = []
     for statement_index, candidate_index in pairs:
@@ -276,6 +280,15 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
                        for node in candidate.review_node_bindings)],
             "native_table_source": units[statement.structure_unit_id].model_dump(mode="json")
                 if units[statement.structure_unit_id].table_context is not None else None,
+            **({"native_review_scope": {
+                "version": NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
+                "workflow_stage_sources": [stage.model_dump(mode="json")
+                    for stage in batch.known_workflow_stage_targets],
+                "marked_columns": [asdict(column) for column in schedule_column_scope(
+                    units[statement.structure_unit_id], batch.context_units)],
+                "read_only_context_sources": [unit.model_dump(mode="json")
+                    for unit in batch.context_units],
+            }} if units[statement.structure_unit_id].table_context is not None else {}),
             "allowed_candidate_atom_quotes": [
                 atom.statement
                 for expression in (candidate.applicability_expression,
@@ -287,6 +300,19 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
             ],
             "candidate": candidate.model_dump(mode="json"),
         })
+    native_scope_instruction = (
+        "native_review_scope 给出宿主冻结的入排审核节点、逐列标记与原始只读上下文，不是采信或完整覆盖结论。"
+        "先逐列从真实表头和单元格核对，再比较候选在当前入排审核范围的表达。"
+        "at_or_before_baseline 的动作不能遗漏；明确 after_baseline 的标记仍保留原文，"
+        "但不是要求当前候选新增后续治疗访视的入排判断。unresolved 的列不能因候选没有绑定就排除。"
+        "若原文要求当前节点承诺或准备后续持续义务，或后续记录是当前判断的依赖，仍须保留该有源关系；"
+        "不能仅因发生在基线后就删除它。"
+        "脚注、同列/合并表头和当前时期的例外仍须核查，缺失或关系不明时具体列为未核，不能凭派生列标签补来源。"
+        "source_statement 是前一步解释而非权威原文；它说缺表头时须检查 read_only_context_sources，"
+        "不能把已有原始表头忽略后继续声称原文没有节点。候选的通用记录主体并非自动新增人群筛选条件；"
+        "核对的是实际适用对象、范围与条件，不要求把无新限制的语法主语也逐字写在表格格内。"
+        "特定亚组、对象改变或新的限制仍必须有原文依据，不以系统通用主体代替它。"
+    ) if any("native_review_scope" in item for item in selected) else ""
     return (
         "你只核同一冻结方案原文与已有候选的语义对应，不新增条款，不判断受试者。"
         "此前的核对仅说明官方条款和访视目录未完整覆盖本句，不能据此断言本候选也未覆盖。"
@@ -315,7 +341,8 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
         "同一标记列的时期、访视名、周数和日数可共同标识一次访视，不因短语数量判作多个访视。"
         "这不证明动作、脚注、例外、结果条件或资料限制已完整表达，仍须逐项核查；"
         "不得把另一列或缺出处的访视标签借给当前动作。"
-        "candidate_atom_quotes 只能从 allowed_candidate_atom_quotes 原样选完整句，不得改写、补词或只摘短词。"
+        + native_scope_instruction
+        + "candidate_atom_quotes 只能从 allowed_candidate_atom_quotes 原样选完整句，不得改写、补词或只摘短词。"
         "不完整或不确定时列出具体 unresolved_dimensions；仅返回符合 Schema 的 JSON。\n"
         f"待核对应：{json.dumps(selected, ensure_ascii=False, sort_keys=True)}"
     )
@@ -342,7 +369,10 @@ def _alignment_input_identity(batch, interpretation, wire, item):
                            "statement": statement.model_dump(mode="json"),
                            "source_unit": unit.model_dump(mode="json"),
                            **({"native_visit_correspondence": "v1",
+                               "native_review_scope": NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
                                "context_units": [row.model_dump(mode="json") for row in batch.context_units],
+                               "workflow_stage_sources": [stage.model_dump(mode="json")
+                                   for stage in batch.known_workflow_stage_targets],
                                "bound_visit_sources": [stage.model_dump(mode="json")
                                    for stage in batch.known_workflow_stage_targets
                                    if any(node.workflow_stage_id == stage.workflow_stage_id

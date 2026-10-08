@@ -5699,7 +5699,8 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "native-table-scope-recovery/v4",
                   "native-table-visit-correspondence/v1",
                   "reviewed-source-type-field-recovery/v1",
-                  "validated-snapshot-scoped-session/v1"))
+                  "validated-snapshot-scoped-session/v1",
+                  "native-table-review-scope/v2"))
     )
 
 

@@ -6799,6 +6799,80 @@ def test_native_visit_correspondence_does_not_approve_an_extra_evidence_restrict
                                      wire, alignment)
 
 
+@pytest.mark.parametrize("missing_headers", [False, True])
+def test_alignment_prompt_preserves_current_and_future_native_columns(missing_headers):
+    from app.agents.protocol_control_candidate_alignment import build_candidate_alignment_prompt
+
+    batch, inventory, wire = _native_visit_candidate_material()
+    for unit, label in zip(batch.context_units, ["治疗期", "V3", "D14"], strict=True):
+        ref = f"body.t0.r{unit.table_context.row_index}.c3.p0"
+        unit.member_source_refs.append(ref)
+        unit.source_span_ids.append(f"snapshot::{ref}")
+        unit.member_texts.append(label)
+        unit.table_context.member_cell_paths.append((unit.table_context.row_index, 3))
+        unit.excerpt += " | " + label
+    unit = batch.owned_units[0]
+    unit.member_source_refs.append("body.t0.r3.c3.p0")
+    unit.source_span_ids.append("snapshot::body.t0.r3.c3.p0")
+    unit.member_texts.append("X")
+    unit.table_context.member_cell_paths.append((3, 3))
+    unit.excerpt += " | X"
+    inventory.statements[0].quoted_text = unit.excerpt
+    if missing_headers:
+        batch.context_units = []
+    frozen = batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()
+    prompt = build_candidate_alignment_prompt(batch, inventory, wire, [(0, 0)])
+    packet = json.loads(prompt.split("待核对应：", 1)[1])[0]
+    scope = packet["native_review_scope"]
+    assert scope["workflow_stage_sources"] == [stage.model_dump(mode="json")
+        for stage in batch.known_workflow_stage_targets]
+    assert scope["read_only_context_sources"] == [unit.model_dump(mode="json")
+        for unit in batch.context_units]
+    assert [column["cell_source_ref"] for column in scope["marked_columns"]] == [
+        "body.t0.r3.c2.p0", "body.t0.r3.c3.p0"]
+    assert [column["boundary_side"] for column in scope["marked_columns"]] == (
+        ["unresolved", "unresolved"] if missing_headers else
+        ["at_or_before_baseline", "after_baseline"])
+    assert "unresolved 的列不能因候选没有绑定就排除" in prompt
+    assert "特定亚组、对象改变或新的限制仍必须有原文依据" in prompt
+    assert (batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()) == frozen
+
+
+def test_alignment_proof_binds_unselected_frozen_native_workflow_context():
+    from app.agents.protocol_control_candidate_alignment import (
+        SOURCE_CANDIDATE_ALIGNMENT_VERSION, SourceCandidateAlignment,
+        bind_candidate_alignment, reusable_proven_alignment_items,
+    )
+    batch, inventory, wire = _native_visit_candidate_material()
+    source = inventory.statements[0].quoted_text
+    alignment = SourceCandidateAlignment.model_validate({
+        "version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+        "items": [{"statement_index": 0, "candidate_index": 0,
+                   "decision": "fully_expressed", "source_excerpt": source,
+                   "candidate_atom_quotes": [source], "unresolved_dimensions": []}],
+    })
+    coverage = source_statement_coverage(batch, inventory, wire)
+    frozen = bind_candidate_alignment(batch, inventory, coverage, wire, alignment,
+                                     alignment.model_dump_json(exclude={"proofs"}))
+    assert len(reusable_proven_alignment_items(batch, inventory, coverage, wire, frozen)) == 1
+    batch.known_workflow_stage_targets.append(batch.known_workflow_stage_targets[0].model_copy(
+        update={"workflow_stage_id": "stage:screening:another",
+                "review_stage": ReviewStage.SCREENING}))
+    assert reusable_proven_alignment_items(batch, inventory, coverage, wire, frozen) == []
+
+
+def test_non_table_alignment_does_not_receive_native_review_scope():
+    from app.agents.protocol_control_candidate_alignment import build_candidate_alignment_prompt
+
+    batch, inventory, wire = _native_visit_candidate_material()
+    batch.owned_units[0].table_context = None
+    prompt = build_candidate_alignment_prompt(batch, inventory, wire, [(0, 0)])
+    packet = json.loads(prompt.split("待核对应：", 1)[1])[0]
+    assert packet["native_table_source"] is None
+    assert "native_review_scope" not in packet
+    assert "source_statement 是前一步解释而非权威原文" not in prompt
+
+
 def _negative_native_policy_alignment(batch, inventory, wire):
     from app.agents.protocol_control_candidate_alignment import (
         SOURCE_CANDIDATE_ALIGNMENT_VERSION, SourceCandidateAlignment, bind_candidate_alignment,
