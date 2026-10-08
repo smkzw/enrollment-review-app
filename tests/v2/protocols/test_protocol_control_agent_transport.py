@@ -1137,15 +1137,18 @@ def test_candidate_field_repair_sends_only_authorized_field_schema(mode: str) ->
     first = transport.start(prompt="冻结输入")
     response = transport.continue_candidate(
         session_id=first.session_id, prompt="仅核对关联", fields=("cross_source_relations",),
+        relation_stage_ids=("frozen-decision-node",),
     )
     assert response.session_id == first.session_id
     call = completions.calls[-1]
     if mode == "json_schema":
         candidate_schema = call["response_format"]["json_schema"]["schema"]["properties"]["candidate_draft"]
         assert list(candidate_schema["properties"]) == ["cross_source_relations"]
+        assert call["response_format"]["json_schema"]["schema"]["$defs"]["ProtocolControlAgentWireRelation"]["properties"]["affected_workflow_stage_id"]["enum"] == ["frozen-decision-node"]
     else:
         assert "response_format" not in call
         assert '"required":["cross_source_relations"]' in call["messages"][-1]["content"]
+        assert '"enum":["frozen-decision-node"]' in call["messages"][-1]["content"]
     assert len(transport.history(first.session_id)) == 4
 
 

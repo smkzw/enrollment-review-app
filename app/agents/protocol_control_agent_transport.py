@@ -369,6 +369,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
     """
 
     supports_candidate_field_repair = True
+    supports_candidate_relation_stage_scope = True
 
     def __init__(
         self,
@@ -1561,6 +1562,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
         session_id: str,
         prompt: str,
         fields: tuple[str, ...] = (),
+        relation_stage_ids: tuple[str, ...] | None = None,
     ) -> ProtocolControlAgentResponse:
         """Repair one candidate in the same history without regenerating the batch."""
 
@@ -1569,7 +1571,9 @@ class OpenAICompatibleProtocolControlAgentTransport:
         history = self._histories.get(session_id)
         if history is None:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
-        response_format = protocol_control_candidate_repair_response_format(fields=fields)
+        response_format = protocol_control_candidate_repair_response_format(
+            fields=fields, relation_stage_ids=relation_stage_ids,
+        )
         logical_history = [*history, *self._single_requirement_messages(prompt, response_format)]
         try:
             text = self._complete(logical_history, response_format=response_format)

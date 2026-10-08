@@ -3,7 +3,13 @@
 
 ### 单一当前用户流程表
 
-当前主集成＋已完成单C03：来源登记/恢复存在解释风险，批准CodeBuddy/deepseek-v4.1-flash/max已完成初审569.594s、同会话复核173.798s及缺诊断复核106.056s，均exit0/no fallback；顾问未读全部消费者、不认证测试或临床采用。7份继承delivery不动，共享首屏184bdb60适配已push，不重复派发或修改共享首页。源码03be2eb1已push，含来源清单范围、结构化失败保存及当前校验身份；Goal active/claims_complete=false。
+当前主集成＋已完成有界C03：最近source-review-pending-input两轮见下文，原来源登记审阅569.594s/173.798s/106.056s仍只作相应快照历史证据；均不认证临床采用。7份继承delivery不动，共享首屏184bdb60适配已push，不重复派发或修改共享首页。源码9e09ba12已push，含来源疑问传递、非法核对保存及当前资格重验；Goal active/claims_complete=false。
+
+当前实际Job a7276ce3ff9f4b5fa32cf4aeefa1e20a（9e09ba12）已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，受控产物rv1006-source-pending-review-recovery-api-20261008-v1：6物理调用288.5069996s，90组0completed/第1组failed/89queued，scope/hydrate/gate依赖失败。原Job状态/payload、保护库、来源库均不变，0共同发布/激活/签发。第2–11组虽入队前已当前核验可复用，但本Job未执行到它们，不能将其queued写成completed。此前bb59749a仍保存这十组最新实际成功结果。
+
+窗口插入项：第1组阻断完整要求快照；首轮把研究分期当访视已单条纠正，作者两个结构错已局部修复，随后关系单字段纠正移到候选没有decide_at_node的节点，产生相邻AFFECTED_STAGE_DECISION_MISSING。最小修复为在现有单字段修订中显式投影冻结候选已有判定节点，支持该能力的现有直连transport将其收窄到实际输出Schema，其他读道仍走同一提示＋完整门，不扩写兄弟、证据、时点或临床值。主集成直接做此客观已有门禁的输入约束，无新增语义裁定或框架；已有候选条件/节点不改，非相容关联可由模型提出删除，之后仍做完整来源与含义核对，不由程序自行删除。候选无本节点判定时只允许空关联输出，不能靠关联创造节点。
+
+三相连模块当前集中1103passed/93.42s/exit0/5既有SWIG，JUnit artifacts/rv1006-relation-decision-scope-connected-20261008-v1.xml，实际pytest模块为slice58c_control_deconstructor、protocol_control_agent_transport、protocol_control_execution，含旧/严格/文字模式及兄弟保全。真实失败原答94ebe504…零模型零写只读反证：新Schema拒绝它移到未授权节点，空关联仅结构可表达，2候选及其原始条件保持；不是临床通过/新Job/完整包。下一受控恢复须重新前置核范围，只以bb59749a中当前合格十组为成功来源，a7276ce3新失败原答作为首错反证保留，不从两次运行挑答案拼接，不机械重读成功组。
 
 实际Job bb59749aa7c047c1bb90f43e97a3c285已failed_final/PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID，冻结源码03be2eb1，受控本机产物rv1006-source-inventory-bound-recovery-api-20261008-v1。90深审11completed/1failed（12）/78queued；前4组合法复用，第5–11组新增28调用完成，第12组4调用后失败，共32物理调用1202.4972455s。driver finally证明旧Job状态/payload、保护库、来源库均不变，0共同发布/激活/签发。旧第5/9/11首错确已越过；11完成仍不是完整同源包。所列直接三次43+7+32=82调用不是全历史总数。
 

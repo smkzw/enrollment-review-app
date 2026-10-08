@@ -7686,14 +7686,20 @@ def test_wire_stage_error_repairs_only_its_candidate_without_rewriting_batch(
 
     class CandidateTransport(_FakeTransport):
         supports_candidate_field_repair = True
+        supports_candidate_relation_stage_scope = True
 
-        def continue_candidate(self, *, session_id: str, prompt: str, fields=()):
+        def continue_candidate(self, *, session_id: str, prompt: str, fields=(), relation_stage_ids=None):
             self.prompts.append(prompt)
             assert "仅返回包含 candidate_draft" in prompt
             assert "本轮获授权候选原稿" in prompt
             expected = fixed_first if len(self.prompts) == 2 else fixed_second
             assert expected.title in prompt
             assert fields == ("cross_source_relations",)
+            assert relation_stage_ids == tuple(dict.fromkeys(
+                node.workflow_stage_id for node in expected.review_node_bindings
+                if node.role == ReviewNodeRole.DECIDE_AT_NODE
+            ))
+            assert "不能通过改关联新增判定节点" in prompt
             assert "系统原样保留疗程、时间、义务、判定节点和证据" in prompt
             assert "不要照抄其他关系" in prompt
             assert "external_target_id、candidate_side必须保持" in prompt
@@ -7776,6 +7782,19 @@ def test_relation_field_repair_retains_clinical_meaning_and_other_targets() -> N
     patch_schema = schema["json_schema"]["schema"]["properties"]["candidate_draft"]
     assert list(patch_schema["properties"]) == ["cross_source_relations"]
     assert patch_schema["additionalProperties"] is False
+    bounded = protocol_control_candidate_repair_response_format(
+        fields=("cross_source_relations",), relation_stage_ids=("stage:screening:one",),
+    )["json_schema"]["schema"]
+    assert bounded["$defs"]["ProtocolControlAgentWireRelation"]["properties"]["affected_workflow_stage_id"] == {
+        "type": "string", "enum": ["stage:screening:one"],
+    }
+    absent = protocol_control_candidate_repair_response_format(
+        fields=("cross_source_relations",), relation_stage_ids=(),
+    )["json_schema"]["schema"]["properties"]["candidate_draft"]
+    assert absent["properties"]["cross_source_relations"]["maxItems"] == 0
+    assert "enum" not in schema["json_schema"]["schema"]["$defs"]["ProtocolControlAgentWireRelation"]["properties"]["affected_workflow_stage_id"]
+    with pytest.raises(ValueError, match="只适用于"):
+        protocol_control_candidate_repair_response_format(relation_stage_ids=("stage:screening:one",))
     with pytest.raises(ValueError, match="未授权"):
         protocol_control_candidate_repair_response_format(fields=("workflow_stage_nodes",))
     same_target = unrelated.model_copy(update={

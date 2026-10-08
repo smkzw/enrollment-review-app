@@ -1613,6 +1613,7 @@ def protocol_control_batch_response_format(
 
 def protocol_control_candidate_repair_response_format(
     *, fields: tuple[str, ...] = (),
+    relation_stage_ids: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     """Ask for one candidate only; the system retains the rest of the wire."""
 
@@ -1630,6 +1631,17 @@ def protocol_control_candidate_repair_response_format(
             "required": list(fields),
             "additionalProperties": False,
         }
+        if relation_stage_ids is not None:
+            if relation_stage_ids:
+                original["$defs"]["ProtocolControlAgentWireRelation"]["properties"]["affected_workflow_stage_id"] = {
+                    "type": "string", "enum": list(dict.fromkeys(relation_stage_ids)),
+                }
+            else:
+                candidate_schema["properties"]["cross_source_relations"] = {
+                    **candidate_schema["properties"]["cross_source_relations"], "maxItems": 0,
+                }
+    elif relation_stage_ids is not None:
+        raise ValueError("节点约束只适用于已授权的关联字段修订")
     return {
         "type": "json_schema",
         "json_schema": {
@@ -10338,6 +10350,11 @@ class ProtocolControlAgentRunner:
                         + json.dumps(frozen_candidates, ensure_ascii=False)
                     )
                 if candidate_repair_fields:
+                    candidate_repair_stage_ids = tuple(dict.fromkeys(
+                        binding.workflow_stage_id
+                        for binding in repair_baseline_wire.candidate_drafts[candidate_repair_index].review_node_bindings
+                        if binding.role == ReviewNodeRole.DECIDE_AT_NODE
+                    ))
                     selected_relations = [
                         repair_baseline_wire.candidate_drafts[candidate_repair_index]
                         .cross_source_relations[index].model_dump(mode="json")
@@ -10358,6 +10375,12 @@ class ProtocolControlAgentRunner:
                         "若所引用流程不能表达该要求，应删除错误关联、保留独立要求；"
                         "不得为适配流程而提前完成时间或改变临床含义。"
                         "关联调整后仍须完整来源、语义及采用核对；空关联不表示已完成审核。"
+                        "\n本候选已冻结的本节点判定身份："
+                        + json.dumps(candidate_repair_stage_ids, ensure_ascii=False)
+                        + "。保留的补充关联只能引用这些既有身份，不能通过改关联新增判定节点。"
+                        "同时仍须符合冻结流程的实际执行节点及原文支持的跨节点规则；"
+                        "若原有判定节点与所引流程不能相容，删除错误关联而保留独立要求，"
+                        "不得把关联移到没有本节点判定的更早节点来凑合。"
                     )
                 try:
                     repair_used = True
@@ -10412,6 +10435,10 @@ class ProtocolControlAgentRunner:
                         response = transport.continue_candidate(
                             session_id=session_id, prompt=repair_prompt,
                             **({"fields": candidate_repair_fields} if candidate_repair_fields else {}),
+                            **({"relation_stage_ids": candidate_repair_stage_ids}
+                               if candidate_repair_fields and getattr(
+                                   transport, "supports_candidate_relation_stage_scope", False,
+                               ) else {}),
                         )
                     elif candidates_only or source_insert_candidates_only:
                         response = transport.continue_candidates(
