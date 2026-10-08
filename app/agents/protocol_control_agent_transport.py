@@ -1777,7 +1777,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
     def continue_evidence_source_types(
         self, *, session_id: str, prompt: str
     ) -> ProtocolControlAgentResponse:
-        """Fill only missing evidence type lists; keep the previous wire local."""
+        """Propose only authorized evidence type lists; keep the previous wire local."""
 
         if not prompt.strip():
             raise ValueError("资料类型修订提示不能为空")

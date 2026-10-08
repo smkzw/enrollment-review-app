@@ -3,7 +3,9 @@
 
 ### 单一当前用户流程表
 
-**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。源码5876dea9合法接续Job442ede7a902548d885e6a01bf82f0ef0已failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，3新物理调用152.314000秒/exit3，16组completed、17失败、73未执行。检查点31a0f863234344568d90628fe5b7d04b已保存成功来源范围修正、旧草稿及累计attempt；18–20仍仅上游可复用，不当本Job完成。原Job/payload、原件、保护库和来源库保持，0共同发布/激活/签发。完整新工作稿及关联更正闭环仍未达。
+**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。源码97346cd8合法接续Job1342cac6a8484dba8fdf0b33148ded21已failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，3新物理调用177.849064秒/exit3，16组completed、17失败、73未执行。检查点c625c09abe634df3ad399d900de6e48b保留原答和负核对证明。三份实际请求零网络精确重放已确认对应核查确实运行：目标初答结构修正后，alignment明确指出候选增加原文未限定的资料种类；不是旧选择器未执行。18–20仍仅上游可复用。原Job/payload、原件、保护库和来源库保持，0共同发布/激活/签发。完整新工作稿及关联更正闭环仍未达。
+
+**当前最小插入项与分工：** 影响完整要求快照；首因是合法负核对可指出过严资料类型，但现有仅补缺字段入口未被用于该已填字段。复用同一字段提案合同，仅在当前来源/候选/原答绑定的类型差额上允许再提案，宿主保留兄弟及其他字段，完整门和新语义核对重新运行；不复制核对者值、不采用旧批准、不刷新预算，同一字段本次不循环。直接集成＋单批准C03独审，因为改变局部修订边界；无需新执行节点或Phase。validator单列reviewed-source-type-field-recovery/v1，旧成功结果仍当前重验。15项族窗通过；首7pass/8fail为新增来源夹具结构不一致及公开序列化故意排除原答造成对象比较错误，已核JSON/proof/candidate实际保全后修测试，不松产品门。首次集中命令误写transport模块目录，exit4无测试；正确三相连模块1196passed/1failed106.82秒/exit1，仅旧validator期望，修断言后原例1pass2.04秒/exit0。不冒称末版全窗；产品未再改。C03实际CodeBuddy/DeepSeek/max/session01a11ce4…首12/续6只读、exit0/no fallback，120min静默等待，关闭条件resume疑问，未测试/临床；取舍reviews/rv1006-reviewed-source-types-owner-disposition-20261008.md。新修复尚未真实运行或医学采用。
 
 **当前相连功能包：** 直接集成＋单批准C03，因为冻结原生访视与已有候选对应影响采用边界。整行/唯一列/全部物理表头/唯一决定节点/完整分格来源共同证明time_words多个组成词属于同一次访视；仅选择action候选，仍candidate_linked，资料限制/关联/脚注含义由既有alignment核查。不伪造祖先标题引用、不拼临床来源、不直接采用；native上下文及绑定节点进入proof身份，validator增加native-table-visit-correspondence/v1。比较方向及真实阈值仍强制原predicate，名称数字/脚注编号在完整逐字动作中不误当阈值。1250passed/108.29秒/exit0相连三模块；末比较词/policy族32passed/1.17秒/exit0，重叠不累加。首窗1225pass19fail皆新增fixture闭包不一致，后少量故障夹具已据实际数组修正，不松门。C03首293.349/续117.301秒、CodeBuddy/DeepSeek/max同会话、exit0/no fallback，120min静默等待；首17工具超8，无测试/临床，末比较词由所有者验证。取舍reviews/rv1006-native-visit-correspondence-owner-disposition-20261008.md。真实零调用预检v3为19reusable/2resume_partial/69refresh、3时间组成词对应true、action[1]/accepted空、DBhash保持。新Job未执行；同行多候选及表头脚注全局含义残余明确，不把技术接线当临床忠实。
 

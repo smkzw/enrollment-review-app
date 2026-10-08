@@ -104,6 +104,7 @@ from .protocol_control_candidate_alignment import (
     build_candidate_alignment_prompt,
     evidence_policy_alignment_pairs,
     require_evidence_policy_alignment,
+    reviewed_source_type_mismatch_paths,
     reusable_proven_alignment_items,
     validate_candidate_alignment,
 )
@@ -6585,6 +6586,7 @@ def _build_evidence_source_types_repair_prompt(
     batch: ProtocolControlDispositionBatch,
     baseline: Mapping[str, Any],
     paths: tuple[tuple[int, int], ...],
+    *, replace_reviewed: bool = False,
 ) -> str:
     items = []
     for candidate_index, evidence_index in paths:
@@ -6597,9 +6599,10 @@ def _build_evidence_source_types_repair_prompt(
             "source": _candidate_source_texts(batch, candidate["source_structure_unit_ids"]),
         })
     return (
-        "仅补齐下列最低证据项目缺少的 required_source_types 资料类型列表；"
-        "不要重写候选、原文、时间、义务或其他字段。资料类型必须是方案要求或核实该义务"
-        "所必需的受试者层面资料，不得把方案、附录或操作规范当成病例证据；"
+        ("仅重新核对下列最低证据项目的 required_source_types 资料类型列表；"
+         if replace_reviewed else "仅补齐下列最低证据项目缺少的 required_source_types 资料类型列表；")
+        + "不要重写候选、原文、时间、义务或其他字段。资料类型必须是原文明文限定的"
+        "受试者层面资料，不是常见核实材料的建议；不得把方案、附录或操作规范当成病例证据；"
         "原文没有要求特定资料类型时返回空列表，不得凭常识追加检查。"
         "仅返回 items，每个位置恰好一次。\n"
         f"需补项目：{_stable_json(items)}"
@@ -6610,6 +6613,7 @@ def _merge_evidence_source_types_repair(
     raw_text: str,
     baseline: Mapping[str, Any],
     paths: tuple[tuple[int, int], ...],
+    *, replace_reviewed: bool = False,
 ) -> ProtocolControlAgentWire:
     try:
         repair = _EvidenceSourceTypesRepair.model_validate_json(raw_text)
@@ -6621,7 +6625,7 @@ def _merge_evidence_source_types_repair(
             if any(not value.strip() for value in item.required_source_types):
                 raise ValueError("资料类型不得为空白")
             evidence = merged["candidate_drafts"][item.candidate_index]["minimum_evidence"][item.evidence_index]
-            if "required_source_types" in evidence:
+            if "required_source_types" in evidence and not replace_reviewed:
                 raise ValueError("不得覆盖已有资料类型")
             evidence["required_source_types"] = item.required_source_types
         return ProtocolControlAgentWire.model_validate(merged)
@@ -7764,6 +7768,7 @@ class ProtocolControlAgentRunner:
         observation_repair_candidate: int | None = None
         evidence_source_repair_path: tuple[int, int] | None = None
         evidence_source_types_repair_paths: tuple[tuple[int, int], ...] = ()
+        reviewed_source_type_repairs: set[tuple[int, int]] = set()
         while True:
             wire: ProtocolControlAgentWire | None = None
             output: ProtocolControlBatchDispositionHydrated | None = None
@@ -9320,6 +9325,69 @@ class ProtocolControlAgentRunner:
                             additional = pending_additional
                             latest_source_target_review = target_review
                             latest_source_statement_coverage = coverage
+                            # A bound negative review authorizes only another proposal
+                            # for this scalar list. All source and semantic gates rerun.
+                            type_paths = reviewed_source_type_mismatch_paths(
+                                batch, source_interpretation, coverage, wire, candidate_alignment,
+                            )
+                            type_reader = getattr(transport, "continue_evidence_source_types", None)
+                            if (type_paths and not set(type_paths) & reviewed_source_type_repairs
+                                    and callable(type_reader)
+                                    and max(repairs, source_repairs) < self._max_schema_repairs):
+                                repairs = max(repairs, source_repairs) + 1
+                                source_repairs = repairs
+                                reviewed_source_type_repairs.update(type_paths)
+                                type_response = None
+                                baseline = wire.model_dump(mode="json")
+                                try:
+                                    type_response = type_reader(session_id=session_id,
+                                        prompt=_build_evidence_source_types_repair_prompt(
+                                            batch, baseline, type_paths, replace_reviewed=True,
+                                        ))
+                                    if type_response.session_id != session_id:
+                                        raise ValueError("资料类型局部修订不得更换原会话")
+                                    revised = _merge_evidence_source_types_repair(
+                                        type_response.text, baseline, type_paths, replace_reviewed=True,
+                                    )
+                                except Exception as type_error:  # noqa: BLE001 - preserve rejected proposal
+                                    code = (protocol_control_call_failure_code(type_error)
+                                            or "EVIDENCE_SOURCE_TYPES_REPAIR_INVALID")
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1,
+                                        session_id=type_response.session_id if type_response else session_id,
+                                        raw_output_sha256=_sha256(type_response.text if type_response else str(type_error)),
+                                        raw_output_text=type_response.text if type_response else None,
+                                        raw_output_chars=len(type_response.text) if type_response else 0,
+                                        outcome="publication_invalid" if type_response else "transport_failed",
+                                        error_classes=[code], issues=[str(type_error)[:1000]],
+                                        error_detail={"code": code,
+                                            "workflow_phase": "reviewed_source_types_repair",
+                                            "paths": [list(path) for path in type_paths],
+                                            "precondition_sha256": _sha256(wire.model_dump_json()),
+                                            "review_sha256": _sha256(candidate_alignment.model_dump_json()),
+                                            "automatic_adoption": False},
+                                    ))
+                                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                                        session_id=session_id, attempts=attempts,
+                                        source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        source_candidate_alignment=checkpoint_alignment(), partial_wire=wire)
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1, session_id=session_id,
+                                    raw_output_sha256=_sha256(type_response.text),
+                                    raw_output_text=type_response.text, raw_output_chars=len(type_response.text),
+                                    outcome="parsed", issues=["仅修订已核出差额的资料类型，仍须完整重验"],
+                                    error_detail={"code": "REVIEWED_SOURCE_TYPES_REPAIR",
+                                        "workflow_phase": "reviewed_source_types_repair",
+                                        "paths": [list(path) for path in type_paths],
+                                        "precondition_sha256": _sha256(wire.model_dump_json()),
+                                        "review_sha256": _sha256(candidate_alignment.model_dump_json()),
+                                        "automatic_adoption": False},
+                                ))
+                                raw_text = revised.model_dump_json()
+                                partial_wire = revised
+                                repair_used = True
+                                continue
                             cited_candidates = {
                                 entry.statement_index: sorted(set(
                                     entry.action_candidate_indexes

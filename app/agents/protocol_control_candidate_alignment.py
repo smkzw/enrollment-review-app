@@ -79,6 +79,24 @@ def require_evidence_policy_alignment(batch, interpretation, coverage, wire, ali
     if not pairs <= {(item.statement_index, item.candidate_index) for item in proven}:
         raise SourceCandidateAlignmentValidationError("资料来源限制缺少绑定当前候选与原文的核对证明")
 
+
+def reviewed_source_type_mismatch_paths(batch, interpretation, coverage, wire, alignment):
+    """Select a field repair, never apply the reviewer's proposed clinical value."""
+    proven = reusable_proven_alignment_items(
+        batch, interpretation, coverage, wire, alignment, require_positive=False,
+    )
+    paths = set()
+    for item in proven:
+        if item.decision != "incomplete":
+            continue
+        for check in item.evidence_policy_checks:
+            if check.dimension != "required_source_types":
+                continue
+            evidence = wire.candidate_drafts[item.candidate_index].minimum_evidence[check.evidence_index]
+            if frozenset(check.source_types) != frozenset(evidence.required_source_types):
+                paths.add((item.candidate_index, check.evidence_index))
+    return tuple(sorted(paths))
+
 _COMPARISON_WORDS = (
     (r"(?:≥|>=|大于等于|不小于|至少|最少|不少于|不低于|以上)", "gte"),
     (r"(?:≤|<=|小于等于|不大于|不多于|至多|最多|不超过|不高于|以下)", "lte"),

@@ -6799,6 +6799,124 @@ def test_native_visit_correspondence_does_not_approve_an_extra_evidence_restrict
                                      wire, alignment)
 
 
+def _negative_native_policy_alignment(batch, inventory, wire):
+    from app.agents.protocol_control_candidate_alignment import (
+        SOURCE_CANDIDATE_ALIGNMENT_VERSION, SourceCandidateAlignment, bind_candidate_alignment,
+    )
+    unit = batch.owned_units[0]
+    answer = SourceCandidateAlignment.model_validate({
+        "version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+        "items": [{"statement_index": 0, "candidate_index": 0, "decision": "incomplete",
+            "source_excerpt": inventory.statements[0].quoted_text,
+            "candidate_atom_quotes": [inventory.statements[0].quoted_text],
+            "unresolved_dimensions": ["原文未限定资料种类"],
+            "evidence_policy_checks": [{"evidence_index": 0, "dimension": "required_source_types",
+                "source_types": [], "source_span_id": unit.source_span_ids[0],
+                "source_excerpt": unit.member_texts[0]}]}],
+    })
+    return bind_candidate_alignment(batch, inventory, source_statement_coverage(batch, inventory, wire),
+                                    wire, answer, answer.model_dump_json(exclude={"proofs"}))
+
+
+@pytest.mark.parametrize("variant", ["valid", "no_proof", "changed_candidate", "changed_source", "uncertain", "same_value"])
+def test_reviewed_source_type_repair_needs_bound_negative_evidence(variant):
+    from app.agents.protocol_control_candidate_alignment import reviewed_source_type_mismatch_paths
+    batch, inventory, wire = _native_visit_candidate_material()
+    wire.candidate_drafts[0].minimum_evidence[0].required_source_types = ["指定原始记录"]
+    alignment = _negative_native_policy_alignment(batch, inventory, wire)
+    if variant == "no_proof":
+        alignment.proofs = []
+    elif variant == "changed_candidate":
+        wire.candidate_drafts[0].title = "不同要求"
+    elif variant == "changed_source":
+        batch.context_units[0].member_texts[0] = "其他时期"
+        batch.context_units[0].excerpt = " | ".join(batch.context_units[0].member_texts)
+    elif variant == "uncertain":
+        alignment.items[0].decision = "uncertain"
+    elif variant == "same_value":
+        alignment.items[0].evidence_policy_checks[0].source_types = ["指定原始记录"]
+    assert reviewed_source_type_mismatch_paths(batch, inventory, source_statement_coverage(batch, inventory, wire),
+        wire, alignment) == (((0, 0),) if variant == "valid" else ())
+
+
+@pytest.mark.parametrize("fault", [None, "unchanged", "wrong_position", "extra_field", "transport", "wrong_session", "budget"])
+def test_native_policy_field_repair_rechecks_full_consumer_and_keeps_source(fault):
+    from app.agents.protocol_control_candidate_alignment import SOURCE_CANDIDATE_ALIGNMENT_VERSION
+    batch, inventory, wire = _native_visit_candidate_material()
+    wire.candidate_drafts[0].minimum_evidence[0].required_source_types = ["指定原始记录"]
+    original = wire.model_dump(mode="json")
+    source = inventory.statements[0].quoted_text
+    calls = dict(repair=0, alignment=0, author=0)
+    checked = []
+
+    class Transport(_FakeTransport):
+        def start(self, *, prompt):
+            calls["author"] += 1
+            return super().start(prompt=prompt)
+
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="source", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target", text=SourceTargetReview(
+                version=SOURCE_TARGET_REVIEW_VERSION, items=[SourceTargetReviewItem(
+                    statement_index=0, decision="additional_requirement", source_action_excerpt=source,
+                    source_time_excerpt=inventory.statements[0].scope_quote,
+                    unresolved_aspects=["核对候选资料政策"],
+                )]).model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            calls["alignment"] += 1
+            material = json.loads(prompt.split("待核对应：", 1)[1])[0]["candidate"]
+            if material["minimum_evidence"][0]["required_source_types"]:
+                answer = _negative_native_policy_alignment(batch, inventory, wire)
+                text = answer.model_dump_json(exclude={"proofs"})
+            else:
+                text = json.dumps({"version": SOURCE_CANDIDATE_ALIGNMENT_VERSION, "items": [{
+                    "statement_index": 0, "candidate_index": 0, "decision": "fully_expressed",
+                    "source_excerpt": source, "candidate_atom_quotes": [source], "unresolved_dimensions": [],
+                }]}, ensure_ascii=False)
+            return ProtocolControlAgentResponse(session_id="alignment", text=text)
+
+        def continue_evidence_source_types(self, *, session_id, prompt):
+            calls["repair"] += 1
+            assert "仅重新核对" in prompt
+            if fault == "transport":
+                raise OSError("injected read failure")
+            proposal = {"items": [{"candidate_index": 1 if fault == "wrong_position" else 0,
+                "evidence_index": 0, "required_source_types": ["指定原始记录"] if fault == "unchanged" else []}]}
+            if fault == "extra_field":
+                proposal["candidate_draft"] = {"title": "禁止修改"}
+            return ProtocolControlAgentResponse(session_id="other" if fault == "wrong_session" else session_id,
+                text=json.dumps(proposal, ensure_ascii=False))
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=0 if fault == "budget" else 1).run(
+        batch, Transport([ProtocolControlAgentResponse(session_id="wire", text=wire.model_dump_json())]),
+        output_validator=lambda output: checked.append(output))
+    assert calls["author"] == 1
+    assert calls["repair"] == (0 if fault == "budget" else 1)
+    assert wire.model_dump(mode="json") == original
+    assert result.source_interpretation == inventory
+    restored = type(result).model_validate_json(result.model_dump_json())
+    # Raw answers are deliberately excluded from public serialization; proof and
+    # candidate fields must survive, while raw receipts remain separate artifacts.
+    assert restored.model_dump(mode="json") == result.model_dump(mode="json")
+    assert restored.source_candidate_alignment == result.source_candidate_alignment
+    assert restored.partial_wire == result.partial_wire
+    if fault is None:
+        assert result.status == "已解析" and result.final_output is not None
+        assert len(checked) == 2 and calls["alignment"] == 2
+        expected = deepcopy(original)
+        expected["candidate_drafts"][0]["minimum_evidence"][0]["required_source_types"] = []
+        assert result.partial_wire.model_dump(mode="json") == expected
+        assert result.source_candidate_alignment.items[0].decision == "fully_expressed"
+    else:
+        assert result.final_output is None and result.status == "需要核对"
+        assert result.partial_wire.model_dump(mode="json") == original
+        if fault == "unchanged":
+            assert calls["alignment"] == 2  # Same negative result cannot keep looping.
+
+
 @pytest.mark.parametrize("label,valid", [
     ("完成用药核对^7", True), ("完成12导联心电图检查", True),
     ("完成检查且结果≥8", False), ("完成检查（最多2次）", False),
