@@ -64,6 +64,7 @@ from app.agents.protocol_control_discovery_transport import (
 from app.agents.protocol_control_source_interpretation import (
     SOURCE_COVERAGE_VALIDATION_VERSION,
     SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
+    SOURCE_TARGET_REVIEW_GAP_VERSION,
     SOURCE_QUOTE_RECOVERY_VERSION,
     SOURCE_TARGET_REVIEW_VERSION,
     SourceDefinitionConsumers,
@@ -120,6 +121,9 @@ from app.services.protocol_control_restricted_source import (
     _temporal_restriction_indexes,
     TEMPORAL_RESTRICTION_VERSION,
     WHOLE_UNIT_RESTRICTION_VERSION,
+    PROCEDURE_RESTRICTION_VALIDATION_VERSION,
+    PROCEDURE_SOURCE_CONTEXT_VERSION,
+    procedure_correspondence_source_gaps,
     RESTRICTED_DEFINITION_VALIDATION_VERSION,
     restricted_batch_from_review,
 )
@@ -2063,6 +2067,9 @@ def _deep_component_identity(
                                        RESTRICTED_DEFINITION_VALIDATION_VERSION,
                                        SOURCE_COVERAGE_VALIDATION_VERSION,
                                        SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
+                                       SOURCE_TARGET_REVIEW_GAP_VERSION,
+                                       PROCEDURE_RESTRICTION_VALIDATION_VERSION,
+                                       PROCEDURE_SOURCE_CONTEXT_VERSION,
                                        "native-row-source-normalization/v1",
                                        "native-table-scope-recovery/v4",
                                        "native-table-visit-correspondence/v1",
@@ -2759,6 +2766,19 @@ def _validated_deep_partial_source(
         raise ValueError("局部草稿缺少有源解释")
     interpretation = SourceInterpretation.model_validate(source)
     validate_source_interpretation(batch, interpretation)
+    if (saved.get("partial_wire") is not None and saved.get("source_target_review") is not None
+            and saved.get("attempts")
+            and set(saved["attempts"][-1].get("error_classes", []))
+            == {"SOURCE_TARGET_REVIEW_UNRESOLVED"}):
+        original_wire = ProtocolControlAgentWire.model_validate(saved["partial_wire"])
+        _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(original_wire, batch))
+        witnessed_review = _resumable_saved_source_review(batch, interpretation, saved)
+        if (witnessed_review.state == "reused" and procedure_correspondence_source_gaps(
+            batch, interpretation, original_wire, witnessed_review.review,
+        )):
+            # A missing source prefix needs a new read even when compilation
+            # did not change. Completed siblings are revalidated separately.
+            return None
     if source_seed_proof is not None:
         seed = dict(saved, source_interpretation=source, partial_wire=None, source_target_review=None,
                     source_statement_coverage=[], source_candidate_alignment=None,

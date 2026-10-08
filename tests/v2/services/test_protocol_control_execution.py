@@ -388,6 +388,221 @@ def test_whole_mixed_unit_does_not_disguise_invalid_source_or_author(failure):
     assert protocol_control_execution_module.restricted_batch_from_review(batch, result) is None
 
 
+def _procedure_correspondence_review(*, single=False):
+    batch, result = _same_unit_two_requirement_review()
+    quotes = ["检查前静坐至少8分钟"] if single else ["每日给药1次", "建议每日固定时段给药"]
+    batch.owned_units[0].excerpt = "；".join(quotes)
+    template = result.source_interpretation.statements[0]
+    result.source_interpretation.statements = [template.model_copy(update={
+        "quoted_text": quote, "time_words": ["8分钟"] if single else [],
+        "unresolved": [],
+    }, deep=True) for quote in quotes]
+    wire = _wire().model_copy(deep=True)
+    wire.candidate_drafts = []
+    wire.dispositions[0].disposition = StructureUnitDispositionKind.REQUIRED_PROCEDURE
+    target = batch.known_procedure_targets[0]
+    target.source_excerpts = list(quotes)
+    wire.dispositions[0].linked_procedure_catalog_item_id = target.catalog_item_id
+    result.partial_wire = wire
+    result.source_target_review.items = [type(result.source_target_review.items[0])(
+        statement_index=index, decision="unresolved", source_action_excerpt=quote,
+        target_id=target.catalog_item_id, target_action_excerpt=quote,
+        unresolved_aspects=["系统尚未证明它适用于所列访视"],
+        unresolved_cause="target_correspondence",
+    ) for index, quote in enumerate(quotes)]
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, wire,
+    )
+    return batch, result
+
+
+@pytest.mark.parametrize("single", [False, True])
+@pytest.mark.parametrize("source_unknown", [False, True])
+def test_procedure_correspondence_retains_full_source_without_claiming_visit_coverage(single, source_unknown):
+    from app.services.eligibility_review_projection import _restricted_control_projections
+    from tests.v2.domain.test_control_catalog_restricted_contract import _catalog, _publication
+
+    batch, result = _procedure_correspondence_review(single=single)
+    if source_unknown:
+        result.source_interpretation.statements[0].unresolved = ["原文的适用对象未核清"]
+        result.source_target_review.items[0].unresolved_cause = "source_ambiguity"
+    frozen = result.model_dump(mode="json")
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert output is not None and not output.candidates
+    assert len(output.restricted_statements) == len(result.source_interpretation.statements)
+    assert output.dispositions[0].disposition == StructureUnitDispositionKind.RESTRICTED_SOURCE
+    assert output.dispositions[0].linked_procedure_catalog_item_id is None
+    kind = "interpretation_unresolved" if source_unknown else "consumer_unavailable"
+    assert {item.limitation_kind for item in output.restricted_statements} == {kind}
+    assert result.model_dump(mode="json") == frozen
+    readback = type(output).model_validate(output.model_dump(mode="json"))
+    protocol_control_execution_module._validate_deep_batch_output(batch, readback)
+    projected = _restricted_control_projections(_publication(_catalog(
+        restricted=tuple(readback.restricted_statements), allowed=tuple(batch.owned_source_span_ids),
+    )))
+    assert all(item.obligations[0].fact_refs == () for item in projected)
+    if not source_unknown:
+        assert all(item.obligations[0].action_owner is None for item in projected)
+        assert all("不要求研究者" in item.obligations[0].action_detail for item in projected)
+
+
+@pytest.mark.parametrize("cause", [None, "source_ambiguity"])
+def test_procedure_new_or_legacy_source_question_is_not_inferred_to_be_software_gap(cause):
+    batch, result = _procedure_correspondence_review(single=True)
+    item = result.source_target_review.items[0]
+    item.unresolved_cause = cause
+    item.unresolved_aspects = ["核对中发现原文未明确适用范围"]
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert output is not None
+    assert output.restricted_statements[0].limitation_kind == "interpretation_unresolved"
+    assert "原文已核" not in "；".join(output.restricted_statements[0].unresolved_dimensions)
+    if cause is None:
+        assert "unresolved_cause" not in item.model_dump(mode="json")
+
+
+def test_procedure_retention_changes_gate_without_refreshing_unchanged_compilation():
+    module = protocol_control_execution_module
+    current = module._deep_component_identity({}, module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE)
+    assert module.WHOLE_UNIT_RESTRICTION_VERSION == "source-whole-unit-restricted-disposition/v2"
+    assert module.PROCEDURE_RESTRICTION_VALIDATION_VERSION not in current["compiler_versions"]
+    assert module.PROCEDURE_RESTRICTION_VALIDATION_VERSION in current["validator_version"]
+    previous = dict(current, validator_version="previous gate")
+    assert module._same_deep_components_with_current_gate(previous, current)
+    assert not module._same_deep_components_with_current_gate(
+        dict(previous, compiler_versions=["changed compiler"]), current,
+    )
+    assert not module._same_deep_components_with_current_gate(
+        dict(previous, source_sha256="different source"), current,
+    )
+
+
+@pytest.mark.parametrize("gap", [None, "prefix", "tail", "bad_wire"])
+@pytest.mark.parametrize("previous_gate", [False, True])
+def test_partial_procedure_source_refresh_is_scoped_and_keeps_original_receipt(monkeypatch, gap, previous_gate):
+    module = protocol_control_execution_module
+    batch, result = _procedure_correspondence_review(single=True)
+    if gap == "prefix":
+        batch.owned_units[0].excerpt = "所测项目包括心率与血压，" + batch.owned_units[0].excerpt
+    elif gap == "tail":
+        batch.owned_units[0].excerpt += "；必要时再测一次"
+    prompt = module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE
+    identity = {"synthetic": "explicit-model-route"}
+    payload = {"frozen_model_routes": {"deep": hashlib.sha256(json.dumps(
+        identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode()).hexdigest()}}
+    components = module._deep_component_identity(payload, prompt)
+    if previous_gate:
+        components = dict(components, validator_version="previous gate")
+    saved = dict(result.model_dump(mode="json"),
+        stage="deep_failure_diagnostic", schema_version="phase5/deep-failure-diagnostic/v3",
+        batch_id=batch.batch_id, session_id="synthetic-source-session",
+        component_identity=components, transport_identity=identity,
+        prompt_template_sha256=module.protocol_control_agent_prompt_template_sha256(prompt),
+        repair_contract_sha256=module.protocol_control_agent_repair_contract_sha256())
+    if gap == "bad_wire":
+        saved["partial_wire"] = {"invalid": True}
+    frozen = json.dumps(saved, ensure_ascii=False, sort_keys=True)
+
+    class Store:
+        def get_job(self, _):
+            text = json.dumps(payload)
+            return SimpleNamespace(payload_json=text, payload_sha256=hashlib.sha256(text.encode()).hexdigest())
+
+        def list_steps(self, _):
+            return [SimpleNamespace(step_id="deep_0001", state="failed_final")]
+
+        def get_last_checkpoint(self, _, step):
+            return ("closure", {"stage": "closure", "deep_plan": {}}) if step == module.STEP_CLOSURE else ("failure", saved)
+
+    monkeypatch.setattr(module.ProtocolControlDiscoveryToDeepPlan, "model_validate",
+                        staticmethod(lambda _: SimpleNamespace(batches=[batch])))
+    if gap == "bad_wire":
+        with pytest.raises(ValueError):
+            module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
+    else:
+        partial = module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
+        assert (partial is not None) == (gap is None)
+        if partial is not None:
+            assert partial[1] is saved and partial[2].state == "reused"
+    assert json.dumps(saved, ensure_ascii=False, sort_keys=True) == frozen
+
+
+def test_whole_procedure_restriction_preserves_covered_sibling_reason():
+    batch, result = _procedure_correspondence_review()
+    item = result.source_target_review.items[1]
+    item.decision = "covered_by_procedure"
+    item.unresolved_cause = None
+    item.unresolved_aspects = []
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert output is not None
+    sibling = next(record for record in output.restricted_statements if record.source_statement_index == 1)
+    assert "本条对应关系已有核对" in sibling.unresolved_dimensions[0]
+    assert "系统尚未证明本条与具体操作" not in sibling.unresolved_dimensions[0]
+    assert output.candidates == [] and sibling.independent_scope_proof is None
+
+
+@pytest.mark.parametrize("defect", ["source_question", "covered_cause"])
+def test_procedure_correspondence_cause_cannot_erase_question_or_coexist_with_coverage(defect):
+    batch, result = _procedure_correspondence_review(single=True)
+    if defect == "source_question":
+        result.source_interpretation.statements[0].unresolved = ["本条对象未明"]
+    else:
+        result.source_target_review.items[0].decision = "covered_by_procedure"
+        result.source_target_review.items[0].unresolved_aspects = []
+    with pytest.raises(ValueError, match="来源仍有疑问|非未决条目"):
+        protocol_control_execution_module.restricted_batch_from_review(batch, result)
+
+
+@pytest.mark.parametrize("gap", [None, "prefix", "tail"])
+def test_procedure_source_context_gap_requires_new_read_not_guessed_scope(gap):
+    from app.services.protocol_control_restricted_source import procedure_correspondence_source_gaps
+
+    batch, result = _procedure_correspondence_review(single=True)
+    unit = batch.owned_units[0]
+    if gap == "prefix":
+        unit.excerpt = "所测项目包括心率与血压，" + unit.excerpt
+    elif gap == "tail":
+        unit.excerpt += "；必要时再测一次"
+    frozen = result.model_dump(mode="json")
+    assert procedure_correspondence_source_gaps(
+        batch, result.source_interpretation, result.partial_wire, result.source_target_review,
+    ) == ([] if gap is None else [unit.structure_unit_id])
+    if gap == "prefix":
+        # Only an actual source proposal can supply this field in production.
+        result.source_interpretation.statements[0].scope_quote = "所测项目包括心率与血压，"
+        assert procedure_correspondence_source_gaps(
+            batch, result.source_interpretation, result.partial_wire, result.source_target_review,
+        ) == []
+        result.source_interpretation.statements[0].scope_quote = None
+    assert result.model_dump(mode="json") == frozen
+
+
+@pytest.mark.parametrize("defect", ["unread_prefix", "unread_tail", "overlap", "missing_review", "transport", "extra_error"])
+def test_procedure_correspondence_does_not_hide_incomplete_or_failed_source(defect):
+    batch, result = _procedure_correspondence_review()
+    if defect == "unread_prefix":
+        batch.owned_units[0].excerpt = "仅限完成资格审核之后：" + batch.owned_units[0].excerpt
+    elif defect == "unread_tail":
+        batch.owned_units[0].excerpt += "；其他时段禁止使用"
+    elif defect == "overlap":
+        result.source_interpretation.statements[1] = result.source_interpretation.statements[0].model_copy(deep=True)
+        result.source_target_review.items[1].source_action_excerpt = result.source_interpretation.statements[0].quoted_text
+    elif defect == "missing_review":
+        result.source_target_review.items.pop()
+    elif defect == "transport":
+        result.attempts[-1].outcome = "transport_failed"
+    else:
+        result.attempts[-1].error_classes.append("SOURCE_TARGET_REVIEW_INVALID")
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire,
+    )
+    if defect == "missing_review":
+        with pytest.raises(ValueError):
+            protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    else:
+        assert protocol_control_execution_module.restricted_batch_from_review(batch, result) is None
+
+
 @pytest.mark.parametrize("separator", ["，", ",", "；\n"])
 def test_whole_unit_coverage_keeps_joiners_without_proving_independence(separator):
     from app.protocols.protocol_control_gate import source_statement_ranges_cover_unit
@@ -5768,6 +5983,9 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   protocol_control_execution_module.RESTRICTED_DEFINITION_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_COVERAGE_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
+                  protocol_control_execution_module.SOURCE_TARGET_REVIEW_GAP_VERSION,
+                  protocol_control_execution_module.PROCEDURE_RESTRICTION_VALIDATION_VERSION,
+                  protocol_control_execution_module.PROCEDURE_SOURCE_CONTEXT_VERSION,
                   "native-row-source-normalization/v1",
                   "native-table-scope-recovery/v4",
                   "native-table-visit-correspondence/v1",

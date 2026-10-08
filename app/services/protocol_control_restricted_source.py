@@ -45,7 +45,55 @@ from app.agents.protocol_control_stage_compiler import requires_temporal_resolut
 
 TEMPORAL_RESTRICTION_VERSION = "source-temporal-restricted-disposition/v2"
 WHOLE_UNIT_RESTRICTION_VERSION = "source-whole-unit-restricted-disposition/v2"
+# Procedure retention changes the current gate, not previously compiled rules.
+PROCEDURE_RESTRICTION_VALIDATION_VERSION = "procedure-source-restricted-retention/v1"
 RESTRICTED_DEFINITION_VALIDATION_VERSION = "restricted-definition-registration-validation/v1"
+PROCEDURE_SOURCE_CONTEXT_VERSION = "procedure-source-context-completeness/v1"
+
+
+def _unit_statements_cover_source(unit, interpretation, indexes) -> bool:
+    ranges = [locate_source_quote_offsets(unit.excerpt, interpretation.statements[index].quoted_text)
+              for index in indexes]
+    if any(bounds is None for bounds in ranges):
+        return False
+    ordered = sorted(ranges)
+    if any(left[1] > right[0] for left, right in zip(ordered, ordered[1:])):
+        return False
+    scopes = [locate_source_quote_offsets(unit.excerpt, interpretation.statements[index].scope_quote)
+              for index in indexes if interpretation.statements[index].scope_quote is not None
+              and interpretation.statements[index].scope_context_unit_id is None]
+    if any(bounds is None for bounds in scopes):
+        return False
+    extra = []
+    for bounds in sorted(set(scopes)):
+        if any(start <= bounds[0] and bounds[1] <= end for start, end in ranges):
+            continue
+        if any(start < bounds[1] and bounds[0] < end for start, end in ranges):
+            return False
+        extra.append(bounds)
+    return source_statement_ranges_cover_unit(
+        unit.excerpt, [*ranges, *extra], allow_joining_punctuation=True,
+    )
+
+
+def procedure_correspondence_source_gaps(batch, interpretation, wire, review) -> list[str]:
+    """Locate missing source context, not a guessed qualifier or a clinical gap.
+
+    Callers must first verify the actual saved source and review receipts. A
+    failed procedure mapping cannot reuse an incomplete source seed to claim
+    whole-unit restriction; it needs a new, bounded source read instead.
+    """
+    dispositions = {item.structure_unit_id: item for item in wire.dispositions}
+    affected = {interpretation.statements[item.statement_index].structure_unit_id
+                for item in review.items if item.decision == "unresolved"}
+    return sorted(unit.structure_unit_id for unit in batch.owned_units
+                  if unit.structure_unit_id in affected
+                  and dispositions[unit.structure_unit_id].disposition
+                  == StructureUnitDispositionKind.REQUIRED_PROCEDURE
+                  and not _unit_statements_cover_source(unit, interpretation, [
+                      index for index, statement in enumerate(interpretation.statements)
+                      if statement.structure_unit_id == unit.structure_unit_id
+                  ]))
 
 
 def _temporal_restriction_indexes(
@@ -360,41 +408,32 @@ def _whole_unit_restriction(
     by_unit: dict[str, list[int]] = {}
     for index, statement in enumerate(interpretation.statements):
         by_unit.setdefault(statement.structure_unit_id, []).append(index)
-    if not any(len(by_unit[unit_id]) > 1 for unit_id in restricted_units):
-        return None
     dispositions = {item.structure_unit_id: item for item in original.dispositions}
+    procedure_units = {unit_id for unit_id in restricted_units
+                       if dispositions[unit_id].disposition
+                       == StructureUnitDispositionKind.REQUIRED_PROCEDURE}
+    if not procedure_units and not any(len(by_unit[unit_id]) > 1 for unit_id in restricted_units):
+        return None
     coverage = {item.statement_index: item for item in result.source_statement_coverage}
     for unit_id, indexes in by_unit.items():
         if unit_id in restricted_units:
-            if dispositions[unit_id].disposition != StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE:
+            if dispositions[unit_id].disposition not in {
+                StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+                StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+            }:
                 return None
-            ranges = [locate_source_quote_offsets(units[unit_id].excerpt,
-                       interpretation.statements[index].quoted_text) for index in indexes]
-            if any(bounds is None for bounds in ranges):
-                return None
-            ordered = sorted(ranges)
-            if any(left[1] > right[0] for left, right in zip(ordered, ordered[1:])):
-                return None
-            # Exact, already-validated local headings cover source text only.
-            # They do not establish independence between sibling requirements.
-            scope_ranges = [locate_source_quote_offsets(units[unit_id].excerpt,
-                            interpretation.statements[index].scope_quote)
-                            for index in indexes
-                            if interpretation.statements[index].scope_quote is not None
-                            and interpretation.statements[index].scope_context_unit_id is None]
-            if any(bounds is None for bounds in scope_ranges):
-                return None
-            extra_scope_ranges = []
-            for bounds in sorted(set(scope_ranges)):
-                if any(start <= bounds[0] and bounds[1] <= end for start, end in ranges):
-                    continue
-                if any(start < bounds[1] and bounds[0] < end for start, end in ranges):
-                    return None
-                extra_scope_ranges.append(bounds)
-            if not source_statement_ranges_cover_unit(
-                units[unit_id].excerpt, [*ranges, *extra_scope_ranges],
-                allow_joining_punctuation=True,
+            # A valid target ID in an unresolved review is a comparison, not
+            # coverage. Keep the whole procedure unit non-executable; do not
+            # turn a missing correspondence into source ambiguity or approval.
+            if unit_id in procedure_units and any(
+                index not in reviewed or reviewed[index].decision not in {
+                    "unresolved", "covered_by_procedure", "background_context",
+                    "definition_dependency",
+                } for index in indexes
             ):
+                return None
+            # This covers context, not independence or semantic equivalence.
+            if not _unit_statements_cover_source(units[unit_id], interpretation, indexes):
                 return None
             continue
         for index in indexes:
@@ -432,6 +471,12 @@ def _whole_unit_restriction(
     statements = []
     for unit_id in sorted(restricted_units):
         temporal_only = not uncertain_indexes.intersection(by_unit[unit_id])
+        correspondence_only = unit_id in procedure_units and all(
+            not interpretation.statements[index].unresolved
+            and (reviewed[index].decision != "unresolved"
+                 or reviewed[index].unresolved_cause == "target_correspondence")
+            for index in by_unit[unit_id]
+        )
         aspects = list(dict.fromkeys(
             aspect for index in by_unit[unit_id]
             for aspect in [*interpretation.statements[index].unresolved,
@@ -446,10 +491,15 @@ def _whole_unit_restriction(
                 restricted_statement_id=f"restricted:{digest}",
                 source_structure_unit_id=unit_id, source_statement_index=index,
                 source_quote=source.quoted_text, source_span_ids=sorted(units[unit_id].source_span_ids),
-                limitation_kind="consumer_unavailable" if temporal_only else "interpretation_unresolved",
+                limitation_kind=("consumer_unavailable" if temporal_only or correspondence_only
+                                 else "interpretation_unresolved"),
                 unresolved_dimensions=[
                     ("同一原文单元的持续期或跨节点要求尚未完成核对，未证明各要求可独立采用；本单元整体保留待核"
                      if temporal_only else
+                     "系统尚未证明本条与具体操作或访视的对应关系；本单元整体暂不能用于判断"
+                     if correspondence_only and reviewed[index].decision == "unresolved" else
+                     "本条对应关系已有核对，但尚未证明它与同单元未决要求独立；本单元整体暂不能用于判断"
+                     if correspondence_only else
                      "同一原文单元的对应关系尚未核清，未证明各要求可独立采用；本单元整体保留待核"),
                     *aspects,
                 ],

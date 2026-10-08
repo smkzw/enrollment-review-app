@@ -36,6 +36,7 @@ SOURCE_COVERAGE_VALIDATION_VERSION = "source-owned-inventory-validation/v1"
 SOURCE_TARGET_REVIEW_VALIDATION_VERSION = "source-native-procedure-row-validation/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
+SOURCE_TARGET_REVIEW_GAP_VERSION = "source-target-unresolved-cause/v1"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -859,6 +860,9 @@ class SourceTargetReviewItem(ContractModel):
     source_object_excerpt: str | None = None
     target_object_excerpt: str | None = None
     unresolved_aspects: list[str] = Field(default_factory=list)
+    unresolved_cause: Literal["source_ambiguity", "target_correspondence"] | None = Field(
+        default=None, exclude_if=lambda value: value is None,
+    )
     non_control_basis_excerpt: str | None = None
     attribution_excerpt: str | None = None
 
@@ -1586,6 +1590,11 @@ def build_source_target_review_prompt(
         "不得为了选增量要求，借同单元另一动作的时期、频次或治疗持续期。"
         "未完整覆盖时可以附上已有目标的逐字动作和时间作为核对线索，同时在 unresolved_aspects"
         "写明未对齐之处；此类目标引用不代表已覆盖。"
+        f"未决原因合同 {SOURCE_TARGET_REVIEW_GAP_VERSION}：仅 decision=unresolved 时填写 unresolved_cause。"
+        "原文自身的对象、适用范围或含义仍不清时填 source_ambiguity；"
+        "只有来源含义明确、没有尚存来源疑问，仅系统不能证明对应已有目标时才填 target_correspondence。"
+        "两者不能区分或兼有时填 null，不因早先 unresolved 为空就默认没有新来源疑问。"
+        "其他 decision 填 null；这个原因不授权采信、清来源疑问或省略未覆盖内容。"
         "引用已有目标作对照时，target_id 必须是该冻结目标的编号，target_action_excerpt "
         "必须逐字摘自该目标 source_refs 指向的原文，两者须同时填写；不引用目标时两者都填 null，"
         "target_time_excerpt 也填 null。不能把本条原文复制到目标摘录，"
@@ -1614,7 +1623,7 @@ def build_source_target_review_prompt(
         'additional_requirement|not_current_control|unresolved|potential_same_requirement|cited_external_rationale|background_context|definition_dependency","target_id":null,"source_action_excerpt":"逐字动作",'
         '"target_action_excerpt":null,"source_object_excerpt":null,"target_object_excerpt":null,'
         '"source_time_excerpt":null,"target_time_excerpt":null,"target_scope_excerpt":null,'
-        '"unresolved_aspects":[],"non_control_basis_excerpt":null,"attribution_excerpt":null}]}。枚举值只选一个，未知目标填 null；'
+        '"unresolved_aspects":[],"unresolved_cause":null,"non_control_basis_excerpt":null,"attribution_excerpt":null}]}。枚举值只选一个，未知目标填 null；'
         '非跨章节关系的对象与另一来源时期字段一律填 null。\n'
         f"本次必须且只能返回这些 statement_index：{json.dumps(indexes)}。"
         "不得返回同单元其他陈述或上一轮整批清单；items 数量必须与本次序号数量相同。\n"
@@ -1727,6 +1736,11 @@ def validate_source_target_review(
 
     for item in review.items:
         statement = interpretation.statements[item.statement_index]
+        if item.unresolved_cause is not None and item.decision != "unresolved":
+            reject(item, "UNRESOLVED_CAUSE_INVALID", "unresolved_cause", "非未决条目不得携带未决原因")
+        if item.unresolved_cause == "target_correspondence" and statement.unresolved:
+            reject(item, "UNRESOLVED_CAUSE_INVALID", "unresolved_cause",
+                   "来源仍有疑问，不能仅归因于系统对应关系")
         action = normalize_source_excerpt(item.source_action_excerpt)
         quoted = normalize_source_excerpt(statement.quoted_text)
         source_unit_text = normalize_source_excerpt(
@@ -2950,6 +2964,9 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
         "同一 owned 单元有多条陈述时，时间措辞也不能借自另一条陈述，除非本条动作之前有明确共同范围。"
         "不适用共同范围时填 null。quoted_text 只取本条动作；若另填资格先决原文，"
         "该先决短语须在 quoted_text 之前，不能把它并入动作摘录。"
+        "操作说明前的项目标签及直接限定检查对象的说明也须保留：若它是本条动作的共同上下文，"
+        "scope_quote 连续逐字保留该前缀；若另有独立要求则另列陈述，不把它塞入范围。"
+        "不能只摘取建议或时间尾句而丢掉所指项目；本条没有共同范围时仍填 null，不猜测。"
         "force 只表示原文语气，不表示受试者是否满足。"
         "decision_functions 独立记录本条对当前入排决策的功能，可多选 action、definition、"
         "calculation_input、threshold、time_validity、exception；仅明确与入排无关的说明选"
