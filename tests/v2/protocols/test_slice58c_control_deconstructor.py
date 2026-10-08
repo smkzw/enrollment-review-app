@@ -6917,6 +6917,67 @@ def test_native_policy_field_repair_rechecks_full_consumer_and_keeps_source(faul
             assert calls["alignment"] == 2  # Same negative result cannot keep looping.
 
 
+@pytest.mark.parametrize("fault", [None, "source", "gate"])
+def test_saved_native_policy_uses_real_transport_scoped_resume(fault):
+    from app.agents.protocol_control_agent_transport import OpenAICompatibleProtocolControlAgentTransport
+    from app.agents.protocol_control_candidate_alignment import SOURCE_CANDIDATE_ALIGNMENT_VERSION
+    batch, inventory, wire = _native_visit_candidate_material()
+    wire.candidate_drafts[0].minimum_evidence[0].required_source_types = ["指定原始记录"]
+    source = inventory.statements[0].quoted_text
+    original = wire.model_dump(mode="json")
+    calls = []
+
+    class RealTransport(OpenAICompatibleProtocolControlAgentTransport):
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target", text=SourceTargetReview(
+                version=SOURCE_TARGET_REVIEW_VERSION, items=[SourceTargetReviewItem(
+                    statement_index=0, decision="additional_requirement", source_action_excerpt=source,
+                    source_time_excerpt=inventory.statements[0].scope_quote,
+                    unresolved_aspects=["核对资料类型"],
+                )]).model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            candidate = json.loads(prompt.split("待核对应：", 1)[1])[0]["candidate"]
+            if candidate["minimum_evidence"][0]["required_source_types"]:
+                answer = _negative_native_policy_alignment(batch, inventory, wire)
+                text = answer.model_dump_json(exclude={"proofs"})
+            else:
+                text = json.dumps({"version": SOURCE_CANDIDATE_ALIGNMENT_VERSION, "items": [{
+                    "statement_index": 0, "candidate_index": 0, "decision": "fully_expressed",
+                    "source_excerpt": source, "candidate_atom_quotes": [source], "unresolved_dimensions": [],
+                }]}, ensure_ascii=False)
+            return ProtocolControlAgentResponse(session_id="alignment", text=text)
+
+        def _complete(self, messages, *, response_format=None):
+            calls.append(messages)
+            assert [m["role"] for m in messages] == ["user"]
+            assert "仅重新核对" in messages[0]["content"]
+            return '{"items":[{"candidate_index":0,"evidence_index":0,"required_source_types":[]}]}'
+
+    transport = RealTransport(client=SimpleNamespace(), backend="ollama-cloud",
+        model="deepseek-v4.1-flash", model_identity_check=False)
+    checked = []
+    def validate(output):
+        if fault == "gate":
+            raise ValueError("injected source gate rejection")
+        checked.append(output)
+    if fault == "source":
+        inventory.statements[0].quoted_text = "不是原文"
+    kwargs = dict(resume_wire=wire, resume_source_interpretation=inventory,
+        resume_session_id="saved-author", output_validator=validate)
+    if fault:
+        with pytest.raises(ValueError):
+            ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, transport, **kwargs)
+        assert not transport._scoped_resume_contexts and not calls
+    else:
+        result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, transport, **kwargs)
+        assert result.status == "已解析" and result.final_output is not None
+        assert len(calls) == 1 and len(checked) == 3  # Resume, old proposal, revised proposal.
+        assert transport._histories == {} and set(transport._scoped_resume_contexts) == {"saved-author"}
+        assert result.partial_wire.candidate_drafts[0].minimum_evidence[0].required_source_types == []
+    assert wire.model_dump(mode="json") == original
+
+
 @pytest.mark.parametrize("label,valid", [
     ("完成用药核对^7", True), ("完成12导联心电图检查", True),
     ("完成检查且结果≥8", False), ("完成检查（最多2次）", False),

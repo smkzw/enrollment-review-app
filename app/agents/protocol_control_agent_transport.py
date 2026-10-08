@@ -496,6 +496,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
             env_name=_response_format_mode_env,
         )
         self._histories: dict[str, list[dict[str, str]]] = {}
+        self._scoped_resume_contexts: dict[str, str] = {}
         self._batch_response_formats: dict[str, Mapping[str, Any]] = {}
         self._receipt_local = local()
         self._model_identity_check = selected_identity_check
@@ -1676,8 +1677,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
 
         if not prompt.strip():
             raise ValueError("单义务原子修订提示不能为空")
-        history = self._histories.get(session_id)
-        if history is None:
+        if session_id not in self._histories and session_id not in self._scoped_resume_contexts:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         # The prompt carries the frozen atom and its source. Sending the full
         # batch history would turn a one-atom repair into another full review.
@@ -1704,7 +1704,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
 
         if not prompt.strip():
             raise ValueError("观察采用说明修订提示不能为空")
-        if session_id not in self._histories:
+        if session_id not in self._histories and session_id not in self._scoped_resume_contexts:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         response_format = protocol_control_observation_repair_response_format()
         request_prompt = prompt
@@ -1735,7 +1735,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
 
         if not prompt.strip():
             raise ValueError("日期属性修订提示不能为空")
-        if session_id not in self._histories:
+        if session_id not in self._histories and session_id not in self._scoped_resume_contexts:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         response_format = protocol_control_time_operand_repair_response_format()
         try:
@@ -1758,7 +1758,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
 
         if not prompt.strip():
             raise ValueError("资料来源要求修订提示不能为空")
-        if session_id not in self._histories:
+        if session_id not in self._histories and session_id not in self._scoped_resume_contexts:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         response_format = protocol_control_evidence_source_repair_response_format()
         try:
@@ -1781,7 +1781,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
 
         if not prompt.strip():
             raise ValueError("资料类型修订提示不能为空")
-        if session_id not in self._histories:
+        if session_id not in self._histories and session_id not in self._scoped_resume_contexts:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         response_format = protocol_control_evidence_source_types_repair_response_format()
         try:
@@ -1828,6 +1828,21 @@ class OpenAICompatibleProtocolControlAgentTransport:
             {"role": "assistant", "content": text},
         ]
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def restore_scoped_session(self, *, session_id: str, context_sha256: str) -> None:
+        """Bind a host-revalidated snapshot for self-contained field requests only.
+
+        This is not a reconstructed conversation or a clinical approval. Full
+        history repair still requires restore_history with actual messages.
+        """
+        if not session_id.strip() or len(context_sha256) != 64 or any(
+            char not in "0123456789abcdef" for char in context_sha256
+        ):
+            raise ValueError("局部恢复缺少完整的当前上下文身份")
+        existing = self._scoped_resume_contexts.get(session_id)
+        if existing is not None and existing != context_sha256:
+            raise ValueError("局部恢复不得覆盖不同上下文身份")
+        self._scoped_resume_contexts[session_id] = context_sha256
 
     def restore_history(
         self,

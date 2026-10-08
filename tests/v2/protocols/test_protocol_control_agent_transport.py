@@ -1476,6 +1476,35 @@ def test_invalid_persisted_history_is_rejected(messages) -> None:
         transport.restore_history(session_id="persisted-session", messages=messages)
 
 
+@pytest.mark.parametrize("method", ["continue_atom", "continue_observation_policies",
+    "continue_time_operands", "continue_evidence_source_policy", "continue_evidence_source_types"])
+def test_scoped_snapshot_resume_enables_only_self_contained_requests(method):
+    client, completions = _client(['{"items":[]}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(client=client,
+        backend="ollama-cloud", model="deepseek-v4.1-flash", model_identity_check=False)
+    scoped = getattr(transport, method)
+    with pytest.raises(ProtocolControlAgentCallError):
+        scoped(session_id="saved", prompt="仅核冻结指定字段")
+    assert not completions.calls
+    transport.restore_scoped_session(session_id="saved", context_sha256="a" * 64)
+    transport.restore_scoped_session(session_id="saved", context_sha256="a" * 64)
+    with pytest.raises(ValueError, match="不同上下文"):
+        transport.restore_scoped_session(session_id="saved", context_sha256="b" * 64)
+    for missing_id, digest in [("", "a" * 64), ("other", "short"), ("other", "z" * 64)]:
+        with pytest.raises(ValueError):
+            transport.restore_scoped_session(session_id=missing_id, context_sha256=digest)
+    answer = scoped(session_id="saved", prompt="仅核冻结指定字段")
+    assert answer.session_id == "saved"
+    assert [m["role"] for m in completions.calls[0]["messages"]] == ["user"]
+    assert transport._histories == {}  # No fictitious prior assistant answer.
+    for history_method in [transport.continue_session, transport.continue_candidate, transport.continue_candidates]:
+        with pytest.raises(ProtocolControlAgentCallError):
+            history_method(session_id="saved", prompt="不能恢复整包会话")
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.history("saved")
+    assert len(completions.calls) == 1
+
+
 def test_length_finish_reason_retries_once_then_succeeds_in_same_call() -> None:
     client, completions = _client(
         [

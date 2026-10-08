@@ -7141,6 +7141,13 @@ class ProtocolControlAgentRunner:
                 raise ValueError("局部恢复缺少来源、会话或发布校验")
             validate_source_interpretation(batch, resume_source_interpretation)
             output_validator(hydrate_protocol_control_agent_output(resume_wire, batch))
+            restore_scoped = getattr(transport, "restore_scoped_session", None)
+            if callable(restore_scoped):
+                restore_scoped(session_id=resume_session_id, context_sha256=_sha256(_stable_json({
+                    "batch": batch.model_dump(mode="json"),
+                    "source": resume_source_interpretation.model_dump(mode="json"),
+                    "wire": resume_wire.model_dump(mode="json"),
+                })))
             source_interpretation = resume_source_interpretation
             partial_wire = resume_wire
             session_id = resume_session_id

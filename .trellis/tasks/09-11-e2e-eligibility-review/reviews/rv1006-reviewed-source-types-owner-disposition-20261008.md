@@ -23,3 +23,13 @@
 - F4wire限定：私有函数唯一调用者为完整已验证wire，未声明支持hydrated公共接口；不为未用类型加新适配。
 
 顾问Bash被拒，不能取得git delta；所有者git diff/check和明确stage补足源码身份。顾问未读测试且只部分读通用门迁移，所有者相连服务例实际证明旧成功重验0新增调用。残余：跨运行总历史补答预算完备性仍按现有回执与配置，不把本次每路径限制说成全历史一次；负核对只修资料类型，不能解决其他真语义差额。尚未真实运行此字段修复；完整包/当前节点/更正后报告未达，claims_complete=false。
+
+## 真实恢复后的增量：局部会话绑定
+
+d36c8818产品Jobf1cc4856…1调用173.484166秒/exit3：模型核对实际stop/48.204秒，之后字段提案尚未发送，适配器找不到旧作者会话。简化运输替身未模拟适配器的历史成员门，故旧软件正例不证明真实恢复。这是生产到传输的缺口，不是需研究者确认或来源不可读；旧负核对/原答/原件和所有旧Job保持。
+
+最小共同修复：Runner在已恢复来源和output_validator(hydrated wire)均通过后，绑定batch/source/wire当前身份；适配器仅保存hash，允许原有五个自足短字段操作，绝不构造旧assistant消息。依赖历史的continue_session/candidate/candidates和history仍拒绝。重复相同绑定幂等，冲突/坏hash拒绝；hash是适配器上下文而非临床批准。方法唯一当前生产者已经过实际来源门；不同供应商不得借此绕过冻结路线检查。validator单列validated-snapshot-scoped-session/v1；基础编译不变。
+
+21族例/1.90秒/exit0；完整三相连模块1205pass/145.32秒/exit0/5SWIG，JUnit artifacts/rv1006-scoped-snapshot-resume-connected-20261008-v1.xml。新增正例使用实际适配器continue_evidence_source_types，只有SDK completion被替代，Runner恢复/绑定/来源/完整装配/局部合并/新语义核对正常运行；坏源或装配门拒绝均0绑定/0请求；不只Schema通过。
+
+同批准C03增量round3，8只读/34.667秒/exit0/no fallback，120min静默完成等待，顾问独立检查当前调用者及失败边界，无必修；未读完整SDK底层/门身份，本节所有者源码与测试补足，未冒称临床审核。同会话为降低上下文独立性。当前尚无新绑定的真实产品恢复结果；窗口仍未达。教训：恢复测试须连接真实适配器身份检查，不能因伪传输能接续就据此相信生产恢复；不以盲重读解决本地缺口。

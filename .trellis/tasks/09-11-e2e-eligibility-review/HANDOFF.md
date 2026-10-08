@@ -1,4 +1,4 @@
-# HANDOFF｜1006V1｜来源对应已执行，资料类型过严的局部提案，继续执行
+# HANDOFF｜1006V1｜已验证草稿的局部接续绑定，继续执行
 
 2026-10-08，用户已解除暂停；Goal实查active，Trellis in_progress，execution_paused_by_user=false。窗口未达，claims_complete=false。本记录是相连功能包里程碑，不是暂停。只维护本HANDOFF、implement当前表及review_index；历史运行在implement附录和Git保留，不按旧“当前/暂停”恢复。
 
@@ -10,13 +10,13 @@
 |---|---|
 | 唯一工作树 | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；.trellis/tasks/09-11-e2e-eligibility-review |
-| 本功能包基础代码 | 97346cd8；新增有源负核对驱动字段级资料类型提案，完整重验而非自动采用 |
-| 当前终态/上游 | 1342cac6a8484dba8fdf0b33148ded21，failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED；声明上游442ede7a902548d885e6a01bf82f0ef0 |
-| 失败检查点 | 17=c625c09abe634df3ad399d900de6e48b；实际alignment负核对/原答/来源/草稿/累计账本保留，不改旧终态 |
+| 本功能包基础代码 | d36c8818；新增当前已验证快照的自足局部请求绑定，不伪造历史消息，不代替临床采用 |
+| 当前终态/上游 | f1cc48569ee44fc9933d4da44538b686，failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID；声明上游1342cac6a8484dba8fdf0b33148ded21 |
+| 失败检查点 | 17=6d1c24ca0c9345ec92567e0df57d4f23；实际负核对/原答/局部提案发送前会话失败/草稿/累计账本保留，不改旧终态 |
 | 产品模型 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high、65536输出；产品harness直接访问端点 |
 | 当前隔离库 | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 最新已执行产物 | 同上根目录/rv1006-native-visit-api-20261008-v1；3新物理调用/177.849064秒/exit3，源码97346cd8；对应核查已执行，真实发现候选新增未限定资料种类 |
-| 私有当前预检 | 同上根目录/rv1006-reviewed-source-types-preflight-20261008-v1.json；当前新validator19reusable/2resume_partial/69refresh，3时间组成词对应true、action候选[1]但accepted空，0调用/0写/DBhash保持/exit0 |
+| 最新已执行产物 | 同上根目录/rv1006-reviewed-source-types-api-20261008-v1；1新物理调用/173.484166秒/exit3，源码d36c8818；核查48.204秒/stop，之后字段提案尚未发送便被本地会话门拒绝 |
+| 私有当前预检 | 同上根目录/rv1006-scoped-snapshot-resume-preflight-20261008-v1.json；源f1当前新validator19reusable/2resume_partial/69refresh，3时间组成词对应true、action候选[1]但accepted空，0调用/0写/DBhash保持/exit0 |
 | 外部可复查范围 | Git源码、合成测试、净化工程报告/索引；原件、DB、实际临床提示/原答与截图仅本机可读，不提交，hash不证明临床含义 |
 
 五分钟入口：本HANDOFF → implement当前表 → delivery_1006V1/03_ACCEPTANCE.md → review_index_20261006_1006V1.json → 新合法作业prepare/execute回执。不要重读全部历史，不复活旧失败Job。
@@ -34,6 +34,10 @@
 病例根/准备副本：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-prepared-review-current-node-20261008-v1/data；subject rv29-preparation-20261001，筛选episode e8615813d75b452489579ff9606781b4。
 
 ## 3. 当前首错与最小修复
+
+f1首错在读取服务接续而非医学语义：Runner恢复了合法full wire，重启适配器却没有原作者历史。当前只在来源和完整装配门通过后绑定batch/source/wire身份，使原五个自足字段接口可接续；不假造历史user/assistant消息，整包及依赖历史的候选修订仍严格要求实际历史。预算、来源/兄弟、proof、新语义核查及采用保护保持。21族例包含真实适配器与坏源/门故障零请求；三相连模块1205pass/145.32秒/exit0。C03同会话8只读/34.667秒/exit0/no fallback，未跑测试/病例；没有必须修，限制与所有者逐层反证见原取舍新增节。新接续尚未真实运行。不要把负核对通道技术可用写成完整包已通过。
+
+### 上一字段修订功能包的证据
 
 1342实际三请求零网络精确重放证明已有alignment已运行，指出候选把常见记录种类误设为原文强制限制。首因不再是候选选择。复用原字段提案合同：绑定当前来源、候选和实际原答的负核对仅授权位置；模型重新提案，宿主保全兄弟/其他字段，完整结构、来源及新语义核查再运行。旧proof不批准新候选，同路径本次不循环，现有共享预算保持。validator增加reviewed-source-type-field-recovery/v1，不改基础语义编译身份。族窗15pass；三相连模块1196pass/1fail106.82秒，唯一旧版本期望修正后单例1pass2.04秒（不冒称末版全窗）；首新夹具8失败及命令目录错误如实见implement。C03首12/续6只读，CodeBuddy/DeepSeek/max同会话exit0/no fallback，条件resume风险已按实际生产/恢复签名关闭，未跑测试/临床。取舍reviews/rv1006-reviewed-source-types-owner-disposition-20261008.md。新字段修复尚未真实运行；真不完整、来源歧义、其他关联问题仍拒，不能自动清空政策求通过。
 

@@ -3,7 +3,9 @@
 
 ### 单一当前用户流程表
 
-**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。源码97346cd8合法接续Job1342cac6a8484dba8fdf0b33148ded21已failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，3新物理调用177.849064秒/exit3，16组completed、17失败、73未执行。检查点c625c09abe634df3ad399d900de6e48b保留原答和负核对证明。三份实际请求零网络精确重放已确认对应核查确实运行：目标初答结构修正后，alignment明确指出候选增加原文未限定的资料种类；不是旧选择器未执行。18–20仍仅上游可复用。原Job/payload、原件、保护库和来源库保持，0共同发布/激活/签发。完整新工作稿及关联更正闭环仍未达。
+**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。源码d36c8818合法接续Jobf1cc48569ee44fc9933d4da44538b686已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，1新物理调用/173.484166秒/exit3，16组completed、17失败、73未执行；唯一模型调用48.204秒/stop，之后局部提案未发送，读取服务本地拒绝“找不到原会话”。检查点6d1c24ca0c9345ec92567e0df57d4f23保留负核对/原草稿/失败账本。1342的三请求零网络精确重放已证对应核查确实运行且草稿添加无源资料类型；本次是重启适配器缺少已验证草稿的局部接续身份，不是医学缺证。18–20仍仅上游可复用；原Job/payload、原件、保护库和来源库保持，0共同发布/激活/签发。完整新工作稿及关联更正闭环仍未达。
+
+**当前直接前置修复：** 完整要求快照接续受阻；真实请求与原模块证实Runner恢复full wire但未连接适配器，而简化运输替身没检查这条边界。保留完整会话恢复的严格真实消息门，新增内存中已验证快照的局部请求绑定，不伪造旧assistant回答。仅原有五个自足短字段接口可用；整包/单候选/多候选历史调用仍拒绝无历史会话。绑定位于真实来源及完整装配门之后，hash含batch/source/wire，冲突身份拒绝，不供应临床资格。既有预算和proof/发布保护保持，validator单列validated-snapshot-scoped-session/v1，不改编译身份。21族例含真实适配器与零请求故障；相连三模块1205passed/145.32秒/exit0/5SWIG，JUnit rv1006-scoped-snapshot-resume-connected-20261008-v1.xml。同批准C03增量8只读/34.667秒/exit0/no fallback，120min静默等待，无必修，未跑测试/病例。选择直接集成＋单同会话独审，不另开Phase或框架。旧局部字段修订实证如下，新接续绑定尚未产品实跑。
 
 **当前最小插入项与分工：** 影响完整要求快照；首因是合法负核对可指出过严资料类型，但现有仅补缺字段入口未被用于该已填字段。复用同一字段提案合同，仅在当前来源/候选/原答绑定的类型差额上允许再提案，宿主保留兄弟及其他字段，完整门和新语义核对重新运行；不复制核对者值、不采用旧批准、不刷新预算，同一字段本次不循环。直接集成＋单批准C03独审，因为改变局部修订边界；无需新执行节点或Phase。validator单列reviewed-source-type-field-recovery/v1，旧成功结果仍当前重验。15项族窗通过；首7pass/8fail为新增来源夹具结构不一致及公开序列化故意排除原答造成对象比较错误，已核JSON/proof/candidate实际保全后修测试，不松产品门。首次集中命令误写transport模块目录，exit4无测试；正确三相连模块1196passed/1failed106.82秒/exit1，仅旧validator期望，修断言后原例1pass2.04秒/exit0。不冒称末版全窗；产品未再改。C03实际CodeBuddy/DeepSeek/max/session01a11ce4…首12/续6只读、exit0/no fallback，120min静默等待，关闭条件resume疑问，未测试/临床；取舍reviews/rv1006-reviewed-source-types-owner-disposition-20261008.md。新修复尚未真实运行或医学采用。
 
