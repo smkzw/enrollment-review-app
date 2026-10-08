@@ -6838,7 +6838,8 @@ def test_alignment_prompt_preserves_current_and_future_native_columns(missing_he
     assert (batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()) == frozen
 
 
-def test_alignment_proof_binds_unselected_frozen_native_workflow_context():
+@pytest.mark.parametrize("changed", ["workflow", "note_mapping"])
+def test_alignment_proof_binds_unselected_frozen_native_workflow_context(changed):
     from app.agents.protocol_control_candidate_alignment import (
         SOURCE_CANDIDATE_ALIGNMENT_VERSION, SourceCandidateAlignment,
         bind_candidate_alignment, reusable_proven_alignment_items,
@@ -6855,9 +6856,13 @@ def test_alignment_proof_binds_unselected_frozen_native_workflow_context():
     frozen = bind_candidate_alignment(batch, inventory, coverage, wire, alignment,
                                      alignment.model_dump_json(exclude={"proofs"}))
     assert len(reusable_proven_alignment_items(batch, inventory, coverage, wire, frozen)) == 1
-    batch.known_workflow_stage_targets.append(batch.known_workflow_stage_targets[0].model_copy(
-        update={"workflow_stage_id": "stage:screening:another",
-                "review_stage": ReviewStage.SCREENING}))
+    if changed == "workflow":
+        batch.known_workflow_stage_targets.append(batch.known_workflow_stage_targets[0].model_copy(
+            update={"workflow_stage_id": "stage:screening:another",
+                    "review_stage": ReviewStage.SCREENING}))
+    else:
+        # Deliberately altered frozen linkage cannot borrow the previous proof.
+        batch.table_footnote_context_links = {batch.owned_units[0].structure_unit_id: {"1": ["other-note"]}}
     assert reusable_proven_alignment_items(batch, inventory, coverage, wire, frozen) == []
 
 

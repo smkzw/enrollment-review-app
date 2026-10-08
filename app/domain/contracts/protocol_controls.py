@@ -2621,8 +2621,8 @@ class ProtocolControlDispositionBatch(Phase5ControlModel):
             raise ValueError("context_structure_unit_ids 必须与 context_units 顺序和身份一致")
         if set(owned_ids) & set(context_ids):
             raise ValueError("同一批次的 owned/context 结构单元不得重叠")
-        if not set(self.table_footnote_context_links) <= set(owned_ids):
-            raise ValueError("表格脚注引用只能属于本批原文单元")
+        if not set(self.table_footnote_context_links) <= set(owned_ids) | set(context_ids):
+            raise ValueError("表格脚注引用只能属于本批原文或只读上下文单元")
         available = {unit.structure_unit_id: unit for unit in (*self.owned_units, *self.context_units)}
         for unit_id, notes in self.table_footnote_context_links.items():
             if available[unit_id].table_context is None or not notes:

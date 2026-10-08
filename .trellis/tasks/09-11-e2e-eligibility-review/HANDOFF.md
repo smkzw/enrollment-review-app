@@ -1,4 +1,4 @@
-# HANDOFF｜1006V1｜20组实际完成，表格核对范围修订，继续执行
+# HANDOFF｜1006V1｜标题脚注补齐来源关系，继续执行
 
 2026-10-08，用户已解除暂停；Goal实查active，Trellis in_progress，execution_paused_by_user=false。窗口未达，claims_complete=false。本记录是相连功能包里程碑，不是暂停。只维护本HANDOFF、implement当前表及review_index；历史运行在implement附录和Git保留，不按旧“当前/暂停”恢复。
 
@@ -10,13 +10,13 @@
 |---|---|
 | 唯一工作树 | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；.trellis/tasks/09-11-e2e-eligibility-review |
-| 本功能包基础代码 | 5f9585ed；17的自足局部恢复已实际完成，新增表格核对的真实表头和当前审核范围输入，不替医学采用 |
-| 当前终态/上游 | 13191716ea054d0d9ed026c189b574e6，failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED；声明上游f1cc48569ee44fc9933d4da44538b686 |
-| 失败检查点 | 21=49bebc7c76c4486d83d1aa717d8c4d35；已有草稿、实际负核对、原答和累计账本保留，17已完成，不改旧终态 |
+| 本功能包基础代码 | d51f5c9e；scope输入已实跑，补已选只读标题的真实脚注及编号关系，不替医学采用 |
+| 当前终态/上游 | 664a74a63376450a8688d8632e42a15b，failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED；声明上游13191716ea054d0d9ed026c189b574e6 |
+| 失败检查点 | 17=6a3eb542c5704917aea476a2fb132cb7；已有草稿、实际核对、原答和累计账本保留，不改旧终态 |
 | 产品模型 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high、65536输出；产品harness直接访问端点 |
 | 当前隔离库 | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 最新已执行产物 | 同上根目录/rv1006-scoped-snapshot-resume-api-20261008-v1；11新物理调用/527.983795秒/exit3，源码5f9585ed；20 completed、21失败、69未执行，17实际3调用完成，18–20沿冻结来源复用 |
-| 私有当前预检 | 同上根目录/rv1006-native-review-scope-preflight-20261008-v1.json；源1319，19reusable/1resume_partial/70refresh，17旧对应证明因新输入失效需刷新，21草稿可接续，0调用/0写/DBhash保持/exit0 |
+| 最新已执行产物 | 同上根目录/rv1006-native-review-scope-api-20261008-v1；12新物理调用/400.544216秒/exit3，源码d51f5c9e；16 completed、17失败、73未执行，旧Job/payload/来源库/保护库保持 |
+| 私有当前预检 | 同上根目录/rv1006-header-note-closure-preflight-20261008-v1.json；源1319，15reusable/75refresh，标题脚注影响表格材料，0调用/0写/DBhash保持/exit0 |
 | 外部可复查范围 | Git源码、合成测试、净化工程报告/索引；原件、DB、实际临床提示/原答与截图仅本机可读，不提交，hash不证明临床含义 |
 
 五分钟入口：本HANDOFF → implement当前表 → delivery_1006V1/03_ACCEPTANCE.md → review_index_20261006_1006V1.json → 新合法作业prepare/execute回执。不要重读全部历史，不复活旧失败Job。
@@ -25,7 +25,7 @@
 
 | 用户节点 | 已证 | 未达 |
 |---|---|---|
-| 完整有源要求包 | 内置DOCX官方Job1153e25b4eba40db964202a1c3ed07c3草稿修订21，23父条/86组件/141谓词，publishable；85发现/90深审计划冻结 | 最新实跑20完成、21失败、69未执行，scope/hydrate/gate依赖失败；当前新预检不等于新Job完成，publishable不是共同发布 |
+| 完整有源要求包 | 内置DOCX官方Job1153e25b4eba40db964202a1c3ed07c3草稿修订21，23父条/86组件/141谓词，publishable；85发现/90深审计划冻结 | 最新实跑16完成、17失败、73未执行，scope/hydrate/gate依赖失败；上游20完成属于旧材料，新15/75预检不等于新Job完成，publishable不是共同发布 |
 | 资料与事实 | 继承5文件24页/14组实际保存，458候选→407事实/40事件/11暴露；32资格候选关联30合格事实、426受限 | 不同分母非准确率。手写对象/数字位置仍有具体未决，新完整要求消费未证，不授予自动事实采用 |
 | 工作稿与原件 | 既有冻结计算/资格消费者，Ego真实原件导航；已收紧重复抬头及大空白 | 病例准备副本仍旧81组件/0controls；旧REVIEW_SOURCE_POLICY_NOT_READY不证明新141谓词失败；完整新工作稿未生成 |
 | 更正与历史 | 正式UI一次有源描述更正、Profile3→4、旧记录hash保持 | 该更正0规则关联；不是新完整审核结果重算，新旧审核报告闭环尚未达 |
@@ -35,7 +35,7 @@
 
 ## 3. 当前首错与最小修复
 
-1319实际跨过17局部接续阻断，21的新核对错误指向输入范围：同一行8个访视标记，当前候选绑定宿主冻结的筛选/基线2节点，旧核查要求同时新增后续治疗6列，并把通用记录主体误判成人群限制。只读证实该行11个context/475字符、8列原始表头齐全。新增表格核对输入列示原表头、全部冻结节点和既有逐列范围；未知列、脚注、当前节点承诺/准备后续义务及人群限制仍逐项核，不能把后续内容一律删除。模型须重新判断，没有改草稿或复制positive。原生proof scope/v2及全部节点进身份，旧hash不重写，非表格不变。三模块1208passed/112.41秒；末等值导入和说明后5相关例1.42秒，非全库末版重跑。新C03 9只读/141.817秒/exit0/no fallback，未测试/临床；所有者确认真实范围，不称所有表格已核。详细取舍reviews/rv1006-native-review-scope-owner-disposition-20261008.md。当前19/1/70合法预检已完成，新运行尚未执行，claims_complete=false。
+664a实际核对提出标题脚注未核清。只读完整冻结清单证实标题编号→原文关系存在，但分包仅跟随owned项目行，不跟随已选context表头，alignment也漏编号映射。最小修复沿已有原生链接补同批只读原文，不扩大owned或临床要求；原文、来源范围及映射进入proof/scope-v3。前一scope-v2范围补充仍保留，未知、例外及当前对后续的真实依赖不能删除。四相连模块1242passed/110.10秒/exit0；顾问后仅合成测试增强，7相关例0.53秒/exit0，不累加。C03实际CodeBuddy/DeepSeek/max/session01a11d1e…9只读/父174.178秒/exit0/no fallback，未测试/临床；其额外服务函数读取和不采纳全量脚注深审建议如实见reviews/rv1006-header-note-closure-owner-disposition-20261008.md。源1319新15/75预检0调用/0写/DB保持，新API运行尚未开始。上游20完成不能跨材料机械复用，claims_complete=false。
 
 ### 已通过实际运行的前一接续包（历史）
 

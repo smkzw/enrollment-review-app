@@ -3,11 +3,11 @@
 
 ### 单一当前用户流程表
 
-**现行里程碑（覆盖下方各历史“当前/未运行”）：** Goal active/claims_complete=false。5f9585ed合法Job13191716ea054d0d9ed026c189b574e6实际11新物理调用/527.983795秒/exit3，20深审completed、21 failed_final/SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED、69未执行，scope/hydrate/gate依赖失败。17的局部字段及新核对真实完成，18–20按冻结计划零调用复用；旧Job/payload、来源库和保护库保持，0共同发布/激活/签发。检查点21=49bebc7c76c4486d83d1aa717d8c4d35，不将20组当完整包。
+**现行里程碑（覆盖下方各历史“当前/未运行”）：** Goal active/claims_complete=false。d51f5c9e合法Job664a74a63376450a8688d8632e42a15b实际12新物理调用/400.544216秒/exit3，16深审completed、17 failed_final/SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED、73未执行，scope/hydrate/gate依赖失败。检查点17=6a3eb542c5704917aea476a2fb132cb7；旧Job/payload、来源库和保护库保持，0共同发布/激活/签发。上游1319的20组完成是旧材料下的成果，不直接变成新上下文的批准。
 
-**当前最小插入与分工：** 影响完整要求快照；实际负核对将原表后续治疗6列误作为当前义务，并把通用主体当新增人群限制。所有者只读该行8列原始表头齐全、11context/475字符；补表格alignment真实只读上下文、全部冻结节点及既有逐列边界，不能删除未知列/当前对未来义务的承诺或依赖，不改草稿或复制核对答案。原生scope/v2和全部节点进入proof，不反算旧hash；非表格不变。直接集成＋单新C03，因为任务范围和证据解释影响采用边界；不另开Phase/框架。三相连原模块1208passed/112.41秒/exit0/5SWIG；末等值常量导入/后续依赖说明/非表格断言后相关5例1.42秒，1087deselected，不宣称末全库重跑。C03实际CodeBuddy/DeepSeek/max/session01a11d09…141.817秒，9只读，exit0/no fallback，120min静默完成等待；未测试/临床，context完整性由所有者补查，非全表金标。取舍reviews/rv1006-native-review-scope-owner-disposition-20261008.md。
+**当前最小插入与分工：** 影响完整要求快照；真实核对提出标题脚注缺失，而冻结全清单已有实际编号映射，分包只送项目行脚注、漏已选只读标题的脚注。最小修复：已有context标题的实际链接闭合到同批只读原文，编号映射贯通解释/对应核对并进入proof，scope/v3；原owned/发现处置、非表格及无关批次保持，不推断医学含义。直接集成＋单新C03，因为来源关系改变核对及复用边界；不另开Phase/框架。四相连模块1242passed/110.10秒/exit0，末只加合成测试后相关7例0.53秒/58deselected/exit0，不累加或重复整库。C03实际CodeBuddy/DeepSeek/max/session01a11d1e…9只读/父174.178秒/exit0/no fallback，120min静默完成等待；未测试/临床，额外读取材料比较函数如实记。拒绝“所有全清单脚注必须深审”的过度扩展，补同编号跨表、多owned、错误/缺失context反例；取舍reviews/rv1006-header-note-closure-owner-disposition-20261008.md。
 
-**现行运行前预检：** 源1319、新范围身份，19reusable/1resume_partial/70refresh，17旧表格proof失效需刷新、21草稿接续、69尚未读；0调用/0写/DBhash保持/exit0，私有rv1006-native-review-scope-preflight-20261008-v1.json。首脚本错误假定17仍失败形状，KeyError/exit1/0调用/0写；通用现有服务预检修正，不改产品或临床数据。新API运行尚未开始。完整共同包、当前节点工作稿、有源更正→受影响重算→新旧审核报告仍未达。
+**现行运行前预检：** 源1319、标题脚注闭合后15reusable/75refresh，1–15保持；16起受影响表格须按新实际上下文重新核，其余未执行范围保留。0调用/0写/DBhash保持/exit0，私有rv1006-header-note-closure-preflight-20261008-v1.json。旧19/1/70预检及664a失败回执保留；首诊断误取kind属性为诊断AttributeError/0调用/0写，修后从完整冻结结构读回成功，不归因产品或模型。新API运行尚未开始。完整共同包、当前节点工作稿、有源更正→受影响重算→新旧审核报告仍未达。
 
 ### 之前接续包的历史说明（状态不覆盖上述现行里程碑）
 

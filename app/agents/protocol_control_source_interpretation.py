@@ -2850,6 +2850,8 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
             "heading_path": unit.heading_path,
             "excerpt": unit.excerpt,
             "table_context": unit.table_context.model_dump(mode="json") if unit.table_context else None,
+            **({"referenced_table_notes": batch.table_footnote_context_links[unit.structure_unit_id]}
+               if unit.structure_unit_id in batch.table_footnote_context_links else {}),
         }
         for unit in batch.context_units
     ]

@@ -18,7 +18,7 @@ from app.protocols.control_scope_sources import resolve_ancestor_scope_citation,
 
 SOURCE_CANDIDATE_ALIGNMENT_VERSION = "phase5/control-source-candidate-alignment/v8"
 EVIDENCE_POLICY_ALIGNMENT_VERSION = "phase5/control-evidence-policy-alignment/v2"
-NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION = "native-table-review-scope/v2"
+NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION = "native-table-review-scope/v3"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
@@ -288,6 +288,7 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
                     units[statement.structure_unit_id], batch.context_units)],
                 "read_only_context_sources": [unit.model_dump(mode="json")
                     for unit in batch.context_units],
+                "referenced_table_notes": batch.table_footnote_context_links,
             }} if units[statement.structure_unit_id].table_context is not None else {}),
             "allowed_candidate_atom_quotes": [
                 atom.statement
@@ -371,6 +372,7 @@ def _alignment_input_identity(batch, interpretation, wire, item):
                            **({"native_visit_correspondence": "v1",
                                "native_review_scope": NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
                                "context_units": [row.model_dump(mode="json") for row in batch.context_units],
+                               "referenced_table_notes": batch.table_footnote_context_links,
                                "workflow_stage_sources": [stage.model_dump(mode="json")
                                    for stage in batch.known_workflow_stage_targets],
                                "bound_visit_sources": [stage.model_dump(mode="json")

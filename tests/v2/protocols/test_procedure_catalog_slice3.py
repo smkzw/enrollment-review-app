@@ -496,6 +496,40 @@ def test_native_note_context_requires_all_note_parts_not_scientific_notation(mis
     assert [block.model_dump(mode="json") for block in blocks] == before
 
 
+def test_same_number_notes_remain_bound_to_their_original_table():
+    from app.domain.contracts.protocol_controls import ProtocolStructureUnit, TableCellContext
+    from app.protocols.procedure_catalog import table_footnote_context_links
+
+    blocks = []
+    for table_index in range(2):
+        matrix, _ = _matrix([["项目", "基线期^1"], ["检查", "X"]])
+        offset = len(blocks)
+        blocks.extend(block.model_copy(update={
+            "source_ref": block.source_ref.replace("body.t0", f"body.t{table_index}"),
+            "block_order": block.block_order + offset,
+        }) for block in matrix)
+        blocks.append(StructureBlock(
+            source_ref=f"body.p{table_index}", document_part=DocumentPart.BODY,
+            section_index=0, block_order=len(blocks), kind=BlockKind.PARAGRAPH,
+            text=f"第{table_index}张表的访视说明",
+            numbering=NumberingRef(num_id=7 + table_index, level=0, start=1),
+        ))
+    units = [ProtocolStructureUnit(
+        structure_unit_id="unit:" + block.source_ref, source_ref=block.source_ref,
+        member_source_refs=[block.source_ref], source_span_ids=["span:" + block.source_ref],
+        unit_kind="table_row" if block.table_path else "list_item", heading_path=["访视安排"],
+        source_order=block.block_order, study_phase=StudyPhase.PHASE_II,
+        phase_scopes=[PhaseScope.SHARED], excerpt=block.text,
+        table_context=(TableCellContext(table_path=block.table_path, row_index=block.table_path[-2],
+                        column_index=block.table_path[-1], member_cell_paths=[block.table_path])
+                       if block.table_path else None),
+    ) for block in blocks if block.kind == BlockKind.PARAGRAPH]
+    assert table_footnote_context_links(blocks, units) == {
+        f"unit:body.t{index}.r0.c1.p0": {"1": [f"unit:body.p{index}"]}
+        for index in range(2)
+    }
+
+
 @pytest.mark.parametrize("trailing_heading", [False, True])
 def test_final_nested_flow_note_does_not_require_a_later_parent(trailing_heading):
     blocks, _ = _matrix([

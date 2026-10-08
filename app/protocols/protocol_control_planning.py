@@ -1312,6 +1312,20 @@ def plan_protocol_control_deep_batches_from_discovery(
     batch_total = len(chunks)
     for number, (owned, context) in enumerate(chunks, start=1):
         owned_ids = [unit.structure_unit_id for unit in owned]
+        # Headers are read-only sources too: their notes may qualify the entire
+        # visit column, not just the marker on the action row.
+        linked_notes = {
+            unit.structure_unit_id: note_links[unit.structure_unit_id]
+            for unit in (*owned, *context)
+            if unit.structure_unit_id in note_links
+        }
+        context_by_id = {unit.structure_unit_id: unit for unit in context}
+        for notes in linked_notes.values():
+            for ids in notes.values():
+                for unit_id in ids:
+                    if unit_id not in owned_ids:
+                        context_by_id[unit_id] = unit_by_id[unit_id]
+        context = sorted(context_by_id.values(), key=lambda unit: (unit.source_order, unit.structure_unit_id))
         context_ids = [unit.structure_unit_id for unit in context]
         action_kinds, procedure_ids = _owned_action_gate_metadata(
             owned, procedure_targets
@@ -1334,8 +1348,8 @@ def plan_protocol_control_deep_batches_from_discovery(
                 table_context_reading_bounds={unit_id: continuation_bounds[unit_id]
                                              for unit_id in owned_ids if unit_id in continuation_bounds},
                 table_footnote_context_links={
-                    unit_id: {number: list(ids) for number, ids in note_links[unit_id].items()}
-                    for unit_id in owned_ids if unit_id in note_links
+                    unit_id: {number: list(ids) for number, ids in notes.items()}
+                    for unit_id, notes in linked_notes.items()
                 },
                 owned_structure_unit_ids=owned_ids,
                 context_structure_unit_ids=context_ids,

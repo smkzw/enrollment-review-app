@@ -139,7 +139,8 @@ def test_native_table_notes_are_readonly_and_change_only_affected_batch_identity
     )
     assert old.plan_id != new.plan_id
     assert not _same_deep_batch_material(old.batches[0], new.batches[0])
-    assert all(_same_deep_batch_material(a, b) for a, b in zip(old.batches[1:], new.batches[1:]))
+    assert len(old.batches) == len(new.batches)
+    assert all(_same_deep_batch_material(a, b) for a, b in zip(old.batches[1:], new.batches[1:], strict=True))
     assert new.batches[0].context_structure_unit_ids == [note.structure_unit_id]
     assert new.batches[0].owned_structure_unit_ids == [row.structure_unit_id]
     assert (note.structure_unit_id in new.deep_structure_unit_ids) == (
@@ -163,6 +164,61 @@ def test_native_table_notes_are_readonly_and_change_only_affected_batch_identity
             manifest, discovery, decisions,
             table_footnote_context_links={row.structure_unit_id: {"2": ["foreign"]}},
         )
+
+
+@pytest.mark.parametrize("batch_size", [1, 2])
+def test_readonly_header_notes_close_without_promoting_notes_to_owned(batch_size):
+    from app.domain.contracts.protocol_controls import TableCellContext
+    from app.agents.protocol_control_source_interpretation import build_source_interpretation_prompt
+    from app.services.protocol_control_execution import _same_deep_batch_material
+
+    manifest = _manifest(7)
+    header, row, note, unrelated, foreign_note, sibling, last = manifest.units
+    for unit, row_index, text in ((header, 0, "访视 | 基线期^2"), (row, 6, "检查 | X")):
+        unit.source_ref = f"body.t0.r{row_index}.c0.p0"
+        unit.member_source_refs = [unit.source_ref]
+        unit.excerpt = text
+        unit.unit_kind = StructureUnitKind.TABLE_ROW
+        unit.table_context = TableCellContext(table_path=(row_index, 0), row_index=row_index,
+                                             column_index=0, member_cell_paths=[(row_index, 0)])
+    note.heading_path = foreign_note.heading_path = ["表后说明"]
+    unrelated.heading_path = sibling.heading_path = last.heading_path = ["其他章节"]
+    discovery = plan_protocol_control_discovery(manifest, max_units_per_batch=7)
+    decisions = [[ProtocolControlDiscoveryDecision(
+        structure_unit_id=unit.structure_unit_id,
+        disposition=(ProtocolControlDiscoveryDisposition.CANDIDATE if unit in (row, unrelated, sibling, last)
+                     else ProtocolControlDiscoveryDisposition.NON_CONTROL),
+        rationale="有源处置",
+    ) for unit in manifest.units]]
+    before = manifest.model_dump(mode="json")
+    old = plan_protocol_control_deep_batches_from_discovery(
+        manifest, discovery, decisions, max_owned_units_per_batch=batch_size,
+    )
+    new = plan_protocol_control_deep_batches_from_discovery(
+        manifest, discovery, decisions, max_owned_units_per_batch=batch_size,
+        table_footnote_context_links={header.structure_unit_id: {"2": [note.structure_unit_id]}},
+    )
+    batch = new.batches[0]
+    assert batch.owned_structure_unit_ids == [row.structure_unit_id]
+    assert batch.context_structure_unit_ids == [header.structure_unit_id, note.structure_unit_id]
+    assert batch.table_footnote_context_links == {header.structure_unit_id: {"2": [note.structure_unit_id]}}
+    assert foreign_note.structure_unit_id not in batch.context_structure_unit_ids
+    assert not _same_deep_batch_material(old.batches[0], batch)
+    assert old.plan_id != new.plan_id
+    assert len(old.batches) == len(new.batches)
+    assert all(_same_deep_batch_material(a, b) for a, b in zip(old.batches[1:], new.batches[1:], strict=True))
+    assert ProtocolControlDiscoveryToDeepPlan.model_validate(new.model_dump(mode="json")) == new
+    assert '"referenced_table_notes": {"2": ["unit-002"]}' in build_source_interpretation_prompt(batch)
+    assert manifest.model_dump(mode="json") == before
+    broken = new.model_dump(mode="json")
+    broken["batches"][0]["table_footnote_context_links"]["foreign-header"] = {"2": [note.structure_unit_id]}
+    with pytest.raises(ValueError, match="只读上下文单元"):
+        ProtocolControlDiscoveryToDeepPlan.model_validate(broken)
+    omitted = new.model_dump(mode="json")
+    omitted["batches"][0]["context_units"].pop()
+    omitted["batches"][0]["context_structure_unit_ids"].pop()
+    with pytest.raises(ValueError, match="无法闭合"):
+        ProtocolControlDiscoveryToDeepPlan.model_validate(omitted)
 
 
 def test_deep_plan_preserves_source_action_and_exact_procedure_targets() -> None:
