@@ -385,6 +385,8 @@ def build_source_scope_correction_prompt(
         "若原文范围逐字存在于本行全部标记列的有源标题中，可在 scope_quote 引用该共同短语，"
         "scope_context_unit_id 仍为 null；affected_stage/time_words 仅可引用该范围内的原词。"
         "不同标记列没有同一范围时不得压成一个阶段；保留具体疑问。缺标题来源、访视未清或脚注有疑问时不能猜。"
+        "只有一个标记列且可确认时，scope_quote 保留该列完整 header_text，不只摘一个时期或日数；"
+        "完整表头共同说明同一次访视，不把组成短语数量当访视次数。"
         "上轮错误字段不可照抄：若共享范围不在本条动作前的同一来源单元、所属标题或表格标题中，且无上述可核标签，"
         "scope_quote 填 null；本条没有对应时间原文则 time_words 填空数组。"
         "本条括号内的临床子条件若有独立回溯期限也要逐项列出，文献书名的版本年份不算；"
@@ -2365,9 +2367,101 @@ def shared_prohibition_preserves_source(statement, atom) -> bool:
     )
 
 
+def native_schedule_visit_scope_is_preserved(batch, statement, candidate) -> bool:
+    """Prove one marked column against its frozen, physically sourced visit node."""
+    if (statement.force not in {"required", "descriptive"}
+            or not set(statement.decision_functions) <= {"action", "time_validity"}
+            or "action" not in statement.decision_functions
+            or statement.exception_words or statement.unresolved
+            or statement.scope_context_unit_id is not None or not statement.time_words
+            or _unreported_time_fragments(statement)):
+        return False
+    unit = next((unit for unit in batch.owned_units
+                 if unit.structure_unit_id == statement.structure_unit_id), None)
+    if (unit is None or unit.table_context is None
+            or unit.source_ref.rpartition(".r")[2] != str(unit.table_context.row_index)
+            or unit.unit_kind.value != "table_row"
+            or unit.structure_unit_id not in candidate.source_structure_unit_ids
+            or normalize_source_excerpt(statement.quoted_text) != normalize_source_excerpt(unit.excerpt)):
+        return False
+    columns = schedule_column_scope(unit, batch.context_units)
+    if len(columns) != 1:
+        return False
+    column = columns[0]
+    scope = normalize_source_excerpt(statement.scope_quote or "")
+    if (not column.header_source_refs or column.visit_unresolved or column.marker_footnotes
+            or column.boundary_side != "at_or_before_baseline"
+            or scope != normalize_source_excerpt(column.header_text)
+            or any(normalize_source_excerpt(word) not in scope for word in statement.time_words)
+            or (statement.affected_stage and normalize_source_excerpt(statement.affected_stage) not in scope)):
+        return False
+    header_sources = {}
+    for header in batch.context_units:
+        if not set(header.member_source_refs) & set(column.header_source_refs):
+            continue
+        if header.member_texts is None or len(header.member_source_refs) != len(header.member_texts):
+            return False
+        if (header.member_source_span_ids is not None
+                and len(header.member_source_span_ids) != len(header.member_source_refs)):
+            return False
+        for index, (ref, text) in enumerate(zip(
+            header.member_source_refs, header.member_texts or [], strict=True,
+        )):
+            if ref not in column.header_source_refs:
+                continue
+            spans = (header.member_source_span_ids[index] if header.member_source_span_ids is not None
+                     else [span for span in header.source_span_ids if span.endswith(f"::{ref}")])
+            if len(spans) != 1 or ref in header_sources or spans[0] not in header.source_span_ids:
+                return False
+            header_sources[ref] = (spans[0], normalize_source_excerpt(text))
+    if set(header_sources) != set(column.header_source_refs):
+        return False
+    nodes = [node for node in candidate.review_node_bindings if node.role == ReviewNodeRole.DECIDE_AT_NODE]
+    if len(nodes) != 1:
+        return False
+    stages = [stage for stage in batch.known_workflow_stage_targets
+              if stage.workflow_stage_id == nodes[0].workflow_stage_id]
+    if len(stages) != 1:
+        return False
+    stage = stages[0]
+    if (stage.review_stage != column.review_stage
+            or normalize_source_excerpt(stage.visit_instance or "") != scope
+            or len(stage.source_span_ids) != len(stage.source_excerpts)):
+        return False
+    stage_sources = set(zip(stage.source_span_ids,
+                            map(normalize_source_excerpt, stage.source_excerpts), strict=True))
+    if stage_sources != set(header_sources.values()):
+        return False
+    row_sources = set()
+    if unit.member_texts is None or len(unit.member_texts) != len(unit.member_source_refs):
+        return False
+    if unit.member_source_span_ids is not None and len(unit.member_source_span_ids) != len(unit.member_source_refs):
+        return False
+    for index, (ref, text) in enumerate(zip(unit.member_source_refs, unit.member_texts, strict=True)):
+        if not text.strip():
+            continue
+        spans = (unit.member_source_span_ids[index] if unit.member_source_span_ids is not None
+                 else [span for span in unit.source_span_ids if span.endswith(f"::{ref}")])
+        if len(spans) != 1 or spans[0] not in unit.source_span_ids:
+            return False
+        row_sources.add((spans[0], normalize_source_excerpt(text)))
+    return any(
+        atom.kind == ControlObligationKind.COMPLETE_OR_VERIFY
+        and normalize_source_excerpt(atom.statement) == normalize_source_excerpt(statement.quoted_text)
+        and set(atom.source_span_ids) <= set(unit.source_span_ids)
+        and set(atom.source_span_ids) & set(unit.source_span_ids)
+        and len(atom.source_span_ids) == len(atom.source_excerpts)
+        and row_sources == set(zip(atom.source_span_ids,
+                                   map(normalize_source_excerpt, atom.source_excerpts), strict=True))
+        for group in candidate.obligation_expression.groups for atom in group.atoms
+    )
+
+
 def simple_visit_action_preserves_time(batch, statement, candidate) -> bool:
     """Only the complete frozen visit scope may be carried by the bound stage."""
 
+    if native_schedule_visit_scope_is_preserved(batch, statement, candidate):
+        return True
     if (statement.force not in {"required", "descriptive"}
             or "action" not in statement.decision_functions
             or statement.exception_words or statement.unresolved

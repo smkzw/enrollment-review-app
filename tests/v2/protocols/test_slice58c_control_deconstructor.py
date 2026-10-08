@@ -6639,6 +6639,191 @@ def _native_time_recheck_batch():
     return batch, inventory
 
 
+def _native_visit_candidate_material(*, label=None):
+    batch, inventory = _native_time_recheck_batch()
+    unit = batch.owned_units[0]
+    if label is not None:
+        unit.member_texts[0] = label
+        unit.excerpt = f"{label} | X"
+        inventory.statements[0].quoted_text = unit.excerpt
+    scope = "基线期 / V2 / D0"
+    inventory.statements[0].scope_quote = scope
+    inventory.statements[0].affected_stage = "基线期"
+    inventory.statements[0].time_words = ["V2", "D0"]
+    stage = KnownWorkflowStageTarget(workflow_stage_id="stage:baseline:native",
+        review_stage=ReviewStage.BASELINE, display_name=scope, visit_instance=scope,
+        source_span_ids=["snapshot::body.t0.r0.c2.p0", "snapshot::body.t0.r1.c2.p0",
+                         "snapshot::body.t0.r2.c2.p0"],
+        source_excerpts=["基线期", "V2", "D0"])
+    batch.known_workflow_stage_targets = [stage]
+    candidate = _candidate().model_dump(mode="json")
+    candidate.update(source_structure_unit_ids=[unit.structure_unit_id],
+                     source_span_ids=unit.source_span_ids,
+                     applicability_expression=None, exception_expression=None)
+    atom = candidate["obligation_expression"]["groups"][0]["atoms"][0]
+    atom.update(kind="complete_or_verify", statement=unit.excerpt,
+                source_span_ids=unit.source_span_ids, source_excerpts=unit.member_texts,
+                evaluation=_evaluation(unit.excerpt, unit.source_span_ids[0], unit.member_texts[0]))
+    candidate["review_node_bindings"][0].update(workflow_stage_id=stage.workflow_stage_id,
+                                                review_stage="baseline")
+    evidence = candidate["minimum_evidence"][0]
+    evidence.update(workflow_stage_ids=[stage.workflow_stage_id], due_stage="baseline",
+                    source_policy=_evidence_policy(unit.source_span_ids[0], unit.excerpt))
+    candidate = ProtocolControlAgentWireCandidate.model_validate(candidate)
+    wire = ProtocolControlAgentWire(wire_version=CONTROL_AGENT_WIRE_VERSION,
+        dispositions=[ProtocolControlAgentWireDisposition(
+            structure_unit_id=unit.structure_unit_id,
+            disposition=StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+            linked_official_code=None, linked_procedure_catalog_item_id=None,
+            linked_procedure_catalog_item_ids=[], notes=None)], candidate_drafts=[candidate])
+    return batch, inventory, wire
+
+
+@pytest.mark.parametrize("mutation", [None, "one_time_word", "spacing", "wrong_column",
+    "missing_header", "missing_stage_source", "changed_header_quote", "wrong_stage",
+    "extra_node", "partial_scope", "extra_time", "partial_action", "marker_footnote",
+    "unresolved", "exception", "multiple_columns", "changed_action", "partial_row",
+    "missing_member_spans", "hidden_duration"])
+def test_native_visit_components_require_complete_physical_correspondence(mutation):
+    from app.agents.protocol_control_source_interpretation import native_schedule_visit_scope_is_preserved
+    batch, inventory, wire = _native_visit_candidate_material()
+    statement, candidate = inventory.statements[0], wire.candidate_drafts[0]
+    unit, stage = batch.owned_units[0], batch.known_workflow_stage_targets[0]
+    if mutation == "one_time_word":
+        statement.time_words = ["D0"]
+    elif mutation == "spacing":
+        statement.scope_quote = "基线期  /  V2 / D0"
+    elif mutation == "wrong_column":
+        stage.source_span_ids[0] = "snapshot::body.t0.r0.c1.p0"
+    elif mutation == "missing_header":
+        batch.context_units = batch.context_units[1:]
+    elif mutation == "missing_stage_source":
+        stage.source_span_ids = stage.source_span_ids[1:]
+        stage.source_excerpts = stage.source_excerpts[1:]
+    elif mutation == "changed_header_quote":
+        stage.source_excerpts[-1] = "D1"
+    elif mutation == "wrong_stage":
+        stage.review_stage = ReviewStage.SCREENING
+    elif mutation == "extra_node":
+        candidate.review_node_bindings.append(candidate.review_node_bindings[0].model_copy())
+    elif mutation == "partial_scope":
+        statement.scope_quote = "V2 / D0"
+    elif mutation == "extra_time":
+        statement.time_words.append("筛选前7天")
+    elif mutation == "partial_action":
+        statement.quoted_text = "完成用药核对"
+    elif mutation == "marker_footnote":
+        unit.member_texts[-1] = "X^5"
+        unit.excerpt = "完成用药核对 | X^5"
+        statement.quoted_text = unit.excerpt
+    elif mutation == "unresolved":
+        statement.unresolved = ["尚待核对访视"]
+    elif mutation == "exception":
+        statement.exception_words = "除非已完成"
+    elif mutation == "multiple_columns":
+        unit.member_source_refs.append("body.t0.r3.c1.p0")
+        unit.member_texts.append("X")
+        unit.source_span_ids.append("snapshot::body.t0.r3.c1.p0")
+        unit.table_context.member_cell_paths.append((3, 1))
+        unit.excerpt += " | X"
+        statement.quoted_text = unit.excerpt
+    elif mutation == "changed_action":
+        candidate.obligation_expression.groups[0].atoms[0].statement = "完成另一操作"
+    elif mutation == "partial_row":
+        unit.source_ref += ".c2.p0"
+    elif mutation == "missing_member_spans":
+        batch.context_units[0].member_source_span_ids = [[]]
+    elif mutation == "hidden_duration":
+        unit.member_texts[0] = "完成用药核对；给药前7天"
+        unit.excerpt = "完成用药核对；给药前7天 | X"
+        statement.quoted_text = unit.excerpt
+        candidate.obligation_expression.groups[0].atoms[0].statement = unit.excerpt
+        candidate.obligation_expression.groups[0].atoms[0].source_excerpts[0] = unit.excerpt
+    frozen = batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()
+    valid = mutation in {None, "one_time_word", "spacing"}
+    assert native_schedule_visit_scope_is_preserved(batch, statement, candidate) == valid
+    if mutation == "missing_member_spans":
+        with pytest.raises(ValueError):
+            source_statement_coverage(batch, inventory, wire)
+        assert (batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()) == frozen
+        return
+    coverage = source_statement_coverage(batch, inventory, wire)[0]
+    assert coverage.status == "candidate_linked"
+    if valid:
+        assert coverage.action_candidate_indexes == [0]
+        assert coverage.candidate_indexes == []  # Position correspondence is not semantic acceptance.
+    assert (batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()) == frozen
+
+
+def test_native_visit_candidate_alignment_is_saved_and_context_changes_invalidate_proof():
+    from app.agents.protocol_control_candidate_alignment import (
+        SOURCE_CANDIDATE_ALIGNMENT_VERSION, SourceCandidateAlignment,
+        bind_candidate_alignment, build_candidate_alignment_prompt,
+        reusable_proven_alignment_items, validate_candidate_alignment,
+    )
+    batch, inventory, wire = _native_visit_candidate_material()
+    source = inventory.statements[0].quoted_text
+    alignment = SourceCandidateAlignment.model_validate({
+        "version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+        "items": [{"statement_index": 0, "candidate_index": 0,
+                   "decision": "fully_expressed", "source_excerpt": source,
+                   "candidate_atom_quotes": [source], "unresolved_dimensions": []}],
+    })
+    coverage = source_statement_coverage(batch, inventory, wire)
+    validate_candidate_alignment(batch, inventory, coverage, wire, alignment)
+    prompt = build_candidate_alignment_prompt(batch, inventory, wire, [(0, 0)])
+    assert "bound_visit_sources" in prompt and "snapshot::body.t0.r2.c2.p0" in prompt
+    frozen = bind_candidate_alignment(batch, inventory, coverage, wire, alignment,
+                                      alignment.model_dump_json(exclude={"proofs"}))
+    saved = SourceCandidateAlignment.model_validate_json(frozen.model_dump_json())
+    assert len(reusable_proven_alignment_items(batch, inventory, coverage, wire, saved)) == 1
+    batch.context_units[0].member_texts[0] = "修订后的列名"
+    assert reusable_proven_alignment_items(batch, inventory, coverage, wire, saved) == []
+
+
+def test_native_visit_correspondence_does_not_approve_an_extra_evidence_restriction():
+    from app.agents.protocol_control_candidate_alignment import (
+        SOURCE_CANDIDATE_ALIGNMENT_VERSION, SourceCandidateAlignment, validate_candidate_alignment,
+    )
+    batch, inventory, wire = _native_visit_candidate_material()
+    source = inventory.statements[0].quoted_text
+    wire.candidate_drafts[0].minimum_evidence[0].required_source_types = ["指定原始报告单"]
+    alignment = SourceCandidateAlignment.model_validate({
+        "version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+        "items": [{"statement_index": 0, "candidate_index": 0,
+                   "decision": "fully_expressed", "source_excerpt": source,
+                   "candidate_atom_quotes": [source], "unresolved_dimensions": []}],
+    })
+    with pytest.raises(ValueError):
+        validate_candidate_alignment(batch, inventory, source_statement_coverage(batch, inventory, wire),
+                                     wire, alignment)
+
+
+@pytest.mark.parametrize("label,valid", [
+    ("完成用药核对^7", True), ("完成12导联心电图检查", True),
+    ("完成检查且结果≥8", False), ("完成检查（最多2次）", False),
+    ("完成检查（最少2次）", False), ("完成检查（多于2次）", False),
+    ("完成检查且结果＞8", False), ("完成检查且结果＜8", False),
+])
+def test_native_visit_literal_action_numbers_are_not_automatically_thresholds(label, valid):
+    from app.agents.protocol_control_candidate_alignment import (
+        SOURCE_CANDIDATE_ALIGNMENT_VERSION, SourceCandidateAlignment, validate_candidate_alignment,
+    )
+    batch, inventory, wire = _native_visit_candidate_material(label=label)
+    source = inventory.statements[0].quoted_text
+    alignment = SourceCandidateAlignment.model_validate({
+        "version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+        "items": [{"statement_index": 0, "candidate_index": 0, "decision": "fully_expressed",
+                   "source_excerpt": source, "candidate_atom_quotes": [source], "unresolved_dimensions": []}],
+    })
+    coverage = source_statement_coverage(batch, inventory, wire)
+    if valid:
+        validate_candidate_alignment(batch, inventory, coverage, wire, alignment)
+    else:
+        with pytest.raises(ValueError, match="数值原文"):
+            validate_candidate_alignment(batch, inventory, coverage, wire, alignment)
+
+
 @pytest.mark.parametrize("variant", ["valid", "other_column", "mixed", "partial_quote", "footnote", "no_header", "subword"])
 def test_native_table_time_selects_recheck_without_authorizing_review_time(variant):
     from app.agents.protocol_control_source_interpretation import (

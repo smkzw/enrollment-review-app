@@ -3,7 +3,11 @@
 
 ### 单一当前用户流程表
 
-**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。源码5bac5819合法接续Jobb9d2b85f853d4e6a9c2b61388f683826已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID，2新物理调用153.514735秒/exit3，16组completed、17失败、73未执行；18–20仅前置可复用，不冒称本Job完成。检查点cc41a12ecadf4733b9d2283e1a1f2b75保存原答/草稿/来源/累计attempt。上游400f018e为2调用178.479445秒、7c5d744d为2调用116.304107秒、42e54739为7调用199.182118秒、53021为36调用1129.773510秒/19完成，各运行分开。原Job/payload、原件、保护库、来源库保持，0共同发布/激活/签发。
+**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。源码5876dea9合法接续Job442ede7a902548d885e6a01bf82f0ef0已failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，3新物理调用152.314000秒/exit3，16组completed、17失败、73未执行。检查点31a0f863234344568d90628fe5b7d04b已保存成功来源范围修正、旧草稿及累计attempt；18–20仍仅上游可复用，不当本Job完成。原Job/payload、原件、保护库和来源库保持，0共同发布/激活/签发。完整新工作稿及关联更正闭环仍未达。
+
+**当前相连功能包：** 直接集成＋单批准C03，因为冻结原生访视与已有候选对应影响采用边界。整行/唯一列/全部物理表头/唯一决定节点/完整分格来源共同证明time_words多个组成词属于同一次访视；仅选择action候选，仍candidate_linked，资料限制/关联/脚注含义由既有alignment核查。不伪造祖先标题引用、不拼临床来源、不直接采用；native上下文及绑定节点进入proof身份，validator增加native-table-visit-correspondence/v1。比较方向及真实阈值仍强制原predicate，名称数字/脚注编号在完整逐字动作中不误当阈值。1250passed/108.29秒/exit0相连三模块；末比较词/policy族32passed/1.17秒/exit0，重叠不累加。首窗1225pass19fail皆新增fixture闭包不一致，后少量故障夹具已据实际数组修正，不松门。C03首293.349/续117.301秒、CodeBuddy/DeepSeek/max同会话、exit0/no fallback，120min静默等待；首17工具超8，无测试/临床，末比较词由所有者验证。取舍reviews/rv1006-native-visit-correspondence-owner-disposition-20261008.md。真实零调用预检v3为19reusable/2resume_partial/69refresh、3时间组成词对应true、action[1]/accepted空、DBhash保持。新Job未执行；同行多候选及表头脚注全局含义残余明确，不把技术接线当临床忠实。
+
+### 历史相连功能包说明（不覆盖上方现行状态）
 
 **本次实质变化：** v3来源补核入口已实际执行，但第二答夹杂自我修改文字，不是合法JSON，来源未应用。选择直接集成＋单既有C03：局部格式恢复影响失败分类和采用边界，需只读挑战。仅json_invalid按同一范围原提示重交一次并扣旧source_repairs；缺字段、正确JSON错ID、传输和语义错误不走语法重试。原答hash/session/类型化位置保存，耗尽仍SOURCE_SCOPE_CORRECTION_JSON_INVALID，不转成研究者判断；来源/兄弟/原一次目标门保持。validator局部恢复v4，不声称全历史scope计数已完整。相连三模块1224passed/1failed/102.85秒/exit1，仅旧版本断言v3→v4修正，单项复验1passed/2.00秒/exit0；不冒称末版全库通过。C03同CodeBuddy/DeepSeek/max/8只读/exit0/no fallback，120min静默完成等待，无必须修，未跑测试或临床；取舍见reviews/rv1006-scope-json-recovery-owner-disposition-20261008.md。预检首次漏PYTHONPATH为请求前导入错误/0调用/0写，修诊断入口，不松产品门。以下v3/v2材料为上轮证据。
 

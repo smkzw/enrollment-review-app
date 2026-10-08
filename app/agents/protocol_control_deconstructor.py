@@ -4454,7 +4454,9 @@ def source_statement_coverage(
 ) -> list[SourceStatementCoverage]:
     """Record literal source-to-output links without inferring clinical equivalence."""
 
-    from .protocol_control_source_interpretation import shared_prohibition_preserves_source
+    from .protocol_control_source_interpretation import (
+        native_schedule_visit_scope_is_preserved, shared_prohibition_preserves_source,
+    )
 
     unit_spans = {
         unit.structure_unit_id: set(unit.source_span_ids)
@@ -4477,7 +4479,8 @@ def source_statement_coverage(
                 and shared_prohibition_preserves_source(statement, atom)
                 for group in candidate.obligation_expression.groups for atom in group.atoms
             )
-            time_scope_preserved = shared_prohibition or _candidate_preserves_source_time_words(
+            native_visit_scope = native_schedule_visit_scope_is_preserved(batch, statement, candidate)
+            time_scope_preserved = native_visit_scope or shared_prohibition or _candidate_preserves_source_time_words(
                 statement, candidate, unit_spans[statement.structure_unit_id]
             )
             if time_scope_preserved and any(
@@ -4572,7 +4575,9 @@ def source_statement_coverage(
                     if statement.force in {"required", "prohibited", "recommended"}
                     else candidate_roles
                 )
-            if expressed:
+            # Physical visit correspondence selects a semantic check; it is not
+            # proof that the candidate's policies and other relations are faithful.
+            if expressed and not native_visit_scope:
                 linked_candidates.append(candidate_index)
         disposition = dispositions[statement.structure_unit_id]
         quote = normalize_source_excerpt(statement.quoted_text)

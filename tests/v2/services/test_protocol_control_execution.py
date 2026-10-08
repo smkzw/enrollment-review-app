@@ -5696,7 +5696,8 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   protocol_control_execution_module.SOURCE_COVERAGE_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
                   "native-row-source-normalization/v1",
-                  "native-table-scope-recovery/v4"))
+                  "native-table-scope-recovery/v4",
+                  "native-table-visit-correspondence/v1"))
     )
 
 

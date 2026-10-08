@@ -80,9 +80,9 @@ def require_evidence_policy_alignment(batch, interpretation, coverage, wire, ali
         raise SourceCandidateAlignmentValidationError("资料来源限制缺少绑定当前候选与原文的核对证明")
 
 _COMPARISON_WORDS = (
-    (r"(?:≥|>=|大于等于|不小于|至少|不少于|不低于|以上)", "gte"),
-    (r"(?:≤|<=|小于等于|不大于|不多于|至多|不超过|不高于|以下)", "lte"),
-    (r"(?:>(?!=)|(?<!不)大于(?!等于)|(?<!不)超过|(?<!不)高于)", "gt"),
+    (r"(?:≥|>=|大于等于|不小于|至少|最少|不少于|不低于|以上)", "gte"),
+    (r"(?:≤|<=|小于等于|不大于|不多于|至多|最多|不超过|不高于|以下)", "lte"),
+    (r"(?:>(?!=)|(?<!不)大于(?!等于)|(?<!不)多于|(?<!不)超过|(?<!不)高于)", "gt"),
     (r"(?:<(?!=)|(?<!不)小于(?!等于)|(?<!不)少于|(?<!不)低于)", "lt"),
 )
 _NUMBER = re.compile(r"(?<![\d.])\d+(?:\.\d+)?(?![\d.])")
@@ -252,6 +252,12 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
             "required_source_excerpt": statement.quoted_text,
             "source_statement": statement.model_dump(mode="json"),
             "source_unit": units[statement.structure_unit_id].excerpt,
+            "bound_visit_sources": [stage.model_dump(mode="json")
+                for stage in batch.known_workflow_stage_targets
+                if any(node.workflow_stage_id == stage.workflow_stage_id
+                       for node in candidate.review_node_bindings)],
+            "native_table_source": units[statement.structure_unit_id].model_dump(mode="json")
+                if units[statement.structure_unit_id].table_context is not None else None,
             "allowed_candidate_atom_quotes": [
                 atom.statement
                 for expression in (candidate.applicability_expression,
@@ -287,6 +293,10 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
         "只有上述所有适用维度与原文一致，才选 fully_expressed；有确定差额选 incomplete，"
         "无法从冻结原文与候选判清选 uncertain。不得因为候选引用了同一来源或看起来临床合理就选完整。"
         "source_excerpt 必须逐字复制 required_source_excerpt，不得从 source_unit 补入前后文字；"
+        "bound_visit_sources 仅说明候选绑定的冻结访视及其原始表头来源；"
+        "同一标记列的时期、访视名、周数和日数可共同标识一次访视，不因短语数量判作多个访视。"
+        "这不证明动作、脚注、例外、结果条件或资料限制已完整表达，仍须逐项核查；"
+        "不得把另一列或缺出处的访视标签借给当前动作。"
         "candidate_atom_quotes 只能从 allowed_candidate_atom_quotes 原样选完整句，不得改写、补词或只摘短词。"
         "不完整或不确定时列出具体 unresolved_dimensions；仅返回符合 Schema 的 JSON。\n"
         f"待核对应：{json.dumps(selected, ensure_ascii=False, sort_keys=True)}"
@@ -313,6 +323,13 @@ def _alignment_input_identity(batch, interpretation, wire, item):
                            "coverage_manifest_id": batch.coverage_manifest_id,
                            "statement": statement.model_dump(mode="json"),
                            "source_unit": unit.model_dump(mode="json"),
+                           **({"native_visit_correspondence": "v1",
+                               "context_units": [row.model_dump(mode="json") for row in batch.context_units],
+                               "bound_visit_sources": [stage.model_dump(mode="json")
+                                   for stage in batch.known_workflow_stage_targets
+                                   if any(node.workflow_stage_id == stage.workflow_stage_id
+                                          for node in candidate.review_node_bindings)]}
+                              if unit.table_context is not None else {}),
                            **({"evidence_policy_review": EVIDENCE_POLICY_ALIGNMENT_VERSION}
                               if any(has_explicit_evidence_policy(row) for row in candidate.minimum_evidence)
                               else {})}),
@@ -445,6 +462,7 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
     from app.agents.protocol_control_source_interpretation import (
         normalize_source_excerpt,
         simple_visit_action_preserves_time,
+        native_schedule_visit_scope_is_preserved,
         shared_prohibition_preserves_source,
     )
 
@@ -475,12 +493,14 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 or normalize_source_excerpt(item.source_excerpt) != normalize_source_excerpt(statement.quoted_text)):
             raise ValueError("候选语义核对未绑定本条原文与已有动作候选")
         unit = units[statement.structure_unit_id]
+        native_visit_scope = native_schedule_visit_scope_is_preserved(batch, statement, candidate)
         validate_scope_citations(
             candidate.review_node_bindings,
             [units[unit_id] for unit_id in candidate.source_structure_unit_ids],
             [*batch.owned_units, *batch.context_units],
         )
-        if item.decision == "fully_expressed" and statement.scope_quote:
+        if (item.decision == "fully_expressed" and statement.scope_quote
+                and not native_visit_scope):
             expected_scope = resolve_ancestor_scope_citation(
                 unit, statement.scope_quote, [*batch.owned_units, *batch.context_units],
             )
@@ -523,7 +543,9 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                    for group in candidate.obligation_expression.groups):
                 raise ValueError("候选存在未覆盖本条要求的另一义务分支")
             obligation_selected = [atom for atom in selected_atoms if atom in obligation_atoms]
-            if not any(source in normalize_source_excerpt(quote)
+            if not (native_visit_scope and any(
+                normalize_source_excerpt(atom.statement) == source for atom in obligation_selected
+            )) and not any(source in normalize_source_excerpt(quote)
                        for atom in obligation_selected for quote in atom.source_excerpts):
                 if not any(_split_obligations_cover_source(source, scope, group.atoms)
                            for group in candidate.obligation_expression.groups
@@ -585,9 +607,10 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 if (len(source_modes) != 1 or statement_modes != source_modes
                         or (proposition_modes and not source_modes <= proposition_modes)):
                     raise ValueError("候选数量范围未在对应原句中保留")
-            if numbers:
-                directions = {direction for pattern, direction in _COMPARISON_WORDS
-                              if re.search(pattern, source)}
+            directions = {direction for pattern, direction in _COMPARISON_WORDS
+                          if re.search(pattern, source)}
+            if numbers and not (native_visit_scope and source in rendered
+                                and "threshold" not in functions and not directions):
                 predicates = [atom.evaluation.predicate for atom in selected_atoms
                               if getattr(atom, "evaluation", None) is not None
                               and atom.evaluation.predicate is not None]
