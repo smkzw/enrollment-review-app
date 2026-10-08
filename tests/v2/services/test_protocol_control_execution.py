@@ -412,6 +412,20 @@ def test_whole_unit_coverage_keeps_joiners_without_proving_independence(separato
     )
 
 
+@pytest.mark.parametrize("errors", [
+    ["SOURCE_TARGET_REVIEW_INVALID"],
+    ["SOURCE_TARGET_REVIEW_INVALID", "SOURCE_TARGET_REVIEW_UNRESOLVED"],
+    ["SOURCE_TARGET_REVIEW_TRANSPORT_FAILED"],
+])
+def test_invalid_partial_review_cannot_be_reclassified_as_faithful_restriction(errors):
+    batch, result = _same_unit_two_requirement_review()
+    result.source_target_review.items = []
+    result.attempts[-1].error_classes = errors
+    frozen = result.model_dump(mode="json")
+    assert protocol_control_execution_module.restricted_batch_from_review(batch, result) is None
+    assert result.model_dump(mode="json") == frozen
+
+
 @pytest.mark.parametrize("with_scope", [False, True])
 @pytest.mark.parametrize("sibling_unresolved", [False, True])
 def test_whole_temporal_unit_preserves_time_and_scope_without_executable_siblings(
@@ -4883,6 +4897,56 @@ def test_missing_failed_diagnostic_requires_explicit_fresh_read_scope(
             assert _job_checkpoint_fingerprint(session_factory, first.job_id) == old_history
 
 
+def test_invalid_target_review_keeps_technical_failure_and_persists_actual_answer(
+    data_paths, session_factory, monkeypatch,
+):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner, ProtocolControlAgentAttempt
+    from app.agents.protocol_control_source_interpretation import (
+        SourceInterpretation, SourceTargetReview, SOURCE_TARGET_REVIEW_VERSION,
+    )
+
+    seed = _seed_frozen_source(data_paths, session_factory, key="invalid-target-review")
+    service = _build_service(data_paths, session_factory, seed)
+    raw = '{"items":[]}'
+
+    def failed_review(_self, batch, *_args, **_kwargs):
+        return ProtocolControlAgentRunResult(
+            status="需要核对", batch_id=batch.batch_id, session_id="bad-review",
+            source_interpretation=SourceInterpretation(
+                version=SOURCE_INTERPRETATION_VERSION, statements=[],
+                units_without_statement=list(batch.owned_structure_unit_ids),
+            ),
+            source_target_review=SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[]),
+            attempts=[ProtocolControlAgentAttempt(
+                attempt=1, session_id="bad-review", outcome="publication_invalid",
+                raw_output_text=raw, raw_output_chars=len(raw),
+                raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(),
+                error_classes=["SOURCE_TARGET_REVIEW_INVALID"],
+                issues=["核对回答不符合本次来源范围"],
+            )],
+        )
+
+    monkeypatch.setattr(ProtocolControlAgentRunner, "run", failed_review)
+    job = service.create_from_deconstruction(source_job_id=seed.source_job_id,
+                                            idempotency_key="invalid-target-review-execution")
+    deep = _DeepTransport(seed.source_span_excerpts)
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    assert runner.run_job(job.job_id)
+    with session_factory() as session:
+        store = JobStore(session, now=_now)
+        row = store.get_job(job.job_id)
+        assert row.state == "failed_final"
+        assert row.error_code == "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID"
+        failed = next(item for item in store.list_steps(job.job_id)
+                      if item.error_code == row.error_code)
+        saved = store.get_last_checkpoint(job.job_id, failed.step_id)[1]
+    assert deep.start_calls == 0
+    assert saved["stage"] == "deep_failure_diagnostic"
+    assert saved["attempts"][0]["raw_output_text"] == raw
+    assert saved["partial_wire"] is None
+    assert "restricted_batch" not in saved
+
+
 def test_source_inventory_scope_failure_saves_diagnostic_and_requires_fresh_read(
     data_paths, session_factory,
 ):
@@ -5332,6 +5396,59 @@ def test_deep_source_corrupt_completed_checkpoint_rejected_before_job_creation(
     assert deep.start_calls == calls_before
 
 
+@pytest.mark.parametrize("changed_gate", [True, False])
+def test_pending_exclusion_invalidates_only_an_older_restricted_proof(
+    data_paths, session_factory, monkeypatch, changed_gate,
+):
+    seed = _seed_frozen_source(data_paths, session_factory, key="pending-exclusion-proof")
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="pending-exclusion-source",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    assert runner.run_job(source.job_id)
+    calls_before = deep.start_calls
+    original = JobStore.get_last_checkpoint
+
+    def saved_restriction(self, job_id, step_id):
+        checkpoint = original(self, job_id, step_id)
+        if job_id != source.job_id or step_id != "deep_0001" or checkpoint is None:
+            return checkpoint
+        checkpoint_id, saved = checkpoint
+        saved = dict(saved, restricted_batch=saved["run_result"]["final_output"])
+        if changed_gate:
+            saved["component_identity"] = dict(saved["component_identity"], validator_version="previous validator")
+        return checkpoint_id, saved
+
+    def reject_pending(_batch, _result):
+        raise protocol_control_execution_module.SourceTargetReviewValidationError(
+            "来源疑问未关闭", code="SOURCE_UNRESOLVED_STILL_EXCLUDED",
+            statement_index=0, json_path="/items/0/decision",
+        )
+
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", saved_restriction)
+    monkeypatch.setattr(protocol_control_execution_module, "restricted_batch_from_review", reject_pending)
+    if changed_gate:
+        planned = service.create_from_deconstruction(
+            source_job_id=seed.source_job_id, idempotency_key="pending-exclusion-current",
+            deep_source_job_id=source.job_id,
+        )
+        _, payload = _job_snapshot_and_payload(session_factory, planned.job_id)
+        decisions = {v["step_id"]: v for v in payload["deep_reuse_plan"]["decisions"].values()}
+        assert decisions["deep_0001"]["decision"] == "refresh_required"
+        assert decisions["deep_0001"]["reason"] == "current_source_review_requires_refresh"
+        assert all(v["decision"] == "reusable" for k, v in decisions.items() if k != "deep_0001")
+    else:
+        with pytest.raises(protocol_control_execution_module.ProtocolControlExecutionError) as exc:
+            service.create_from_deconstruction(
+                source_job_id=seed.source_job_id, idempotency_key="pending-exclusion-current",
+                deep_source_job_id=source.job_id,
+            )
+        assert exc.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+    assert deep.start_calls == calls_before
+
+
 def test_gate_only_change_revalidates_reusable_batch_without_model_call(
     data_paths, session_factory, monkeypatch,
 ):
@@ -5373,7 +5490,8 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
     assert checkpoint[1]["component_identity"]["validator_version"] == (
         "/".join((protocol_control_execution_module.CONTROL_PUBLICATION_GATE_VERSION,
                   protocol_control_execution_module.RESTRICTED_DEFINITION_VALIDATION_VERSION,
-                  protocol_control_execution_module.SOURCE_COVERAGE_VALIDATION_VERSION))
+                  protocol_control_execution_module.SOURCE_COVERAGE_VALIDATION_VERSION,
+                  protocol_control_execution_module.SOURCE_TARGET_REVIEW_VALIDATION_VERSION))
     )
 
 

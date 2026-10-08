@@ -3,7 +3,13 @@
 
 ### 单一当前用户流程表
 
-当前主集成＋已完成单C03：来源登记/恢复存在解释风险，批准CodeBuddy/deepseek-v4.1-flash/max已完成初审569.594s、同会话复核173.798s及缺诊断复核106.056s，均exit0/no fallback；顾问未读全部消费者、不认证测试或临床采用。7份继承delivery不动，共享首屏184bdb60适配已push，不重复派发或修改共享首页。源码582cd8eb已push，含登记/上下文/明确缺诊断新读及审阅限制；Goal active/claims_complete=false。
+当前主集成＋已完成单C03：来源登记/恢复存在解释风险，批准CodeBuddy/deepseek-v4.1-flash/max已完成初审569.594s、同会话复核173.798s及缺诊断复核106.056s，均exit0/no fallback；顾问未读全部消费者、不认证测试或临床采用。7份继承delivery不动，共享首屏184bdb60适配已push，不重复派发或修改共享首页。源码03be2eb1已push，含来源清单范围、结构化失败保存及当前校验身份；Goal active/claims_complete=false。
+
+实际Job bb59749aa7c047c1bb90f43e97a3c285已failed_final/PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID，冻结源码03be2eb1，受控本机产物rv1006-source-inventory-bound-recovery-api-20261008-v1。90深审11completed/1failed（12）/78queued；前4组合法复用，第5–11组新增28调用完成，第12组4调用后失败，共32物理调用1202.4972455s。driver finally证明旧Job状态/payload、保护库、来源库均不变，0共同发布/激活/签发。旧第5/9/11首错确已越过；11完成仍不是完整同源包。所列直接三次43+7+32=82调用不是全历史总数。
+
+窗口插入项：第12组阻断完整要求快照；冻结来源含一项未核清维度，而下一核对提示漏掉该字段，两次回答仍声称已覆盖，完整门正确拒绝；恢复保留其余4项但不能替代5项完整核对。最小修复为公开冻结疑问、禁止有疑问时关闭对应事项、将非法核对保持技术失败并保存原答，不将部分无效答复转成研究者裁量。独审CodeBuddy/deepseek-v4.1-flash/max同会话01a1196e…153.517s＋123.580s，各exit0/no fallback，初次13工具/11读超过10读限制如实保留，后续5读符合范围；不读临床、不跑测试。采纳背景许可与门禁不一致的RD1；撤销新的渲染输入hash框架建议，现有逐项当前重验及完整最终门已提供必要保护。拒绝顾问CR1将非法排除答复直接改成忠实未决的建议。front与最终消费共用校验，未核原文不由本步清空。
+
+当前功能包集中窗v1：1245passed/1failed/86.42s/exit1/5SWIG；新增服务测试幂等键与来源种子碰撞，修测试键，不松产品门。v2：1247passed/1failed/87.48s/exit1/5SWIG，唯一失败为该新增替身缺局部合同导入，Runner正确记录EXECUTOR_ERROR，补测试导入后针对该例及旧/当前资格变体3passed/3.06s/exit0/5SWIG；后续产品代码未改，不再重复整窗，不将不同快照总数拼成全通过。JUnit见artifacts/rv1006-source-pending-input-connected-20261008-v2.xml及source-pending-fixture-check-v1.xml，实际命令为三相连模块pytest与service中三个故障例选择。只读恢复预检发现旧第一受限证明也被新的疑问排除校验拒绝；按校验身份变化仅列该组受控重算，当前身份下相同无效证明仍硬拒。完整新预检90组10reusable（2–11）、1resume_partial（12，4合法兄弟）、79refresh_required（1及78未读）；0模型/0数据库写，不按旧11全部继承。尚未把新正式Job或病例流程写成完成。
 
 最新实际Job22418c0d8f43468f8ee8dd37f31fde55（582cd8eb，受控原隔离目录）：7物理调用310.9939s，deep_0001/2/4复用、deep_0003六调用完成，第5组一次来源读后failed_final/PROTOCOL_CONTROL_CHECKPOINT_INVALID；90组4completed/1failed/85queued，原Job状态/payload、保护库、来源库均不变，0共同发布/激活/签发。所列直接两次链43+7=50新增调用不是全历史总数。
 
@@ -15,7 +21,7 @@
 
 集中5相连模块549passed/93.87s/exit0/5既有SWIG（connected-final.xml）；顾问后微小重放硬化由所有者20passed/2.80s针对性核，不冒称549是后续快照全跑。此前488pass、479pass7fail和collection错误分别保留、不累加；7失败均新夹具原生坐标不一致，已修夹具，不放产品保护。
 
-恢复前只读核查发现旧第11组缺失败检查点，默认复用正确硬拒。窗口插入项：影响完整要求包恢复；证据为当前_preflight_deep_source失败及私有6实际回执；最小措施为显式指定缺记录失败范围重新读，保留损坏/缺失为证据，不复用它或改旧终态，原有成功范围仍逐项当前核验。已有或损坏回执不能用此选项跳过；入队/执行双核源Job/步状态/缺记录证明。新只读前置计划为6reusable/84refresh_required（其中3已完成组的来源范围改变，79未读、第9组待重核、第11组明确重新读）；0调用/库hash不变。六相连模块573passed/114.22s/exit0/5既有SWIG，JUnit registration-context-missing-record-connected-final；独审后补同编号不同owned来源硬拒，随后6passed/5.24s，573不冒称末版全跑。顾问条件B2已用JobStore实际反证：无行才None，坏hash抛错，不新增框架。正式下一动作是合法新版本作业，只继承6份当前证明，不原地续旧failed_final。
+此前恢复前只读核查发现旧第11组缺失败检查点，默认复用正确硬拒。窗口插入项：影响完整要求包恢复；证据为当时_preflight_deep_source失败及私有6实际回执；最小措施为显式指定缺记录失败范围重新读，保留损坏/缺失为证据，不复用它或改旧终态，原有成功范围仍逐项当前核验。已有或损坏回执不能用此选项跳过；入队/执行双核源Job/步状态/缺记录证明。当时只读前置计划为6reusable/84refresh_required（其中3已完成组的来源范围改变，79未读、第9组待重核、第11组明确重新读）；0调用/库hash不变。这是582cd8eb运行前历史计划，不是当前bb59749a的4组复用计划。六相连模块573passed/114.22s/exit0/5既有SWIG，JUnit registration-context-missing-record-connected-final；独审后补同编号不同owned来源硬拒，随后6passed/5.24s，573不冒称末版全跑。顾问条件B2已用JobStore实际反证：无行才None，坏hash抛错，不新增框架。旧failed_final始终未原地续跑。
 
 | 用户流程节点 | 当前入口与实际证据 | 首个未完成项/用户动作 |
 |---|---|---|

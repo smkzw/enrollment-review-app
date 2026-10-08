@@ -63,6 +63,7 @@ from app.agents.protocol_control_discovery_transport import (
 )
 from app.agents.protocol_control_source_interpretation import (
     SOURCE_COVERAGE_VALIDATION_VERSION,
+    SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
     SOURCE_QUOTE_RECOVERY_VERSION,
     SOURCE_TARGET_REVIEW_VERSION,
     SourceDefinitionConsumers,
@@ -2047,7 +2048,8 @@ def _deep_component_identity(
         ],
         "validator_version": "/".join((CONTROL_PUBLICATION_GATE_VERSION,
                                        RESTRICTED_DEFINITION_VALIDATION_VERSION,
-                                       SOURCE_COVERAGE_VALIDATION_VERSION)),
+                                       SOURCE_COVERAGE_VALIDATION_VERSION,
+                                       SOURCE_TARGET_REVIEW_VALIDATION_VERSION)),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}
         ).get("deep"),
@@ -2935,15 +2937,23 @@ def _preflight_deep_source(
                 if result.batch_id != batch.batch_id:
                     raise ValueError("已完成的来源批次结果损坏")
                 if saved.get("restricted_batch") is not None:
-                    expected = restricted_batch_from_review(batch, result)
-                    if (expected is None or expected != ProtocolControlBatchDispositionHydrated.model_validate(
-                            saved["restricted_batch"]
-                    )):
-                        raise ValueError("已保存的受限来源与当前逐项核对不一致")
-                    if _source_interpretation_requires_refresh(batch, result):
-                        reason = "current_source_links_require_refresh"
+                    restricted = ProtocolControlBatchDispositionHydrated.model_validate(saved["restricted_batch"])
+                    try:
+                        expected = restricted_batch_from_review(batch, result)
+                    except SourceTargetReviewValidationError as exc:
+                        if (exc.code != "SOURCE_UNRESOLVED_STILL_EXCLUDED"
+                                or saved_components["validator_version"] == current_components["validator_version"]):
+                            raise
+                        # A newly enforced pending-scope check invalidates this
+                        # old proof, not the unaffected siblings or raw record.
+                        reason = "current_source_review_requires_refresh"
                     else:
-                        decision, reason = "reusable", "same_restricted_source_and_current_gate"
+                        if expected is None or expected != restricted:
+                            raise ValueError("已保存的受限来源与当前逐项核对不一致")
+                        if _source_interpretation_requires_refresh(batch, result):
+                            reason = "current_source_links_require_refresh"
+                        else:
+                            decision, reason = "reusable", "same_restricted_source_and_current_gate"
                 else:
                     if result.status not in {"已解析", "待跨章核验"} or result.final_output is None:
                         raise ValueError("已完成的来源批次结果损坏")
@@ -3926,6 +3936,7 @@ def _execute_deep(
             "SOURCE_TARGET_FOCUSED_SCHEMA_INVALID",
             "SOURCE_TARGET_REVIEW_UNAVAILABLE",
             "SOURCE_TARGET_REVIEW_UNRESOLVED",
+            "SOURCE_TARGET_REVIEW_INVALID",
             "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE",
             "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED",
             "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",

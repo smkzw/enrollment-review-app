@@ -33,6 +33,7 @@ SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
 SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v22"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
 SOURCE_COVERAGE_VALIDATION_VERSION = "source-owned-inventory-validation/v1"
+SOURCE_TARGET_REVIEW_VALIDATION_VERSION = "source-pending-disposition-validation/v1"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
 
@@ -1257,10 +1258,12 @@ def build_source_target_review_prompt(
             "decision_functions": interpretation.statements[index].decision_functions,
             "background_context_allowed": (
                 interpretation.statements[index].decision_functions == ["background"]
+                and not interpretation.statements[index].unresolved
             ),
             "definition_dependency_allowed": is_non_action_definition(interpretation.statements[index]),
             "definition_dependency_permission_version": "non-action-numeric-definition/v1",
             "exception_words": interpretation.statements[index].exception_words,
+            "unresolved": interpretation.statements[index].unresolved,
             "eligibility_sequence": interpretation.statements[index].eligibility_sequence,
             "eligibility_sequence_quote": interpretation.statements[index].eligibility_sequence_quote,
             "control_authority": interpretation.statements[index].control_authority,
@@ -1312,6 +1315,12 @@ def build_source_target_review_prompt(
         "unresolved_aspects 填 []。实际依赖哪些条件由后续冻结消费者登记及全范围核对决定；"
         "原文存在歧义或含未完成动作时仍选 unresolved，不得用此项绕过。"
         "同段已有候选并不等于所有动作已覆盖；目录名称相似也不等于时间、条件、例外都已覆盖。"
+        "unresolved 是当前冻结来源解释尚未核清的具体维度，不是受试者缺件。"
+        "此字段非空时，不得选择 covered_by_official 或 covered_by_procedure；"
+        "目标文字相同也不能消除已保存的来源疑问。本步骤无权改写或清空来源解释，"
+        "须保留相关疑问及有源对照线索，不声称完整覆盖。"
+        "未核清的原文也不得作为 not_current_control、potential_same_requirement 或 cited_external_rationale 关闭；"
+        "只能在现有未完整覆盖路径中保留具体 unresolved_aspects，不将原文疑问改写成受试者缺件。"
         "若 scope_context_source 提供表内项目标签，宿主只核了位置；你须从原文独立核它是否"
         "直接限定本条对象及适用分期，再核实际目标是否完整对应。标签是另一动作、存在冲突或"
         "关系不明时必须保留 unresolved，不能仅因结构相邻就报完整覆盖。"
@@ -1516,6 +1525,11 @@ def validate_source_target_review(
         if covered and statement.unresolved:
             reject(item, "SOURCE_UNRESOLVED_STILL_COVERED", "decision",
                    "来源陈述仍有未核清内容，不能宣称已有目标完整覆盖")
+        if statement.unresolved and item.decision in {
+            "not_current_control", "potential_same_requirement", "cited_external_rationale",
+        }:
+            reject(item, "SOURCE_UNRESOLVED_STILL_EXCLUDED", "decision",
+                   "来源陈述仍有未核清内容，不能排除当前审核或关闭来源疑问")
         if (not covered and item.decision not in {"not_current_control", "potential_same_requirement",
                                                 "cited_external_rationale", "background_context", "definition_dependency"}
                 and not item.unresolved_aspects):

@@ -3682,6 +3682,35 @@ def test_post_eligibility_action_requires_source_order_and_no_current_candidate(
     })
     validate_source_target_review(batch, inventory, coverage, review)
 
+    from app.agents.protocol_control_source_interpretation import validated_source_review_seed
+
+    pending = inventory.model_copy(deep=True)
+    pending.statements[0].unresolved = ["执行范围尚未核清"]
+    for decision in ("not_current_control", "potential_same_requirement", "cited_external_rationale"):
+        excluded = review.model_copy(deep=True)
+        excluded.items[0].decision = decision
+        with pytest.raises(SourceTargetReviewValidationError) as pending_error:
+            validate_source_target_review(batch, pending, coverage, excluded)
+        assert pending_error.value.code == "SOURCE_UNRESOLVED_STILL_EXCLUDED"
+        assert validated_source_review_seed(batch, pending, coverage, excluded) is None
+    retained = review.model_copy(deep=True)
+    retained.items[0].decision = "unresolved"
+    retained.items[0].non_control_basis_excerpt = None
+    retained.items[0].unresolved_aspects = pending.statements[0].unresolved.copy()
+    validate_source_target_review(batch, pending, coverage, retained)
+    assert validated_source_review_seed(batch, pending, coverage, retained) == retained
+    from app.agents.protocol_control_source_interpretation import is_post_eligibility_calculation
+    assert not is_post_eligibility_calculation(pending.statements[0], review.items[0])
+    retained.items[0].decision = "additional_requirement"
+    assert validated_source_review_seed(batch, pending, coverage, retained) == retained
+    pending.statements[0].decision_functions = ["background"]
+    prompt = build_source_target_review_prompt(batch, pending, coverage)
+    packet = json.loads(next(line.removeprefix("待核陈述：") for line in prompt.splitlines()
+                             if line.startswith("待核陈述：")))
+    assert packet[0]["background_context_allowed"] is False
+    assert packet[0]["unresolved"] == ["执行范围尚未核清"]
+    assert pending.statements[0].unresolved == ["执行范围尚未核清"]
+
     wrong_order = inventory.model_copy(deep=True)
     wrong_order.statements[0].eligibility_sequence_quote = "给予研究治疗"
     with pytest.raises(SourceInterpretationValidationError, match="位于动作之前"):
@@ -3940,6 +3969,14 @@ def test_source_target_review_requires_real_target_excerpts_and_matching_time() 
     with pytest.raises(SourceTargetReviewValidationError) as unresolved_error:
         validate_source_target_review(batch, unresolved_inventory, coverage, review)
     assert unresolved_error.value.code == "SOURCE_UNRESOLVED_STILL_COVERED"
+    unresolved_prompt = build_source_target_review_prompt(batch, unresolved_inventory, coverage)
+    packet = json.loads(next(line.removeprefix("待核陈述：")
+                             for line in unresolved_prompt.splitlines()
+                             if line.startswith("待核陈述：")))
+    assert packet[0]["unresolved"] == []
+    assert packet[1]["unresolved"] == ["筛选时的适用范围未核清"]
+    assert "此字段非空时，不得选择 covered_by_official 或 covered_by_procedure" in unresolved_prompt
+    assert unresolved_inventory.statements[1].unresolved == ["筛选时的适用范围未核清"]
 
     longer_batch = batch.model_copy(deep=True)
     longer_batch.owned_units[1].excerpt = "筛选时连续7天记录末次用药日期"

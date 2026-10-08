@@ -721,6 +721,19 @@ def restricted_batch_from_review(
     batch: ProtocolControlDispositionBatch,
     result: ProtocolControlAgentRunResult,
 ) -> ProtocolControlBatchDispositionHydrated | None:
+    if not result.attempts:
+        return None
+    if result.capability_wire is None and (
+        not result.attempts[-1].error_classes
+        or set(result.attempts[-1].error_classes) - {
+            "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+            "SOURCE_TARGET_REVIEW_UNRESOLVED",
+            "TEMPORAL_SCOPE_UNRESOLVED",
+        }
+    ):
+        # An invalid/partial review is a recovery diagnostic, not a faithful
+        # non-executable requirement. Do not validate it as an adopted review.
+        return None
     output = _restricted_statement_batch_from_review(batch, result)
     if output is not None:
         _validate_restricted_definition_registration(batch, result, output)
