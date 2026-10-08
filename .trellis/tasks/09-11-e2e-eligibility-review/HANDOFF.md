@@ -1,4 +1,4 @@
-# HANDOFF｜1006V1｜先核来源依赖再局部修复，继续执行
+# HANDOFF｜1006V1｜来源补核已执行，局部语法恢复，继续执行
 
 2026-10-08，用户已解除暂停；Goal实查active，Trellis in_progress，execution_paused_by_user=false。窗口未达，claims_complete=false。本记录是相连功能包里程碑，不是暂停。只维护本HANDOFF、implement当前表及review_index；历史运行在implement附录和Git保留，不按旧“当前/暂停”恢复。
 
@@ -10,12 +10,12 @@
 |---|---|
 | 唯一工作树 | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；.trellis/tasks/09-11-e2e-eligibility-review |
-| 本功能包基础代码 | a7de55be；v3五个源码/测试补丁及只读C03报告明确可核，不把旧独审当本增量证据 |
-| 当前终态/上游 | 400f018e7a134ef78ef9f62baa031711，failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID；声明上游7c5d744d6ad341bc9f6b4ece4d751f48 |
-| 失败检查点 | 17=08e6f88efd8244518f4476511e64db97；4累计attempt不等于2新调用。上游21=328f986fdeba472c9009f457bd1bd269；原答/来源/草稿/累计账本保留，不改旧终态 |
+| 本功能包基础代码 | 5bac5819；局部JSON语法恢复、技术失败映射、合成反例及同C03差异审阅，不把旧独审当本增量证据 |
+| 当前终态/上游 | b9d2b85f853d4e6a9c2b61388f683826，failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID；声明上游400f018e7a134ef78ef9f62baa031711 |
+| 失败检查点 | 17=cc41a12ecadf4733b9d2283e1a1f2b75；4累计attempt不等于2新调用。上游21=328f986fdeba472c9009f457bd1bd269；原答/来源/草稿/累计账本保留，不改旧终态 |
 | 产品模型 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high、65536输出；产品harness直接访问端点 |
 | 当前隔离库 | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 最新已执行产物 | 同上根目录/rv1006-native-scope-ordering-api-20261008-v1；2新物理调用/178.479445秒/exit3，源码a7de55be，不归到后续v3补丁 |
+| 最新已执行产物 | 同上根目录/rv1006-native-dependency-api-20261008-v1；2新物理调用/153.514735秒/exit3，源码5bac5819，不归到后续语法恢复补丁 |
 | 私有当前预检 | 同上根目录/rv1006-native-table-consumer-preflight-20261008-v2.json；19reusable/2resume_partial/69refresh，0调用/0写/DBhash保持 |
 | 外部可复查范围 | Git源码、合成测试、净化工程报告/索引；原件、DB、实际临床提示/原答与截图仅本机可读，不提交，hash不证明临床含义 |
 
@@ -34,6 +34,8 @@
 病例根/准备副本：/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-prepared-review-current-node-20261008-v1/data；subject rv29-preparation-20261001，筛选episode e8615813d75b452489579ff9606781b4。
 
 ## 3. 当前首错与最小修复
+
+最新b9实际执行scope纠正，但模型在JSON字段间插入自我修改文字；未应用来源。只对json_invalid重交一次原范围，扣同source_repairs，错误ID/来源/字段/传输不借此扩读；最后仍技术失败，新码贯通实际服务，受限消费者拒绝。有效后才能过原来源及一次目标门。v4恢复身份，旧成功重验/旧终态保持。全历史scope计数完备性仍是既有残余，不称已修。三模块1224pass/1fail102.85秒，旧v3断言修v4后单项1pass2秒；不冒称末版全三模块。C03同会话8静态读取/exit0/no fallback，无必须修，未读临床/跑测试。取舍reviews/rv1006-scope-json-recovery-owner-disposition-20261008.md。新产品恢复尚待从b9合法入队；以下为原v3及更早快照。
 
 a7de实际初答缺unresolved_aspects且未写时间，局部格式纠正才提真实原生时点。v2仍依赖模型先说时间，未运行scope修正。v3只依据冻结结构中的有源共同标题和尚未解释的来源范围选择既有scope修正；不依赖核对者措辞或错误顺序。旧一次目标纠正/source_repairs预算保持，原句/用途/例外/兄弟不改，错误目标仍完整拒绝。已有scope/stage/time任何一个不空不由此扩写。
 
@@ -89,7 +91,7 @@ a7de实际初答缺unresolved_aspects且未写时间，局部格式纠正才提�
 
 ## 6. 连续接续（不是暂停点）
 
-1. 当前v3相连验证/独审已完成，通过既有control-executions API从400f018e…合法新建前先做零调用前置核验；新OUT不得覆盖。1–16/18–20须现场核来源链与当前门后复用，17草稿和21来源解释接续；关闭旧未决冻结选项，保留原账本和终态，不把前置计划当执行成果。
+1. 当前v4局部语法恢复及同C03已完成，通过既有control-executions API从b9d2b85f…合法新建前先做零调用前置核验；新OUT不得覆盖。1–16/18–20须现场核来源链与当前门后复用，17草稿和21来源解释接续；关闭旧未决冻结选项，保留原账本和终态，不把前置计划当执行成果。
 2. 按1006窗口保留局部真实未决和能力缺口，不让独立结果饥饿，但已知错义/未读来源不能换标签发布。失败两次无新信息停止该分支，推进可独立节点；不复活旧Job，不重置历史调用。
 3. 同源完整采用合同成立后接当前节点工作稿→确切原件→UI有源更正/补证→相关重算→新旧结果。窗口完成先回交，不扩模型横评/新框架。
 

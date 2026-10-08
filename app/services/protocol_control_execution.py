@@ -2057,7 +2057,7 @@ def _deep_component_identity(
                                        SOURCE_COVERAGE_VALIDATION_VERSION,
                                        SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
                                        "native-row-source-normalization/v1",
-                                       "native-table-scope-recovery/v3")),
+                                       "native-table-scope-recovery/v4")),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}
         ).get("deep"),
@@ -4106,6 +4106,7 @@ def _execute_deep(
             "SOURCE_TARGET_REVIEW_UNAVAILABLE",
             "SOURCE_TARGET_REVIEW_UNRESOLVED",
             "SOURCE_TARGET_REVIEW_INVALID",
+            "SOURCE_SCOPE_CORRECTION_JSON_INVALID",
             "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE",
             "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED",
             "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
@@ -4140,6 +4141,8 @@ def _execute_deep(
                  "原文要求小时或分钟精度，但该批尚未满足有源局部采用条件；结果保持未采信。"
                  if result.capability_wire is not None else
                  {
+                     "SOURCE_SCOPE_CORRECTION_JSON_INVALID":
+                         "模型未按要求返回本条来源范围，修订尚未应用；原文和已核内容保留。",
                      "SOURCE_TARGET_REVIEW_UNRESOLVED":
                          "原文已保存，但它与审核要求的对应关系仍需核清；尚不能作为完整采用依据。",
                      "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE":

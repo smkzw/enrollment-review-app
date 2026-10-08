@@ -3,7 +3,9 @@
 
 ### 单一当前用户流程表
 
-**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。源码a7de55be的合法接续Job400f018e7a134ef78ef9f62baa031711已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID，2新物理调用178.479445秒/exit3，16组completed、17失败、73未执行；18–20仅前置可复用，不冒称本Job完成。检查点08e6f88efd8244518f4476511e64db97保存原答/草稿/来源/累计attempt。上游7c5d744d为2调用116.304107秒、42e54739为7调用199.182118秒、53021为36调用1129.773510秒/19完成，各运行分开。原Job/payload、原件、保护库、来源库保持，0共同发布/激活/签发。
+**当前里程碑与运行状态：** Goal active，窗口未达/claims_complete=false。源码5bac5819合法接续Jobb9d2b85f853d4e6a9c2b61388f683826已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID，2新物理调用153.514735秒/exit3，16组completed、17失败、73未执行；18–20仅前置可复用，不冒称本Job完成。检查点cc41a12ecadf4733b9d2283e1a1f2b75保存原答/草稿/来源/累计attempt。上游400f018e为2调用178.479445秒、7c5d744d为2调用116.304107秒、42e54739为7调用199.182118秒、53021为36调用1129.773510秒/19完成，各运行分开。原Job/payload、原件、保护库、来源库保持，0共同发布/激活/签发。
+
+**本次实质变化：** v3来源补核入口已实际执行，但第二答夹杂自我修改文字，不是合法JSON，来源未应用。选择直接集成＋单既有C03：局部格式恢复影响失败分类和采用边界，需只读挑战。仅json_invalid按同一范围原提示重交一次并扣旧source_repairs；缺字段、正确JSON错ID、传输和语义错误不走语法重试。原答hash/session/类型化位置保存，耗尽仍SOURCE_SCOPE_CORRECTION_JSON_INVALID，不转成研究者判断；来源/兄弟/原一次目标门保持。validator局部恢复v4，不声称全历史scope计数已完整。相连三模块1224passed/1failed/102.85秒/exit1，仅旧版本断言v3→v4修正，单项复验1passed/2.00秒/exit0；不冒称末版全库通过。C03同CodeBuddy/DeepSeek/max/8只读/exit0/no fallback，120min静默完成等待，无必须修，未跑测试或临床；取舍见reviews/rv1006-scope-json-recovery-owner-disposition-20261008.md。预检首次漏PYTHONPATH为请求前导入错误/0调用/0写，修诊断入口，不松产品门。以下v3/v2材料为上轮证据。
 
 **首因与当前修复：** 400f初答缺unresolved_aspects且time为空，格式修正后才提真实原生时点；v2仍依赖核对者先填时间，故source修正未执行。v3从冻结原生列自身识别来源scope/stage/time均缺，要求整行逐字、全部标记列有源共同完整标题、访视/标记格脚注无未决；先核来源依赖，再使用原一次目标修正。错目标仍完整拒绝，已解释范围不扩，不加次数或错误白名单。表头脚注与标记格脚注不同：本次只读证实表头脚注原单元在完整冻结清单，但未进入此行局部上下文；本助手只证明位置/字面范围，不能代替脚注和全局依赖临床覆盖。合法未决首答不触发这一失败恢复是明确残余，不另加全局扫描。选择直接集成＋同批准C03，因为模型未提时间时的来源修正选择涉及作用域，需要独立挑战；旧调用/终态/hash不改。
 

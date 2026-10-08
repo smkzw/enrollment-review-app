@@ -8164,8 +8164,7 @@ class ProtocolControlAgentRunner:
                                             raise review_error
                                         original_statement = source_interpretation.statements[invalid_index]
                                         review_response = None
-                                        source_repairs += 1
-                                        time_response = scope_corrector(prompt=(
+                                        scope_prompt = (
                                             build_source_scope_correction_prompt(
                                                 batch, original_statement, str(review_error)
                                             )
@@ -8175,11 +8174,54 @@ class ProtocolControlAgentRunner:
                                                if native_time_recheck else
                                                "\n本次只补全 time_words；scope_quote 与 affected_stage "
                                                "须与原陈述相同，其他陈述和医学含义不变。")
-                                        ))
-                                        review_response = time_response
-                                        time_correction = SourceScopeCorrection.model_validate_json(
-                                            time_response.text
                                         )
+                                        # Only malformed JSON gets one local retry, within the existing budget.
+                                        for format_attempt in range(2):
+                                            source_repairs += 1
+                                            time_response = scope_corrector(prompt=scope_prompt)
+                                            review_response = time_response
+                                            try:
+                                                time_correction = SourceScopeCorrection.model_validate_json(
+                                                    time_response.text
+                                                )
+                                                break
+                                            except ValidationError as format_error:
+                                                if not all(item["type"] == "json_invalid"
+                                                           for item in format_error.errors()):
+                                                    raise
+                                                attempts.append(ProtocolControlAgentAttempt(
+                                                    attempt=len(attempts) + 1,
+                                                    session_id=time_response.session_id,
+                                                    raw_output_sha256=_sha256(time_response.text),
+                                                    raw_output_text=time_response.text,
+                                                    raw_output_chars=len(time_response.text),
+                                                    outcome="schema_invalid",
+                                                    issues=["本条来源范围回答不是合法 JSON"],
+                                                    error_classes=["SOURCE_SCOPE_CORRECTION_JSON_INVALID"],
+                                                    error_detail={
+                                                        "workflow_phase": "source_scope_correction",
+                                                        "code": "SOURCE_SCOPE_CORRECTION_JSON_INVALID",
+                                                        "statement_id": invalid_index,
+                                                        "json_path": "/", "retry_class": "schema",
+                                                        "source_refs": list(source_unit.source_span_ids),
+                                                        "affected_dependents": [invalid_index],
+                                                        "precondition_sha256": _sha256(original_statement.model_dump_json()),
+                                                    },
+                                                ))
+                                                if format_attempt or source_repairs >= self._max_schema_repairs:
+                                                    failure = SourceTargetReviewValidationError(
+                                                        "本条来源范围回答格式未修复，未应用任何修订",
+                                                        code="SOURCE_SCOPE_CORRECTION_JSON_INVALID",
+                                                        statement_index=invalid_index, json_path="/",
+                                                        source_refs=tuple(source_unit.source_span_ids),
+                                                    )
+                                                    failure.retry_class = "schema"
+                                                    raise failure from format_error
+                                                scope_prompt += (
+                                                    "\n上次回答未通过 JSON 语法校验。本次仅按原 Schema 重新提交一个完整 JSON 对象，"
+                                                    "不含思考、说明、自我修改文字或 Markdown。原来源、编号与修订范围不变；"
+                                                    "不能借格式修复增加或改写其他内容。"
+                                                )
                                         if not native_time_recheck and (
                                                 time_correction.scope_quote != original_statement.scope_quote
                                                 or time_correction.scope_context_unit_id != original_statement.scope_context_unit_id
@@ -9456,6 +9498,7 @@ class ProtocolControlAgentRunner:
                                         "SOURCE_TARGET_REVIEW_UNRESOLVED",
                                         "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE",
                                         "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED",
+                                        "SOURCE_SCOPE_CORRECTION_JSON_INVALID",
                                     } else
                                 "SOURCE_TARGET_REVIEW_UNAVAILABLE" if review_unavailable else
                                 "TEMPORAL_SCOPE_UNRESOLVED"

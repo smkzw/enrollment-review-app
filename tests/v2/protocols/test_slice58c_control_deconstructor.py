@@ -6684,7 +6684,7 @@ def test_native_table_time_selects_recheck_without_authorizing_review_time(varia
     assert rejected.value.code == "SOURCE_TIME_UNGROUNDED"
 
 
-@pytest.mark.parametrize("fault", [None, "transport", "wrong_scope", "empty_time", "budget", "repeated", "missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first", "already_scoped"])
+@pytest.mark.parametrize("fault", [None, "transport", "wrong_scope", "empty_time", "budget", "repeated", "missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first", "already_scoped", "json_once", "json_repeated", "json_budget", "wrong_id", "json_then_wrong_id"])
 def test_runner_native_table_time_recheck_preserves_source_and_retry_boundary(fault):
     batch, inventory = _native_time_recheck_batch()
     if fault == "already_scoped":
@@ -6723,25 +6723,35 @@ def test_runner_native_table_time_recheck_preserves_source_and_retry_boundary(fa
             return ProtocolControlAgentResponse(session_id=f"review-{self.target_calls}", text=answer.model_dump_json())
         def correct_source_scope(self, *, prompt):
             self.scope_calls += 1
-            assert self.scope_calls == 1
+            assert self.scope_calls <= (2 if fault in {"json_once", "json_repeated", "json_then_wrong_id"} else 1)
             assert "标记列原生来源" in prompt
+            if self.scope_calls == 2:
+                assert "仅按原 Schema" in prompt
+                assert "Wait structure_unit_id" not in prompt
             if fault == "transport":
                 raise OSError("injected source scope failure")
+            if fault in {"json_repeated", "json_budget"} or (
+                    fault in {"json_once", "json_then_wrong_id"} and self.scope_calls == 1):
+                return ProtocolControlAgentResponse(session_id=f"scope-{self.scope_calls}", text=(
+                    '{"version":"phase5/control-source-scope-correction/v1",'
+                    '"structure_unit_id":"row-3"? Wait structure_unit_id is incorrect'
+                ))
             scope = "筛选期" if fault == "wrong_scope" else "基线期 / V2 / D0"
-            return ProtocolControlAgentResponse(session_id="scope-1", text=SourceScopeCorrection(
-                version="phase5/control-source-scope-correction/v1", structure_unit_id=unit.structure_unit_id,
+            return ProtocolControlAgentResponse(session_id=f"scope-{self.scope_calls}", text=SourceScopeCorrection(
+                version="phase5/control-source-scope-correction/v1",
+                structure_unit_id="other-row" if fault in {"wrong_id", "json_then_wrong_id"} else unit.structure_unit_id,
                 scope_quote=scope, affected_stage=None,
                 time_words=[] if fault == "empty_time" else [scope],
             ).model_dump_json())
     transport = Transport([ProtocolControlAgentResponse(session_id="wire-1", text=wire.model_dump_json())])
-    runner = ProtocolControlAgentRunner(max_schema_repairs=0) if fault == "budget" else ProtocolControlAgentRunner()
+    runner = ProtocolControlAgentRunner(max_schema_repairs=0 if fault == "budget" else 1) if fault in {"budget", "json_budget"} else ProtocolControlAgentRunner()
     result = runner.run(batch, transport)
-    assert transport.scope_calls == (0 if fault in {"budget", "already_scoped"} else 1)
-    assert transport.target_calls == (2 if fault in {None, "repeated", "missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first"} else 1)
+    assert transport.scope_calls == (0 if fault in {"budget", "already_scoped"} else 2 if fault in {"json_once", "json_repeated", "json_then_wrong_id"} else 1)
+    assert transport.target_calls == (2 if fault in {None, "repeated", "missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first", "json_once"} else 1)
     assert result.final_output is None and result.status == "需要核对"
     assert result.source_interpretation.statements[0].quoted_text == inventory.statements[0].quoted_text
     assert inventory.statements[0].scope_quote == ("基线期 / V2 / D0" if fault == "already_scoped" else None)
-    if fault in {None, "repeated", "missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first"}:
+    if fault in {None, "repeated", "missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first", "json_once"}:
         assert result.source_interpretation.statements[0].scope_quote == "基线期 / V2 / D0"
         if fault in {None, "missing_aspects_first", "ungrounded_time_first", "missing_aspects_no_time_first"}:
             assert result.source_target_review.items[0].decision == "unresolved"
@@ -6750,6 +6760,18 @@ def test_runner_native_table_time_recheck_preserves_source_and_retry_boundary(fa
                 assert "UNRESOLVED_ASPECTS_MISSING" in errors
     else:
         assert result.source_interpretation == inventory
+    malformed = [attempt for attempt in result.attempts
+                 if attempt.outcome == "schema_invalid"
+                 and "SOURCE_SCOPE_CORRECTION_JSON_INVALID" in attempt.error_classes]
+    assert len(malformed) == (2 if fault == "json_repeated" else 1 if fault in {"json_once", "json_budget", "json_then_wrong_id"} else 0)
+    for attempt in malformed:
+        assert attempt.error_detail["statement_id"] == 0
+        assert attempt.error_detail["retry_class"] == "schema"
+        assert attempt.error_detail["source_refs"] == unit.source_span_ids
+        assert "Wait structure_unit_id" in attempt.raw_output_text
+    if fault in {"json_repeated", "json_budget"}:
+        assert result.attempts[-1].error_classes == ["SOURCE_SCOPE_CORRECTION_JSON_INVALID"]
+        assert result.attempts[-1].error_detail["retry_class"] == "schema"
 
 
 def test_split_schedule_row_uses_only_complete_source_cells() -> None:
