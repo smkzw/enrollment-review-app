@@ -44,6 +44,7 @@ SOURCE_TARGET_REVIEW_GAP_VERSION = "source-target-unresolved-cause/v1"
 SOURCE_ATTRIBUTION_VALIDATION_VERSION = "source-external-header-scope/v2"
 SOURCE_TARGET_CONTEXT_RECHECK_VERSION = "source-owned-context-target-recheck/v1"
 SOURCE_TARGET_COCITED_CONTEXT_VERSION = "source-target-cocited-owned-context/v1"
+SOURCE_STAGE_ECHO_VERSION = "source-grounded-stage-echo/v1"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -3250,6 +3251,36 @@ def validate_source_interpretation(
             reject("SOURCE_ATTRIBUTION_MISSING",
                    "同句外部资料转述须注明逐字归因；不能用描述性语气跳过核对",
                    "attribution_quote", "correct_source_scope")
+
+
+def normalize_source_stage_echo(
+    batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation,
+) -> tuple[SourceInterpretation, list[int]]:
+    """Echo an already grounded label, never select or repair a temporal meaning."""
+    updated = interpretation
+    changed: list[int] = []
+    for _ in interpretation.statements:
+        try:
+            validate_source_interpretation(batch, updated)
+        except SourceInterpretationValidationError as issue:
+            if issue.code != "SOURCE_STAGE_TIME_MISSING" or issue.statement_id in changed:
+                break
+            statement = updated.statements[issue.statement_id]
+            stage = normalize_source_excerpt(statement.affected_stage or "")
+            # A partial label/window is an interpretation problem, not omitted duplication.
+            if any(word and (word in stage or stage in word)
+                   for word in map(normalize_source_excerpt, statement.time_words)):
+                break
+            if any(fragment != stage for fragment in _unreported_time_fragments(statement)):
+                break
+            if updated is interpretation:
+                updated = interpretation.model_copy(deep=True)
+            assert statement.affected_stage is not None  # The validator grounded it before raising.
+            updated.statements[issue.statement_id].time_words.append(statement.affected_stage)
+            changed.append(issue.statement_id)
+        else:
+            break
+    return updated, changed
 
 
 def _cell_scope_label_packet(batch: ProtocolControlDispositionBatch, unit) -> list[dict[str, str]]:

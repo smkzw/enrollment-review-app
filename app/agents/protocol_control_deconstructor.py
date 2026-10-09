@@ -170,6 +170,8 @@ from .protocol_control_source_interpretation import (
     validate_source_interpretation,
     normalize_schedule_randomization_anchors,
     normalize_mixed_schedule_scopes,
+    normalize_source_stage_echo,
+    SOURCE_STAGE_ECHO_VERSION,
     native_schedule_time_excerpt_is_grounded,
     native_schedule_scope_requires_recheck,
     validate_source_target_review,
@@ -7762,6 +7764,9 @@ class ProtocolControlAgentRunner:
                     source_interpretation, mixed_scope_ids = normalize_mixed_schedule_scopes(
                         batch, source_interpretation
                     )
+                    source_interpretation, stage_echo_indexes = normalize_source_stage_echo(
+                        batch, source_interpretation
+                    )
                     validate_source_interpretation(batch, source_interpretation)
                     attempts.append(ProtocolControlAgentAttempt(
                         attempt=len(attempts) + 1,
@@ -7776,6 +7781,9 @@ class ProtocolControlAgentRunner:
                                 if anchor_ids else []) +
                                (["混合访视行错误共享范围按原列来源拆除：" + ",".join(mixed_scope_ids)]
                                 if mixed_scope_ids else []),
+                        error_detail=({"normalization_version": SOURCE_STAGE_ECHO_VERSION,
+                                       "stage_echo_indexes": stage_echo_indexes}
+                                      if stage_echo_indexes else None),
                     ))
                     break
                 except Exception as exc:  # noqa: BLE001 - product transport/schema boundary

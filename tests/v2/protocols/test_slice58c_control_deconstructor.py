@@ -113,6 +113,7 @@ from app.agents.protocol_control_source_interpretation import (
     schedule_column_links,
     normalize_schedule_randomization_anchors,
     normalize_mixed_schedule_scopes,
+    normalize_source_stage_echo,
     validate_source_interpretation,
     validate_source_target_review,
     _exception_in_target,
@@ -138,6 +139,7 @@ from app.agents.protocol_control_stage_compiler import (
     can_compile_relative_stage_requirement,
     can_compile_shared_prohibition_requirement,
     can_compile_stage_bound_requirement,
+    can_compile_stage_bound_source,
     build_relative_stage_requirement_prompt,
     build_shared_prohibition_requirement_prompt,
     build_stage_bound_requirement_prompt,
@@ -5243,7 +5245,7 @@ def test_source_scope_failure_retains_pending_source_without_reread(failure):
     assert result.pending_source_interpretation.statements[1:] == inventory.statements[1:]
 
 
-def test_runner_repairs_missing_stage_time_on_one_source_statement() -> None:
+def test_runner_echoes_missing_stage_time_without_a_repair_call() -> None:
     batch = _batch()
     original = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
@@ -5279,9 +5281,11 @@ def test_runner_repairs_missing_stage_time_on_one_source_statement() -> None:
     ])
     result = ProtocolControlAgentRunner().run(batch, transport)
     assert transport.source_calls == 1
-    assert transport.correction_calls == 1
+    assert transport.correction_calls == 0
     assert result.source_interpretation is not None
     assert result.source_interpretation.statements[0].time_words == ["筛选时"]
+    assert original.statements[0].time_words == []
+    assert result.attempts[0].raw_output_text == original.model_dump_json()
 
 
 def test_runner_repairs_intraday_omission_locally_without_rewriting_sibling() -> None:
@@ -5392,6 +5396,97 @@ def test_source_stage_requires_complete_original_time_word() -> None:
     assert error.value.code == "SOURCE_STAGE_TIME_MISSING"
     inventory.statements[0].time_words = ["筛选期"]
     validate_source_interpretation(batch, inventory)
+
+
+@pytest.mark.parametrize("stage", ["准备期", "评价期", "准备期或评价期", "非准备期"])
+def test_grounded_stage_echo_is_literal_immutable_and_not_adoption(stage):
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[1].heading_path = [stage]
+    batch.owned_units[1].excerpt = "核对受试者记录。"
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-02", quoted_text="核对受试者记录。",
+            affected_stage=stage, force="required", decision_functions=["action"], time_words=[],
+            exception_words="原有例外", unresolved=["原有疑问"])], units_without_statement=["su-01"])
+    before = inventory.model_dump(mode="json")
+    actual, indexes = normalize_source_stage_echo(batch, inventory)
+    assert indexes == [0]
+    validate_source_interpretation(batch, actual)
+    assert actual.statements[0].time_words == [stage]
+    assert actual.model_dump(mode="json", exclude={"statements": {0: {"time_words"}}}) == inventory.model_dump(
+        mode="json", exclude={"statements": {0: {"time_words"}}})
+    assert inventory.model_dump(mode="json") == before
+    assert normalize_source_stage_echo(batch, actual) == (actual, [])
+    # A heading alone is not an executable visit or a semantic approval.
+    assert not can_compile_stage_bound_source(batch, actual, 0)
+
+
+def test_runner_echoes_sourced_stage_without_a_model_correction_and_keeps_raw_reply():
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[1].heading_path = ["评价期"]
+    batch.owned_units[1].excerpt = "核对受试者记录。"
+    source = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-02", quoted_text="核对受试者记录。",
+            affected_stage="评价期", force="required", decision_functions=["action"], time_words=[])],
+        units_without_statement=["su-01"])
+    raw = source.model_dump_json()
+
+    class StageTransport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="original-source", text=raw)
+
+        def correct_source_scope(self, *, prompt):
+            pytest.fail("Duplicating a grounded label does not need another model call")
+
+    transport = StageTransport([ProtocolControlAgentResponse(session_id="author", text=_wire().model_dump_json())])
+    result = ProtocolControlAgentRunner().run(batch, transport)
+    assert result.source_interpretation.statements[0].time_words == ["评价期"]
+    assert source.statements[0].time_words == []
+    assert result.attempts[0].raw_output_text == raw
+    assert result.attempts[0].raw_output_sha256 == hashlib.sha256(raw.encode()).hexdigest()
+    assert result.attempts[0].error_detail == {
+        "normalization_version": "source-grounded-stage-echo/v1", "stage_echo_indexes": [0]}
+
+
+def test_heading_stage_echo_cannot_enable_a_short_visit_compiler():
+    batch = _batch().model_copy(deep=True)
+    batch.known_workflow_stage_targets = [batch.known_workflow_stage_targets[0]]
+    batch.owned_units[1].heading_path = ["筛选期"]
+    batch.owned_units[1].excerpt = "核对受试者记录。"
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-02", quoted_text="核对受试者记录。",
+            affected_stage="筛选期", force="required", decision_functions=["action"], time_words=[])],
+        units_without_statement=["su-01"])
+    actual, indexes = normalize_source_stage_echo(batch, inventory)
+    assert indexes == [0] and not actual.statements[0].unresolved
+    validate_source_interpretation(batch, actual)
+    assert not can_compile_stage_bound_source(batch, actual, 0)
+    # Only the actual leading action scope, not its heading alone, enables this capability.
+    batch.owned_units[1].excerpt = inventory.statements[0].quoted_text = "筛选期核对受试者记录。"
+    actual, indexes = normalize_source_stage_echo(batch, inventory)
+    assert indexes == [0]
+    assert can_compile_stage_bound_source(batch, actual, 0)
+
+
+@pytest.mark.parametrize("quote,stage,words,expected", [
+    ("筛选期核对记录。", "基线期", [], "SOURCE_STAGE_UNGROUNDED"),
+    ("Ⅲ期核对记录。", "Ⅲ期", [], "STUDY_PHASE_NOT_VISIT_STAGE"),
+    ("筛选期核对记录。", "筛选期", ["筛选"], "SOURCE_STAGE_TIME_MISSING"),
+    ("筛选期首次给药前2天核对记录。", "筛选期", [], "SOURCE_STAGE_TIME_MISSING"),
+    ("筛选期休息30分钟。", "筛选期", [], "SOURCE_STAGE_TIME_MISSING"),
+    ("筛选期核对记录。", "筛选期", ["给药后"], "SOURCE_TIME_UNGROUNDED"),
+])
+def test_stage_echo_never_repairs_ungrounded_or_incomplete_time(quote, stage, words, expected):
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[1].excerpt = quote
+    batch.owned_units[1].heading_path = []
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-02", quoted_text=quote,
+            affected_stage=stage, force="required", decision_functions=["action"], time_words=words)],
+        units_without_statement=["su-01"])
+    actual, _ = normalize_source_stage_echo(batch, inventory)
+    with pytest.raises(SourceInterpretationValidationError) as caught:
+        validate_source_interpretation(batch, actual)
+    assert caught.value.code == expected
 
 
 def test_runner_corrects_study_phase_stage_without_rereading_source() -> None:

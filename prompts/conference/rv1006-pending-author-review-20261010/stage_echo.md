@@ -1,0 +1,19 @@
+# 同批准角色增量：原文已证阶段字段的确定性回填
+
+Active task: .trellis/tasks/09-11-e2e-eligibility-review。
+本次是工程只读审阅，不是产品病例读取。批准既有C03/evidence_single_object同会话增量，禁止写文件、shell、网络、临床原件/库/env/原答、运行测试、递归派发。可用只读源码工具，最多18个聚焦读取；不要重复全部历史。源码4bd40fe5之后本机未提交五文件增量，以当前文件为准。
+
+请独立核下列当前定义及消费者，不先采信修改者结论：
+- app/agents/protocol_control_source_interpretation.py：normalize_source_stage_echo、完整validate_source_interpretation、_unreported_time_fragments、_time_words_cover_stage_label；不是语义批准。
+- app/agents/protocol_control_deconstructor.py：新source读取的归一化/验证/实际raw回执记录；来源恢复先验验证。
+- app/services/protocol_control_execution.py：_unrepaired_source_seed_proof、完整_revalidated_source_seed_proof的新v6路径、_validated_deep_partial_source投影、_execute_deep余额及接收seed、_deep_component_identity与完成组复用。
+- app/agents/protocol_control_stage_compiler.py：时间词对短编译/时间判定的真实作用。
+- 原测试test_slice58c_control_deconstructor.py的新stage_echo/runner_echoes用例，test_protocol_control_execution.py的pending_stage_witness真实服务消费/历史不变/篡改反例。
+
+要核的问题：目前所有SOURCE_STAGE_TIME_MISSING都进入模型核查，即使affected_stage已经在引用/合法范围/标题逐字存在。新helper只在原完整validator已经证明该字段来源后，原样复制到time_words；不选阶段，不删旧词、不修其他错误。已有部分阶段/列表成员、遗漏窗口/时长/小时不得自动回填；下一原门仍运行。原模型回复及hash保持，投影版本和indexes记录在实际attempt。字段重复本身不是医学判断。
+
+恢复v6：仅未采用、没有下游证明的pending来源；重放当前合法原source和每个成功scope修订，逐字快照相等。剩余失败提案hash均核验，不能略过一个parsed成功；失败提案不合并。只在当前整份来源通过上述确定性回填及全门后生成新证明，旧source hash与新hash均记录，old checkpoint不改。修订调用已花次数不重置，余额扣除terminal已花数与原答数一致证明。下游作者/核对/coverage全部丢弃并重新执行。当前测试18passed，先前12pass/1fail是新fixture记录None detail的TypeError，修fixture未改产品；完整相连窗口尚未跑。
+
+请找真实可达的危险反例：范围或兄弟语义是否被改？表格标题标签是否能误作为访视？缺时长/窗口是否被掩盖？v6能否跳过成功修订、损坏回执或恢复已采用内容？字面metadata回填是否意外让编译快速路径跳过语义核对？旧completed是否被不必要丢弃？指出第一处因果错误、必要输入与最小修复；不是泛泛要求更多测试/全面改框架。建议也明确证据限制。相同模型家族只程序/上下文分离，不是模型独立金标/医学批准。
+
+输出已读范围、按严重度发现、可否有界使用和未证边界；不输出临床内容。

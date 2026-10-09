@@ -2,6 +2,18 @@
 
 ## 实际产物与边界
 
+### 当前增量：有源阶段重复字段（基础4bd40fe5）
+
+最新实际Job093f40aa13784946b4f8d3415f745a54：3物理调用189.9354220830137秒/exit3，44完成、45失败、45未读；检查点23df0b9397044830977c26f1e03121c6。原校验已经证实affected_stage逐字有源，却因time_words未重复同字段再次要求模型补写；两次局部修订未完成。此轮没有到作者/嵌套政策修订。替代解释包括模型采样波动与阶段字段提示冗余；本包只处理确定性重复，不证明其他临床含义已核。
+
+source-grounded-stage-echo/v1调用完整原validator后只处理SOURCE_STAGE_TIME_MISSING：复制原affected_stage，不补阶段选择、时间窗/时长或部分标签。完整门随后重验。Runner保存原raw/hash及投影元数据；unrepaired证明带版本/索引。失败来源恢复仅在实际原答与每个成功修订可重放时生成v6，逐一核失败回复hash、扣旧来源修订次数，旧产物不改。44个完成结果继续当前完整门重验，不凭版本串白名单。
+
+最终三相连原模块1661passed/164.75秒/5SWIG，JUnit artifacts/rv1006-source-stage-echo-connected-20261010-v2.xml。首选窗新夹具None detail导致1失败，修夹具；随后18聚焦通过。全窗v1为1659pass/2fail：旧测试要求一次阶段重复补写及validator literal漏新版本，按本行为改为零补写并保留raw/来源检查。窗口不相加。最终只读预检rv1006-stage-echo-preflight-20261010-v2.json：44reusable/1resume_partial/45refresh，0模型/0写/database_unchanged=true；实际45证明v6、原24扣2余额22。首次诊断入口未设PYTHONPATH而导入失败发生在请求前，改入口不改产品。
+
+C03同角色会话stage_echo审阅210.986秒/exit0/no fallback，120min完成等待，无临床/库/env/测试。C1称旧_replay_checkpoint严格比较，未复查当前；完整现码已有_same_deep_components_with_current_gate及原回执/全门检查（4bd40fe5），原消费者正反回放否证，不重复加补丁。C2标题范围反例被例外未决共同阻断，补独立标题不启短编译/正文有源可编译的正反例。C3补unrepaired证明投影元数据，并限定v6恢复投影，避免对已投影v1再次要求新索引。C4其他来源错误不扩入本恢复。末C2/C3由所有者最终窗核验，未再独审；同模型家族只有程序/context分离，不是独立金标。
+
+真实新接续尚未运行。下一按最终实际44/1/45计划合法新建，保留旧093f/原件/库与累积账。完整共同采用、同包病例工作稿、正式UI有源更正后新旧结果仍未达；下方是前包历史，不覆盖此段。
+
 本包基础源码972428f6258dd5eabfea580346177e1c049eaf09。只更改两源码、两原模块测试和当前任务记录；七份继承dirty不纳入提交。Goal active、claims_complete=false。
 
 真实Job775a750ed7634c4bbfa7a5400485e54f在972428f6源码上终止：failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，2物理调用241.53028695797548秒，驱动exit3。85发现及44成功零新调用，deep_0045失败、余45未读。检查点ab7501a2ad2f442490e0f5aaeb9375cf；旧Job、来源库、保护库检查均不变。该运行尚未使用本包，不是完整采用或临床验收。

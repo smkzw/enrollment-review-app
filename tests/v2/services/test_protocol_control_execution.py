@@ -4767,8 +4767,12 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     } else 2)
 
 
+@pytest.mark.parametrize("stage_echo,tamper", [
+    (False, None), (True, None), (True, "changed_source"),
+    (True, "corrupt_response"), (True, "reset_budget"), (True, "unreplayed_success"),
+])
 def test_pending_stage_witness_with_two_corrections_reaches_real_recovery_consumer(
-    data_paths, session_factory, monkeypatch,
+    data_paths, session_factory, monkeypatch, stage_echo, tamper,
 ):
     from dataclasses import replace
     from tests.v2.protocols.test_deconstruction_service import _synthetic_spans, _synthetic_phase_graph
@@ -4807,7 +4811,7 @@ def test_pending_stage_witness_with_two_corrections_reaches_real_recovery_consum
             for unit in units
         ] + [SourceStatement(structure_unit_id=units[1].structure_unit_id, quoted_text="准备期、评价期核对资料",
                              force="descriptive", decision_functions=["background"],
-                             affected_stage="准备期、评价期", time_words=["准备期", "评价期"])],
+                             affected_stage="准备期、评价期", time_words=[] if stage_echo else ["准备期", "评价期"])],
             units_without_statement=list(batch.owned_structure_unit_ids[2:]))
         attempts = []
         with pytest.raises(SourceInterpretationValidationError) as first:
@@ -4818,7 +4822,7 @@ def test_pending_stage_witness_with_two_corrections_reaches_real_recovery_consum
             attempts.append(ProtocolControlAgentAttempt(attempt=len(attempts) + 1,
                 session_id=f"observed-{len(attempts)}", outcome=outcome, raw_output_text=raw,
                 raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(), error_detail=detail,
-                error_classes=[detail["code"]] if outcome == "schema_invalid" else []))
+                error_classes=[detail["code"]] if outcome == "schema_invalid" and detail else []))
 
         issue = first.value
         record(source, "schema_invalid", dict(code=issue.code, statement_id=issue.statement_id,
@@ -4832,12 +4836,21 @@ def test_pending_stage_witness_with_two_corrections_reaches_real_recovery_consum
                 structure_unit_id=units[index].structure_unit_id, scope_quote=None, affected_stage=None, time_words=[])
             record(correction, "parsed", dict(code=issue.code, statement_id=index, source_refs=issue.source_refs))
             source = apply_source_scope_correction(batch, source, index, correction)
-        validate_source_interpretation(batch, source)
-        attempts.append(ProtocolControlAgentAttempt(attempt=4, session_id="observed-0",
+        if stage_echo:
+            with pytest.raises(SourceInterpretationValidationError, match="明确阶段范围"):
+                validate_source_interpretation(batch, source)
+            # One failed proposal has no semantic effect and remains hash-bound.
+            record(SourceScopeCorrection(version="phase5/control-source-scope-correction/v1",
+                structure_unit_id=units[1].structure_unit_id, scope_quote=None,
+                affected_stage="准备期、评价期", time_words=[]), "schema_invalid")
+        else:
+            validate_source_interpretation(batch, source)
+        attempts.append(ProtocolControlAgentAttempt(attempt=len(attempts) + 1, session_id="observed-0",
             raw_output_sha256=hashlib.sha256(b"historical pending stage validation").hexdigest(), outcome="schema_invalid",
             error_classes=["SOURCE_STAGE_TIME_MISSING"], error_detail=dict(
                 workflow_phase="source_correction_pending", code="SOURCE_STAGE_TIME_MISSING",
-                statement_id=2, source_refs=list(units[1].source_span_ids), json_path="statements[2].time_words")))
+                statement_id=2, source_refs=list(units[1].source_span_ids), json_path="statements[2].time_words",
+                repairs_used=3 if stage_echo else 2)))
         return ProtocolControlAgentRunResult(status="需要核对", batch_id=batch.batch_id, session_id="observed-0",
             attempts=attempts, pending_source_interpretation=source)
 
@@ -4855,15 +4868,52 @@ def test_pending_stage_witness_with_two_corrections_reaches_real_recovery_consum
         checkpoint = JobStore(session, now=_now).get_last_checkpoint(old.job_id, "deep_0001")
     assert checkpoint is not None, failures
     before = _job_checkpoint_fingerprint(session_factory, old.job_id)
+    if tamper:
+        from copy import deepcopy
+        altered = deepcopy(checkpoint[1])
+        if tamper == "changed_source":
+            altered["pending_source_interpretation"]["statements"][2]["force"] = "required"
+        elif tamper == "corrupt_response":
+            altered["attempts"][-2]["raw_output_sha256"] = "0" * 64
+        elif tamper == "reset_budget":
+            altered["attempts"][-1]["error_detail"]["repairs_used"] = 0
+        elif tamper == "unreplayed_success":
+            altered["attempts"][-2]["outcome"] = "parsed"
+        original_checkpoint = JobStore.get_last_checkpoint
+        monkeypatch.setattr(JobStore, "get_last_checkpoint", lambda self, job_id, step_id:
+            (checkpoint[0], altered) if job_id == old.job_id and step_id == "deep_0001"
+            else original_checkpoint(self, job_id, step_id))
+        if tamper == "corrupt_response":
+            with pytest.raises(protocol_control_execution_module.ProtocolControlExecutionError):
+                service.create_from_deconstruction(source_job_id=seed.source_job_id,
+                    deep_source_job_id=old.job_id, idempotency_key="pending-echo-damaged")
+        else:
+            next_job = service.create_from_deconstruction(source_job_id=seed.source_job_id,
+                deep_source_job_id=old.job_id, idempotency_key="pending-echo-unproven")
+            _, payload = _job_snapshot_and_payload(session_factory, next_job.job_id)
+            decision = next(item for item in payload["deep_reuse_plan"]["decisions"].values()
+                            if item["step_id"] == "deep_0001")
+            assert decision["decision"] == "refresh_required"
+        assert not resumed and deep.start_calls == 0
+        monkeypatch.setattr(JobStore, "get_last_checkpoint", original_checkpoint)
+        assert _job_checkpoint_fingerprint(session_factory, old.job_id) == before
+        return
     new = service.create_from_deconstruction(source_job_id=seed.source_job_id, deep_source_job_id=old.job_id,
                                              idempotency_key="pending-two-scope-new")
     _, payload = _job_snapshot_and_payload(session_factory, new.job_id)
     first = next(item for item in payload["deep_reuse_plan"]["decisions"].values() if item["step_id"] == "deep_0001")
     assert first["decision"] == "resume_partial"
-    assert first["source_seed_proof"]["schema_version"] == "phase5/revalidated-source-seed-proof/v4"
+    assert first["source_seed_proof"]["schema_version"] == (
+        "phase5/revalidated-source-seed-proof/v6" if stage_echo else "phase5/revalidated-source-seed-proof/v4")
     assert first["source_seed_proof"]["scope_correction_indexes"] == [0, 1]
+    if stage_echo:
+        assert first["source_seed_proof"]["stage_echo_indexes"] == [2]
+        assert first["source_seed_proof"]["source_repair_limit"] == 1
+        assert len(first["source_seed_proof"]["discarded_response_sha256"]) == 1
     assert runner.run_job(new.job_id)
     assert resumed and deep.start_calls == 1
+    if stage_echo:
+        assert resumed[0].statements[2].time_words == ["准备期、评价期"]
     snapshot, _ = _job_snapshot_and_payload(session_factory, new.job_id)
     assert snapshot.state == "failed_final"  # No reviewer is fabricated to approve these source statements.
     with session_factory() as session:
@@ -6988,6 +7038,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "missing-anchor-scoped-atom-recovery/v1",
                   "unaccepted-author-proposal-revalidation/v1",
                   "completed-result-current-gate-revalidation/v1",
+                  protocol_control_execution_module.SOURCE_STAGE_ECHO_VERSION,
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   "scoped-exception-dnf/v1"))
     )

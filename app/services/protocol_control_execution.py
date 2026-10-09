@@ -96,6 +96,8 @@ from app.agents.protocol_control_source_interpretation import (
     validate_source_interpretation,
     normalize_schedule_randomization_anchors,
     normalize_mixed_schedule_scopes,
+    normalize_source_stage_echo,
+    SOURCE_STAGE_ECHO_VERSION,
     schedule_column_links,
     validate_source_target_review,
     validated_source_review_seed,
@@ -2113,6 +2115,7 @@ def _deep_component_identity(
                                        "missing-anchor-scoped-atom-recovery/v1",
                                        "unaccepted-author-proposal-revalidation/v1",
                                        "completed-result-current-gate-revalidation/v1",
+                                       SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),
         "requested_route_sha256": (
@@ -2378,6 +2381,7 @@ def _unrepaired_source_seed_proof(
         actual = parse_product_source_interpretation(batch, raw)
         actual, _ = normalize_schedule_randomization_anchors(batch, actual)
         actual, _ = normalize_mixed_schedule_scopes(batch, actual)
+        actual, echoed = normalize_source_stage_echo(batch, actual)
         validate_source_interpretation(batch, actual)
     except (ValueError, KeyError, TypeError):
         return None
@@ -2385,6 +2389,8 @@ def _unrepaired_source_seed_proof(
         return None
     return {
         "schema_version": "phase5/unrepaired-source-seed-proof/v1",
+        **({"normalization_version": SOURCE_STAGE_ECHO_VERSION,
+            "stage_echo_indexes": echoed} if echoed else {}),
         "source_job_id": source_job_id, "step_id": step_id,
         "checkpoint_id": checkpoint_id,
         "raw_output_sha256": digest, "raw_output_chars": len(raw),
@@ -2426,6 +2432,8 @@ def _revalidated_source_seed_proof(
 
     source_snapshot = saved.get("source_interpretation")
     snapshot_field = "source_interpretation"
+    stage_echo_indexes: list[int] = []
+    pending_repairs_used = 0
     if source_snapshot is None and saved.get("pending_source_interpretation") is not None:
         last = attempts[-1]
         detail = last.get("error_detail") if isinstance(last, Mapping) else None
@@ -2452,9 +2460,30 @@ def _revalidated_source_seed_proof(
         stage = normalize_source_excerpt(statement.affected_stage or "")
         if (unit is None or not stage
                 or detail.get("source_refs") != list(unit.source_span_ids)
-                or detail.get("json_path") != f"statements[{index}].time_words"
-                or not _time_words_cover_stage_label(stage, statement.time_words)
-                or any(stage in normalize_source_excerpt(word) for word in statement.time_words)):
+                or detail.get("json_path") != f"statements[{index}].time_words"):
+            return None
+        normalized, stage_echo_indexes = normalize_source_stage_echo(batch, pending)
+        if stage_echo_indexes:
+            try:
+                validate_source_interpretation(batch, normalized)
+            except ValueError:
+                return None
+            try:
+                validate_source_interpretation(batch, pending)
+            except SourceInterpretationValidationError as issue:
+                if (issue.code != detail["code"] or issue.statement_id != index
+                        or issue.source_refs != detail["source_refs"]):
+                    return None
+            else:
+                return None
+            pending_repairs_used = detail.get("repairs_used")
+            if (type(pending_repairs_used) is not int or pending_repairs_used < 0
+                    or pending_repairs_used > max_source_corrections
+                    or pending_repairs_used != sum(
+                        bool(attempt.get("raw_output_text")) for attempt in attempts[1:])):
+                return None
+        elif (not _time_words_cover_stage_label(stage, statement.time_words)
+              or any(stage in normalize_source_excerpt(word) for word in statement.time_words)):
             return None
         snapshot_field = "pending_source_interpretation"
 
@@ -2480,6 +2509,11 @@ def _revalidated_source_seed_proof(
         actual = parse_product_source_interpretation(batch, raw)
         actual, _ = normalize_schedule_randomization_anchors(batch, actual)
         actual, _ = normalize_mixed_schedule_scopes(batch, actual)
+        detail = first.get("error_detail")
+        if isinstance(detail, Mapping) and detail.get("normalization_version") == SOURCE_STAGE_ECHO_VERSION:
+            actual, echoed = normalize_source_stage_echo(batch, actual)
+            if not echoed or echoed != detail.get("stage_echo_indexes"):
+                return None
     except (ValueError, KeyError, TypeError):
         return None
     witnessed = [first["raw_output_sha256"]]
@@ -2489,6 +2523,24 @@ def _revalidated_source_seed_proof(
         try:
             validate_source_interpretation(batch, actual)
         except SourceInterpretationValidationError as issue:
+            if stage_echo_indexes and actual.model_dump(mode="json") == source_snapshot:
+                # Failed proposals never mutate the witnessed source. Verify every
+                # discarded reply, then derive only the literal duplicate metadata.
+                tail = attempts[offset + 1:]
+                if any(not isinstance(item, Mapping) or item.get("outcome") != "schema_invalid"
+                       or item.get("attempt") != offset + position + 2
+                       for position, item in enumerate(tail)):
+                    return None
+                for item in tail:
+                    actual_text(item)
+                actual, echoed = normalize_source_stage_echo(batch, actual)
+                if echoed != stage_echo_indexes:
+                    return None
+                try:
+                    validate_source_interpretation(batch, actual)
+                except ValueError:
+                    return None
+                break
             if (offset == max_source_corrections or issue.code not in {
                     "SOURCE_TIME_UNGROUNDED", "SOURCE_SCOPE_UNGROUNDED", "SOURCE_TIME_INCOMPLETE",
                     "SOURCE_SCOPE_CONTEXT_INVALID", "SOURCE_STAGE_UNGROUNDED",
@@ -2555,7 +2607,7 @@ def _revalidated_source_seed_proof(
                 return None
             break
     question_corrected: set[int] = set()
-    for attempt in attempts[len(witnessed):]:
+    for attempt in ([] if stage_echo_indexes else attempts[len(witnessed):]):
         detail = attempt.get("error_detail") if isinstance(attempt, Mapping) else None
         if not isinstance(detail, Mapping) or detail.get("workflow_phase") != "source_scope_question_recheck":
             break
@@ -2585,16 +2637,30 @@ def _revalidated_source_seed_proof(
             return None
         question_corrected.add(index)
         witnessed.append(attempt["raw_output_sha256"])
+    if stage_echo_indexes:
+        source_snapshot = normalize_source_stage_echo(
+            batch, SourceInterpretation.model_validate(source_snapshot))[0].model_dump(mode="json")
     if actual.model_dump(mode="json") != source_snapshot:
         return None
     return {
-        "schema_version": ("phase5/revalidated-source-seed-proof/v5" if question_corrected else
+        "schema_version": ("phase5/revalidated-source-seed-proof/v6" if stage_echo_indexes else
+                           "phase5/revalidated-source-seed-proof/v5" if question_corrected else
                            "phase5/revalidated-source-seed-proof/v4"
                            if snapshot_field == "pending_source_interpretation"
                            else "phase5/revalidated-source-seed-proof/v3"),
         **({"source_snapshot_field": snapshot_field}
            if snapshot_field == "pending_source_interpretation" else {}),
-        "source_repair_limit": max_source_corrections,
+        "source_repair_limit": max_source_corrections - pending_repairs_used,
+        **({"normalization_version": SOURCE_STAGE_ECHO_VERSION,
+            "stage_echo_indexes": stage_echo_indexes,
+            "source_repairs_used": pending_repairs_used,
+            "original_source_sha256": hashlib.sha256(json.dumps(
+                saved[snapshot_field], ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"),
+            ).encode()).hexdigest(),
+            "discarded_response_sha256": [item["raw_output_sha256"]
+                for item in attempts[len(witnessed):] if item.get("raw_output_text")]}
+           if stage_echo_indexes else {}),
         "source_job_id": source_job_id, "step_id": step_id, "checkpoint_id": checkpoint_id,
         "source_response_sha256": witnessed,
         "scope_correction_indexes": sorted(corrected - quote_corrected),
@@ -2941,6 +3007,13 @@ def _validated_deep_partial_source(
     if not isinstance(source, Mapping):
         raise ValueError("局部草稿缺少有源解释")
     interpretation = SourceInterpretation.model_validate(source)
+    if source_seed_proof and source_seed_proof.get("schema_version") == "phase5/revalidated-source-seed-proof/v6":
+        interpretation, echoed = normalize_source_stage_echo(batch, interpretation)
+        if (echoed != source_seed_proof["stage_echo_indexes"]
+                or hashlib.sha256(interpretation.model_dump_json().encode()).hexdigest()
+                != source_seed_proof["source_sha256"]):
+            raise ValueError("来源阶段投影与入队前证明不一致")
+        source = interpretation.model_dump(mode="json")
     validate_source_interpretation(batch, interpretation)
     if source_seed_proof is None and saved.get("pending_author_wire") is not None:
         return checkpoint_id, saved, _pending_author_resume(
@@ -3430,7 +3503,7 @@ def _preflight_deep_source(
                 "verified_source_interpretation_components_revalidated"
                 if partial[2].source_seed_proof["schema_version"] in {
                     "phase5/revalidated-source-seed-proof/v3", "phase5/revalidated-source-seed-proof/v4",
-                    "phase5/revalidated-source-seed-proof/v5"}
+                    "phase5/revalidated-source-seed-proof/v5", "phase5/revalidated-source-seed-proof/v6"}
                 else "verified_source_interpretation_repair_material_changed"
             )
             decisions[batch.batch_id]["source_seed_proof"] = partial[2].source_seed_proof
@@ -4799,7 +4872,7 @@ def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str
             "revalidated_source_interpretation"
             if resume_review.source_seed_proof["schema_version"] in {
                 "phase5/revalidated-source-seed-proof/v3", "phase5/revalidated-source-seed-proof/v4",
-                "phase5/revalidated-source-seed-proof/v5"}
+                "phase5/revalidated-source-seed-proof/v5", "phase5/revalidated-source-seed-proof/v6"}
             else "unrepaired_source_interpretation"
         )
         record["source_seed_proof"] = dict(resume_review.source_seed_proof)
