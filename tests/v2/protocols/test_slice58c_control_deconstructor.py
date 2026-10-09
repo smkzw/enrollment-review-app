@@ -8899,6 +8899,37 @@ def test_candidate_only_repair_preserves_other_candidates_and_dispositions() -> 
     assert list(response_format["json_schema"]["schema"]["properties"]) == ["candidate_draft"]
 
 
+@pytest.mark.parametrize("policy", ["retain_initial", "no_result", "unresolved"])
+def test_candidate_repair_schema_requires_explicit_current_repeat_policy(policy) -> None:
+    from app.domain.contracts.repeat_scheme import RepeatScheme
+
+    before = protocol_control_agent_json_schema()
+    schema = protocol_control_candidate_repair_response_format()["json_schema"]["schema"]
+    definition = schema["$defs"]["RepeatScheme"]
+    selection = definition["properties"]["no_repeat_result_use"]
+    assert "no_repeat_result_use" in definition["required"]
+    assert "default" not in selection
+    assert len(selection["anyOf"]) == 1
+    assert selection["anyOf"][0]["type"] == "string"
+    assert policy in selection["anyOf"][0]["enum"]
+    assert None not in selection["anyOf"][0]["enum"]
+    assert protocol_control_agent_json_schema() == before
+    # Historical decoding still preserves the omission. Current extraction
+    # remains stricter and must never default an absent policy to initial use.
+    payload = dict(scope="核对复查结果", source_span_ids=["span:repeat"],
+                   source_excerpts=["检查结果可复查，结果采用方式需另行核对"],
+                   permission="optional", trigger="unconditional",
+                   count_status="not_specified", time_status="not_specified",
+                   result_use="unresolved")
+    historical = RepeatScheme.model_validate(payload)
+    assert "no_repeat_result_use" not in historical.model_dump(mode="json")
+    with pytest.raises(ValueError, match="须说明没有复查记录"):
+        historical.require_current_extraction()
+    current = RepeatScheme.model_validate({**payload, "no_repeat_result_use": policy})
+    current.require_current_extraction()
+    assert current.no_repeat_result_use == policy
+
+
 def test_missing_evidence_types_are_assembled_without_rewriting_the_candidate() -> None:
     baseline = _wire(candidate=_candidate()).model_dump(mode="json")
     del baseline["candidate_drafts"][0]["minimum_evidence"][0]["required_source_types"]

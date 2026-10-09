@@ -34,3 +34,13 @@
 只读预检rv1006-source-located-stop-preflight-20261010-v1.json：44reuse/1partial/45refresh，0模型/0库写/hash保持。私有材料根/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003，本机可读，当前外部审阅不可读；公开材料不含原文/原答/DB/env。
 
 冻结提交后从合法入口新建，实际90步与预检逐项一致再运行，旧终态不复活。此机制减少无信息重复，不证明本次作者已能正确表达所有临床关系；替代解释包括模型缺上下文和确有原文歧义。完整同源采用包、同包病例当前节点工作稿、正式UI一次更正/补证及新旧结果尚未完成；claims_complete=false，Goal active，不暂停。
+
+## 实际试跑纠正及请求Schema一致性修复
+
+4b954a74485ef7fdf211a3bffc260c31a1e46adc的Job463cf606ef704fddafc3cc38de92a40f failed_final，2物理调用268.0073541669408秒/exit3；44完成/45失败/45未读。85发现/44成功零新调用，旧Job/保护库/来源库保持。检查点9c989e585f8442548874600dd596091f，payload sha7e0e430362033f4e3004f507561bdefa52a7ebb242ae583760cfb84d7a7bb887，仅来源解释可复用。实际第一答WIRE_SCHEMA_INVALID，第二答CANDIDATE_REPAIR_INVALID因遗漏no_repeat_result_use；不是第二次出版错误，也未验证新定位停止器真实效果。此前“二次即停证明新机制”口头推断已更正，不据此宣布临床改进。
+
+实际第二请求含完整Schema，no_repeat_result_use可空；RepeatScheme.require_current_extraction却已要求明确非空政策。确定性最小修复仅收紧protocol_control_candidate_repair_response_format中同字段为既有非空枚举含unresolved，历史域解码/base作者Schema/临床接受规则不变，不默认任何采用值。不是新语义能力，也不新增repeat专用恢复方法。实际发送Schema/提示由每次请求回执及源码快照绑定，不拿旧宽Schema说新请求已执行；原修订权限和契约文字不变，不为凑版本更新历史hash。
+
+三相连模块最终1493pass/146.05秒/exit0/5SWIG；命令同前但不含未改gate模块，JUnit artifacts/rv1006-candidate-repair-schema-current-policy-20261010-v1.xml。新增明确政策正例、null不得进入当前提取、历史遗漏仍可读、基础Schema调用前后未变；两次集中窗不累加。此routine一致性修复由所有者直接确定性验证，前C03不冒称审过它。
+
+当前只读预检rv1006-candidate-schema-preflight-20261010-v1.json：最新463cf为源，44/1/45，0调用/0写/hash保持。下一冻结修复、合法新建核逐项计划再读取剩余；即使模型满足新Schema也仍须来源语义及最终消费者，不能把格式修复当内容正确。

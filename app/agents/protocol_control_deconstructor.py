@@ -1642,6 +1642,13 @@ def protocol_control_candidate_repair_response_format(
     """Ask for one candidate only; the system retains the rest of the wire."""
 
     original = protocol_control_agent_json_schema()
+    # Current extraction rejects an omitted/null policy; keep the repair
+    # request consistent without changing historical domain decoding.
+    repeat = original["$defs"].get("RepeatScheme")
+    if repeat is not None:
+        policy = repeat["properties"]["no_repeat_result_use"]
+        policy["anyOf"] = [part for part in policy["anyOf"] if part.get("type") != "null"]
+        policy.pop("default", None)
     candidate_schema: dict[str, Any] = {
         "$ref": "#/$defs/ProtocolControlAgentWireCandidate"
     }
