@@ -478,9 +478,12 @@ def test_procedure_retention_changes_gate_without_refreshing_unchanged_compilati
 
 @pytest.mark.parametrize("gap", [None, "prefix", "tail", "bad_wire"])
 @pytest.mark.parametrize("previous_gate", [False, True])
-def test_partial_procedure_source_refresh_is_scoped_and_keeps_original_receipt(monkeypatch, gap, previous_gate):
+@pytest.mark.parametrize("failure_kind", ["source_review", "temporal"])
+def test_partial_procedure_source_refresh_is_scoped_and_keeps_original_receipt(monkeypatch, gap, previous_gate, failure_kind):
     module = protocol_control_execution_module
     batch, result = _procedure_correspondence_review(single=True)
+    if failure_kind == "temporal":
+        result.attempts[-1].error_classes = ["TEMPORAL_SCOPE_UNRESOLVED"]
     if gap == "prefix":
         batch.owned_units[0].excerpt = "所测项目包括心率与血压，" + batch.owned_units[0].excerpt
     elif gap == "tail":
@@ -583,6 +586,85 @@ def test_mixed_procedure_extension_does_not_expand_the_temporal_only_whole_unit_
     assert _whole_unit_restriction(batch, result) is None
 
 
+@pytest.mark.parametrize("defect", [None, "unread_prefix", "wrong_detail", "definition_sibling", "transport", "all_recommended"])
+@pytest.mark.parametrize("force", ["required", "recommended"])
+def test_typed_temporal_procedure_retains_all_same_unit_actions_without_adoption(defect, force):
+    from app.services.eligibility_review_projection import _restricted_control_projections
+    from tests.v2.domain.test_control_catalog_restricted_contract import _catalog, _publication
+
+    batch, result = _procedure_correspondence_review()
+    quotes = ["核查时登记全部测量记录", ("建议" if force == "recommended" else "") + "复核前静坐至少8分钟"]
+    batch.owned_units[0].excerpt = "；".join(quotes)
+    batch.known_procedure_targets[0].source_excerpts = quotes
+    for index, quote in enumerate(quotes):
+        source = result.source_interpretation.statements[index]
+        source.quoted_text = quote
+        source.force = force if index else "required"
+        source.decision_functions = ["action", "time_validity"]
+        source.time_words = ["8分钟"] if index else []
+        result.source_target_review.items[index] = result.source_target_review.items[index].model_copy(update={
+            "decision": "additional_requirement", "unresolved_cause": None,
+            "source_action_excerpt": quote, "target_id": None, "target_action_excerpt": None,
+            "unresolved_aspects": ["该要求尚未装配"],
+        })
+    attempt = result.attempts[-1]
+    attempt.error_classes = ["TEMPORAL_SCOPE_UNRESOLVED"]
+    attempt.error_detail = dict(code="TEMPORAL_SCOPE_UNRESOLVED", statement_ids=[1],
+        affected_dependents=[1], json_path="/items", retry_class="temporal_scope_review",
+        source_refs=sorted(batch.owned_units[0].source_span_ids))
+    if defect == "unread_prefix":
+        batch.owned_units[0].excerpt = "只适用于下列患者：" + batch.owned_units[0].excerpt
+    elif defect == "wrong_detail":
+        attempt.error_detail["affected_dependents"] = []
+    elif defect == "definition_sibling":
+        result.source_interpretation.statements[0].decision_functions.append("definition")
+    elif defect == "transport":
+        attempt.outcome = "transport_failed"
+    elif defect == "all_recommended":
+        for statement in result.source_interpretation.statements:
+            statement.force = "recommended"
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire,
+    )
+    frozen = result.model_dump(mode="json")
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert result.model_dump(mode="json") == frozen
+    if defect:
+        assert output is None
+        return
+    assert output is not None and not output.candidates
+    assert {item.source_quote for item in output.restricted_statements} == set(quotes)
+    assert all(item.limitation_kind == "consumer_unavailable" and item.independent_scope_proof is None
+               for item in output.restricted_statements)
+    assert all(item.linked_procedure_catalog_item_id is None for item in output.dispositions)
+    assert next(item.source_force for item in output.restricted_statements
+                if item.source_statement_index == 1) == force
+    readback = type(output).model_validate(output.model_dump(mode="json"))
+    protocol_control_execution_module._validate_deep_batch_output(batch, readback)
+    projected = _restricted_control_projections(_publication(_catalog(
+        restricted=tuple(readback.restricted_statements), allowed=tuple(batch.owned_source_span_ids),
+    )))
+    assert all(item.obligations[0].fact_refs == () and item.obligations[0].action_owner is None
+               for item in projected)
+    recommendation = next(item for item in projected if item.title == quotes[1])
+    if force == "recommended":
+        assert recommendation.display_label == "方案建议"
+        assert "不作为独立强制入排条件" in recommendation.obligations[0].reason
+    else:
+        assert recommendation.display_label == "方案补充要求"
+
+
+def test_typed_temporal_procedure_cannot_absorb_unrelated_additional_source():
+    from app.services.protocol_control_restricted_source import _temporal_restriction_indexes
+
+    batch, result = _independent_candidate_and_temporal_gap()
+    result.source_target_review.items.append(type(result.source_target_review.items[0])(
+        statement_index=0, decision="additional_requirement",
+        source_action_excerpt=result.source_interpretation.statements[0].quoted_text,
+    ))
+    assert _temporal_restriction_indexes(batch, result, whole_unit=True) is None
+
+
 @pytest.mark.parametrize("defect", [None, "partial_prefix", "tail", "wrong_unit", "source_unknown"])
 def test_local_context_completion_is_a_real_scoped_proposal_not_host_filled_source(defect):
     from app.agents.protocol_control_source_interpretation import SourceScopeCorrection, apply_source_context_completion
@@ -612,6 +694,50 @@ def test_local_context_completion_is_a_real_scoped_proposal_not_host_filled_sour
         assert revised.statements[0].scope_quote == prefix
         assert revised.statements[0].quoted_text == result.source_interpretation.statements[0].quoted_text
     assert result.source_interpretation.model_dump(mode="json") == frozen
+
+
+@pytest.mark.parametrize("defect", [None, "partial_context", "changed_action", "changed_stage"])
+def test_completed_local_context_question_only_changes_the_source_question(defect):
+    from app.agents.protocol_control_source_interpretation import (
+        SourceScopeCorrection, apply_source_context_completion, can_recheck_source_scope_question,
+        apply_source_scope_question_recheck, build_source_scope_question_prompt,
+    )
+
+    batch, result = _procedure_correspondence_review(single=True)
+    prefix = "测量项目包括血压与心率，"
+    batch.owned_units[0].excerpt = prefix + batch.owned_units[0].excerpt
+    statement = result.source_interpretation.statements[0]
+    statement.affected_stage = "检查前"
+    statement.time_words = ["检查前", "8分钟"]
+    statement.unresolved = ["该操作适用的测量项目未明确"]
+    completed = apply_source_context_completion(batch, result.source_interpretation, 0, SourceScopeCorrection(
+        version="phase5/control-source-scope-correction/v1",
+        structure_unit_id=statement.structure_unit_id, scope_quote=prefix,
+        affected_stage="检查前", time_words=["检查前", "8分钟"],
+    ))
+    if defect == "partial_context":
+        completed.statements[0].scope_quote = "测量项目"
+        assert not can_recheck_source_scope_question(completed.statements[0], batch)
+        return
+    assert can_recheck_source_scope_question(completed.statements[0], batch)
+    prompt = build_source_scope_question_prompt(batch, completed, 0)
+    assert prefix in prompt and "仍仅能修改 unresolved" in prompt
+    proposal = completed.model_copy(deep=True)
+    proposal.units_without_statement = []
+    proposal.statements[0].unresolved = []
+    if defect == "changed_action":
+        proposal.statements[0].quoted_text = "检查前静坐"
+    elif defect == "changed_stage":
+        proposal.statements[0].affected_stage = None
+    frozen = completed.model_dump(mode="json")
+    if defect:
+        with pytest.raises(ValueError, match="不得改变"):
+            apply_source_scope_question_recheck(batch, completed, 0, proposal)
+    else:
+        revised = apply_source_scope_question_recheck(batch, completed, 0, proposal)
+        assert revised.statements[0].unresolved == []
+        assert revised.statements[0].scope_quote == prefix
+    assert completed.model_dump(mode="json") == frozen
 
 
 @pytest.mark.parametrize("invalid", [False, True])

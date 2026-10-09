@@ -46,9 +46,9 @@ from app.agents.protocol_control_stage_compiler import requires_temporal_resolut
 TEMPORAL_RESTRICTION_VERSION = "source-temporal-restricted-disposition/v2"
 WHOLE_UNIT_RESTRICTION_VERSION = "source-whole-unit-restricted-disposition/v2"
 # Procedure retention changes the current gate, not previously compiled rules.
-PROCEDURE_RESTRICTION_VALIDATION_VERSION = "procedure-source-restricted-retention/v2"
+PROCEDURE_RESTRICTION_VALIDATION_VERSION = "procedure-source-restricted-retention/v3"
 RESTRICTED_DEFINITION_VALIDATION_VERSION = "restricted-definition-registration-validation/v1"
-PROCEDURE_SOURCE_CONTEXT_VERSION = "procedure-source-context-completeness/v2"
+PROCEDURE_SOURCE_CONTEXT_VERSION = "procedure-source-context-completeness/v3"
 
 
 def _unit_statements_cover_source(unit, interpretation, indexes) -> bool:
@@ -151,18 +151,42 @@ def _temporal_restriction_indexes(
     additional = {item.statement_index for item in review.items
                   if item.decision == "additional_requirement"}
     units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    temporal_units = {interpretation.statements[index].structure_unit_id for index in indexes}
+    # A typed unsupported clock can restrict its whole procedure unit, not an
+    # unrelated additional requirement. Literal whole-unit coverage is checked
+    # by the caller before any disposition can be saved.
+    related_additional = whole_unit and indexes <= additional and all(
+        interpretation.statements[index].structure_unit_id in temporal_units
+        and "action" in interpretation.statements[index].decision_functions
+        and not set(interpretation.statements[index].decision_functions)
+        & {"definition", "calculation_input"}
+        and not interpretation.statements[index].unresolved
+        for index in additional - indexes
+    )
     spans = sorted({span for index in ids
                     for span in units[interpretation.statements[index].structure_unit_id].source_span_ids})
-    if (additional != indexes or detail.get("source_refs") != spans
+    if ((additional != indexes and not related_additional) or detail.get("source_refs") != spans
             or (not whole_unit and any(item.decision not in {
                 "covered_by_official", "covered_by_procedure", "additional_requirement",
             } for item in review.items))):
         return None
     for index in ids:
         statement = interpretation.statements[index]
+        recommendation_in_required_unit = (
+            whole_unit and statement.force == "recommended" and result.partial_wire is not None
+            and any(item.structure_unit_id == statement.structure_unit_id
+                    and item.disposition == StructureUnitDispositionKind.REQUIRED_PROCEDURE
+                    for item in result.partial_wire.dispositions)
+            and any(other != index
+                    and interpretation.statements[other].structure_unit_id == statement.structure_unit_id
+                    and interpretation.statements[other].force in {"required", "prohibited"}
+                    and "action" in interpretation.statements[other].decision_functions
+                    for other in additional)
+        )
         source_action = ("action" in statement.decision_functions
                          and "definition" not in statement.decision_functions
-                         and statement.force in {"required", "prohibited"})
+                         and (statement.force in {"required", "prohibited"}
+                              or recommendation_in_required_unit))
         if (statement.unresolved
                 or not (source_action if whole_unit else source_statement_is_standalone_action(statement))
                 or (not whole_unit and not source_statement_context_is_self_contained(statement))
@@ -456,7 +480,8 @@ def _whole_unit_restriction(
                     "unresolved", "covered_by_procedure", "background_context",
                     "definition_dependency", "additional_requirement",
                 } or (reviewed[index].decision == "additional_requirement"
-                      and not uncertain_indexes.intersection(indexes)) for index in indexes
+                      and not uncertain_indexes.intersection(indexes)
+                      and not (len(indexes) > 1 and temporal_indexes.intersection(indexes))) for index in indexes
             ):
                 return None
             # This covers context, not independence or semantic equivalence.

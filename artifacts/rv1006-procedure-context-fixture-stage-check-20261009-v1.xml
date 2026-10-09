@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="4" time="1.156" timestamp="2026-10-09T03:05:40.608249+02:00" hostname="MacBook-Pro-4.local"><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[None]" time="0.002"><failure message="ValueError: 时间疑问核对必须只返回指定原陈述">defect = None
+
+    @pytest.mark.parametrize("defect", [None, "partial_context", "changed_action", "changed_stage"])
+    def test_completed_local_context_question_only_changes_the_source_question(defect):
+        from app.agents.protocol_control_source_interpretation import (
+            SourceScopeCorrection, apply_source_context_completion, can_recheck_source_scope_question,
+            apply_source_scope_question_recheck, build_source_scope_question_prompt,
+        )
+    
+        batch, result = _procedure_correspondence_review(single=True)
+        prefix = "测量项目包括血压与心率，"
+        batch.owned_units[0].excerpt = prefix + batch.owned_units[0].excerpt
+        statement = result.source_interpretation.statements[0]
+        statement.affected_stage = "检查前"
+        statement.time_words = ["检查前", "8分钟"]
+        statement.unresolved = ["该操作适用的测量项目未明确"]
+        completed = apply_source_context_completion(batch, result.source_interpretation, 0, SourceScopeCorrection(
+            version="phase5/control-source-scope-correction/v1",
+            structure_unit_id=statement.structure_unit_id, scope_quote=prefix,
+            affected_stage="检查前", time_words=["检查前", "8分钟"],
+        ))
+        if defect == "partial_context":
+            completed.statements[0].scope_quote = "测量项目"
+            assert not can_recheck_source_scope_question(completed.statements[0], batch)
+            return
+        assert can_recheck_source_scope_question(completed.statements[0], batch)
+        prompt = build_source_scope_question_prompt(batch, completed, 0)
+        assert prefix in prompt and "仍仅能修改 unresolved" in prompt
+        proposal = completed.model_copy(deep=True)
+        proposal.statements[0].unresolved = []
+        if defect == "changed_action":
+            proposal.statements[0].quoted_text = "检查前静坐"
+        elif defect == "changed_stage":
+            proposal.statements[0].affected_stage = None
+        frozen = completed.model_dump(mode="json")
+        if defect:
+            with pytest.raises(ValueError, match="不得改变"):
+                apply_source_scope_question_recheck(batch, completed, 0, proposal)
+        else:
+&gt;           revised = apply_source_scope_question_recheck(batch, completed, 0, proposal)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/v2/services/test_protocol_control_execution.py:724: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = ProtocolControlDispositionBatch(schema_version='phase5/v1', batch_id='pcb-generic-01', coverage_manifest_id='manifest:...ng'&gt;, display_name='筛选期审核二', visit_instance='screening-2', visit_window=None, source_span_ids=[], source_excerpts=[])])
+interpretation = SourceInterpretation(version='phase5/control-source-interpretation/v11', statements=[SourceStatement(structure_unit_id...sequence_quote=None, control_authority='study_or_unknown', attribution_quote=None)], units_without_statement=['su-02'])
+index = 0
+proposal = SourceInterpretation(version='phase5/control-source-interpretation/v11', statements=[SourceStatement(structure_unit_id...sequence_quote=None, control_authority='study_or_unknown', attribution_quote=None)], units_without_statement=['su-02'])
+
+    def apply_source_scope_question_recheck(
+        batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation,
+        index: int, proposal: SourceInterpretation,
+    ) -&gt; SourceInterpretation:
+        original = interpretation.statements[index]
+        if (not can_recheck_source_scope_question(original, batch) or proposal.version != interpretation.version
+                or len(proposal.statements) != 1 or proposal.units_without_statement):
+&gt;           raise ValueError("时间疑问核对必须只返回指定原陈述")
+E           ValueError: 时间疑问核对必须只返回指定原陈述
+
+app/agents/protocol_control_source_interpretation.py:502: ValueError</failure></testcase><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[partial_context]" time="0.001" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[changed_action]" time="0.002"><failure message="AssertionError: Regex pattern did not match.&#10;  Expected regex: '不得改变'&#10;  Actual message: '时间疑问核对必须只返回指定原陈述'">defect = 'changed_action'
+
+    @pytest.mark.parametrize("defect", [None, "partial_context", "changed_action", "changed_stage"])
+    def test_completed_local_context_question_only_changes_the_source_question(defect):
+        from app.agents.protocol_control_source_interpretation import (
+            SourceScopeCorrection, apply_source_context_completion, can_recheck_source_scope_question,
+            apply_source_scope_question_recheck, build_source_scope_question_prompt,
+        )
+    
+        batch, result = _procedure_correspondence_review(single=True)
+        prefix = "测量项目包括血压与心率，"
+        batch.owned_units[0].excerpt = prefix + batch.owned_units[0].excerpt
+        statement = result.source_interpretation.statements[0]
+        statement.affected_stage = "检查前"
+        statement.time_words = ["检查前", "8分钟"]
+        statement.unresolved = ["该操作适用的测量项目未明确"]
+        completed = apply_source_context_completion(batch, result.source_interpretation, 0, SourceScopeCorrection(
+            version="phase5/control-source-scope-correction/v1",
+            structure_unit_id=statement.structure_unit_id, scope_quote=prefix,
+            affected_stage="检查前", time_words=["检查前", "8分钟"],
+        ))
+        if defect == "partial_context":
+            completed.statements[0].scope_quote = "测量项目"
+            assert not can_recheck_source_scope_question(completed.statements[0], batch)
+            return
+        assert can_recheck_source_scope_question(completed.statements[0], batch)
+        prompt = build_source_scope_question_prompt(batch, completed, 0)
+        assert prefix in prompt and "仍仅能修改 unresolved" in prompt
+        proposal = completed.model_copy(deep=True)
+        proposal.statements[0].unresolved = []
+        if defect == "changed_action":
+            proposal.statements[0].quoted_text = "检查前静坐"
+        elif defect == "changed_stage":
+            proposal.statements[0].affected_stage = None
+        frozen = completed.model_dump(mode="json")
+        if defect:
+            with pytest.raises(ValueError, match="不得改变"):
+&gt;               apply_source_scope_question_recheck(batch, completed, 0, proposal)
+
+tests/v2/services/test_protocol_control_execution.py:722: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = ProtocolControlDispositionBatch(schema_version='phase5/v1', batch_id='pcb-generic-01', coverage_manifest_id='manifest:...ng'&gt;, display_name='筛选期审核二', visit_instance='screening-2', visit_window=None, source_span_ids=[], source_excerpts=[])])
+interpretation = SourceInterpretation(version='phase5/control-source-interpretation/v11', statements=[SourceStatement(structure_unit_id...sequence_quote=None, control_authority='study_or_unknown', attribution_quote=None)], units_without_statement=['su-02'])
+index = 0
+proposal = SourceInterpretation(version='phase5/control-source-interpretation/v11', statements=[SourceStatement(structure_unit_id...sequence_quote=None, control_authority='study_or_unknown', attribution_quote=None)], units_without_statement=['su-02'])
+
+    def apply_source_scope_question_recheck(
+        batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation,
+        index: int, proposal: SourceInterpretation,
+    ) -&gt; SourceInterpretation:
+        original = interpretation.statements[index]
+        if (not can_recheck_source_scope_question(original, batch) or proposal.version != interpretation.version
+                or len(proposal.statements) != 1 or proposal.units_without_statement):
+&gt;           raise ValueError("时间疑问核对必须只返回指定原陈述")
+E           ValueError: 时间疑问核对必须只返回指定原陈述
+
+app/agents/protocol_control_source_interpretation.py:502: ValueError
+
+During handling of the above exception, another exception occurred:
+
+defect = 'changed_action'
+
+    @pytest.mark.parametrize("defect", [None, "partial_context", "changed_action", "changed_stage"])
+    def test_completed_local_context_question_only_changes_the_source_question(defect):
+        from app.agents.protocol_control_source_interpretation import (
+            SourceScopeCorrection, apply_source_context_completion, can_recheck_source_scope_question,
+            apply_source_scope_question_recheck, build_source_scope_question_prompt,
+        )
+    
+        batch, result = _procedure_correspondence_review(single=True)
+        prefix = "测量项目包括血压与心率，"
+        batch.owned_units[0].excerpt = prefix + batch.owned_units[0].excerpt
+        statement = result.source_interpretation.statements[0]
+        statement.affected_stage = "检查前"
+        statement.time_words = ["检查前", "8分钟"]
+        statement.unresolved = ["该操作适用的测量项目未明确"]
+        completed = apply_source_context_completion(batch, result.source_interpretation, 0, SourceScopeCorrection(
+            version="phase5/control-source-scope-correction/v1",
+            structure_unit_id=statement.structure_unit_id, scope_quote=prefix,
+            affected_stage="检查前", time_words=["检查前", "8分钟"],
+        ))
+        if defect == "partial_context":
+            completed.statements[0].scope_quote = "测量项目"
+            assert not can_recheck_source_scope_question(completed.statements[0], batch)
+            return
+        assert can_recheck_source_scope_question(completed.statements[0], batch)
+        prompt = build_source_scope_question_prompt(batch, completed, 0)
+        assert prefix in prompt and "仍仅能修改 unresolved" in prompt
+        proposal = completed.model_copy(deep=True)
+        proposal.statements[0].unresolved = []
+        if defect == "changed_action":
+            proposal.statements[0].quoted_text = "检查前静坐"
+        elif defect == "changed_stage":
+            proposal.statements[0].affected_stage = None
+        frozen = completed.model_dump(mode="json")
+        if defect:
+&gt;           with pytest.raises(ValueError, match="不得改变"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: '不得改变'
+E             Actual message: '时间疑问核对必须只返回指定原陈述'
+
+tests/v2/services/test_protocol_control_execution.py:721: AssertionError</failure></testcase><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[changed_stage]" time="0.001"><failure message="AssertionError: Regex pattern did not match.&#10;  Expected regex: '不得改变'&#10;  Actual message: '时间疑问核对必须只返回指定原陈述'">defect = 'changed_stage'
+
+    @pytest.mark.parametrize("defect", [None, "partial_context", "changed_action", "changed_stage"])
+    def test_completed_local_context_question_only_changes_the_source_question(defect):
+        from app.agents.protocol_control_source_interpretation import (
+            SourceScopeCorrection, apply_source_context_completion, can_recheck_source_scope_question,
+            apply_source_scope_question_recheck, build_source_scope_question_prompt,
+        )
+    
+        batch, result = _procedure_correspondence_review(single=True)
+        prefix = "测量项目包括血压与心率，"
+        batch.owned_units[0].excerpt = prefix + batch.owned_units[0].excerpt
+        statement = result.source_interpretation.statements[0]
+        statement.affected_stage = "检查前"
+        statement.time_words = ["检查前", "8分钟"]
+        statement.unresolved = ["该操作适用的测量项目未明确"]
+        completed = apply_source_context_completion(batch, result.source_interpretation, 0, SourceScopeCorrection(
+            version="phase5/control-source-scope-correction/v1",
+            structure_unit_id=statement.structure_unit_id, scope_quote=prefix,
+            affected_stage="检查前", time_words=["检查前", "8分钟"],
+        ))
+        if defect == "partial_context":
+            completed.statements[0].scope_quote = "测量项目"
+            assert not can_recheck_source_scope_question(completed.statements[0], batch)
+            return
+        assert can_recheck_source_scope_question(completed.statements[0], batch)
+        prompt = build_source_scope_question_prompt(batch, completed, 0)
+        assert prefix in prompt and "仍仅能修改 unresolved" in prompt
+        proposal = completed.model_copy(deep=True)
+        proposal.statements[0].unresolved = []
+        if defect == "changed_action":
+            proposal.statements[0].quoted_text = "检查前静坐"
+        elif defect == "changed_stage":
+            proposal.statements[0].affected_stage = None
+        frozen = completed.model_dump(mode="json")
+        if defect:
+            with pytest.raises(ValueError, match="不得改变"):
+&gt;               apply_source_scope_question_recheck(batch, completed, 0, proposal)
+
+tests/v2/services/test_protocol_control_execution.py:722: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+batch = ProtocolControlDispositionBatch(schema_version='phase5/v1', batch_id='pcb-generic-01', coverage_manifest_id='manifest:...ng'&gt;, display_name='筛选期审核二', visit_instance='screening-2', visit_window=None, source_span_ids=[], source_excerpts=[])])
+interpretation = SourceInterpretation(version='phase5/control-source-interpretation/v11', statements=[SourceStatement(structure_unit_id...sequence_quote=None, control_authority='study_or_unknown', attribution_quote=None)], units_without_statement=['su-02'])
+index = 0
+proposal = SourceInterpretation(version='phase5/control-source-interpretation/v11', statements=[SourceStatement(structure_unit_id...sequence_quote=None, control_authority='study_or_unknown', attribution_quote=None)], units_without_statement=['su-02'])
+
+    def apply_source_scope_question_recheck(
+        batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation,
+        index: int, proposal: SourceInterpretation,
+    ) -&gt; SourceInterpretation:
+        original = interpretation.statements[index]
+        if (not can_recheck_source_scope_question(original, batch) or proposal.version != interpretation.version
+                or len(proposal.statements) != 1 or proposal.units_without_statement):
+&gt;           raise ValueError("时间疑问核对必须只返回指定原陈述")
+E           ValueError: 时间疑问核对必须只返回指定原陈述
+
+app/agents/protocol_control_source_interpretation.py:502: ValueError
+
+During handling of the above exception, another exception occurred:
+
+defect = 'changed_stage'
+
+    @pytest.mark.parametrize("defect", [None, "partial_context", "changed_action", "changed_stage"])
+    def test_completed_local_context_question_only_changes_the_source_question(defect):
+        from app.agents.protocol_control_source_interpretation import (
+            SourceScopeCorrection, apply_source_context_completion, can_recheck_source_scope_question,
+            apply_source_scope_question_recheck, build_source_scope_question_prompt,
+        )
+    
+        batch, result = _procedure_correspondence_review(single=True)
+        prefix = "测量项目包括血压与心率，"
+        batch.owned_units[0].excerpt = prefix + batch.owned_units[0].excerpt
+        statement = result.source_interpretation.statements[0]
+        statement.affected_stage = "检查前"
+        statement.time_words = ["检查前", "8分钟"]
+        statement.unresolved = ["该操作适用的测量项目未明确"]
+        completed = apply_source_context_completion(batch, result.source_interpretation, 0, SourceScopeCorrection(
+            version="phase5/control-source-scope-correction/v1",
+            structure_unit_id=statement.structure_unit_id, scope_quote=prefix,
+            affected_stage="检查前", time_words=["检查前", "8分钟"],
+        ))
+        if defect == "partial_context":
+            completed.statements[0].scope_quote = "测量项目"
+            assert not can_recheck_source_scope_question(completed.statements[0], batch)
+            return
+        assert can_recheck_source_scope_question(completed.statements[0], batch)
+        prompt = build_source_scope_question_prompt(batch, completed, 0)
+        assert prefix in prompt and "仍仅能修改 unresolved" in prompt
+        proposal = completed.model_copy(deep=True)
+        proposal.statements[0].unresolved = []
+        if defect == "changed_action":
+            proposal.statements[0].quoted_text = "检查前静坐"
+        elif defect == "changed_stage":
+            proposal.statements[0].affected_stage = None
+        frozen = completed.model_dump(mode="json")
+        if defect:
+&gt;           with pytest.raises(ValueError, match="不得改变"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: '不得改变'
+E             Actual message: '时间疑问核对必须只返回指定原陈述'
+
+tests/v2/services/test_protocol_control_execution.py:721: AssertionError</failure></testcase></testsuite></testsuites>

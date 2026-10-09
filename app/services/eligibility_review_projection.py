@@ -1429,13 +1429,16 @@ def _restricted_control_projections(publication) -> tuple[EligibilityControlProj
     result = []
     for statement in publication.catalog.restricted_statements:
         interpretive = statement.limitation_kind == "interpretation_unresolved"
+        recommended = statement.source_force == "recommended"
         reason = (
             "方案原文的适用含义尚未核清：" if interpretive
             else "方案原文有此要求，但当前审核尚不能可靠计算："
         ) + "；".join(statement.unresolved_dimensions) + "。本项暂不能判为符合或不符合。"
+        if recommended:
+            reason = "本项为方案建议，不作为独立强制入排条件。" + reason
         result.append(EligibilityControlProjection(
             protocol_control_id=statement.restricted_statement_id,
-            display_label="方案补充要求",
+            display_label="方案建议" if recommended else "方案补充要求",
             title=statement.source_quote,
             source_span_ids=tuple(statement.source_span_ids),
             obligations=(EligibilityControlObligationProjection(
@@ -1445,7 +1448,8 @@ def _restricted_control_projections(publication) -> tuple[EligibilityControlProj
                 source_excerpts=(statement.source_quote,),
                 status="restricted",
                 limitation_kind=statement.limitation_kind,
-                status_label="方案待澄清" if interpretive else "审核方法待完善",
+                status_label=("方案建议待核对" if recommended
+                              else "方案待澄清" if interpretive else "审核方法待完善"),
                 reason=reason,
                 fact_refs=(),
                 action_owner="sponsor_medical_or_project" if interpretive else None,

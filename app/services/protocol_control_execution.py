@@ -2774,7 +2774,8 @@ def _validated_deep_partial_source(
             and saved.get("attempts")
             and set(saved["attempts"][-1].get("error_classes", []))
             in ({"SOURCE_TARGET_REVIEW_UNRESOLVED"}, {"SOURCE_CONTEXT_COMPLETION_INVALID"},
-                {"SOURCE_CONTEXT_UNRESOLVED"}, {"SOURCE_CONTEXT_COMPLETION_TRANSPORT_FAILED"})):
+                {"SOURCE_CONTEXT_UNRESOLVED"}, {"SOURCE_CONTEXT_COMPLETION_TRANSPORT_FAILED"},
+                {"TEMPORAL_SCOPE_UNRESOLVED"})):
         original_wire = ProtocolControlAgentWire.model_validate(saved["partial_wire"])
         _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(original_wire, batch))
         witnessed_review = _resumable_saved_source_review(batch, interpretation, saved)

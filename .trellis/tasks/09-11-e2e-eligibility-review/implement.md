@@ -3,7 +3,11 @@
 
 Goal active；claims_complete=false。本表是唯一现行流程状态；下方过去的“当前/未运行”均为各自时点的历史记录，不据此重跑。
 
-**当前实际终态：** 源码9b45dfa4已push。合法Joba513a024917d4a4285e7c331342029a3为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，11物理调用328.159519秒/exit3；85发现及22成功深审零新调用复用，第23实际局部恢复并保存成功，第24失败、66未执行。exec92599已结束；产物rv1006-local-source-context-api-20261009-v1，不能覆盖或复活。旧Job/保护库/来源库保持，0共同发布/启用/签发。上游5afb的10调用/失败检查点仍为历史，不清账本。
+**当前实际终态：** 源码674dfffa已push。合法Job4731c111f0f94e38b7ed1c3b8c47363a为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，1物理调用112.355218秒/exit3；85发现及23成功深审零新调用复用，第24因TEMPORAL_SCOPE_UNRESOLVED（陈述7）失败、66未执行。exec96634已结束；产物rv1006-relative-stage-preflight-api-20261009-v1不能覆盖或复活。实际唯一回执stop，16101输入/6137输出/22238合计、2494缓存token，20.620489秒；不是112秒全部模型生成。旧Job/保护库/来源库保持，0共同发布/启用/签发。上游a513的11调用与5afb的10调用/失败检查点均保留，不能把前置修复当整组或整例已完成。
+
+**本次直接阻断功能包：** 所有者集成＋单批准工程独审，因为同一有源单元的非可执行留存涉及采用边界。第24实际只读发现检验单元676字符仅摘14字符时间尾句，前置项目清单未进入scope；不是已证明原文含糊。沿已有单条范围补核/问题复核补齐，不增动作/临床值/兄弟；不完整尾句或多陈述仍拒。另仅对结构化时间失败的同单元动作兄弟整体不可执行保留，真实未读、无关additional、定义依赖和错误来源不借此通过；旧单条时间路径不扩大。四相连模块1271pass/4fail/136.17秒，四失败均新夹具漏阶段时间；补时间后1pass/3fail/1.16秒，余三因单条提案带入无陈述单元列表，修为合同规定空列表后4pass/0.87秒/exit0。两次修正仅测试，产品源码不变；不重复全窗、不累计拼总数，5既有SWIG。C03新上下文CodeBuddy/deepseek-v4.1-flash/max独审exit0/no fallback，Bash被拒、15聚焦读、未运行测试/临床或检查全部下游，不以意见作验收。混合未决理由归因的旧限制保留，不扩冻结范围。实际产品只读恢复选中来源范围索引8；预检23reusable/1resume_partial/66refresh，0调用/0写/hash保持。下一合法新Job尚未运行；Git提交只含明确本次净化文件，不清理继承7dirty。此前674dfff生成失败JUnit的缓存区空行空白检查exit2，仅原始错误轨迹格式，不冒称该缓存区检查通过。
+
+**功能包最终来源/消费者核对：** 实际陈述7的force为recommended，不能以必做正例假称已适配。仅在完整有效操作单元另有required/prohibited动作兄弟且typed失败成立时保留该建议，原source_force不变；全建议、单项、非操作目录、无关additional仍不借此采用。正式投影明确“方案建议／不作为独立强制入排条件”，必做兄弟仍自己的语气。末四相连模块1282passed/113.54秒/exit0、5既有SWIG，JUnit procedure-context-temporal-connected-v2；不与v1或小窗累加。C03同批准新会话01a11e2d…增量独审4读/exit0/no fallback，完成等待83.61秒；未核所有评估/UI、hydrate内部或实际测试，所有者查完整生产与保存门，不能称模型独立金标。真实旧回执当前typed范围为{7}，完整来源尚待实际补核；最终v2只读预检23/1/66、0调用/0写/hash保持。下一经现有合法API受控接续，不改旧terminal，不增加框架或复制隔离库。
 
 **本次直接前置及执行选择：** 直接集成，原因是把已有装配的必要条件前移到路径选择，不作新的临床含义或采用裁定。第24实际短答被STAGE_BOUND_INSERT_INVALID拒绝：程序只因有时间文字选择相对阶段路径，未先核原范围对应先前冻结节点、目标对应更晚冻结节点，模型随即填写unknown。最小修复复用现有流程节点映射与装配先后检查，主题标题不能冒充先前阶段；不增加疾病词表、不改原来源、不把坏短答改成忠实未决。relative-stage-frozen-target-preflight/v1仅进入验证身份，旧成功结果当前重验，不强制23组重读。实际失败回执只读产品恢复及新路径选择反证已完成，0模型/0写/hash保持；前置复用23reusable/1resume_partial/66refresh，0模型/0写/hash保持。四相连模块1256pass/1fail/134.34秒/exit1，唯一失败为复用测试的显式版本期望漏新前置版本，实际零调用复用已通过；只改断言后原例1pass/2.25秒/exit0，产品代码未变，不再全窗重复。5既有SWIG。JUnit relative-stage-preflight-connected-v1与relative-stage-gate-identity-expectation-v1；不把两个窗口拼成1257全窗。下一新Job未运行，不能据此宣称第24或完整病例已完成。
 

@@ -60,3 +60,15 @@ Next actual continuation uses the existing legal API and bounded independent
 read policy, preserving a first eligible unresolved failure while other sources
 can be read; a second failure still stops and publication remains blocked.
 This is not a new queue, a reset call budget, clinical approval or completion.
+
+## 本次时间兄弟及补回对象核对（674dfffa之后）
+
+真实4731c111终态失败：1调用112.355218秒/exit3，23成功及85发现零新调用复用，24时间失败、66未执行；旧库/终态/hash保持。实际首因不是端点：一个完整项目清单仅保留尾句，因此不能宣称原文对象不清。沿已有前置scope补核路径选中索引8，随后只允许单条unresolved的原文复核，不改动作、时间、阶段、兄弟或自动产生采用。
+
+不同于前包被撤销的无条件时间扩展，本包要求typed temporal的严格范围证明、完整逐字来源、有效wire和完整核对；additional兄弟必须同单元、action、非definition/calculation_input且无来源未决。仅整体非可执行，去流程链接且无独立性证明。跨单元additional、缺前缀、错误证明、传输失败仍拒，旧single-temporal-procedure负例保留。定义/共享来源全局闭合不跳过。
+
+C03新上下文按批准manifest实际执行CodeBuddy/deepseek-v4.1-flash/max，exit0/no fallback；完成等待226.65秒，报告读15处。Bash被拒，未比较完整diff、未读所有消费者、未测试或读取临床，所以不能以“未发现阻断”作验收。顾问混合单元每条limitation归因L1为旧保守行为，本例不同单元，不新扩冻结范围；R3独立动作吞入scope的语义残余保留，代码仅能证明逐字来源，变化后必须重新对应核对，不能说已经证明临床关系。相邻phase归一化低置信意见未实际反证，不为猜测新建修补路线。
+
+四模块集中1271pass/4fail/136.17s/exit1。四新夹具漏阶段time_words，修后1pass/3fail/1.16s；余三因单条提案带units_without_statement，按现行合同空列表修正后4pass/0.87s/exit0。产品源码在集中窗后未改，不累加、不全窗重复；原失败JUnit保留。真实产品只读恢复选中索引8，23/1/66复用计划、0模型/0写/hash保持。下一新Job尚未执行，完整发布/新工作稿/UI更正/Q3未完成。
+
+进一步真实回执反证：时间陈述7为recommended，原必做正例不能证明真实适配。仅完整REQUIRED_PROCEDURE单元另有distinct additional必做/禁止动作时容纳该建议；source_force不改，全部建议、单项、无关源和坏证明仍拒，正式投影明确非独立强制入排条件。整个单元非可执行，不猜内部独立性。末四相连1282pass/113.54s/exit0；原窗口不累加，5SWIG。C03同会话增量4读/exit0/no fallback，83.61s等待；未读全部UI/评估消费者、hydrate内部、未测试/临床，意见不当医学批准。建议新增的否定支测试属于覆盖建议，已有推荐force/单项/同单元兄弟/作用域/源/故障反例及真实typed范围{7}仍留待实际生产接线验证。最终v2复用23/1/66、0调用/0写/hash保持。没有新模型、批准或规则激活。

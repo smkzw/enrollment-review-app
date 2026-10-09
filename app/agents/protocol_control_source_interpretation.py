@@ -434,11 +434,21 @@ def can_recheck_source_scope_question(
                      if unit.structure_unit_id == statement.structure_unit_id), None)
         if unit is not None:
             columns = schedule_column_scope(unit, batch.context_units)
+    local_context = False
+    if batch is not None and unit is not None and statement.scope_context_unit_id is None:
+        quote = locate_source_quote_offsets(unit.excerpt, statement.quoted_text)
+        scope = locate_source_quote_offsets(unit.excerpt, statement.scope_quote or "")
+        local_context = bool(quote and scope and scope[1] <= quote[0]
+                             and source_statement_ranges_cover_unit(
+                                 unit.excerpt, [scope, quote], allow_joining_punctuation=True,
+                             ))
     # A readable header is enough to ask a question, not to prove its scope.
     # Early-exit columns may legitimately have no fixed visit/date mapping.
     native_scope = bool(columns) and all(column.header_source_refs and column.header_text
                                         for column in columns)
-    return bool(statement.unresolved) and statement.affected_stage is None and (literal_times or native_scope)
+    return bool(statement.unresolved) and (
+        local_context or statement.affected_stage is None and (literal_times or native_scope)
+    )
 
 
 def build_source_scope_question_prompt(
@@ -449,6 +459,12 @@ def build_source_scope_question_prompt(
         raise ValueError("本条不属于多时间来源疑问核对范围")
     unit = next(unit for unit in batch.owned_units
                 if unit.structure_unit_id == statement.structure_unit_id)
+    context_instruction = (
+        "已保留的 scope_quote 与 quoted_text 连续覆盖本来源单元时，另核前置对象或范围是否"
+        "足以回答本条 unresolved；只有原文确有两种解释才保留具体疑问。此普通原句仍仅能"
+        "修改 unresolved，不改任何摘录、项目、时间、逻辑或阶段，不把程序尚不能消费写成原文歧义。"
+        if statement.scope_quote and not schedule_column_scope(unit, batch.context_units) else ""
+    )
     return (
         "你是内置方案 Agent 的单条原文范围疑问核对步骤。只核 unresolved 中的疑问是否"
         "确实由原文引起，不生成规则、不判断受试者。不同子条件可以各有自己的时间限定，"
@@ -465,6 +481,7 @@ def build_source_scope_question_prompt(
         "只有源文字、脚注或动作与列关系本身未清时才保留具体疑问。"
         "不存在既有流程项不能作为忽略原文访视列的理由，也不得借另一个动作的流程项。此提案还须完整来源与目标核对，"
         "不是采用证明。\n"
+        + context_instruction
         + json.dumps({"recheck_version": SOURCE_SCOPE_QUESTION_RECHECK_VERSION,
                       "native_guidance_version": NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
                       "version": interpretation.version,
