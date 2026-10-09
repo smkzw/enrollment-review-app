@@ -1,17 +1,21 @@
 <!-- RV1006-CURRENT:BEGIN -->
 ## 当前1006V1交付窗口（持续实施，非暂停）
 
+**当前终态：** 源码9431f58f已push；合法Jobfc25efcb3c0d48e4bfd352c4990985ce已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，12物理调用628.062秒/exit3；入队90步与47/2/41预检逐项一致，85发现及前44深审零新调用，第45失败、45深审未执行。第49未到达，不能称新局部闭包路径实跑通过。私有产物rv1006-scoped-unit-repair-api-20261010-v1及scoped-terminal-diagnostic-v1，checkpoint aaa98ea36a3a44b5b0015451d689bf3f，pending_author_wire有、partial_wire无。原件/旧Job/保护库保持，无共同发布/启用/签发。
+
+**当前最小修复与分工：** 所有者直接集成＋批准C03只读独审，因为修订恢复的边界和后置消费者需独立挑战。45原文尾句已补全，末回答仍有无源recommended、缺少混合句条件及猜时间锚点，原拒绝正确，不放松禁止/可选/建议门。另一实际首错是普通采用校验后的CANDIDATE_REPAIR_INVALID缺观察政策没有接既有字段补齐（多候选结构恢复内部已有），退回整候选又丢字段；仅补这一接线，保留提案和兄弟，原字段来源/完整消费者再验。越域/混合错误无合法字段通道则停止；字段回复本身非法也停止，不退整批。身份只增加validator，不追认旧批准。C03新会话01a122e0-696b-7146-9a31-8969fdc03ed0/257.691秒/exit0/no fallback/16只读，120min静默完成等待，指出夹具内断言被transport兜底吞掉的假绿，已加运行后次数断言。末相连v2为1681pass/1fail/140.84秒，唯一新增重复消费者夹具缺生产finding.message，补完整后受影响54pass/3.78秒/exit0；末完整窗未重跑，不累加。新只读preflight以fc25为源沿冻结祖先保留46–48/49，47reusable/2resume/41refresh，0模型/0写/hash保持。不是患者缺证、研究者判断或语义已核。
+
 **实际状态：** 已push源码c8c9005097066680cefefe2defb8316e67a61d8e的合法Job88efd2f742b5416f84aae7d86b3b4f5f已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，19物理调用756.5914077500347秒；85发现及原44成功零新调用，46/47/48实际保存，47完成、45/49失败、41未读。旧包装器没有传播driver返回码，外层exit0不是成功证据；下一改为SystemExit，不改旧回执。原件/旧Job/保护库/来源库保持，无共同发布/启用/签发。
 
 **首因与执行选择：** 所有者集成＋既有批准C03只读独审，局部作者修订影响采用范围。45漏来源尾句，需要已有source-unit completion而非改名忠实未决；49关联到无本行来源的目录，下一答无候选却称已有覆盖，原拒绝正确。新包沿原错误授权/来源传递闭包仅请求局部处置及候选，宿主保留兄弟，再过原完整门。自含传输不伪造旧history；局部内容/编号/引用及owned元数据同步缩窄并经原Batch验证。坏局部格式停止该分支，不退整组、不清累计账。不新增框架或临床特例。
 
 **本包证据：** 最新只读预检rv1006-scoped-unit-repair-preflight-20261010-v1.json为47reusable/2resume_partial/41refresh，0模型/0写/database_unchanged=true；45来源范围和49未采用提案分别接续。最终四相连原模块1798pass/180.76秒/exit0/5SWIG，JUnit artifacts/rv1006-scoped-unit-repair-connected-20261010-v1.xml；聚焦20pass不累加。中间14pass/2fail实际揭示局部编号未缩窄，修产品而非容忍测试。前包1661pass及44/1/45预检已用于88efd实际运行，不能按旧“未运行”重跑。
 
-**独审及下一动作：** 批准C03同角色CodeBuddy/DeepSeek/max/session01a1226e-303b-7746-9434-5b2568b22ffe，scoped_unit_repair报告247.681秒/exit0/1轮/no fallback，120min完成等待，无临床/库/env/测试。同家族仅程序/context分离。F1状态清理采纳并补坏JSON停止反例；F2空来源已由既有Schema拒绝；F3继续原来源后置门。请求IDs错配是所有者测试另查所得，末代码未再独审。详见reviews/rv1006-pending-author-owner-disposition-20261010.md。下一冻结并合法新建90步，逐项核47/2/41，不复活88efd、不重读47成功。完整同源包、同包病例工作稿及正式UI更正后新旧结果仍未达。Goal active、claims_complete=false；七份继承dirty及原件/库/env/原答不stage、不清理。
+**独审及下一动作：** scoped_unit_repair的前包C03取舍保留；新字段恢复取舍见reviews/rv1006-publication-policy-owner-disposition-20261010.md，末停止/reader能力及测试加固由所有者验证、未称顾问读过末代码。仅程序/context独立，不是医学金标。下一冻结当前源码，从fc25合法新建90步逐项核47/2/41，沿原冻结祖先复用，不重读47成功、不复活旧失败Job。完整同源包、同包病例工作稿及正式UI更正后新旧结果仍未达。Goal active、claims_complete=false；七份继承dirty及原件/库/env/原答不stage、不清理。
 
 | 用户流程节点 | 已证与首个未完成 |
 |---|---|
-| 完整要求快照 | DOCX官方rev21/23父条86组件141条件；85发现90深审，47完成；45来源补全/49局部作者修订及41未执行待接续，不称共同发布 |
+| 完整要求快照 | DOCX官方rev21/23父条86组件141条件；85发现90深审；最新Job44完成，沿冻结祖先另有46–48成功可核复用；45作者待核、49未到达/沿祖先提案恢复及41未读，不称共同发布 |
 | 资料/事实资格/工作稿 | 5PDF24页历史提取保持；旧81组件/0controls准备例不是新同包，当前整例工作稿未达 |
 | 原件导航 | Ego真实连续页和局部宽屏检查已有；新报告回源/Q3未达，不造框 |
 | 有源更正与新旧结果 | 旧UI描述更正0规则关联；新完整要求下更正→相关重算→新工作稿→旧历史仍未达 |

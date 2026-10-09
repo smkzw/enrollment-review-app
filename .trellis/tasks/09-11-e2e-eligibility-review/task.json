@@ -40,7 +40,7 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "持续1006V1/Goal active/claims_complete=false。c8c90050源码Job88efd2f7 failed_final，19调用756.591408s/47完成45及49失败41未读；原44/85发现零新读，新增3组。45来源未完整；49错误目录关联后无候选称已覆盖，原拒绝正确。新局部闭包修订不造history/不改兄弟，IDs/spans/owned元数据同步原Batch验证，坏局部格式不退整组。最终四相连1798pass/180.76s；最新只读预检47/2/41，0模型/0写/hash保持。C03同会话247.681s/exit0/no fallback，F1修复/F2原Schema否证/末IDs所有者检查。下一合法新Job实际核90步计划；完整同包工作稿/UI更正未达，七份继承dirty保持。",
+  "notes": "持续1006V1/Goal active/claims_complete=false。9431f58f源码Jobfc25efcb failed_final，12调用628.062s/44完成45失败45未读，49新scoped路径未到。原文尾句已补，作者可选/建议/限定仍错，原门保留。一般采用校验后缺观察政策接既有字段修复，不退整包；C03指出内assert假绿，已加run后次数检查及非法字段停止。相连v2为1681pass1fail，补完整生产finding后受影响54pass/3.78s，末全窗未重跑。最新源fc25沿冻结祖先预检47/2/41、0模型0写/hash保持。下一冻结并合法新建90步核实际计划；完整同包工作稿/UI更正未达，七份继承dirty保持。",
   "meta": {
     "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",
@@ -50,7 +50,7 @@
     "runtime_goal_status_observed": "active",
     "current_handoff": "HANDOFF.md",
     "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",
-    "last_verified_source_commit": "c8c9005097066680cefefe2defb8316e67a61d8e",
+    "last_verified_source_commit": "9431f58f",
     "current_review_index": "review_index_20261006_1006V1.json",
     "historical_notes_20261006": "1006V1连续实施，Goal active，claims_complete=false。资料14组/24页、30事实及实际UI更正/Profile4成立；完整要求/工作稿/新报告未达。关系字段修复7a613204/822检查、末尾句界修复3472fa28/845检查已普通push；两旧原答零调用重验通过但未采用。v5合法部分恢复7调用/212.4902s，总37；29来源/24核对保存，研究目的用途及期别定义对应两项未核清。原库/旧Job不改，不重复整批或另复制大库。前端最终34检查/Ego成立，原198/展示190，原件/7份继承dirty保留。"
   }

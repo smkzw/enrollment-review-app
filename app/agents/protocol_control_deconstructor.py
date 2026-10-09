@@ -10628,6 +10628,15 @@ class ProtocolControlAgentRunner:
                                     time_operand_repair_paths = missing_dates
                                     time_operand_repair_candidate = candidate_repair_index
                                     repair_candidate_indexes.add(candidate_repair_index)
+                                else:
+                                    missing_policies = _invalid_observation_policy_paths(
+                                        error, wrapped, candidate_repair_index,
+                                    )
+                                    if missing_policies:
+                                        repair_baseline_raw = wrapped
+                                        observation_repair_paths = missing_policies
+                                        observation_repair_candidate = candidate_repair_index
+                                        repair_candidate_indexes.add(candidate_repair_index)
                     except (ValueError, TypeError, KeyError, IndexError):
                         pass
                 elif (
@@ -11272,6 +11281,16 @@ class ProtocolControlAgentRunner:
                 if (
                     no_progress
                     or failed_scoped_unit_repair
+                    or (previous_observation_repair_candidate is not None
+                        and error.code == "OBSERVATION_REPAIR_INVALID")
+                    or (error.code == "CANDIDATE_REPAIR_INVALID"
+                        and candidate_repair_index is not None
+                        and not (time_operand_repair_candidate is not None
+                                 and callable(getattr(transport, "continue_time_operands", None)))
+                        and not (observation_repair_candidate is not None
+                                 and callable(getattr(transport, "continue_observation_policies", None)))
+                        and not (evidence_source_types_repair_paths
+                                 and callable(getattr(transport, "continue_evidence_source_types", None))))
                     or (current_scope_path is not None and (
                         current_scope_path in future_observation_scope_paths
                         or future_observation_scope_repairs >= (

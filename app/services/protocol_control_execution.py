@@ -2116,6 +2116,7 @@ def _deep_component_identity(
                                        "unaccepted-author-proposal-revalidation/v1",
                                        "completed-result-current-gate-revalidation/v1",
                                        "source-closure-scoped-unit-repair/v1",
+                                       "publication-candidate-missing-policy-recovery/v1",
                                        SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),

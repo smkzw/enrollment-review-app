@@ -2,17 +2,17 @@
 
 ## 当前事实
 
-**实际状态：** 已push源码c8c9005097066680cefefe2defb8316e67a61d8e的Job88efd2f742b5416f84aae7d86b3b4f5f已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，19物理调用756.5914077500347秒。85发现及原44成功零新调用，46/47/48新保存；47完成、45/49失败、41未读。外层exit0因私有包装器没传播driver失败码，下一SystemExit已修，不能据此说业务成功。旧Job/原件/保护库/来源库不变，0共同发布/启用/签发。
+**实际状态：** 已push源码9431f58f的Jobfc25efcb3c0d48e4bfd352c4990985ce failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，12物理调用628.062秒/exit3。85发现及前44深审零新调用；第45失败、45深审未执行，第49新scoped路径未到达。祖先46–48成功沿冻结复用链保持，不当新Job完成数。旧Job/原件/保护库/来源库不变，0共同发布/启用/签发。
 
-**首因与执行选择：** 所有者集成＋单批准工程独审。45来源尾句未读全，不能冻结为忠实未决；49先误关联无该行来源目录，后无候选却称已覆盖，原门正确拒绝。当前source-closure-scoped-unit-repair/v1沿原闭包授权仅修局部，程序保留兄弟并完整后验，不构造假history。所有局部IDs/spans/owned元数据同步更新并经Batch原合同校验。坏局部回复保存失败、停止该分支而不扩大整组；原累计次数不归零。
+**首因与执行选择：** 所有者集成＋单批准工程独审。45尾句已补全，作者却将可选免做写为recommended并漏操作限定，原拒绝保留。最小新增接线把一般采用校验后缺观察政策提案接原字段补齐，保留来源/兄弟、完整再验；越域/混合错误、缺reader、坏字段回复停止，不退整包。不改累计账、不构造假history、不增加项目词表。49沿祖先未采用提案保持。
 
-**本包证据：** 新当前源只读预检rv1006-scoped-unit-repair-preflight-20261010-v1.json：47reusable/2resume_partial/41refresh，0模型/0库写/hash保持。两失败分别来源补全及未采用提案恢复。最终四相连原模块1798pass/180.76秒/exit0/5SWIG，JUnit artifacts/rv1006-scoped-unit-repair-connected-20261010-v1.xml；聚焦20pass不累加。中间14pass/2fail查出真实IDs未缩窄已修，不松门。新产品接续尚未开始。前包1661pass对应源码及预检已实际用于88efd，旧44/1/45不再是下一计划。
+**本包证据：** 前包1798pass对应9431f58f及fc25实跑，不当新字段恢复全窗。当前相连v2为1681pass/1fail/140.84秒；新增重复消费者夹具缺生产finding.message，补齐后最终受影响54pass/1628deselected/3.78秒/exit0/5SWIG，末全窗未重跑，窗口不累加。最新publication-policy-preflight-20261010-v1从fc25经冻结祖先：47reusable/2resume/41refresh，0模型/0库写/hash保持。新字段恢复尚未真实运行，不是临床验收。
 
-**独审及下一动作：** 批准C03 CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max同session01a1226e-303b-7746-9434-5b2568b22ffe，247.681秒/exit0/1轮/no fallback，120min完成等待，无临床/库/env/测试，非模型独立金标。F1状态泄漏采纳；F2空来源既有Schema否证；F3保留完整来源后置门；IDs错配是所有者另查，末代码未再独审。细账见reviews/rv1006-pending-author-owner-disposition-20261010.md。下一冻结、从88efd合法新建90步逐项核47/2/41，不复活旧Job。完整同源包、同包病例工作稿及UI更正后新旧结果仍未达；Goal active/claims_complete=false；继承七dirty/原件/库/env/原答不stage不清理。
+**独审及下一动作：** 新批准C03 CodeBuddy/DeepSeek/max/session01a122e0-696b-7146-9a31-8969fdc03ed0，257.691秒/exit0/1轮/no fallback，120min静默完成等待、16源码只读。内assert被transport兜底吞掉的假绿已修，检查移到run后；末停止/reader检查所有者验证，未再独审，仅程序/context分离。详见reviews/rv1006-publication-policy-owner-disposition-20261010.md。下一冻结并从fc25合法新建90步核47/2/41，不复活旧Job、不重读47成功。完整同源包、同包工作稿及UI更正后新旧结果未达；Goal active/claims_complete=false；继承七dirty和临床材料不stage、不清理。
 
 | 用户流程节点 | 已证与首个未完成 |
 |---|---|
-| 完整要求快照 | DOCX官方rev21/23父条86组件141条件；85发现90深审，47完成；45来源补全/49局部修订及41未读待接续，不称共同发布 |
+| 完整要求快照 | DOCX官方rev21/23父条86组件141条件；85发现90深审，最新44完成、祖先46–48成功可核；45作者待核，49未运行/祖先提案待恢复及41未读，不称共同发布 |
 | 资料/事实资格/工作稿 | 5PDF24页历史提取保持；旧81组件/0controls准备例不是新同包，当前整例工作稿未达 |
 | 原件导航 | Ego真实连续页和局部宽屏检查已有；新报告回源/Q3未达，不造框 |
 | 有源更正与新旧结果 | 旧UI描述更正0规则关联；新完整要求下更正→相关重算→新工作稿→旧历史仍未达 |
