@@ -6619,6 +6619,47 @@ def _merge_observation_policy_repair(
         ) from exc
 
 
+def _invalid_scoped_observation_payload(
+    raw_text: str, previous: ProtocolControlAgentWire, authorized_units: set[str],
+    batch: ProtocolControlDispositionBatch,
+) -> tuple[dict[str, Any], int, tuple[tuple[str, int, int], ...]] | None:
+    """Splice an unaccepted local proposal only when its sole defect is a missing policy."""
+    salvage = _invalid_candidate_payload(raw_text)
+    if salvage is None or len(salvage[1]) != 1:
+        return None
+    payload, invalid_indexes = salvage
+    dispositions, drafts = payload["dispositions"], payload["candidate_drafts"]
+    allowed_spans = {span for unit in batch.owned_units if unit.structure_unit_id in authorized_units
+                     for span in unit.source_span_ids}
+    if (not authorized_units
+            or {item["structure_unit_id"] for item in dispositions} != authorized_units
+            or any(not set(item["source_structure_unit_ids"]) <= authorized_units
+                   or not set(item["source_span_ids"]) <= allowed_spans for item in drafts)
+            or any(set(item.source_structure_unit_ids) & authorized_units
+                   and not set(item.source_structure_unit_ids) <= authorized_units
+                   for item in previous.candidate_drafts)):
+        return None
+    for draft in drafts:
+        source_ids = set(draft["source_structure_unit_ids"])
+        matches = [item for item in previous.candidate_drafts
+                   if source_ids <= set(item.source_structure_unit_ids)]
+        if len(matches) == 1:
+            _restore_unchanged_time_operands(draft, matches[0])
+    changes = {item["structure_unit_id"]: item for item in dispositions}
+    merged = previous.model_dump(mode="json")
+    merged["dispositions"] = [changes.get(item["structure_unit_id"], item) for item in merged["dispositions"]]
+    siblings = [item for item in merged["candidate_drafts"]
+                if set(item["source_structure_unit_ids"]).isdisjoint(authorized_units)]
+    merged["candidate_drafts"] = [*siblings, *drafts]
+    index = len(siblings) + invalid_indexes[0]
+    try:
+        ProtocolControlAgentWireCandidate.model_validate(drafts[invalid_indexes[0]])
+    except ValidationError as cause:
+        paths = _invalid_observation_policy_paths(cause, merged, index)
+        return (merged, index, paths) if paths else None
+    return None
+
+
 def _build_observation_policy_repair_prompt(
     baseline: Mapping[str, Any],
     candidate_index: int,
@@ -10493,6 +10534,7 @@ class ProtocolControlAgentRunner:
             except Exception as exc:  # noqa: BLE001 - bounded validation boundary
                 previous_atom_repair_path = atom_repair_path
                 failed_scoped_unit_repair = bool(scoped_unit_repair_ids)
+                failed_scoped_unit_ids = set(scoped_unit_repair_ids)
                 scoped_unit_repair_ids = set()
                 previous_missing_anchor_only = missing_anchor_only
                 previous_time_operand_repair_candidate = time_operand_repair_candidate
@@ -10682,6 +10724,18 @@ class ProtocolControlAgentRunner:
                     repair_candidate_indexes.add(candidate_repair_index)
                 elif repair_baseline_raw is not None and candidate_repair_indexes:
                     repair_candidate_indexes.update(candidate_repair_indexes)
+                if (failed_scoped_unit_repair and repair_baseline_wire is not None
+                        and error.code == "WIRE_SCHEMA_INVALID"
+                        and previous_observation_repair_candidate is None
+                        and callable(getattr(transport, "continue_observation_policies", None))):
+                    scoped_policy = _invalid_scoped_observation_payload(
+                        raw_text, repair_baseline_wire, failed_scoped_unit_ids, batch,
+                    )
+                    if scoped_policy is not None:
+                        repair_baseline_raw, observation_repair_candidate, observation_repair_paths = scoped_policy
+                        repair_candidate_indexes = {observation_repair_candidate}
+                        focused_invalid_indexes = ()
+                        failed_scoped_unit_repair = False
                 if output is not None and output_validator is not None:
                     candidate_source_by_id = {
                         candidate.control_candidate_id: tuple(
@@ -11485,6 +11539,7 @@ class ProtocolControlAgentRunner:
                 )
                 scoped_unit_repair = (
                     not post_treatment_only
+                    and not observation_only
                     and (allow_candidate_repartition or allow_source_closure_rewrite)
                     and repair_baseline_wire is not None and bool(mutable_candidate_source_union)
                     and callable(getattr(transport, "continue_scoped_unit_repair", None))

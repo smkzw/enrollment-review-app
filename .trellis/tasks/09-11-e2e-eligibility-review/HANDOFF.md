@@ -2,13 +2,13 @@
 
 ## 当前事实
 
-**事实与执行选择：** Goal实查active、claims_complete=false；所有者直接集成＋原批准C03定向独审，原因是恢复作用域及后置消费者需独立挑战。源码aba90c63已push；其合法Job38e4a8a1cee3402b88d01c323c2fa6c3 failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，0物理调用168.982731秒/exit3。85发现及前44深审零新调用，第45失败、45深审未执行，第49及前包缺观察字段通道均未到达。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。
+**事实与执行选择：** Goal active、claims_complete=false；所有者直接集成＋既有批准C03定向独审。已push源码b898aabacafb518824d1fd62e1a0a3c5a518f06e的合法Job9be5397f8ddc4fb1a161fe81d6ca97e8为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，1物理调用231.548825秒/exit3；85发现及44成功零新调用，45失败/45未执行，第49未到达。检查点9597e370ec6d4aafb7ad51237678c0dc。旧Job、原件、保护库和来源库保持；0共同发布/启用/签发。
 
-**第一因果错误：** attempt3实际为“找不到原协议控制 Agent 会话，不能脱离上下文继续修复”，不是预算耗尽或模型再次答错。pending_author已核身份并有snapshot binding；采用校验给出source_closure_rewrite权限后，Runner却仍调用要求真实history的continue_session。现有两种闭包模式共用范围推导/restore，最小接线使已有source_closure_rewrite也走原continue_scoped_unit_repair。local owned/schema/合并均缩至授权闭包，兄弟只读、原完整来源/语义/采用门不变；普通history通道仍拒虚构会话，累计账不清零。仅增加validator身份，不增平台或临床特例。
+**第一因果错误与最小修复：** snapshot局部来源修订已实际调用，合法JSON的唯一候选在trigger/obligation各两处分支缺observation_policy；不是病例缺证或研究者未判断。仅在全部错误均为同一候选缺该字段、处置集合等于已授权单元、来源不越界时，拼接未采用局部提案与原兄弟，沿原字段reader补说明。合并后完整Schema/作用域/hydrate/来源与含义门仍在；坏JSON/混合错误/错引句/错位置/越权字段/预算或传输失败不退整批。保留原累计预算，仅新增validator组成，不改模型/作者/编译身份。相连测试发现scoped reader抢先覆盖字段reader，已加排除；已核且整个原子未变的日期属性沿原函数复用，改变时间不复用。
 
-**实证与限制：** 四相连原模块v1为1816pass/3fail/147.18秒，三个新增断言读错Schema $ref；修正并增加第二错误多轮反例后v2为57pass/1fail/4.17秒，唯一夹具错用候选末位置，改为来源身份。最终受影响v3为58pass/1762deselected/4.27秒/exit0/5SWIG；末全窗未重跑，不拼总数。C03同会话01a122e0…定向续审exit0/1轮/no fallback/16源码只读，120min静默完成等待，未读临床/跑测试，只有程序/context分离。采纳末transport失败断言及第二语义门反例，最后测试补强由所有者验证。详见reviews/rv1006-publication-closure-owner-disposition-20261010.md。接线不能证明模型下一答正确；原可选/建议/限定错误仍需原门拒绝。
+**实证与限制：** 最终四模块受影响窗75pass/1759deselected/3.88秒/exit0/5SWIG，JUnit artifacts/rv1006-scoped-missing-policy-connected-20261010-v5.xml；未末全模块重跑，窗口不累加。中间12失败为合成夹具有例外却无触发，随后6失败是真实路由错误，最后2失败为模型默认字段规范化前后比较；分别修夹具、生产分派与规范化快照，不关门。真实6996字符旧答的零模型只读结构探针可定位四处政策，raw hash bb28f2ae7bf26f9bef5f9657ff8a334aa7b3c200625125b8ab2e809e8e1b37d3；探针不是临床采用或合法恢复授权。C03原会话01a122e0…16次源码只读/exit0/1轮/no fallback，120min静默完成等待；指出实际路由结合点和未变时间属性恢复，末修由所有者验证。未读全部消费者、未跑测试或看临床；同模型家族仅程序/context分离，不是独立医学批准。取舍reviews/rv1006-scoped-policy-owner-disposition-20261010.md。
 
-**恢复计划：** 新只读publication-closure-preflight-20261010-v1从38e4沿冻结祖先解析46–48成功/49未采用提案，47reusable/2resume_partial/41refresh_required，0模型/0库写/hash保持。下一冻结同版本源码，经合法API新建90步核逐项决策一致后局部接续；旧失败终态不复活，47成功不重读，现存产物目录不覆盖。继承7份dirty和私有原答/原件/DB/env不stage、不清理。当前新接线尚未真实运行；不是患者缺证或临床采用。
+**恢复计划与边界：** 新只读scoped-policy-preflight-20261010-v1从9be沿冻结祖先47reusable/2resume_partial/41refresh_required，0模型/0库写/hash保持。下一同版本经合法API新建并核90步决策一致，保留47成功、不复活旧失败/覆盖旧目录。当前服务跨Job只保存合法未采用pending_author_wire，不能直接恢复本次结构无效raw；下一会重新生成一次授权局部提案，字段路径仅在运行中接续，不声称零调用接回旧无效答。实际调用累计不清零。继承7份dirty及私有原答/原件/DB/env不stage、不清理。新字段路径尚未产品实跑；完整同源包、同包病例工作稿及UI更正新旧报告仍未达。
 
 | 用户流程节点 | 现有入口/已证 | 首个未完成与预期动作 |
 |---|---|---|

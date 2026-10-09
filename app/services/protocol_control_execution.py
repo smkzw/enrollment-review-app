@@ -2118,6 +2118,7 @@ def _deep_component_identity(
                                        "source-closure-scoped-unit-repair/v1",
                                        "publication-candidate-missing-policy-recovery/v1",
                                        "publication-source-closure-scoped-resume/v1",
+                                       "scoped-source-proposal-missing-policy-recovery/v1",
                                        SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),

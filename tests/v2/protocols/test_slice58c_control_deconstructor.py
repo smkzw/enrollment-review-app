@@ -11736,6 +11736,142 @@ def test_pending_publication_closure_uses_real_scoped_transport_not_missing_hist
             assert "不得退回整组改写" in " ".join(result.attempts[-1].issues)
 
 
+@pytest.mark.parametrize("fault", [None, "budget", "missing_reader", "cross_source", "cross_span",
+    "mixed_error", "bad_json", "position", "quote", "extra_field", "transport", "second_gate"])
+def test_scoped_missing_policy_uses_field_reader_and_preserves_actual_proposal(fault):
+    from app.agents.protocol_control_agent_transport import OpenAICompatibleProtocolControlAgentTransport
+    from app.protocols.protocol_control_gate import validate_protocol_control_batch_candidates
+
+    batch = _batch()
+    first = _candidate().model_copy(update={"exception_expression": None})
+    second_data = _candidate_for_second_unit().model_dump(mode="json")
+    second_data["exception_expression"] = None
+    second_atom = second_data["obligation_expression"]["groups"][0]["atoms"][0]
+    second_atom["evaluation"] = _evaluation(second_atom["statement"], "span:02", second_atom["source_excerpts"][0])
+    original = _wire_with_two_candidates(first, ProtocolControlAgentWireCandidate.model_validate(second_data))
+    before = original.model_dump(mode="json")
+    proposal = original.model_copy(update={
+        "dispositions": [original.dispositions[0]],
+        "candidate_drafts": [original.candidate_drafts[0].model_copy(update={"title": "修订后的有源要求"})],
+    }).model_dump(mode="json")
+    atom = proposal["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]
+    atom["evaluation"]["observation_policy"] = None
+    if fault == "cross_source":
+        proposal["candidate_drafts"][0]["source_structure_unit_ids"] = ["su-01", "su-02"]
+    elif fault == "cross_span":
+        proposal["candidate_drafts"][0]["source_span_ids"] = ["span:01", "span:02"]
+    elif fault == "mixed_error":
+        atom["statement"] = ""
+    policy = {"mode": "unresolved", "scope": "原文未明确采用哪次记录",
+              "source_span_ids": atom["source_span_ids"], "source_excerpts": atom["source_excerpts"]}
+    if fault == "quote":
+        policy = {**policy, "source_span_ids": ["span:02"], "source_excerpts": ["禁止使用救援药物"]}
+    repair = {"items": [{"layer": "obligation", "group_index": 0,
+                         "atom_index": 1 if fault == "position" else 0, "policy": policy}]}
+    if fault == "extra_field":
+        repair["items"][0]["statement"] = "越权改写"
+    requests = []
+
+    class Transport(OpenAICompatibleProtocolControlAgentTransport):
+        def _complete(self, messages, *, response_format=None):
+            requests.append((messages, response_format))
+            if len(requests) == 1:
+                return "{" if fault == "bad_json" else json.dumps(proposal, ensure_ascii=False)
+            if fault == "transport":
+                raise RuntimeError("模拟字段读取服务断开")
+            return json.dumps(repair, ensure_ascii=False)
+
+    transport = Transport(client=SimpleNamespace(), backend="ollama-cloud",
+        model="deepseek-v4.1-flash", model_identity_check=False)
+    if fault == "missing_reader":
+        transport.continue_observation_policies = None
+    seen = []
+
+    def consume(output):
+        validate_protocol_control_batch_candidates(batch, output)
+        seen.append(output)
+        candidate = next(item for item in output.candidates if item.frozen_structure_unit_ids == ["su-01"])
+        if candidate.title != "修订后的有源要求":
+            raise ProtocolControlAgentWireValidationError("PUBLICATION_GATE_REJECTED", "有源范围需要局部核对",
+                candidate_ids=[candidate.control_candidate_id], structure_unit_ids=["su-01"],
+                allow_source_closure_rewrite=True)
+        if fault == "second_gate":
+            raise ProtocolControlAgentWireValidationError("RECOMMENDED_MODALITY_UNSUPPORTED", "修订含义仍未通过",
+                candidate_ids=[candidate.control_candidate_id], structure_unit_ids=["su-01"])
+
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION, statements=[],
+        units_without_statement=list(batch.owned_structure_unit_ids))
+    result = ProtocolControlAgentRunner(max_schema_repairs=1 if fault == "budget" else 2).run(
+        batch, transport, output_validator=consume, resume_pending_author_wire=original,
+        resume_source_interpretation=inventory, resume_session_id="saved-author")
+    assert original.model_dump(mode="json") == before
+    assert transport._histories == {}
+    stops_before_policy = {"budget", "missing_reader", "cross_source", "cross_span", "mixed_error", "bad_json"}
+    assert len(requests) == (1 if fault in stops_before_policy else 2), [item.issues for item in result.attempts]
+    if len(requests) == 2:
+        messages, response_format = requests[1]
+        assert [item["role"] for item in messages] == ["user"]
+        assert "仅为列出的条件或义务原子补充观察采用说明" in messages[0]["content"]
+        assert "修订后的有源要求" not in messages[0]["content"]
+        assert set(response_format["json_schema"]["schema"]["properties"]) == {"items"}
+    if fault is None:
+        assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
+        assert result.final_output is not None and len(seen) == 2
+        target = next(item for item in result.partial_wire.candidate_drafts
+                      if item.source_structure_unit_ids == ["su-01"])
+        expected = deepcopy(proposal["candidate_drafts"][0])
+        expected["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["observation_policy"] = policy
+        assert target == ProtocolControlAgentWireCandidate.model_validate(expected)
+        sibling = next(item for item in result.partial_wire.candidate_drafts
+                       if item.source_structure_unit_ids == ["su-02"])
+        assert sibling == original.candidate_drafts[1]
+        assert result.partial_wire.dispositions[1] == original.dispositions[1]
+    else:
+        assert result.status == "需要核对" and result.final_output is None
+        assert len(seen) == (2 if fault == "second_gate" else 1)
+        if fault == "second_gate":
+            assert any("RECOMMENDED_MODALITY_UNSUPPORTED" in item.error_classes for item in result.attempts)
+        else:
+            assert result.pending_author_wire == original
+
+
+@pytest.mark.parametrize("changed_time", [False, True])
+def test_scoped_missing_policy_retains_only_unchanged_known_time_operand(changed_time):
+    from app.agents.protocol_control_deconstructor import _invalid_scoped_observation_payload
+    from app.domain.contracts.rules import TimeConstraint
+
+    original = _wire(candidate=_candidate()).model_dump(mode="json")
+    atoms = original["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"]
+    timed = deepcopy(atoms[0])
+    timed["statement"] = "核对此前年龄资料"
+    timed["evaluation"] = _timed_evaluation(timed["statement"], "span:01", "年龄至少18岁")
+    timed["evaluation"]["time_operand_attribute"] = "record_time"
+    timed["time_constraint"] = TimeConstraint.model_validate(
+        {"anchor_type": "screening_date", "direction": "before"}).model_dump(mode="json")
+    atoms.append(timed)
+    previous = ProtocolControlAgentWire.model_validate(original)
+    original = previous.model_dump(mode="json")
+    timed = original["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][1]
+    proposal = previous.model_dump(mode="json")
+    proposal["dispositions"] = proposal["dispositions"][:1]
+    returned_atoms = proposal["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"]
+    returned_atoms[0]["evaluation"]["observation_policy"] = None
+    returned_atoms[1]["evaluation"]["time_operand_attribute"] = None
+    if changed_time:
+        returned_atoms[1]["time_constraint"]["direction"] = "after"
+    raw = json.dumps(proposal, ensure_ascii=False)
+    recovered = _invalid_scoped_observation_payload(raw, previous, {"su-01"}, _batch())
+    assert previous.model_dump(mode="json") == original
+    if changed_time:
+        assert recovered is None
+    else:
+        material, index, paths = recovered
+        assert index == 0 and paths == (("obligation", 0, 0),)
+        restored = material["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][1]
+        assert restored == timed
+        assert material["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["observation_policy"] is None
+
+
 def test_explicit_candidate_repartition_preserves_authorized_source_union() -> None:
     first = _candidate()
     second = _candidate_for_second_unit()

@@ -1,5 +1,5 @@
 <!-- RV1006-CONTEXT:BEGIN -->
-现行唯一状态（2026-10-10）：用户解除暂停，Goal active/claims_complete=false，1006V1持续实施。aba90c63源码合法Job38e4a8a1…failed_final，0模型调用168.983秒/exit3；85发现及44深审复用，45失败/45未执行，第49及缺观察字段通道未到达。真实首错为snapshot恢复没有真实history却误选continue_session，不是额度耗尽。已有source_closure_rewrite接同一scoped unit修订，原范围/来源/临床门保持，不增框架、不清旧账。四相连1816pass3新Schema断言失败；最终受影响58pass/4.27秒，末全窗未重跑。批准C03定向续审16只读/exit0/no fallback，末测试由所有者核验，非临床批准。最新38e4沿冻结祖先预检47reusable/2resume/41refresh、0调用0写/hash保持；下一冻结同版本合法接续，旧Job不复活。完整共同发布、同包5PDF24页工作稿、UI更正后新旧结果/Q3未达；细账见任务implement/HANDOFF/index，以下均历史。
+现行唯一状态（2026-10-10）：Goal active/claims_complete=false；1006V1持续。b898aaba合法9be5397f…failed_final，1调用231.549s/exit3，44完成45失败45未执行。实际局部答唯一候选四处漏观察采用说明，原Schema拒绝正确；当前最小包沿已有字段reader，仅补授权字段、保持实际提案和兄弟，完整来源/含义门不变。相连反例发现scoped分派抢先，已修；75受影响pass/3.88s/exit0，末全模块未重跑。批准C03同会话16源码只读/exit0/no fallback，末修由所有者验证，非医学批准。最新9be只读预检47reusable/2resume/41refresh、0模型0写/hash保持；下一冻结合法接续，跨Job不能直接重用无效raw，不冒称零调用恢复。完整共同发布、同包5PDF24页工作稿、UI更正后新旧结果/Q3未达。细账仅任务implement/HANDOFF/index，以下均历史。
 
 ### 以下为历史快照，不覆盖上方现行状态
 当前功能包最终核对：recommended时间项保持为方案建议而非强制入排条件，完整同单元的必做兄弟也不丢弃；仅可非执行留存，不得取得事实refs或签发资格。1282相连pass/113.54秒，增量批准独审4读/exit0且保留未读边界；最终v2预检23/1/66无模型无写/hash保持。实际补来源/共同发布尚未运行，当前新Job及临床层状态以任务单一当前表为准，不与下方历史拼完成率。
