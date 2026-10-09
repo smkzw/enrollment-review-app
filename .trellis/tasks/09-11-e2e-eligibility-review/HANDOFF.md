@@ -1,12 +1,12 @@
-# HANDOFF｜1006V1｜用户要求无损暂停
+# HANDOFF｜1006V1｜已解除暂停，实施中
 
-更新2026-10-09。用户最新要求完成手头工作后暂停；不启动新作业，Goal paused，claims_complete=false。历史授权保留但不自行恢复临床/模型运行。正式事实自动采用、临床签发另守权限。任务未完成，不归档；历史“当前/未运行”不能覆盖本表。
+更新2026-10-09。用户已解除暂停，Goal active，claims_complete=false。源码46237852的Job2f63ef87383c42f2b9dea9bff596d048已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED，10调用405.756969秒/exit3，43完成/第44失败/46未执行；exec86368结束，85发现及43成功零新调用复用。原件、旧Job、来源库及保护库保持。新包补已有候选共同引用的原文上下文并绑定诊断输出身份，1109相连检查通过，C03只读工程审阅完成；未放宽采用条件，尚未真实运行该补丁。下一对2f63零调用预检、合法新建，旧目录不重跑。完整共同发布、同包病例工作稿、UI更正后新旧结果仍未完成，正式事实自动采用/临床签发另守权限。现行状态以implement当前块及实际回执为准；下方旧终态及“下一”均为历史，不是暂停或重跑指令。任务未完成、不归档。
 
 ## 五分钟入口
 
 本HANDOFF → implement单一当前用户流程表 → delivery_1006V1/03_ACCEPTANCE.md → review_index_20261006_1006V1.json current_state → 具体prepare/execute回执。先核HEAD/dirty/来源/租约；不要重读所有历史，不重跑已有目录或复活旧失败终态。
 
-## 当前身份
+## 接续来源的历史身份
 
 当前最新真实终态：已push源码78064244160d2f24e8541bb539a2f88459628a6d，Job604d997a075f4e13b44933b578f8350d为failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED；2调用230.955691秒/exit3，43completed、44failed_final、46queued。exec67835结束，85发现及43成功零新调用。有效操作兄弟保存，重复来源字段不再是本次首错；新对应回答8个引句均为真实候选原句，但1–6不在当前来源陈述局部摘录范围，部分来自同一候选的其他有源段落，现有grounded_atoms筛选拒绝。不能称模型捏造引用或自报完整已采信，也尚不能仅凭这个筛选差异宣布候选医学含义正确。检查点ba28351dc6e042fbbd215aa725ef8e79，真实产物rv1006-conditioned-numeric-api-20261009-v1。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。
 

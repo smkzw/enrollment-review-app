@@ -69,6 +69,7 @@ from app.agents.protocol_control_source_interpretation import (
     SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
     SOURCE_TARGET_REVIEW_GAP_VERSION,
     SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
+    SOURCE_TARGET_COCITED_CONTEXT_VERSION,
     SOURCE_QUOTE_RECOVERY_VERSION,
     SOURCE_TARGET_REVIEW_VERSION,
     SourceDefinitionConsumers,
@@ -2077,6 +2078,7 @@ def _deep_component_identity(
                                        SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
                                        SOURCE_TARGET_REVIEW_GAP_VERSION,
                                        SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
+                                       SOURCE_TARGET_COCITED_CONTEXT_VERSION,
                                        PROCEDURE_RESTRICTION_VALIDATION_VERSION,
                                        PROCEDURE_SOURCE_CONTEXT_VERSION,
                                        RELATIVE_STAGE_PREFLIGHT_VERSION,
@@ -4524,6 +4526,10 @@ def _pending_definition_consumer_checkpoint(
             and not result.pending_source_definition_consumer_attempts):
         return {}
     return {
+        "pending_source_definition_consumer_output_sha256": (
+            result.pending_source_definition_consumer_output_sha256
+        ),
+        "pending_source_definition_consumer_adoptable": False,
         "pending_source_definition_consumers": (
             result.pending_source_definition_consumers.model_dump(mode="json")
             if result.pending_source_definition_consumers is not None else None

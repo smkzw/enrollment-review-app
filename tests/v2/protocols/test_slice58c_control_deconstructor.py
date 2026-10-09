@@ -19,6 +19,7 @@ from app.agents.protocol_control_deconstructor import (
     protocol_control_batch_response_format,
     ProtocolControlAgentResponse,
     ProtocolControlAgentRunner,
+    ProtocolControlAgentRunResult,
     ProtocolControlAgentInput,
     ProtocolControlAgentWire,
     ProtocolControlAgentWireCandidate,
@@ -3395,7 +3396,7 @@ def test_runner_reaffirmed_function_requires_one_valid_target_review(resolved: b
     )
     assert transport.function_calls == 1
     assert transport.target_calls == 2
-    assert transport.definition_calls == 1
+    assert transport.definition_calls == 1, [(attempt.error_classes, attempt.issues) for attempt in result.attempts]
     assert result.source_interpretation == original
     assert result.source_target_review == corrected
     assert result.partial_wire == wire
@@ -3407,6 +3408,14 @@ def test_runner_reaffirmed_function_requires_one_valid_target_review(resolved: b
         assert result.pending_source_definition_consumers.items == []
         assert len(result.pending_source_definition_consumer_attempts) == 1
         assert result.pending_source_definition_consumer_attempts[0].outcome == "parsed"
+        assert result.pending_source_definition_consumer_output_sha256 == hashlib.sha256(
+            hydrate_protocol_control_agent_output(wire, batch).model_dump_json().encode()
+        ).hexdigest()
+        restored = ProtocolControlAgentRunResult.model_validate_json(result.model_dump_json())
+        assert restored.pending_source_definition_consumer_output_sha256 == result.pending_source_definition_consumer_output_sha256
+        assert [attempt.model_dump(mode="json") for attempt in restored.pending_source_definition_consumer_attempts] == [
+            attempt.model_dump(mode="json") for attempt in result.pending_source_definition_consumer_attempts]
+        assert restored.pending_source_definition_consumer_attempts[0].raw_output_text is None
         assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
     else:
         assert result.source_definition_consumers is not None
@@ -13686,6 +13695,68 @@ def test_alignment_numeric_gap_repairs_only_selected_atom_then_revalidates(reply
                        for attempt in result.attempts)
 
 
+def test_pending_definition_diagnostic_keeps_declaration_identity_after_atom_rollback():
+    from app.agents.protocol_control_source_interpretation import SOURCE_DEFINITION_CONSUMER_VERSION
+    from app.services.protocol_control_execution import _pending_definition_consumer_checkpoint
+
+    batch, inventory, review, wire, alignment = _two_independent_candidate_linked_alignment_material()
+    definition = "参考范围尚未明确。"
+    batch.owned_units[1].excerpt = definition
+    inventory.statements[1] = SourceStatement(structure_unit_id="su-02", quoted_text=definition,
+        force="descriptive", decision_functions=["definition"], time_words=[], unresolved=["参照对象未明确"])
+    review.items[1] = SourceTargetReviewItem(statement_index=1, decision="unresolved",
+        source_action_excerpt=definition, unresolved_aspects=["参照对象未明确"])
+    wire = _wire(candidate=wire.candidate_drafts[0])
+    good_wire = wire.model_copy(deep=True)
+    good_atom = good_wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    bad_atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    bad_atom.evaluation = bad_atom.evaluation.model_copy(update={
+        "determination_mode": "semantic", "predicate": None, "operation": None, "operand_attribute": None})
+    alignment["items"] = alignment["items"][:1]
+
+    class Transport(_FakeTransport):
+        target_calls = 0
+        definition_calls = 0
+
+        def start_source_target_review(self, *, prompt):
+            self.target_calls += 1
+            answer = review.model_copy(deep=True)
+            requested = json.loads(next(line.removeprefix("待核陈述：")
+                for line in prompt.splitlines() if line.startswith("待核陈述：")))
+            answer.items = [item for item in answer.items
+                if item.statement_index in {entry["statement_index"] for entry in requested}]
+            return ProtocolControlAgentResponse(session_id="target", text=answer.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="alignment", text=json.dumps(alignment, ensure_ascii=False))
+
+        def continue_atom(self, *, session_id, prompt):
+            return ProtocolControlAgentResponse(session_id=session_id,
+                text=json.dumps({"atom": good_atom.model_dump(mode="json")}, ensure_ascii=False))
+
+        def start_source_definition_consumers(self, *, prompt):
+            self.definition_calls += 1
+            return ProtocolControlAgentResponse(session_id="diagnostic",
+                text=json.dumps({"version": SOURCE_DEFINITION_CONSUMER_VERSION, "items": []}))
+
+    transport = Transport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=2).run(batch, transport,
+        resume_wire=wire, resume_source_interpretation=inventory, resume_session_id="saved",
+        output_validator=lambda _output: None)
+    assert transport.definition_calls == 1, [(attempt.error_classes, attempt.issues) for attempt in result.attempts]
+    assert result.final_output is None and result.source_definition_consumers is None
+    assert result.partial_wire == wire
+    declared_hash = hashlib.sha256(hydrate_protocol_control_agent_output(good_wire, batch)
+        .model_dump_json().encode()).hexdigest()
+    assert result.pending_source_definition_consumer_output_sha256 == declared_hash
+    assert declared_hash != hashlib.sha256(hydrate_protocol_control_agent_output(result.partial_wire, batch)
+        .model_dump_json().encode()).hexdigest()
+    saved = ProtocolControlAgentRunResult.model_validate_json(result.model_dump_json())
+    checkpoint = _pending_definition_consumer_checkpoint(saved)
+    assert checkpoint["pending_source_definition_consumer_output_sha256"] == declared_hash
+    assert checkpoint["pending_source_definition_consumer_adoptable"] is False
+
+
 def test_unchanged_negative_alignment_survives_invalid_retry_without_becoming_positive():
     from app.agents.protocol_control_candidate_alignment import SourceCandidateAlignment, bind_candidate_alignment
     batch, inventory, review, wire, alignment = _two_independent_candidate_linked_alignment_material()
@@ -13986,6 +14057,35 @@ def test_target_review_prompt_supplies_force_without_declaring_coverage():
     assert "force 只记原文语气，不决定是否要核对" in prompt
     assert "不是时间已对应的证明" in prompt
     assert "shared_visit_source_positions" in prompt
+
+
+@pytest.mark.parametrize("cited", ["both", "self", "foreign", "none"])
+def test_target_review_supplies_only_frozen_cocited_owned_context(cited):
+    batch = _batch()
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id=unit.structure_unit_id, quoted_text=unit.excerpt,
+            force="required", decision_functions=["action"], time_words=[])
+            for unit in batch.owned_units], units_without_statement=[])
+    wire = _wire(candidate=_candidate())
+    wire.candidate_drafts[0].source_structure_unit_ids = {
+        "both": ["su-01", "su-02"], "self": ["su-02"], "foreign": ["su-02", "su-03"],
+        "none": ["su-01"],
+    }[cited]
+    coverage = [SourceStatementCoverage(statement_index=1, structure_unit_id="su-02",
+        disposition="other_control_candidate", status="not_located")]
+    frozen = batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()
+    prompt = build_source_target_review_prompt(batch, inventory, coverage, wire=wire)
+    assert "本次必须且只能返回这些 statement_index：[1]" in prompt
+    assert ("本条完整原文关系上下文：" in prompt) == (cited == "both")
+    if cited == "both":
+        packet = json.loads(next(line.removeprefix("本条完整原文关系上下文：")
+            for line in prompt.splitlines() if line.startswith("本条完整原文关系上下文：")))
+        assert [unit["structure_unit_id"] for unit in packet] == ["su-01", "su-02"]
+        assert packet[0]["excerpt"] == batch.owned_units[0].excerpt
+        assert packet[0]["source_span_ids"] == batch.owned_units[0].source_span_ids
+        assert packet[0]["statements"][0]["statement_index"] == 0
+        assert "不证明它们具有总分或依赖关系" in prompt
+    assert (batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()) == frozen
 
 
 def _owned_context_target_example():

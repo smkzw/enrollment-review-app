@@ -42,6 +42,7 @@ SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
 SOURCE_TARGET_REVIEW_GAP_VERSION = "source-target-unresolved-cause/v1"
 SOURCE_ATTRIBUTION_VALIDATION_VERSION = "source-external-header-scope/v2"
 SOURCE_TARGET_CONTEXT_RECHECK_VERSION = "source-owned-context-target-recheck/v1"
+SOURCE_TARGET_COCITED_CONTEXT_VERSION = "source-target-cocited-owned-context/v1"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -1630,6 +1631,7 @@ def build_source_target_review_prompt(
     *,
     comparison_target_id: str | None = None,
     include_owned_context: bool = False,
+    wire=None,
 ) -> str:
     indexes = target_review_indexes(interpretation, coverage, batch)
     coverage_by_index = {entry.statement_index: entry for entry in coverage}
@@ -1697,12 +1699,21 @@ def build_source_target_review_prompt(
         }
         for unit in batch.context_units
     ]
+    selected_units = {interpretation.statements[index].structure_unit_id for index in indexes}
+    context_units = set(selected_units) if include_owned_context else set()
+    if wire is not None:
+        for candidate in wire.candidate_drafts:
+            cited = set(candidate.source_structure_unit_ids) & set(owned_by_id)
+            if cited & selected_units:
+                context_units.update(cited)
     owned_context = ""
-    if include_owned_context:
-        selected_units = {interpretation.statements[index].structure_unit_id for index in indexes}
+    if include_owned_context or context_units - selected_units:
         owned_context = (
             f"\n局部原文关系复核：{SOURCE_TARGET_CONTEXT_RECHECK_VERSION}。"
+            f"共同引用的有源上下文：{SOURCE_TARGET_COCITED_CONTEXT_VERSION}。"
             "陈述拆分只是核对粒度；同一原文单元里的条件、例外及依赖仍须一起核查。"
+            "候选共同引用的其他原文单元仅提供关系线索，不证明它们具有总分或依赖关系。"
+            "核查条件、例外或定义是否实际限定本条，不把说明自动新增成独立患者义务。"
             "下列完整原文及兄弟陈述只提供关系上下文，不证明已有目标覆盖。"
             "先核原文是否明确将例外限定到本条，再核目标是否保留同一条件和例外；"
             "不能因本条摘录未重复例外就自动新增要求，也不能因整段文字相同就跳过含义核对。"
@@ -1715,7 +1726,7 @@ def build_source_target_review_prompt(
                  "statements": [{"statement_index": index, "quoted_text": statement.quoted_text}
                                 for index, statement in enumerate(interpretation.statements)
                                 if statement.structure_unit_id == unit.structure_unit_id]}
-                for unit in batch.owned_units if unit.structure_unit_id in selected_units
+                for unit in batch.owned_units if unit.structure_unit_id in context_units
             ], ensure_ascii=False, sort_keys=True) + "\n"
         )
     return owned_context + (

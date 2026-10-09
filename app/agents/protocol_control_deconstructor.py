@@ -4348,6 +4348,9 @@ class ProtocolControlAgentRunResult(ContractModel):
     pending_source_definition_consumer_attempts: list[ProtocolControlAgentAttempt] = Field(
         default_factory=list, exclude_if=lambda value: not value,
     )
+    pending_source_definition_consumer_output_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$", exclude_if=lambda value: value is None,
+    )
     restricted_source_definition_consumer_attempts: list[ProtocolControlAgentAttempt] = Field(
         default_factory=list, exclude_if=lambda value: not value,
     )
@@ -8348,7 +8351,7 @@ class ProtocolControlAgentRunner:
                                 review_unavailable = True
                                 raise RuntimeError("逐项来源核对服务不可用，不能跳过未闭合陈述")
                             review_response = reviewer(prompt=build_source_target_review_prompt(
-                                batch, source_interpretation, pending_coverage,
+                                batch, source_interpretation, pending_coverage, wire=wire,
                             ))
                             pending_review = SourceTargetReview.model_validate_json(review_response.text)
                             corrected_invalid_review = False
@@ -8679,6 +8682,7 @@ class ProtocolControlAgentRunner:
                                         correction_prompt = build_source_target_review_prompt(
                                             batch, source_interpretation, invalid_entries,
                                             comparison_target_id=overclaimed.target_id if compare_one else None,
+                                            wire=wire,
                                         ) + (
                                             "\n上一回答对此条的完整覆盖判断未通过来源核对："
                                             + str(review_error)[:1000]
@@ -8785,7 +8789,7 @@ class ProtocolControlAgentRunner:
                                     local_phase = "SOURCE_TARGET_FOCUSED"
                                     local_response = None
                                     local_response = reviewer(prompt=build_source_target_review_prompt(
-                                        batch, source_interpretation, [revised_entry],
+                                        batch, source_interpretation, [revised_entry], wire=wire,
                                     ))
                                     corrected = SourceTargetReview.model_validate_json(local_response.text)
                                     validate_source_target_review(
@@ -8852,7 +8856,7 @@ class ProtocolControlAgentRunner:
                                         continue
                                     focused_reads += 1
                                     focused_prompt = build_source_target_review_prompt(
-                                        batch, source_interpretation, [entry],
+                                        batch, source_interpretation, [entry], wire=wire,
                                     ) + (
                                         "\n只复核这一条。已有候选覆盖该来源单元的其他要求，不代表本条已覆盖；"
                                         "本条的 linked_procedure_target_ids 为空也不代表冻结目标列表为空。"
@@ -8988,7 +8992,7 @@ class ProtocolControlAgentRunner:
                                          if entry.statement_index == item.statement_index)
                             context_prompt = build_source_target_review_prompt(
                                 batch, source_interpretation, [entry],
-                                comparison_target_id=item.target_id, include_owned_context=True,
+                                comparison_target_id=item.target_id, include_owned_context=True, wire=wire,
                             )
                             detail = {
                                 "recovery_method": SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
@@ -9995,6 +9999,7 @@ class ProtocolControlAgentRunner:
                         # failure stays a diagnostic only: no adoption, no
                         # status change, and no shared attempt sequence.
                         pending_definition_consumers = None
+                        pending_definition_output_sha256 = None
                         pending_definition_attempts: list[ProtocolControlAgentAttempt] = []
                         if (
                             isinstance(exc, SourceTargetReviewValidationError)
@@ -10013,6 +10018,7 @@ class ProtocolControlAgentRunner:
                                     official_predicate_sources=official_predicate_sources,
                                 )
                             )
+                            pending_definition_output_sha256 = _sha256(output.model_dump_json())
                         return build_result(
                             status="需要核对",
                             batch_id=batch.batch_id,
@@ -10025,6 +10031,7 @@ class ProtocolControlAgentRunner:
                             partial_wire=partial_wire,
                             pending_source_definition_consumers=pending_definition_consumers,
                             pending_source_definition_consumer_attempts=pending_definition_attempts,
+                            pending_source_definition_consumer_output_sha256=pending_definition_output_sha256,
                         )
                 definition_consumers, definition_failed = declare_source_definition_consumers(
                     batch, transport, source_interpretation, output, attempts,
