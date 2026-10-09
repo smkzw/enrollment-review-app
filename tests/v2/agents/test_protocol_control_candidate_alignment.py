@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -14,6 +15,8 @@ from app.agents.protocol_control_candidate_alignment import (
     candidate_alignment_response_format,
     bind_candidate_alignment,
     validate_candidate_alignment,
+    build_candidate_alignment_prompt,
+    reusable_proven_alignment_items,
 )
 from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentAttempt,
@@ -35,6 +38,7 @@ from app.agents.protocol_control_source_interpretation import (
 )
 from app.domain.contracts.protocol_controls import ControlObligationKind
 from app.domain.contracts.protocol_controls import KnownWorkflowStageTarget
+from app.domain.contracts.protocol_controls import StructureUnitKind
 from app.domain.contracts.enums import ReviewStage
 from app.services.protocol_control_execution import _validate_saved_source_review
 from tests.v2.protocols.test_slice58c_control_deconstructor import (
@@ -60,6 +64,145 @@ def _native_action_material():
                    "candidate_atom_quotes": [atom.statement], "unresolved_dimensions": []}],
     })
     return batch, source, wire, coverage, alignment
+
+
+def test_alignment_prompt_includes_only_actual_candidate_source_closure():
+    batch, source, wire, _, _ = _native_action_material()
+    prompt = build_candidate_alignment_prompt(batch, source, wire, [(0, 0)])
+    data = json.loads(prompt.split("待核对应：", 1)[1])
+    assert [unit["structure_unit_id"] for unit in data[0]["candidate_source_closure"]] == wire.candidate_drafts[0].source_structure_unit_ids
+    assert "兄弟要求须各自处置" in prompt
+    wire.candidate_drafts[0].source_structure_unit_ids.append("outside-scope")
+    with pytest.raises(ValueError, match="越出本批"):
+        build_candidate_alignment_prompt(batch, source, wire, [(0, 0)])
+
+
+@pytest.mark.parametrize("mutation", [None, "pure_exception", "missing_exception", "no_exception_words", "definition", "unknown", "different_exception_layer"])
+def test_action_with_source_exception_is_not_a_pure_definition(mutation):
+    batch, source, wire, coverage, alignment = _native_action_material()
+    text = "材料分发及回收，尚未同意者除外"
+    unit, statement = batch.owned_units[0], source.statements[0]
+    # This family exercises a paragraph obligation, not table visit inference.
+    unit.table_context = None
+    unit.unit_kind = StructureUnitKind.PARAGRAPH
+    unit.source_ref = "body.p1"
+    unit.member_source_refs = [unit.source_ref]
+    unit.member_texts = [text]
+    unit.member_source_span_ids = [list(unit.source_span_ids)]
+    unit.excerpt = text
+    statement.quoted_text = unit.excerpt
+    statement.scope_quote = None
+    statement.time_words = []
+    statement.decision_functions = ["action", "exception"]
+    statement.exception_words = "尚未同意者除外"
+    for node in wire.candidate_drafts[0].review_node_bindings:
+        node.scope_citation = None
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    atom.statement = text
+    atom.evaluation = atom.evaluation.model_copy(update={"proposition": atom.statement})
+    atom.source_excerpts = [text]
+    alignment.items[0].source_excerpt = unit.excerpt
+    alignment.items[0].candidate_atom_quotes = [atom.statement]
+    if mutation == "pure_exception":
+        statement.decision_functions = ["exception"]
+    elif mutation == "missing_exception":
+        statement.exception_words = "其他情况除外"
+    elif mutation == "no_exception_words":
+        statement.exception_words = None
+    elif mutation == "definition":
+        statement.decision_functions.append("definition")
+    elif mutation == "unknown":
+        statement.decision_functions.append("unclassified")
+    elif mutation == "different_exception_layer":
+        expression = _candidate().exception_expression
+        exception = expression.groups[0].atoms[0]
+        exception.statement = "已经同意者也除外"
+        exception.source_span_ids = list(unit.source_span_ids)
+        exception.source_excerpts = [text]
+        exception.evaluation = atom.evaluation.model_copy(update={"proposition": exception.statement})
+        wire.candidate_drafts[0].exception_expression = expression
+    if mutation:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+
+
+def test_alignment_closure_change_invalidates_saved_proof_not_sibling_source():
+    batch, source, wire, coverage, alignment = _native_action_material()
+    extra = batch.owned_units[0].model_copy(deep=True, update={
+        "structure_unit_id": "owned-extra", "excerpt": "另外记录操作日期",
+        "table_context": None, "source_ref": "body.p99",
+        "unit_kind": StructureUnitKind.PARAGRAPH,
+        "member_source_refs": ["body.p99"], "member_texts": ["另外记录操作日期"],
+        "source_span_ids": ["span:extra"], "member_source_span_ids": [["span:extra"]],
+    })
+    batch.owned_units.append(extra)
+    batch.owned_structure_unit_ids.append(extra.structure_unit_id)
+    batch.owned_source_span_ids.extend(extra.source_span_ids)
+    wire.candidate_drafts[0].source_structure_unit_ids.append(extra.structure_unit_id)
+    wire.candidate_drafts[0].source_span_ids.extend(extra.source_span_ids)
+    proof = bind_candidate_alignment(batch, source, coverage, wire, alignment,
+        alignment.model_dump_json(exclude={"proofs"}))
+    assert len(reusable_proven_alignment_items(batch, source, coverage, wire, proof)) == 1
+    extra.excerpt = "不得记录操作日期"
+    extra.member_texts = [extra.excerpt]
+    assert reusable_proven_alignment_items(batch, source, coverage, wire, proof) == []
+
+
+@pytest.mark.parametrize("separate_alternative", [False, "unrelated", "weaker", "full_quote_weaker", "equivalent"])
+def test_split_conjunction_checks_this_statement_without_erasing_or_alternative(separate_alternative):
+    batch, source, wire, coverage, alignment = _native_action_material()
+    unit, statement = batch.owned_units[0], source.statements[0]
+    text = "领取材料，回收材料"
+    unit.table_context = None
+    unit.unit_kind = StructureUnitKind.PARAGRAPH
+    statement.quoted_text = text
+    unit.excerpt = text + "。另需记录电话。"
+    unit.source_ref = "body.p1"
+    unit.member_source_refs = [unit.source_ref]
+    unit.member_texts = [unit.excerpt]
+    unit.member_source_span_ids = [list(unit.source_span_ids)]
+    statement.scope_quote = None
+    statement.time_words = []
+    candidate = wire.candidate_drafts[0]
+    for node in candidate.review_node_bindings:
+        node.scope_citation = None
+    group = candidate.obligation_expression.groups[0]
+    original = group.atoms[0]
+    group.atoms = []
+    for part in ["领取材料", "回收材料", "记录电话"]:
+        atom = original.model_copy(deep=True, update={"statement": part, "source_excerpts": [part]})
+        atom.evaluation = atom.evaluation.model_copy(update={"proposition": part})
+        group.atoms.append(atom)
+    alignment.items[0].source_excerpt = text
+    alignment.items[0].candidate_atom_quotes = ["领取材料", "回收材料"]
+    if separate_alternative == "unrelated":
+        # An OR alternative must not bypass the current requirement.
+        candidate.obligation_expression.groups.append(group.model_copy(deep=True,
+            update={"atoms": [group.atoms.pop()]}))
+        with pytest.raises(ValueError, match="另一义务分支"):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    elif separate_alternative:
+        if separate_alternative == "full_quote_weaker":
+            group.atoms = [original.model_copy(deep=True,
+                update={"statement": text, "source_excerpts": [text]})]
+            group.atoms[0].evaluation = original.evaluation.model_copy(update={"proposition": text})
+            alignment.items[0].candidate_atom_quotes = [text, "领取材料"]
+        alternative = group.model_copy(deep=True,
+            update={"atoms": [group.atoms[0]] if separate_alternative != "equivalent" else group.atoms[:2]})
+        if separate_alternative == "full_quote_weaker":
+            alternative.atoms[0] = original.model_copy(deep=True,
+                update={"statement": "领取材料", "source_excerpts": ["领取材料"]})
+            alternative.atoms[0].evaluation = original.evaluation.model_copy(update={"proposition": "领取材料"})
+        candidate.obligation_expression.groups.append(alternative)
+        if separate_alternative == "equivalent":
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+        else:
+            with pytest.raises(ValueError, match="完整合取内容"):
+                validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
 
 
 @pytest.mark.parametrize("label", ["材料分发及回收", "资料发放并回收", "资料发放及回收确认"])

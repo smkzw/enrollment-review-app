@@ -3,7 +3,11 @@
 
 Goal active；claims_complete=false。本表是唯一现行流程状态；下方过去的“当前/未运行”均为各自时点的历史记录，不据此重跑。
 
-**当前实际终态：** 源码e1cbe65a7d76116564724df73da30b87b6b25b87已push；合法Job01f4d4daada545c681b6a0e1f79fe98d已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，3物理调用259.832089秒/exit3，43深审completed、第44失败、46queued。85发现及43旧成功零新调用复用；定位重复失败机制已实际在第三答停止，不再耗用此前12答。第44先漏共同条件、继而全范围例外被拒、最后又漏共同条件；不是端点失败或医学资料缺失。exec65654结束，旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。失败检查点987dd233d3d3421d9f57918826b8c723，实际产物rv1006-located-publication-api-20261009-v1。42对应官方EX13c仍非可执行限制，不借药物窗口消除其他分支疑问。
+**当前实际终态：** 已push源码469288f40ac289604e1767078aa00dc8114e956c的合法Job0fbbb14ba841415d970281159021c423为failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，5调用325.527855秒/exit3，43深审完成、第44失败、46queued。85发现及43成功零新调用；结构已通过，核对把有源兄弟误当单句新增，当前次数表达仍有缺口。exec94874结束；检查点6089461160cd40e097a2423a6919f5a6，产物rv1006-scoped-exception-api-20261009-v1。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发；42/EX13c仍非执行限制。
+
+**当前最小包与分工：** 所有者集成＋批准C03单独审，来源与采用证明有解释风险。candidate-source-closure-context/v1提供候选实际owned来源，多来源内容进入proof身份；不自动完成兄弟或重签旧答。action+exception仅无独立例外层且保留明确例外文字可核；纯定义/计算/例外仍拒。合取按当前句选定原子拼接，每个OR分支完整核，弱分支/全句短路拒绝。首审忽略OR组建议未采纳；续审指出any绕过后由所有者逐组修验，未第三审。两相连全窗512pass/96.33秒，末受影响68pass/448deselected/4.56秒/exit0，5SWIG，不累加/不冒称末全窗。Grok/grok-4.7/high同会话两轮exit0/no fallback，无临床/测试。只读反事实第2操作句结构可用，第1次数句仍拒，非采用。最终预检0fbbb来源43/1/46零调用零写/hash保持，新合法创建90步须逐项一致。取舍reviews/rv1006-candidate-source-closure-owner-disposition-20261009.md。完整共同发布及病例闭环未达。
+
+### 前一例外范围包（历史）
 
 **当前最小包与执行选择：** 所有者集成＋单批准C03独审，因为例外作用域影响采用。scoped-exception-dnf/v1将作用域纳入例外重复身份，同范围仍拒；全分支原拒绝保留并定位，复制整段摘录不证明跨分支作用。首子串实验被独审反例推翻撤回，旧实际回放不计当前采用。Grok/grok-4.7/high同会话三轮exit0/no fallback，不读临床/不跑测试；末组内逃逸由所有者直接修验，未第四独审。整包646pass/1fail/94.79秒为新增测试误遍历None，修正后最终受影响14pass/634deselected/1.76秒/exit0、5SWIG；未末全包重跑、不累加。取舍reviews/rv1006-scoped-exception-owner-disposition-20261009.md。最终预检43reusable/1resume_partial/46refresh，0调用/0写/hash保持；下一从01f4合法新建且实际创建90步逐项一致。完整共同发布及病例闭环未达。
 

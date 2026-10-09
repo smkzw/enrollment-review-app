@@ -8,7 +8,9 @@
 
 ## 当前身份
 
-当前最新真实终态：源码e1cbe65a7d76116564724df73da30b87b6b25b87的Job01f4d4daada545c681b6a0e1f79fe98d已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID；3调用259.832089秒/exit3，43completed、44failed_final、46queued。exec65654结束，85发现及43成功零新调用。第44共同条件与例外表达往返错误已被无进展机制停止；不是端点故障。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。
+当前最新真实终态：源码469288f40ac289604e1767078aa00dc8114e956c的Job0fbbb14ba841415d970281159021c423为failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED；5调用325.527855秒/exit3，43completed、44failed_final、46queued。exec94874结束，85发现及43成功零新调用。结构通过，但候选逐句对应缺兄弟真实来源上下文，次数表达仍有缺口；不是端点故障。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。
+
+当前包candidate-source-closure-context/v1补候选owned来源闭包并绑多源proof；兄弟逐项不自动完成，旧答不重签。action带例外仅无独立例外层且有明确例外文字可核；AND兄弟不误拦本句，每个OR分支完整核不借另一分支。单批准C03两轮Grok/grok-4.7/high审阅exit0/no fallback，无临床/测试；最后OR弱分支修复所有者验证、未第三审。完整相连512pass/96.33秒在末修前，最终受影响68pass/448deselected/4.56秒，不累加。43/1/46零调用零写预检保持库hash；反事实第2操作句结构通过，第1次数句仍拒，未签proof、不代表语义采用。取舍reviews/rv1006-candidate-source-closure-owner-disposition-20261009.md。下一从0fbbb合法新建并核90步计划，不重跑43成功组。下列例外范围包属历史。
 
 当前包scoped-exception-dnf/v1：同条件不同范围不再误拒为重复，同范围仍拒；原全分支拒绝保留并定位，同例外跨分支不能只复制整段摘录。首子串放行实验因独审反例撤回，其旧只读回放不属于现行接受证据。三轮批准独审exit0/no fallback、无临床/测试，末组内反例所有者修验；整包646pass/1新测试None错误，修正后末受影响14pass/634deselected/1.76秒/exit0，未末全窗重跑。取舍reviews/rv1006-scoped-exception-owner-disposition-20261009.md。最终预检43/1/46零调用零写/hash保持，下一从01f4合法新建，成功旧内容仍当前重验，不挑旧失败回答采用。
 
@@ -28,15 +30,15 @@
 |---|---|
 | 唯一worktree | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；09-11-e2e-eligibility-review |
-| 当前代码基础 | e1cbe65a7d76116564724df73da30b87b6b25b87已push；本包按明确文件提交后冻结新prepare |
-| 当前最新真实Job | 01f4d4daada545c681b6a0e1f79fe98d，failed_final；exec65654结束，不复活旧终态 |
-| 最新真实运行 | 源码e1cbe65a，43completed/44failed_final/46queued；3调用259.832089秒/exit3 |
+| 当前代码基础 | 469288f40ac289604e1767078aa00dc8114e956c已push；本包按明确文件提交后冻结新prepare |
+| 当前最新真实Job | 0fbbb14ba841415d970281159021c423，failed_final；exec94874结束，不复活旧终态 |
+| 最新真实运行 | 源码469288f4，43completed/44failed_final/46queued；5调用325.527855秒/exit3 |
 | 上游第23失败检查点 | c1fea38816e84c729b9b1587a8818619；已由a513局部恢复保存，旧原答/hash保持，不回改成功 |
 | 当前隔离DB | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 真实产物 | 同根/rv1006-located-publication-api-20261009-v1，prepare/execute保存；第44检查点987dd233d3d3421d9f57918826b8c723；不覆盖/重跑 |
+| 真实产物 | 同根/rv1006-scoped-exception-api-20261009-v1，prepare/execute保存；第44检查点6089461160cd40e097a2423a6919f5a6；不覆盖/重跑 |
 | 模型路线 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high，输出65536，产品自己的harness直连 |
-| 当前新预检 | 同根/rv1006-scoped-exception-preflight-20261009-v3.json：43reusable/1resume_partial/46refresh；0调用/0写/DBhash保持，完整90步创建计划需逐项一致 |
-| 新代码实际临床运行 | 定位失败恢复已实际3答停止；本次例外范围包尚未新运行，未共同发布/新病例工作稿 |
+| 当前新预检 | 同根/rv1006-candidate-closure-preflight-20261009-v2.json：43reusable/1resume_partial/46refresh；0调用/0写/DBhash保持，完整90步创建计划需逐项一致 |
+| 新代码实际临床运行 | 例外范围包已实际越过结构；本次来源闭包包尚未新运行，未共同发布/新病例工作稿 |
 | 继承dirty | 7份旧delivery文件未动，不stage；大量继承untracked不清理/不批量stage |
 | 外部可复查范围 | Git源码/合成用例/净化工程报告；真实原件、DB、提示、原答和病例截图仅本机受控可读，外部审阅不可读 |
 
@@ -44,7 +46,7 @@
 
 | 用户动作 | 已实现/已证 | 首个未完成 |
 |---|---|---|
-| 从DOCX准备完整要求 | 官方1153e25b4eba40db964202a1c3ed07c3草稿rev21，23父条/86组件/141条件；200有源资料政策覆盖141条件；85发现/90深审，43完成 | 第44总条件映射及46未执行；publishable只是官方草稿门，不是共同发布 |
+| 从DOCX准备完整要求 | 官方1153e25b4eba40db964202a1c3ed07c3草稿rev21，23父条/86组件/141条件；200有源资料政策覆盖141条件；85发现/90深审，43完成 | 第44逐句对应/次数表达及46未执行；publishable只是官方草稿门，不是共同发布 |
 | 读取整例资料 | 5PDF24页、14组已实读保存；458候选→407事实/40事件/11暴露；32资格候选关联30事实、426候选受限 | 不同分母不代表准确率；新完整要求消费/数字位置/手写归属仍有具体待核 |
 | 使用当前节点工作稿 | 冻结资格与R1正常/风险/受限消费者已接线 | 现准备病例仍旧81组件/0controls；旧REVIEW_SOURCE_POLICY_NOT_READY不说明新141条件失败 |
 | 回看原件 | Ego147正式非Mock，连续24页/切文件/文字/缩放/返回正确个例；行政噪声收起，临床内容保留；宽屏局部无横溢出 | 新完整报告回源和完整Q3尚未完成；无坐标不造框 |

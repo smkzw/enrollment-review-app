@@ -20,6 +20,7 @@ SOURCE_CANDIDATE_ALIGNMENT_VERSION = "phase5/control-source-candidate-alignment/
 EVIDENCE_POLICY_ALIGNMENT_VERSION = "phase5/control-evidence-policy-alignment/v2"
 NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION = "native-table-review-scope/v3"
 NATIVE_ROW_ACTION_COVERAGE_VERSION = "native-row-action-coverage/v2"
+CANDIDATE_SOURCE_CLOSURE_CONTEXT_VERSION = "candidate-source-closure-context/v1"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
@@ -261,6 +262,15 @@ def candidate_alignment_response_format() -> dict[str, object]:
     }
 
 
+def _candidate_source_closure(batch, candidate):
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    unknown = set(candidate.source_structure_unit_ids) - units.keys()
+    if unknown:
+        raise ValueError("候选核对来源闭包越出本批授权原文")
+    return [unit.model_dump(mode="json") for unit in batch.owned_units
+            if unit.structure_unit_id in candidate.source_structure_unit_ids]
+
+
 def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
     from app.protocols.procedure_catalog import schedule_column_scope
 
@@ -275,6 +285,7 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
             "required_source_excerpt": statement.quoted_text,
             "source_statement": statement.model_dump(mode="json"),
             "source_unit": units[statement.structure_unit_id].excerpt,
+            "candidate_source_closure": _candidate_source_closure(batch, candidate),
             "bound_visit_sources": [stage.model_dump(mode="json")
                 for stage in batch.known_workflow_stage_targets
                 if any(node.workflow_stage_id == stage.workflow_stage_id
@@ -319,7 +330,11 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
         "你只核同一冻结方案原文与已有候选的语义对应，不新增条款，不判断受试者。"
         "此前的核对仅说明官方条款和访视目录未完整覆盖本句，不能据此断言本候选也未覆盖。"
         "逐项判断候选中已经写出的条件、对象、全称/数量、时间、否定、后果、例外和证据政策，"
-        "是否共同且仅共同表达本句原文。多原子合取可以表达一句话。"
+        "是否完整表达本条要求，并核查它与候选其余有源要求的关系。多原子合取可以表达一句话。"
+        "candidate_source_closure 是候选实际引用的授权原始结构单元，不是新的医学解释或采信结论。"
+        "本条之外的条件或义务若来自该闭包中的其他原文，不能仅因本句没有重述就判为新增；"
+        "须核共同前置、子项、例外及各自作用域，不得把无关邻句的限制借给本条。"
+        "逐项完整仍只证明指定 statement_index；兄弟要求须各自处置，不因同一候选关联而自动完成。"
         "证据政策 action_completion 仅证明操作已经完成，不证明检查结果正常或达到入排阈值；"
         "原文若另有结果条件，不得用操作完成替代该条件；原文只要求完成操作时，也不得新增结果正常要求。"
         "required_source_types 是原文明文限定的可接受资料种类，不是建议示例；"
@@ -370,6 +385,9 @@ def _alignment_input_identity(batch, interpretation, wire, item):
                            "coverage_manifest_id": batch.coverage_manifest_id,
                            "statement": statement.model_dump(mode="json"),
                            "source_unit": unit.model_dump(mode="json"),
+                           **({"candidate_source_closure_version": CANDIDATE_SOURCE_CLOSURE_CONTEXT_VERSION,
+                               "candidate_source_closure": _candidate_source_closure(batch, candidate)}
+                              if len(candidate.source_structure_unit_ids) > 1 else {}),
                            **({"native_visit_correspondence": "v1",
                                "native_review_scope": NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
                                "context_units": [row.model_dump(mode="json") for row in batch.context_units],
@@ -597,20 +615,25 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                    for group in candidate.obligation_expression.groups):
                 raise ValueError("候选存在未覆盖本条要求的另一义务分支")
             obligation_selected = [atom for atom in selected_atoms if atom in obligation_atoms]
-            action_cell_preserved = native_visit_scope and native_schedule_action_cell_is_preserved(
-                batch, statement, unit, obligation_selected,
-            )
-            if not action_cell_preserved and not (native_visit_scope and any(
-                normalize_source_excerpt(atom.statement) == source for atom in obligation_selected
-            )) and not any(source in normalize_source_excerpt(quote)
-                       for atom in obligation_selected for quote in atom.source_excerpts):
-                if not any(_split_obligations_cover_source(source, scope, group.atoms)
-                           for group in candidate.obligation_expression.groups
-                           if all(atom in obligation_selected for atom in group.atoms)):
+            for group in candidate.obligation_expression.groups:
+                group_selected = [atom for atom in group.atoms if atom in obligation_selected]
+                action_cell_preserved = native_visit_scope and native_schedule_action_cell_is_preserved(
+                    batch, statement, unit, group_selected,
+                )
+                if action_cell_preserved or (native_visit_scope and any(
+                    normalize_source_excerpt(atom.statement) == source for atom in group_selected
+                )) or any(source in normalize_source_excerpt(quote)
+                          for atom in group_selected for quote in atom.source_excerpts):
+                    continue
+                if not _split_obligations_cover_source(source, scope, group_selected):
                     raise ValueError("候选义务摘录未按原文保留完整合取内容")
             functions = set(statement.decision_functions)
-            if functions & {"definition", "calculation_input", "exception", "unclassified"}:
+            if (functions & {"definition", "calculation_input", "unclassified"}
+                    or ("exception" in functions and "action" not in functions)):
                 raise ValueError("定义、计算输入或例外不能仅凭候选文字核对宣布完整")
+            if "exception" in functions and (not statement.exception_words
+                                              or candidate.exception_expression is not None):
+                raise ValueError("未明例外或独立例外层不能仅凭动作文字对应宣布完整")
             if statement.force == "prohibited" and not any(
                 str(getattr(getattr(atom, "kind", None), "value", getattr(atom, "kind", None)))
                 .startswith("prohibit_")
