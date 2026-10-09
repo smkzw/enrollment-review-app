@@ -19,7 +19,9 @@ from app.domain.contracts.protocol_controls import (
     ReviewNodeRole,
     StructureUnitDispositionKind,
 )
-from app.protocols.protocol_control_gate import _visit_scope_keys
+from app.protocols.protocol_control_gate import (
+    _visit_scope_keys, locate_source_quote_offsets, source_statement_ranges_cover_unit,
+)
 from app.protocols.control_scope_sources import immediate_cell_scope_label
 from app.protocols.procedure_catalog import (
     _without_display_footnotes,
@@ -570,6 +572,33 @@ def apply_source_scope_correction(
     )
     validate_source_interpretation(batch, isolated)
     return updated
+
+
+def apply_source_context_completion(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    statement_index: int,
+    correction: SourceScopeCorrection,
+) -> SourceInterpretation:
+    """Use the existing scope proposal, but require the missing local prefix.
+
+    This does not add a source action, infer its meaning or prove applicability.
+    The changed statement still needs its source/target review.
+    """
+    result = apply_source_scope_correction(batch, interpretation, statement_index, correction)
+    statement = result.statements[statement_index]
+    unit = next(item for item in batch.owned_units
+                if item.structure_unit_id == statement.structure_unit_id)
+    quote = locate_source_quote_offsets(unit.excerpt, statement.quoted_text)
+    scope = locate_source_quote_offsets(unit.excerpt, statement.scope_quote or "")
+    if (statement.scope_context_unit_id is not None or quote is None or scope is None
+            or scope[1] > quote[0]
+            or not source_statement_ranges_cover_unit(
+                unit.excerpt, [scope, quote], allow_joining_punctuation=True,
+            )):
+        raise ValueError("单条范围提案未保留全部前置原文；不能把遗漏内容当完整来源")
+    validate_source_interpretation(batch, result)
+    return result
 
 
 def build_source_quote_correction_prompt(

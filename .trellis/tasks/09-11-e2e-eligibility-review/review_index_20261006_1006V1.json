@@ -7,22 +7,22 @@
   "claims_complete": false,
   "current_state": {
     "updated": "2026-10-09",
-    "base_head": "81d31233",
+    "base_head": "0a63ace3",
     "runtime_state": "active",
     "claims_complete": false,
-    "latest_actual_job": "c18ba9a37b454bad84921e00390e09d2",
+    "latest_actual_job": "5afb1fa3d6274f5ead49388e50292ac2",
     "latest_actual_state": "failed_final",
     "latest_actual_code": "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED",
-    "latest_actual_physical_calls": 22,
-    "latest_actual_seconds": 657.932456959039,
+    "latest_actual_physical_calls": 10,
+    "latest_actual_seconds": 287.42269179195864,
     "completed_deep": 22,
     "failed_step": "deep_0023",
     "queued_unexecuted": 67,
-    "source_checkpoint": "8936362934034cf28f0eb4e19c9a1f7c",
-    "package": "procedure-source-restricted-retention/v1; source-target-unresolved-cause/v1; procedure-source-context-completeness/v1",
+    "source_checkpoint": "c1fea38816e84c729b9b1587a8818619",
+    "package": "procedure-source-restricted-retention/v2; source-target-unresolved-cause/v1; procedure-source-context-completeness/v2",
     "new_product_run": false,
-    "running_attempt": null,
-    "current_private_directory": "rv1006-current-columns-api-20261009-v1",
+    "last_completed_attempt": {"head": "0a63ace3", "job_id": "5afb1fa3d6274f5ead49388e50292ac2", "exec_session": 97961, "private_directory": "rv1006-procedure-correspondence-api-20261009-v1", "terminal": true, "exit_code": 3, "reused_deep": 22, "reused_discovery": 85, "reused_physical_calls": 0, "publication_activation_signature": false},
+    "current_private_directory": "rv1006-procedure-correspondence-api-20261009-v1",
     "pending_patch": {"product_run": false, "connected_v4_passed": 1229, "connected_v4_seconds": 117.96, "identity_and_partial_caller_passed": 23, "identity_and_partial_caller_seconds": 4.55, "connected_v5_passed": 1238, "connected_v5_seconds": 113.24, "connected_v5_exit_code": 0, "compiler_identity_changes": false, "new_validation_identity": true, "unread_prefix_refused": true, "legacy_unknown_cause_not_inferred": true},
     "connected_windows": [
       {
@@ -34,7 +34,7 @@
         "junit": "artifacts/rv1006-native-row-action-connected-20261009-v3.xml"
       }
     ],
-    "final_affected": {
+    "previous_final_affected": {
       "passed": 1238,
       "deselected": 0,
       "seconds": 113.24,
@@ -42,17 +42,18 @@
       "junit": "artifacts/rv1006-procedure-correspondence-restricted-20261009-v5.xml",
       "final_full_rerun": true
     },
+    "final_affected": {"passed": 1254, "failed": 0, "seconds": 130.83, "exit_code": 0, "junit": "artifacts/rv1006-local-source-context-connected-20261009-v2.xml", "scope": "four connected source/retention/projection modules; not all repo or clinical acceptance"},
     "preflight": {
-      "source_job": "c18ba9a37b454bad84921e00390e09d2",
+      "source_job": "5afb1fa3d6274f5ead49388e50292ac2",
       "reusable": 22,
-      "source_only_resume": 0,
-      "refresh": 68,
+      "source_only_resume": 1,
+      "refresh": 67,
       "source_repair_limit": 16,
       "scope_question_indexes": [],
       "model_calls": 0,
       "database_writes": 0,
       "database_unchanged": true,
-      "private_record": "rv1006-procedure-correspondence-preflight-20261009-v2.json",
+      "private_record": "rv1006-local-source-context-preflight-20261009-v1.json",
       "previous_failed_preflight": {"private_record": "rv1006-procedure-correspondence-preflight-20261009-v1.json", "refresh": 90, "reason": "retention validator incorrectly classified as changed compiler", "executed": false}
     },
     "conference": {
@@ -70,7 +71,8 @@
       "followup_tool_calls": 4,
       "parsed_tool_results": 0
     },
-    "owner_disposition": "reviews/rv1006-procedure-correspondence-owner-disposition-20261009.md",
+    "owner_disposition": "reviews/rv1006-local-source-context-owner-disposition-20261009.md",
+    "local_context_review": {"first_exit_code": 3, "first_reason": "max turns8 exhausted; rejected", "final_exit_code": 0, "final_seconds": 136.822026334, "final_max_turns": 24, "same_approved_session": true, "fallback": false, "tests_or_clinical": false, "report": "runs/conference/rv1006-native-row-action-coverage-review-20261009/procedure_local_context_final.md", "scope_limits": "Reviewer did not read the full execution body, range/location helpers, every consumer or run tests", "temporal_expansion_rejected_by_owner": true},
     "procedure_reviews": {"reports": ["procedure_correspondence_followup.md", "procedure_correspondence_adjudication.md", "procedure_correspondence_patch_review.md", "procedure_correspondence_final_review.md"], "same_approved_session": true, "last_read_count": 8, "tests_or_clinical": false, "recursive_first_review_not_accepted": true, "final_identity_caller_delta_owner_verified": true, "final_reviewer_did_not_find_90_refresh": true},
     "source_question_diagnostic": {"physical_calls": 1, "seconds": 7.269450124993455, "database_writes": 0, "database_unchanged": true, "validated": true, "remaining_source_questions": 0, "common_scope_invented": false, "adoption": false},
     "incremental_reviews": ["runs/conference/rv1006-native-row-action-coverage-review-20261009/source_question_followup.md", "runs/conference/rv1006-native-row-action-coverage-review-20261009/current_columns_followup.md"],

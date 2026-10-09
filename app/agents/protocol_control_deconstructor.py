@@ -7021,6 +7021,7 @@ class ProtocolControlAgentRunner:
         resume_source_statement_coverage: Sequence[SourceStatementCoverage] = (),
         resume_source_candidate_alignment: SourceCandidateAlignment | None = None,
         resume_source_scope_question_history: Sequence[Mapping[str, object]] = (),
+        resume_source_scope_correction_indexes: Sequence[int] = (),
         official_predicate_identities: Mapping[str, Sequence[tuple[str, str]]] | None = None,
         official_predicate_sources: Mapping[str, Mapping[tuple[str, str], Sequence[str]]] | None = None,
         workflow_variant: str = "RV1001-BASELINE",
@@ -7079,10 +7080,12 @@ class ProtocolControlAgentRunner:
                 *question_history,
                 *[{**attempt.model_dump(mode="json"), "raw_output_text": attempt.raw_output_text}
                   for attempt in attempts
-                  if attempt.error_detail and attempt.error_detail.get("workflow_phase") == "source_scope_question_recheck"],
+                  if attempt.error_detail and attempt.error_detail.get("workflow_phase") in {
+                      "source_scope_question_recheck", "source_context_completion",
+                  }],
             ])
             if any(attempt.error_detail and attempt.error_detail.get("workflow_phase") in {
-                "source_scope_question_recheck", "source_function_field_repair",
+                "source_scope_question_recheck", "source_function_field_repair", "source_context_completion",
             }
                    for attempt in attempts):
                 values.setdefault("repair_used", True)
@@ -7200,22 +7203,31 @@ class ProtocolControlAgentRunner:
         source_batch_reader = getattr(transport, "start_source_interpretation_batch", None)
         question_history = [dict(item) for item in resume_source_scope_question_history]
         seen_questions: set[int] = set()
+        seen_context_attempts: set[int] = set()
         for record in question_history:
             attempt = ProtocolControlAgentAttempt.model_validate(record)
             detail = attempt.error_detail or {}
             index = detail.get("statement_id")
+            context_completion = detail.get("workflow_phase") == "source_context_completion"
             if (source_interpretation is None or detail.get("workflow_phase") != "source_scope_question_recheck"
-                    or detail.get("code") != "SOURCE_SCOPE_QUESTION_RECHECK"
+                    and not context_completion
+                    or detail.get("code") != ("SOURCE_CONTEXT_COMPLETION" if context_completion
+                                              else "SOURCE_SCOPE_QUESTION_RECHECK")
                     or type(index) is not int or not 0 <= index < len(source_interpretation.statements)):
                 raise ValueError("来源疑问的历史核对范围无效，未发送请求")
             statement = source_interpretation.statements[index]
             unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == statement.structure_unit_id)
             if (detail.get("source_refs") != list(unit.source_span_ids)
-                    or detail.get("json_path") != f"statements[{index}].unresolved"
+                    or detail.get("json_path") != f"statements[{index}].{'scope_quote' if context_completion else 'unresolved'}"
                     or not isinstance(detail.get("precondition_sha256"), str)
                     or len(detail["precondition_sha256"]) != 64
                     or (attempt.raw_output_text is not None and _sha256(attempt.raw_output_text) != attempt.raw_output_sha256)):
                 raise ValueError("来源疑问的历史核对见证损坏，未发送请求")
+            if context_completion:
+                if (attempt.outcome != "transport_failed"
+                        and detail["precondition_sha256"] == _sha256(statement.model_dump_json())):
+                    seen_context_attempts.add(index)
+                continue
             if attempt.outcome == "parsed" and not attempt.error_classes and attempt.raw_output_text:
                 proposal = SourceInterpretation.model_validate_json(attempt.raw_output_text)
                 if (proposal.version != source_interpretation.version or len(proposal.statements) != 1
@@ -7227,6 +7239,73 @@ class ProtocolControlAgentRunner:
                     seen_questions.add(index)
         # These are prior paid attempts, not fresh calls in this invocation.
         source_repairs = len(question_history)
+        if resume_source_scope_correction_indexes:
+            from .protocol_control_source_interpretation import apply_source_context_completion
+
+            indexes = tuple(resume_source_scope_correction_indexes)
+            if (resume_wire is None or source_interpretation is None
+                    or tuple(sorted(set(indexes))) != indexes
+                    or any(type(index) is not int or not 0 <= index < len(source_interpretation.statements)
+                           for index in indexes)):
+                raise ValueError("单条来源范围恢复缺少有效的冻结草稿或索引")
+            for index in indexes:
+                statement = source_interpretation.statements[index]
+                unit = next(unit for unit in batch.owned_units
+                            if unit.structure_unit_id == statement.structure_unit_id)
+                response = None
+                correction = None
+                called = False
+                detail = {
+                    "workflow_phase": "source_context_completion", "code": "SOURCE_CONTEXT_COMPLETION",
+                    "statement_id": index, "json_path": f"statements[{index}].scope_quote",
+                    "source_refs": list(unit.source_span_ids), "retry_class": "source_semantic_review",
+                    "affected_dependents": [index], "precondition_sha256": _sha256(statement.model_dump_json()),
+                }
+                try:
+                    corrector = getattr(transport, "correct_source_scope", None)
+                    if index in seen_context_attempts or source_repairs >= self._max_schema_repairs:
+                        raise ValueError("相同来源范围已核对或核对额度用尽，未重复调用")
+                    if not callable(corrector):
+                        raise ValueError("单条来源范围核对服务不可用")
+                    prompt = build_source_scope_correction_prompt(batch, statement,
+                        "SOURCE_CONTEXT_INCOMPLETE：本条动作前的同单元原文尚未完整保留。仅核是否为本条"
+                        "直接对象或共同范围；若确属范围，scope_quote须逐字保留整个前置范围，不只填标题。"
+                        "若其中含另一条独立动作、条件或例外，本接口不能增加陈述，unresolved写明，不得吞入范围。")
+                    detail["prompt_sha256"] = _sha256(prompt)
+                    source_repairs += 1
+                    called = True
+                    response = corrector(prompt=prompt)
+                    correction = SourceScopeCorrection.model_validate_json(response.text)
+                    source_interpretation = apply_source_context_completion(
+                        batch, source_interpretation, index, correction,
+                    )
+                    repair_used = True
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1, session_id=response.session_id,
+                        raw_output_sha256=_sha256(response.text), raw_output_chars=len(response.text),
+                        raw_output_text=response.text, outcome="parsed", error_detail=detail,
+                        issues=["仅核对本条前置范围；原动作及其他陈述未改，适用关系仍待核对"],
+                    ))
+                except Exception as context_error:
+                    code = protocol_control_call_failure_code(context_error) or (
+                        "SOURCE_CONTEXT_UNRESOLVED" if correction is not None and correction.unresolved
+                        else "SOURCE_CONTEXT_COMPLETION_TRANSPORT_FAILED" if called and response is None
+                        else "SOURCE_CONTEXT_COMPLETION_INVALID"
+                    )
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=response.session_id if response else session_id or "source-context-failed",
+                        raw_output_sha256=_sha256(response.text if response else str(context_error)),
+                        raw_output_chars=len(response.text) if response else None,
+                        raw_output_text=response.text if response else None,
+                        outcome="schema_invalid" if response else "transport_failed" if called else "publication_invalid",
+                        error_classes=[code], error_detail=detail, issues=[str(context_error)[:1200]],
+                    ))
+                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                        session_id=session_id or "source-context-failed", attempts=attempts,
+                        source_interpretation=source_interpretation, partial_wire=partial_wire,
+                        source_target_review=resume_source_target_review,
+                        source_statement_coverage=list(resume_source_statement_coverage))
         if source_interpretation is None and callable(source_reader):
             source_response: ProtocolControlAgentResponse | None = None
             source_prompt = build_source_interpretation_prompt(batch)

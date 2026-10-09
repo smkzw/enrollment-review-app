@@ -8,21 +8,25 @@
 
 ## 当前身份
 
+当前实际终态：0a63ace3已push，合法Job5afb1fa3d6274f5ead49388e50292ac2已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED，10物理调用287.422692秒/exit3；85发现及22成功深审实际零调用复用，第23失败、67未执行。检查点c1fea38816e84c729b9b1587a8818619，产物rv1006-procedure-correspondence-api-20261009-v1；exec97961已结束，不重复等待、启动或覆盖。以下c18为历史上游，不能当现行作业。
+
+当前最小修复见implement文头及reviews/rv1006-local-source-context-owner-disposition-20261009.md：pending私有role投影、完整未决单元中的additional要求留存、单条前置对象范围恢复。不是新的重构。实际只读产品恢复已成功，源库hash保持；预检22reusable/1resume_partial/67refresh，0调用/0写。原单条动作不改、模型实际补范围并逐字联合覆盖，变更该条后旧对应核对失效；缺尾句/多条要求不吞入范围，同输入非传输失败不清零再读。新Job尚未运行；集中软件验证不能代共同发布或临床验收。
+
 实际终态：源码81d31233已push，Jobc18ba9a37b454bad84921e00390e09d2已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED，22调用657.932457秒/exit3，22深审完成、第23失败、67未执行。旧20成功及85发现实际零新调用。exec87184已结束，勿继续等待或覆盖目录。当前操作来源受限采用包尚在修改/验证，不是新真实运行或共同发布。
 
 | 项目 | 实际身份/证据 |
 |---|---|
 | 唯一worktree | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；09-11-e2e-eligibility-review |
-| 当前代码基础 | 81d31233已push；其四模块1200pass99.88秒。新操作来源受限采用为未提交补丁，验证不归给81d312 |
-| 当前最新真实Job | c18ba9a37b454bad84921e00390e09d2，failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED |
-| 最新真实运行 | 源码81d31233，22物理调用/657.932457秒；22completed、23failed、67未读；85发现及旧20成功组零新调用。shell3与实际失败相符 |
-| 第23组失败检查点 | 8936362934034cf28f0eb4e19c9a1f7c；全部实际原答/请求/hash及局部核对保持 |
+| 当前代码基础 | 0a63ace3已push；局部来源范围/私有回执修复尚为本地补丁，新的验证不归给旧提交 |
+| 当前最新真实Job | 5afb1fa3d6274f5ead49388e50292ac2，failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED |
+| 最新真实运行 | 源码0a63ace3，10物理调用/287.422692秒；22completed、23failed、67未读；85发现及旧22成功组零新调用。shell3与实际失败相符 |
+| 第23组失败检查点 | c1fea38816e84c729b9b1587a8818619；全部实际原答/请求/hash及局部核对保持 |
 | 当前隔离DB | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 真实产物 | 同根/rv1006-current-columns-api-20261009-v1，目录存在，不覆盖/重跑 |
+| 真实产物 | 同根/rv1006-procedure-correspondence-api-20261009-v1，目录存在，不覆盖/重跑 |
 | 模型路线 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high，输出65536，产品自己的harness直连 |
-| 当前新预检 | 同根/rv1006-procedure-correspondence-preflight-20261009-v2.json：22reusable/68refresh（23补上下文＋67未执行），0调用/0写/DBhash保持；v1错误90刷新已保留但不可执行 |
-| 新代码实际临床运行 | 81d31233已实跑并推进第21/22；新操作受限采用补丁未实跑，仍无共同发布/完整新工作稿 |
+| 当前新预检 | 同根/rv1006-local-source-context-preflight-20261009-v1.json：22reusable/1resume_partial/67refresh，0调用/0写/DBhash保持；旧90刷新诊断不可执行 |
+| 新代码实际临床运行 | 0a63ace3已实跑，第23仍失败；新局部范围修复未实跑，仍无共同发布/完整新工作稿 |
 | 继承dirty | 7份旧delivery文件未动，不stage；大量继承untracked不清理/不批量stage |
 | 外部可复查范围 | Git源码/合成用例/净化工程报告；真实原件、DB、提示、原答和病例截图仅本机受控可读，外部审阅不可读 |
 

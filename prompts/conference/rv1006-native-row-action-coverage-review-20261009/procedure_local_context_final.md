@@ -1,0 +1,12 @@
+# Finish the bounded C03 engineering review on the current patch
+
+Same approved read-only scope and synthetic analogue from procedure_local_context_review.md. Prior continuation exhausted eight turns with no accepted final report; do not claim it passed or repeat broad whole-file exploration. No delegation, clinical files, network, edits or tests. Current frozen diff is four application files and the affected tests only.
+
+Inspect the current changed definitions (complete relevant definitions, not entire 10k-line modules):
+- app/services/protocol_control_restricted_source.py: procedure_correspondence_scope_indexes and _whole_unit_restriction. Additional_requirement is retained only inside an already-unresolved, full literal unit, with no executable links, no fake independence and distinct reason. All-additional still refuses. Source questions remain source questions.
+- app/agents/protocol_control_source_interpretation.py: apply_source_context_completion wraps unchanged apply_source_scope_correction; complete same-unit prefix required, action/conditions/exceptions/siblings frozen; tail not accepted.
+- app/agents/protocol_control_deconstructor.py: run signature/source-context completion and history logic, _source_statement_reuse_identity and existing reviewer cache invalidation. Check changed scope cannot keep old review, failed same-input local answer cannot be recalled as fresh, transport failure is distinct, and partial-success/multiple-index failure doesn't corrupt source/review identity. Requested indexes come only from host current-gate preflight, not model authority.
+- app/services/protocol_control_execution.py: _validated_deep_partial_source, _ResumedSourceReview, _execute_deep argument and _saved_failed_deep_run_result. Private pending role projection cannot grant approval or drop unknown fields; old bytes untouched. Gate version changes, stable compiler identity; actual reuse still requires next read-only preflight.
+- Tests in tests/v2/services/test_protocol_control_execution.py: procedure partial source, additional-point retention, actual runner local context completion, pending producer checkpoint restore. Focused run37pass; not clinical acceptance or all-consumer regression.
+
+Return a concise final report within this continuation (maximum1200words): must-fix findings first, evidence and counterexamples, limits of inspected scope. If no must-fix, say so and identify residual uncertainties. Do not invent missing functions. No blanket medical endorsement or claims of product completion.

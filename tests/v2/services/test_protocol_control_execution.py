@@ -521,9 +521,10 @@ def test_partial_procedure_source_refresh_is_scoped_and_keeps_original_receipt(m
             module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
     else:
         partial = module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
-        assert (partial is not None) == (gap is None)
+        assert (partial is not None) == (gap in {None, "prefix"})
         if partial is not None:
             assert partial[1] is saved and partial[2].state == "reused"
+            assert partial[2].source_scope_correction_indexes == ((0,) if gap == "prefix" else ())
     assert json.dumps(saved, ensure_ascii=False, sort_keys=True) == frozen
 
 
@@ -539,6 +540,136 @@ def test_whole_procedure_restriction_preserves_covered_sibling_reason():
     assert "本条对应关系已有核对" in sibling.unresolved_dimensions[0]
     assert "系统尚未证明本条与具体操作" not in sibling.unresolved_dimensions[0]
     assert output.candidates == [] and sibling.independent_scope_proof is None
+
+
+@pytest.mark.parametrize("only_additional", [False, True])
+def test_whole_unresolved_procedure_retains_additional_point_without_claiming_it_executable(only_additional):
+    batch, result = _procedure_correspondence_review()
+    result.source_target_review.items[1] = result.source_target_review.items[1].model_copy(update={
+        "decision": "additional_requirement", "unresolved_cause": None,
+        "unresolved_aspects": ["本条时段要求未装配"],
+    })
+    if only_additional:
+        result.source_target_review.items[0] = result.source_target_review.items[0].model_copy(update={
+            "decision": "covered_by_procedure", "unresolved_cause": None, "unresolved_aspects": [],
+        })
+    frozen = result.model_dump(mode="json")
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    if only_additional:
+        assert output is None
+    else:
+        assert output is not None and not output.candidates
+        assert len(output.restricted_statements) == 2
+        assert all(item.independent_scope_proof is None for item in output.restricted_statements)
+        sibling = next(item for item in output.restricted_statements if item.source_statement_index == 1)
+        assert "另有要求尚未完成装配" in sibling.unresolved_dimensions[0]
+        assert "本条对应关系已有核对" not in sibling.unresolved_dimensions[0]
+        protocol_control_execution_module._validate_deep_batch_output(batch, type(output).model_validate(output.model_dump()))
+    assert result.model_dump(mode="json") == frozen
+
+
+def test_mixed_procedure_extension_does_not_expand_the_temporal_only_whole_unit_path():
+    from app.services.protocol_control_restricted_source import _whole_unit_restriction, _temporal_restriction_indexes
+
+    batch, result = _independent_candidate_and_temporal_gap()
+    unit_id = result.source_interpretation.statements[1].structure_unit_id
+    entry = next(item for item in result.partial_wire.dispositions if item.structure_unit_id == unit_id)
+    entry.disposition = StructureUnitDispositionKind.REQUIRED_PROCEDURE
+    entry.linked_procedure_catalog_item_id = batch.known_procedure_targets[0].catalog_item_id
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire,
+    )
+    assert _temporal_restriction_indexes(batch, result, whole_unit=True) == {1}
+    assert _whole_unit_restriction(batch, result) is None
+
+
+@pytest.mark.parametrize("defect", [None, "partial_prefix", "tail", "wrong_unit", "source_unknown"])
+def test_local_context_completion_is_a_real_scoped_proposal_not_host_filled_source(defect):
+    from app.agents.protocol_control_source_interpretation import SourceScopeCorrection, apply_source_context_completion
+
+    batch, result = _procedure_correspondence_review(single=True)
+    prefix = "所测项目包括心率与血压，"
+    batch.owned_units[0].excerpt = prefix + batch.owned_units[0].excerpt
+    if defect == "tail":
+        batch.owned_units[0].excerpt += "；必要时再测一次"
+    correction = SourceScopeCorrection(
+        version="phase5/control-source-scope-correction/v1",
+        structure_unit_id=batch.owned_units[0].structure_unit_id,
+        scope_quote=prefix, affected_stage=None, time_words=["8分钟"],
+    )
+    if defect == "partial_prefix":
+        correction.scope_quote = "所测项目"
+    elif defect == "wrong_unit":
+        correction.structure_unit_id = "not-this-source"
+    elif defect == "source_unknown":
+        correction.unresolved = "前置内容另有独立要求，本接口不能补入"
+    frozen = result.source_interpretation.model_dump(mode="json")
+    if defect:
+        with pytest.raises(ValueError):
+            apply_source_context_completion(batch, result.source_interpretation, 0, correction)
+    else:
+        revised = apply_source_context_completion(batch, result.source_interpretation, 0, correction)
+        assert revised.statements[0].scope_quote == prefix
+        assert revised.statements[0].quoted_text == result.source_interpretation.statements[0].quoted_text
+    assert result.source_interpretation.model_dump(mode="json") == frozen
+
+
+@pytest.mark.parametrize("invalid", [False, True])
+def test_actual_runner_uses_one_context_request_and_rechecks_changed_source(invalid):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
+    from app.agents.protocol_control_source_interpretation import SourceScopeCorrection
+
+    batch, fixture = _procedure_correspondence_review(single=True)
+    prefix = "所测项目包括心率与血压，"
+    batch.owned_units[0].excerpt = prefix + batch.owned_units[0].excerpt
+    frozen = fixture.source_interpretation.model_dump(mode="json")
+    correction = SourceScopeCorrection(
+        version="phase5/control-source-scope-correction/v1",
+        structure_unit_id=batch.owned_units[0].structure_unit_id,
+        scope_quote="所测项目" if invalid else prefix, time_words=["8分钟"],
+    )
+
+    class Transport(_FakeTransport):
+        context_calls = 0
+        review_calls = 0
+
+        def start_source_interpretation(self, **_):
+            pytest.fail("不得为单条范围缺失重读整组")
+
+        def correct_source_scope(self, *, prompt):
+            self.context_calls += 1
+            assert "前置范围" in prompt and "另一条独立动作" in prompt
+            return ProtocolControlAgentResponse(session_id="context-only", text=correction.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            self.review_calls += 1
+            assert not invalid and prefix in prompt
+            return ProtocolControlAgentResponse(session_id="changed-source-review", text=fixture.source_target_review.model_dump_json())
+
+    transport = Transport([])
+
+    def execute(history=()):
+        return ProtocolControlAgentRunner(max_schema_repairs=2).run(
+            batch, transport, resume_wire=fixture.partial_wire,
+            resume_source_interpretation=fixture.source_interpretation, resume_session_id="frozen-author",
+            resume_source_target_review=fixture.source_target_review,
+            resume_source_statement_coverage=fixture.source_statement_coverage,
+            resume_source_scope_correction_indexes=(0,), resume_source_scope_question_history=history,
+            output_validator=lambda output: protocol_control_execution_module._validate_deep_batch_output(batch, output),
+        )
+
+    result = execute()
+    assert transport.context_calls == 1 and transport.review_calls == int(not invalid)
+    assert result.status == "需要核对" and result.final_output is None
+    assert len(result.source_scope_question_history) == 1
+    if invalid:
+        assert result.attempts[-1].error_classes == ["SOURCE_CONTEXT_COMPLETION_INVALID"]
+        execute(result.source_scope_question_history)
+        assert transport.context_calls == 1  # the same failure is not reset by recovery
+    else:
+        assert result.source_interpretation.statements[0].scope_quote == prefix
+        assert protocol_control_execution_module.restricted_batch_from_review(batch, result) is not None
+    assert fixture.source_interpretation.model_dump(mode="json") == frozen
 
 
 @pytest.mark.parametrize("defect", ["source_question", "covered_cause"])
@@ -6620,6 +6751,38 @@ def test_failure_checkpoint_keeps_legacy_shape_without_a_pending_diagnostic(monk
     )
     assert "pending_source_definition_consumers" not in diagnostic
     assert "pending_source_definition_consumer_attempts" not in diagnostic
+
+
+@pytest.mark.parametrize("defect", [None, "role", "hash", "length", "missing_raw", "unknown_field"])
+def test_pending_definition_checkpoint_restores_only_its_own_verified_envelope(monkeypatch, defect):
+    module = protocol_control_execution_module
+    diagnostic = _deep_failure_diagnostic(
+        monkeypatch, _pending_definition_result(with_pending=True),
+    )
+    item = diagnostic["pending_source_definition_consumer_attempts"][0]
+    if defect == "role":
+        item["role"] = "restricted_source_definition_consumer"
+    elif defect == "hash":
+        item["raw_output_sha256"] = "0" * 64
+    elif defect == "length":
+        item["raw_output_chars"] += 1
+    elif defect == "missing_raw":
+        item["raw_output_text"] = None
+    elif defect == "unknown_field":
+        item["unexpected"] = True
+    frozen = json.dumps(diagnostic, ensure_ascii=False, sort_keys=True)
+    if defect:
+        with pytest.raises(ValueError):
+            module._saved_failed_deep_run_result(SimpleNamespace(batch_id=diagnostic["batch_id"]), diagnostic)
+    else:
+        restored = module._saved_failed_deep_run_result(
+            SimpleNamespace(batch_id=diagnostic["batch_id"]), diagnostic,
+        )
+        assert restored.pending_source_definition_consumer_attempts[0].raw_output_text == _PENDING_DEFINITION_RAW_TEXT
+        assert restored.status == "需要核对" and restored.final_output is None
+        assert restored.source_definition_consumers is None
+        assert restored.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+    assert json.dumps(diagnostic, ensure_ascii=False, sort_keys=True) == frozen
 
 
 def test_deep_attempt_raw_outputs_marks_only_pending_definition_answers() -> None:

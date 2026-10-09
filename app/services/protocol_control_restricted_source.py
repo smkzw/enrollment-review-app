@@ -46,9 +46,9 @@ from app.agents.protocol_control_stage_compiler import requires_temporal_resolut
 TEMPORAL_RESTRICTION_VERSION = "source-temporal-restricted-disposition/v2"
 WHOLE_UNIT_RESTRICTION_VERSION = "source-whole-unit-restricted-disposition/v2"
 # Procedure retention changes the current gate, not previously compiled rules.
-PROCEDURE_RESTRICTION_VALIDATION_VERSION = "procedure-source-restricted-retention/v1"
+PROCEDURE_RESTRICTION_VALIDATION_VERSION = "procedure-source-restricted-retention/v2"
 RESTRICTED_DEFINITION_VALIDATION_VERSION = "restricted-definition-registration-validation/v1"
-PROCEDURE_SOURCE_CONTEXT_VERSION = "procedure-source-context-completeness/v1"
+PROCEDURE_SOURCE_CONTEXT_VERSION = "procedure-source-context-completeness/v2"
 
 
 def _unit_statements_cover_source(unit, interpretation, indexes) -> bool:
@@ -94,6 +94,32 @@ def procedure_correspondence_source_gaps(batch, interpretation, wire, review) ->
                       index for index, statement in enumerate(interpretation.statements)
                       if statement.structure_unit_id == unit.structure_unit_id
                   ]))
+
+
+def procedure_correspondence_scope_indexes(batch, interpretation, wire, review) -> tuple[int, ...] | None:
+    """Select context-only recovery, without supplying the missing meaning.
+
+    The existing scope contract cannot add actions or amend exceptions. A
+    missing tail or a multi-statement unit needs a different source recovery.
+    """
+    gaps = set(procedure_correspondence_source_gaps(batch, interpretation, wire, review))
+    indexes = []
+    for unit in batch.owned_units:
+        if unit.structure_unit_id not in gaps:
+            continue
+        statements = [(index, statement) for index, statement in enumerate(interpretation.statements)
+                      if statement.structure_unit_id == unit.structure_unit_id]
+        if len(statements) != 1:
+            return None
+        index, statement = statements[0]
+        bounds = locate_source_quote_offsets(unit.excerpt, statement.quoted_text)
+        if (bounds is None or bounds[0] == 0
+                or not source_statement_ranges_cover_unit(
+                    unit.excerpt, [(0, bounds[1])], allow_joining_punctuation=True,
+                )):
+            return None
+        indexes.append(index)
+    return tuple(sorted(indexes))
 
 
 def _temporal_restriction_indexes(
@@ -428,8 +454,9 @@ def _whole_unit_restriction(
             if unit_id in procedure_units and any(
                 index not in reviewed or reviewed[index].decision not in {
                     "unresolved", "covered_by_procedure", "background_context",
-                    "definition_dependency",
-                } for index in indexes
+                    "definition_dependency", "additional_requirement",
+                } or (reviewed[index].decision == "additional_requirement"
+                      and not uncertain_indexes.intersection(indexes)) for index in indexes
             ):
                 return None
             # This covers context, not independence or semantic equivalence.
@@ -496,6 +523,8 @@ def _whole_unit_restriction(
                 unresolved_dimensions=[
                     ("同一原文单元的持续期或跨节点要求尚未完成核对，未证明各要求可独立采用；本单元整体保留待核"
                      if temporal_only else
+                     "本条另有要求尚未完成装配，且未证明与同单元未决要求独立；完整来源保留但暂不能用于判断"
+                     if index in reviewed and reviewed[index].decision == "additional_requirement" else
                      "系统尚未证明本条与具体操作或访视的对应关系；本单元整体暂不能用于判断"
                      if correspondence_only and reviewed[index].decision == "unresolved" else
                      "本条对应关系已有核对，但尚未证明它与同单元未决要求独立；本单元整体暂不能用于判断"

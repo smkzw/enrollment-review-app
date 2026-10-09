@@ -124,6 +124,7 @@ from app.services.protocol_control_restricted_source import (
     PROCEDURE_RESTRICTION_VALIDATION_VERSION,
     PROCEDURE_SOURCE_CONTEXT_VERSION,
     procedure_correspondence_source_gaps,
+    procedure_correspondence_scope_indexes,
     RESTRICTED_DEFINITION_VALIDATION_VERSION,
     restricted_batch_from_review,
 )
@@ -2134,6 +2135,7 @@ class _ResumedSourceReview:
     review: SourceTargetReview | None = None
     coverage: tuple[SourceStatementCoverage, ...] = ()
     source_seed_proof: Mapping[str, Any] | None = None
+    source_scope_correction_indexes: tuple[int, ...] = ()
 
 
 def _resumable_saved_candidate_alignment(
@@ -2769,16 +2771,25 @@ def _validated_deep_partial_source(
     if (saved.get("partial_wire") is not None and saved.get("source_target_review") is not None
             and saved.get("attempts")
             and set(saved["attempts"][-1].get("error_classes", []))
-            == {"SOURCE_TARGET_REVIEW_UNRESOLVED"}):
+            in ({"SOURCE_TARGET_REVIEW_UNRESOLVED"}, {"SOURCE_CONTEXT_COMPLETION_INVALID"},
+                {"SOURCE_CONTEXT_UNRESOLVED"}, {"SOURCE_CONTEXT_COMPLETION_TRANSPORT_FAILED"})):
         original_wire = ProtocolControlAgentWire.model_validate(saved["partial_wire"])
         _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(original_wire, batch))
         witnessed_review = _resumable_saved_source_review(batch, interpretation, saved)
         if (witnessed_review.state == "reused" and procedure_correspondence_source_gaps(
             batch, interpretation, original_wire, witnessed_review.review,
         )):
-            # A missing source prefix needs a new read even when compilation
-            # did not change. Completed siblings are revalidated separately.
-            return None
+            indexes = procedure_correspondence_scope_indexes(
+                batch, interpretation, original_wire, witnessed_review.review,
+            )
+            if indexes is None or source_seed_proof is not None:
+                return None
+            # Keep a verified seed, not its incomplete coverage. The bounded
+            # scope reader supplies missing context; the host never fills it.
+            return checkpoint_id, saved, replace(
+                witnessed_review, reason="source_context_correction_required",
+                source_scope_correction_indexes=indexes,
+            )
     if source_seed_proof is not None:
         seed = dict(saved, source_interpretation=source, partial_wire=None, source_target_review=None,
                     source_statement_coverage=[], source_candidate_alignment=None,
@@ -3766,7 +3777,9 @@ def _saved_source_scope_question_history(saved: Mapping[str, Any] | None) -> lis
     if history is None:
         history = [attempt for attempt in saved.get("attempts", [])
                    if isinstance(attempt, Mapping) and isinstance(attempt.get("error_detail"), Mapping)
-                   and attempt["error_detail"].get("workflow_phase") == "source_scope_question_recheck"]
+                   and attempt["error_detail"].get("workflow_phase") in {
+                       "source_scope_question_recheck", "source_context_completion",
+                   }]
     if not isinstance(history, list) or any(not isinstance(item, Mapping) for item in history):
         raise ValueError("来源疑问的历史核对账损坏")
     return [dict(item) for item in history]
@@ -4171,6 +4184,7 @@ def _execute_deep(
         ),
         resume_source_candidate_alignment=resume_candidate_alignment,
         resume_source_scope_question_history=_saved_source_scope_question_history(resume_alignment_saved),
+        resume_source_scope_correction_indexes=resume_review.source_scope_correction_indexes,
         official_predicate_identities=official_predicate_identities,
         official_predicate_sources=official_predicate_sources,
         workflow_variant=context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
@@ -4411,10 +4425,36 @@ def _saved_deep_run_result(payload: Mapping[str, Any]) -> ProtocolControlAgentRu
 def _saved_failed_deep_run_result(
     batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
 ) -> ProtocolControlAgentRunResult:
+    fields = {key: value for key, value in saved.items()
+              if key in ProtocolControlAgentRunResult.model_fields}
+    pending = fields.get("pending_source_definition_consumer_attempts")
+    if pending is not None:
+        if not isinstance(pending, list):
+            raise ValueError("待核定义登记回执清单损坏")
+        projected = []
+        for item in pending:
+            if not isinstance(item, Mapping):
+                raise ValueError("待核定义登记回执损坏")
+            record = dict(item)
+            has_envelope = "role" in record
+            if "role" in record:
+                if record.pop("role") != "pending_source_definition_consumer":
+                    raise ValueError("待核定义登记回执角色不一致")
+            raw = record.get("raw_output_text")
+            if (raw is not None and (not isinstance(raw, str)
+                    or len(raw) != record.get("raw_output_chars")
+                    or hashlib.sha256(raw.encode("utf-8")).hexdigest()
+                    != record.get("raw_output_sha256"))):
+                raise ValueError("待核定义登记原答损坏")
+            if has_envelope and raw is None and record.get("raw_output_chars") is not None:
+                raise ValueError("待核定义登记原答缺失")
+            # Only the producer's private role envelope is removed. Unknown
+            # fields still fail the unchanged strict attempt contract.
+            projected.append(record)
+        fields["pending_source_definition_consumer_attempts"] = projected
     return _saved_deep_run_result({
         "run_result": {
-            **{key: value for key, value in saved.items()
-               if key in ProtocolControlAgentRunResult.model_fields},
+            **fields,
             "status": "需要核对", "batch_id": batch.batch_id,
         },
         "attempt_raw_outputs": saved.get("attempt_raw_outputs"),
@@ -4468,6 +4508,8 @@ def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str
             )
         ),
     }
+    if resume_review.source_scope_correction_indexes:
+        record["source_scope_correction_indexes"] = list(resume_review.source_scope_correction_indexes)
     if resume_review.source_seed_proof is not None:
         record["proof_scope"] = (
             "revalidated_source_interpretation"
