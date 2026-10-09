@@ -5456,6 +5456,96 @@ def test_manual_retry_reuses_verified_source_without_partial_wire(
         assert _job_checkpoint_fingerprint(session_factory, job.job_id) == source_history
 
 
+@pytest.mark.parametrize("tamper", [None, "hash", "session", "wire", "review", "coverage", "alignment", "flow",
+                                    "source", "used", "capability", "front", "definition"])
+def test_pending_author_recovery_does_not_confer_approval_or_accept_corruption(tamper):
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _shared_source_missing_anchor_fixture
+    batch, wire = _shared_source_missing_anchor_fixture()
+    from app.agents.protocol_control_source_interpretation import SOURCE_INTERPRETATION_VERSION, SourceInterpretation
+    source = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[], units_without_statement=list(batch.owned_structure_unit_ids))
+    saved = dict(pending_author_wire=wire.model_dump(mode="json"),
+                 pending_author_wire_sha256=hashlib.sha256(wire.model_dump_json().encode()).hexdigest(),
+                 source_interpretation=source.model_dump(mode="json"),
+                 pending_author_source_sha256=hashlib.sha256(source.model_dump_json().encode()).hexdigest(),
+                 session_id="pending-author")
+    workflow = "RV1001-BASELINE"
+    if tamper == "hash":
+        saved["pending_author_wire_sha256"] = "0" * 64
+    elif tamper == "session":
+        saved["session_id"] = ""
+    elif tamper == "flow":
+        workflow = "RV1001-FLOW"
+    elif tamper == "source":
+        saved["pending_author_source_sha256"] = "0" * 64
+    elif tamper == "used":
+        saved["pending_author_repairs_used"] = True
+    elif tamper:
+        saved[{"wire": "partial_wire", "review": "source_target_review",
+               "coverage": "source_statement_coverage", "alignment": "source_candidate_alignment",
+               "capability": "capability_wire", "front": "source_front_target_review",
+               "definition": "pending_source_definition_consumers"}[tamper]] = {"unproven": True}
+    before = json.dumps(saved, sort_keys=True)
+    if tamper:
+        with pytest.raises(ValueError):
+            protocol_control_execution_module._pending_author_resume(saved, workflow)
+    else:
+        result = protocol_control_execution_module._pending_author_resume(saved, workflow)
+        assert result.state == "absent" and result.review is None and not result.coverage
+        assert result.reason == "unaccepted_author_proposal_requires_revalidation"
+    assert json.dumps(saved, sort_keys=True) == before
+
+
+def test_unaccepted_author_proposal_round_trips_failure_preflight_and_new_job(data_paths, session_factory, monkeypatch):
+    from app.agents.protocol_control_deconstructor import (
+        ProtocolControlAgentAttempt, ProtocolControlAgentRunResult, ProtocolControlAgentRunner,
+        build_protocol_control_agent_prompt, parse_protocol_control_agent_wire,
+    )
+    from app.agents.protocol_control_source_interpretation import SOURCE_INTERPRETATION_VERSION, SourceInterpretation
+    seed = _seed_frozen_source(data_paths, session_factory, key="pending-author-resume")
+    deep = _DeepTransport(seed.source_span_excerpts)
+    deep.restore_scoped_session = lambda **_: None
+    service = _build_service(data_paths, session_factory, seed)
+    job = service.create_from_deconstruction(source_job_id=seed.source_job_id, idempotency_key="pending-author-first")
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    original_run = ProtocolControlAgentRunner.run
+    first = True
+    resumed = []
+
+    def fail_then_resume(self, batch, transport, **kwargs):
+        nonlocal first
+        if first:
+            first = False
+            raw = deep._response(build_protocol_control_agent_prompt(batch)).text
+            wire = parse_protocol_control_agent_wire(raw)
+            source = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+                statements=[], units_without_statement=list(batch.owned_structure_unit_ids))
+            return ProtocolControlAgentRunResult(status="需要核对", batch_id=batch.batch_id,
+                session_id="pending-author", partial_wire=None, pending_author_wire=wire,
+                source_interpretation=source,
+                pending_author_source_sha256=hashlib.sha256(source.model_dump_json().encode()).hexdigest(),
+                attempts=[ProtocolControlAgentAttempt(attempt=1, session_id="pending-author",
+                    raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(), raw_output_text=raw,
+                    outcome="publication_invalid", error_classes=["POST_HYDRATION_INVALID"])])
+        if kwargs.get("resume_pending_author_wire") is not None:
+            resumed.append(kwargs)
+            assert kwargs["resume_wire"] is None and kwargs["resume_source_target_review"] is None
+        return original_run(self, batch, transport, **kwargs)
+
+    monkeypatch.setattr(ProtocolControlAgentRunner, "run", fail_then_resume)
+    assert runner.run_job(job.job_id)
+    assert _job_snapshot_and_payload(session_factory, job.job_id)[0].state == "failed_final"
+    old = _job_checkpoint_fingerprint(session_factory, job.job_id)
+    continued = service.create_from_deconstruction(source_job_id=seed.source_job_id,
+        deep_source_job_id=job.job_id, idempotency_key="pending-author-second")
+    _, payload = _job_snapshot_and_payload(session_factory, continued.job_id)
+    assert any(entry["reason"] == "unaccepted_author_proposal" for entry in payload["deep_reuse_plan"]["decisions"].values())
+    assert runner.run_job(continued.job_id)
+    assert _job_snapshot_and_payload(session_factory, continued.job_id)[0].state == "completed"
+    assert len(resumed) == 1
+    assert _job_checkpoint_fingerprint(session_factory, job.job_id) == old
+
+
 @pytest.mark.parametrize("change", ["same", "checkpoint_session", "missing_session", "changed_source", "missing_raw", "not_parsed", "wire_present", "bad_hash"])
 def test_source_only_repair_change_proof_is_content_bound_and_corruption_is_not_a_miss(change):
     from tests.v2.protocols.test_slice58c_control_deconstructor import (
@@ -6855,6 +6945,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "native-scope-source-runtime-separation/v1",
                   "native-table-review-scope/v3", "located-publication-recovery/v1",
                   "missing-anchor-scoped-atom-recovery/v1",
+                  "unaccepted-author-proposal-revalidation/v1",
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   "scoped-exception-dnf/v1"))
     )

@@ -807,6 +807,16 @@ def test_repair_prompt_explains_incremental_candidate_shape(
     assert '"execution_workflow_stage_id": "stage:screening:one"' in prompt
 
 
+def test_repair_prompt_preserves_nested_policy_source_closure() -> None:
+    prompt = build_protocol_control_repair_prompt(
+        _batch(), problem="嵌套政策与所属原子的逐字来源不一致", candidate_only=True,
+    )
+    assert "嵌套求值政策的来源必须由所属原子的逐字来源完整承载" in prompt
+    assert "不得缩短内层摘录、删除触发条件或借用其他来源" in prompt
+    assert "未获授权的来源字段保持不变" in prompt
+    assert "只修复指定的一个候选" in prompt
+
+
 def test_repair_prompt_reuses_prior_schema_and_keeps_time_corrections_bounded() -> None:
     batch = _batch()
     without_time = build_protocol_control_repair_prompt(
@@ -11882,6 +11892,78 @@ def test_missing_anchor_runner_preserves_shared_source_sibling_and_rechecks_gate
         assert result.attempts[1].error_classes == ["ATOM_REPAIR_INVALID"]
 
 
+@pytest.mark.parametrize("bad_patch", [False, True])
+def test_unaccepted_author_proposal_is_saved_and_revalidated_without_reauthoring(bad_patch):
+    batch, initial = _shared_source_missing_anchor_fixture()
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[], units_without_statement=list(batch.owned_structure_unit_ids))
+
+    def validate(output):
+        atoms = output.candidates[0].semantics.obligation_expression.groups[0].atoms
+        if atoms[1].time_constraint is None:
+            raise _missing_anchor_issue(batch, output)
+
+    first = ProtocolControlAgentRunner(max_schema_repairs=0).run(
+        batch, _FakeTransport([ProtocolControlAgentResponse(session_id="saved-author", text=initial.model_dump_json())]),
+        output_validator=validate, resume_source_interpretation=inventory)
+    assert first.final_output is None and first.partial_wire is None
+    assert first.pending_author_wire == initial
+
+    atom = deepcopy(initial.model_dump(mode="json")["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][1])
+    atom["time_constraint"] = {"anchor_type": "screening_date", "direction": "before", "upper_bound_days": 7}
+    atom["evaluation"].update(time_operand_attribute="date_range", time_purpose="interval_condition")
+    if bad_patch:
+        atom["statement"] = "未经授权的要求"
+
+    class Transport(_FakeTransport):
+        def restore_scoped_session(self, *, session_id, context_sha256):
+            assert session_id == "saved-author" and len(context_sha256) == 64
+
+        def start(self, **kwargs):
+            pytest.fail("保存的未核提案必须先重验，不重新生成整组")
+
+        def continue_session(self, **kwargs):
+            pytest.fail("精确时间错误不得回退整组")
+
+        def continue_atom(self, *, session_id, prompt):
+            self.prompts.append(prompt)
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"atom": atom}))
+
+    transport = Transport([])
+    second = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        batch, transport, output_validator=validate, resume_source_interpretation=inventory,
+        resume_session_id="saved-author", resume_pending_author_wire=first.pending_author_wire)
+    assert len(transport.prompts) == 1
+    assert second.attempts[0].error_detail["adopted"] is False
+    assert initial == first.pending_author_wire
+    if bad_patch:
+        assert second.final_output is None and second.partial_wire is None
+        assert second.pending_author_wire == initial
+        assert second.pending_author_repairs_used == 1
+        stopped = Transport([])
+        third = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+            batch, stopped, output_validator=validate, resume_source_interpretation=inventory,
+            resume_session_id="saved-author", resume_pending_author_wire=second.pending_author_wire,
+            resume_pending_author_repairs_used=second.pending_author_repairs_used)
+        assert not stopped.prompts and third.final_output is None
+        assert third.pending_author_repairs_used == 1
+    else:
+        assert second.status == "已解析" and second.final_output is not None
+        assert second.pending_author_wire is None
+
+
+def test_pending_author_resume_requires_scoped_restore_and_cannot_mix_approved_wire():
+    batch, wire = _shared_source_missing_anchor_fixture()
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[], units_without_statement=list(batch.owned_structure_unit_ids))
+    kwargs = dict(output_validator=lambda _: None, resume_source_interpretation=inventory,
+                  resume_session_id="saved", resume_pending_author_wire=wire)
+    with pytest.raises(ValueError, match="会话恢复能力"):
+        ProtocolControlAgentRunner().run(batch, _FakeTransport([]), **kwargs)
+    with pytest.raises(ValueError, match="不能与已核草稿"):
+        ProtocolControlAgentRunner().run(batch, _FakeTransport([]), resume_wire=wire, **kwargs)
+
+
 def test_early_anchor_atom_repair_is_unique_and_cannot_target_siblings() -> None:
     error = ProtocolControlAgentWireValidationError(
         "PUBLICATION_GATE_REJECTED", "早期节点不能终判后续锚点",
@@ -14988,6 +15070,49 @@ def test_same_source_question_runner_requires_fresh_target_review_and_preserves_
             run(result.source_scope_question_history, result.source_interpretation, result.source_target_review)
         assert transport.source_calls == 1
     assert (inventory.model_dump_json(), wire.model_dump_json(), review.model_dump_json()) == original
+
+
+@pytest.mark.parametrize("outcome", ["changed", "transport", "exhausted"])
+def test_pending_author_source_change_is_recorded_not_raised_or_silently_reauthored(outcome):
+    batch, inventory, wire, _ = _owned_context_target_example()
+    inventory.statements[0].unresolved = ["列表未提供"]
+    target = batch.known_official_targets[0]
+    target.source_span_ids = list(batch.owned_units[0].source_span_ids) + ["span:list"]
+    target.source_excerpts.append("对象包括甲类与乙类。")
+    proposal = SourceInterpretation(version=inventory.version,
+        statements=[inventory.statements[0].model_copy(deep=True)], units_without_statement=[])
+    proposal.statements[0].unresolved = []
+
+    class Transport(_FakeTransport):
+        source_calls = 0
+        def restore_scoped_session(self, **kwargs):
+            pass
+        def start_source_interpretation(self, *, prompt):
+            self.source_calls += 1
+            assert outcome != "exhausted"
+            if outcome == "transport":
+                raise RuntimeError("isolated source recheck failed")
+            return ProtocolControlAgentResponse(session_id="question", text=proposal.model_dump_json())
+        def start(self, **kwargs):
+            pytest.fail("来源变化不得静默重读作者整组")
+
+    transport = Transport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=2, max_transport_retries=0).run(
+        batch, transport, resume_pending_author_wire=wire,
+        resume_pending_author_repairs_used=(2 if outcome == "exhausted" else 1),
+        resume_source_interpretation=inventory, resume_session_id="pending",
+        output_validator=(lambda _: None) if outcome == "exhausted"
+        else lambda _: pytest.fail("来源核对尚未完成不得进入旧作者求值"))
+    assert transport.source_calls == int(outcome != "exhausted") and result.status == "需要核对"
+    if outcome == "changed":
+        assert result.attempts[-1].error_classes == ["PENDING_AUTHOR_SOURCE_CHANGED"]
+        assert result.source_scope_question_history and result.source_interpretation.statements[0].unresolved == []
+        assert result.pending_author_wire is None
+    elif outcome == "transport":
+        assert result.source_scope_question_history and result.pending_author_wire == wire
+        assert result.pending_author_repairs_used == 1
+    assert result.final_output is None
+    assert inventory.statements[0].unresolved == ["列表未提供"]
 
 
 def _native_candidate_row_batch():

@@ -1,13 +1,13 @@
 <!-- RV1006-CURRENT:BEGIN -->
 ## 当前1006V1交付窗口（持续实施，非暂停）
 
-**实际状态：** 源码81b3cd0e502ad7709acdb4f80da38aea0b52779b的合法Job0c8e961e4fc6456e9f2d9295fdf60116已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，6物理调用286.66884104092605秒/exit3；85发现和44成功零新调用，44完成/45失败/45未执行。检查点647c2f276a6a49e1afeaebaa4e0dcc8a，sha5c3e8bcf505e3a68f570de1a7ee31eb1e9680e0a71323e8f9b8e5d446137b200，仅来源解释有效；旧Job/保护库/来源库保持，无共同发布/启用/签发。
+**实际状态：** 源码972428f6258dd5eabfea580346177e1c049eaf09的合法Job775a750ed7634c4bbfa7a5400485e54f已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，2物理调用241.53028695797548秒/exit3；85发现和44成功零新调用，44完成/45失败/45未执行。检查点ab7501a2ad2f442490e0f5aaeb9375cf；只有来源解释有效，完整作者回复未通过Schema，不能伪造为已保存的合法草稿。旧Job/保护库/来源库保持，无共同发布/启用/签发。
 
-**首因与执行选择：** 首因：两个独立子项共用原文span，时间错误已有精确路径/身份/hash，但恢复退回整候选并按span去重而拒绝。所有者集成＋单批准C03独审；新路径复用continue_atom，仅补授权子项时间及配套求值时间属性，命题/观察政策/来源/兄弟冻结。同错仍同权限，缺接口不扩整候选，原来源/语义/采用门不松。冻结实际原答经原消费者零模型零写重放命中(1,0,1)，不是采用。
+**首因与执行选择：** 最新实际首错为嵌套政策引用完整条件、所属原子却只摘动作；补答又缩短内层来源但保留触发条件，两层来源校验均正确拒绝。所有者直接核真实请求/原答，不将其称为医学歧义。新包另保存已通过Schema但未通过全门禁的作者提案，绑定生成时来源hash、累计作者修订次数及真实会话；读回先重验，无已核证明、无整包自动重答。来源改变则保存有类型失败，不能继续旧提案。只补通用修订提示的来源闭包说明，不改临床门禁或基础作者/编译器。
 
-**证据：** 三相连最终1623passed/119.39秒/exit0/5SWIG（JUnit missing-anchor-atom-connected-v4），中间失败分别记录不累加。C03 CodeBuddy/DeepSeek/max、session01a12256-4dba-729e-9330-250349f33417，196.579秒/exit0/no fallback，120min完成等待；同模型家族仅程序/上下文分离，未读临床/库/env/测试。实际只读预检44reusable/1resume_partial/45refresh，0模型/0写/hash保持，新增validator身份、作者/编译不变。详见reviews/rv1006-missing-anchor-atom-owner-disposition-20261010.md。
+**证据：** 新包相连窗口1641passed/120.26秒/exit0；随后计数与来源失败映射修订的末受影响窗55passed/1388deselected/2.76秒/exit0，两窗不相加、末全窗未重复。C03 CodeBuddy/DeepSeek/max初审及同会话增量审均exit0/no fallback，session01a1226e-303b-7746-9434-5b2568b22ffe，120min完成等待；同家族仅程序/上下文分离，未读取临床/库/env/运行测试，最后计数修订由所有者反例验证。只读预检44reusable/1resume_partial/45refresh，0模型/0写/hash保持；最新失败不含typed提案，新恢复能力未在真实该组上调用。详见reviews/rv1006-pending-author-owner-disposition-20261010.md。
 
-下一冻结同版本代码后经control-executions合法新建，以0c8来源核90步计划接续；不复活旧终态、不覆盖旧目录、不复制大库。完整同源包、同包病例工作稿及正式UI更正后新旧结果仍未达。Goal active、claims_complete=false；正式自动事实采用/启用/签发权限不扩。七份继承dirty及原件/库/env/原答不stage、不清理。
+下一冻结同版本代码并重做最新复用预检；从775a来源经合法入口受控接续，核90步与44成功复用。若再次同类无新信息失败，停止该分支重复读取而定位生产/装配首错。不复活旧终态、不覆盖旧目录、不复制大库。完整同源包、同包病例工作稿及正式UI更正后新旧结果仍未达。Goal active、claims_complete=false；正式自动事实采用/启用/签发权限不扩。七份继承dirty及原件/库/env/原答不stage、不清理。
 
 | 用户流程节点 | 已证与首个未完成 |
 |---|---|

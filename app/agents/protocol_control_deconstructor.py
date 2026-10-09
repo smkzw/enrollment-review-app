@@ -2327,6 +2327,10 @@ _CONTROL_REPAIR_CONTRACT = (
     "逐条依据原文与冻结节点核对关系，不得将不同访视的流程目标一律指向同一节点。"
     "修订判定节点时，不能把最后一个冻结节点改写为 later_node_review；"
     "此角色只有存在更晚的明确判定节点才可使用。"
+    "嵌套求值政策的来源必须由所属原子的逐字来源完整承载：适用条件、否定、例外、许可和结果采用"
+    "不能只留在内层而从外层摘录中省去。若内层引用同一授权原文的完整条件句、外层只摘动作短句，"
+    "须在本轮允许修订的来源字段中保留该完整条件句；不得缩短内层摘录、删除触发条件或借用其他来源来凑合。"
+    "未获授权的来源字段保持不变；无法在授权范围内完整表达时保留具体失败。"
 )
 _CALENDAR_BOUND_REPAIR_PROMPT_VERSION = "phase5/calendar-bound-repair-prompt/v4"
 _AFFECTED_STAGE_REPAIR_GUIDANCE_VERSION = "phase5/affected-stage-repair-guidance/v5"
@@ -4384,6 +4388,10 @@ class ProtocolControlAgentRunResult(ContractModel):
         default_factory=list, exclude_if=lambda value: not value,
     )
     partial_wire: ProtocolControlAgentWire | None = None
+    # A parsed author proposal is not a gate-valid draft or source-review proof.
+    pending_author_wire: ProtocolControlAgentWire | None = Field(default=None, exclude_if=lambda value: value is None)
+    pending_author_source_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$", exclude_if=lambda value: value is None)
+    pending_author_repairs_used: int = Field(default=0, ge=0, strict=True, exclude_if=lambda value: value == 0)
     # Diagnostic only: an unaccepted full wire with a typed consumer-capability
     # failure. The source restriction producer revalidates it on every read.
     capability_wire: ProtocolControlAgentWire | None = None
@@ -7241,6 +7249,8 @@ class ProtocolControlAgentRunner:
         accepted_batch_ids: Sequence[str] = (),
         output_validator: ProtocolControlAgentOutputValidator | None = None,
         resume_wire: ProtocolControlAgentWire | None = None,
+        resume_pending_author_wire: ProtocolControlAgentWire | None = None,
+        resume_pending_author_repairs_used: int = 0,
         resume_source_interpretation: SourceInterpretation | None = None,
         resume_session_id: str | None = None,
         resume_source_target_review: SourceTargetReview | None = None,
@@ -7298,12 +7308,24 @@ class ProtocolControlAgentRunner:
         raw_text: str | None = None
         source_interpretation: SourceInterpretation | None = None
         partial_wire: ProtocolControlAgentWire | None = None
+        pending_author_wire: ProtocolControlAgentWire | None = None
+        pending_author_source_sha256: str | None = None
+        repairs = source_repairs = 0
         front_flow_assembled = False
         front_target_review: SourceTargetReview | None = None
         front_candidate_alignment: SourceCandidateAlignment | None = None
         workflow_path_executed = "not_started"
         pending_alignment_atom_baseline = None
         def build_result(**values) -> ProtocolControlAgentRunResult:
+            if (values.get("final_output") is None and values.get("partial_wire") is None
+                    and values.get("capability_wire") is None
+                    and source_interpretation is not None and pending_author_source_sha256
+                    == _sha256(source_interpretation.model_dump_json())):
+                values.setdefault("pending_author_wire", pending_author_wire)
+                if values.get("pending_author_wire") is not None:
+                    values.setdefault("pending_author_source_sha256", pending_author_source_sha256)
+                    values.setdefault("pending_author_repairs_used", max(
+                        resume_pending_author_repairs_used, repairs - source_repairs))
             values.setdefault("source_scope_question_history", [
                 *question_history,
                 *[{**attempt.model_dump(mode="json"), "raw_output_text": attempt.raw_output_text}
@@ -7403,6 +7425,42 @@ class ProtocolControlAgentRunner:
 
         resuming_partial = resume_wire is not None
         repair_used = resuming_partial
+        if type(resume_pending_author_repairs_used) is not int or resume_pending_author_repairs_used < 0:
+            raise ValueError("未核作者提案的已用修订次数无效")
+        if resume_pending_author_repairs_used and resume_pending_author_wire is None:
+            raise ValueError("已用作者修订次数不能脱离未核提案恢复")
+        source_repair_limit = max(0, self._max_schema_repairs - resume_pending_author_repairs_used)
+        if resume_pending_author_wire is not None:
+            if (resume_wire is not None or workflow_variant != BASELINE
+                    or resume_source_interpretation is None or not resume_session_id
+                    or output_validator is None or resume_source_target_review is not None
+                    or resume_source_statement_coverage or resume_source_candidate_alignment is not None
+                    or resume_source_scope_correction_indexes or resume_source_unit_completion_ids):
+                raise ValueError("未核作者提案不能与已核草稿或核对证明混用")
+            validate_source_interpretation(batch, resume_source_interpretation)
+            restore_scoped = getattr(transport, "restore_scoped_session", None)
+            if not callable(restore_scoped):
+                raise ValueError("未核作者提案缺少有源会话恢复能力，未退回整组读取")
+            restore_scoped(session_id=resume_session_id, context_sha256=_sha256(_stable_json({
+                "batch": batch.model_dump(mode="json"),
+                "source": resume_source_interpretation.model_dump(mode="json"),
+                "pending_author_wire": resume_pending_author_wire.model_dump(mode="json"),
+            })))
+            source_interpretation = resume_source_interpretation
+            session_id = resume_session_id
+            raw_text = resume_pending_author_wire.model_dump_json()
+            pending_author_wire = resume_pending_author_wire.model_copy(deep=True)
+            pending_author_source_sha256 = _sha256(source_interpretation.model_dump_json())
+            workflow_path_executed = "resumed_saved_wire"
+            repair_used = True
+            # The normal parse/hydrate/gate loop below determines the current
+            # defect before granting any repair scope. No approval is restored.
+            attempts.append(ProtocolControlAgentAttempt(
+                attempt=1, session_id=session_id, raw_output_sha256=_sha256(raw_text),
+                raw_output_chars=len(raw_text), raw_output_text=raw_text,
+                outcome="parsed", issues=["恢复未核作者提案；尚未通过来源、语义或采用校验"],
+                error_detail={"workflow_phase": "pending_author_revalidation", "adopted": False},
+            ))
         if resume_wire is not None:
             if workflow_variant == FIXED_FLOW:
                 raise ValueError("FLOW_RESUME_PROOF_REQUIRED：局部装配缺少可恢复的前置核对证明，未调用模型")
@@ -7517,7 +7575,7 @@ class ProtocolControlAgentRunner:
                 called = False
                 try:
                     if ((unit_id, precondition) in seen_unit_completions
-                            or source_repairs >= self._max_schema_repairs):
+                            or source_repairs >= source_repair_limit):
                         raise ValueError("相同遗漏来源已补读或共用额度用尽，不重复调用")
                     if not callable(source_reader):
                         raise ValueError("来源局部补读服务不可用")
@@ -7580,7 +7638,7 @@ class ProtocolControlAgentRunner:
                 }
                 try:
                     corrector = getattr(transport, "correct_source_scope", None)
-                    if index in seen_context_attempts or source_repairs >= self._max_schema_repairs:
+                    if index in seen_context_attempts or source_repairs >= source_repair_limit:
                         raise ValueError("相同来源范围已核对或核对额度用尽，未重复调用")
                     if not callable(corrector):
                         raise ValueError("单条来源范围核对服务不可用")
@@ -7641,7 +7699,7 @@ class ProtocolControlAgentRunner:
                         except SourceInterpretationValidationError as function_issue:
                             if (function_issue.code not in {
                                 "SOURCE_FUNCTION_UNSTATED", "SOURCE_FUNCTION_UNRESOLVED",
-                            } or source_repairs >= self._max_schema_repairs
+                            } or source_repairs >= source_repair_limit
                                     or function_issue.statement_id in corrected_function_indexes):
                                 raise
                             detail = {
@@ -7761,7 +7819,7 @@ class ProtocolControlAgentRunner:
                             and source_interpretation is not None and callable(scope_corrector)):
                         scope_issue = exc
                         corrected_scope_indexes: set[int] = set()
-                        while source_repairs < self._max_schema_repairs:
+                        while source_repairs < source_repair_limit:
                             if (not isinstance(scope_issue, SourceInterpretationValidationError)
                                     or scope_issue.code not in {
                                         "SOURCE_TIME_UNGROUNDED", "SOURCE_SCOPE_UNGROUNDED",
@@ -7877,7 +7935,7 @@ class ProtocolControlAgentRunner:
                     ):
                         quote_issue = exc
                         corrected_quote_indexes: set[int] = set()
-                        while source_repairs < self._max_schema_repairs and quote_issue.code in {
+                        while source_repairs < source_repair_limit and quote_issue.code in {
                             "SOURCE_QUOTE_UNGROUNDED", "POST_ELIGIBILITY_SEQUENCE_UNGROUNDED",
                         }:
                             index = quote_issue.statement_id
@@ -7992,7 +8050,7 @@ class ProtocolControlAgentRunner:
                                 },
                             ))
                     if (source_response is None or source_attempt == 1
-                            or source_repairs >= self._max_schema_repairs
+                            or source_repairs >= source_repair_limit
                             or isinstance(exc, SourceInterpretationValidationError)):
                         return build_result(
                             status="需要核对",
@@ -8013,7 +8071,7 @@ class ProtocolControlAgentRunner:
         if source_interpretation is not None and callable(source_reader):
             for index, statement in enumerate(source_interpretation.statements):
                 if (index in seen_questions or not can_recheck_source_scope_question(statement, batch)
-                        or source_repairs >= self._max_schema_repairs):
+                        or source_repairs >= source_repair_limit):
                     continue
                 question_response = None
                 question_prompt = build_source_scope_question_prompt(batch, source_interpretation, index)
@@ -8126,6 +8184,18 @@ class ProtocolControlAgentRunner:
                 raw_output_text=raw_text,
                 outcome="parsed", issues=["RV1001-FLOW：宿主装配，非模型原答，仍待完整采用检查"],
             ))
+        if (resume_pending_author_wire is not None
+                and source_interpretation != resume_source_interpretation):
+            attempts.append(ProtocolControlAgentAttempt(
+                attempt=len(attempts) + 1, session_id=session_id,
+                raw_output_sha256=_sha256(source_interpretation.model_dump_json()),
+                outcome="publication_invalid", error_classes=["PENDING_AUTHOR_SOURCE_CHANGED"],
+                issues=["原文解释已改变；旧作者提案保留在原回执中，本次不修订或重读整组"],
+                error_detail={"code": "PENDING_AUTHOR_SOURCE_CHANGED", "adopted": False},
+            ))
+            return build_result(status="需要核对", batch_id=batch.batch_id, session_id=session_id,
+                attempts=attempts, source_interpretation=source_interpretation,
+                partial_wire=None, pending_author_wire=None)
         prompt = build_protocol_control_agent_prompt(
             batch,
             prompt_template=prompt_template,
@@ -8176,7 +8246,7 @@ class ProtocolControlAgentRunner:
                     )
 
         assert session_id is not None and raw_text is not None
-        repairs = source_repairs
+        repairs = source_repairs + resume_pending_author_repairs_used
         source_insert_repairs = 0
         future_scope_repairs = 0
         future_observation_scope_repairs = 0
@@ -8412,6 +8482,9 @@ class ProtocolControlAgentRunner:
                     {item.structure_unit_id for item in wire.dispositions}
                     - set(batch.owned_structure_unit_ids)
                 )
+                pending_author_wire = wire.model_copy(deep=True)
+                pending_author_source_sha256 = (_sha256(source_interpretation.model_dump_json())
+                                               if source_interpretation is not None else None)
                 output = hydrate_protocol_control_agent_output(wire, batch)
                 if allow_source_insert:
                     # A successfully merged addition becomes the immutable baseline

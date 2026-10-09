@@ -40,7 +40,7 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "持续1006V1/Goal active/claims_complete=false。最新实际0c8e961e Job failed_final，6物理调用286.668841s/44完成45失败45未读。首因精确时间原子却退整候选span恢复；新路径只补时间并冻结其余字段，旧来源/语义/采用门不松。三相连1623pass/119.39s/exit0；C03 CodeBuddy/DeepSeek/max 196.579s/exit0/no fallback仅程序分离。冻结原答零调用重放命中(1,0,1)，最新预检44/1/45、0模型/0写/hash保持。下一冻结代码后合法新建核90步；完整同包工作稿/UI更正新旧结果仍未达，不复活旧终态、不stage继承材料。",
+  "notes": "持续1006V1/Goal active/claims_complete=false。最新实际源码972428f6，775a750e Job failed_final，2物理调用241.530287s/44完成45失败45未读。首因嵌套政策与所属原子摘录闭包不一致；原Schema拒绝正确。新包保存未采用typed作者提案、生成来源hash/累计修订次数，恢复先重验，无证明冒充；最新失败尚无typed提案。相连1641pass后末受影响55pass，两窗不累计、末全窗未重复。批准C03初审/增量exit0/no fallback仅程序分离；末计数/映射所有者反例关闭。下一新身份预检后合法接续，不盲重读/不复活旧终态；完整同包工作稿/UI更正仍未达，七份继承dirty保持。",
   "meta": {
     "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",

@@ -2109,6 +2109,7 @@ def _deep_component_identity(
                                        NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
                                        "located-publication-recovery/v1",
                                        "missing-anchor-scoped-atom-recovery/v1",
+                                       "unaccepted-author-proposal-revalidation/v1",
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),
         "requested_route_sha256": (
@@ -2720,6 +2721,30 @@ def _resumable_unit_completion_failure(
             "source_sha256": hashlib.sha256(interpretation.model_dump_json().encode()).hexdigest()})
 
 
+def _pending_author_resume(saved: Mapping[str, Any], workflow_variant: str) -> _ResumedSourceReview | None:
+    if saved.get("pending_author_wire") is None:
+        return None
+    if (saved.get("partial_wire") is not None or saved.get("source_target_review") is not None
+            or saved.get("source_statement_coverage") or saved.get("source_candidate_alignment")
+            or saved.get("capability_wire") is not None or saved.get("source_front_target_review") is not None
+            or saved.get("pending_source_definition_consumers") is not None
+            or not isinstance(saved.get("session_id"), str) or not saved["session_id"]
+            or workflow_variant != "RV1001-BASELINE"):
+        raise ValueError("未核作者提案不能与已核草稿或核对证明混用")
+    proposal = ProtocolControlAgentWire.model_validate(saved["pending_author_wire"])
+    if saved.get("pending_author_wire_sha256") != hashlib.sha256(proposal.model_dump_json().encode()).hexdigest():
+        raise ValueError("未核作者提案的实际保存摘要损坏")
+    source = SourceInterpretation.model_validate(saved.get("source_interpretation"))
+    if saved.get("pending_author_source_sha256") != hashlib.sha256(source.model_dump_json().encode()).hexdigest():
+        raise ValueError("未核作者提案与生成时的来源解释不一致")
+    used = saved.get("pending_author_repairs_used", 0)
+    if type(used) is not int or used < 0:
+        raise ValueError("未核作者提案的已用修订次数无效")
+    # Eligibility of source, components and route is checked by the caller;
+    # current hydration/gates are replayed by the runner before any repair.
+    return _ResumedSourceReview(state="absent", reason="unaccepted_author_proposal_requires_revalidation")
+
+
 def _validated_deep_partial_source(
     store: JobStore,
     current_payload: Mapping[str, Any],
@@ -2914,6 +2939,9 @@ def _validated_deep_partial_source(
         raise ValueError("局部草稿缺少有源解释")
     interpretation = SourceInterpretation.model_validate(source)
     validate_source_interpretation(batch, interpretation)
+    if source_seed_proof is None and saved.get("pending_author_wire") is not None:
+        return checkpoint_id, saved, _pending_author_resume(
+            saved, current_payload.get("deep_workflow_variant", "RV1001-BASELINE"))
     if (saved.get("partial_wire") is not None and saved.get("source_target_review") is not None
             and saved.get("attempts")
             and set(saved["attempts"][-1].get("error_classes", []))
@@ -3362,6 +3390,7 @@ def _preflight_deep_source(
                 decision = "resume_partial"
                 base_reason = (
                     "verified_unpublished_draft" if partial[1].get("partial_wire") is not None
+                    else "unaccepted_author_proposal" if partial[1].get("pending_author_wire") is not None
                     else "verified_source_interpretation"
                 )
                 review_state = partial[2].state
@@ -4146,8 +4175,12 @@ def _execute_deep(
             # failed run had no reusable partial wire; an unproven one is
             # recorded as refresh_required and never silently adopted.
             try:
-                resume_review = (_resumable_unit_completion_failure(batch, previous)
+                resume_review = (_pending_author_resume(previous, context.job_payload.get(
+                                     "deep_workflow_variant", "RV1001-BASELINE"))
+                                 or _resumable_unit_completion_failure(batch, previous)
                                  or _resumable_saved_source_review(batch, resume_interpretation, previous))
+                if resume_review.reason == "unaccepted_author_proposal_requires_revalidation":
+                    resume_session_id = previous["session_id"]
             except ValueError as exc:
                 raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
                                   detail=str(exc)) from exc
@@ -4286,11 +4319,15 @@ def _execute_deep(
             }}
         if (decision == "resume_partial" and resume_wire is None
                 and resume_review.reason != "source_unit_quote_completion_transport_resume"):
-            with config.session_factory() as session:
-                partial = _validated_deep_partial_source(
-                    JobStore(session, now=config.now), context.job_payload,
-                    deep_source_job_id, batch, context.step_id, prompt_template,
-                )
+            try:
+                with config.session_factory() as session:
+                    partial = _validated_deep_partial_source(
+                        JobStore(session, now=config.now), context.job_payload,
+                        deep_source_job_id, batch, context.step_id, prompt_template,
+                    )
+            except ValueError as exc:
+                raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                                  detail="未核来源或提案与入队前身份不一致，未发送请求。") from exc
             if partial is None:
                 raise StepFailure(
                     retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
@@ -4314,6 +4351,8 @@ def _execute_deep(
             )
             if draft.get("partial_wire") is not None:
                 resume_wire = ProtocolControlAgentWire.model_validate(draft["partial_wire"])
+                resume_session_id = draft["session_id"]
+            elif resume_review.reason == "unaccepted_author_proposal_requires_revalidation":
                 resume_session_id = draft["session_id"]
             resume_alignment_saved = draft
 
@@ -4365,6 +4404,13 @@ def _execute_deep(
         prompt_template=prompt_template,
         output_validator=lambda output: _validate_deep_batch_output(batch, output),
         resume_wire=resume_wire,
+        resume_pending_author_wire=(ProtocolControlAgentWire.model_validate(
+            resume_alignment_saved["pending_author_wire"])
+            if resume_review.reason == "unaccepted_author_proposal_requires_revalidation"
+            and resume_alignment_saved is not None else None),
+        resume_pending_author_repairs_used=(resume_alignment_saved.get("pending_author_repairs_used", 0)
+            if resume_review.reason == "unaccepted_author_proposal_requires_revalidation"
+            and resume_alignment_saved is not None else 0),
         resume_source_interpretation=resume_interpretation,
         resume_session_id=resume_session_id,
         resume_source_target_review=(
@@ -4431,6 +4477,7 @@ def _execute_deep(
             "SOURCE_INTERPRETATION_CORRECTION_TRANSPORT_FAILED",
             "EVIDENCE_POLICY_REVIEW_UNAVAILABLE", "EVIDENCE_POLICY_UNJUSTIFIED",
             "MODEL_IDENTITY_INVALID",
+            "PENDING_AUTHOR_SOURCE_CHANGED",
         }
         source_review_failure = next((code for code in (
             result.attempts[-1].error_classes if result.attempts else []
@@ -4459,6 +4506,8 @@ def _execute_deep(
                  "原文要求小时或分钟精度，但该批尚未满足有源局部采用条件；结果保持未采信。"
                  if result.capability_wire is not None else
                  {
+                     "PENDING_AUTHOR_SOURCE_CHANGED":
+                         "原文解释已经更新，旧草稿不再用于这份解释；已用调用与原答保留，尚未采用。",
                      "SOURCE_SCOPE_CORRECTION_JSON_INVALID":
                          "模型未按要求返回本条来源范围，修订尚未应用；原文和已核内容保留。",
                      "SOURCE_UNIT_QUOTE_COMPLETION_INVALID":
@@ -4487,6 +4536,12 @@ def _execute_deep(
                     result.partial_wire.model_dump(mode="json")
                     if result.partial_wire is not None else None
                 ),
+                **({"pending_author_wire": result.pending_author_wire.model_dump(mode="json"),
+                    "pending_author_source_sha256": result.pending_author_source_sha256,
+                    "pending_author_repairs_used": result.pending_author_repairs_used,
+                    "pending_author_wire_sha256": hashlib.sha256(
+                        result.pending_author_wire.model_dump_json().encode()).hexdigest()}
+                   if result.pending_author_wire is not None else {}),
                 "capability_wire": (
                     result.capability_wire.model_dump(mode="json")
                     if result.capability_wire is not None else None
