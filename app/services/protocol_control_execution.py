@@ -108,6 +108,7 @@ from app.agents.protocol_control_candidate_alignment import (
     NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
     NATIVE_ROW_ACTION_COVERAGE_VERSION,
     SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+    SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
     SourceCandidateAlignment,
     SourceCandidateAlignmentItem,
     SourceCandidateAlignmentProof,
@@ -2092,6 +2093,7 @@ def _deep_component_identity(
                                        NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
                                        NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
                                        "located-publication-recovery/v1",
+                                       SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}

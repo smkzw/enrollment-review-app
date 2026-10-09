@@ -21,6 +21,7 @@ EVIDENCE_POLICY_ALIGNMENT_VERSION = "phase5/control-evidence-policy-alignment/v2
 NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION = "native-table-review-scope/v3"
 NATIVE_ROW_ACTION_COVERAGE_VERSION = "native-row-action-coverage/v2"
 CANDIDATE_SOURCE_CLOSURE_CONTEXT_VERSION = "candidate-source-closure-context/v1"
+SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION = "statement-grounded-candidate-quotes/v1"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
@@ -341,6 +342,25 @@ def _candidate_source_closure(batch, candidate):
             if unit.structure_unit_id in candidate.source_structure_unit_ids]
 
 
+def _statement_grounded_atoms(unit, statement, candidate):
+    from app.agents.protocol_control_source_interpretation import normalize_source_excerpt
+
+    source = normalize_source_excerpt(statement.quoted_text)
+    scope = normalize_source_excerpt(statement.scope_quote or "")
+    unit_text = normalize_source_excerpt(unit.excerpt)
+    return [atom
+        for expression in (candidate.applicability_expression, candidate.trigger_expression,
+                           candidate.obligation_expression, candidate.exception_expression)
+        if expression is not None
+        for group in expression.groups for atom in group.atoms
+        if (set(atom.source_span_ids) & set(unit.source_span_ids)
+            and atom.source_excerpts
+            and all(normalize_source_excerpt(quote) in unit_text for quote in atom.source_excerpts)
+            and any(_source_fragment(source, scope, normalize_source_excerpt(quote)) is not None
+                    or source in normalize_source_excerpt(quote)
+                    for quote in atom.source_excerpts))]
+
+
 def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
     from app.protocols.procedure_catalog import schedule_column_scope
 
@@ -352,6 +372,7 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
         selected.append({
             "statement_index": statement_index,
             "candidate_index": candidate_index,
+            "candidate_quote_scope_version": SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
             "required_source_excerpt": statement.quoted_text,
             "source_statement": statement.model_dump(mode="json"),
             "source_unit": units[statement.structure_unit_id].excerpt,
@@ -372,15 +393,9 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
                     for unit in batch.context_units],
                 "referenced_table_notes": batch.table_footnote_context_links,
             }} if units[statement.structure_unit_id].table_context is not None else {}),
-            "allowed_candidate_atom_quotes": [
-                atom.statement
-                for expression in (candidate.applicability_expression,
-                                   candidate.trigger_expression,
-                                   candidate.obligation_expression,
-                                   candidate.exception_expression)
-                if expression is not None
-                for group in expression.groups for atom in group.atoms
-            ],
+            "allowed_candidate_atom_quotes": list(dict.fromkeys(
+                atom.statement for atom in _statement_grounded_atoms(
+                    units[statement.structure_unit_id], statement, candidate))),
             "candidate": candidate.model_dump(mode="json"),
         })
     native_scope_instruction = (
@@ -430,6 +445,7 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
         "不得把另一列或缺出处的访视标签借给当前动作。"
         + native_scope_instruction
         + "candidate_atom_quotes 只能从 allowed_candidate_atom_quotes 原样选完整句，不得改写、补词或只摘短词。"
+        "完整候选及其来源闭包用于核对关系，不授权把本条之外的候选原句填入本条引句；其他要求仍分别核对。"
         "不完整或不确定时列出具体 unresolved_dimensions；仅返回符合 Schema 的 JSON。\n"
         f"待核对应：{json.dumps(selected, ensure_ascii=False, sort_keys=True)}"
     )
@@ -712,23 +728,16 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 node.scope_citation == expected_scope for node in candidate.review_node_bindings
             ):
                 raise ValueError("候选审核时期缺少对应原文标题的物理来源")
-        atoms = [atom for expression in (
-            candidate.applicability_expression, candidate.trigger_expression,
-            candidate.obligation_expression, candidate.exception_expression,
-        ) if expression is not None for group in expression.groups for atom in group.atoms]
         obligation_atoms = [atom for group in candidate.obligation_expression.groups
                             for atom in group.atoms]
         source = normalize_source_excerpt(statement.quoted_text)
         scope = normalize_source_excerpt(statement.scope_quote or "")
-        grounded_atoms = [atom for atom in atoms if (
-            set(atom.source_span_ids) & set(unit.source_span_ids)
-            and atom.source_excerpts
-            and all(normalize_source_excerpt(quote) in normalize_source_excerpt(unit.excerpt)
-                    for quote in atom.source_excerpts)
-            and any(_source_fragment(source, scope, normalize_source_excerpt(quote)) is not None
-                    or source in normalize_source_excerpt(quote)
-                    for quote in atom.source_excerpts)
-        )]
+        grounded_atoms = _statement_grounded_atoms(unit, statement, candidate)
+        supported_quotes = {
+            normalize_source_excerpt(value) for atom in grounded_atoms
+            for value in (atom.statement, getattr(getattr(atom, "evaluation", None), "proposition", None))
+            if isinstance(value, str)
+        }
         selected_atoms = [atom for atom in grounded_atoms if any(
             normalize_source_excerpt(quote) in {
                 normalize_source_excerpt(value) for value in (
@@ -737,8 +746,9 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 ) if isinstance(value, str)
             } for quote in item.candidate_atom_quotes
         )]
-        if (len(selected_atoms) < len(set(item.candidate_atom_quotes))
-                or any(not normalize_source_excerpt(quote) for quote in item.candidate_atom_quotes)):
+        if any(not normalize_source_excerpt(quote)
+               or normalize_source_excerpt(quote) not in supported_quotes
+               for quote in item.candidate_atom_quotes):
             raise ValueError("候选语义核对引用了未由本条来源支持的候选原句")
         if item.decision == "fully_expressed":
             if not any(atom in obligation_atoms for atom in selected_atoms):

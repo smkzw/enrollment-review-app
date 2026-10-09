@@ -177,6 +177,28 @@ def _conditioned_action_material(prefix="已完成核查者"):
     return batch, source, wire, coverage, alignment
 
 
+def test_alignment_prompt_offers_only_current_statement_quotes_keeps_context():
+    batch, source, wire, coverage, alignment = _conditioned_action_material()
+    prompt = build_candidate_alignment_prompt(batch, source, wire, [(0, 0)])
+    selected = json.loads(prompt.split("待核对应：", 1)[1])[0]
+    assert selected["allowed_candidate_atom_quotes"] == ["已完成核查者", "领取材料", "回收材料"]
+    assert "条件甲" in json.dumps(selected["candidate"], ensure_ascii=False)
+    assert "条件乙" in selected["candidate_source_closure"][0]["excerpt"]
+    validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    bound = bind_candidate_alignment(batch, source, coverage, wire, alignment,
+        alignment.model_dump_json(exclude={"proofs"}))
+    assert len(reusable_proven_alignment_items(batch, source, coverage, wire, bound)) == 1
+
+
+@pytest.mark.parametrize("outside_quote", ["条件甲", "不存在的原句", " "])
+def test_duplicate_grounded_atoms_cannot_mask_an_unsupported_quote(outside_quote):
+    batch, source, wire, coverage, alignment = _conditioned_action_material()
+    # Two trigger branches repeat the same supported quote, not two distinct proofs.
+    alignment.items[0].candidate_atom_quotes.append(outside_quote)
+    with pytest.raises(ValueError, match="未由本条来源支持"):
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+
+
 @pytest.mark.parametrize("mutation", [None, "missing_condition", "wrong_prefix", "wrong_position", "weaker_obligation", "partial_branch_mapping", "empty_branch_mapping"])
 def test_distributed_source_condition_requires_every_relevant_branch(mutation):
     batch, source, wire, coverage, alignment = _conditioned_action_material()
