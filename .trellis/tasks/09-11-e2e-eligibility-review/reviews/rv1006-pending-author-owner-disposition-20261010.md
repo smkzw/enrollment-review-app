@@ -31,4 +31,12 @@
 
 ## 窗口仍未达
 
+### 相连复用修正（本包后增量）
+
+新补答说明令只读预检变28reusable/62refresh，其中16个已完成组只因历史repair hash不符而失效，未发送新请求。改为仅已完成三消费者使用_completed_repair_receipt_traceable，原补答hash仍原样作为历史证据；原文/基础作者/编译/模型身份和当前全门均须成立。失败恢复仍精确比对repair材料，不放宽pending来源或历史会话。无版本白名单或历史反算。新增validator身份completed-result-current-gate-revalidation/v1。
+
+单批准C03同角色增量completed_revalidation报告192.671秒/exit0/no fallback，120min等待；读全三消费者及来源/定义门，未读_saved_deep_run_result全文或运行测试。同家族仅程序隔离。指出_replay_checkpoint身份比较精确而其他消费者容忍旧validator，所有者修正为同一比较并保留当前门，合成回放正反例已证。没有盲采“坏门下run_job应False”：该布尔只表示获得租约；新测试的首失败为这个错误断言，改查实际failed_final，不改产品状态。当前门不通过时预检refresh、新实际执行仍失败且旧checkpoint相同。既有受限分支门强度差异/无定义但有登记尝试的窄状态列剩余审阅边界，本增量不扩展修复。
+
+最终服务模块完整537passed/112.19秒/exit0/5SWIG，JUnit artifacts/rv1006-completed-repair-service-connected-20261010-v3.xml；此前选窗29pass与28pass/1fail不相加。最后身份比较行由所有者测试，未再派独审。git diff --check exit0。只读最新预检44reusable/46refresh、0模型/0写/DBhash保持，产物本机rv1006-completed-repair-preflight-20261010-v1.json；失败组45无typed提案，修订合同变化后来源种子不满足旧恢复资格，不能称1resume。下一以最新实际计划合法新建，不盲重读44成功组。
+
 没有完整官方+跨章共同采用包，沒有新同包24页整例工作稿、正式UI有源更正后的新旧结果。旧UI描述更正0规则关联不冒充闭环。下一是冻结源码、最新材料复用预检、合法有界接续；不复活旧终态或继续无新假设的整组重读。

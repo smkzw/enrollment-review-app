@@ -1,0 +1,15 @@
+# 同角色增量审阅：完成结果与未来补答说明分离
+
+你是既有批准C03的只读工程审阅者。限定本次新增两处代码和原模块测试；不是产品临床读取，不批准病例或规则，不递归派发，不读.env/临床原件/数据库/原答，不运行shell或测试，不修改文件。可用只读源码工具，最多16个聚焦读取。现行源码6a935c36之后有本机增量，审阅的是当前文件，不归到旧提交。原始待审意见由独立来源和代码形成，下面现象只是问题定位，不是结论。
+
+现场只读预检发现：仅在_CONTROL_REPAIR_CONTRACT增加嵌套来源闭包说明，就使16个已完成组因repair_material_changed_or_unproven从可复用变refresh，44复用变28。作者基础材料/编译器/来源/模型未变。没有因此发新模型请求，也不重签旧回执。
+
+新增最小方案：三处completed消费者（_restore_valid_checkpoint、_preflight_deep_source、_validated_deep_source；名称以实际为准）改调用_completed_repair_receipt_traceable，只确认已完成结果形态及原64hex补答回执，然后仍执行各自原来源/作者/编译/route身份、当前SourceInterpretation/SourceTargetReview/coverage/alignment/definition/输出门与来源刷新检查。新的validator身份completed-result-current-gate-revalidation/v1。未来失败/未完成提案继续调用未改的_repair_material_matches及repair hash精确比较，不靠新函数恢复旧补答会话或核对证明。没有历史版本字符串白名单，没有用当前材料伪算历史hash。
+
+请读完整涉及定义与紧邻消费者，给出真实可达反例而不是原则性背书：
+- app/services/protocol_control_execution.py：上述三处、_same_deep_components_with_current_gate、_completed_repair_receipt_traceable、_repair_material_matches、_validated_deep_partial_source；按函数查关键上下游，勿读整巨型文件。
+- tests/v2/services/test_protocol_control_execution.py：test_deep_publication_gate_repairs_in_the_originating_session（旧生产Schema/门禁恢复保存；改补答说明后新Job预检和实际消费零新读取；旧checkpoint相同；再使当前门拒绝则refresh）、test_corrupt_repair_receipt_fails_preflight_instead_of_cache_refresh；未完成_repair_material_matches旧负例保持。
+
+核心问题：这是否漏掉不可由当前来源/含义校验重验的补答来源或权限边界？若有，指出首次绕过位置、必要具体条件与最小修复；如果某一门在实际调用者缺失，明确该调用者。不要建议重读所有成功组或取消临床门来过关。区分旧历史声明、当前代码、合成测试、尚未运行真实产品。既有相同模型家族仅程序/上下文隔离，不叫模型独立金标。
+
+输出：已读证、缺陷按严重度、决定所需未证条件及最小验证、是否有界可接续建议。不要输出临床全文或秘密。

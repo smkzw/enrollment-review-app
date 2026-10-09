@@ -4133,9 +4133,50 @@ def test_deep_publication_gate_repairs_in_the_originating_session(
         deep_source_job_id=result.job_id,
     )
     _, payload = _job_snapshot_and_payload(session_factory, planned.job_id)
-    assert {item["reason"] for item in payload["deep_reuse_plan"]["decisions"].values()} == {
-        "repair_material_changed_or_unproven"
-    }
+    assert {item["decision"] for item in payload["deep_reuse_plan"]["decisions"].values()} == {"reusable"}
+    assert runner.run_job(planned.job_id)
+    assert deep.start_calls == 1 and deep.continue_calls == 1
+    with session_factory() as session:
+        assert JobStore(session, now=_now).get_last_checkpoint(result.job_id, deep_step.step_id) == checkpoint
+
+    # Crash replay must revalidate old validator evidence, not reauthor it.
+    _, source_payload = _job_snapshot_and_payload(session_factory, result.job_id)
+    replay_saved = json.loads(json.dumps(checkpoint[1]))
+    replay_saved["component_identity"]["validator_version"] = "historical-validator"
+    replay_context = StepContext(
+        job_id=result.job_id, job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+        job_payload=source_payload, step_id=deep_step.step_id, name="深审", attempt=2,
+        last_checkpoint_id=checkpoint[0], last_checkpoint=replay_saved,
+    )
+    _, replay_executor = _build_runner(data_paths, session_factory, discovery, deep)
+    assert replay_executor(replay_context) == replay_saved
+    assert deep.start_calls == 1 and deep.continue_calls == 1
+
+    def reject_current(batch, output):
+        candidate = output.candidates[0]
+        return (ProtocolControlGateError(
+            "MIXED_DECISION_STAGE_CONTROL", "当前门禁反例", entity_id=candidate.control_candidate_id,
+            structure_unit_ids=candidate.frozen_structure_unit_ids,
+            candidate_ids=(candidate.control_candidate_id,),
+        ),)
+
+    monkeypatch.setattr(protocol_control_execution_module, "check_protocol_control_batch_candidates", reject_current)
+    rejected = _build_service(data_paths, session_factory, seed, max_deep_units_per_batch=256).create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="changed-current-gate-rejects-old-result",
+        deep_source_job_id=result.job_id,
+    )
+    _, rejected_payload = _job_snapshot_and_payload(session_factory, rejected.job_id)
+    assert {item["reason"] for item in rejected_payload["deep_reuse_plan"]["decisions"].values()} == {"current_gate_requires_refresh"}
+    assert deep.start_calls == 1 and deep.continue_calls == 1
+    with pytest.raises(StepFailure) as rejected_replay:
+        replay_executor(replay_context)
+    assert rejected_replay.value.error_code == "PROTOCOL_CONTROL_CHECKPOINT_INVALID"
+    assert runner.run_job(rejected.job_id)  # True means lease acquired, not success.
+    rejected_snapshot, _ = _job_snapshot_and_payload(session_factory, rejected.job_id)
+    assert rejected_snapshot.state == "failed_final"
+    assert deep.start_calls > 1
+    with session_factory() as session:
+        assert JobStore(session, now=_now).get_last_checkpoint(result.job_id, deep_step.step_id) == checkpoint
 
 
 @pytest.mark.parametrize("damage", [None, "gate-records", "old-version"])
@@ -6946,6 +6987,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "native-table-review-scope/v3", "located-publication-recovery/v1",
                   "missing-anchor-scoped-atom-recovery/v1",
                   "unaccepted-author-proposal-revalidation/v1",
+                  "completed-result-current-gate-revalidation/v1",
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   "scoped-exception-dnf/v1"))
     )

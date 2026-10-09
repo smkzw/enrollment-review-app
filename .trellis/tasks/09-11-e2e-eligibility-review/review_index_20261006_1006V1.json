@@ -37,6 +37,17 @@
       "clinical_acceptance": false
     },
     "package": "unaccepted-author-proposal-revalidation",
+    "completed_result_revalidation": {
+      "service_module": {"passed": 537, "seconds": 112.19, "exit_code": 0, "junit": "artifacts/rv1006-completed-repair-service-connected-20261010-v3.xml"},
+      "initial_selected_failure": "New test assumed run_job False meant failed; actual Boolean means lease acquired. Corrected test to assert failed_final; product unchanged.",
+      "preflight": {"reusable": 44, "refresh_required": 46, "model_calls": 0, "database_writes": 0, "database_unchanged": true},
+      "conference_seconds": 192.671,
+      "conference_exit_code": 0,
+      "conference_report": "runs/conference/rv1006-pending-author-review-20261010/completed_revalidation.md",
+      "old_receipts_unchanged": true,
+      "failed_proposal_repair_identity_still_exact": true,
+      "new_product_run": false
+    },
     "pending_author_checks": {
       "connected_before_final_counter_changes": {"passed": 1641, "seconds": 120.26, "exit_code": 0, "junit": "artifacts/rv1006-pending-author-connected-20261010-v1.xml"},
       "final_affected": {"passed": 55, "deselected": 1388, "seconds": 2.76, "exit_code": 0, "junit": "artifacts/rv1006-pending-author-affected-20261010-v3.xml"},

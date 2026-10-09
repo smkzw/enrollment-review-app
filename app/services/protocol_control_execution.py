@@ -1241,10 +1241,12 @@ def _replay_checkpoint(
         if (checkpoint.get("batch_id") != batch.batch_id
                 or checkpoint.get("prompt_template_sha256")
                 != protocol_control_agent_prompt_template_sha256(prompt_template)
-                or checkpoint.get("component_identity")
-                != _deep_component_identity(context.job_payload, prompt_template)
+                or not isinstance(checkpoint.get("component_identity"), Mapping)
+                or not _same_deep_components_with_current_gate(
+                    checkpoint["component_identity"],
+                    _deep_component_identity(context.job_payload, prompt_template))
                 or checkpoint.get("transport_identity") != transport_identity
-                or not _repair_material_matches(checkpoint)):
+                or not _completed_repair_receipt_traceable(checkpoint)):
             raise StepFailure(
                 retryable=False, error_code="PROTOCOL_CONTROL_CHECKPOINT_INVALID",
                 detail="已保存的深审结果与当前冻结来源、提示或模型线路不一致。",
@@ -2110,6 +2112,7 @@ def _deep_component_identity(
                                        "located-publication-recovery/v1",
                                        "missing-anchor-scoped-atom-recovery/v1",
                                        "unaccepted-author-proposal-revalidation/v1",
+                                       "completed-result-current-gate-revalidation/v1",
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),
         "requested_route_sha256": (
@@ -3334,8 +3337,8 @@ def _preflight_deep_source(
                            if source_lineage else {}),
                     }
                     continue
-                if not _repair_material_matches(saved):
-                    reason = "repair_material_changed_or_unproven"
+                if not _completed_repair_receipt_traceable(saved):
+                    reason = "completed_repair_receipt_unproven"
                     decisions[batch.batch_id] = {
                         "step_id": step_id, "decision": decision, "reason": reason,
                         **({"effective_source_job_id": batch_source_id, "source_lineage": source_lineage}
@@ -3482,6 +3485,26 @@ def _source_interpretation_requires_refresh(
         ):
             return True
     return False
+
+
+def _completed_repair_receipt_traceable(saved: Mapping[str, Any]) -> bool:
+    """Historical repair wording is evidence, not the current result validator.
+
+    Only completed-result consumers use this check, after source/author/compiler/
+    route identity checks and before full current source and output validation.
+    Failed proposal continuation still requires matching repair material.
+    """
+    result = saved.get("run_result")
+    if (not isinstance(result, Mapping) or type(result.get("repair_used")) is not bool
+            or result.get("status") not in {"已解析", "待跨章核验", "需要核对"}
+            or (not isinstance(result.get("final_output"), Mapping)
+                and not isinstance(saved.get("restricted_batch"), Mapping))):
+        return False
+    if not result["repair_used"]:
+        return True
+    receipt = saved.get("repair_contract_sha256")
+    return (isinstance(receipt, str) and len(receipt) == 64
+            and all(char in "0123456789abcdef" for char in receipt))
 
 
 def _repair_material_matches(saved: Mapping[str, Any]) -> bool:
@@ -3745,7 +3768,7 @@ def _validated_deep_source(
                 saved["component_identity"],
                 _deep_component_identity(current_payload, prompt_template),
             )
-            or not _repair_material_matches(saved)
+            or not _completed_repair_receipt_traceable(saved)
             or identity != _transport_identity(transport, stage="deep")
         ):
             raise ValueError("已完成的来源批次提示或模型回执身份不一致")

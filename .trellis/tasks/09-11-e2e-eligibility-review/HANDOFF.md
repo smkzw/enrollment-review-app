@@ -8,7 +8,7 @@
 
 **证据：** 新包相连窗口1641passed/120.26秒/exit0；随后计数与来源失败映射修订的末受影响窗55passed/1388deselected/2.76秒/exit0，两窗不相加、末全窗未重复。C03 CodeBuddy/DeepSeek/max初审及同会话增量审均exit0/no fallback，session01a1226e-303b-7746-9434-5b2568b22ffe，120min完成等待；同家族仅程序/上下文分离，未读取临床/库/env/运行测试，最后计数修订由所有者反例验证。只读预检44reusable/1resume_partial/45refresh，0模型/0写/hash保持；最新失败不含typed提案，新恢复能力未在真实该组上调用。详见reviews/rv1006-pending-author-owner-disposition-20261010.md。
 
-下一冻结同版本代码并重做最新复用预检；从775a来源经合法入口受控接续，核90步与44成功复用。若再次同类无新信息失败，停止该分支重复读取而定位生产/装配首错。不复活旧终态、不覆盖旧目录、不复制大库。完整同源包、同包病例工作稿及正式UI更正后新旧结果仍未达。Goal active、claims_complete=false；正式自动事实采用/启用/签发权限不扩。七份继承dirty及原件/库/env/原答不stage、不清理。
+**完成结果重验包：** 新修订说明曾使16个已完成组仅因历史补答hash不同失效，预检28/62；未照此重读。现仅在已完成消费者区分原回执可追踪与当前内容校验，来源/作者/编译/route不变且当前完整门成立才能复用；失败提案仍严格比对补答材料。C03同角色增量192.671秒/exit0/no fallback指出续跑消费者身份比较不一致，已统一当前门重验并补正反回放；没有接受“执行返回True等于成功”的建议，测试改查真实failed_final。最终整个服务模块537passed/112.19秒/exit0/5SWIG，首选窗28pass/1fail为新测试误解run_job布尔含义，未改产品终态；不累计窗口。最新只读预检44reusable/46refresh，0模型/0写/hash保持；失败45没有typed提案且补答材料已变，不伪称1resume。旧已核hash不改写，待运行新90步合法Job。完整同源包、同包病例工作稿及正式UI更正后新旧结果仍未达。Goal active、claims_complete=false；权限不扩，七份继承dirty及原件/库/env/原答不stage、不清理。
 
 | 用户流程节点 | 已证与首个未完成 |
 |---|---|
