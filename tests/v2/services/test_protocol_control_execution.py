@@ -6478,6 +6478,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   protocol_control_execution_module.CITATION_CLOSURE_RESTRICTION_VALIDATION_VERSION,
                   "source-target-additional-recovery/v1",
                   "numeric-evaluation-field-patch/v1",
+                  "source-target-frozen-id-schema/v1",
                   protocol_control_execution_module.PROCEDURE_SOURCE_CONTEXT_VERSION,
                   protocol_control_execution_module.RELATIVE_STAGE_PREFLIGHT_VERSION,
                   protocol_control_execution_module.RELATIVE_STAGE_SOURCE_DIMENSION_VERSION,

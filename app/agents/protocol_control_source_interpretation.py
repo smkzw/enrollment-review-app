@@ -1879,13 +1879,23 @@ def build_source_target_review_prompt(
     )
 
 
-def source_target_review_response_format() -> dict[str, object]:
+def source_target_review_response_format(
+    *, target_ids: list[str] | None = None,
+) -> dict[str, object]:
+    schema = SourceTargetReview.model_json_schema()
+    if target_ids is not None:
+        if any(not isinstance(value, str) or not value.strip() for value in target_ids):
+            raise ValueError("冻结目标编号不得为空")
+        schema["$defs"]["SourceTargetReviewItem"]["properties"]["target_id"] = (
+            {"anyOf": [{"type": "string", "enum": sorted(set(target_ids))}, {"type": "null"}]}
+            if target_ids else {"type": "null"}
+        )
     return {
         "type": "json_schema",
         "json_schema": {
             "name": "protocol_control_source_target_review_" + SOURCE_TARGET_REVIEW_VERSION.rsplit("/", 1)[-1],
             "strict": True,
-            "schema": SourceTargetReview.model_json_schema(),
+            "schema": schema,
         },
     }
 

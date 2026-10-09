@@ -1,6 +1,8 @@
 <!-- RV1006-CURRENT:BEGIN -->
 ## 当前1006V1交付窗口（2026-10-09，用户解除暂停、继续实施）
 
+**当前实际进展（覆盖下方前一记录）：** 源码fba9a374的合法Job1dd2d3bc2f664838a321ef853b98d398已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_INVALID，10物理调用310.756653秒/exit3，85发现及43成功零新调用复用，44失败/46未执行；检查点91570e9cf31846339cc33995b83d16b0。四字段数值补丁实际parsed并进入重核，末首错是回答抄写冻结procedure目标ID多一个字符，服务端正确拒绝，失败回退的草稿不宣称已保存数值修订。当前最小修复将真实batch冻结编号作为目标核对Schema枚举，所有原来源/作用域检查保留，不猜映射、不纠正旧答，不改变模型或医学含义；text/json_object仅提示约束，strict Schema另传约束，不声称必然临床正确。作者/编译器不改，仅新增source-target-frozen-id-schema/v1校验身份。受影响相连窗81pass/1368deselected/7.66s/exit0/5既有SWIG，非全库/临床验收。此次为直接确定性格式及接口修复，无新临床取舍、不重复会商。完整共同发布、同包病例工作稿、UI更正后的新旧报告仍未达；claims_complete=false。下一以1dd2最新只读复用预检为准，从合法入口新建，不复活终态、不重跑旧目录；原件/保护库/旧回执及继承dirty保持。
+
 **当前实际进展：** 源码b6fb9016的合法Jobd6e869ea2e1d46448ec7b4b848a13c6f已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，7调用277.534631秒/exit3；85发现及43成功零新调用复用，44失败/46未执行，检查点1fea68334eeb43589c9d8d46015b797b。负结论已实际重新核对，未再进入三次范围越界补入；末首错为唯一数值原子修订把完整父句写入仅容纳局部摘录的比较来源，现有包含校验正确拒绝。新最小包通过原transport新增数值字段补丁：仅四个获准求值字段，原句/时间/观察政策/来源/兄弟由宿主保留；完整Schema与原文数值对应仍重验，拒绝降级比较、错阈值、扩大摘录和越权字段，原完整原子路径兼容读取。只登记新的validator身份，未变化作者/编译器不重读。C03同批准会话续审exit0/no fallback，207.47秒完成等待，无临床/测试/HEAD核验，仅同模型家族程序分离；末降级与冻结字段保护由所有者反例验证。五相连模块最终1586pass/105.83s/exit0/5SWIG，JUnit numeric-field-patch-connected-v2；此前18选窗不累加。新源只读预检numeric-patch-preflight-v1仍43reusable/1resume_partial/46refresh，0模型/0写/hash保持，44保留actual unpublished draft及source_review；独审所疑丢草稿分支与实际预检不符，未放宽旧身份检查。下一合法新建、核90步一致后接续，旧Job/目录不复活。完整共同发布、同包病例工作稿及UI更正后新旧结果未达；claims_complete=false。下方历史“当前/下一”不覆盖本段。
 
 Goal已实查active；claims_complete=false。用户解除暂停；本表是唯一现行流程状态，下方暂停及过去的“当前/未运行”仅为相应时点记录，不据此重跑。既有1006V1隔离调用和工程里程碑授权继续；正式事实自动采用/启用/签发边界不变。任务未完成，不归档。

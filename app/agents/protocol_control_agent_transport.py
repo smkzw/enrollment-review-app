@@ -1324,14 +1324,16 @@ class OpenAICompatibleProtocolControlAgentTransport:
             ) from exc
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
-    def start_source_target_review(self, *, prompt: str) -> ProtocolControlAgentResponse:
+    def start_source_target_review(
+        self, *, prompt: str, target_ids: list[str] | None = None,
+    ) -> ProtocolControlAgentResponse:
         """Check only source statements not directly expressed by the first wire."""
 
         if not prompt.strip():
             raise ValueError("逐项来源核对提示不能为空")
         session_id = f"protocol-control-target-{uuid4().hex}"
         try:
-            response_format = source_target_review_response_format()
+            response_format = source_target_review_response_format(target_ids=target_ids)
             text = self._complete(
                 self._single_requirement_messages(prompt, response_format),
                 response_format=response_format,

@@ -23,10 +23,12 @@ calls a model and never writes a project artifact.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import re
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
+from functools import partial
 from types import SimpleNamespace
 from typing import Literal, Protocol
 from app.domain.contracts.record_semantics import RECORD_SEMANTICS_GUIDANCE
@@ -8315,6 +8317,13 @@ class ProtocolControlAgentRunner:
                     )
                 target_review: SourceTargetReview | None = None
                 reviewer = getattr(transport, "start_source_target_review", None)
+                if callable(reviewer) and "target_ids" in inspect.signature(reviewer).parameters:
+                    # A decoding constraint only: existing scope/source checks remain decisive.
+                    reviewer = partial(reviewer, target_ids=[
+                        *(target.official_code for target in batch.known_official_targets),
+                        *(target.catalog_item_id for target in batch.known_procedure_targets),
+                        *(unit.structure_unit_id for unit in batch.context_units),
+                    ])
                 review_indexes = (
                     target_review_indexes(source_interpretation, coverage, batch)
                     if source_interpretation is not None else []

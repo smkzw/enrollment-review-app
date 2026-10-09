@@ -2085,6 +2085,7 @@ def _deep_component_identity(
                                        CITATION_CLOSURE_RESTRICTION_VALIDATION_VERSION,
                                        "source-target-additional-recovery/v1",
                                        "numeric-evaluation-field-patch/v1",
+                                       "source-target-frozen-id-schema/v1",
                                        PROCEDURE_SOURCE_CONTEXT_VERSION,
                                        RELATIVE_STAGE_PREFLIGHT_VERSION,
                                        RELATIVE_STAGE_SOURCE_DIMENSION_VERSION,

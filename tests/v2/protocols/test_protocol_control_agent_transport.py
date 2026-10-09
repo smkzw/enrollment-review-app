@@ -1265,6 +1265,45 @@ def test_future_prohibition_repair_receives_nested_schema(mode: str) -> None:
 
 
 @pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+def test_target_review_transmits_frozen_identifiers_without_guessing(mode):
+    import jsonschema
+    from app.agents.protocol_control_source_interpretation import source_target_review_response_format
+
+    ids = ["IN-01", "procedure:abc", "su-context"]
+    client, completions = _client(['{"items":[]}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    transport.start_source_target_review(prompt="冻结陈述和目标", target_ids=ids)
+    call = completions.calls[0]
+    schema = source_target_review_response_format(target_ids=ids)["json_schema"]["schema"]
+    property_schema = schema["$defs"]["SourceTargetReviewItem"]["properties"]["target_id"]
+    for value in [None, *ids]:
+        jsonschema.validate(value, property_schema)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate("procedure:abcc", property_schema)
+    if mode == "json_schema":
+        assert call["response_format"]["json_schema"]["schema"] == schema
+    else:
+        prompt = call["messages"][0]["content"]
+        assert "完整 JSON Schema" in prompt
+        for value in ids:
+            assert value in prompt
+
+
+def test_empty_frozen_target_set_requires_null_not_an_invented_identifier():
+    import jsonschema
+    from app.agents.protocol_control_source_interpretation import source_target_review_response_format
+    prop = source_target_review_response_format(target_ids=[])["json_schema"]["schema"]["$defs"]["SourceTargetReviewItem"]["properties"]["target_id"]
+    jsonschema.validate(None, prop)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate("IN-01", prop)
+    with pytest.raises(ValueError):
+        source_target_review_response_format(target_ids=[""])
+
+
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
 def test_numeric_field_patch_preserves_history_and_sends_only_authorized_schema(mode):
     client, completions = _client(['{"wire":1}', '{"evaluation_patch":{}}'])
     transport = OpenAICompatibleProtocolControlAgentTransport(

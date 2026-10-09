@@ -13627,7 +13627,12 @@ def test_alignment_numeric_gap_repairs_only_selected_atom_then_revalidates(reply
         atom_calls = 0
         alignment_calls = 0
 
-        def start_source_target_review(self, *, prompt):
+        def start_source_target_review(self, *, prompt, target_ids=None):
+            assert target_ids == [
+                *(target.official_code for target in batch.known_official_targets),
+                *(target.catalog_item_id for target in batch.known_procedure_targets),
+                *(unit.structure_unit_id for unit in batch.context_units),
+            ]
             return ProtocolControlAgentResponse(session_id="target", text=review.model_dump_json())
 
         def start_source_candidate_alignment(self, *, prompt):
