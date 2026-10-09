@@ -152,6 +152,11 @@ def test_deep_step_preserves_pending_cross_chapter_for_final_relation_check(monk
         attempts=[],
         pending_source_definition_consumer_attempts=[],
         restricted_source_definition_consumer_attempts=[],
+        source_scope_question_history=[{
+            "outcome": "parsed", "raw_output_text": "actual private history",
+            "raw_output_chars": len("actual private history"),
+            "raw_output_sha256": hashlib.sha256(b"actual private history").hexdigest(),
+        }],
         model_dump=lambda **_: {"status": "待跨章核验", "batch_id": "batch-a"},
     )
     monkeypatch.setattr(module.ProtocolControlAgentRunner, "run", lambda *_ , **__: result)
@@ -165,6 +170,69 @@ def test_deep_step_preserves_pending_cross_chapter_for_final_relation_check(monk
     assert checkpoint["stage"] == "deep"
     assert checkpoint["run_result"]["status"] == "待跨章核验"
     assert checkpoint["model_call_receipts"] == [{"request_id": "request-1", "usage": None}]
+    assert checkpoint["source_scope_question_history"] == result.source_scope_question_history
+    assert module._saved_source_scope_question_history(checkpoint) == result.source_scope_question_history
+
+
+@pytest.mark.parametrize("defect", [None, "missing", "duplicate", "text", "foreign_role"])
+def test_successful_question_history_restores_only_its_actual_private_answer(defect):
+    module = protocol_control_execution_module
+    answer = '{"unresolved":[]}'
+    attempt = {"attempt": 3, "session_id": "question-session", "outcome": "parsed",
+               "raw_output_chars": len(answer),
+               "raw_output_sha256": hashlib.sha256(answer.encode()).hexdigest(),
+               "error_detail": {"workflow_phase": "source_scope_question_recheck"}}
+    original = {**attempt, "raw_output_text": answer}
+    outputs = [{**original}]
+    if defect == "missing":
+        outputs.clear()
+    elif defect == "duplicate":
+        outputs.append({**original})
+    elif defect == "text":
+        outputs[0]["raw_output_text"] += " "
+    elif defect == "foreign_role":
+        outputs[0]["role"] = "restricted_source_definition_consumer"
+    saved = {"run_result": {"attempts": [attempt]}, "attempt_raw_outputs": outputs}
+    before = json.dumps(saved, sort_keys=True)
+    if defect:
+        with pytest.raises(ValueError, match="历史原答"):
+            module._saved_source_scope_question_history(saved)
+    else:
+        assert module._saved_source_scope_question_history(saved) == [original]
+    assert json.dumps(saved, sort_keys=True) == before
+
+
+@pytest.mark.parametrize("defect", [None, "text", "length", "hash", "missing", "transport"])
+def test_explicit_question_history_cannot_bypass_original_answer_verification(defect):
+    answer = "actual answer"
+    record = {"outcome": "parsed", "raw_output_text": answer, "raw_output_chars": len(answer),
+              "raw_output_sha256": hashlib.sha256(answer.encode()).hexdigest()}
+    if defect == "text":
+        record["raw_output_text"] += " "
+    elif defect == "length":
+        record["raw_output_chars"] += 1
+    elif defect == "hash":
+        record["raw_output_sha256"] = "0" * 64
+    elif defect in {"missing", "transport"}:
+        record["raw_output_text"] = None
+        if defect == "transport":
+            record["outcome"] = "transport_failed"
+    payload = {"source_scope_question_history": [record]}
+    if defect not in {None, "transport"}:
+        with pytest.raises(ValueError, match="历史原答"):
+            protocol_control_execution_module._saved_source_scope_question_history(payload)
+    else:
+        assert protocol_control_execution_module._saved_source_scope_question_history(payload) == [record]
+
+
+def test_nested_question_transport_failure_preserves_attempt_without_fabricating_answer():
+    record = {"attempt": 4, "session_id": "failed-question", "outcome": "transport_failed",
+              "raw_output_chars": 0, "raw_output_sha256": hashlib.sha256(b"").hexdigest(),
+              "error_detail": {"workflow_phase": "source_scope_question_recheck"}}
+    saved = {"run_result": {"attempts": [record]},
+             "attempt_raw_outputs": [{**record, "raw_output_text": None}]}
+    assert protocol_control_execution_module._saved_source_scope_question_history(saved) == [
+        {**record, "raw_output_text": None}]
 
 
 def _independent_candidate_and_unresolved_review():
@@ -6305,7 +6373,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "invalid-wire-scoped-post-enrollment-repair/v1",
                   "native-row-action-coverage/v2",
                   "native-scope-source-runtime-separation/v1",
-                  "native-table-review-scope/v3"))
+                  "native-table-review-scope/v3", "located-publication-recovery/v1"))
     )
 
 

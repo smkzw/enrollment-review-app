@@ -2090,7 +2090,8 @@ def _deep_component_identity(
                                        "invalid-wire-scoped-post-enrollment-repair/v1",
                                        NATIVE_ROW_ACTION_COVERAGE_VERSION,
                                        NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
-                                       NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION)),
+                                       NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
+                                       "located-publication-recovery/v1")),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}
         ).get("deep"),
@@ -3786,13 +3787,44 @@ def _saved_source_scope_question_history(saved: Mapping[str, Any] | None) -> lis
         return []
     history = saved.get("source_scope_question_history")
     if history is None:
-        history = [attempt for attempt in saved.get("attempts", [])
+        run_result = saved.get("run_result")
+        nested = isinstance(run_result, Mapping) and "attempts" not in saved
+        attempts = run_result.get("attempts", []) if nested else saved.get("attempts", [])
+        history = [attempt for attempt in attempts
                    if isinstance(attempt, Mapping) and isinstance(attempt.get("error_detail"), Mapping)
                    and attempt["error_detail"].get("workflow_phase") in {
                        "source_scope_question_recheck", "source_context_completion",
                    }]
+        if nested and history:
+            outputs = saved.get("attempt_raw_outputs", [])
+            if not isinstance(outputs, list):
+                raise ValueError("来源疑问的历史原答账损坏")
+            restored = []
+            for attempt in history:
+                matches = [item for item in outputs if isinstance(item, Mapping)
+                           and item.get("role") is None
+                           and item.get("attempt") == attempt.get("attempt")
+                           and item.get("session_id") == attempt.get("session_id")]
+                if len(matches) != 1:
+                    raise ValueError("来源疑问的历史原答缺失或重复")
+                answer = matches[0].get("raw_output_text")
+                failed_without_answer = answer is None and attempt.get("outcome") == "transport_failed"
+                if (not failed_without_answer and (not isinstance(answer, str)
+                        or len(answer) != attempt.get("raw_output_chars")
+                        or hashlib.sha256(answer.encode("utf-8")).hexdigest()
+                        != attempt.get("raw_output_sha256"))):
+                    raise ValueError("来源疑问的历史原答与回执不一致")
+                restored.append({**attempt, "raw_output_text": answer})
+            history = restored
     if not isinstance(history, list) or any(not isinstance(item, Mapping) for item in history):
         raise ValueError("来源疑问的历史核对账损坏")
+    for item in history:
+        answer = item.get("raw_output_text")
+        if answer is None and item.get("outcome") == "transport_failed":
+            continue
+        if (not isinstance(answer, str) or len(answer) != item.get("raw_output_chars")
+                or hashlib.sha256(answer.encode("utf-8")).hexdigest() != item.get("raw_output_sha256")):
+            raise ValueError("来源疑问的历史原答与回执不一致")
     return [dict(item) for item in history]
 
 
@@ -4365,6 +4397,8 @@ def _execute_deep(
         "component_identity": _deep_component_identity(context.job_payload, prompt_template),
         "repair_contract_sha256": protocol_control_agent_repair_contract_sha256(),
         "run_result": result.model_dump(mode="json"),
+        **({"source_scope_question_history": result.source_scope_question_history}
+           if result.source_scope_question_history else {}),
         "attempt_raw_outputs": _deep_attempt_raw_outputs(result),
         "source_review_reuse": _source_review_reuse_record(resume_review),
     }

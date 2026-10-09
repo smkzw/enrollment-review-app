@@ -218,6 +218,7 @@ def publication_repair_error(
         repair_scope_unknown=repair_scope_unknown,
         validation_findings=[{
             "code": issue.code, "entity_id": issue.entity_id,
+            "message": issue.message,
             "structure_unit_ids": list(getattr(issue, "structure_unit_ids", ()) or ()),
             "candidate_ids": list(getattr(issue, "candidate_ids", ()) or ()),
             "obligation_source_span_ids": list(getattr(issue, "obligation_source_span_ids", ()) or ()),

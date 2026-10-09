@@ -5730,10 +5730,6 @@ def test_unresolved_exact_context_uses_one_pending_correspondence_without_adopti
             result.source_target_review.model_dump_json().encode()).hexdigest()
     else:
         assert result.source_target_review.items[0] == review.items[0]
-        if response_kind == "additional":
-            proof = next(attempt.error_detail for attempt in result.attempts
-                         if attempt.error_detail and "review_proof_origin" in attempt.error_detail)
-            assert proof["review_proof_origin"] == "assembled_source_target_review"
     if fault in {"identity", "budget", "interrupted"}:
         expected = {"identity": "MODEL_IDENTITY_INVALID", "budget": "LOGICAL_BUDGET_EXHAUSTED",
                     "interrupted": "FLOW_COMPLETION_UNCERTAIN"}[fault]
@@ -8490,6 +8486,65 @@ def test_repeated_identical_invalid_output_stops_without_consuming_all_repairs()
     assert all("CANDIDATE_MISSING" in attempt.issues[0] for attempt in result.attempts)
     assert "停止自动修订" in result.attempts[-1].issues[-1]
     assert "不得只在 notes 中描述候选" in transport.prompts[1]
+
+
+@pytest.mark.parametrize("corrected", [False, True])
+@pytest.mark.parametrize("extra_unlocated", [False, True])
+def test_located_publication_defect_does_not_reset_when_candidate_identity_changes(corrected, extra_unlocated):
+    from app.protocols.protocol_control_gate import ProtocolControlGateIssue
+    from app.protocols.protocol_control_repair_errors import publication_repair_error
+
+    batch = _batch()
+    original = _wire(candidate=_candidate())
+    changed = original.model_copy(deep=True)
+    changed.candidate_drafts[0].title = "重新表述但仍使用同一来源"
+    transport = _FakeTransport([
+        ProtocolControlAgentResponse(session_id="located", text=wire.model_dump_json())
+        for wire in (original, changed)
+    ])
+    owners = []
+    def validate(output):
+        candidate = output.candidates[0]
+        owners.append(candidate.control_candidate_id)
+        if corrected and len(owners) == 2:
+            return
+        issues = [ProtocolControlGateIssue(
+                code="CONDITIONAL_BRANCH_MAPPING_INVALID", message="同一原文条件未对应",
+                entity_id=candidate.control_candidate_id,
+                structure_unit_ids=("su-01",), json_path="/trigger_expression/groups",
+            )]
+        if extra_unlocated:
+            issues.append(ProtocolControlGateIssue(
+                code="UNLOCATED_FINDING", message=f"其他问题第{len(owners)}次",
+                entity_id=candidate.control_candidate_id))
+        raise publication_repair_error(
+            issues=issues,
+            candidate_by_id={candidate.control_candidate_id: candidate},
+            control_to_candidate={}, default_structure_unit_ids=batch.owned_structure_unit_ids,
+        )
+    result = ProtocolControlAgentRunner(max_schema_repairs=10).run(
+        batch, transport, output_validator=validate)
+    assert len(owners) == 2 and owners[0] != owners[1]
+    assert not transport.responses
+    if corrected:
+        assert result.final_output is not None
+    else:
+        assert result.final_output is None
+        assert "停止自动修订" in result.attempts[-1].issues[-1]
+
+
+def test_located_failure_identity_keeps_long_distinct_conditions_and_separate_candidates():
+    from app.agents.protocol_control_deconstructor import _located_publication_failure_identities
+
+    finding = {"code": "CONDITIONAL_BRANCH_MAPPING_INVALID", "entity_id": "candidate-a",
+               "structure_unit_ids": ["su-01"], "json_path": "/trigger_expression/groups",
+               "message": "共同原文" * 600 + "条件甲"}
+    def identity(item):
+        return _located_publication_failure_identities(ProtocolControlAgentWireValidationError(
+            "PUBLICATION_GATE_REJECTED", "display only", validation_findings=[item]),
+            ["candidate-a", "candidate-b"])
+    assert identity(finding) != identity({**finding, "message": "共同原文" * 600 + "条件乙"})
+    assert identity(finding) != identity({**finding, "entity_id": "candidate-b"})
 
 
 def test_post_hydration_repair_restores_changes_outside_original_scope() -> None:

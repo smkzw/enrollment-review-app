@@ -8,9 +8,9 @@
 
 ## 当前身份
 
-当前最新真实终态：源码db2dec4887437747fcbdb33eddac88c9396ca5f1的Job8e50af461e964fb295b2970f99246655已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED；36调用1210.912223秒/exit3，40completed、37/42failed_final、48queued。exec92662已结束，不等待或覆盖旧目录；85发现及33旧成功零新调用。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。37为来源读道未带后续列表及括号疑问；42为同段时间关系疑问，均原答留存，不机械消解。
+当前最新真实终态：源码d57cb647eefb172b08ed0cf85c45d3a9cff38a52的Job27f0d04275d643f2b6386326630e995e已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID；22调用657.695566秒/exit3，43completed、44failed_final、46queued。exec72657已结束，不等待或覆盖旧目录；85发现及40旧成功零新调用。37/42/43已实际保存；44为总条件尚未映射，不是模型端点故障。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。
 
-当前最小修复：same-source-official-question-context/v1沿现有单条疑问复核，仅唯一单来源位置与整段原文匹配时提供同一官方要求原文；不增加临床特例/新框架、不改普通陈述其他字段或兄弟。来源上下文hash在实际请求、恢复和证明回放共同核验；丢失上下文不能沿用清空的旧答复；真歧义仍未决。66受影响例7.26秒/exit0；批准C03 Grok/grok-4.7/high同会话两轮完成，无fallback，首两必修已关闭、续无必修，未临床或测试，末顺序小修由所有者验证。只读预检40/2/48零调用零写；真实新运行尚待v2预检与快照冻结，不把工程通过当共同发布/病例完成。
+当前最小包located-publication-recovery/v1：完整失败条件句进入反馈但不缩小候选修订闭包；每个有定位的失败独立计数，随机ID或其他无定位发现不能掩盖重复。成功来源疑问账实际保存；旧成功从唯一同会话原答核hash/长度恢复，无答传输失败保留次数，缺答或损坏不造空账。最终57受影响例2.47秒/exit0；相连完整窗口1443pass/11fail，10项既有测试NameError与1项版本字面断言已修，末全窗未再跑。批准C03 Grok/grok-4.7/high两轮exit0/no fallback，最后嵌套传输边界由所有者验证，非第三轮独审。只读预检43/1/46零调用零写/hash不变。新包实际运行尚未发生，不把工程通过当共同发布或病例完成。详见reviews/rv1006-located-publication-history-owner-disposition-20261009.md。
 
 ### 上游功能包记录（历史，不覆盖当前表）
 
@@ -24,15 +24,15 @@
 |---|---|
 | 唯一worktree | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；09-11-e2e-eligibility-review |
-| 当前代码基础 | db2dec4887437747fcbdb33eddac88c9396ca5f1已push；实际prepare冻结该HEAD及app文件hash |
-| 当前最新真实Job | 8e50af461e964fb295b2970f99246655，failed_final；exec92662已结束，不复活旧终态 |
-| 最新真实运行 | 源码db2dec48，40completed/37及42failed_final/48queued；36调用1210.912223秒/exit3 |
+| 当前代码基础 | d57cb647eefb172b08ed0cf85c45d3a9cff38a52已push；当前恢复包按明确文件提交后再冻结新prepare |
+| 当前最新真实Job | 27f0d04275d643f2b6386326630e995e，failed_final；exec72657已结束，不复活旧终态 |
+| 最新真实运行 | 源码d57cb647，43completed/44failed_final/46queued；22调用657.695566秒/exit3 |
 | 上游第23失败检查点 | c1fea38816e84c729b9b1587a8818619；已由a513局部恢复保存，旧原答/hash保持，不回改成功 |
 | 当前隔离DB | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 真实产物 | 同根/rv1006-owned-context-target-api-20261009-v1，prepare/execute均已保存；不覆盖/重跑 |
+| 真实产物 | 同根/rv1006-local-question-mode-api-20261009-v1，prepare/execute均已保存；第44检查点cc6c393016594f68a71c785df15c03de；不覆盖/重跑 |
 | 模型路线 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high，输出65536，产品自己的harness直连 |
-| 当前新预检 | 同根/rv1006-same-source-question-preflight-20261009-v2.json：40reusable/2resume_partial/48refresh；0调用/0写/DBhash保持，37两疑问及42一疑问均原文绑定 |
-| 新代码实际临床运行 | 旧包真实恢复34并保存更多独立组；本次同源疑问上下文包尚未新运行，未达共同发布/新病例工作稿 |
+| 当前新预检 | 同根/rv1006-located-publication-preflight-20261009-v1.json：43reusable/1resume_partial/46refresh；0调用/0写/DBhash保持，完整90步创建计划需逐项一致 |
+| 新代码实际临床运行 | 同源疑问包已恢复37/42并保存43；本次定位失败恢复包尚未新运行，未达共同发布/新病例工作稿 |
 | 继承dirty | 7份旧delivery文件未动，不stage；大量继承untracked不清理/不批量stage |
 | 外部可复查范围 | Git源码/合成用例/净化工程报告；真实原件、DB、提示、原答和病例截图仅本机受控可读，外部审阅不可读 |
 
@@ -40,7 +40,7 @@
 
 | 用户动作 | 已实现/已证 | 首个未完成 |
 |---|---|---|
-| 从DOCX准备完整要求 | 官方1153e25b4eba40db964202a1c3ed07c3草稿rev21，23父条/86组件/141条件；200有源资料政策覆盖141条件；85发现/90深审，运行中39完成 | 第37来源疑问及其余未执行；publishable只是官方草稿门，不是共同发布 |
+| 从DOCX准备完整要求 | 官方1153e25b4eba40db964202a1c3ed07c3草稿rev21，23父条/86组件/141条件；200有源资料政策覆盖141条件；85发现/90深审，43完成 | 第44总条件映射及46未执行；publishable只是官方草稿门，不是共同发布 |
 | 读取整例资料 | 5PDF24页、14组已实读保存；458候选→407事实/40事件/11暴露；32资格候选关联30事实、426候选受限 | 不同分母不代表准确率；新完整要求消费/数字位置/手写归属仍有具体待核 |
 | 使用当前节点工作稿 | 冻结资格与R1正常/风险/受限消费者已接线 | 现准备病例仍旧81组件/0controls；旧REVIEW_SOURCE_POLICY_NOT_READY不说明新141条件失败 |
 | 回看原件 | Ego147正式非Mock，连续24页/切文件/文字/缩放/返回正确个例；行政噪声收起，临床内容保留；宽屏局部无横溢出 | 新完整报告回源和完整Q3尚未完成；无坐标不造框 |
@@ -92,7 +92,7 @@ C03：CodeBuddy/codebuddy-cli/deepseek-v4.1-flash:max，session01a11d4f-08dd-746
 
 ## 接续步骤与退出
 
-1. 核提交/dirty及当前补丁验证；最新来源为8e50终态，37/42原答及有源上下文保持。收取最新v2预检，40成功依当前完整门证明复用、2局部恢复、48未读不隐藏。只有合法新Job续跑，不能复活失败作业或覆盖旧目录；真歧义保留具体影响，不强行清空。
+1. 核提交/dirty及当前补丁验证；最新来源为27f0终态，37/42成功核对账与第44源解释保持。43成功依当前完整门证明复用、1局部恢复、46未读不隐藏。按最新定位恢复预检从合法入口创建新Job并逐项对90步；不能复活失败作业或覆盖旧目录；真歧义保留具体影响，不强行清空。
 2. 无新证据同失败两次停该分支，归因来源→解释→装配→验证→采用→界面首错；推进独立病例消费者，不把所有模型输出都UNKNOWN或以扩大整包预算恢复格式错误。
 3. 完整官方+跨章同源包成立后从合法入口共同发布隔离项目；来源身份及正式采用权限分别核。原政策齐全的新141条件进入消费者，不沿用旧81组件缺policy作结论。
 4. 新合法项目下继承有源资料/候选并实际核资格→全当前节点工作稿；未核或不可读范围具体限制，独立有据结果保持可用，不授予未批准自动数值采用。

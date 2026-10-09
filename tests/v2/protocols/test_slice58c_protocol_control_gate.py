@@ -1789,13 +1789,16 @@ def test_single_condition_action_pair_requires_an_explicit_trigger() -> None:
         ]
     )
 
-    with pytest.raises(ProtocolControlGateError, match="CONDITIONAL_BRANCH_MAPPING_INVALID"):
+    with pytest.raises(ProtocolControlGateError, match="CONDITIONAL_BRANCH_MAPPING_INVALID") as failure:
         _check_conditional_branch_mapping(
             entity_id="candidate:single-conditional",
-            units=[unit],
+            units=[unit, _paragraph_unit("su-dependent", "span:dependent", 6, "其他来源说明。")],
             trigger_expression=None,
             obligation_expression=obligation,
         )
+    assert failure.value.structure_unit_ids == ("su-dependent", "su-single-conditional")
+    assert failure.value.json_path == "/trigger_expression/groups"
+    assert "若A阳性，则进行A检测" in failure.value.message
 
 
 def test_universal_action_after_population_description_is_not_conditional() -> None:

@@ -6971,6 +6971,25 @@ def _require_resolved_source_target_review(
     )
 
 
+def _located_publication_failure_identities(
+    error: ProtocolControlAgentWireValidationError,
+    candidate_ids: Sequence[str],
+) -> tuple[str, ...]:
+    """Track a located defect, not changing generated candidate IDs or prose."""
+    if error.repair_scope_unknown:
+        return ()
+    owners = {candidate_id: index for index, candidate_id in enumerate(candidate_ids)}
+    return tuple(sorted({_stable_json({
+        "candidate_index": owners[item["entity_id"]],
+        "code": item.get("code"), "json_path": item["json_path"],
+        "structure_unit_ids": sorted(item["structure_unit_ids"]),
+        "source_span_ids": sorted(item.get("obligation_source_span_ids", ())),
+        "message_sha256": _sha256(item["message"]),
+    }) for item in error.validation_findings
+        if item.get("entity_id") in owners and item.get("structure_unit_ids")
+        and item.get("json_path") and isinstance(item.get("message"), str)}))
+
+
 class ProtocolControlAgentRunner:
     """Bounded same-session parser/repair loop for one planned batch.
 
@@ -6985,7 +7004,8 @@ class ProtocolControlAgentRunner:
        repair or repeat an unsuccessful insertion.
     2. The loop always terminates (no infinite loop): the ``repairs``
        counter increases monotonically against the strict bound, and an
-       identical invalid result (raw text sha256 + error code + message)
+       identical invalid result (raw text sha256 + error code + message), or
+       the same source-located publication defect despite a rewritten answer,
        observed for the second time triggers the ``no_progress`` early
        stop before the remaining budget is consumed.
     3. Transport calls are bounded: one initial call, at most
@@ -9978,7 +9998,14 @@ class ProtocolControlAgentRunner:
                 invalid_fingerprint_counts[invalid_fingerprint] = (
                     invalid_fingerprint_counts.get(invalid_fingerprint, 0) + 1
                 )
-                no_progress = invalid_fingerprint_counts[invalid_fingerprint] >= 2
+                located_fingerprints = _located_publication_failure_identities(
+                    validation_error, candidate_ids)
+                for fingerprint in located_fingerprints:
+                    key = (fingerprint, "located-publication-defect", "")
+                    invalid_fingerprint_counts[key] = invalid_fingerprint_counts.get(key, 0) + 1
+                no_progress = (invalid_fingerprint_counts[invalid_fingerprint] >= 2
+                               or any(invalid_fingerprint_counts[(item, "located-publication-defect", "")] >= 2
+                                      for item in located_fingerprints))
                 repair_scope_unknown = bool(
                     set(error.structure_unit_ids) - set(batch.owned_structure_unit_ids)
                 ) or error.repair_scope_unknown

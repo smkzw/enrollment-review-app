@@ -2156,8 +2156,12 @@ def _check_conditional_branch_mapping(
         if not matches:
             _fail(
                 "CONDITIONAL_BRANCH_MAPPING_INVALID",
-                "候选引用的条件及后续操作必须用最小逐字摘录映射到触发分支",
+                "候选引用的条件及后续操作必须用最小逐字摘录映射到触发分支；"
+                f"尚未对应的原文条件句：{clause}。仅列出其他子条件不能替代此句的条件。",
                 entity_id=entity_id,
+                # Location feedback must not shrink the candidate's repair closure.
+                structure_unit_ids=[unit.structure_unit_id for unit in units],
+                json_path="/trigger_expression/groups",
             )
         matched_branch_ids.extend(matches)
 
