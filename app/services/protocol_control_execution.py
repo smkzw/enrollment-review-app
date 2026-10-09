@@ -55,6 +55,7 @@ from app.agents.protocol_control_deconstructor import (
 )
 from app.agents.protocol_control_stage_compiler import (
     RELATIVE_STAGE_PREFLIGHT_VERSION,
+    RELATIVE_STAGE_SOURCE_DIMENSION_VERSION,
     RELATIVE_STAGE_REQUIREMENT_VERSION,
     SHARED_PROHIBITION_REQUIREMENT_VERSION,
     STAGE_BOUND_REQUIREMENT_VERSION,
@@ -2075,6 +2076,7 @@ def _deep_component_identity(
                                        PROCEDURE_RESTRICTION_VALIDATION_VERSION,
                                        PROCEDURE_SOURCE_CONTEXT_VERSION,
                                        RELATIVE_STAGE_PREFLIGHT_VERSION,
+                                       RELATIVE_STAGE_SOURCE_DIMENSION_VERSION,
                                        "native-row-source-normalization/v1",
                                        "native-table-scope-recovery/v4",
                                        "native-table-visit-correspondence/v1",

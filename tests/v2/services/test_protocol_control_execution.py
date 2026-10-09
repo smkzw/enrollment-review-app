@@ -6245,6 +6245,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   protocol_control_execution_module.PROCEDURE_RESTRICTION_VALIDATION_VERSION,
                   protocol_control_execution_module.PROCEDURE_SOURCE_CONTEXT_VERSION,
                   protocol_control_execution_module.RELATIVE_STAGE_PREFLIGHT_VERSION,
+                  protocol_control_execution_module.RELATIVE_STAGE_SOURCE_DIMENSION_VERSION,
                   "native-row-source-normalization/v1",
                   "native-table-scope-recovery/v4",
                   "native-table-visit-correspondence/v1",

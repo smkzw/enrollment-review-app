@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="37" time="2.557" timestamp="2026-10-09T04:22:05.532536+02:00" hostname="MacBook-Pro-4.local"><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_requirement_compiles_only_frozen_visit_scope" time="0.002" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_action_completion_requires_source_only_operation" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_requirement_rejects_relative_time_and_unknown_semantics" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_path_does_not_erase_explicit_duration_or_multiple_periods[\u62df\u53c2\u52a0\u8005\u987b\u63a5\u53d7\u6cbb\u75977\u5929-time_words0]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_path_does_not_erase_explicit_duration_or_multiple_periods[\u5728\u6574\u4e2a\u6cbb\u7597\u671f\u7ee7\u7eed\u63a5\u53d7\u6cbb\u7597-time_words1]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_path_does_not_erase_explicit_duration_or_multiple_periods[\u7b5b\u9009\u671f\u3001\u540e\u7eed\u6cbb\u7597\u671f\u5747\u4e0d\u5f97\u8c03\u6574\u7528\u836f-time_words2]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_path_does_not_erase_explicit_duration_or_multiple_periods[\u62df\u53c2\u52a0\u8005\u6bcf\u65e51\u6b21\u63a5\u53d7\u6cbb\u7597-time_words3]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_path_does_not_erase_explicit_duration_or_multiple_periods[\u62df\u53c2\u52a0\u8005\u6bcf\u65e5\u4e00\u6b21\u63a5\u53d7\u6cbb\u7597-time_words4]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_path_does_not_erase_explicit_duration_or_multiple_periods[\u7ed9\u836f\u524d90\u5206\u949f\u5185\u91c7\u96c6\u6837\u672c-time_words5]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_path_does_not_erase_explicit_duration_or_multiple_periods[\u7ed9\u836f\u540e\u4e24\u5c0f\u65f6\u590d\u67e5-time_words6]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_path_does_not_erase_explicit_duration_or_multiple_periods[\u9759\u5750\u534a\u5c0f\u65f6\u540e\u5b8c\u6210\u6d4b\u91cf-time_words7]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_path_does_not_erase_explicit_duration_or_multiple_periods[\u9759\u57500.5\u5c0f\u65f6\u540e\u5b8c\u6210\u6d4b\u91cf-time_words8]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_path_does_not_erase_explicit_duration_or_multiple_periods[Collect within 45 minutes before administration-time_words9]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_path_rejects_multi_visit_range_in_scope" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_stage_bound_insert_uses_product_reader_and_keeps_original_candidate" time="0.073" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[False-functions0-None]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[False-functions0-\u7b5b\u9009/\u5bfc\u5165\u671f\uff08D-7~D-1\uff09]" time="0.004" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[False-functions0-D-7~D-1]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[False-functions1-None]" time="0.002" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[False-functions1-\u7b5b\u9009/\u5bfc\u5165\u671f\uff08D-7~D-1\uff09]" time="0.003" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[False-functions1-D-7~D-1]" time="0.002" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[True-functions0-None]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[True-functions0-\u7b5b\u9009/\u5bfc\u5165\u671f\uff08D-7~D-1\uff09]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[True-functions0-D-7~D-1]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[True-functions1-None]" time="0.002" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[True-functions1-\u7b5b\u9009/\u5bfc\u5165\u671f\uff08D-7~D-1\uff09]" time="0.003" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window[True-functions1-D-7~D-1]" time="0.002" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_preflight_rejects_missing_frozen_predecessor[topic_scope]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_preflight_rejects_missing_frozen_predecessor[same_stage]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_relative_stage_preflight_rejects_missing_frozen_predecessor[unknown_stage]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_two_sourced_actions_insert_together_without_rewriting_existing_draft[False-complete]" time="0.021" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_two_sourced_actions_insert_together_without_rewriting_existing_draft[False-broken_first]" time="0.024" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_two_sourced_actions_insert_together_without_rewriting_existing_draft[False-joint_failure]" time="0.018" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_two_sourced_actions_insert_together_without_rewriting_existing_draft[True-complete]" time="0.020" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_two_sourced_actions_insert_together_without_rewriting_existing_draft[True-broken_first]" time="0.018" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_two_sourced_actions_insert_together_without_rewriting_existing_draft[True-joint_failure]" time="0.018" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_gate_only_change_revalidates_reusable_batch_without_model_call" time="1.003"><failure message="AssertionError: assert 'phase5/contr...view-scope/v3' == 'phase5/contr...view-scope/v3'&#10;  &#10;  Skipping 344 identical leading characters in diff, use -v to show&#10;  - flight/v1/native-row-source-normalization/v1/native-table-scope-recovery/v4/native-table-visit-correspondence/v1/reviewed-source-type-field-recovery/v1/validated-snapshot-scoped-session/v1/phase5/source-function-field-repair/v1/native-author-note-projection-and-procedure-row-gate/v1/invalid-wire-scoped-post-enrollment-repair/v1/native-row-action-coverage/v2/native-scope-source-runtime-separation/v1/native-table-review-scope/v3&#10;  ?           ^^^^^^^^^^^^^^^^^^^^^&#10;  + flight/v1/relative-stage-source-dimension/v1...&#10;  &#10;  ...Full output truncated (2 lines hidden), use '-vv' to show">data_paths = DataPaths(root=PosixPath('/private/var/folders/yb/31r9763x6_54mdxswxk36c4w0000gn/T/pytest-of-smkzw/pytest-1910/test_ga...Path('/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/projects'),)))
+session_factory = sessionmaker(class_='Session', bind=Engine(sqlite:////private/var/folders/yb/31r9763x6_54mdxswxk36c4w0000gn/T/pytest-o...est-1910/test_gate_only_change_revalida0/data_v2/enrollment-review-v2.sqlite3), autoflush=True, expire_on_commit=False)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x113595af0&gt;
+
+    def test_gate_only_change_revalidates_reusable_batch_without_model_call(
+        data_paths, session_factory, monkeypatch,
+    ):
+        seed = _seed_frozen_source(data_paths, session_factory, key="gate-only-reuse")
+        deep = _DeepTransport(seed.source_span_excerpts)
+        service = _build_service(data_paths, session_factory, seed)
+        source = service.create_from_deconstruction(
+            source_job_id=seed.source_job_id, idempotency_key="gate-only-source",
+        )
+        runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+        assert runner.run_job(source.job_id)
+        calls_before = deep.start_calls
+        original = JobStore.get_last_checkpoint
+        old_gate = "phase5/control-publication-gate/v31"
+    
+        def previous_gate_checkpoint(self, job_id, step_id):
+            checkpoint = original(self, job_id, step_id)
+            if job_id != source.job_id or step_id != "deep_0001" or checkpoint is None:
+                return checkpoint
+            checkpoint_id, saved = checkpoint
+            saved = dict(saved)
+            saved["component_identity"] = dict(saved["component_identity"], validator_version=old_gate)
+            return checkpoint_id, saved
+    
+        monkeypatch.setattr(JobStore, "get_last_checkpoint", previous_gate_checkpoint)
+        adopted = service.create_from_deconstruction(
+            source_job_id=seed.source_job_id,
+            idempotency_key="gate-only-adopted",
+            deep_source_job_id=source.job_id,
+        )
+        _, payload = _job_snapshot_and_payload(session_factory, adopted.job_id)
+        assert {entry["decision"] for entry in payload["deep_reuse_plan"]["decisions"].values()} == {"reusable"}
+        assert runner.run_job(adopted.job_id)
+        assert deep.start_calls == calls_before
+        with session_factory() as session:
+            checkpoint = JobStore(session, now=_now).get_last_checkpoint(adopted.job_id, "deep_0001")
+        assert checkpoint is not None
+        assert checkpoint[1]["revalidated_from_gate_version"] == old_gate
+&gt;       assert checkpoint[1]["component_identity"]["validator_version"] == (
+            "/".join((protocol_control_execution_module.CONTROL_PUBLICATION_GATE_VERSION,
+                      protocol_control_execution_module.RESTRICTED_DEFINITION_VALIDATION_VERSION,
+                      protocol_control_execution_module.SOURCE_COVERAGE_VALIDATION_VERSION,
+                      protocol_control_execution_module.SOURCE_ATTRIBUTION_VALIDATION_VERSION,
+                      protocol_control_execution_module.SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
+                      protocol_control_execution_module.SOURCE_TARGET_REVIEW_GAP_VERSION,
+                      protocol_control_execution_module.PROCEDURE_RESTRICTION_VALIDATION_VERSION,
+                      protocol_control_execution_module.PROCEDURE_SOURCE_CONTEXT_VERSION,
+                      protocol_control_execution_module.RELATIVE_STAGE_PREFLIGHT_VERSION,
+                      "native-row-source-normalization/v1",
+                      "native-table-scope-recovery/v4",
+                      "native-table-visit-correspondence/v1",
+                      "reviewed-source-type-field-recovery/v1",
+                      "validated-snapshot-scoped-session/v1",
+                      "phase5/source-function-field-repair/v1",
+                      "native-author-note-projection-and-procedure-row-gate/v1",
+                      "invalid-wire-scoped-post-enrollment-repair/v1",
+                      "native-row-action-coverage/v2",
+                      "native-scope-source-runtime-separation/v1",
+                      "native-table-review-scope/v3"))
+        )
+E       AssertionError: assert 'phase5/contr...view-scope/v3' == 'phase5/contr...view-scope/v3'
+E         
+E         Skipping 344 identical leading characters in diff, use -v to show
+E         - flight/v1/native-row-source-normalization/v1/native-table-scope-recovery/v4/native-table-visit-correspondence/v1/reviewed-source-type-field-recovery/v1/validated-snapshot-scoped-session/v1/phase5/source-function-field-repair/v1/native-author-note-projection-and-procedure-row-gate/v1/invalid-wire-scoped-post-enrollment-repair/v1/native-row-action-coverage/v2/native-scope-source-runtime-separation/v1/native-table-review-scope/v3
+E         ?           ^^^^^^^^^^^^^^^^^^^^^
+E         + flight/v1/relative-stage-source-dimension/v1...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/v2/services/test_protocol_control_execution.py:6238: AssertionError</failure></testcase></testsuite></testsuites>

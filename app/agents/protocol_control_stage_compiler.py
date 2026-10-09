@@ -50,6 +50,7 @@ from .protocol_control_source_interpretation import (
 STAGE_BOUND_REQUIREMENT_VERSION = "phase5/control-stage-bound-requirement/v10"
 RELATIVE_STAGE_REQUIREMENT_VERSION = "phase5/control-relative-stage-requirement/v9"
 RELATIVE_STAGE_PREFLIGHT_VERSION = "relative-stage-frozen-target-preflight/v1"
+RELATIVE_STAGE_SOURCE_DIMENSION_VERSION = "relative-stage-source-dimension/v1"
 SHARED_PROHIBITION_REQUIREMENT_VERSION = "phase5/control-shared-prohibition-requirement/v4"
 
 
@@ -690,7 +691,16 @@ def compile_stage_bound_requirement(
         raise StageBoundCompilationGap("动作不属于本条来源陈述")
     if scope != normalize_source_excerpt(_simple_stage_scope(statement) or ""):
         raise StageBoundCompilationGap("访视范围必须采用已核陈述的原文范围")
-    if normalize_source_excerpt(review.source_action_excerpt) not in action:
+    reviewed_action = normalize_source_excerpt(review.source_action_excerpt)
+    # A separately verified time prefix may precede the action without being lost.
+    complete_relative_action = (
+        isinstance(selection, RelativeStageRequirement)
+        and normalize_source_excerpt(selection.relative_time_excerpt)
+        == normalize_source_excerpt(review.source_time_excerpt or "")
+        and reviewed_action
+        == normalize_source_excerpt(selection.relative_time_excerpt + selection.action_excerpt)
+    )
+    if reviewed_action not in action and not complete_relative_action:
         raise StageBoundCompilationGap("动作不得省略已核增量摘录中的限定")
     source_proposition = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
     selected_proposition = normalize_source_excerpt(selection.obligation_statement).rstrip("。；;.!！?？")

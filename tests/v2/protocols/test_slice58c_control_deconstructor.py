@@ -12861,7 +12861,8 @@ def test_stage_bound_insert_uses_product_reader_and_keeps_original_candidate() -
 
 @pytest.mark.parametrize("shared_time_word", [None, "筛选/导入期（D-7~D-1）", "D-7~D-1"])
 @pytest.mark.parametrize("functions", [["action"], ["action", "time_validity"]])
-def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window(shared_time_word, functions) -> None:
+@pytest.mark.parametrize("split_action", [False, True])
+def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_window(shared_time_word, functions, split_action) -> None:
     batch, inventory, review, selection = _stage_bound_example()
     batch.owned_units[0].excerpt = (
         "筛选/导入期（D-7~D-1）：完成导入治疗后再次核查资格。"
@@ -12888,7 +12889,7 @@ def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_w
     relative = RelativeStageRequirement.model_validate({
         **selection.model_dump(exclude={"version"}),
         "version": RELATIVE_STAGE_REQUIREMENT_VERSION,
-        "action_excerpt": review.source_action_excerpt,
+        "action_excerpt": "再次核查资格" if split_action else review.source_action_excerpt,
         "stage_scope_excerpt": "筛选/导入期（D-7~D-1）：",
         "workflow_stage_id": "stage:screening:two",
         "prior_workflow_stage_id": "stage:screening:one",
@@ -12907,6 +12908,23 @@ def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_w
     assert candidate.review_node_bindings[0].review_stage == ReviewStage.BASELINE
     assert candidate.cross_source_relations[0].affected_workflow_stage_id == "stage:screening:two"
     assert source_statement_coverage(batch, inventory, _wire(candidate=candidate))[0].status == "expressed"
+    if split_action:
+        for mutation in (
+            {"action_excerpt": "核查资格"},
+            {"relative_time_excerpt": "导入治疗后"},
+            {"obligation_statement": "再次核查资格"},
+        ):
+            with pytest.raises(StageBoundCompilationGap):
+                compile_stage_bound_requirement(
+                    batch, inventory, review, relative.model_copy(update=mutation),
+                )
+        ordinary = StageBoundRequirement.model_validate({
+            **relative.model_dump(exclude={"version", "prior_workflow_stage_id",
+                                           "target_procedure_id", "relative_time_excerpt"}),
+            "version": STAGE_BOUND_REQUIREMENT_VERSION,
+        })
+        with pytest.raises(StageBoundCompilationGap, match="动作不得省略"):
+            compile_stage_bound_requirement(batch, inventory, review, ordinary)
     if "time_validity" in functions:
         for mutation in ("relation_missing", "wrong_target", "wrong_stage", "wrong_scope"):
             broken = candidate.model_copy(deep=True)
@@ -12980,7 +12998,8 @@ def test_relative_stage_preflight_rejects_missing_frozen_predecessor(case) -> No
 
 
 @pytest.mark.parametrize("case", ["complete", "broken_first", "joint_failure"])
-def test_two_sourced_actions_insert_together_without_rewriting_existing_draft(case) -> None:
+@pytest.mark.parametrize("split_action", [False, True])
+def test_two_sourced_actions_insert_together_without_rewriting_existing_draft(case, split_action) -> None:
     batch, inventory, first_review, first = _stage_bound_example()
     batch.owned_units[0].excerpt = (
         "年龄至少18岁；筛选期（D-7~D-1）：拟参加者须完成知情同意记录。"
@@ -13008,7 +13027,7 @@ def test_two_sourced_actions_insert_together_without_rewriting_existing_draft(ca
         **first.model_dump(exclude={"version"}),
         "version": RELATIVE_STAGE_REQUIREMENT_VERSION,
         "statement_index": 1,
-        "action_excerpt": second_review.source_action_excerpt,
+        "action_excerpt": "再次核查资格" if split_action else second_review.source_action_excerpt,
         "workflow_stage_id": "stage:screening:two",
         "prior_workflow_stage_id": "stage:screening:one",
         "target_procedure_id": second_review.target_id,
