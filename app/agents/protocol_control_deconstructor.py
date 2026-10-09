@@ -10867,16 +10867,53 @@ class ProtocolControlAgentRunner:
                                     repaired = _merge_observation_policy_repair_payload(
                                         focused_response.text, repaired, index, policy_paths,
                                     )
-                                    ProtocolControlAgentWireCandidate.model_validate(
-                                        repaired["candidate_drafts"][index],
-                                    )
+                                    try:
+                                        ProtocolControlAgentWireCandidate.model_validate(
+                                            repaired["candidate_drafts"][index],
+                                        )
+                                    except ValidationError as cause:
+                                        candidate_error = ProtocolControlAgentWireValidationError(
+                                            "CANDIDATE_REPAIR_INVALID", _validation_error_summary(cause),
+                                        )
+                                        candidate_error.__cause__ = cause
+                                        date_paths = _invalid_time_operand_paths(candidate_error, repaired, index)
+                                        date_reader = getattr(transport, "continue_time_operands", None)
+                                        if not date_paths or not callable(date_reader):
+                                            raise candidate_error from cause
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1, session_id=session_id,
+                                            raw_output_sha256=_sha256(focused_response.text),
+                                            raw_output_chars=len(focused_response.text),
+                                            raw_output_text=focused_response.text,
+                                            outcome="schema_invalid", error_classes=[candidate_error.code],
+                                            issues=[str(candidate_error)[:1400]],
+                                        ))
+                                        if repairs >= self._max_schema_repairs:
+                                            focused_response = None
+                                            raise ProtocolControlAgentWireValidationError(
+                                                "REPAIR_BUDGET_EXHAUSTED", "逐项修订次数已用完，缺失日期属性未补齐",
+                                            )
+                                        repairs += 1
+                                        focused_response = None
+                                        focused_response = date_reader(
+                                            session_id=session_id,
+                                            prompt=_build_time_operand_repair_prompt(repaired, index, date_paths),
+                                        )
+                                        if focused_response.session_id != session_id:
+                                            raise ValueError("缺失日期属性修订不得更换原会话")
+                                        repaired = _merge_time_operand_repair_payload(
+                                            focused_response.text, repaired, index, date_paths,
+                                        )
+                                        ProtocolControlAgentWireCandidate.model_validate(
+                                            repaired["candidate_drafts"][index],
+                                        )
                                     attempts.append(ProtocolControlAgentAttempt(
                                         attempt=len(attempts) + 1, session_id=session_id,
                                         raw_output_sha256=_sha256(focused_response.text),
                                         raw_output_chars=len(focused_response.text),
                                         raw_output_text=focused_response.text,
                                         outcome="parsed",
-                                        issues=["仅补入授权观察说明，整批仍须通过原发布门禁"],
+                                        issues=["仅补入授权缺失字段，整批仍须通过原发布门禁"],
                                     ))
                                     continue
                                 if not callable(focused_reader):

@@ -10188,6 +10188,101 @@ def test_multiple_candidates_missing_policy_use_only_frozen_field_repairs(failur
             assert result.attempts[-1].error_classes == ["REPAIR_BUDGET_EXHAUSTED"]
 
 
+@pytest.mark.parametrize("failure", [None, "budget", "missing_reader", "session", "position", "unresolved", "transport", "other_error", "extra"])
+def test_multi_candidate_policy_then_date_repair_keeps_frozen_scope_and_budget(failure) -> None:
+    from app.domain.contracts.rules import TimeConstraint
+
+    original = _wire_with_two_candidates(
+        _candidate().model_copy(update={"exception_expression": None}),
+        _candidate_for_second_unit().model_copy(update={"exception_expression": None}),
+    ).model_dump(mode="json")
+    second = original["candidate_drafts"][1]["obligation_expression"]["groups"][0]["atoms"][0]
+    second["evaluation"] = _evaluation(second["statement"], second["source_span_ids"][0], second["source_excerpts"][0])
+    original = ProtocolControlAgentWire.model_validate(original).model_dump(mode="json")
+    initial = deepcopy(original)
+    for index, draft in enumerate(initial["candidate_drafts"]):
+        atom = draft["obligation_expression"]["groups"][0]["atoms"][0]
+        atom["evaluation"]["observation_policy"] = None
+        if index == 0:
+            atom["time_constraint"] = TimeConstraint.model_validate(
+                {"anchor_type": "screening_date", "direction": "before"},
+            ).model_dump(mode="json")
+            atom["evaluation"]["time_purpose"] = "not_applicable" if failure == "other_error" else "unresolved"
+            atom["evaluation"]["time_operand_attribute"] = None
+    snapshot = deepcopy(initial)
+    expected = deepcopy(initial)
+
+    class FieldTransport(_FakeTransport):
+        policy_calls = 0
+        date_calls = 0
+
+        def continue_observation_policies(self, *, session_id, prompt):
+            index = self.policy_calls
+            self.policy_calls += 1
+            atom = initial["candidate_drafts"][index]["obligation_expression"]["groups"][0]["atoms"][0]
+            policy = {"mode": "unresolved", "scope": "原文未明确采用哪次记录",
+                      "source_span_ids": atom["source_span_ids"], "source_excerpts": atom["source_excerpts"]}
+            expected["candidate_drafts"][index]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["observation_policy"] = policy
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"items": [{
+                "layer": "obligation", "group_index": 0, "atom_index": 0, "policy": policy,
+            }]}))
+
+        def continue_time_operands(self, *, session_id, prompt):
+            self.date_calls += 1
+            assert '"group_index":0' in prompt and '"atom_index":0' in prompt
+            assert "原文未明确采用哪次记录" in prompt
+            if failure == "transport":
+                raise RuntimeError("模拟日期读取服务断开")
+            expected["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["time_operand_attribute"] = "record_time"
+            return ProtocolControlAgentResponse(
+                session_id="wrong-session" if failure == "session" else session_id,
+                text=json.dumps({"items": [{"group_index": 0, "atom_index": 1 if failure == "position" else 0,
+                                           "attribute": "unresolved" if failure == "unresolved" else "record_time",
+                                           **({"statement": "越权改写"} if failure == "extra" else {})}]}),
+            )
+
+        def continue_candidate(self, **kwargs):
+            pytest.fail("缺失字段不能退回整候选重写")
+
+        def continue_session(self, **kwargs):
+            pytest.fail("缺失字段失败不能扩大整批重读")
+
+    transport = FieldTransport([ProtocolControlAgentResponse(session_id="policy-date", text=json.dumps(initial))])
+    if failure == "missing_reader":
+        transport.continue_time_operands = None
+    consumers = []
+    from app.protocols.protocol_control_gate import validate_protocol_control_batch_candidates
+
+    def consume(output):
+        validate_protocol_control_batch_candidates(_batch(), output)
+        consumers.append(output)
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1 if failure == "budget" else 3).run(
+        _batch(), transport, output_validator=consume,
+    )
+    assert initial == snapshot
+    assert len(transport.prompts) == 1
+    if failure is None:
+        assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
+        assert transport.policy_calls == 2 and transport.date_calls == 1
+        assert len(consumers) == 1
+        assert result.partial_wire.model_dump(mode="json") == expected
+        assert result.attempts[1].outcome == "schema_invalid"
+        assert result.attempts[1].raw_output_text is not None
+    else:
+        assert result.status == "需要核对"
+        assert result.final_output is None and consumers == []
+        assert transport.policy_calls == 1
+        assert transport.date_calls == (0 if failure in {"budget", "missing_reader", "other_error"} else 1)
+        if failure == "budget":
+            assert result.attempts[-1].error_classes == ["REPAIR_BUDGET_EXHAUSTED"]
+        if failure == "transport":
+            assert result.attempts[-1].raw_output_text is None
+            assert result.attempts[1].raw_output_text is not None
+        if failure == "other_error":
+            assert "已有时间约束不能在求值规格中忽略" in str(result.attempts[-1].issues)
+
+
 def test_candidate_relative_policy_selector_rejects_other_errors() -> None:
     from pydantic import ValidationError
     from app.agents.protocol_control_deconstructor import _invalid_observation_policy_paths
