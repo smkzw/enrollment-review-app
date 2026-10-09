@@ -10368,6 +10368,93 @@ def test_multiple_candidate_repair_uses_typed_dates_without_rewriting_siblings(f
             assert result.attempts[-1].error_classes == ["TIME_OPERAND_UNRESOLVED"]
 
 
+@pytest.mark.parametrize("failure", [None, "budget", "scope", "other_error", "session",
+                                      "transport", "source", "extra", "missing_reader", "consumer"])
+def test_candidate_repair_missing_policy_keeps_field_only_followup(failure) -> None:
+    first, second = _candidate(), _candidate_for_second_unit()
+    first.exception_expression = second.exception_expression = None
+    second.applicability_expression = None
+    second_atom = second.obligation_expression.groups[0].atoms[0]
+    second_atom.evaluation = type(second_atom.evaluation).model_validate(
+        _evaluation("记录末次用药日期", "span:02", "筛选时记录末次用药日期"),
+    )
+    valid = _wire_with_two_candidates(first, second)
+    initial = valid.model_dump(mode="json")
+    for draft in initial["candidate_drafts"]:
+        del draft["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]
+    snapshot = deepcopy(initial)
+    proposal = valid.candidate_drafts[0].model_dump(mode="json")
+    atom = proposal["obligation_expression"]["groups"][0]["atoms"][0]
+    policy = deepcopy(atom["evaluation"]["observation_policy"])
+    atom["evaluation"]["observation_policy"] = None
+    if failure == "scope":
+        proposal["source_structure_unit_ids"] = ["su-02"]
+    elif failure == "other_error":
+        proposal["title"] = ""
+
+    class Transport(_FakeTransport):
+        candidate_calls = 0
+        policy_calls = 0
+
+        def continue_candidate(self, *, session_id, prompt):
+            self.candidate_calls += 1
+            assert self.candidate_calls <= 2
+            draft = proposal if self.candidate_calls == 1 else valid.candidate_drafts[1].model_dump(mode="json")
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"candidate_draft": draft}))
+
+        def continue_observation_policies(self, *, session_id, prompt):
+            self.policy_calls += 1
+            assert self.policy_calls == 1
+            assert valid.candidate_drafts[1].title not in prompt
+            assert "不重写条件、义务、阈值、时间、例外或来源" in prompt
+            if failure == "transport":
+                raise RuntimeError("synthetic policy transport failure")
+            chosen = deepcopy(policy)
+            if failure == "source":
+                chosen["source_span_ids"] = valid.candidate_drafts[1].source_span_ids
+            items = [{"layer": "obligation", "group_index": 0, "atom_index": 0, "policy": chosen}]
+            if failure == "extra":
+                items.append(deepcopy(items[0]))
+            return ProtocolControlAgentResponse(
+                session_id="foreign-session" if failure == "session" else session_id,
+                text=json.dumps({"items": items}),
+            )
+
+        def continue_time_operands(self, **kwargs):
+            pytest.fail("观察选择不是日期字段，不得进入日期恢复")
+
+        def continue_session(self, **kwargs):
+            pytest.fail("局部字段失败不得退回整批重写")
+
+    transport = Transport([ProtocolControlAgentResponse(session_id="candidate-policy", text=json.dumps(initial))])
+    if failure == "missing_reader":
+        transport.continue_observation_policies = None
+    consumed = []
+
+    def consume(output):
+        from app.protocols.protocol_control_gate import validate_protocol_control_batch_candidates
+        validate_protocol_control_batch_candidates(_batch(), output)
+        assert output.candidates[1] == hydrate_protocol_control_agent_output(valid, _batch()).candidates[1]
+        consumed.append(output)
+        if failure == "consumer":
+            raise ProtocolControlAgentWireValidationError("PUBLICATION_GATE_REJECTED", "synthetic semantic rejection")
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1 if failure == "budget" else 3).run(
+        _batch(), transport, output_validator=consume,
+    )
+    assert initial == snapshot
+    assert atom["evaluation"]["observation_policy"] is None
+    if failure is None:
+        assert result.status == "已解析", [a.issues for a in result.attempts]
+        assert transport.candidate_calls == 2 and transport.policy_calls == 1
+        assert len(consumed) == 1
+        assert result.partial_wire == valid
+        assert any(a.error_classes == ["CANDIDATE_REPAIR_INVALID"] for a in result.attempts)
+    else:
+        assert result.final_output is None
+        assert transport.policy_calls == (0 if failure in {"budget", "scope", "other_error", "missing_reader"} else 1)
+
+
 @pytest.mark.parametrize("failure", [None, "scope", "other_error", "unresolved", "budget"])
 def test_plural_candidate_transport_missing_date_keeps_typed_followup(failure) -> None:
     valid = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())

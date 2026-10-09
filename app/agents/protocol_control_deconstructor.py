@@ -6424,7 +6424,11 @@ def _invalid_observation_policy_paths(
     paths: set[tuple[str, int, int]] = set()
     for item in cause.errors(include_url=False):
         location = tuple(item["loc"])
-        if candidate_relative:
+        if candidate_relative or (
+            isinstance(error, ProtocolControlAgentWireValidationError)
+            and error.code == "CANDIDATE_REPAIR_INVALID"
+            and location[:1] != ("candidate_drafts",)
+        ):
             location = ("candidate_drafts", candidate_index, *location)
         layer = (
             str(location[2]).removesuffix("_expression")
@@ -10863,7 +10867,6 @@ class ProtocolControlAgentRunner:
                                     proposal = json.loads(focused_response.text)
                                     date_reader = getattr(transport, "continue_time_operands", None)
                                     if (candidate_error.code != "CANDIDATE_REPAIR_INVALID"
-                                            or not callable(date_reader)
                                             or repairs >= self._max_schema_repairs
                                             or not isinstance(proposal, dict)
                                             or set(proposal) != {"candidate_draft"}
@@ -10877,7 +10880,10 @@ class ProtocolControlAgentRunner:
                                     proposed = deepcopy(repaired)
                                     proposed["candidate_drafts"][index] = proposal["candidate_draft"]
                                     date_paths = _invalid_time_operand_paths(candidate_error, proposed, index)
-                                    if not date_paths:
+                                    policy_paths = _invalid_observation_policy_paths(candidate_error, proposed, index)
+                                    policy_reader = getattr(transport, "continue_observation_policies", None)
+                                    if not ((date_paths and callable(date_reader))
+                                            or (policy_paths and callable(policy_reader))):
                                         raise
                                     # Retain this unaccepted proposal only for the
                                     # typed missing-field repair. Siblings stay frozen.
@@ -10891,13 +10897,26 @@ class ProtocolControlAgentRunner:
                                         issues=[str(candidate_error)[:1400]],
                                     ))
                                     repairs += 1
-                                    date_prompt = _build_time_operand_repair_prompt(repaired, index, date_paths)
+                                    field_prompt = (
+                                        _build_time_operand_repair_prompt(repaired, index, date_paths)
+                                        if date_paths else _build_observation_policy_repair_prompt(
+                                            repaired, index, policy_paths, str(candidate_error),
+                                        )
+                                    )
+                                    field_reader = date_reader if date_paths else policy_reader
                                     focused_response = None
-                                    focused_response = date_reader(session_id=session_id, prompt=date_prompt)
+                                    focused_response = field_reader(session_id=session_id, prompt=field_prompt)
                                     if focused_response.session_id != session_id:
-                                        raise ValueError("日期属性修订不得更换原会话")
-                                    repaired = _merge_time_operand_repair_payload(
-                                        focused_response.text, repaired, index, date_paths,
+                                        raise ValueError("缺失字段修订不得更换原会话")
+                                    repaired = (
+                                        _merge_time_operand_repair_payload(
+                                            focused_response.text, repaired, index, date_paths,
+                                        ) if date_paths else _merge_observation_policy_repair_payload(
+                                            focused_response.text, repaired, index, policy_paths,
+                                        )
+                                    )
+                                    ProtocolControlAgentWireCandidate.model_validate(
+                                        repaired["candidate_drafts"][index],
                                     )
                                 attempts.append(ProtocolControlAgentAttempt(
                                     attempt=len(attempts) + 1,
