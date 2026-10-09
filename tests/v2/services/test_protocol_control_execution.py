@@ -19,7 +19,10 @@ from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentWireValidationError,
     ProtocolControlDiscoveryAgentResponse,
 )
-from app.agents.protocol_control_source_interpretation import SOURCE_INTERPRETATION_VERSION
+from app.agents.protocol_control_source_interpretation import (
+    SOURCE_INTERPRETATION_VERSION,
+    SourceTargetReviewValidationError,
+)
 from app.domain.contracts.enums import Comparator, PhaseScope, ReviewStage, StudyPhase
 from app.domain.contracts.protocol_controls import (
     ControlObligationKind,
@@ -318,6 +321,61 @@ def test_citation_connected_restriction_keeps_complete_source_not_a_verified_sib
                for item in output.restricted_statements)
     protocol_control_execution_module._validate_deep_batch_output(batch, output)
     assert type(output).model_validate(output.model_dump(mode="json")) == output
+
+
+@pytest.mark.parametrize("bad_numeric", [False, True])
+def test_citation_linked_addition_preserves_source_doubt_without_duplicate_insertion(bad_numeric):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
+    from app.services.eligibility_review_projection import _restricted_control_projections
+    from tests.v2.domain.test_control_catalog_restricted_contract import _catalog, _publication
+
+    batch, fixture = _citation_connected_unresolved_review()
+    atom = fixture.partial_wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    atom.statement = "年龄达到18岁"
+    if bad_numeric:
+        atom.evaluation.predicate.value = 19
+    review = fixture.source_target_review.model_copy(deep=True)
+    review.items.insert(0, review.items[0].model_copy(update={
+        "statement_index": 0, "decision": "additional_requirement",
+        "source_action_excerpt": fixture.source_interpretation.statements[0].quoted_text,
+        "unresolved_aspects": ["已有候选关联不等于语义完整"], "unresolved_cause": None}))
+
+    class Transport(_FakeTransport):
+        def start_source_target_review(self, *, prompt):
+            statements = json.loads(next(line.removeprefix("待核陈述：")
+                for line in prompt.splitlines() if line.startswith("待核陈述：")))
+            indexes = {item["statement_index"] for item in statements}
+            scoped = review.model_copy(update={"items": [item for item in review.items
+                if item.statement_index in indexes]})
+            return ProtocolControlAgentResponse(session_id="target", text=scoped.model_dump_json())
+
+        def start_source_insert(self, **kwargs):
+            pytest.fail("已关联且与来源疑问共享依据的要求不得补成另一条义务")
+
+    runner = ProtocolControlAgentRunner(max_schema_repairs=0)
+    if bad_numeric:
+        with pytest.raises(ProtocolControlAgentWireValidationError, match="NUMERIC_VALUE_NOT_IN_SOURCE"):
+            runner.run(batch, Transport([]), resume_wire=fixture.partial_wire,
+                resume_source_interpretation=fixture.source_interpretation,
+                resume_session_id="saved", output_validator=lambda output:
+                protocol_control_execution_module._validate_deep_batch_output(batch, output))
+        return
+    result = runner.run(
+        batch, Transport([]), resume_wire=fixture.partial_wire,
+        resume_source_interpretation=fixture.source_interpretation,
+        resume_session_id="saved", output_validator=lambda output:
+        protocol_control_execution_module._validate_deep_batch_output(batch, output))
+    assert result.final_output is None
+    assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+    assert result.attempts[-1].error_detail["statement_ids"] == [1]
+    restored = ProtocolControlAgentRunResult.model_validate(result.model_dump(mode="json"))
+    restricted = protocol_control_execution_module.restricted_batch_from_review(batch, restored)
+    assert restricted is not None and restricted.candidates == []
+    assert {item.source_structure_unit_id for item in restricted.restricted_statements} == {"su-01", "su-02"}
+    assert any(item.limitation_kind == "interpretation_unresolved" for item in restricted.restricted_statements)
+    projections = _restricted_control_projections(_publication(_catalog(
+        restricted=tuple(restricted.restricted_statements), allowed=tuple(batch.owned_source_span_ids))))
+    assert projections and all(row.obligations[0].status == "restricted" for row in projections)
 
 
 @pytest.mark.parametrize("foreign", [None, "unit", "span"])
@@ -1493,6 +1551,11 @@ def test_temporal_restriction_does_not_approve_unproven_error_ranges(failure: st
     result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
         batch, result.source_interpretation, result.partial_wire,
     )
+    if failure == "unresolved_semantics":
+        with pytest.raises(SourceTargetReviewValidationError) as error:
+            protocol_control_execution_module.restricted_batch_from_review(batch, result)
+        assert error.value.code == "SOURCE_UNRESOLVED_STILL_ADDED"
+        return
     output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
     if failure == "shared_scope":
         # Shared meaning cannot keep an executable sibling. Complete frozen
@@ -6375,8 +6438,9 @@ def test_deep_source_corrupt_completed_checkpoint_rejected_before_job_creation(
 
 
 @pytest.mark.parametrize("changed_gate", [True, False])
+@pytest.mark.parametrize("error_code", ["SOURCE_UNRESOLVED_STILL_EXCLUDED", "SOURCE_UNRESOLVED_STILL_ADDED", "SOURCE_SCOPE_INVALID"])
 def test_pending_exclusion_invalidates_only_an_older_restricted_proof(
-    data_paths, session_factory, monkeypatch, changed_gate,
+    data_paths, session_factory, monkeypatch, changed_gate, error_code,
 ):
     seed = _seed_frozen_source(data_paths, session_factory, key="pending-exclusion-proof")
     deep = _DeepTransport(seed.source_span_excerpts)
@@ -6401,13 +6465,13 @@ def test_pending_exclusion_invalidates_only_an_older_restricted_proof(
 
     def reject_pending(_batch, _result):
         raise protocol_control_execution_module.SourceTargetReviewValidationError(
-            "来源疑问未关闭", code="SOURCE_UNRESOLVED_STILL_EXCLUDED",
+            "来源疑问未关闭", code=error_code,
             statement_index=0, json_path="/items/0/decision",
         )
 
     monkeypatch.setattr(JobStore, "get_last_checkpoint", saved_restriction)
     monkeypatch.setattr(protocol_control_execution_module, "restricted_batch_from_review", reject_pending)
-    if changed_gate:
+    if changed_gate and error_code != "SOURCE_SCOPE_INVALID":
         planned = service.create_from_deconstruction(
             source_job_id=seed.source_job_id, idempotency_key="pending-exclusion-current",
             deep_source_job_id=source.job_id,
@@ -6479,6 +6543,8 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "source-target-additional-recovery/v1",
                   "numeric-evaluation-field-patch/v1",
                   "source-target-frozen-id-schema/v1",
+                                       "source-unresolved-addition-guard/v1",
+                                       "source-role-citation-insertion-guard/v1",
                   protocol_control_execution_module.PROCEDURE_SOURCE_CONTEXT_VERSION,
                   protocol_control_execution_module.RELATIVE_STAGE_PREFLIGHT_VERSION,
                   protocol_control_execution_module.RELATIVE_STAGE_SOURCE_DIMENSION_VERSION,

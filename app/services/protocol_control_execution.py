@@ -2086,6 +2086,8 @@ def _deep_component_identity(
                                        "source-target-additional-recovery/v1",
                                        "numeric-evaluation-field-patch/v1",
                                        "source-target-frozen-id-schema/v1",
+                                       "source-unresolved-addition-guard/v1",
+                                       "source-role-citation-insertion-guard/v1",
                                        PROCEDURE_SOURCE_CONTEXT_VERSION,
                                        RELATIVE_STAGE_PREFLIGHT_VERSION,
                                        RELATIVE_STAGE_SOURCE_DIMENSION_VERSION,
@@ -3198,7 +3200,7 @@ def _preflight_deep_source(
                     try:
                         expected = restricted_batch_from_review(batch, result)
                     except SourceTargetReviewValidationError as exc:
-                        if (exc.code != "SOURCE_UNRESOLVED_STILL_EXCLUDED"
+                        if (exc.code not in {"SOURCE_UNRESOLVED_STILL_EXCLUDED", "SOURCE_UNRESOLVED_STILL_ADDED"}
                                 or saved_components["validator_version"] == current_components["validator_version"]):
                             raise
                         # A newly enforced pending-scope check invalidates this

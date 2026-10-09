@@ -1780,6 +1780,8 @@ def build_source_target_review_prompt(
         "须保留相关疑问及有源对照线索，不声称完整覆盖。"
         "未核清的原文也不得作为 not_current_control、potential_same_requirement 或 cited_external_rationale 关闭；"
         "只能在现有未完整覆盖路径中保留具体 unresolved_aspects，不将原文疑问改写成受试者缺件。"
+        "unresolved 非空时只能保留 unresolved 决定及具体疑问，不得选择 additional_requirement；"
+        "来源含义明确而已有目标未覆盖时才可选 additional_requirement，不据此新增研究者判断义务。"
         "若 scope_context_source 提供表内项目标签，宿主只核了位置；你须从原文独立核它是否"
         "直接限定本条对象及适用分期，再核实际目标是否完整对应。标签是另一动作、存在冲突或"
         "关系不明时必须保留 unresolved，不能仅因结构相邻就报完整覆盖。"
@@ -2004,6 +2006,9 @@ def validate_source_target_review(
         if covered and statement.unresolved:
             reject(item, "SOURCE_UNRESOLVED_STILL_COVERED", "decision",
                    "来源陈述仍有未核清内容，不能宣称已有目标完整覆盖")
+        if item.decision == "additional_requirement" and statement.unresolved:
+            reject(item, "SOURCE_UNRESOLVED_STILL_ADDED", "decision",
+                   "来源陈述仍有未核清内容，不能据此新增独立要求；须保留具体来源疑问")
         if statement.unresolved and item.decision in {
             "not_current_control", "potential_same_requirement", "cited_external_rationale",
         }:

@@ -4488,6 +4488,16 @@ def _literally_cited_action_candidates(
     wire: ProtocolControlAgentWire,
 ) -> list[int]:
     """Find an existing action citation without claiming its scope is verified."""
+    return [index for index, roles in _literally_cited_candidate_roles(batch, statement, wire).items()
+            if "obligation" in roles]
+
+
+def _literally_cited_candidate_roles(
+    batch: ProtocolControlDispositionBatch,
+    statement: SourceStatement,
+    wire: ProtocolControlAgentWire,
+) -> dict[int, list[str]]:
+    """Locate citations for blocking duplicate inserts, never prove expression."""
     spans = {
         span for unit in batch.owned_units
         if unit.structure_unit_id == statement.structure_unit_id
@@ -4495,17 +4505,25 @@ def _literally_cited_action_candidates(
     }
     quote = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
     if not quote:
-        return []
-    return [
-        index for index, candidate in enumerate(wire.candidate_drafts)
-        if statement.structure_unit_id in candidate.source_structure_unit_ids
-        and any(
+        return {}
+    found = {}
+    for index, candidate in enumerate(wire.candidate_drafts):
+        if statement.structure_unit_id not in candidate.source_structure_unit_ids:
+            continue
+        roles = [role for role, expression in (
+            ("applicability", candidate.applicability_expression),
+            ("trigger", candidate.trigger_expression),
+            ("obligation", candidate.obligation_expression),
+            ("exception", candidate.exception_expression),
+        ) if expression is not None and any(
             set(atom.source_span_ids) & spans
             and any(quote in normalize_source_excerpt(text)
                     for text in [atom.statement, *atom.source_excerpts])
-            for group in candidate.obligation_expression.groups for atom in group.atoms
-        )
-    ]
+            for group in expression.groups for atom in group.atoms
+        )]
+        if roles:
+            found[index] = roles
+    return found
 
 
 def source_statement_coverage(
@@ -9789,7 +9807,25 @@ class ProtocolControlAgentRunner:
                                 partial_wire = revised
                                 repair_used = True
                                 continue
-                            cited_candidates = {
+                            units = {source_interpretation.statements[item.statement_index].structure_unit_id
+                                     for item in additional}
+                            unresolved_units = {source_interpretation.statements[index].structure_unit_id
+                                                for index in unresolved_indexes}
+                            additional_spans = {span for unit in batch.owned_units
+                                if unit.structure_unit_id in units for span in unit.source_span_ids}
+                            unresolved_spans = {span for unit in batch.owned_units
+                                if unit.structure_unit_id in unresolved_units for span in unit.source_span_ids}
+                            shared_candidate = any(
+                                (set(candidate.source_structure_unit_ids) & units
+                                 or set(candidate.source_span_ids) & additional_spans)
+                                and (set(candidate.source_structure_unit_ids) & unresolved_units
+                                     or set(candidate.source_span_ids) & unresolved_spans)
+                                for candidate in wire.candidate_drafts
+                            )
+                            cited_roles = {entry.statement_index: _literally_cited_candidate_roles(
+                                batch, source_interpretation.statements[entry.statement_index], wire)
+                                for entry in coverage if entry.status == "candidate_linked"}
+                            obligation_candidates = {
                                 entry.statement_index: sorted(set(
                                     entry.action_candidate_indexes
                                     + _literally_cited_action_candidates(
@@ -9800,6 +9836,8 @@ class ProtocolControlAgentRunner:
                                 ))
                                 for entry in coverage if entry.status == "candidate_linked"
                             }
+                            cited_candidates = {index: sorted(set(candidates) | set(cited_roles[index]))
+                                                for index, candidates in obligation_candidates.items()}
                             cited_unexpressed = [
                                 item.statement_index for item in additional
                                 if cited_candidates.get(item.statement_index)
@@ -9811,7 +9849,9 @@ class ProtocolControlAgentRunner:
                                 patch_reader = getattr(transport, "continue_numeric_predicate", None)
                                 atom_reader = patch_reader if callable(patch_reader) else getattr(transport, "continue_atom", None)
                                 if (len(numeric_failures) == 1
-                                        and numeric_failures[0]["statement_ids"] == cited_unexpressed
+                                        and numeric_failures[0]["statement_ids"] == [
+                                            item.statement_index for item in additional
+                                            if obligation_candidates.get(item.statement_index)]
                                         and callable(atom_reader)
                                         and max(repairs, source_repairs) < self._max_schema_repairs):
                                     failure = numeric_failures[0]
@@ -9862,6 +9902,10 @@ class ProtocolControlAgentRunner:
                                         raw_text = revised.model_dump_json()
                                         repair_used = True
                                         continue
+                                if not alignment_failures and (units & unresolved_units or shared_candidate):
+                                    # Keep the real source doubt and its existing dependency closure;
+                                    # a role-only citation is neither coverage nor an insert license.
+                                    _require_resolved_source_target_review(batch, source_interpretation, target_review)
                                 affected = [
                                     entry for entry in coverage
                                     if entry.statement_index in cited_unexpressed
@@ -9886,6 +9930,8 @@ class ProtocolControlAgentRunner:
                                         "code": "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
                                         "statement_ids": cited_unexpressed,
                                         "candidate_indexes": candidate_indexes,
+                                        "matched_candidate_roles": {
+                                            str(index): cited_roles.get(index, {}) for index in cited_unexpressed},
                                         "source_refs": sorted({
                                             span for entry in affected
                                             for unit in batch.owned_units
@@ -9927,25 +9973,6 @@ class ProtocolControlAgentRunner:
                                         for span in unit.source_span_ids
                                     })),
                                 )
-                            units = {
-                                source_interpretation.statements[item.statement_index].structure_unit_id
-                                for item in additional
-                            }
-                            unresolved_units = {
-                                source_interpretation.statements[index].structure_unit_id
-                                for index in unresolved_indexes
-                            }
-                            additional_spans = {span for unit in batch.owned_units
-                                if unit.structure_unit_id in units for span in unit.source_span_ids}
-                            unresolved_spans = {span for unit in batch.owned_units
-                                if unit.structure_unit_id in unresolved_units for span in unit.source_span_ids}
-                            shared_candidate = any(
-                                (set(candidate.source_structure_unit_ids) & units
-                                 or set(candidate.source_span_ids) & additional_spans)
-                                and (set(candidate.source_structure_unit_ids) & unresolved_units
-                                     or set(candidate.source_span_ids) & unresolved_spans)
-                                for candidate in wire.candidate_drafts
-                            )
                             if units & unresolved_units or shared_candidate:
                                 # Unit-scoped insertion cannot authorize a still-unknown
                                 # sibling or split a shared candidate's source meaning.

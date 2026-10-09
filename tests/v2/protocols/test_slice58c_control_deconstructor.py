@@ -3858,7 +3858,10 @@ def test_post_eligibility_action_requires_source_order_and_no_current_candidate(
     from app.agents.protocol_control_source_interpretation import is_post_eligibility_calculation
     assert not is_post_eligibility_calculation(pending.statements[0], review.items[0])
     retained.items[0].decision = "additional_requirement"
-    assert validated_source_review_seed(batch, pending, coverage, retained) == retained
+    with pytest.raises(SourceTargetReviewValidationError) as added_error:
+        validate_source_target_review(batch, pending, coverage, retained)
+    assert added_error.value.code == "SOURCE_UNRESOLVED_STILL_ADDED"
+    assert validated_source_review_seed(batch, pending, coverage, retained) is None
     pending.statements[0].decision_functions = ["background"]
     prompt = build_source_target_review_prompt(batch, pending, coverage)
     packet = json.loads(next(line.removeprefix("待核陈述：") for line in prompt.splitlines()
@@ -6262,6 +6265,7 @@ def test_cited_but_unexpressed_candidate_does_not_request_duplicate_insert(
         "code": "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
         "statement_ids": [0],
         "candidate_indexes": [0],
+        "matched_candidate_roles": {"0": {0: ["applicability", "obligation", "exception"]}},
         "source_refs": batch.owned_units[0].source_span_ids,
         "retry_class": "source_semantic_review",
         "affected_dependents": [0],
@@ -13724,6 +13728,106 @@ def test_alignment_numeric_gap_repairs_only_selected_atom_then_revalidates(reply
             assert transport.alignment_calls == 2
             assert any(attempt.raw_output_text and '"value": 21' in attempt.raw_output_text
                        for attempt in result.attempts)
+
+
+@pytest.mark.parametrize("unresolved", [[], ["原文范围尚未明确"]])
+def test_source_unresolved_cannot_be_upgraded_to_additional_requirement(unresolved):
+    from app.agents.protocol_control_source_interpretation import validated_source_review_seed
+
+    batch, inventory, review, wire, _ = _two_independent_candidate_linked_alignment_material()
+    inventory.statements[0].unresolved = unresolved
+    coverage = source_statement_coverage(batch, inventory, wire)
+    if unresolved:
+        with pytest.raises(SourceTargetReviewValidationError) as error:
+            validate_source_target_review(batch, inventory, coverage, review)
+        assert error.value.code == "SOURCE_UNRESOLVED_STILL_ADDED"
+        seed = validated_source_review_seed(batch, inventory, coverage, review)
+        assert seed is not None and [item.statement_index for item in seed.items] == [1]
+        review.items[0].decision = "unresolved"
+        review.items[0].unresolved_cause = "source_ambiguity"
+    validate_source_target_review(batch, inventory, coverage, review)
+    assert inventory.statements[0].unresolved == unresolved
+
+
+@pytest.mark.parametrize("role", ["applicability", "trigger", "exception"])
+@pytest.mark.parametrize("cited", [True, False])
+def test_condition_role_citation_blocks_duplicate_insert_without_proving_coverage(role, cited):
+    from app.agents.protocol_control_deconstructor import _literally_cited_candidate_roles
+
+    batch, inventory, review, wire, _ = _two_independent_candidate_linked_alignment_material()
+    batch.owned_units[0].excerpt = "年龄至少18岁；记录评估结论。"
+    inventory.statements = inventory.statements[:1]
+    inventory.statements[0].force = "descriptive"
+    inventory.statements[0].decision_functions = ["threshold"]
+    inventory.units_without_statement = ["su-02"]
+    review.items = review.items[:1]
+    candidate = wire.candidate_drafts[0].model_copy(deep=True)
+    condition = candidate.applicability_expression
+    candidate.applicability_expression = None
+    candidate.trigger_expression = None
+    candidate.exception_expression = None
+    if cited:
+        if role == "exception":
+            candidate.exception_expression = ProtocolControlAgentWireExceptionDnf(groups=condition.groups)
+        else:
+            setattr(candidate, f"{role}_expression", condition)
+    atom = candidate.obligation_expression.groups[0].atoms[0]
+    atom.statement = "记录评估结论。"
+    atom.source_excerpts = [atom.statement]
+    atom.evaluation = type(atom.evaluation).model_validate(_evaluation(atom.statement, "span:01", atom.statement))
+    candidate.minimum_evidence[0].source_policy.source_excerpts = [atom.statement]
+    wire = _wire(candidate=candidate)
+    assert _literally_cited_candidate_roles(batch, inventory.statements[0], wire) == (
+        {0: [role]} if cited else {})
+    original = wire.model_dump(mode="json")
+
+    class Transport(_FakeTransport):
+        insert_calls = 0
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target", text=review.model_dump_json())
+
+        def start_source_insert(self, **kwargs):
+            self.insert_calls += 1
+            raise RuntimeError("Synthetic unavailable insertion; never a completed result")
+
+    transport = Transport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=2).run(
+        batch, transport, resume_wire=wire, resume_source_interpretation=inventory,
+        resume_session_id="saved", output_validator=lambda _output: None)
+    assert result.final_output is None
+    assert result.partial_wire.model_dump(mode="json") == original
+    if cited:
+        assert transport.insert_calls == 0
+        assert result.attempts[-1].error_classes == ["SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"]
+        assert result.attempts[-1].error_detail["matched_candidate_roles"] == {"0": {0: [role]}}
+        from app.services.protocol_control_restricted_source import restricted_batch_from_review
+        assert restricted_batch_from_review(batch, result) is None
+    else:
+        assert transport.insert_calls == 1
+
+
+@pytest.mark.parametrize("direct_source", [True, False])
+def test_continuing_citation_requires_its_parent_obligation_source(direct_source):
+    from app.agents.protocol_control_deconstructor import _literally_cited_action_candidates
+
+    batch, inventory, _, wire, _ = _two_independent_candidate_linked_alignment_material()
+    candidate = wire.candidate_drafts[0]
+    data = candidate.model_dump(mode="json")
+    atom = data["obligation_expression"]["groups"][0]["atoms"][0]
+    quote = inventory.statements[0].quoted_text
+    atom["kind"] = ControlObligationKind.PROHIBIT_EVENT.value
+    atom["continuing_obligation"] = {"statement": quote,
+        "source_span_ids": ["span:01"], "source_excerpts": [quote],
+        "prospective_period": {"period": "treatment_period"}, "status": "not_due_at_review_node"}
+    if not direct_source:
+        atom["source_excerpts"] = ["没有持续义务引句的来源"]
+        atom["evaluation"] = _evaluation(atom["statement"], "span:01", atom["source_excerpts"][0])
+        with pytest.raises(ValueError, match="后续持续义务必须引用同一原子的直接来源"):
+            ProtocolControlAgentWireCandidate.model_validate(data)
+        return
+    candidate = ProtocolControlAgentWireCandidate.model_validate(data)
+    assert _literally_cited_action_candidates(batch, inventory.statements[0], _wire(candidate=candidate)) == [0]
 
 
 def test_pending_definition_diagnostic_keeps_declaration_identity_after_atom_rollback():

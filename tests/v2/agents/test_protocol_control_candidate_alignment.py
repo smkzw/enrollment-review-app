@@ -31,6 +31,7 @@ from app.agents.protocol_control_source_interpretation import (
     SOURCE_TARGET_REVIEW_VERSION,
     SourceInterpretation,
     SourceTargetReview,
+    SourceTargetReviewValidationError,
     can_recheck_source_scope_question,
     build_source_scope_question_prompt,
     build_source_scope_correction_prompt,
@@ -495,8 +496,9 @@ def test_native_action_alignment_survives_save_and_read_without_erasing_scope():
     restored = ProtocolControlAgentRunResult.model_validate(result.model_dump(mode="json"))
     _validate_saved_source_review(batch, restored)
     restored.source_interpretation.statements[0].unresolved = ["适用访视尚待核对"]
-    with pytest.raises(ValueError, match="未核清范围"):
+    with pytest.raises(SourceTargetReviewValidationError) as error:
         _validate_saved_source_review(batch, restored)
+    assert error.value.code == "SOURCE_UNRESOLVED_STILL_ADDED"
 
 
 @pytest.mark.parametrize("readable", [True, False])
