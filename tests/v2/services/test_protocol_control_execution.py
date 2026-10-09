@@ -4561,6 +4561,54 @@ def test_pending_literal_stage_source_recovery_proves_raw_read_not_authority(cha
     assert saved == before
 
 
+@pytest.mark.parametrize("change", ["same", "missing_context", "wrong_context", "changed_context", "changed_quote"])
+def test_revalidated_source_question_proof_requires_current_original_context(change):
+    import hashlib
+    from copy import deepcopy
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _owned_context_target_example
+    from app.agents.protocol_control_source_interpretation import (
+        SourceInterpretation, source_question_context_identity,
+    )
+    module = protocol_control_execution_module
+    batch, source, _, _ = _owned_context_target_example()
+    target = batch.known_official_targets[0]
+    target.source_span_ids = list(batch.owned_units[0].source_span_ids)
+    source.statements[0].unresolved = ["对象列表未提供"]
+    raw = source.model_dump_json()
+    proposal = SourceInterpretation(version=source.version,
+        statements=[source.statements[0].model_copy(deep=True)], units_without_statement=[])
+    proposal.statements[0].unresolved = []
+    revised = source.model_copy(deep=True)
+    revised.statements[0] = proposal.statements[0].model_copy(deep=True)
+    answer = proposal.model_dump_json()
+    current = module._deep_component_identity({}, module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE)
+    detail = dict(workflow_phase="source_scope_question_recheck", code="SOURCE_SCOPE_QUESTION_RECHECK",
+        statement_id=0, json_path="statements[0].unresolved", source_refs=list(batch.owned_units[0].source_span_ids),
+        precondition_sha256=hashlib.sha256(source.statements[0].model_dump_json().encode()).hexdigest(),
+        source_context_sha256=source_question_context_identity(source.statements[0], batch))
+    saved = dict(component_identity=dict(current, compiler_versions=["previous compiler"]),
+        prompt_template_sha256=current["prompt_material_sha256"], source_interpretation=revised.model_dump(mode="json"),
+        attempts=[dict(attempt=1, session_id="source", outcome="parsed", error_classes=[], raw_output_text=raw,
+                       raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest()),
+                  dict(attempt=2, session_id="question", outcome="parsed", error_classes=[], error_detail=detail,
+                       raw_output_text=answer, raw_output_sha256=hashlib.sha256(answer.encode()).hexdigest())])
+    if change == "missing_context":
+        detail.pop("source_context_sha256")
+    elif change == "wrong_context":
+        detail["source_context_sha256"] = "0" * 64
+    elif change == "changed_context":
+        target.source_excerpts[0] += "后续来源已经变更。"
+    elif change == "changed_quote":
+        proposal.statements[0].quoted_text = "允许中断背景治疗。"
+        saved["attempts"][1]["raw_output_text"] = proposal.model_dump_json()
+        saved["attempts"][1]["raw_output_sha256"] = hashlib.sha256(proposal.model_dump_json().encode()).hexdigest()
+    frozen = deepcopy(saved)
+    proof = module._revalidated_source_seed_proof(batch, saved, current, source_job_id="old",
+        step_id="deep_0001", checkpoint_id="original")
+    assert bool(proof) is (change == "same")
+    assert saved == frozen
+
+
 @pytest.mark.parametrize("change", ["same", "wrong_target", "wrong_reason", "changed_sibling", "corrupt_correction"])
 def test_revalidated_source_seed_replays_only_proven_scope_corrections(change):
     from copy import deepcopy

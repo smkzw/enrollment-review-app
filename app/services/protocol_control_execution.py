@@ -88,6 +88,7 @@ from app.agents.protocol_control_source_interpretation import (
     parse_product_source_interpretation,
     apply_source_scope_correction,
     apply_source_scope_question_recheck,
+    source_question_context_identity,
     apply_source_quote_correction,
     validate_source_definition_consumers,
     validate_source_interpretation,
@@ -2546,6 +2547,7 @@ def _revalidated_source_seed_proof(
         if (detail.get("code") != "SOURCE_SCOPE_QUESTION_RECHECK"
                 or detail.get("json_path") != f"statements[{index}].unresolved"
                 or detail.get("source_refs") != list(unit.source_span_ids)
+                or detail.get("source_context_sha256") != source_question_context_identity(statement, batch)
                 or detail.get("precondition_sha256") != hashlib.sha256(statement.model_dump_json().encode()).hexdigest()):
             return None
         text = actual_text(attempt)

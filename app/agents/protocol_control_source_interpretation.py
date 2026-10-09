@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import unicodedata
@@ -477,6 +478,52 @@ def build_source_scope_correction_prompt(
 
 SOURCE_SCOPE_QUESTION_RECHECK_VERSION = "phase5/source-scope-question-recheck/v1"
 NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION = "native-scope-source-runtime-separation/v1"
+OFFICIAL_SOURCE_QUESTION_CONTEXT_VERSION = "same-source-official-question-context/v1"
+
+
+def source_question_official_context(
+    statement: SourceStatement, batch: ProtocolControlDispositionBatch,
+) -> dict[str, object] | None:
+    """Expose original context only when both source identity and whole-unit text agree."""
+    unit = next((item for item in batch.owned_units
+                 if item.structure_unit_id == statement.structure_unit_id), None)
+    if unit is None:
+        return None
+    if len(unit.source_span_ids) != 1:
+        return None
+    matches = []
+    for target in batch.known_official_targets:
+        if not target.source_excerpts:
+            continue
+        if (len(target.source_span_ids) != len(target.source_excerpts)
+                or len(set(target.source_span_ids)) != len(target.source_span_ids)):
+            raise ValueError("冻结官方来源位置与摘录身份损坏，不能补入核对上下文")
+        if any(ref == unit.source_span_ids[0]
+               and normalize_source_excerpt(excerpt) == normalize_source_excerpt(unit.excerpt)
+               for ref, excerpt in zip(target.source_span_ids, target.source_excerpts, strict=True)):
+            matches.append(target)
+    if len(matches) != 1:
+        return None
+    target = matches[0]
+    orders = {}
+    for ref in target.source_span_ids:
+        found = {item.source_order for item in (*batch.owned_units, *batch.context_units)
+                 if item.source_span_ids == [ref]}
+        orders[ref] = next(iter(found)) if len(found) == 1 else None
+    return {
+        "version": OFFICIAL_SOURCE_QUESTION_CONTEXT_VERSION,
+        "source_span_ids": list(target.source_span_ids),
+        "source_excerpts": list(target.source_excerpts),
+        "source_orders_by_span": orders,
+        "listed_order_is_reading_order": False,
+    }
+
+
+def source_question_context_identity(
+    statement: SourceStatement, batch: ProtocolControlDispositionBatch,
+) -> str | None:
+    context = source_question_official_context(statement, batch)
+    return hashlib.sha256(json.dumps(context, ensure_ascii=False, sort_keys=True).encode()).hexdigest() if context else None
 
 
 def can_recheck_source_scope_question(
@@ -487,6 +534,7 @@ def can_recheck_source_scope_question(
             and all(normalize_source_excerpt(word) in normalize_source_excerpt(statement.quoted_text)
                     for word in statement.time_words))
     columns = ()
+    unit = None
     if batch is not None:
         unit = next((unit for unit in batch.owned_units
                      if unit.structure_unit_id == statement.structure_unit_id), None)
@@ -506,6 +554,7 @@ def can_recheck_source_scope_question(
                                         for column in columns)
     return bool(statement.unresolved) and (
         local_context or statement.affected_stage is None and (literal_times or native_scope)
+        or batch is not None and source_question_official_context(statement, batch) is not None
     )
 
 
@@ -514,7 +563,7 @@ def build_source_scope_question_prompt(
 ) -> str:
     statement = interpretation.statements[index]
     if not can_recheck_source_scope_question(statement, batch):
-        raise ValueError("本条不属于多时间来源疑问核对范围")
+        raise ValueError("本条不属于可核来源疑问范围")
     unit = next(unit for unit in batch.owned_units
                 if unit.structure_unit_id == statement.structure_unit_id)
     context_instruction = (
@@ -523,6 +572,17 @@ def build_source_scope_question_prompt(
         "修改 unresolved，不改任何摘录、项目、时间、逻辑或阶段，不把程序尚不能消费写成原文歧义。"
         if statement.scope_quote and not schedule_column_scope(unit, batch.context_units) else ""
     )
+    official_context = source_question_official_context(statement, batch)
+    if official_context is not None:
+        context_instruction += (
+            "下方 same_source_original_context 是同一官方要求已冻结的完整原文，不是已编译规则或医学答案。"
+            "本条是其中一个来源单元；后续列表、上位条件与相邻选择分支仅用于核实本条疑问。"
+            "不要把本次分包未带来的内容说成整份方案缺失；也不能仅因同源就认定所有时间或条件共用。"
+            "分别判断排版缺陷是否实际改变含义、列表是否已在完整原文提供、范围是否仍确有歧义。"
+            "只有完整原文能消除疑问时清空 unresolved；否则保留具体疑问。普通原句其余字段全部冻结。"
+            "摘录数组按来源ID排列，不是阅读顺序；仅 source_orders_by_span 非空值证明原文位置顺序。"
+            "无顺序定位的摘录不能据数组前后推定时间、范围或上位关系，仍可核实其文字是否实际存在。"
+        )
     return (
         "你是内置方案 Agent 的单条原文范围疑问核对步骤。只核 unresolved 中的疑问是否"
         "确实由原文引起，不生成规则、不判断受试者。不同子条件可以各有自己的时间限定，"
@@ -545,6 +605,7 @@ def build_source_scope_question_prompt(
                       "version": interpretation.version,
                       "frozen_statement": statement.model_dump(mode="json"),
                       "source_unit": unit.model_dump(mode="json"),
+                      "same_source_original_context": official_context,
                       "native_scope_instruction": build_source_scope_correction_prompt(batch, statement, "原有来源范围疑问")
                           if schedule_column_scope(unit, batch.context_units) else None}, ensure_ascii=False)
     )
@@ -557,7 +618,7 @@ def apply_source_scope_question_recheck(
     original = interpretation.statements[index]
     if (not can_recheck_source_scope_question(original, batch) or proposal.version != interpretation.version
             or len(proposal.statements) != 1 or proposal.units_without_statement):
-        raise ValueError("时间疑问核对必须只返回指定原陈述")
+        raise ValueError("来源疑问核对必须只返回指定原陈述")
     revised = proposal.statements[0]
     unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == original.structure_unit_id)
     native = bool(schedule_column_scope(unit, batch.context_units))

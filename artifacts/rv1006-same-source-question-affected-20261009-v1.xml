@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="26" time="2.421" timestamp="2026-10-09T05:32:17.883820+02:00" hostname="MacBook-Pro-4.local"><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[None]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[source]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[target]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[unknown]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[single]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[covered]" time="0.017" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[additional]" time="0.015" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[foreign]" time="0.014" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[failure]" time="0.015" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[None]" time="0.001"><failure message="TypeError: 'NoneType' object is not subscriptable">defect = None
+
+    @pytest.mark.parametrize("defect", [None, "wrong_source", "wrong_excerpt", "duplicate_target",
+                                         "missing_excerpt", "changed_quote", "changed_scope", "still_unknown"])
+    def test_same_source_official_question_context_is_read_only_not_adoption(defect):
+        from app.agents.protocol_control_source_interpretation import (
+            source_question_official_context, can_recheck_source_scope_question,
+            build_source_scope_question_prompt, apply_source_scope_question_recheck,
+        )
+        batch, inventory, wire, review = _owned_context_target_example()
+        target = batch.known_official_targets[0]
+        target.source_span_ids.append("span:list")
+        target.source_excerpts.append("具体对象包括甲类与乙类，且不限于这些对象。")
+        inventory.statements[0].unresolved = ["具体对象列表未提供"]
+        if defect == "wrong_source":
+            target.source_span_ids[0] = "span:not-the-owned-unit"
+        elif defect == "wrong_excerpt":
+            target.source_excerpts[0] += "另外还必须完成检查。"
+        elif defect == "duplicate_target":
+            other = target.model_copy(deep=True)
+            other.official_code, other.catalog_item_id, other.position = "EX-02", "official-other", 1
+            batch.known_official_targets.append(other)
+        elif defect == "missing_excerpt":
+            target.source_excerpts = []
+        frozen = batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()
+        context = source_question_official_context(inventory.statements[0], batch)
+        if defect in {"wrong_source", "wrong_excerpt", "duplicate_target", "missing_excerpt"}:
+            assert context is None
+            assert not can_recheck_source_scope_question(inventory.statements[0], batch)
+            with pytest.raises(ValueError, match="可核来源"):
+                build_source_scope_question_prompt(batch, inventory, 0)
+            return
+&gt;       assert context["source_excerpts"] == target.source_excerpts
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/v2/protocols/test_slice58c_control_deconstructor.py:13928: TypeError</failure></testcase><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[wrong_source]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[wrong_excerpt]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[duplicate_target]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[missing_excerpt]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[changed_quote]" time="0.000"><failure message="TypeError: 'NoneType' object is not subscriptable">defect = 'changed_quote'
+
+    @pytest.mark.parametrize("defect", [None, "wrong_source", "wrong_excerpt", "duplicate_target",
+                                         "missing_excerpt", "changed_quote", "changed_scope", "still_unknown"])
+    def test_same_source_official_question_context_is_read_only_not_adoption(defect):
+        from app.agents.protocol_control_source_interpretation import (
+            source_question_official_context, can_recheck_source_scope_question,
+            build_source_scope_question_prompt, apply_source_scope_question_recheck,
+        )
+        batch, inventory, wire, review = _owned_context_target_example()
+        target = batch.known_official_targets[0]
+        target.source_span_ids.append("span:list")
+        target.source_excerpts.append("具体对象包括甲类与乙类，且不限于这些对象。")
+        inventory.statements[0].unresolved = ["具体对象列表未提供"]
+        if defect == "wrong_source":
+            target.source_span_ids[0] = "span:not-the-owned-unit"
+        elif defect == "wrong_excerpt":
+            target.source_excerpts[0] += "另外还必须完成检查。"
+        elif defect == "duplicate_target":
+            other = target.model_copy(deep=True)
+            other.official_code, other.catalog_item_id, other.position = "EX-02", "official-other", 1
+            batch.known_official_targets.append(other)
+        elif defect == "missing_excerpt":
+            target.source_excerpts = []
+        frozen = batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()
+        context = source_question_official_context(inventory.statements[0], batch)
+        if defect in {"wrong_source", "wrong_excerpt", "duplicate_target", "missing_excerpt"}:
+            assert context is None
+            assert not can_recheck_source_scope_question(inventory.statements[0], batch)
+            with pytest.raises(ValueError, match="可核来源"):
+                build_source_scope_question_prompt(batch, inventory, 0)
+            return
+&gt;       assert context["source_excerpts"] == target.source_excerpts
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/v2/protocols/test_slice58c_control_deconstructor.py:13928: TypeError</failure></testcase><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[changed_scope]" time="0.001"><failure message="TypeError: 'NoneType' object is not subscriptable">defect = 'changed_scope'
+
+    @pytest.mark.parametrize("defect", [None, "wrong_source", "wrong_excerpt", "duplicate_target",
+                                         "missing_excerpt", "changed_quote", "changed_scope", "still_unknown"])
+    def test_same_source_official_question_context_is_read_only_not_adoption(defect):
+        from app.agents.protocol_control_source_interpretation import (
+            source_question_official_context, can_recheck_source_scope_question,
+            build_source_scope_question_prompt, apply_source_scope_question_recheck,
+        )
+        batch, inventory, wire, review = _owned_context_target_example()
+        target = batch.known_official_targets[0]
+        target.source_span_ids.append("span:list")
+        target.source_excerpts.append("具体对象包括甲类与乙类，且不限于这些对象。")
+        inventory.statements[0].unresolved = ["具体对象列表未提供"]
+        if defect == "wrong_source":
+            target.source_span_ids[0] = "span:not-the-owned-unit"
+        elif defect == "wrong_excerpt":
+            target.source_excerpts[0] += "另外还必须完成检查。"
+        elif defect == "duplicate_target":
+            other = target.model_copy(deep=True)
+            other.official_code, other.catalog_item_id, other.position = "EX-02", "official-other", 1
+            batch.known_official_targets.append(other)
+        elif defect == "missing_excerpt":
+            target.source_excerpts = []
+        frozen = batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()
+        context = source_question_official_context(inventory.statements[0], batch)
+        if defect in {"wrong_source", "wrong_excerpt", "duplicate_target", "missing_excerpt"}:
+            assert context is None
+            assert not can_recheck_source_scope_question(inventory.statements[0], batch)
+            with pytest.raises(ValueError, match="可核来源"):
+                build_source_scope_question_prompt(batch, inventory, 0)
+            return
+&gt;       assert context["source_excerpts"] == target.source_excerpts
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/v2/protocols/test_slice58c_control_deconstructor.py:13928: TypeError</failure></testcase><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[still_unknown]" time="0.001"><failure message="TypeError: 'NoneType' object is not subscriptable">defect = 'still_unknown'
+
+    @pytest.mark.parametrize("defect", [None, "wrong_source", "wrong_excerpt", "duplicate_target",
+                                         "missing_excerpt", "changed_quote", "changed_scope", "still_unknown"])
+    def test_same_source_official_question_context_is_read_only_not_adoption(defect):
+        from app.agents.protocol_control_source_interpretation import (
+            source_question_official_context, can_recheck_source_scope_question,
+            build_source_scope_question_prompt, apply_source_scope_question_recheck,
+        )
+        batch, inventory, wire, review = _owned_context_target_example()
+        target = batch.known_official_targets[0]
+        target.source_span_ids.append("span:list")
+        target.source_excerpts.append("具体对象包括甲类与乙类，且不限于这些对象。")
+        inventory.statements[0].unresolved = ["具体对象列表未提供"]
+        if defect == "wrong_source":
+            target.source_span_ids[0] = "span:not-the-owned-unit"
+        elif defect == "wrong_excerpt":
+            target.source_excerpts[0] += "另外还必须完成检查。"
+        elif defect == "duplicate_target":
+            other = target.model_copy(deep=True)
+            other.official_code, other.catalog_item_id, other.position = "EX-02", "official-other", 1
+            batch.known_official_targets.append(other)
+        elif defect == "missing_excerpt":
+            target.source_excerpts = []
+        frozen = batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()
+        context = source_question_official_context(inventory.statements[0], batch)
+        if defect in {"wrong_source", "wrong_excerpt", "duplicate_target", "missing_excerpt"}:
+            assert context is None
+            assert not can_recheck_source_scope_question(inventory.statements[0], batch)
+            with pytest.raises(ValueError, match="可核来源"):
+                build_source_scope_question_prompt(batch, inventory, 0)
+            return
+&gt;       assert context["source_excerpts"] == target.source_excerpts
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/v2/protocols/test_slice58c_control_deconstructor.py:13928: TypeError</failure></testcase><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_question_runner_requires_fresh_target_review_and_preserves_history[clear]" time="0.001"><failure message="pydantic_core._pydantic_core.ValidationError: 1 validation error for SourceInterpretation&#10;units_without_statement&#10;  Field required [type=missing, input_value={'version': 'phase5/contr...ttribution_quote=None)]}, input_type=dict]&#10;    For further information visit https://errors.pydantic.dev/2.13/v/missing">outcome = 'clear'
+
+    @pytest.mark.parametrize("outcome", ["clear", "unknown", "transport"])
+    def test_same_source_question_runner_requires_fresh_target_review_and_preserves_history(outcome):
+        batch, inventory, wire, review = _owned_context_target_example()
+        inventory.statements[0].unresolved = ["列表未提供"]
+        target = batch.known_official_targets[0]
+        target.source_span_ids.append("span:list")
+        target.source_excerpts.append("对象包括甲类与乙类。")
+        # A previously unresolved review is valid, but not a fresh proof after a source proposal.
+        review.items[0].decision = "unresolved"
+        review.items[0].unresolved_aspects = ["列表未提供"]
+        review.items[0].unresolved_cause = "source_ambiguity"
+&gt;       proposal = SourceInterpretation(version=inventory.version,
+            statements=[inventory.statements[0].model_copy(deep=True)])
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for SourceInterpretation
+E       units_without_statement
+E         Field required [type=missing, input_value={'version': 'phase5/contr...ttribution_quote=None)]}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/missing
+
+tests/v2/protocols/test_slice58c_control_deconstructor.py:13962: ValidationError</failure></testcase><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_question_runner_requires_fresh_target_review_and_preserves_history[unknown]" time="0.001"><failure message="pydantic_core._pydantic_core.ValidationError: 1 validation error for SourceInterpretation&#10;units_without_statement&#10;  Field required [type=missing, input_value={'version': 'phase5/contr...ttribution_quote=None)]}, input_type=dict]&#10;    For further information visit https://errors.pydantic.dev/2.13/v/missing">outcome = 'unknown'
+
+    @pytest.mark.parametrize("outcome", ["clear", "unknown", "transport"])
+    def test_same_source_question_runner_requires_fresh_target_review_and_preserves_history(outcome):
+        batch, inventory, wire, review = _owned_context_target_example()
+        inventory.statements[0].unresolved = ["列表未提供"]
+        target = batch.known_official_targets[0]
+        target.source_span_ids.append("span:list")
+        target.source_excerpts.append("对象包括甲类与乙类。")
+        # A previously unresolved review is valid, but not a fresh proof after a source proposal.
+        review.items[0].decision = "unresolved"
+        review.items[0].unresolved_aspects = ["列表未提供"]
+        review.items[0].unresolved_cause = "source_ambiguity"
+&gt;       proposal = SourceInterpretation(version=inventory.version,
+            statements=[inventory.statements[0].model_copy(deep=True)])
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for SourceInterpretation
+E       units_without_statement
+E         Field required [type=missing, input_value={'version': 'phase5/contr...ttribution_quote=None)]}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/missing
+
+tests/v2/protocols/test_slice58c_control_deconstructor.py:13962: ValidationError</failure></testcase><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_question_runner_requires_fresh_target_review_and_preserves_history[transport]" time="0.001"><failure message="pydantic_core._pydantic_core.ValidationError: 1 validation error for SourceInterpretation&#10;units_without_statement&#10;  Field required [type=missing, input_value={'version': 'phase5/contr...ttribution_quote=None)]}, input_type=dict]&#10;    For further information visit https://errors.pydantic.dev/2.13/v/missing">outcome = 'transport'
+
+    @pytest.mark.parametrize("outcome", ["clear", "unknown", "transport"])
+    def test_same_source_question_runner_requires_fresh_target_review_and_preserves_history(outcome):
+        batch, inventory, wire, review = _owned_context_target_example()
+        inventory.statements[0].unresolved = ["列表未提供"]
+        target = batch.known_official_targets[0]
+        target.source_span_ids.append("span:list")
+        target.source_excerpts.append("对象包括甲类与乙类。")
+        # A previously unresolved review is valid, but not a fresh proof after a source proposal.
+        review.items[0].decision = "unresolved"
+        review.items[0].unresolved_aspects = ["列表未提供"]
+        review.items[0].unresolved_cause = "source_ambiguity"
+&gt;       proposal = SourceInterpretation(version=inventory.version,
+            statements=[inventory.statements[0].model_copy(deep=True)])
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for SourceInterpretation
+E       units_without_statement
+E         Field required [type=missing, input_value={'version': 'phase5/contr...ttribution_quote=None)]}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/missing
+
+tests/v2/protocols/test_slice58c_control_deconstructor.py:13962: ValidationError</failure></testcase><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[None]" time="0.002" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[partial_context]" time="0.001" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[changed_action]" time="0.001" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[changed_stage]" time="0.001" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_actual_runner_uses_one_context_request_and_rechecks_changed_source[False]" time="0.015" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_actual_runner_uses_one_context_request_and_rechecks_changed_source[True]" time="0.001" /></testsuite></testsuites>

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="26" time="1.535" timestamp="2026-10-09T05:32:49.801996+02:00" hostname="MacBook-Pro-4.local"><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[None]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[source]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[target]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[unknown]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[single]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[covered]" time="0.016" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[additional]" time="0.013" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[foreign]" time="0.013" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[failure]" time="0.013" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[None]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[wrong_source]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[wrong_excerpt]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[duplicate_target]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[missing_excerpt]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[changed_quote]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[changed_scope]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_official_question_context_is_read_only_not_adoption[still_unknown]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_question_runner_requires_fresh_target_review_and_preserves_history[clear]" time="0.013" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_question_runner_requires_fresh_target_review_and_preserves_history[unknown]" time="0.012"><failure message="AssertionError: assert 1 == 0&#10; +  where 1 = &lt;v2.protocols.test_slice58c_control_deconstructor.test_same_source_question_runner_requires_fresh_target_review_and_preserves_history.&lt;locals&gt;.Transport object at 0x11361bad0&gt;.target_calls&#10; +  and   0 = int('unknown' == 'clear'&#10;    &#10;    - clear&#10;    + unknown)">outcome = 'unknown'
+
+    @pytest.mark.parametrize("outcome", ["clear", "unknown", "transport"])
+    def test_same_source_question_runner_requires_fresh_target_review_and_preserves_history(outcome):
+        batch, inventory, wire, review = _owned_context_target_example()
+        inventory.statements[0].unresolved = ["列表未提供"]
+        target = batch.known_official_targets[0]
+        target.source_span_ids = list(batch.owned_units[0].source_span_ids)
+        target.source_span_ids.append("span:list")
+        target.source_excerpts.append("对象包括甲类与乙类。")
+        # A previously unresolved review is valid, but not a fresh proof after a source proposal.
+        review.items[0].decision = "unresolved"
+        review.items[0].unresolved_aspects = ["列表未提供"]
+        review.items[0].unresolved_cause = "source_ambiguity"
+        proposal = SourceInterpretation(version=inventory.version,
+            statements=[inventory.statements[0].model_copy(deep=True)], units_without_statement=[])
+        if outcome == "clear":
+            proposal.statements[0].unresolved = []
+        class Transport(_FakeTransport):
+            source_calls = 0
+            target_calls = 0
+            def start_source_interpretation(self, *, prompt):
+                self.source_calls += 1
+                assert target.source_excerpts[-1] in prompt
+                if outcome == "transport":
+                    raise RuntimeError("isolated source context unavailable")
+                return ProtocolControlAgentResponse(session_id="source-question", text=proposal.model_dump_json())
+            def start_source_target_review(self, *, prompt):
+                self.target_calls += 1
+                assert outcome == "clear"
+                answer = review.items[0].model_copy(deep=True)
+                answer.decision, answer.unresolved_aspects, answer.unresolved_cause = "covered_by_official", [], None
+                return ProtocolControlAgentResponse(session_id="fresh-target", text=SourceTargetReview(
+                    version=review.version, items=[answer]).model_dump_json())
+        transport = Transport([])
+        original = inventory.model_dump_json(), wire.model_dump_json(), review.model_dump_json()
+        def run(history=(), source=inventory, seed=review):
+            return ProtocolControlAgentRunner(max_schema_repairs=2, max_transport_retries=0).run(
+                batch, transport, resume_wire=wire, resume_source_interpretation=source,
+                resume_source_target_review=seed, resume_source_statement_coverage=source_statement_coverage(batch, source, wire),
+                resume_session_id="frozen-wire", resume_source_scope_question_history=history,
+                output_validator=lambda _output: None)
+        result = run()
+        assert transport.source_calls == 1
+&gt;       assert transport.target_calls == int(outcome == "clear")
+E       AssertionError: assert 1 == 0
+E        +  where 1 = &lt;v2.protocols.test_slice58c_control_deconstructor.test_same_source_question_runner_requires_fresh_target_review_and_preserves_history.&lt;locals&gt;.Transport object at 0x11361bad0&gt;.target_calls
+E        +  and   0 = int('unknown' == 'clear'
+E           
+E           - clear
+E           + unknown)
+
+tests/v2/protocols/test_slice58c_control_deconstructor.py:13994: AssertionError</failure></testcase><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_same_source_question_runner_requires_fresh_target_review_and_preserves_history[transport]" time="0.001" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[None]" time="0.002" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[partial_context]" time="0.001" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[changed_action]" time="0.001" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_completed_local_context_question_only_changes_the_source_question[changed_stage]" time="0.001" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_actual_runner_uses_one_context_request_and_rechecks_changed_source[False]" time="0.014" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_actual_runner_uses_one_context_request_and_rechecks_changed_source[True]" time="0.001" /></testsuite></testsuites>

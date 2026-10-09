@@ -8,9 +8,9 @@
 
 ## 当前身份
 
-当前实际终态：a4cd7dc2已push，合法Job2d9dd3c446b145b69b95f774145251f2为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，25物理调用688.643328秒/exit3；85发现及27成功零新调用，第28实际1调用恢复、第29–33保存，第34失败、56未执行。exec46669已结束，检查点6594f140d652464691ca5016f2e4662c；产物rv1006-relative-source-dimension-api-20261009-v1不覆盖/复活。原Job/保护库/来源库保持。第34同单元条件与例外拆分后被误认为新增；不是已证来源歧义或医学判断缺件。
+当前最新真实终态：源码db2dec4887437747fcbdb33eddac88c9396ca5f1的Job8e50af461e964fb295b2970f99246655已failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED；36调用1210.912223秒/exit3，40completed、37/42failed_final、48queued。exec92662已结束，不等待或覆盖旧目录；85发现及33旧成功零新调用。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。37为来源读道未带后续列表及括号疑问；42为同段时间关系疑问，均原答留存，不机械消解。
 
-当前最小修复：source-owned-context-target-recheck/v1仅选择完整自有原文与已知官方目标来源相等的多陈述新增项，提供完整原文和兄弟摘录作局部关系核查，不自动覆盖、不改兄弟；原单项/全批门保持。默认提示/Schema不变，新局部调用有版本及实际hash；跨Job无自动次数护栏，如实保留已调用账本。最终23受影响例6.17秒/exit0；C0312聚焦读、244.530秒静默完成等待/exit0/no fallback，MF-1来源标记已修，末修由所有者核验，未临床/diff/全消费者。33reusable/1resume_partial/56refresh只读预检0模型/0写/hash保持；下一合法Job未启动。共同发布/新完整病例闭环/Q3未达。详细命令和局限见implement及reviews/rv1006-owned-context-target-owner-disposition-20261009.md。
+当前最小修复：same-source-official-question-context/v1沿现有单条疑问复核，仅唯一单来源位置与整段原文匹配时提供同一官方要求原文；不增加临床特例/新框架、不改普通陈述其他字段或兄弟。来源上下文hash在实际请求、恢复和证明回放共同核验；丢失上下文不能沿用清空的旧答复；真歧义仍未决。66受影响例7.26秒/exit0；批准C03 Grok/grok-4.7/high同会话两轮完成，无fallback，首两必修已关闭、续无必修，未临床或测试，末顺序小修由所有者验证。只读预检40/2/48零调用零写；真实新运行尚待v2预检与快照冻结，不把工程通过当共同发布/病例完成。
 
 ### 上游功能包记录（历史，不覆盖当前表）
 
@@ -24,15 +24,15 @@
 |---|---|
 | 唯一worktree | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；09-11-e2e-eligibility-review |
-| 当前代码基础 | a4cd7dc2已push；同单元局部核对为当前补丁，下一prepare冻结实际HEAD及源文件hash |
-| 当前最新真实Job | 2d9dd3c446b145b69b95f774145251f2，failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID |
-| 最新真实运行 | 源码a4cd7dc2，25新增调用/688.643328秒；33completed、34failed、56未读；85发现及27成功零新调用，shell3 |
+| 当前代码基础 | db2dec4887437747fcbdb33eddac88c9396ca5f1已push；实际prepare冻结该HEAD及app文件hash |
+| 当前最新真实Job | 8e50af461e964fb295b2970f99246655，failed_final；exec92662已结束，不复活旧终态 |
+| 最新真实运行 | 源码db2dec48，40completed/37及42failed_final/48queued；36调用1210.912223秒/exit3 |
 | 上游第23失败检查点 | c1fea38816e84c729b9b1587a8818619；已由a513局部恢复保存，旧原答/hash保持，不回改成功 |
 | 当前隔离DB | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 真实产物 | 同根/rv1006-relative-source-dimension-api-20261009-v1，prepare/execute均保存，不覆盖/重跑 |
+| 真实产物 | 同根/rv1006-owned-context-target-api-20261009-v1，prepare/execute均已保存；不覆盖/重跑 |
 | 模型路线 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high，输出65536，产品自己的harness直连 |
-| 当前新预检 | 同根/rv1006-owned-context-target-preflight-20261009-v1.json：33reusable/1resume_partial/56refresh，0调用/0写/DBhash保持 |
-| 新代码实际临床运行 | a4cd7dc2分字段已实际恢复第28及29–33；同单元局部核对尚未实跑；无共同发布/完整新工作稿 |
+| 当前新预检 | 同根/rv1006-same-source-question-preflight-20261009-v2.json：40reusable/2resume_partial/48refresh；0调用/0写/DBhash保持，37两疑问及42一疑问均原文绑定 |
+| 新代码实际临床运行 | 旧包真实恢复34并保存更多独立组；本次同源疑问上下文包尚未新运行，未达共同发布/新病例工作稿 |
 | 继承dirty | 7份旧delivery文件未动，不stage；大量继承untracked不清理/不批量stage |
 | 外部可复查范围 | Git源码/合成用例/净化工程报告；真实原件、DB、提示、原答和病例截图仅本机受控可读，外部审阅不可读 |
 
@@ -40,7 +40,7 @@
 
 | 用户动作 | 已实现/已证 | 首个未完成 |
 |---|---|---|
-| 从DOCX准备完整要求 | 官方1153e25b4eba40db964202a1c3ed07c3草稿rev21，23父条/86组件/141条件；200有源资料政策草稿覆盖141条件；85发现/90深审，目前33完成 | 第34局部及56未执行；publishable只是官方草稿门，不是共同发布 |
+| 从DOCX准备完整要求 | 官方1153e25b4eba40db964202a1c3ed07c3草稿rev21，23父条/86组件/141条件；200有源资料政策覆盖141条件；85发现/90深审，运行中39完成 | 第37来源疑问及其余未执行；publishable只是官方草稿门，不是共同发布 |
 | 读取整例资料 | 5PDF24页、14组已实读保存；458候选→407事实/40事件/11暴露；32资格候选关联30事实、426候选受限 | 不同分母不代表准确率；新完整要求消费/数字位置/手写归属仍有具体待核 |
 | 使用当前节点工作稿 | 冻结资格与R1正常/风险/受限消费者已接线 | 现准备病例仍旧81组件/0controls；旧REVIEW_SOURCE_POLICY_NOT_READY不说明新141条件失败 |
 | 回看原件 | Ego147正式非Mock，连续24页/切文件/文字/缩放/返回正确个例；行政噪声收起，临床内容保留；宽屏局部无横溢出 | 新完整报告回源和完整Q3尚未完成；无坐标不造框 |
@@ -92,7 +92,7 @@ C03：CodeBuddy/codebuddy-cli/deepseek-v4.1-flash:max，session01a11d4f-08dd-746
 
 ## 接续步骤与退出
 
-1. 核提交/dirty及当前补丁验证；当前最新来源为c18终态，而非924。先核第23整段来源、合法非可执行边界和当前复用预检；新Job仍须合法API，不复活失败作业。完整90范围不缩，已完成22组依实际证明复用，67未读不隐藏。目录不可覆盖，不以stdout安静猜成败。
+1. 核提交/dirty及当前补丁验证；最新来源为8e50终态，37/42原答及有源上下文保持。收取最新v2预检，40成功依当前完整门证明复用、2局部恢复、48未读不隐藏。只有合法新Job续跑，不能复活失败作业或覆盖旧目录；真歧义保留具体影响，不强行清空。
 2. 无新证据同失败两次停该分支，归因来源→解释→装配→验证→采用→界面首错；推进独立病例消费者，不把所有模型输出都UNKNOWN或以扩大整包预算恢复格式错误。
 3. 完整官方+跨章同源包成立后从合法入口共同发布隔离项目；来源身份及正式采用权限分别核。原政策齐全的新141条件进入消费者，不沿用旧81组件缺policy作结论。
 4. 新合法项目下继承有源资料/候选并实际核资格→全当前节点工作稿；未核或不可读范围具体限制，独立有据结果保持可用，不授予未批准自动数值采用。

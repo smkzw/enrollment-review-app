@@ -13895,6 +13895,143 @@ def test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_fail
     assert receipt.error_detail["automatic_adoption"] is False
 
 
+@pytest.mark.parametrize("defect", [None, "wrong_source", "wrong_excerpt", "duplicate_target",
+                                     "missing_excerpt", "multi_span", "corrupt_pairs", "duplicate_source",
+                                     "changed_quote", "changed_scope", "still_unknown"])
+def test_same_source_official_question_context_is_read_only_not_adoption(defect):
+    from app.agents.protocol_control_source_interpretation import (
+        source_question_official_context, can_recheck_source_scope_question,
+        build_source_scope_question_prompt, apply_source_scope_question_recheck,
+    )
+    batch, inventory, wire, review = _owned_context_target_example()
+    target = batch.known_official_targets[0]
+    target.source_span_ids = list(batch.owned_units[0].source_span_ids)
+    target.source_span_ids.append("span:list")
+    target.source_excerpts.append("具体对象包括甲类与乙类，且不限于这些对象。")
+    inventory.statements[0].unresolved = ["具体对象列表未提供"]
+    if defect == "wrong_source":
+        target.source_span_ids[0] = "span:not-the-owned-unit"
+    elif defect == "wrong_excerpt":
+        target.source_excerpts[0] += "另外还必须完成检查。"
+    elif defect == "duplicate_target":
+        other = target.model_copy(deep=True)
+        other.official_code, other.catalog_item_id, other.position = "EX-02", "official-other", 1
+        batch.known_official_targets.append(other)
+    elif defect == "missing_excerpt":
+        target.source_excerpts = []
+    elif defect == "multi_span":
+        batch.owned_units[0].source_span_ids.append("span:list")
+    elif defect == "corrupt_pairs":
+        target.source_excerpts.pop()
+    elif defect == "duplicate_source":
+        target.source_span_ids[-1] = target.source_span_ids[0]
+    frozen = batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()
+    if defect in {"corrupt_pairs", "duplicate_source"}:
+        with pytest.raises(ValueError, match="身份损坏"):
+            source_question_official_context(inventory.statements[0], batch)
+        return
+    context = source_question_official_context(inventory.statements[0], batch)
+    if defect in {"wrong_source", "wrong_excerpt", "duplicate_target", "missing_excerpt", "multi_span"}:
+        assert context is None
+        assert not can_recheck_source_scope_question(inventory.statements[0], batch)
+        with pytest.raises(ValueError, match="可核来源"):
+            build_source_scope_question_prompt(batch, inventory, 0)
+        return
+    assert context["source_excerpts"] == target.source_excerpts
+    assert set(context) == {"version", "source_span_ids", "source_excerpts",
+                           "source_orders_by_span", "listed_order_is_reading_order"}
+    assert context["listed_order_is_reading_order"] is False
+    assert context["source_orders_by_span"]["span:list"] is None
+    prompt = build_source_scope_question_prompt(batch, inventory, 0)
+    assert target.source_excerpts[-1] in prompt and "不能仅因同源" in prompt
+    proposal = SourceInterpretation(version=inventory.version,
+        statements=[inventory.statements[0].model_copy(deep=True)], units_without_statement=[])
+    proposal.statements[0].unresolved = ["上位范围仍有两种合理解释"] if defect == "still_unknown" else []
+    if defect == "changed_quote":
+        proposal.statements[0].quoted_text = "允许中断背景治疗。"
+    elif defect == "changed_scope":
+        proposal.statements[0].affected_stage = "基线"
+    if defect in {"changed_quote", "changed_scope"}:
+        with pytest.raises(ValueError, match="不得改变"):
+            apply_source_scope_question_recheck(batch, inventory, 0, proposal)
+    else:
+        revised = apply_source_scope_question_recheck(batch, inventory, 0, proposal)
+        assert revised.statements[0].unresolved == proposal.statements[0].unresolved
+        assert revised.statements[1] == inventory.statements[1]
+        assert revised.statements[0].model_dump(exclude={"unresolved"}) == inventory.statements[0].model_dump(exclude={"unresolved"})
+        assert review.items[0].decision == "additional_requirement"
+    assert (batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()) == frozen
+
+
+@pytest.mark.parametrize("outcome", ["clear", "unknown", "transport"])
+def test_same_source_question_runner_requires_fresh_target_review_and_preserves_history(outcome):
+    batch, inventory, wire, review = _owned_context_target_example()
+    inventory.statements[0].unresolved = ["列表未提供"]
+    target = batch.known_official_targets[0]
+    target.source_span_ids = list(batch.owned_units[0].source_span_ids)
+    target.source_span_ids.append("span:list")
+    target.source_excerpts.append("对象包括甲类与乙类。")
+    # A previously unresolved review is valid, but not a fresh proof after a source proposal.
+    review.items[0].decision = "unresolved"
+    review.items[0].unresolved_aspects = ["列表未提供"]
+    review.items[0].unresolved_cause = "source_ambiguity"
+    proposal = SourceInterpretation(version=inventory.version,
+        statements=[inventory.statements[0].model_copy(deep=True)], units_without_statement=[])
+    if outcome == "clear":
+        proposal.statements[0].unresolved = []
+    class Transport(_FakeTransport):
+        source_calls = 0
+        target_calls = 0
+        def start_source_interpretation(self, *, prompt):
+            self.source_calls += 1
+            assert target.source_excerpts[-1] in prompt
+            if outcome == "transport":
+                raise RuntimeError("isolated source context unavailable")
+            return ProtocolControlAgentResponse(session_id="source-question", text=proposal.model_dump_json())
+        def start_source_target_review(self, *, prompt):
+            self.target_calls += 1
+            assert outcome != "transport"
+            answer = review.items[0].model_copy(deep=True)
+            if outcome == "clear":
+                answer.decision, answer.unresolved_aspects, answer.unresolved_cause = "covered_by_official", [], None
+            return ProtocolControlAgentResponse(session_id="fresh-target", text=SourceTargetReview(
+                version=review.version, items=[answer]).model_dump_json())
+    transport = Transport([])
+    original = inventory.model_dump_json(), wire.model_dump_json(), review.model_dump_json()
+    def run(history=(), source=inventory, seed=review):
+        return ProtocolControlAgentRunner(max_schema_repairs=2, max_transport_retries=0).run(
+            batch, transport, resume_wire=wire, resume_source_interpretation=source,
+            resume_source_target_review=seed, resume_source_statement_coverage=source_statement_coverage(batch, source, wire),
+            resume_session_id="frozen-wire", resume_source_scope_question_history=history,
+            output_validator=lambda _output: None)
+    result = run()
+    assert transport.source_calls == 1
+    assert transport.target_calls == int(outcome != "transport")
+    receipt = result.source_scope_question_history[0]
+    assert len(receipt["error_detail"]["source_context_sha256"]) == 64
+    assert receipt["error_detail"]["source_context_version"] == "same-source-official-question-context/v1"
+    assert result.status == ("已解析" if outcome == "clear" else "需要核对")
+    assert result.source_interpretation.statements[1] == inventory.statements[1]
+    if outcome == "unknown":
+        run(result.source_scope_question_history)
+        assert transport.source_calls == 1
+        # Changed context permits a new question; it does not reset the two-call repair budget.
+        target.source_excerpts[-1] += "另有一个上位对象。"
+        run(result.source_scope_question_history)
+        assert transport.source_calls == 2
+    elif outcome == "clear":
+        original_context = target.source_excerpts[-1]
+        target.source_excerpts[-1] += "仅其他上下文摘录已经改变。"
+        with pytest.raises(ValueError, match="已变更上下文"):
+            run(result.source_scope_question_history, result.source_interpretation, result.source_target_review)
+        target.source_excerpts[-1] = original_context
+        target.source_excerpts[0] += "另一处已经改动的范围。"
+        with pytest.raises(ValueError, match="已变更上下文"):
+            run(result.source_scope_question_history, result.source_interpretation, result.source_target_review)
+        assert transport.source_calls == 1
+    assert (inventory.model_dump_json(), wire.model_dump_json(), review.model_dump_json()) == original
+
+
 def _native_candidate_row_batch():
     batch = _batch().model_copy(deep=True)
     row = batch.owned_units[0]

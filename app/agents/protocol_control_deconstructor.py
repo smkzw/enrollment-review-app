@@ -146,6 +146,8 @@ from .protocol_control_source_interpretation import (
     apply_source_scope_question_recheck,
     can_recheck_source_scope_question,
     build_source_scope_question_prompt,
+    source_question_official_context,
+    source_question_context_identity,
     build_source_definition_consumers_prompt,
     build_source_interpretation_prompt,
     build_source_quote_correction_prompt,
@@ -7235,7 +7237,10 @@ class ProtocolControlAgentRunner:
                 if (proposal.version != source_interpretation.version or len(proposal.statements) != 1
                         or proposal.units_without_statement):
                     raise ValueError("来源疑问的历史答复不是单条有源提案")
-                if (proposal.statements[0] == statement
+                context_compatible = detail.get("source_context_sha256") == source_question_context_identity(statement, batch)
+                if not context_compatible and not statement.unresolved:
+                    raise ValueError("来源疑问的旧答复依赖已变更上下文，不能复用已清空的疑问")
+                if (proposal.statements[0] == statement and context_compatible
                         and (unit.table_context is None
                              or detail.get("native_guidance_version") == NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION)):
                     seen_questions.add(index)
@@ -7713,6 +7718,10 @@ class ProtocolControlAgentRunner:
                     "prompt_sha256": _sha256(question_prompt),
                     "native_guidance_version": NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
                 }
+                official_context = source_question_official_context(statement, batch)
+                if official_context is not None:
+                    detail["source_context_sha256"] = source_question_context_identity(statement, batch)
+                    detail["source_context_version"] = official_context["version"]
                 try:
                     source_repairs += 1
                     repair_used = True
@@ -7726,7 +7735,7 @@ class ProtocolControlAgentRunner:
                         raw_output_sha256=_sha256(question_response.text),
                         raw_output_chars=len(question_response.text), raw_output_text=question_response.text,
                         outcome="parsed", error_detail=detail,
-                        issues=["本条时间疑问经原文局部核对；完整要求仍须独立核验"],
+                        issues=["本条来源疑问经原文局部核对；完整要求仍须独立核验"],
                     ))
                 except Exception as question_error:  # noqa: BLE001 - retain the frozen source on failure
                     code = protocol_control_call_failure_code(question_error) or "SOURCE_SCOPE_QUESTION_RECHECK_INVALID"
