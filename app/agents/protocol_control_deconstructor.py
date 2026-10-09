@@ -127,6 +127,7 @@ from .protocol_control_source_interpretation import (
     NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
     SOURCE_TARGET_REVIEW_VERSION,
     SOURCE_TARGET_REVIEW_POLICY_VERSION,
+    SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
     SourceDefinitionConsumers,
     SourceInterpretation,
     SourceInterpretationValidationError,
@@ -150,6 +151,7 @@ from .protocol_control_source_interpretation import (
     build_source_quote_correction_prompt,
     build_source_scope_correction_prompt,
     build_source_target_review_prompt,
+    source_target_context_recheck_needed,
     build_source_unit_comparison_prompt,
     normalize_source_excerpt,
     simple_visit_action_preserves_time,
@@ -8208,6 +8210,7 @@ class ProtocolControlAgentRunner:
                     temporal_unresolved_indexes: list[int] = []
                     pending_review: SourceTargetReview | None = None
                     reusable: list = []
+                    repaired_review_indexes: set[int] = set()
                     def recovery_target_review() -> SourceTargetReview | None:
                         proposed = target_review
                         if proposed is None and pending_review is not None:
@@ -8293,7 +8296,6 @@ class ProtocolControlAgentRunner:
                             corrected_invalid_review = False
                             # Each typed invalid statement gets one local correction.
                             # Valid siblings are retained; a repeated failure cannot loop.
-                            repaired_review_indexes: set[int] = set()
                             while True:
                                 try:
                                     review_validation_snapshot = pending_review
@@ -8908,6 +8910,74 @@ class ProtocolControlAgentRunner:
                         validate_source_target_review(
                             batch, source_interpretation, coverage, target_review,
                         )
+                        # A split point must not lose the owned paragraph's exception.
+                        # Exact source equality selects one fresh comparison, never coverage.
+                        context_rechecked = {
+                            attempt.error_detail.get("statement_id")
+                            for attempt in attempts
+                            if isinstance(attempt.error_detail, dict)
+                            and attempt.error_detail.get("recovery_method")
+                            == SOURCE_TARGET_CONTEXT_RECHECK_VERSION
+                        }
+                        context_reads = 0
+                        for item in tuple(target_review.items):
+                            if (context_reads >= 2 or item.statement_index in context_rechecked
+                                    or not source_target_context_recheck_needed(
+                                        batch, source_interpretation, item)):
+                                continue
+                            context_reads += 1
+                            entry = next(entry for entry in coverage
+                                         if entry.statement_index == item.statement_index)
+                            context_prompt = build_source_target_review_prompt(
+                                batch, source_interpretation, [entry],
+                                comparison_target_id=item.target_id, include_owned_context=True,
+                            )
+                            detail = {
+                                "recovery_method": SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
+                                "statement_id": item.statement_index,
+                                "request_prompt_sha256": _sha256(context_prompt),
+                                "previous_item_sha256": _sha256(item.model_dump_json()),
+                                "automatic_adoption": False,
+                            }
+                            review_response = None
+                            try:
+                                review_response = reviewer(prompt=context_prompt)
+                                corrected = SourceTargetReview.model_validate_json(review_response.text)
+                                validate_source_target_review(
+                                    batch, source_interpretation, [entry], corrected,
+                                )
+                                proposed_review = target_review.model_copy(update={"items": [
+                                    corrected.items[0] if old.statement_index == item.statement_index
+                                    else old for old in target_review.items
+                                ]})
+                                validate_source_target_review(
+                                    batch, source_interpretation, coverage, proposed_review,
+                                )
+                            except Exception as context_error:
+                                detail["code"] = (protocol_control_call_failure_code(context_error)
+                                                  or "SOURCE_TARGET_CONTEXT_RECHECK_INVALID")
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=(review_response.session_id if review_response
+                                                else getattr(context_error, "session_id", None) or session_id),
+                                    raw_output_sha256=_sha256(review_response.text if review_response else str(context_error)),
+                                    raw_output_chars=len(review_response.text) if review_response else None,
+                                    raw_output_text=review_response.text if review_response else None,
+                                    outcome="publication_invalid" if review_response else "transport_failed",
+                                    error_classes=[detail["code"]], error_detail=detail,
+                                    issues=["同单元关系核查未通过；原核对与兄弟保持：" + str(context_error)[:900]],
+                                ))
+                                raise
+                            target_review = proposed_review
+                            repaired_review_indexes.add(item.statement_index)
+                            review_validation_snapshot = target_review
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1, session_id=review_response.session_id,
+                                raw_output_sha256=_sha256(review_response.text),
+                                raw_output_chars=len(review_response.text), raw_output_text=review_response.text,
+                                outcome="parsed", error_detail=detail,
+                                issues=["同单元关系已局部复核；兄弟保持，仍需整批采用核验"],
+                            ))
                         # A clear source may lack a catalog target while its exact
                         # statement recurs in frozen context. Establish only the
                         # existing pending correspondence, never target coverage.

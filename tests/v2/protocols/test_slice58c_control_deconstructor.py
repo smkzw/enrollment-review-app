@@ -5730,6 +5730,10 @@ def test_unresolved_exact_context_uses_one_pending_correspondence_without_adopti
             result.source_target_review.model_dump_json().encode()).hexdigest()
     else:
         assert result.source_target_review.items[0] == review.items[0]
+        if response_kind == "additional":
+            proof = next(attempt.error_detail for attempt in result.attempts
+                         if attempt.error_detail and "review_proof_origin" in attempt.error_detail)
+            assert proof["review_proof_origin"] == "assembled_source_target_review"
     if fault in {"identity", "budget", "interrupted"}:
         expected = {"identity": "MODEL_IDENTITY_INVALID", "budget": "LOGICAL_BUDGET_EXHAUSTED",
                     "interrupted": "FLOW_COMPLETION_UNCERTAIN"}[fault]
@@ -13792,6 +13796,103 @@ def test_target_review_prompt_supplies_force_without_declaring_coverage():
     assert "force 只记原文语气，不决定是否要核对" in prompt
     assert "不是时间已对应的证明" in prompt
     assert "shared_visit_source_positions" in prompt
+
+
+def _owned_context_target_example():
+    batch = _batch().model_copy(deep=True)
+    action, exception = "不得中断背景治疗。", "如因不良反应中断，则需记录原因。"
+    batch.owned_units[0].excerpt = action + exception
+    batch.known_official_targets[0].source_excerpts = [action + exception]
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-01", quoted_text=quote,
+                                    force="required", decision_functions=["action"], time_words=[])
+                    for quote in (action, exception)], units_without_statement=["su-02"])
+    wire = _wire()
+    wire.dispositions[0].disposition = StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY
+    wire.dispositions[0].linked_official_code = "EX-01"
+    review = SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[
+        SourceTargetReviewItem(statement_index=index, decision="covered_by_official",
+            target_id="EX-01", source_action_excerpt=quote,
+            target_action_excerpt=action + exception, unresolved_aspects=[])
+        for index, quote in enumerate((action, exception))])
+    review.items[0].decision = "additional_requirement"
+    review.items[0].unresolved_aspects = ["拆开的陈述未重复例外"]
+    return batch, inventory, wire, review
+
+
+@pytest.mark.parametrize("mismatch", [None, "source", "target", "unknown", "single"])
+def test_owned_context_target_recheck_selects_exact_source_not_coverage(mismatch):
+    from app.agents.protocol_control_source_interpretation import source_target_context_recheck_needed
+    batch, inventory, wire, review = _owned_context_target_example()
+    if mismatch == "source":
+        batch.owned_units[0].excerpt += "另须核查其他记录。"
+    elif mismatch == "target":
+        review.items[0].target_id = "unknown"
+    elif mismatch == "unknown":
+        inventory.statements[0].unresolved = ["例外关系不明"]
+    elif mismatch == "single":
+        inventory.statements = inventory.statements[:1]
+    assert source_target_context_recheck_needed(batch, inventory, review.items[0]) == (mismatch is None)
+    coverage = source_statement_coverage(batch, inventory, wire)
+    frozen = batch.model_dump_json(), inventory.model_dump_json(), review.model_dump_json()
+    prompt = build_source_target_review_prompt(batch, inventory, [coverage[0]],
+        comparison_target_id="EX-01", include_owned_context=True)
+    context = json.loads(next(line.removeprefix("本条完整原文关系上下文：")
+                              for line in prompt.splitlines()
+                              if line.startswith("本条完整原文关系上下文：")))
+    assert len(context) == 1 and context[0]["structure_unit_id"] == "su-01"
+    assert context[0]["excerpt"] == batch.owned_units[0].excerpt
+    assert len(context[0]["statements"]) == len(inventory.statements)
+    assert "本次必须且只能返回这些 statement_index：[0]" in prompt
+    assert "不证明已有目标覆盖" in prompt
+    assert (batch.model_dump_json(), inventory.model_dump_json(), review.model_dump_json()) == frozen
+    assert "本条完整原文关系上下文" not in build_source_target_review_prompt(batch, inventory, [coverage[0]])
+
+
+@pytest.mark.parametrize("response_kind", ["covered", "additional", "foreign", "failure"])
+def test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure(response_kind):
+    batch, inventory, wire, review = _owned_context_target_example()
+    coverage = source_statement_coverage(batch, inventory, wire)
+    validate_source_target_review(batch, inventory, coverage, review)
+    original = wire.model_dump_json(), inventory.model_dump_json(), review.model_dump_json()
+    answer = review.items[0].model_copy(deep=True)
+    if response_kind == "covered":
+        answer.decision, answer.unresolved_aspects = "covered_by_official", []
+    elif response_kind == "foreign":
+        answer.statement_index = 1
+
+    class ContextTransport(_FakeTransport):
+        calls = 0
+        def start_source_target_review(self, *, prompt):
+            self.calls += 1
+            assert "本条完整原文关系上下文：" in prompt
+            if response_kind == "failure":
+                raise RuntimeError("isolated transport failure")
+            return ProtocolControlAgentResponse(session_id="context-recheck",
+                text=SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[answer]).model_dump_json())
+
+    transport = ContextTransport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=0, max_transport_retries=0).run(
+        batch, transport, resume_wire=wire, resume_source_interpretation=inventory,
+        resume_source_target_review=review, resume_source_statement_coverage=coverage,
+        resume_session_id="saved", output_validator=lambda _output: None)
+    assert transport.calls == 1
+    assert (wire.model_dump_json(), inventory.model_dump_json(), review.model_dump_json()) == original
+    assert result.source_target_review.items[1] == review.items[1]
+    if response_kind == "covered":
+        assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
+        assert result.final_output is not None and not result.final_output.candidates
+        assert result.source_target_review.items[0].decision == "covered_by_official"
+    else:
+        assert result.status == "需要核对"
+        assert result.final_output is None
+        assert result.partial_wire == wire
+        assert result.source_target_review.items[0] == review.items[0]
+    receipt = next(attempt for attempt in result.attempts
+                   if attempt.error_detail and attempt.error_detail.get("recovery_method")
+                   == "source-owned-context-target-recheck/v1")
+    assert len(receipt.error_detail["request_prompt_sha256"]) == 64
+    assert receipt.error_detail["automatic_adoption"] is False
 
 
 def _native_candidate_row_batch():

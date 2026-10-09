@@ -40,6 +40,7 @@ SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
 SOURCE_TARGET_REVIEW_GAP_VERSION = "source-target-unresolved-cause/v1"
 SOURCE_ATTRIBUTION_VALIDATION_VERSION = "source-external-header-scope/v2"
+SOURCE_TARGET_CONTEXT_RECHECK_VERSION = "source-owned-context-target-recheck/v1"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -1536,12 +1537,38 @@ def _target_review_source_packet(batch, comparison_target_id):
     return targets, excerpts
 
 
+def source_target_context_recheck_needed(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    item: SourceTargetReviewItem,
+) -> bool:
+    """Select a bounded comparison, not a proof that the target covers the point."""
+    if item.decision != "additional_requirement" or item.target_id is None:
+        return False
+    statement = interpretation.statements[item.statement_index]
+    if statement.unresolved:
+        return False
+    unit = next(unit for unit in batch.owned_units
+                if unit.structure_unit_id == statement.structure_unit_id)
+    target = next((target for target in batch.known_official_targets
+                   if target.official_code == item.target_id), None)
+    return bool(
+        target is not None
+        and sum(other.structure_unit_id == unit.structure_unit_id
+                for other in interpretation.statements) > 1
+        and normalize_source_excerpt(unit.excerpt)
+        and any(normalize_source_excerpt(unit.excerpt) == normalize_source_excerpt(excerpt)
+                for excerpt in target.source_excerpts if excerpt)
+    )
+
+
 def build_source_target_review_prompt(
     batch: ProtocolControlDispositionBatch,
     interpretation: SourceInterpretation,
     coverage: list[SourceStatementCoverage],
     *,
     comparison_target_id: str | None = None,
+    include_owned_context: bool = False,
 ) -> str:
     indexes = target_review_indexes(interpretation, coverage, batch)
     coverage_by_index = {entry.statement_index: entry for entry in coverage}
@@ -1609,7 +1636,28 @@ def build_source_target_review_prompt(
         }
         for unit in batch.context_units
     ]
-    return (
+    owned_context = ""
+    if include_owned_context:
+        selected_units = {interpretation.statements[index].structure_unit_id for index in indexes}
+        owned_context = (
+            f"\n局部原文关系复核：{SOURCE_TARGET_CONTEXT_RECHECK_VERSION}。"
+            "陈述拆分只是核对粒度；同一原文单元里的条件、例外及依赖仍须一起核查。"
+            "下列完整原文及兄弟陈述只提供关系上下文，不证明已有目标覆盖。"
+            "先核原文是否明确将例外限定到本条，再核目标是否保留同一条件和例外；"
+            "不能因本条摘录未重复例外就自动新增要求，也不能因整段文字相同就跳过含义核对。"
+            "source_action_excerpt仍只能摘自本条quoted_text；不拼接兄弟，不改变兄弟处置。"
+            "关系不明或目标实际缺少限定时保留具体差异。只返回本次待核序号。\n"
+            "本条完整原文关系上下文：" + json.dumps([
+                {"structure_unit_id": unit.structure_unit_id,
+                 "source_ref": unit.source_ref, "source_span_ids": unit.source_span_ids,
+                 "excerpt": unit.excerpt,
+                 "statements": [{"statement_index": index, "quoted_text": statement.quoted_text}
+                                for index, statement in enumerate(interpretation.statements)
+                                if statement.structure_unit_id == unit.structure_unit_id]}
+                for unit in batch.owned_units if unit.structure_unit_id in selected_units
+            ], ensure_ascii=False, sort_keys=True) + "\n"
+        )
+    return owned_context + (
         "你是本系统方案 Agent 的逐项来源核对步骤。仅核下面列出的陈述，不生成新规则或判断受试者。"
         "每条只可选：已有官方入排完整覆盖、已有访视流程完整覆盖、尚有增量要求、"
         "只读单元可能复述同一要求（仅待跨章核验）、"
