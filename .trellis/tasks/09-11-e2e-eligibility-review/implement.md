@@ -3,9 +3,11 @@
 
 Goal active；claims_complete=false。本表是唯一现行流程状态；下方过去的“当前/未运行”均为各自时点的历史记录，不据此重跑。
 
-**当前实际终态：** 已push源码469288f40ac289604e1767078aa00dc8114e956c的合法Job0fbbb14ba841415d970281159021c423为failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，5调用325.527855秒/exit3，43深审完成、第44失败、46queued。85发现及43成功零新调用；结构已通过，核对把有源兄弟误当单句新增，当前次数表达仍有缺口。exec94874结束；检查点6089461160cd40e097a2423a6919f5a6，产物rv1006-scoped-exception-api-20261009-v1。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发；42/EX13c仍非执行限制。
+**当前实际终态：** 已push源码43928e2779dc52b1560c3378298df9dc4f66d785的合法Jobcbf562cbfc7e46999e85d8fbe68d04c1为failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，1调用149.215157秒/exit3，43深审完成、第44失败、46queued。85发现及43成功零新调用；同一核对回答中操作句有效、次数句缺确定比较，旧整答校验丢弃有效兄弟。exec91631结束；检查点9906bbc5bf604edbb4833857244fbb75，产物rv1006-candidate-closure-api-20261009-v1。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发；42/EX13c仍非执行限制。
 
-**当前最小包与分工：** 所有者集成＋批准C03单独审，来源与采用证明有解释风险。candidate-source-closure-context/v1提供候选实际owned来源，多来源内容进入proof身份；不自动完成兄弟或重签旧答。action+exception仅无独立例外层且保留明确例外文字可核；纯定义/计算/例外仍拒。合取按当前句选定原子拼接，每个OR分支完整核，弱分支/全句短路拒绝。首审忽略OR组建议未采纳；续审指出any绕过后由所有者逐组修验，未第三审。两相连全窗512pass/96.33秒，末受影响68pass/448deselected/4.56秒/exit0，5SWIG，不累加/不冒称末全窗。Grok/grok-4.7/high同会话两轮exit0/no fallback，无临床/测试。只读反事实第2操作句结构可用，第1次数句仍拒，非采用。最终预检0fbbb来源43/1/46零调用零写/hash保持，新合法创建90步须逐项一致。取舍reviews/rv1006-candidate-source-closure-owner-disposition-20261009.md。完整共同发布及病例闭环未达。
+**当前最小包与分工：** 所有者集成＋单批准C03独审，逐项保存和局部修订涉及采用保护。真实原答只读重验已保留操作句，并定位唯一次数原子；0模型/0数据库写/不重签旧proof。新绑定保存完整实际回答及候选/来源hash；身份损坏整答拒绝，内容错误只影响对应项。条件前缀须在每个触发分支且显式绑定全部分支；空作用域不当全部。访视词须独立边界或条件引导词，期外/前/后不借前缀过门。唯一数值/方向/原子缺口只走原continue_atom，共用预算、一次路径；冻结命题/时间/观察政策，失败后回到原草稿，原答及失败保留。未变候选的合法incomplete证明继续保存、不提升为positive。C03 Grok/grok-build/grok-4.7/high，session318e06ad-e6b0-4d87-8b4d-8e38660ff615，781.912秒/exit0/1轮/no fallback，120min完成等待；不读临床/不跑测试，四项意见均以所有者修复及反例关闭，末代码未另独审。最终三相连模块1029pass/13.48秒/exit0、5SWIG，v8；此前v6为1027pass/2fail、v7为1028pass/1fail，新增夹具问题与验证未实际进入分支如实修正，不松门、不累加。取舍reviews/rv1006-alignment-item-recovery-owner-disposition-20261009.md。新包尚未真实运行；下一从cbf562做最新只读预检、90步合法创建并接续，不重跑43成功。完整共同发布及病例闭环仍未达。
+
+**前一来源闭包包（历史）：** candidate-source-closure-context/v1提供实际owned来源及多源proof身份。两相连全窗512pass在末修前，末受影响68pass；两轮独审、取舍及当时预检见reviews/rv1006-candidate-source-closure-owner-disposition-20261009.md。该包已在cbf562实际运行，不能依据旧“尚未运行”重跑。
 
 ### 前一例外范围包（历史）
 

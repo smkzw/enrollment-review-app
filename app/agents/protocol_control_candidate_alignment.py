@@ -27,6 +27,23 @@ class SourceCandidateAlignmentValidationError(ValueError):
     pass
 
 
+class CandidateNumericAlignmentError(SourceCandidateAlignmentValidationError):
+    def __init__(self, *, item, candidate, atoms, source_refs):
+        paths = [(item.candidate_index, group_index, atom_index)
+                 for group_index, group in enumerate(candidate.obligation_expression.groups)
+                 for atom_index, atom in enumerate(group.atoms)
+                 if atom in atoms and any(_NUMBER.search(quote)
+                     and any(re.search(pattern, quote) for pattern, _ in _COMPARISON_WORDS)
+                     for quote in atom.source_excerpts)]
+        self.error_detail = {
+            "reason": "numeric_predicate_missing",
+            "source_refs": list(source_refs),
+            "atom_paths": [list(path) for path in paths],
+            "required_source_excerpt": item.source_excerpt,
+        }
+        super().__init__("数值原文缺少可核验的比较条件，不能宣布完整")
+
+
 class EvidencePolicyCheckError(SourceCandidateAlignmentValidationError):
     """A source-policy mismatch, scoped to the unchanged candidate field."""
 
@@ -162,6 +179,59 @@ def _split_obligations_cover_source(source: str, scope: str, atoms) -> bool:
     remainder = "".join(char for char, present in zip(source, covered, strict=True)
                         if not present).strip("，,。；;：: ")
     return remainder in {"", "且", "并且", "同时"}
+
+
+def _conditioned_obligations_cover_source(source, scope, candidate, group, atoms, selected_atoms):
+    """A literal common trigger may carry the prefix, never the consequence."""
+    if candidate.trigger_expression is None:
+        return False
+    from .protocol_control_source_interpretation import normalize_source_excerpt
+
+    fragments = [fragment for atom in atoms for quote in atom.source_excerpts
+                 if (fragment := _source_fragment(source, scope, normalize_source_excerpt(quote))) is not None]
+    if not fragments or any(source.count(fragment) != 1 for fragment in fragments):
+        return False
+    offset = min(source.index(fragment) for fragment in fragments)
+    prefix = source[:offset].strip("，,。；;：: ")
+    branches = candidate.trigger_expression.groups
+    if (not prefix or set(group.applies_to_trigger_branch_indexes) != set(range(len(branches)))):
+        return False
+    if not all(any(atom in selected_atoms and normalize_source_excerpt(atom.statement) == prefix
+                   for atom in branch.atoms) for branch in branches):
+        return False
+    return _split_obligations_cover_source(source[offset:], scope, atoms)
+
+
+def _common_trigger_preserves_visit_time(batch, statement, candidate, selected_atoms):
+    from .protocol_control_source_interpretation import (
+        normalize_source_excerpt, source_has_single_visit_anchor, source_visit_scope_matches,
+    )
+    if (statement.unresolved or not source_has_single_visit_anchor(statement)
+            or candidate.trigger_expression is None):
+        return False
+    word = normalize_source_excerpt(statement.time_words[0])
+    if _NUMBER.search(word):
+        return False
+    def carries_visit(atom):
+        text = normalize_source_excerpt(atom.statement)
+        if not text.startswith(word):
+            return False
+        remainder = text[len(word):]
+        # A visit label must be a separate scope, not the prefix of a different window.
+        return not remainder or bool(re.match(r"^[，,；;：:、。]|^(?:如|若|当|如果)", remainder))
+
+    if not all(any(atom in selected_atoms and carries_visit(atom)
+                   for atom in branch.atoms) for branch in candidate.trigger_expression.groups):
+        return False
+    stages = {stage.workflow_stage_id: stage for stage in batch.known_workflow_stage_targets}
+    nodes = [node for node in candidate.review_node_bindings if node.role.value == "decide_at_node"]
+    return bool(nodes) and all(
+        (stage := stages.get(node.workflow_stage_id)) is not None
+        and node.review_stage == stage.review_stage
+        and bool(stage.source_span_ids) and bool(stage.source_excerpts)
+        and source_visit_scope_matches(word, normalize_source_excerpt(stage.display_name))
+        for node in nodes
+    )
 
 
 def _matches_time_anchor_direction(word: str, atoms) -> bool:
@@ -426,6 +496,65 @@ def bind_candidate_alignment(batch, interpretation, coverage, wire, alignment, r
     return alignment.model_copy(update={"proofs": proofs})
 
 
+def bind_partial_candidate_alignment(batch, interpretation, coverage, wire, alignment,
+                                     response_text, expected_pairs):
+    """Keep valid individual decisions bound to the unchanged complete response."""
+    from .protocol_control_source_interpretation import normalize_source_excerpt
+
+    parsed = SourceCandidateAlignment.model_validate_json(response_text)
+    pairs = [(item.statement_index, item.candidate_index) for item in parsed.items]
+    if (parsed != alignment or parsed.proofs
+            or parsed.version != SOURCE_CANDIDATE_ALIGNMENT_VERSION
+            or len(set(pairs)) != len(pairs) or set(pairs) != set(expected_pairs)
+            or any(index >= len(interpretation.statements) for index, _ in pairs)):
+        raise ValueError("候选核对回答的身份、范围或原始内容不一致")
+    candidates = wire.candidate_drafts if hasattr(wire, "candidate_drafts") else wire.candidates
+    if any(index >= len(candidates) for _, index in pairs):
+        raise ValueError("候选核对回答越出冻结候选范围")
+    by_statement = {entry.statement_index: entry for entry in coverage}
+    for item in parsed.items:
+        statement = interpretation.statements[item.statement_index]
+        entry = by_statement.get(item.statement_index)
+        selected = candidates[item.candidate_index]
+        candidate = selected.semantics if hasattr(selected, "semantics") else selected
+        if (candidate is None or entry is None
+                or entry.structure_unit_id != statement.structure_unit_id
+                or item.candidate_index not in entry.action_candidate_indexes
+                or statement.structure_unit_id not in candidate.source_structure_unit_ids
+                or normalize_source_excerpt(item.source_excerpt) != normalize_source_excerpt(statement.quoted_text)):
+            raise ValueError("候选核对回答的来源身份不一致")
+    items, proofs, failures = [], [], []
+    for item in parsed.items:
+        single = SourceCandidateAlignment(version=parsed.version, items=[item])
+        try:
+            validate_candidate_alignment(batch, interpretation, coverage, wire, single)
+        except ValueError as exc:
+            unit = next(unit for unit in batch.owned_units
+                        if unit.structure_unit_id == interpretation.statements[item.statement_index].structure_unit_id)
+            failures.append({
+                "code": "SOURCE_CANDIDATE_ALIGNMENT_INVALID",
+                "statement_ids": [item.statement_index],
+                "candidate_indexes": [item.candidate_index],
+                "json_path": f"/source_candidate_alignment/items/{pairs.index((item.statement_index, item.candidate_index))}",
+                "source_refs": list(unit.source_span_ids),
+                "retry_class": "source_semantic_review",
+                "affected_dependents": [item.candidate_index],
+                "message": str(exc),
+                **getattr(exc, "error_detail", {}),
+            })
+            continue
+        source_hash, candidate_hash = _alignment_input_identity(batch, interpretation, wire, item)
+        items.append(item)
+        proofs.append(SourceCandidateAlignmentProof(
+            statement_index=item.statement_index, candidate_index=item.candidate_index,
+            source_sha256=source_hash, candidate_sha256=candidate_hash,
+            response_sha256=hashlib.sha256(response_text.encode("utf-8")).hexdigest(),
+            response_text=response_text,
+        ))
+    bound = SourceCandidateAlignment(version=parsed.version, items=items, proofs=proofs) if items else None
+    return bound, failures
+
+
 def alignment_with_items(alignment, items):
     pairs = {(item.statement_index, item.candidate_index) for item in items}
     return SourceCandidateAlignment(version=SOURCE_CANDIDATE_ALIGNMENT_VERSION, items=list(items),
@@ -465,7 +594,10 @@ def reusable_proven_alignment_items(batch, interpretation, coverage, wire, align
             response = SourceCandidateAlignment.model_validate_json(proof.response_text)
             matches = [entry for entry in response.items
                        if (entry.statement_index, entry.candidate_index) == pair]
-            if response.proofs or len(matches) != 1 or matches[0] != item:
+            response_pairs = [(entry.statement_index, entry.candidate_index) for entry in response.items]
+            if (response.proofs or response.version != SOURCE_CANDIDATE_ALIGNMENT_VERSION
+                    or len(response_pairs) != len(set(response_pairs))
+                    or len(matches) != 1 or matches[0] != item):
                 continue
         except (SourceCandidateAlignmentValidationError, ValueError, TypeError, KeyError,
                 IndexError, StopIteration):
@@ -625,7 +757,9 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 )) or any(source in normalize_source_excerpt(quote)
                           for atom in group_selected for quote in atom.source_excerpts):
                     continue
-                if not _split_obligations_cover_source(source, scope, group_selected):
+                if (not _split_obligations_cover_source(source, scope, group_selected)
+                        and not _conditioned_obligations_cover_source(
+                            source, scope, candidate, group, group_selected, selected_atoms)):
                     raise ValueError("候选义务摘录未按原文保留完整合取内容")
             functions = set(statement.decision_functions)
             if (functions & {"definition", "calculation_input", "unclassified"}
@@ -648,9 +782,22 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                               getattr(getattr(atom, "evaluation", None), "proposition", None))
                 if isinstance(value, str)
             )
+            numbers = set(_NUMBER.findall(source))
+            directions = {direction for pattern, direction in _COMPARISON_WORDS
+                          if re.search(pattern, source)}
+            predicates = [atom.evaluation.predicate for atom in selected_atoms
+                          if getattr(atom, "evaluation", None) is not None
+                          and atom.evaluation.predicate is not None]
+            if len(numbers) == 1 and len(directions) == 1 and not predicates:
+                raise CandidateNumericAlignmentError(
+                    item=item, candidate=candidate, atoms=obligation_selected,
+                    source_refs=unit.source_span_ids,
+                )
             shared_prohibition_time = any(
                 shared_prohibition_preserves_source(statement, atom) for atom in obligation_selected
             )
+            common_trigger_time = _common_trigger_preserves_visit_time(
+                batch, statement, candidate, selected_atoms)
             if statement.exception_words and normalize_source_excerpt(statement.exception_words) not in rendered:
                 raise ValueError("候选未逐项保留来源时点或例外")
             for word in statement.time_words:
@@ -665,13 +812,12 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 if (normalized_word not in scope or _NUMBER.search(normalized_word)
                         or not _matches_time_anchor_direction(normalized_word, selected_atoms)):
                     raise ValueError("候选未逐项保留来源时点或例外")
-            if "time_validity" in functions and not shared_prohibition_time and not simple_visit_action_preserves_time(
+            if "time_validity" in functions and not shared_prohibition_time and not common_trigger_time and not simple_visit_action_preserves_time(
                 batch, statement, candidate
             ):
                 for word in statement.time_words:
                     if not _matches_time_anchor_direction(word, selected_atoms):
                         raise ValueError("候选时间锚点或方向未由原文逐项证明")
-            numbers = set(_NUMBER.findall(source))
             if "threshold" in functions and not numbers:
                 source_modes = {mode for mode, words in _QUANTIFIER_GROUPS.items()
                                 if any(word in source for word in words)}
@@ -687,13 +833,8 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 if (len(source_modes) != 1 or statement_modes != source_modes
                         or (proposition_modes and not source_modes <= proposition_modes)):
                     raise ValueError("候选数量范围未在对应原句中保留")
-            directions = {direction for pattern, direction in _COMPARISON_WORDS
-                          if re.search(pattern, source)}
             if numbers and not (native_visit_scope and source in rendered
                                 and "threshold" not in functions and not directions):
-                predicates = [atom.evaluation.predicate for atom in selected_atoms
-                              if getattr(atom, "evaluation", None) is not None
-                              and atom.evaluation.predicate is not None]
                 if len(numbers) != 1 or len(directions) != 1 or not predicates:
                     raise ValueError("数值原文不能由模糊比较条件宣布完整")
                 for predicate in predicates:

@@ -10557,7 +10557,7 @@ def test_publication_scope_never_guesses_unknown_or_structural_ownership(unscope
     )
     error = _candidate_findings(output, ["FIRST_FIELD_INVALID", "SECOND_FIELD_INVALID"])
     assert len(error.repair_scopes) == 2
-    issues = [SimpleNamespace(**finding, message="待核字段") for finding in error.validation_findings]
+    issues = [SimpleNamespace(**{**finding, "message": "待核字段"}) for finding in error.validation_findings]
     if unscoped == "unknown":
         issues[1].entity_id = "unknown-candidate"
     elif unscoped == "cross":
@@ -13525,12 +13525,17 @@ def test_alignment_transport_failure_keeps_partial_and_does_not_expand(failure_k
     assert result.attempts[-1].error_detail["candidate_indexes"] == [0, 1]
 
 
-def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_fails() -> None:
+@pytest.mark.parametrize("invalid_positive", [False, True])
+def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_fails(invalid_positive) -> None:
     from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunResult
 
     batch, inventory, review, wire, alignment = (
         _two_independent_candidate_linked_alignment_material()
     )
+    if invalid_positive:
+        alignment["items"][1]["decision"] = "fully_expressed"
+        alignment["items"][1]["unresolved_dimensions"] = []
+        alignment["items"][1]["candidate_atom_quotes"] = ["未由该条原文支持的动作"]
 
     class Transport(_FakeTransport):
         alignment_prompts: list[str] = []
@@ -13564,7 +13569,14 @@ def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_f
     saved = ProtocolControlAgentRunResult.model_validate(result.model_dump(mode="json"))
     assert [
         (item.statement_index, item.decision) for item in saved.source_candidate_alignment.items
-    ] == [(0, "fully_expressed"), (1, "incomplete")]
+    ] == ([(0, "fully_expressed")] if invalid_positive else
+          [(0, "fully_expressed"), (1, "incomplete")])
+    if invalid_positive:
+        rejected = [attempt.error_detail for attempt in saved.attempts
+                    if "SOURCE_CANDIDATE_ALIGNMENT_INVALID" in attempt.error_classes]
+        assert len(rejected) == 1
+        assert rejected[0]["statement_ids"] == [1]
+        assert saved.source_candidate_alignment.proofs[0].response_text == json.dumps(alignment, ensure_ascii=False)
     by_index = {entry.statement_index: entry for entry in saved.source_statement_coverage}
     assert by_index[0].status == "semantically_aligned"
     assert by_index[0].candidate_indexes == [0]
@@ -13576,6 +13588,116 @@ def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_f
     assert len(details) == 1
     assert details[0]["statement_ids"] == [1]
     assert details[0]["affected_dependents"] == [1]
+
+
+@pytest.mark.parametrize("reply_kind", ["valid", "unchanged", "changed_source", "transport", "exhausted",
+    "wrong_predicate", "changed_proposition", "changed_policy", "multi_number"])
+def test_alignment_numeric_gap_repairs_only_selected_atom_then_revalidates(reply_kind):
+    batch, inventory, review, wire, alignment = _two_independent_candidate_linked_alignment_material()
+    batch.owned_units[1].excerpt = "研究背景说明"
+    inventory = inventory.model_copy(update={"statements": inventory.statements[:1], "units_without_statement": ["su-02"]})
+    review.items = review.items[:1]
+    wire = _wire(candidate=wire.candidate_drafts[0])
+    if reply_kind == "multi_number":
+        text = "年龄至少18岁且不超过65岁"
+        batch.owned_units[0].excerpt = inventory.statements[0].quoted_text = text
+        atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+        atom.source_excerpts = [text]
+        alignment["items"][0]["source_excerpt"] = text
+    good_atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0].model_copy(deep=True)
+    bad_atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    bad_atom.evaluation = bad_atom.evaluation.model_copy(update={
+        "determination_mode": "semantic", "predicate": None, "operation": None, "operand_attribute": None})
+    alignment["items"] = alignment["items"][:1]
+    original = wire.model_dump(mode="json")
+
+    class NumericTransport(_FakeTransport):
+        atom_calls = 0
+        alignment_calls = 0
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target", text=review.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            self.alignment_calls += 1
+            return ProtocolControlAgentResponse(session_id="alignment", text=json.dumps(alignment, ensure_ascii=False))
+
+        def continue_atom(self, *, session_id, prompt):
+            self.atom_calls += 1
+            assert '"reason":"numeric_predicate_missing"' in prompt
+            assert "不新增临床含义" in prompt
+            if reply_kind == "transport":
+                raise RuntimeError("synthetic transport failure")
+            atom = (bad_atom if reply_kind == "unchanged" else good_atom).model_copy(deep=True)
+            if reply_kind == "changed_source":
+                atom.statement = "年龄至少21岁"
+            elif reply_kind == "wrong_predicate":
+                atom.evaluation = atom.evaluation.model_copy(update={
+                    "predicate": atom.evaluation.predicate.model_copy(update={"value": 21})})
+            elif reply_kind == "changed_proposition":
+                atom.evaluation = atom.evaluation.model_copy(update={"proposition": "年龄低于18岁"})
+            elif reply_kind == "changed_policy":
+                atom.evaluation = atom.evaluation.model_copy(update={
+                    "observation_policy": atom.evaluation.observation_policy.model_copy(update={"mode": "any"})})
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"atom": atom.model_dump(mode="json")}, ensure_ascii=False))
+
+        def continue_candidate(self, **kwargs):
+            pytest.fail("Known atom scope must not expand to a full candidate")
+
+        def start_source_insert(self, **kwargs):
+            pytest.fail("Existing source-linked atom must not create a duplicate requirement")
+
+    transport = NumericTransport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=0 if reply_kind == "exhausted" else 2).run(
+        batch, transport, resume_wire=wire, resume_source_interpretation=inventory,
+        resume_session_id="saved-wire", output_validator=lambda _output: None)
+    assert transport.atom_calls == (0 if reply_kind in {"exhausted", "multi_number"} else 1), [
+        (attempt.error_classes, attempt.issues) for attempt in result.attempts]
+    if reply_kind == "valid":
+        assert result.final_output is not None, [(attempt.error_classes, attempt.issues) for attempt in result.attempts]
+        assert transport.alignment_calls == 2
+        final = result.partial_wire.model_dump(mode="json")
+        restored = final["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]
+        assert restored == good_atom.model_dump(mode="json")
+        final["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0] = original["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]
+        assert final == original
+    else:
+        assert result.final_output is None
+        assert result.partial_wire.model_dump(mode="json") == original
+        assert transport.alignment_calls <= 2
+        if reply_kind in {"changed_proposition", "changed_policy"}:
+            assert any("ATOM_REPAIR_INVALID" in attempt.error_classes for attempt in result.attempts)
+        if reply_kind == "wrong_predicate":
+            assert transport.alignment_calls == 2
+            assert any(attempt.raw_output_text and '"value": 21' in attempt.raw_output_text
+                       for attempt in result.attempts)
+
+
+def test_unchanged_negative_alignment_survives_invalid_retry_without_becoming_positive():
+    from app.agents.protocol_control_candidate_alignment import SourceCandidateAlignment, bind_candidate_alignment
+    batch, inventory, review, wire, alignment = _two_independent_candidate_linked_alignment_material()
+    previous = deepcopy(alignment["items"][0])
+    previous.update(decision="incomplete", unresolved_dimensions=["尚未证明完整"])
+    saved = SourceCandidateAlignment.model_validate({"version": alignment["version"], "items": [previous]})
+    saved = bind_candidate_alignment(batch, inventory, source_statement_coverage(batch, inventory, wire),
+                                     wire, saved, saved.model_dump_json(exclude={"proofs"}))
+    alignment["items"][0]["candidate_atom_quotes"] = ["未支持的动作"]
+
+    class Transport(_FakeTransport):
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target", text=review.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="alignment", text=json.dumps(alignment, ensure_ascii=False))
+
+    result = ProtocolControlAgentRunner().run(batch, Transport([]), resume_wire=wire,
+        resume_source_interpretation=inventory, resume_source_candidate_alignment=saved,
+        resume_session_id="saved-wire", output_validator=lambda _output: None)
+    assert result.final_output is None
+    assert result.source_candidate_alignment is not None
+    retained = next(item for item in result.source_candidate_alignment.items if item.statement_index == 0)
+    assert retained == saved.items[0] and retained.decision == "incomplete"
+    assert next(entry for entry in result.source_statement_coverage if entry.statement_index == 0).status != "semantically_aligned"
 
 
 def test_resume_skips_only_revalidated_proven_alignment_pair() -> None:

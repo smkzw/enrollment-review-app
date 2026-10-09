@@ -102,6 +102,7 @@ from .protocol_control_candidate_alignment import (
     SourceCandidateAlignment,
     alignment_with_items,
     bind_candidate_alignment,
+    bind_partial_candidate_alignment,
     build_candidate_alignment_prompt,
     evidence_policy_alignment_pairs,
     require_evidence_policy_alignment,
@@ -6784,7 +6785,8 @@ def _merge_time_operand_repair(
 
 
 def _merge_obligation_atom_repair(
-    raw_text: str, baseline: Mapping[str, Any], path: tuple[int, int, int]
+    raw_text: str, baseline: Mapping[str, Any], path: tuple[int, int, int],
+    *, numeric_predicate_only: bool = False,
 ) -> ProtocolControlAgentWire:
     """Splice a checked atom into the original batch; all siblings remain byte-identical."""
 
@@ -6809,6 +6811,13 @@ def _merge_obligation_atom_repair(
         ):
             if field not in original or replacement_json[field] != original[field]:
                 raise ValueError(f"义务原子修订不得改变 {field}")
+        if numeric_predicate_only:
+            allowed = {"determination_mode", "operation", "predicate", "operand_attribute"}
+            if replacement_json["time_constraint"] != original["time_constraint"]:
+                raise ValueError("数值条件修订不得改变时间约束")
+            for field, value in original["evaluation"].items():
+                if field not in allowed and replacement_json["evaluation"][field] != value:
+                    raise ValueError(f"数值条件修订不得改变 evaluation/{field}")
         merged["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index] = replacement_json
         return ProtocolControlAgentWire.model_validate(merged)
     except (json.JSONDecodeError, ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
@@ -6823,6 +6832,7 @@ def _build_obligation_atom_repair_prompt(
     baseline: Mapping[str, Any],
     path: tuple[int, int, int],
     problem: str,
+    *, numeric_predicate_only: bool = False,
 ) -> str:
     candidate_index, group_index, atom_index = path
     candidate = baseline["candidate_drafts"][candidate_index]
@@ -6840,7 +6850,10 @@ def _build_obligation_atom_repair_prompt(
     return (
         "仅修订一个已有义务原子的结构，不新增临床含义。"
         "原句、义务类型、强度、来源定位、后续义务和研究者判断属性必须原样保留；"
-        "只能根据冻结原文修订求值和时间字段。若原文无法支持修订，不得猜测。"
+        + ("本次仅允许修订 evaluation 的 determination_mode、operation、predicate、operand_attribute；"
+           "时间字段、命题、观察采用政策及其他所有字段必须原样保留。"
+           if numeric_predicate_only else "只能根据冻结原文修订求值和时间字段。")
+        + "若原文无法支持修订，不得猜测。"
         "返回的是完整原子，不是单个字段补丁：数值比较的单位须按原文填写，"
         "确为无量纲时写 unitless；求值规格须同时保留非空观察采用说明，"
         "原文未说明如何选择记录时写 unresolved，不得以 null 省略。"
@@ -7099,6 +7112,7 @@ class ProtocolControlAgentRunner:
         front_target_review: SourceTargetReview | None = None
         front_candidate_alignment: SourceCandidateAlignment | None = None
         workflow_path_executed = "not_started"
+        pending_alignment_atom_baseline = None
         def build_result(**values) -> ProtocolControlAgentRunResult:
             values.setdefault("source_scope_question_history", [
                 *question_history,
@@ -7188,6 +7202,11 @@ class ProtocolControlAgentRunner:
                             }),
                         ))
                         values.update(status="需要核对", final_output=None)
+            if pending_alignment_atom_baseline is not None and values.get("final_output") is None:
+                # Keep the attempted reply in receipts, never expose an unvalidated edit as the draft.
+                saved_wire, saved_coverage, saved_alignment, saved_review = pending_alignment_atom_baseline
+                values.update(partial_wire=saved_wire, source_statement_coverage=saved_coverage,
+                              source_candidate_alignment=saved_alignment, source_target_review=saved_review)
             return ProtocolControlAgentRunResult(**values)
 
         resuming_partial = resume_wire is not None
@@ -7985,6 +8004,7 @@ class ProtocolControlAgentRunner:
         evidence_source_repair_path: tuple[int, int] | None = None
         evidence_source_types_repair_paths: tuple[tuple[int, int], ...] = ()
         reviewed_source_type_repairs: set[tuple[int, int]] = set()
+        reviewed_atom_repairs: set[tuple[int, int, int]] = set()
         while True:
             wire: ProtocolControlAgentWire | None = None
             output: ProtocolControlBatchDispositionHydrated | None = None
@@ -9337,6 +9357,7 @@ class ProtocolControlAgentRunner:
                             else:
                                 pending_additional = simple_additional
                             candidate_alignment: SourceCandidateAlignment | None = None
+                            alignment_failures = []
                             alignment_pairs = []
                             # A temporal statement may already have a complete candidate;
                             # it must not fall back to a single-visit source insert.
@@ -9353,10 +9374,14 @@ class ProtocolControlAgentRunner:
                                         and len(entry.action_candidate_indexes) == 1):
                                     alignment_pairs.append((item.statement_index,
                                                             entry.action_candidate_indexes[0]))
-                            resumed_alignment_items = reusable_proven_alignment_items(
+                            retained_alignment_items = reusable_proven_alignment_items(
                                 batch, source_interpretation, coverage, wire,
-                                resume_source_candidate_alignment,
+                                resume_source_candidate_alignment, require_positive=False,
                             )
+                            retained_alignment_items = [item for item in retained_alignment_items
+                                if (item.statement_index, item.candidate_index) in set(alignment_pairs)]
+                            resumed_alignment_items = [item for item in retained_alignment_items
+                                if item.decision == "fully_expressed"]
                             resumed_pairs = {
                                 (item.statement_index, item.candidate_index)
                                 for item in resumed_alignment_items
@@ -9379,24 +9404,33 @@ class ProtocolControlAgentRunner:
                                     fresh_alignment = SourceCandidateAlignment.model_validate_json(
                                         alignment_response.text
                                     )
-                                    validate_candidate_alignment(
-                                        batch, source_interpretation, coverage, wire,
-                                        fresh_alignment,
-                                    )
-                                    if {(item.statement_index, item.candidate_index)
-                                            for item in fresh_alignment.items} != set(pending_alignment_pairs):
-                                        raise ValueError("候选语义核对未逐项覆盖指定来源与候选")
-                                    fresh_alignment = bind_candidate_alignment(
+                                    fresh_alignment, alignment_failures = bind_partial_candidate_alignment(
                                         batch, source_interpretation, coverage, wire,
                                         fresh_alignment, alignment_response.text,
+                                        pending_alignment_pairs,
                                     )
-                                    if resumed_alignment_items:
+                                    for failure in alignment_failures:
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=alignment_response.session_id,
+                                            raw_output_sha256=_sha256(alignment_response.text),
+                                            raw_output_chars=len(alignment_response.text),
+                                            raw_output_text=alignment_response.text,
+                                            outcome="publication_invalid",
+                                            issues=[failure["message"]],
+                                            error_classes=[failure["code"]], error_detail=failure,
+                                        ))
+                                    fresh_pairs = {(item.statement_index, item.candidate_index)
+                                        for item in (fresh_alignment.items if fresh_alignment else [])}
+                                    retained = [item for item in retained_alignment_items
+                                        if (item.statement_index, item.candidate_index) not in fresh_pairs]
+                                    if retained:
                                         candidate_alignment = SourceCandidateAlignment(
                                             version=SOURCE_CANDIDATE_ALIGNMENT_VERSION,
-                                            items=[*resumed_alignment_items, *fresh_alignment.items],
+                                            items=[*retained, *(fresh_alignment.items if fresh_alignment else [])],
                                             proofs=[*alignment_with_items(
-                                                resume_source_candidate_alignment, resumed_alignment_items,
-                                            ).proofs, *fresh_alignment.proofs],
+                                                resume_source_candidate_alignment, retained,
+                                            ).proofs, *(fresh_alignment.proofs if fresh_alignment else [])],
                                         )
                                         validate_candidate_alignment(
                                             batch, source_interpretation, coverage, wire,
@@ -9404,7 +9438,7 @@ class ProtocolControlAgentRunner:
                                         )
                                     else:
                                         candidate_alignment = fresh_alignment
-                                    accepted = {item.statement_index for item in candidate_alignment.items
+                                    accepted = {item.statement_index for item in (candidate_alignment.items if candidate_alignment else [])
                                                 if item.decision == "fully_expressed"}
                                     # Sibling temporal gaps must not erase proven pairs or their
                                     # coverage mutation when the alignment record itself is kept.
@@ -9439,9 +9473,9 @@ class ProtocolControlAgentRunner:
                                     ))
                                 except Exception as alignment_error:  # noqa: BLE001 - fail closed
                                     candidate_alignment = None
-                                    if resumed_alignment_items:
+                                    if retained_alignment_items:
                                         candidate_alignment = alignment_with_items(
-                                            resume_source_candidate_alignment, resumed_alignment_items,
+                                            resume_source_candidate_alignment, retained_alignment_items,
                                         )
                                         validate_candidate_alignment(
                                             batch, source_interpretation, coverage, wire, candidate_alignment,
@@ -9508,9 +9542,9 @@ class ProtocolControlAgentRunner:
                                             source_statement_coverage=coverage, source_target_review=target_review,
                                             source_candidate_alignment=checkpoint_alignment(), partial_wire=wire,
                                         )
-                            elif resumed_alignment_items:
+                            elif retained_alignment_items:
                                 candidate_alignment = alignment_with_items(
-                                    resume_source_candidate_alignment, resumed_alignment_items,
+                                    resume_source_candidate_alignment, retained_alignment_items,
                                 )
                                 validate_candidate_alignment(
                                     batch, source_interpretation, coverage, wire, candidate_alignment,
@@ -9688,6 +9722,62 @@ class ProtocolControlAgentRunner:
                                 if cited_candidates.get(item.statement_index)
                             ]
                             if cited_unexpressed:
+                                numeric_failures = [failure for failure in alignment_failures
+                                    if failure.get("reason") == "numeric_predicate_missing"
+                                    and len(failure.get("atom_paths", [])) == 1]
+                                atom_reader = getattr(transport, "continue_atom", None)
+                                if (len(numeric_failures) == 1
+                                        and numeric_failures[0]["statement_ids"] == cited_unexpressed
+                                        and callable(atom_reader)
+                                        and max(repairs, source_repairs) < self._max_schema_repairs):
+                                    failure = numeric_failures[0]
+                                    path = tuple(failure["atom_paths"][0])
+                                    if path not in reviewed_atom_repairs:
+                                        reviewed_atom_repairs.add(path)
+                                        repairs = max(repairs, source_repairs) + 1
+                                        source_repairs = repairs
+                                        baseline = wire.model_dump(mode="json")
+                                        atom_response = None
+                                        detail = {**failure, "workflow_phase": "reviewed_atom_repair",
+                                            "precondition_sha256": _sha256(wire.model_dump_json()),
+                                            "automatic_adoption": False}
+                                        try:
+                                            atom_response = atom_reader(session_id=session_id,
+                                                prompt=_build_obligation_atom_repair_prompt(
+                                                    batch, baseline, path, _stable_json(failure),
+                                                    numeric_predicate_only=True))
+                                            if atom_response.session_id != session_id:
+                                                raise ValueError("义务局部修订不得更换原会话")
+                                            revised = _merge_obligation_atom_repair(
+                                                atom_response.text, baseline, path, numeric_predicate_only=True)
+                                        except Exception as atom_error:  # noqa: BLE001 - preserve failed scoped reply
+                                            code = protocol_control_call_failure_code(atom_error) or "ATOM_REPAIR_INVALID"
+                                            attempts.append(ProtocolControlAgentAttempt(
+                                                attempt=len(attempts) + 1, session_id=session_id,
+                                                raw_output_sha256=_sha256(atom_response.text if atom_response else str(atom_error)),
+                                                raw_output_text=atom_response.text if atom_response else None,
+                                                raw_output_chars=len(atom_response.text) if atom_response else None,
+                                                outcome="publication_invalid" if atom_response else "transport_failed",
+                                                issues=[str(atom_error)[:1200]], error_classes=[code], error_detail=detail))
+                                            return build_result(status="需要核对", batch_id=batch.batch_id,
+                                                session_id=session_id, attempts=attempts,
+                                                source_interpretation=source_interpretation,
+                                                source_statement_coverage=coverage, source_target_review=target_review,
+                                                source_candidate_alignment=checkpoint_alignment(), partial_wire=wire)
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1, session_id=session_id,
+                                            raw_output_sha256=_sha256(atom_response.text),
+                                            raw_output_text=atom_response.text, raw_output_chars=len(atom_response.text),
+                                            outcome="parsed", issues=["仅修订原句对应的求值字段，仍须完整重验"],
+                                            error_detail=detail))
+                                        if pending_alignment_atom_baseline is None:
+                                            pending_alignment_atom_baseline = (wire.model_copy(deep=True),
+                                                deepcopy(coverage), candidate_alignment, target_review)
+                                        resume_source_candidate_alignment = candidate_alignment
+                                        partial_wire = revised
+                                        raw_text = revised.model_dump_json()
+                                        repair_used = True
+                                        continue
                                 affected = [
                                     entry for entry in coverage
                                     if entry.statement_index in cited_unexpressed

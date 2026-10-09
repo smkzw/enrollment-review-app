@@ -14,6 +14,7 @@ from app.agents.protocol_control_candidate_alignment import (
     _split_obligations_cover_source,
     candidate_alignment_response_format,
     bind_candidate_alignment,
+    bind_partial_candidate_alignment,
     validate_candidate_alignment,
     build_candidate_alignment_prompt,
     reusable_proven_alignment_items,
@@ -75,6 +76,150 @@ def test_alignment_prompt_includes_only_actual_candidate_source_closure():
     wire.candidate_drafts[0].source_structure_unit_ids.append("outside-scope")
     with pytest.raises(ValueError, match="越出本批"):
         build_candidate_alignment_prompt(batch, source, wire, [(0, 0)])
+
+
+def _mixed_validity_alignment_material():
+    from tests.v2.protocols.test_slice58c_control_deconstructor import (
+        _two_independent_candidate_linked_alignment_material,
+    )
+    batch, source, _, wire, payload = _two_independent_candidate_linked_alignment_material()
+    payload["items"][1]["decision"] = "fully_expressed"
+    payload["items"][1]["unresolved_dimensions"] = []
+    payload["items"][1]["candidate_atom_quotes"] = ["未由该条原文支持的动作"]
+    alignment = SourceCandidateAlignment.model_validate(payload)
+    return batch, source, wire, source_statement_coverage(batch, source, wire), alignment
+
+
+def test_partial_alignment_preserves_actual_response_and_good_sibling_only():
+    batch, source, wire, coverage, alignment = _mixed_validity_alignment_material()
+    raw = alignment.model_dump_json(exclude={"proofs"})
+    kept, failures = bind_partial_candidate_alignment(
+        batch, source, coverage, wire, alignment, raw, [(0, 0), (1, 1)],
+    )
+    assert [item.statement_index for item in kept.items] == [0]
+    assert len(failures) == 1 and failures[0]["statement_ids"] == [1]
+    assert failures[0]["candidate_indexes"] == [1]
+    assert failures[0]["source_refs"] == batch.owned_units[1].source_span_ids
+    assert kept.proofs[0].response_text == raw
+    assert len(json.loads(kept.proofs[0].response_text)["items"]) == 2
+    restored = SourceCandidateAlignment.model_validate_json(kept.model_dump_json())
+    assert reusable_proven_alignment_items(batch, source, coverage, wire, restored) == kept.items
+    wire.candidate_drafts[0].title += "变更"
+    assert reusable_proven_alignment_items(batch, source, coverage, wire, restored) == []
+
+
+@pytest.mark.parametrize("mutation", ["duplicate", "missing", "outside", "source", "changed_raw", "proof"])
+def test_partial_alignment_rejects_entire_identity_invalid_response(mutation):
+    batch, source, wire, coverage, alignment = _mixed_validity_alignment_material()
+    expected = [(0, 0), (1, 1)]
+    if mutation == "duplicate":
+        alignment.items.append(alignment.items[0].model_copy(deep=True))
+    elif mutation == "missing":
+        alignment.items.pop()
+    elif mutation == "outside":
+        alignment.items[1].candidate_index = 99
+    elif mutation == "source":
+        alignment.items[1].source_excerpt = source.statements[0].quoted_text
+    raw = alignment.model_dump_json(exclude={"proofs"})
+    if mutation == "changed_raw":
+        alignment.items[0].decision = "uncertain"
+        alignment.items[0].unresolved_dimensions = ["不明"]
+    elif mutation == "proof":
+        payload = json.loads(raw)
+        payload["proofs"] = [{"statement_index": 0, "candidate_index": 0,
+            "source_sha256": "a" * 64, "candidate_sha256": "b" * 64,
+            "response_sha256": "c" * 64, "response_text": raw}]
+        raw = json.dumps(payload)
+    with pytest.raises(ValueError):
+        bind_partial_candidate_alignment(batch, source, coverage, wire, alignment, raw, expected)
+
+
+def _conditioned_action_material(prefix="已完成核查者"):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentWireConditionDnf
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _evaluation
+    batch, source, wire, coverage, alignment = _native_action_material()
+    text = f"{prefix}，领取材料，回收材料"
+    unit, statement = batch.owned_units[0], source.statements[0]
+    unit.table_context = None
+    unit.unit_kind = StructureUnitKind.PARAGRAPH
+    unit.source_ref = "body.p1"
+    unit.member_source_refs = [unit.source_ref]
+    unit.member_texts = [text]
+    unit.source_span_ids = unit.source_span_ids[:1]
+    unit.member_source_span_ids = [list(unit.source_span_ids)]
+    unit.excerpt = statement.quoted_text = text
+    statement.scope_quote = None
+    statement.time_words = []
+    candidate = wire.candidate_drafts[0]
+    for node in candidate.review_node_bindings:
+        node.scope_citation = None
+    group = candidate.obligation_expression.groups[0]
+    original = group.atoms[0]
+    group.atoms = [original.model_copy(deep=True, update={"statement": part,
+                   "source_span_ids": list(unit.source_span_ids), "source_excerpts": [part]})
+                   for part in ("领取材料", "回收材料")]
+    for atom in group.atoms:
+        atom.evaluation = atom.evaluation.model_copy(update={"proposition": atom.statement})
+    condition = {"statement": prefix, "evaluation": _evaluation(prefix, unit.source_span_ids[0], text),
+        "source_span_ids": list(unit.source_span_ids), "source_excerpts": [text],
+        "time_constraint": None, "requires_professional_judgment": False}
+    unit.excerpt += "。条件甲或条件乙。"
+    unit.member_texts = [unit.excerpt]
+    branches = []
+    for label in ("条件甲", "条件乙"):
+        branches.append({"atoms": [condition, {**condition, "statement": label,
+            "source_excerpts": [label], "evaluation": _evaluation(label, unit.source_span_ids[0], label)}]})
+    candidate.trigger_expression = ProtocolControlAgentWireConditionDnf.model_validate({"groups": branches})
+    group.applies_to_trigger_branch_indexes = [0, 1]
+    alignment.items[0].source_excerpt = text
+    alignment.items[0].candidate_atom_quotes = [prefix, "领取材料", "回收材料"]
+    return batch, source, wire, coverage, alignment
+
+
+@pytest.mark.parametrize("mutation", [None, "missing_condition", "wrong_prefix", "wrong_position", "weaker_obligation", "partial_branch_mapping", "empty_branch_mapping"])
+def test_distributed_source_condition_requires_every_relevant_branch(mutation):
+    batch, source, wire, coverage, alignment = _conditioned_action_material()
+    candidate = wire.candidate_drafts[0]
+    if mutation == "missing_condition":
+        alignment.items[0].candidate_atom_quotes.pop(0)
+    elif mutation == "wrong_prefix":
+        candidate.trigger_expression.groups[1].atoms[0].statement = "尚未完成核查者"
+    elif mutation == "wrong_position":
+        candidate.trigger_expression.groups[1].atoms[0].source_span_ids = ["wrong-source"]
+    elif mutation == "weaker_obligation":
+        candidate.obligation_expression.groups.append(candidate.obligation_expression.groups[0].model_copy(
+            deep=True, update={"atoms": candidate.obligation_expression.groups[0].atoms[:1]}))
+    elif mutation == "partial_branch_mapping":
+        candidate.obligation_expression.groups[0].applies_to_trigger_branch_indexes = [0]
+    elif mutation == "empty_branch_mapping":
+        candidate.obligation_expression.groups[0].applies_to_trigger_branch_indexes = []
+    if mutation:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+
+
+@pytest.mark.parametrize("mutation", [None, "conditional", "different_visit", "numeric_window", "missing_stage_source", "outside_visit", "before_visit", "after_visit"])
+def test_source_bound_common_trigger_preserves_visit_not_date_window(mutation):
+    prefix = {"conditional": "基线期如已完成核查者", "outside_visit": "基线期外已完成核查者",
+              "before_visit": "基线期前已完成核查者", "after_visit": "基线期后已完成核查者"}.get(
+                  mutation, "基线期：已完成核查者")
+    batch, source, wire, coverage, alignment = _conditioned_action_material(prefix)
+    source.statements[0].decision_functions = ["action", "time_validity"]
+    source.statements[0].time_words = ["基线期"]
+    if mutation == "different_visit":
+        wire.candidate_drafts[0].review_node_bindings[0].workflow_stage_id = "unknown-stage"
+    elif mutation == "numeric_window":
+        source.statements[0].time_words = ["基线前7天"]
+    elif mutation == "missing_stage_source":
+        for stage in batch.known_workflow_stage_targets:
+            stage.source_span_ids = []
+    if mutation not in {None, "conditional"}:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
 
 
 @pytest.mark.parametrize("mutation", [None, "pure_exception", "missing_exception", "no_exception_words", "definition", "unknown", "different_exception_layer"])
