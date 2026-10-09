@@ -8,9 +8,9 @@
 
 ## 当前身份
 
-当前实际终态：7a902e87已push，合法Job81d60142796b4e48bac3c5af60b20bde为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，23物理调用709.942941秒/exit3；85发现及旧23成功零新调用复用，第24–26已完成，第27归因范围校验失败、63未执行。exec18934已结束，检查点bccc859eca60403d9fa8d07d87a08851，产物rv1006-procedure-context-temporal-api-20261009-v1不覆盖/复活。原Job/保护库/来源库不变。
+当前实际终态：f42250c6已push，合法Job6b21c8b5ad104e7280cc88676df29149为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，1物理调用158.265990秒/exit3；85发现及26成功零新调用复用，第27归因陈述1失败、63未执行。exec26726已结束，检查点37aadc1235904ad88b7c708cef5ac4cc，产物rv1006-external-header-source-api-20261009-v1不覆盖/复活。原Job/保护库/来源库不变；上游7a902e87的24–26保存及23调用账本保留。
 
-当前最小修复为通用外部文档段首归因：同单元有界标题、逐字唯一、遇新的冒号标签/研究采纳/另一权威中断；作者与独立目标核对共门，不自动关闭、不改force。仅validator身份变，26成功当前重验零调用复用，第27旧失败不追认成功。最终26受影响例通过、最新v3预检26reusable/64refresh、0调用/0写/hash保持；四模块1299pass是最后锚点增量前的窗口，不能冒称最终源码全窗。C03两次独审的结构漏洞已修，最后锚点由所有者实际验证。新合法Job未启动；共同发布/新完整病例闭环/Q3仍未达。详情见implement及reviews/rv1006-external-header-source-owner-disposition-20261009.md。
+当前最小修复v2：实际列举冒号不再当新标题，标题终止符可以留在原文不必复制进归因短语；全段新标签/研究采用/另权威仍中断。作者与目标核对共门，不自动关闭、不改force。仅validator身份变，26成功重验复用，第27旧失败不追认成功。最后36受影响例2.54秒通过；实际6项pending仅来源门只读通过，没有目标核对或采用。当前external-enumeration预检26reusable/64refresh、0模型/0写/hash保持；C03方向与末审未读/未测限制保留，拒绝仅查末句建议，末漏项由所有者补同族反例。新合法Job未启动；共同发布/新完整病例闭环/Q3仍未达。详情见implement及reviews/rv1006-external-header-source-owner-disposition-20261009.md。
 
 ### 上游功能包记录（历史，不覆盖当前表）
 
@@ -24,15 +24,15 @@
 |---|---|
 | 唯一worktree | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；09-11-e2e-eligibility-review |
-| 当前代码基础 | 7a902e87已push；外部标题归因包为本地补丁，不归给旧提交 |
-| 当前最新真实Job | 81d60142796b4e48bac3c5af60b20bde，failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID |
-| 最新真实运行 | 源码7a902e87，23物理调用/709.942941秒；26completed、27failed、63未读；85发现及旧23成功零新调用。shell3与实际失败相符 |
+| 当前代码基础 | f42250c6已push；外部标题列举v2为本地补丁，不归给旧提交 |
+| 当前最新真实Job | 6b21c8b5ad104e7280cc88676df29149，failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID |
+| 最新真实运行 | 源码f42250c6，1物理调用/158.265990秒；26completed、27failed、63未读；85发现及26成功零新调用。shell3与实际失败相符 |
 | 上游第23失败检查点 | c1fea38816e84c729b9b1587a8818619；已由a513局部恢复保存，旧原答/hash保持，不回改成功 |
 | 当前隔离DB | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 真实产物 | 同根/rv1006-procedure-context-temporal-api-20261009-v1，prepare/execute均保存，不覆盖/重跑 |
+| 真实产物 | 同根/rv1006-external-header-source-api-20261009-v1，prepare/execute均保存，不覆盖/重跑 |
 | 模型路线 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high，输出65536，产品自己的harness直连 |
-| 当前新预检 | 同根/rv1006-external-header-source-preflight-20261009-v3.json：26reusable/64refresh，0调用/0写/DBhash保持 |
-| 新代码实际临床运行 | 7a902e87范围/时间兄弟包已实跑，第24–26完成；新标题归因包未实跑，仍无共同发布/完整新工作稿 |
+| 当前新预检 | 同根/rv1006-external-enumeration-preflight-20261009-v1.json：26reusable/64refresh，0调用/0写/DBhash保持 |
+| 新代码实际临床运行 | f42250c6归因v1已实跑；列举v2仅实际旧源只读反证、未实跑，无共同发布/完整新工作稿 |
 | 继承dirty | 7份旧delivery文件未动，不stage；大量继承untracked不清理/不批量stage |
 | 外部可复查范围 | Git源码/合成用例/净化工程报告；真实原件、DB、提示、原答和病例截图仅本机受控可读，外部审阅不可读 |
 

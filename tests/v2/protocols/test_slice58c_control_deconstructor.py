@@ -4001,6 +4001,14 @@ def test_external_attribution_inside_full_sentence_quote_still_needs_review() ->
      "另需注意其他风险", "另一药物说明书安全性信息提示："),
     ("某指南记载:\n常见反应包括头痛。\n另需注意其他风险。",
      "另需注意其他风险", "某指南记载:"),
+    ("某说明书提示：甲类人群常见反应包括：甲；乙类人群常见反应包括：乙。",
+     "乙类人群常见反应包括：乙", "某说明书提示"),
+    ("某说明书提示：甲类人群常见反应包括：甲，乙类人群常见反应包括：乙。此外需注意其他风险。",
+     "此外需注意其他风险", "某说明书提示"),
+    ("某说明书提示：警告内容包括：甲（如：另一风险）。另需注意其他风险。",
+     "另需注意其他风险", "某说明书提示："),
+    ("某说明书提示：给药时间08:00前完成。另需注意其他风险。",
+     "另需注意其他风险", "某说明书提示"),
 ])
 def test_runner_keeps_external_rationale_out_of_new_control(source, quote, attribution) -> None:
     batch = _batch().model_copy(deep=True)
@@ -4044,6 +4052,11 @@ def test_runner_keeps_external_rationale_out_of_new_control(source, quote, attri
     "某说明书提示：常见反应包括头痛。另一指南建议：另需注意其他风险。",
     "某说明书提示：一般人群处理原则。入组要求：另需注意其他风险。",
     "某说明书提示：一般人群处理原则。另一项要求:另需注意其他风险。",
+    "某说明书提示：一般人群处理原则。入组要求包括：项目甲。另需注意其他风险。",
+    "某说明书提示：入组包括：另需注意其他风险。",
+    "某说明书提示：入选包括：另需注意其他风险。",
+    "某说明书提示：排除包含：另需注意其他风险。",
+    "某说明书提示：一般人群处理原则。另一项要求：项目甲。另需注意其他风险。",
     "某说明书提示：另需注意其他风险。另需注意其他风险。",
 ])
 def test_external_header_cannot_cross_authority_or_unproven_scope(source) -> None:
@@ -4059,6 +4072,37 @@ def test_external_header_cannot_cross_authority_or_unproven_scope(source) -> Non
     )
     with pytest.raises(SourceInterpretationValidationError, match="逐字归因"):
         validate_source_interpretation(batch, inventory)
+
+
+def test_external_enumeration_never_waives_target_review_or_candidate_conflict() -> None:
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[0].excerpt = "某说明书提示：甲类人群常见反应包括：甲；乙类人群常见反应包括：乙。"
+    statement = SourceStatement(
+        structure_unit_id="su-01", quoted_text="乙类人群常见反应包括：乙",
+        force="descriptive", decision_functions=["background"], time_words=[],
+        control_authority="cited_external_rationale", attribution_quote="某说明书提示",
+    )
+    inventory = SourceInterpretation(
+        version=SOURCE_INTERPRETATION_VERSION, statements=[statement],
+        units_without_statement=["su-02"],
+    )
+    validate_source_interpretation(batch, inventory)
+    coverage = [SourceStatementCoverage(
+        statement_index=0, structure_unit_id="su-01", disposition="supporting_or_supplement",
+        status="not_located",
+    )]
+    assert target_review_indexes(inventory, coverage, batch) == [0]
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "cited_external_rationale",
+                   "target_id": None, "source_action_excerpt": statement.quoted_text,
+                   "attribution_excerpt": statement.attribution_quote}],
+    })
+    validate_source_target_review(batch, inventory, coverage, review)
+    with pytest.raises(SourceTargetReviewValidationError, match="候选控制"):
+        validate_source_target_review(batch, inventory, [coverage[0].model_copy(
+            update={"action_candidate_indexes": [0]},
+        )], review)
 
 
 def test_external_header_requires_attribution_and_fresh_target_review() -> None:

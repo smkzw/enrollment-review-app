@@ -39,7 +39,7 @@ SOURCE_TARGET_REVIEW_VALIDATION_VERSION = "source-native-procedure-row-validatio
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
 SOURCE_TARGET_REVIEW_GAP_VERSION = "source-target-unresolved-cause/v1"
-SOURCE_ATTRIBUTION_VALIDATION_VERSION = "source-external-header-scope/v1"
+SOURCE_ATTRIBUTION_VALIDATION_VERSION = "source-external-header-scope/v2"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -67,7 +67,7 @@ _EXTERNAL_ATTRIBUTION_RE = re.compile(
 _STUDY_ADOPTION_RE = re.compile(
     r"(?:本研究|本方案|本试验|本项目)[^。！？；;]{0,40}"
     r"(?:规定|要求|设定|排除|不得|禁止|必须|须|应|采用|采纳|执行|遵循)|"
-    r"(?:入选|排除|入组)标准|不得随机|不得入组|不予入组"
+    r"(?:入选|排除|入组)(?:标准|要求|条件)|不得随机|不得入组|不予入组"
 )
 
 
@@ -92,6 +92,31 @@ def _external_header_end(text: str, before: int) -> int:
     ) >= 0), default=-1)
 
 
+def _has_new_attribution_label(text: str, start: int, end: int) -> bool:
+    depth = 0
+    for index in range(start, end):
+        character = text[index]
+        if character in "（([【":
+            depth += 1
+        elif character in "）)]】":
+            depth = max(0, depth - 1)
+        elif character in "：:" and depth == 0:
+            if (index > start and index + 1 < len(text)
+                    and text[index - 1].isdigit() and text[index + 1].isdigit()):
+                continue
+            clause_start = max(start, max(
+                (text.rfind(mark, start, index) + 1 for mark in "。！？；;：:"),
+                default=start,
+            ))
+            prefix = text[clause_start:index]
+            # Discourse enumeration is not a new scope; a requirement label still is.
+            if (prefix.endswith(("包括", "包含", "例如", "如", "如下"))
+                    and not re.search(r"要求|标准|条件|入组|入选|排除", prefix)):
+                continue
+            return True
+    return False
+
+
 def _attribution_in_source_scope(source: str, quote: str, attribution: str) -> bool:
     text = normalize_source_excerpt(source)
     action = normalize_source_excerpt(quote)
@@ -110,17 +135,19 @@ def _attribution_in_source_scope(source: str, quote: str, attribution: str) -> b
     end = min((pos for pos in ends if pos >= 0), default=len(text))
     header_colon = _external_header_end(text, action_at)
     if (header_colon >= 0
-            and any(mark in text[header_colon + 1:action_at] for mark in "：:")):
+            and _has_new_attribution_label(text, header_colon + 1, action_at)):
         return False
     if basis_at >= start:
         return not _STUDY_ADOPTION_RE.search(text[start:end])
     # A verbatim colon header owns only this source unit, until another authority intervenes.
     header_end = len(basis)
+    if header_end < len(text) and text[header_end] in "：:":
+        header_end += 1
     return bool(
-        basis_at == 0 and basis.endswith(("：", ":"))
+        basis_at == 0 and header_end > 0 and text[header_end - 1] in "：:"
         and header_end <= action_at
         and not any(mark in basis for mark in "。！？；;")
-        and not any(mark in text[header_end:action_at] for mark in "：:")
+        and not _has_new_attribution_label(text, header_end, action_at)
         and not _STUDY_ADOPTION_RE.search(text[:end])
         and not _EXTERNAL_ATTRIBUTION_RE.search(text[header_end:action_at])
     )
@@ -141,9 +168,7 @@ def _has_external_attribution_before_action(source: str, quote: str) -> bool:
     if (_EXTERNAL_ATTRIBUTION_RE.search(text[start:action_at + len(action)])
             and not _STUDY_ADOPTION_RE.search(text[start:end])):
         return True
-    return header_end >= 0 and _attribution_in_source_scope(
-        source, quote, text[:header_end + 1],
-    )
+    return False
 
 
 _ENROLLMENT_DISPOSITIONS = frozenset({
