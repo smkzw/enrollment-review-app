@@ -36,6 +36,7 @@ SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
 SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v22"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
 SOURCE_COVERAGE_VALIDATION_VERSION = "source-owned-inventory-validation/v1"
+SOURCE_UNIT_QUOTE_COMPLETION_VERSION = "source-unit-quote-completion/v1"
 SOURCE_TARGET_REVIEW_VALIDATION_VERSION = "source-native-procedure-row-validation/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
@@ -283,6 +284,85 @@ class SourceInterpretation(ContractModel):
         if len(self.units_without_statement) != len(set(self.units_without_statement)):
             raise ValueError("无独立陈述的来源单元不得重复")
         return self
+
+
+def source_unit_quotes_cover_source(unit, interpretation: SourceInterpretation, indexes) -> bool:
+    """Require located, disjoint excerpts; this proves capture, not interpretation."""
+    ranges = [locate_source_quote_offsets(unit.excerpt, interpretation.statements[index].quoted_text)
+              for index in indexes]
+    if any(bounds is None for bounds in ranges):
+        return False
+    ordered = sorted(ranges)
+    if any(left[1] > right[0] for left, right in zip(ordered, ordered[1:])):
+        return False
+    scopes = [locate_source_quote_offsets(unit.excerpt, interpretation.statements[index].scope_quote)
+              for index in indexes if interpretation.statements[index].scope_quote is not None
+              and interpretation.statements[index].scope_context_unit_id is None]
+    if any(bounds is None for bounds in scopes):
+        return False
+    extra = []
+    for bounds in sorted(set(scopes)):
+        if any(start <= bounds[0] and bounds[1] <= end for start, end in ranges):
+            continue
+        if any(start < bounds[1] and bounds[0] < end for start, end in ranges):
+            return False
+        extra.append(bounds)
+    return source_statement_ranges_cover_unit(
+        unit.excerpt, [*ranges, *extra], allow_joining_punctuation=True,
+    )
+
+
+def source_unit_quote_completion_prompt(
+    batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation, unit_id: str,
+) -> str:
+    unit = next(item for item in batch.owned_units if item.structure_unit_id == unit_id)
+    indexes = [index for index, statement in enumerate(interpretation.statements)
+               if statement.structure_unit_id == unit_id]
+    if not indexes or source_unit_quotes_cover_source(unit, interpretation, indexes):
+        raise ValueError("来源单元没有需要补读的摘录范围")
+    return (
+        "你是内置方案Agent的局部原文补读步骤，不生成规则、不判受试者，也不消除原有疑问。"
+        "下方只有一个授权来源单元的摘录未覆盖全部正文。核实缺失文字是否是原陈述的连续尾部或前部，"
+        "仅可扩展对应quoted_text，逐字保留原摘录；不得缩短、换句、拼接、改变其他任何字段或陈述顺序。"
+        "原有unresolved全部保留；范围、时间、用途、例外及兄弟原样返回。"
+        "包含上位条件、列表连接或例外的文字不得跳过；补齐后其含义还须由后续作者和核对步骤重审。"
+        "如果缺失文字是另一条独立要求而非现有陈述的连续部分，本步骤不能新增或改写语义，"
+        "返回原陈述，系统将保存不完整来源并要求另行有界处理，不为了覆盖而吞并。"
+        "仅返回原SourceInterpretation结构：version不变，statements恰为下列指定陈述，顺序不变，"
+        "units_without_statement为空。不是完整批次，不返回context或其他单元。\n"
+        + json.dumps({"completion_version": SOURCE_UNIT_QUOTE_COMPLETION_VERSION,
+                      "source_unit": unit.model_dump(mode="json"),
+                      "statement_indexes": indexes,
+                      "statements": [interpretation.statements[index].model_dump(mode="json")
+                                     for index in indexes],
+                      "version": interpretation.version}, ensure_ascii=False)
+    )
+
+
+def apply_source_unit_quote_completion(
+    batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation,
+    unit_id: str, proposal: SourceInterpretation,
+) -> SourceInterpretation:
+    unit = next(item for item in batch.owned_units if item.structure_unit_id == unit_id)
+    indexes = [index for index, statement in enumerate(interpretation.statements)
+               if statement.structure_unit_id == unit_id]
+    if (not indexes or proposal.version != interpretation.version or proposal.units_without_statement
+            or len(proposal.statements) != len(indexes)):
+        raise ValueError("局部来源补读必须保留指定单元的全部陈述及顺序")
+    result = interpretation.model_copy(deep=True)
+    for index, revised in zip(indexes, proposal.statements, strict=True):
+        original = interpretation.statements[index]
+        old = locate_source_quote_offsets(unit.excerpt, original.quoted_text)
+        new = locate_source_quote_offsets(unit.excerpt, revised.quoted_text)
+        if (original.model_dump(mode="json", exclude={"quoted_text"})
+                != revised.model_dump(mode="json", exclude={"quoted_text"})
+                or old is None or new is None or not (new[0] <= old[0] < old[1] <= new[1])):
+            raise ValueError("局部补读只能逐字扩展原摘录，不能改变已保存语义或疑问")
+        result.statements[index] = revised.model_copy(deep=True)
+    validate_source_interpretation(batch, result)
+    if not source_unit_quotes_cover_source(unit, result, indexes):
+        raise ValueError("局部补读后来源仍有遗漏、重叠或无法定位，不作为完整来源")
+    return result
 
 
 def normalize_schedule_randomization_anchors(
@@ -1036,6 +1116,27 @@ class SourceTargetReviewItem(ContractModel):
 class SourceTargetReview(ContractModel):
     version: Literal[SOURCE_TARGET_REVIEW_VERSION]
     items: list[SourceTargetReviewItem]
+
+
+def validate_completed_quote_review(interpretation, review, history) -> None:
+    """An expanded capture needs a fresh full-excerpt review or an explicit unresolved item."""
+    expanded = set()
+    for record in history:
+        detail = record.get("error_detail") or {}
+        if detail.get("workflow_phase") != "source_unit_quote_completion" or record.get("outcome") != "parsed":
+            continue
+        indexes = detail.get("expanded_statement_indexes")
+        if (not isinstance(indexes, list) or not indexes
+                or any(type(index) is not int or not 0 <= index < len(interpretation.statements) for index in indexes)
+                or len(set(indexes)) != len(indexes)):
+            raise ValueError("补齐原文的核对范围记录损坏")
+        expanded.update(indexes)
+    items = {item.statement_index: item for item in review.items} if review is not None else {}
+    for index in expanded:
+        item = items.get(index)
+        if item is None or (item.decision != "unresolved" and normalize_source_excerpt(item.source_action_excerpt)
+                            != normalize_source_excerpt(interpretation.statements[index].quoted_text)):
+            raise ValueError("新增原文范围尚未被完整核对，不能采用其原有结论")
 
 
 def is_post_eligibility_calculation(

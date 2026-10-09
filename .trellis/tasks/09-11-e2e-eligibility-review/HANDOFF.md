@@ -1,5 +1,17 @@
 # HANDOFF｜1006V1｜已解除暂停，实施中
 
+## 当前事实（替代下方历史“当前”表述）
+
+当前新增代码包：在7effacd上仅补读一个遗漏来源单元，不修改任何已核语义或原有疑问；受影响旧未采用wire/review/coverage/alignment/session不作种子，真实账本保留，随后重新作者与核对。独审新C03 session01a121c4…301.969秒/exit0/no fallback确认捕获与采用分离，指出失败往返；所有者完成具体失败分类、实际保存/原范围恢复、坏答复阻止重读、旧额度限制和扩展摘录完整复核。相连1471pass/2新夹具fail，修断言后最终58pass/4.25s/exit0，不称全库或临床验收。最新只读v3预检43/1/46、0模型/0写/hash保持，44仅缺口单元补读。详见reviews/rv1006-source-unit-completion-owner-disposition-20261010.md。下一冻结提交后正式入口受控新建，不覆盖原Job、不再复制大库；新模型试跑尚未执行。Goal active，claims_complete=false，完整新病例工作稿/相关更正新旧结果仍未完成。本文件继续维护当前状态，不是暂停指令。
+
+实际源码7effacd，已普通push。新合法Job d371ca37793e49bcaa6dcecd48ce9e32已终止为failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED，14次物理调用、474.0040339579573秒、驱动exit3；85发现及43成功深审零新调用复用，第44失败、46未执行。检查点e5a9f0dc1e844ff0a796f239e5017b31；无活动执行会话。前一功能包的来源未决保护确实起效，但不是完整采用或临床验收。
+
+零模型、零写入的实际消费者诊断证实：已保存覆盖证明当前有效，原草稿结构门无错误；最早阻断是首个来源单元94字符仅由两条摘录覆盖[0,53]和[53,76]，遗漏[76,94]的实质性上位条件/再次筛选连接。六条陈述均无范围摘录，不能声称该尾句已在别处保存。既有整单元受限消费正确拒绝不完整来源，不应放宽。私有证据：/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-source-uncertainty-terminal-consumer-20261010-v1.json（本机可读，外部审阅不可读）；不在公共交付中复制原文。旧数值修订已按未采用策略回退，不作为新结果。
+
+接续：先以既有来源读取/恢复合同有界补齐缺失单元，保存实际原答、保留独立兄弟、重新核其受影响关系；不重复完整方案、不猜写尾句、不伪造证明。旧43组依现场预检决定复用。完整共同发布、同一完整包下的新病例工作稿、正式UI更正与新旧报告未完成，claims_complete=false，Goal active；这不是暂停记录。
+
+## 历史记录（以下不覆盖上述当前事实）
+
 **当前实际进展：** 源码d660ebb4的合法Job2d60c099d5bc4eb59f50a0eacca431cc已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，13物理调用623.5134456250817秒/exit3，85发现及43成功零新调用复用，44失败/46未执行；检查点e5051e44b5444925a6035122a80247e7。数值四字段修订parsed后重核，来源疑问2/4被误称新增，已有条件3/5又走重复补入；原额外来源/错误求值正确拒绝，终态回退草稿不称修订已保存。当前最小包禁止来源未决升级新增，已有条件引用仅阻止重复补入、不能证明语义；实际未决依赖仍由既有R1闭包严格非执行留存，坏数值/未核候选不得混入。作者/编译器不改，仅新增两项validator身份，旧版受限回执失效有界刷新、损坏仍硬拒。单批准C03初审及同会话续审exit0/no fallback，421.966/240.425秒，源码只读/程序分离，非医学批准；持续引用孤立反例由当前域合同否证，多余补丁撤回。完整相连v3为1593pass/7fail/168.27s；修正预期与夹具后最终受影响v9为86pass/1520deselected/9.15s/exit0/5SWIG，末全窗未重跑、窗口不累计。新源最终只读预检仍须核实际43reusable/1resume_partial/46refresh、0模型/0写/hash保持后合法新建。原件/保护库/旧回执及七份继承dirty保持。完整共同发布、同包病例工作稿、UI更正后的新旧报告仍未达；claims_complete=false，Goal active。详见reviews/rv1006-source-uncertainty-owner-disposition-20261010.md；下方前次记录属历史，不覆盖本段。
 
 更新2026-10-09。用户解除暂停，Goal active，claims_complete=false。源码b6fb9016的Jobd6e869ea2e1d46448ec7b4b848a13c6f已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，7调用277.534631秒/exit3，43完成/44失败/46未执行，exec92046结束；85发现及43成功零新调用。旧负结论已实际重核，最后首错为比较来源超出冻结局部摘录，原拒绝正确。最小修复使数值修订只返回四个授权字段，宿主保留其余内容；降级/越权/错误阈值仍拒，完整原子旧路径兼容。五相连模块最终1586pass/105.83s/exit0/5SWIG；18选窗不累加。C03同批准会话增量独审exit0/no fallback/207.47秒，无临床/测试/HEAD核验，仅程序分离，末防降级和冻结字段检查由所有者验证。最新源d6e869只读预检43/1/46、0调用/0写/hash保持，44为verified_unpublished_draft_source_review_reused，未因审阅猜测放宽身份。下一合法新建并核90步一致后接续，不复活旧Job。取舍见reviews/rv1006-numeric-field-patch-owner-disposition-20261009.md。完整共同发布、新病例工作稿、UI更正和新旧结果未达；原件/旧Job/来源与保护库保持，正式自动采用和签发另守权限。implement当前表为现行状态，下方历史不覆盖；本记录不是暂停。

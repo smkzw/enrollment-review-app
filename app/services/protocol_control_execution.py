@@ -65,6 +65,7 @@ from app.agents.protocol_control_discovery_transport import (
 )
 from app.agents.protocol_control_source_interpretation import (
     SOURCE_COVERAGE_VALIDATION_VERSION,
+    SOURCE_UNIT_QUOTE_COMPLETION_VERSION,
     SOURCE_ATTRIBUTION_VALIDATION_VERSION,
     SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
     SOURCE_TARGET_REVIEW_GAP_VERSION,
@@ -100,6 +101,8 @@ from app.agents.protocol_control_source_interpretation import (
     validated_source_review_seed,
     target_review_indexes,
     _time_words_cover_stage_label,
+    source_unit_quotes_cover_source,
+    validate_completed_quote_review,
 )
 from app.agents.protocol_control_source_function import (
     SOURCE_FUNCTION_FIELD_REPAIR_VERSION,
@@ -2076,6 +2079,7 @@ def _deep_component_identity(
         "validator_version": "/".join((CONTROL_PUBLICATION_GATE_VERSION,
                                        RESTRICTED_DEFINITION_VALIDATION_VERSION,
                                        SOURCE_COVERAGE_VALIDATION_VERSION,
+                                       SOURCE_UNIT_QUOTE_COMPLETION_VERSION,
                                        SOURCE_ATTRIBUTION_VALIDATION_VERSION,
                                        SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
                                        SOURCE_TARGET_REVIEW_GAP_VERSION,
@@ -2663,6 +2667,57 @@ def _obsolete_native_author_basis(
     return None
 
 
+def _resumable_unit_completion_failure(
+    batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
+) -> _ResumedSourceReview | None:
+    """Keep the failed capture and its ledger together; never fall back to authorship."""
+    attempts = saved.get("attempts") or []
+    last = attempts[-1] if attempts else None
+    detail = last.get("error_detail") if isinstance(last, Mapping) else None
+    if not isinstance(detail, Mapping) or detail.get("workflow_phase") != "source_unit_quote_completion":
+        return None
+    if (detail.get("code") != "SOURCE_UNIT_QUOTE_COMPLETION"
+            or last.get("error_classes") != ["SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED"]
+            or last.get("outcome") != "transport_failed" or detail.get("called") is not True):
+        raise ValueError("SOURCE_UNIT_QUOTE_COMPLETION_STOPPED：补读内容未通过核对，不自动重读原批次")
+    reuse = saved.get("source_review_reuse")
+    proof = reuse.get("source_seed_proof") if isinstance(reuse, Mapping) else None
+    if (not isinstance(proof, Mapping)
+            or proof.get("schema_version") != "phase5/source-unit-quote-completion-seed-proof/v1"
+            or proof.get("adopted") is not False
+            or any(saved.get(key) for key in ("partial_wire", "source_target_review",
+                                             "source_statement_coverage", "source_candidate_alignment"))):
+        raise ValueError("局部补读失败记录缺少原范围证明，未退回整批读取")
+    interpretation = SourceInterpretation.model_validate(saved.get("source_interpretation"))
+    validate_source_interpretation(batch, interpretation)
+    planned = proof.get("source_unit_completion_ids")
+    owned = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    if (not isinstance(planned, list) or not planned or any(not isinstance(value, str) for value in planned)
+            or len(set(planned)) != len(planned) or not set(planned) <= set(owned)):
+        raise ValueError("局部补读失败记录的来源范围损坏")
+    unit_id = detail.get("structure_unit_id")
+    indexes = [index for index, item in enumerate(interpretation.statements) if item.structure_unit_id == unit_id]
+    if (unit_id not in planned or not indexes or detail.get("statement_id") != indexes[0]
+            or detail.get("source_refs") != list(owned[unit_id].source_span_ids)
+            or detail.get("affected_dependents") != indexes
+            or detail.get("json_path") != f"statements[{indexes[0]}].quoted_text"
+            or detail.get("precondition_sha256") != hashlib.sha256(json.dumps([
+                interpretation.statements[index].model_dump(mode="json") for index in indexes
+            ], ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()):
+        raise ValueError("局部补读失败记录与实际保存来源不一致")
+    history = _saved_source_scope_question_history(saved)
+    if not history or any(history[-1].get(key) != value for key, value in last.items()):
+        raise ValueError("局部补读失败历史缺失，不重置已用额度")
+    remaining = [value for value in planned if not source_unit_quotes_cover_source(
+        owned[value], interpretation, [index for index, item in enumerate(interpretation.statements)
+                                      if item.structure_unit_id == value])]
+    if unit_id not in remaining:
+        raise ValueError("失败补读已无来源缺口，记录矛盾")
+    return _ResumedSourceReview(state="absent", reason="source_unit_quote_completion_transport_resume",
+        source_seed_proof={**proof, "source_unit_completion_ids": remaining,
+            "source_sha256": hashlib.sha256(interpretation.model_dump_json().encode()).hexdigest()})
+
+
 def _validated_deep_partial_source(
     store: JobStore,
     current_payload: Mapping[str, Any],
@@ -2734,6 +2789,11 @@ def _validated_deep_partial_source(
     changed_components = not _same_deep_components_with_current_gate(
         saved_components, current_components,
     )
+    completion_resume = _resumable_unit_completion_failure(batch, saved)
+    if completion_resume is not None:
+        if changed_components or repair_identity != protocol_control_agent_repair_contract_sha256():
+            raise ValueError("失败补读的当前合同已变，不自动退回整批读取")
+        return checkpoint_id, saved, completion_resume
     pending_source = any(
         isinstance(attempt, Mapping) and isinstance(attempt.get("error_detail"), Mapping)
         and attempt["error_detail"].get("workflow_phase") == "source_correction_pending"
@@ -2744,6 +2804,66 @@ def _validated_deep_partial_source(
         if saved_components.get("validator_version") != current_components["validator_version"]
         else None
     )
+    last_attempt = (saved.get("attempts") or [None])[-1]
+    completion_detail = last_attempt.get("error_detail") if isinstance(last_attempt, Mapping) else None
+    if (not changed_components and not pending_source and obsolete_basis is None
+            and repair_identity == protocol_control_agent_repair_contract_sha256()
+            and isinstance(last_attempt, Mapping) and last_attempt.get("outcome") == "publication_invalid"
+            and last_attempt.get("error_classes") == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+            and isinstance(completion_detail, Mapping)
+            and completion_detail.get("code") == "SOURCE_TARGET_REVIEW_UNRESOLVED"
+            and completion_detail.get("json_path") == "/items"
+            and isinstance(saved.get("partial_wire"), Mapping)):
+        interpretation = SourceInterpretation.model_validate(source)
+        validate_source_interpretation(batch, interpretation)
+        original_wire = ProtocolControlAgentWire.model_validate(saved["partial_wire"])
+        _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(original_wire, batch))
+        if not _coverage_matches_current_proofs(batch, _saved_failed_deep_run_result(batch, saved)):
+            raise ValueError("遗漏来源的覆盖证明与冻结草稿不一致")
+        witnessed = _resumable_saved_source_review(batch, interpretation, saved)
+        review_items = {item.statement_index: item for item in witnessed.review.items} if witnessed.review else {}
+        indexes = completion_detail.get("statement_ids")
+        completion_witnessed = (
+            isinstance(indexes, list) and bool(indexes) and all(type(index) is int for index in indexes)
+            and indexes == sorted(set(indexes)) and set(indexes) <= set(review_items)
+            and any(review_items[index].decision == "unresolved" for index in indexes)
+            and all(review_items[index].decision in {"unresolved", "additional_requirement"} for index in indexes)
+            and {item.statement_index for item in review_items.values() if item.decision == "unresolved"} <= set(indexes)
+            and completion_detail.get("source_refs") == sorted({
+                span for unit in batch.owned_units
+                if unit.structure_unit_id in {interpretation.statements[index].structure_unit_id for index in indexes}
+                for span in unit.source_span_ids
+            })
+        )
+        gaps = tuple(unit.structure_unit_id for unit in batch.owned_units
+                     if any(item.structure_unit_id == unit.structure_unit_id
+                            for item in interpretation.statements)
+                     and not source_unit_quotes_cover_source(unit, interpretation, [
+                         index for index, item in enumerate(interpretation.statements)
+                         if item.structure_unit_id == unit.structure_unit_id
+                     ]))
+        if witnessed.state == "reused" and completion_witnessed and gaps:
+            # An actual incomplete source is not a reusable semantic draft.
+            # Preserve its receipts; reread only the missing owned unit before authorship.
+            seed = dict(saved, partial_wire=None, source_target_review=None,
+                        source_statement_coverage=[], source_candidate_alignment=None, session_id=None)
+            return checkpoint_id, seed, _ResumedSourceReview(
+                state="absent", reason="source_unit_quote_completion_required",
+                source_seed_proof={
+                    "schema_version": "phase5/source-unit-quote-completion-seed-proof/v1",
+                    "source_job_id": source_job_id, "checkpoint_id": checkpoint_id,
+                    "step_id": step_id, "source_unit_completion_ids": list(gaps),
+                    "source_sha256": hashlib.sha256(interpretation.model_dump_json().encode()).hexdigest(),
+                    "diagnostic_sha256": hashlib.sha256(json.dumps(
+                        saved, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+                    ).encode()).hexdigest(),
+                    "current_source_equal": True, "reused": ["source_interpretation"],
+                    "discarded": ["partial_wire", "source_target_review", "source_statement_coverage",
+                                  "source_candidate_alignment", "session_id"],
+                    "adopted": False,
+                    "source_repair_limit": source_repair_limit,
+                },
+            )
     # A changed compiler cannot justify reusing executable semantics. It may
     # rederive a wholly non-executable disposition from unchanged source and
     # request materials, checked again by the current validators.
@@ -3390,6 +3510,8 @@ def _validate_saved_source_review(
             json_path="/source_interpretation",
         )
     validate_source_interpretation(batch, interpretation)
+    validate_completed_quote_review(interpretation, result.source_target_review,
+                                    result.source_scope_question_history)
     if result.workflow_variant_requested == "RV1001-FLOW" and result.final_output is not None:
         from app.agents.protocol_control_fixed_flow import supports_front_stage_flow
         if supports_front_stage_flow(batch, interpretation) and result.source_front_target_review is None:
@@ -3807,6 +3929,7 @@ def _saved_source_scope_question_history(saved: Mapping[str, Any] | None) -> lis
                    if isinstance(attempt, Mapping) and isinstance(attempt.get("error_detail"), Mapping)
                    and attempt["error_detail"].get("workflow_phase") in {
                        "source_scope_question_recheck", "source_context_completion",
+                       "source_unit_quote_completion",
                    }]
         if nested and history:
             outputs = saved.get("attempt_raw_outputs", [])
@@ -4020,9 +4143,12 @@ def _execute_deep(
             # A saved review is proven against the current batch even when the
             # failed run had no reusable partial wire; an unproven one is
             # recorded as refresh_required and never silently adopted.
-            resume_review = _resumable_saved_source_review(
-                batch, resume_interpretation, previous,
-            )
+            try:
+                resume_review = (_resumable_unit_completion_failure(batch, previous)
+                                 or _resumable_saved_source_review(batch, resume_interpretation, previous))
+            except ValueError as exc:
+                raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                                  detail=str(exc)) from exc
             resume_alignment_saved = previous
 
     deep_source_job_id = context.job_payload.get("deep_source_job_id")
@@ -4156,7 +4282,8 @@ def _execute_deep(
                 **({"source_lineage": entry["source_lineage"]}
                    if isinstance(plan, Mapping) and entry.get("source_lineage") else {}),
             }}
-        if decision == "resume_partial" and resume_wire is None:
+        if (decision == "resume_partial" and resume_wire is None
+                and resume_review.reason != "source_unit_quote_completion_transport_resume"):
             with config.session_factory() as session:
                 partial = _validated_deep_partial_source(
                     JobStore(session, now=config.now), context.job_payload,
@@ -4221,6 +4348,12 @@ def _execute_deep(
         "batch": batch.model_dump(mode="json"),
         "prompt": protocol_control_agent_prompt_template_sha256(prompt_template),
     })
+    seed_limit = (resume_review.source_seed_proof or {}).get("source_repair_limit")
+    if seed_limit is not None:
+        if type(seed_limit) is not int or seed_limit < 0:
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                              detail="原补读额度损坏，不重置额度。")
+        max_schema_repairs = min(max_schema_repairs, seed_limit)
     result = ProtocolControlAgentRunner(
         max_transport_retries=max_transport_retries,
         max_schema_repairs=max_schema_repairs,
@@ -4241,6 +4374,8 @@ def _execute_deep(
         resume_source_candidate_alignment=resume_candidate_alignment,
         resume_source_scope_question_history=_saved_source_scope_question_history(resume_alignment_saved),
         resume_source_scope_correction_indexes=resume_review.source_scope_correction_indexes,
+        resume_source_unit_completion_ids=(resume_review.source_seed_proof or {}).get(
+            "source_unit_completion_ids", ()),
         official_predicate_identities=official_predicate_identities,
         official_predicate_sources=official_predicate_sources,
         workflow_variant=context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
@@ -4284,6 +4419,8 @@ def _execute_deep(
             "SOURCE_TARGET_REVIEW_UNRESOLVED",
             "SOURCE_TARGET_REVIEW_INVALID",
             "SOURCE_SCOPE_CORRECTION_JSON_INVALID",
+            "SOURCE_UNIT_QUOTE_COMPLETION_INVALID",
+            "SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED",
             "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE",
             "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED",
             "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
@@ -4306,6 +4443,7 @@ def _execute_deep(
                            "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED",
                            "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED",
                            "SOURCE_REQUIREMENT_TRANSPORT_FAILED",
+                           "SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED",
                        }),
             error_code=("PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID" if restricted_error
                         else "PROTOCOL_CONTROL_" + source_review_failure if source_review_failure
@@ -4321,6 +4459,10 @@ def _execute_deep(
                  {
                      "SOURCE_SCOPE_CORRECTION_JSON_INVALID":
                          "模型未按要求返回本条来源范围，修订尚未应用；原文和已核内容保留。",
+                     "SOURCE_UNIT_QUOTE_COMPLETION_INVALID":
+                         "指定原文的补读答复不符合范围要求；旧内容保留，不自动重读整组。",
+                     "SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED":
+                         "指定原文补读时连接中断；保留失败记录和已用额度，可在原范围续读。",
                      "SOURCE_TARGET_REVIEW_UNRESOLVED":
                          "原文已保存，但它与审核要求的对应关系仍需核清；尚不能作为完整采用依据。",
                      "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE":

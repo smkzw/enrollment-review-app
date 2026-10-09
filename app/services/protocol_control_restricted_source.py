@@ -24,6 +24,8 @@ from app.agents.protocol_control_source_interpretation import (
     validate_restricted_definition_consumers,
     validate_source_interpretation,
     validate_source_target_review,
+    source_unit_quotes_cover_source,
+    validate_completed_quote_review,
 )
 from app.domain.contracts.protocol_controls import (
     ProtocolControlBatchDispositionHydrated,
@@ -101,28 +103,7 @@ def _citation_restricted_units(units, candidates, seed):
 
 
 def _unit_statements_cover_source(unit, interpretation, indexes) -> bool:
-    ranges = [locate_source_quote_offsets(unit.excerpt, interpretation.statements[index].quoted_text)
-              for index in indexes]
-    if any(bounds is None for bounds in ranges):
-        return False
-    ordered = sorted(ranges)
-    if any(left[1] > right[0] for left, right in zip(ordered, ordered[1:])):
-        return False
-    scopes = [locate_source_quote_offsets(unit.excerpt, interpretation.statements[index].scope_quote)
-              for index in indexes if interpretation.statements[index].scope_quote is not None
-              and interpretation.statements[index].scope_context_unit_id is None]
-    if any(bounds is None for bounds in scopes):
-        return False
-    extra = []
-    for bounds in sorted(set(scopes)):
-        if any(start <= bounds[0] and bounds[1] <= end for start, end in ranges):
-            continue
-        if any(start < bounds[1] and bounds[0] < end for start, end in ranges):
-            return False
-        extra.append(bounds)
-    return source_statement_ranges_cover_unit(
-        unit.excerpt, [*ranges, *extra], allow_joining_punctuation=True,
-    )
+    return source_unit_quotes_cover_source(unit, interpretation, indexes)
 
 
 def procedure_correspondence_source_gaps(batch, interpretation, wire, review) -> list[str]:
@@ -896,6 +877,9 @@ def restricted_batch_from_review(
         # An invalid/partial review is a recovery diagnostic, not a faithful
         # non-executable requirement. Do not validate it as an adopted review.
         return None
+    if result.source_interpretation is not None:
+        validate_completed_quote_review(result.source_interpretation, result.source_target_review,
+                                        result.source_scope_question_history)
     output = _restricted_statement_batch_from_review(batch, result)
     if output is not None:
         _validate_restricted_definition_registration(batch, result, output)

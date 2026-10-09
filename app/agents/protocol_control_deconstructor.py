@@ -7148,6 +7148,7 @@ class ProtocolControlAgentRunner:
         resume_source_candidate_alignment: SourceCandidateAlignment | None = None,
         resume_source_scope_question_history: Sequence[Mapping[str, object]] = (),
         resume_source_scope_correction_indexes: Sequence[int] = (),
+        resume_source_unit_completion_ids: Sequence[str] = (),
         official_predicate_identities: Mapping[str, Sequence[tuple[str, str]]] | None = None,
         official_predicate_sources: Mapping[str, Mapping[tuple[str, str], Sequence[str]]] | None = None,
         workflow_variant: str = "RV1001-BASELINE",
@@ -7209,10 +7210,12 @@ class ProtocolControlAgentRunner:
                   for attempt in attempts
                   if attempt.error_detail and attempt.error_detail.get("workflow_phase") in {
                       "source_scope_question_recheck", "source_context_completion",
+                      "source_unit_quote_completion",
                   }],
             ])
             if any(attempt.error_detail and attempt.error_detail.get("workflow_phase") in {
                 "source_scope_question_recheck", "source_function_field_repair", "source_context_completion",
+                "source_unit_quote_completion",
             }
                    for attempt in attempts):
                 values.setdefault("repair_used", True)
@@ -7336,25 +7339,34 @@ class ProtocolControlAgentRunner:
         question_history = [dict(item) for item in resume_source_scope_question_history]
         seen_questions: set[int] = set()
         seen_context_attempts: set[int] = set()
+        seen_unit_completions: set[tuple[str, str]] = set()
         for record in question_history:
             attempt = ProtocolControlAgentAttempt.model_validate(record)
             detail = attempt.error_detail or {}
             index = detail.get("statement_id")
             context_completion = detail.get("workflow_phase") == "source_context_completion"
+            unit_completion = detail.get("workflow_phase") == "source_unit_quote_completion"
             if (source_interpretation is None or detail.get("workflow_phase") != "source_scope_question_recheck"
-                    and not context_completion
-                    or detail.get("code") != ("SOURCE_CONTEXT_COMPLETION" if context_completion
+                    and not context_completion and not unit_completion
+                    or detail.get("code") != ("SOURCE_UNIT_QUOTE_COMPLETION" if unit_completion
+                                              else "SOURCE_CONTEXT_COMPLETION" if context_completion
                                               else "SOURCE_SCOPE_QUESTION_RECHECK")
                     or type(index) is not int or not 0 <= index < len(source_interpretation.statements)):
                 raise ValueError("来源疑问的历史核对范围无效，未发送请求")
             statement = source_interpretation.statements[index]
             unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == statement.structure_unit_id)
             if (detail.get("source_refs") != list(unit.source_span_ids)
-                    or detail.get("json_path") != f"statements[{index}].{'scope_quote' if context_completion else 'unresolved'}"
+                    or detail.get("json_path") != f"statements[{index}].{'quoted_text' if unit_completion else 'scope_quote' if context_completion else 'unresolved'}"
                     or not isinstance(detail.get("precondition_sha256"), str)
                     or len(detail["precondition_sha256"]) != 64
                     or (attempt.raw_output_text is not None and _sha256(attempt.raw_output_text) != attempt.raw_output_sha256)):
                 raise ValueError("来源疑问的历史核对见证损坏，未发送请求")
+            if unit_completion:
+                if detail.get("structure_unit_id") != statement.structure_unit_id:
+                    raise ValueError("局部补读历史与冻结单元身份不一致")
+                if attempt.outcome != "transport_failed":
+                    seen_unit_completions.add((statement.structure_unit_id, detail["precondition_sha256"]))
+                continue
             if context_completion:
                 if (attempt.outcome != "transport_failed"
                         and detail["precondition_sha256"] == _sha256(statement.model_dump_json())):
@@ -7372,8 +7384,78 @@ class ProtocolControlAgentRunner:
                         and (unit.table_context is None
                              or detail.get("native_guidance_version") == NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION)):
                     seen_questions.add(index)
-        # These are prior paid attempts, not fresh calls in this invocation.
-        source_repairs = len(question_history)
+        # Legacy records predate the explicit dispatch flag and count conservatively.
+        source_repairs = sum((item.get("error_detail") or {}).get("called", True) is not False
+                             for item in question_history)
+        if resume_source_unit_completion_ids:
+            from .protocol_control_source_interpretation import (
+                apply_source_unit_quote_completion, source_unit_quote_completion_prompt,
+                source_unit_quotes_cover_source,
+            )
+            unit_ids = tuple(resume_source_unit_completion_ids)
+            if (source_interpretation is None or resume_wire is not None or resume_source_target_review is not None
+                    or resume_source_candidate_alignment is not None or resume_source_statement_coverage
+                    or len(set(unit_ids)) != len(unit_ids)
+                    or not set(unit_ids) <= {unit.structure_unit_id for unit in batch.owned_units}):
+                raise ValueError("局部补读仅可使用有源草稿，不得沿用旧候选或核对证明")
+            for unit_id in unit_ids:
+                indexes = [index for index, statement in enumerate(source_interpretation.statements)
+                           if statement.structure_unit_id == unit_id]
+                unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == unit_id)
+                if not indexes or source_unit_quotes_cover_source(unit, source_interpretation, indexes):
+                    raise ValueError("局部补读计划与实际遗漏来源不一致")
+                precondition = _sha256(_stable_json([
+                    source_interpretation.statements[index].model_dump(mode="json") for index in indexes
+                ]))
+                detail = {"workflow_phase": "source_unit_quote_completion", "code": "SOURCE_UNIT_QUOTE_COMPLETION",
+                          "structure_unit_id": unit_id, "statement_id": indexes[0],
+                          "json_path": f"statements[{indexes[0]}].quoted_text",
+                          "source_refs": list(unit.source_span_ids), "retry_class": "source_inventory",
+                          "affected_dependents": indexes, "precondition_sha256": precondition,
+                          "called": False}
+                response = None
+                called = False
+                try:
+                    if ((unit_id, precondition) in seen_unit_completions
+                            or source_repairs >= self._max_schema_repairs):
+                        raise ValueError("相同遗漏来源已补读或共用额度用尽，不重复调用")
+                    if not callable(source_reader):
+                        raise ValueError("来源局部补读服务不可用")
+                    prompt = source_unit_quote_completion_prompt(batch, source_interpretation, unit_id)
+                    detail["prompt_sha256"] = _sha256(prompt)
+                    source_repairs += 1
+                    called = True
+                    detail["called"] = True
+                    response = source_reader(prompt=prompt)
+                    original = source_interpretation
+                    source_interpretation = apply_source_unit_quote_completion(
+                        batch, source_interpretation, unit_id, SourceInterpretation.model_validate_json(response.text),
+                    )
+                    detail["expanded_statement_indexes"] = [index for index in indexes
+                        if original.statements[index].quoted_text != source_interpretation.statements[index].quoted_text]
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1, session_id=response.session_id,
+                        raw_output_sha256=_sha256(response.text), raw_output_chars=len(response.text),
+                        raw_output_text=response.text, outcome="parsed", error_detail=detail,
+                        issues=["仅补齐指定来源单元原摘录；旧候选与核对未复用，仍须重新装配和核对"],
+                    ))
+                except Exception as completion_error:  # noqa: BLE001 - retain exact failed proposal
+                    code = protocol_control_call_failure_code(completion_error) or (
+                        "SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED" if called and response is None
+                        else "SOURCE_UNIT_QUOTE_COMPLETION_INVALID")
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=response.session_id if response else "source-unit-completion-failed",
+                        raw_output_sha256=_sha256(response.text if response else str(completion_error)),
+                        raw_output_chars=len(response.text) if response else None,
+                        raw_output_text=response.text if response else None,
+                        outcome="schema_invalid" if response else "transport_failed" if called else "publication_invalid",
+                        error_classes=[code], error_detail=detail, issues=[str(completion_error)[:1200]],
+                    ))
+                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                        session_id=response.session_id if response else "source-unit-completion-failed",
+                        attempts=attempts, source_interpretation=source_interpretation,
+                        pending_source_interpretation=source_interpretation)
         if resume_source_scope_correction_indexes:
             from .protocol_control_source_interpretation import apply_source_context_completion
 
@@ -8438,9 +8520,20 @@ class ProtocolControlAgentRunner:
                             if not callable(reviewer):
                                 review_unavailable = True
                                 raise RuntimeError("逐项来源核对服务不可用，不能跳过未闭合陈述")
-                            review_response = reviewer(prompt=build_source_target_review_prompt(
+                            review_prompt = build_source_target_review_prompt(
                                 batch, source_interpretation, pending_coverage, wire=wire,
-                            ))
+                            )
+                            expanded = sorted({index for record in [*question_history, *[
+                                attempt.model_dump(mode="json") for attempt in attempts]]
+                                if record.get("outcome") == "parsed"
+                                and (record.get("error_detail") or {}).get("workflow_phase") == "source_unit_quote_completion"
+                                for index in record["error_detail"].get("expanded_statement_indexes", [])})
+                            if expanded:
+                                review_prompt += ("\n本次补齐原文的陈述索引=" + json.dumps(expanded)
+                                    + "。这些条目的source_action_excerpt须逐字保留补齐后的整个quoted_text，"
+                                    "确认新增范围的条件、对象、例外及依赖均已核清；不能只核旧片段。"
+                                    "尚不能确认时返回unresolved并说明具体疑问，不能宣称原有目标完整覆盖。")
+                            review_response = reviewer(prompt=review_prompt)
                             pending_review = SourceTargetReview.model_validate_json(review_response.text)
                             corrected_invalid_review = False
                             # Each typed invalid statement gets one local correction.

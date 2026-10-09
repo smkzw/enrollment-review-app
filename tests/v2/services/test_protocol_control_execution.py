@@ -901,6 +901,293 @@ def test_typed_temporal_procedure_cannot_absorb_unrelated_additional_source():
     assert _temporal_restriction_indexes(batch, result, whole_unit=True) is None
 
 
+@pytest.mark.parametrize("layout", ["tail", "prefix", "punctuation"])
+@pytest.mark.parametrize("defect", [None, "still_missing", "wrong_unit", "changed_force", "cleared_question", "overlap", "extra", "shortened"])
+def test_source_unit_quote_completion_preserves_meaning_and_requires_full_capture(layout, defect):
+    from app.agents.protocol_control_source_interpretation import (
+        SourceInterpretation, apply_source_unit_quote_completion, source_unit_quotes_cover_source,
+        source_unit_quote_completion_prompt,
+    )
+    batch, result = _same_unit_two_requirement_review()
+    unit = batch.owned_units[0]
+    before = result.source_interpretation.model_dump(mode="json")
+    indexes = [0, 1]
+    qualifier = "；仅在下列条件满足时允许重新核查："
+    unit.excerpt = qualifier + unit.excerpt if layout == "prefix" else unit.excerpt + qualifier
+    if layout == "punctuation":
+        unit.excerpt = unit.excerpt.replace("；", "；\n")
+        qualifier = qualifier.replace("；", "；\n")
+    assert not source_unit_quotes_cover_source(unit, result.source_interpretation, indexes)
+    proposal = SourceInterpretation(version=result.source_interpretation.version,
+        statements=[statement.model_copy(deep=True) for statement in result.source_interpretation.statements],
+        units_without_statement=[])
+    changed = proposal.statements[0 if layout == "prefix" else 1]
+    changed.quoted_text = qualifier + changed.quoted_text if layout == "prefix" else changed.quoted_text + qualifier
+    if defect == "still_missing":
+        changed.quoted_text = result.source_interpretation.statements[0 if layout == "prefix" else 1].quoted_text
+    elif defect == "wrong_unit":
+        changed.structure_unit_id = "foreign-unit"
+    elif defect == "changed_force":
+        changed.force = "descriptive"
+    elif defect == "cleared_question":
+        proposal.statements[1].unresolved = []
+    elif defect == "overlap":
+        proposal.statements[0].quoted_text = unit.excerpt
+    elif defect == "extra":
+        proposal.statements.append(proposal.statements[0].model_copy(deep=True))
+    elif defect == "shortened":
+        changed.quoted_text = qualifier
+    prompt = source_unit_quote_completion_prompt(batch, result.source_interpretation, unit.structure_unit_id)
+    assert json.loads(prompt.split("\n", 1)[1])["source_unit"]["excerpt"] == unit.excerpt
+    assert "其他任何字段" in prompt
+    if defect:
+        with pytest.raises(ValueError):
+            apply_source_unit_quote_completion(batch, result.source_interpretation, unit.structure_unit_id, proposal)
+    else:
+        revised = apply_source_unit_quote_completion(batch, result.source_interpretation, unit.structure_unit_id, proposal)
+        assert source_unit_quotes_cover_source(unit, revised, indexes)
+        assert revised.statements[1].unresolved == result.source_interpretation.statements[1].unresolved
+        for original, updated in zip(result.source_interpretation.statements, revised.statements, strict=True):
+            assert original.model_dump(exclude={"quoted_text"}) == updated.model_dump(exclude={"quoted_text"})
+    assert result.source_interpretation.model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("invalid", [False, True])
+def test_runner_local_source_unit_quote_completion_does_not_reuse_semantic_draft(invalid):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
+    from app.agents.protocol_control_source_interpretation import SourceInterpretation
+    batch, fixture = _procedure_correspondence_review(single=True)
+    unit = batch.owned_units[0]
+    qualifier = "，满足后续条件才可继续核查："
+    unit.excerpt += qualifier
+    proposal = SourceInterpretation(version=fixture.source_interpretation.version,
+        statements=[fixture.source_interpretation.statements[0].model_copy(deep=True)], units_without_statement=[])
+    if not invalid:
+        proposal.statements[0].quoted_text += qualifier
+    fresh_review = fixture.source_target_review.model_copy(deep=True)
+    fresh_review.items[0].source_action_excerpt = proposal.statements[0].quoted_text
+    fresh_review.items[0].unresolved_cause = "source_ambiguity"
+    fresh_review.items[0].unresolved_aspects = ["后续条件的适用关系未核清"]
+
+    class Transport(_FakeTransport):
+        source_calls = 0
+        review_calls = 0
+
+        def start_source_interpretation(self, *, prompt):
+            self.source_calls += 1
+            assert unit.excerpt in prompt and "局部原文补读" in prompt
+            return ProtocolControlAgentResponse(session_id="unit-source-only", text=proposal.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            self.review_calls += 1
+            assert qualifier in prompt and not invalid
+            return ProtocolControlAgentResponse(session_id="fresh-unit-review", text=fresh_review.model_dump_json())
+
+    transport = Transport([ProtocolControlAgentResponse(session_id="fresh-author",
+        text=fixture.partial_wire.model_dump_json())])
+    def execute(history=()):
+        return ProtocolControlAgentRunner(max_schema_repairs=2).run(
+            batch, transport, resume_source_interpretation=fixture.source_interpretation,
+            resume_source_unit_completion_ids=(unit.structure_unit_id,),
+            resume_source_scope_question_history=history,
+            output_validator=lambda output: protocol_control_execution_module._validate_deep_batch_output(batch, output),
+        )
+    result = execute()
+    assert transport.source_calls == 1 and transport.review_calls == int(not invalid)
+    assert result.final_output is None
+    assert result.source_scope_question_history[0]["error_detail"]["workflow_phase"] == "source_unit_quote_completion"
+    assert protocol_control_execution_module._saved_source_scope_question_history(
+        {"source_scope_question_history": result.source_scope_question_history}
+    ) == result.source_scope_question_history
+    if invalid:
+        assert result.attempts[-1].error_classes == ["SOURCE_UNIT_QUOTE_COMPLETION_INVALID"]
+        execute(result.source_scope_question_history)
+        assert transport.source_calls == 1
+    else:
+        assert result.source_interpretation.statements[0].quoted_text.endswith(qualifier)
+        restricted = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+        assert restricted is not None and not restricted.candidates
+        assert restricted.restricted_statements[0].source_quote.endswith(qualifier)
+
+
+@pytest.mark.parametrize("decision, abbreviated", [("unresolved", True), ("additional_requirement", False),
+                                                    ("additional_requirement", True)])
+def test_completed_source_quote_requires_full_fresh_review_or_unresolved(decision, abbreviated):
+    from app.agents.protocol_control_source_interpretation import validate_completed_quote_review
+    _, result = _procedure_correspondence_review(single=True)
+    original = result.source_interpretation.statements[0].quoted_text
+    result.source_interpretation.statements[0].quoted_text += "，仅满足下列条件才可继续："
+    item = result.source_target_review.items[0]
+    item.decision = decision
+    item.source_action_excerpt = original if abbreviated else result.source_interpretation.statements[0].quoted_text
+    history = [{"outcome": "parsed", "error_detail": {"workflow_phase": "source_unit_quote_completion",
+                                                        "expanded_statement_indexes": [0]}}]
+    if decision != "unresolved" and abbreviated:
+        with pytest.raises(ValueError, match="新增原文范围"):
+            validate_completed_quote_review(result.source_interpretation, result.source_target_review, history)
+    else:
+        validate_completed_quote_review(result.source_interpretation, result.source_target_review, history)
+
+
+@pytest.mark.parametrize("transport_failure", [True, False])
+def test_unit_completion_failure_survives_real_job_checkpoint_without_upstream_reread(
+    data_paths, session_factory, monkeypatch, transport_failure,
+):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
+    module = protocol_control_execution_module
+    batch, fixture = _procedure_correspondence_review(single=True)
+    unit = batch.owned_units[0]
+    unit.excerpt += "，只有以下条件满足才能继续："
+    class Transport:
+        calls = 0
+        def start_source_interpretation(self, *, prompt):
+            self.calls += 1
+            if transport_failure:
+                raise ConnectionError("synthetic disconnected reader")
+            return ProtocolControlAgentResponse(session_id="invalid-capture",
+                text=fixture.source_interpretation.model_dump_json())
+    transport = Transport()
+    result = ProtocolControlAgentRunner(max_schema_repairs=2).run(batch, transport,
+        resume_source_interpretation=fixture.source_interpretation,
+        resume_source_unit_completion_ids=(unit.structure_unit_id,))
+    prompt = "合成固定提示"
+    components = module._deep_component_identity({}, prompt)
+    proof = dict(schema_version="phase5/source-unit-quote-completion-seed-proof/v1",
+        source_job_id="synthetic-upstream", checkpoint_id="synthetic-origin", step_id="deep_0001",
+        source_unit_completion_ids=[unit.structure_unit_id], adopted=False, source_repair_limit=2)
+    diagnostic = dict(stage="deep_failure_diagnostic", schema_version="phase5/deep-failure-diagnostic/v3",
+        batch_id=batch.batch_id, prompt_template_sha256=module.protocol_control_agent_prompt_template_sha256(prompt),
+        component_identity=components, repair_contract_sha256=module.protocol_control_agent_repair_contract_sha256(),
+        transport_identity={}, source_interpretation=result.source_interpretation.model_dump(mode="json"),
+        pending_source_interpretation=result.pending_source_interpretation.model_dump(mode="json"),
+        partial_wire=None, source_target_review=None, source_candidate_alignment=None, source_statement_coverage=[],
+        attempts=[item.model_dump(mode="json") for item in result.attempts],
+        source_scope_question_history=result.source_scope_question_history,
+        source_review_reuse=module._source_review_reuse_record(module._ResumedSourceReview(
+            state="absent", reason="source_unit_quote_completion_required", source_seed_proof=proof)))
+    current = JobService(session_factory, now=_now).create_job(idempotency_key="completion-roundtrip",
+        job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE, payload={},
+        steps=[StepSpec(step_id="deep_0001", name="原文补读")])
+    first = True
+    def execute(context):
+        nonlocal first
+        if first:
+            first = False
+            raise StepFailure(retryable=False, error_code="SYNTHETIC_CAPTURE_FAILURE",
+                detail="合成补读失败", diagnostic_checkpoint=diagnostic)
+        return module._execute_deep(context, config)
+    config = SimpleNamespace(data_paths=data_paths, session_factory=session_factory, now=_now)
+    runner = JobRunner(session_factory, {PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: execute},
+                       worker_id="completion-roundtrip", now=_now)
+    assert runner.run_job(current.job_id)
+    with session_factory() as session:
+        saved = JobStore(session, now=_now).get_last_checkpoint(current.job_id, "deep_0001")[1]
+    assert saved == {**diagnostic, "attempt": 1}
+    if not transport_failure:
+        with pytest.raises(ValueError, match="SOURCE_UNIT_QUOTE_COMPLETION_STOPPED"):
+            module._resumable_unit_completion_failure(batch, saved)
+        assert transport.calls == 1
+        return
+    resume = module._resumable_unit_completion_failure(batch, saved)
+    assert resume.source_seed_proof["source_unit_completion_ids"] == [unit.structure_unit_id]
+    monkeypatch.setattr(module, "_closure_checkpoint", lambda *_: {"deep_plan": {}})
+    monkeypatch.setattr(module.ProtocolControlDiscoveryToDeepPlan, "model_validate",
+                        staticmethod(lambda _: SimpleNamespace(batches=[batch])))
+    monkeypatch.setattr(module, "_deep_batch_for_step", lambda *_: batch)
+    monkeypatch.setattr(module, "_frozen_official_predicates", lambda *_: ({}, {}))
+    monkeypatch.setattr(module, "_prompt_from_payload", lambda *_: prompt)
+    monkeypatch.setattr(module, "_limits_from_payload", lambda *_: (0, 24))
+    monkeypatch.setattr(module, "_resolve_transport", lambda *_, **__: transport)
+    monkeypatch.setattr(module, "_require_frozen_route", lambda *_, **__: None)
+    monkeypatch.setattr(module, "_transport_identity", lambda *_, **__: {})
+    monkeypatch.setattr(module, "_bind_control_request_budget", lambda *_, **__: None)
+    with session_factory() as session, session.begin():
+        JobStore(session, now=_now).retry_failed(current.job_id)
+    assert runner.run_job(current.job_id)
+    with session_factory() as session:
+        store = JobStore(session, now=_now)
+        second = store.get_last_checkpoint(current.job_id, "deep_0001")[1]
+        # This fixture has one scheduled attempt; the retryable cause survives
+        # even though that scheduler budget makes the job final.
+        assert store.get_job(current.job_id).state == "failed_final"
+        step = store.list_steps(current.job_id)[0]
+        assert step.max_attempts == 1 and not step.retryable
+        assert step.error_code == "PROTOCOL_CONTROL_SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED"
+    assert transport.calls == 2
+    assert len(second["source_scope_question_history"]) == 2
+    assert second["source_review_reuse"]["source_seed_proof"]["source_repair_limit"] == 2
+    assert second["attempts"][-1]["error_classes"] == ["SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED"]
+    assert second["source_interpretation"] == saved["source_interpretation"]
+    # The retry checkpoint, not the original seed, owns the paid history and cap.
+    restored = module._resumable_unit_completion_failure(batch, second)
+    blocked = ProtocolControlAgentRunner(max_schema_repairs=restored.source_seed_proof["source_repair_limit"]).run(
+        batch, transport, resume_source_interpretation=fixture.source_interpretation,
+        resume_source_scope_question_history=second["source_scope_question_history"],
+        resume_source_unit_completion_ids=restored.source_seed_proof["source_unit_completion_ids"])
+    assert transport.calls == 2 and blocked.attempts[-1].error_detail["called"] is False
+
+
+@pytest.mark.parametrize("defect", [None, "dependent_additional", "bad_range", "boolean_range", "wrong_refs", "bad_numeric", "foreign_route"])
+def test_saved_source_gap_preflight_preserves_source_but_discards_semantic_draft(monkeypatch, defect):
+    module = protocol_control_execution_module
+    batch, result = (_procedure_correspondence_review() if defect == "dependent_additional"
+                     else _same_unit_two_requirement_review())
+    batch.owned_units[0].excerpt += "，只有后续条件满足才可继续："
+    result.attempts[-1].outcome = "publication_invalid"
+    result.attempts[-1].error_classes = ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+    result.attempts[-1].error_detail = dict(code="SOURCE_TARGET_REVIEW_UNRESOLVED",
+        statement_ids=[1], source_refs=list(batch.owned_units[0].source_span_ids), json_path="/items")
+    if defect == "dependent_additional":
+        item = result.source_target_review.items[0]
+        item.decision = "additional_requirement"
+        item.target_id = None
+        item.target_action_excerpt = None
+        item.unresolved_cause = None
+        result.attempts[-1].error_detail["statement_ids"] = [0, 1]
+    prompt = module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE
+    payload = {}
+    current = module._deep_component_identity(payload, prompt)
+    saved = dict(result.model_dump(mode="json"), stage="deep_failure_diagnostic",
+                 schema_version="phase5/deep-failure-diagnostic/v3", batch_id=batch.batch_id,
+                 component_identity=current, transport_identity={},
+                 prompt_template_sha256=current["prompt_material_sha256"],
+                 repair_contract_sha256=module.protocol_control_agent_repair_contract_sha256())
+    if defect == "bad_range":
+        saved["attempts"][-1]["error_detail"]["statement_ids"] = [0]
+    elif defect == "boolean_range":
+        saved["attempts"][-1]["error_detail"]["statement_ids"] = [True]
+    elif defect == "wrong_refs":
+        saved["attempts"][-1]["error_detail"]["source_refs"] = ["foreign-span"]
+    elif defect == "bad_numeric":
+        saved["partial_wire"]["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["predicate"]["value"] = 19
+    elif defect == "foreign_route":
+        payload["frozen_model_routes"] = {"deep": "0" * 64}
+    before = json.dumps(saved, sort_keys=True)
+    class Store:
+        def get_job(self, _):
+            text = json.dumps(payload)
+            return SimpleNamespace(payload_json=text, payload_sha256=hashlib.sha256(text.encode()).hexdigest())
+        def list_steps(self, _):
+            return [SimpleNamespace(step_id="deep_0001", state="failed_final")]
+        def get_last_checkpoint(self, _, step):
+            return ("closure", {"stage": "closure", "deep_plan": {}}) if step == module.STEP_CLOSURE else ("failure", saved)
+    monkeypatch.setattr(module.ProtocolControlDiscoveryToDeepPlan, "model_validate",
+                        staticmethod(lambda _: SimpleNamespace(batches=[batch])))
+    if defect in {"bad_numeric", "foreign_route"}:
+        with pytest.raises(ValueError):
+            module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
+    else:
+        recovered = module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
+        assert recovered is not None
+        if defect in {None, "dependent_additional"}:
+            assert recovered[1]["partial_wire"] is None and recovered[2].review is None
+            assert recovered[2].source_seed_proof["source_unit_completion_ids"] == [batch.owned_units[0].structure_unit_id]
+            assert recovered[1]["source_interpretation"] == saved["source_interpretation"]
+        else:
+            assert recovered[2].source_seed_proof is None
+    assert json.dumps(saved, sort_keys=True) == before
+
+
 @pytest.mark.parametrize("defect", [None, "partial_prefix", "tail", "wrong_unit", "source_unknown"])
 def test_local_context_completion_is_a_real_scoped_proposal_not_host_filled_source(defect):
     from app.agents.protocol_control_source_interpretation import SourceScopeCorrection, apply_source_context_completion
@@ -2235,6 +2522,8 @@ def test_completed_restricted_source_reuse_rechecks_saved_review(monkeypatch, ki
     ("SOURCE_TARGET_FOCUSED_INVALID", False),
     ("SOURCE_TARGET_FOCUSED_SCHEMA_INVALID", False),
     ("SOURCE_TARGET_REVIEW_UNAVAILABLE", False),
+    ("SOURCE_UNIT_QUOTE_COMPLETION_INVALID", False),
+    ("SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED", True),
 ])
 def test_deep_service_preserves_recheck_failure_kind_and_checkpoint(monkeypatch, code, retryable):
     from app.agents.protocol_control_deconstructor import ProtocolControlAgentAttempt
@@ -6533,6 +6822,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
         "/".join((protocol_control_execution_module.CONTROL_PUBLICATION_GATE_VERSION,
                   protocol_control_execution_module.RESTRICTED_DEFINITION_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_COVERAGE_VALIDATION_VERSION,
+                  protocol_control_execution_module.SOURCE_UNIT_QUOTE_COMPLETION_VERSION,
                   protocol_control_execution_module.SOURCE_ATTRIBUTION_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_REVIEW_GAP_VERSION,
