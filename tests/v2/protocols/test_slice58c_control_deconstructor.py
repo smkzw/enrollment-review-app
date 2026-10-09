@@ -11611,7 +11611,8 @@ def test_scoped_unit_repair_preserves_siblings_and_rejects_scope_escape(bad_patc
 
 @pytest.mark.parametrize("resume", [False, True])
 @pytest.mark.parametrize("reply", ["valid", "bad_json", "empty_sources"])
-def test_scoped_unit_repair_runs_through_current_consumer_without_full_history(resume, reply):
+@pytest.mark.parametrize("authority", ["repartition", "source_closure"])
+def test_scoped_unit_repair_runs_through_current_consumer_without_full_history(resume, reply, authority):
     batch, original = _batch(), _wire(candidate=_candidate())
     patch = original.model_copy(update={
         "dispositions": [original.dispositions[0]],
@@ -11641,7 +11642,8 @@ def test_scoped_unit_repair_runs_through_current_consumer_without_full_history(r
         if output.candidates[0].title != "修订后的有源要求":
             raise ProtocolControlAgentWireValidationError("ACTION_TARGET_SCOPE_MISMATCH", "有源范围修订",
                 structure_unit_ids=["su-01"], candidate_ids=[output.candidates[0].control_candidate_id],
-                allow_candidate_repartition=True)
+                allow_candidate_repartition=(authority == "repartition"),
+                allow_source_closure_rewrite=(authority == "source_closure"))
     inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION, statements=[],
         units_without_statement=list(batch.owned_structure_unit_ids))
     result = ProtocolControlAgentRunner(max_schema_repairs=3).run(batch, transport, output_validator=validate,
@@ -11658,6 +11660,80 @@ def test_scoped_unit_repair_runs_through_current_consumer_without_full_history(r
     assert result.status == "已解析", [a.issues for a in result.attempts]
     assert len(seen) == 2 and result.partial_wire.dispositions[1] == original.dispositions[1]
     assert result.final_output is not None and original == _wire(candidate=_candidate())
+
+
+@pytest.mark.parametrize("fault", [None, "bad_json", "sibling_source", "missing_authority", "budget", "second_gate"])
+def test_pending_publication_closure_uses_real_scoped_transport_not_missing_history(fault):
+    from app.agents.protocol_control_agent_transport import OpenAICompatibleProtocolControlAgentTransport
+
+    batch = _batch()
+    original = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
+    before = original.model_dump(mode="json")
+    patch = original.model_copy(update={
+        "dispositions": [original.dispositions[0]],
+        "candidate_drafts": [original.candidate_drafts[0].model_copy(update={"title": "修订后的有源要求"})],
+    }).model_dump(mode="json")
+    if fault == "sibling_source":
+        patch["candidate_drafts"][0]["source_structure_unit_ids"] = ["su-01", "su-02"]
+    requests = []
+    class Transport(OpenAICompatibleProtocolControlAgentTransport):
+        def _complete(self, messages, *, response_format=None):
+            requests.append((messages, response_format))
+            return "{" if fault == "bad_json" else json.dumps(patch, ensure_ascii=False)
+
+    transport = Transport(client=SimpleNamespace(), backend="ollama-cloud",
+        model="deepseek-v4.1-flash", model_identity_check=False)
+    seen = []
+    def validate(output):
+        seen.append(output)
+        candidate = next(item for item in output.candidates if item.frozen_structure_unit_ids == ["su-01"])
+        if candidate.title != "修订后的有源要求":
+            raise ProtocolControlAgentWireValidationError("PUBLICATION_GATE_REJECTED", "缺少禁止要求的有源完整表达",
+                candidate_ids=[candidate.control_candidate_id], structure_unit_ids=["su-01"],
+                allow_source_closure_rewrite=(fault != "missing_authority"))
+        if fault == "second_gate":
+            raise ProtocolControlAgentWireValidationError("RECOMMENDED_MODALITY_UNSUPPORTED", "修订后建议语气仍不受原文支持",
+                candidate_ids=[candidate.control_candidate_id], structure_unit_ids=["su-01"])
+
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION, statements=[],
+        units_without_statement=list(batch.owned_structure_unit_ids))
+    result = ProtocolControlAgentRunner(max_schema_repairs=0 if fault == "budget" else 2 if fault == "second_gate" else 1).run(
+        batch, transport, output_validator=validate, resume_pending_author_wire=original,
+        resume_source_interpretation=inventory, resume_session_id="saved-author")
+    assert original.model_dump(mode="json") == before
+    assert transport._histories == {}  # A checked snapshot is not an invented old conversation.
+    assert set(transport._scoped_resume_contexts) == {"saved-author"}
+    assert len(requests) == (0 if fault in {"missing_authority", "budget"} else 1)
+    if requests:
+        messages, response_format = requests[0]
+        assert [item["role"] for item in messages] == ["user"]
+        assert "尚未采用" in messages[0]["content"]
+        schema = response_format["json_schema"]["schema"]
+        disposition_ref = schema["properties"]["dispositions"]["items"]["$ref"]
+        assert schema["$defs"][disposition_ref.rsplit("/", 1)[1]]["properties"][
+            "structure_unit_id"]["enum"] == ["su-01"]
+    if fault is None:
+        assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
+        assert result.final_output is not None and len(seen) == 2
+        sibling = next(item for item in result.partial_wire.candidate_drafts
+                       if item.source_structure_unit_ids == ["su-02"])
+        assert sibling == original.candidate_drafts[1]
+        assert result.partial_wire.dispositions[1] == original.dispositions[1]
+    else:
+        assert result.status == "需要核对" and result.final_output is None
+        assert len(seen) == (2 if fault == "second_gate" else 1)
+        if fault == "second_gate":
+            target = next(item for item in result.pending_author_wire.candidate_drafts
+                          if item.source_structure_unit_ids == ["su-01"])
+            assert target.title == "修订后的有源要求"
+            assert any("RECOMMENDED_MODALITY_UNSUPPORTED" in attempt.error_classes for attempt in result.attempts)
+        else:
+            assert result.pending_author_wire == original
+        if fault in {"missing_authority", "second_gate"}:
+            assert result.attempts[-1].outcome == "transport_failed"
+            assert "找不到原协议控制 Agent 会话" in " ".join(result.attempts[-1].issues)
+        if fault in {"bad_json", "sibling_source"}:
+            assert "不得退回整组改写" in " ".join(result.attempts[-1].issues)
 
 
 def test_explicit_candidate_repartition_preserves_authorized_source_union() -> None:

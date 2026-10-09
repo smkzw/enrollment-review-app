@@ -11484,7 +11484,8 @@ class ProtocolControlAgentRunner:
                     next(iter(repair_candidate_indexes)) if post_treatment_only else None
                 )
                 scoped_unit_repair = (
-                    not post_treatment_only and allow_candidate_repartition
+                    not post_treatment_only
+                    and (allow_candidate_repartition or allow_source_closure_rewrite)
                     and repair_baseline_wire is not None and bool(mutable_candidate_source_union)
                     and callable(getattr(transport, "continue_scoped_unit_repair", None))
                 )

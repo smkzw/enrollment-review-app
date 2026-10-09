@@ -40,17 +40,17 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "持续1006V1/Goal active/claims_complete=false。9431f58f源码Jobfc25efcb failed_final，12调用628.062s/44完成45失败45未读，49新scoped路径未到。原文尾句已补，作者可选/建议/限定仍错，原门保留。一般采用校验后缺观察政策接既有字段修复，不退整包；C03指出内assert假绿，已加run后次数检查及非法字段停止。相连v2为1681pass1fail，补完整生产finding后受影响54pass/3.78s，末全窗未重跑。最新源fc25沿冻结祖先预检47/2/41、0模型0写/hash保持。下一冻结并合法新建90步核实际计划；完整同包工作稿/UI更正未达，七份继承dirty保持。",
+  "notes": "1006V1持续/Goal active/claims_complete=false。aba90c63实际38e4a8a1 failed_final，0物理调用168.983s/44完成45失败45未读；实际首错为snapshot-only恢复后来源闭包修订误用缺真实history的continue_session，不是额度耗尽。两种已有闭包授权接同一scoped reader，来源/兄弟与原完整门保持。四相连1816pass3新Schema断言失败；末受影响58pass4.27s，不累加。C03同批准会话续审exit0/no fallback/16只读，末测试补强所有者验证。最新38e4预检47/2/41、0模型0写/hash保持；下一冻结合法接续核90步决策，不复活旧Job、不重读47成功。同包工作稿/UI更正未达，继承七dirty保持。",
   "meta": {
     "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",
     "current_scope": "1006V1 frozen delivery window: complete same-source requirements, isolated current-node work draft, source navigation, one UI correction/supplement, affected recalculation and old/new history; R1/1001V1 retained.",
     "claims_complete": false,
-    "review_packet_status": "candidate_request_schema_current_policy_owner_verified_preflight_ready",
+    "review_packet_status": "publication_closure_scoped_resume_owner_verified_preflight_ready",
     "runtime_goal_status_observed": "active",
     "current_handoff": "HANDOFF.md",
     "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",
-    "last_verified_source_commit": "9431f58f",
+    "last_verified_source_commit": "aba90c63",
     "current_review_index": "review_index_20261006_1006V1.json",
     "historical_notes_20261006": "1006V1连续实施，Goal active，claims_complete=false。资料14组/24页、30事实及实际UI更正/Profile4成立；完整要求/工作稿/新报告未达。关系字段修复7a613204/822检查、末尾句界修复3472fa28/845检查已普通push；两旧原答零调用重验通过但未采用。v5合法部分恢复7调用/212.4902s，总37；29来源/24核对保存，研究目的用途及期别定义对应两项未核清。原库/旧Job不改，不重复整批或另复制大库。前端最终34检查/Ego成立，原198/展示190，原件/7份继承dirty保留。"
   }

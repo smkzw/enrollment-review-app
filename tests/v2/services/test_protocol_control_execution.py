@@ -7040,6 +7040,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "completed-result-current-gate-revalidation/v1",
                   "source-closure-scoped-unit-repair/v1",
                   "publication-candidate-missing-policy-recovery/v1",
+                  "publication-source-closure-scoped-resume/v1",
                   protocol_control_execution_module.SOURCE_STAGE_ECHO_VERSION,
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   "scoped-exception-dnf/v1"))

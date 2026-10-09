@@ -2,22 +2,21 @@
 
 ## 当前事实
 
-**实际状态：** 已push源码9431f58f的Jobfc25efcb3c0d48e4bfd352c4990985ce failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，12物理调用628.062秒/exit3。85发现及前44深审零新调用；第45失败、45深审未执行，第49新scoped路径未到达。祖先46–48成功沿冻结复用链保持，不当新Job完成数。旧Job/原件/保护库/来源库不变，0共同发布/启用/签发。
+**事实与执行选择：** Goal实查active、claims_complete=false；所有者直接集成＋原批准C03定向独审，原因是恢复作用域及后置消费者需独立挑战。源码aba90c63已push；其合法Job38e4a8a1cee3402b88d01c323c2fa6c3 failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，0物理调用168.982731秒/exit3。85发现及前44深审零新调用，第45失败、45深审未执行，第49及前包缺观察字段通道均未到达。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。
 
-**首因与执行选择：** 所有者集成＋单批准工程独审。45尾句已补全，作者却将可选免做写为recommended并漏操作限定，原拒绝保留。最小新增接线把一般采用校验后缺观察政策提案接原字段补齐，保留来源/兄弟、完整再验；越域/混合错误、缺reader、坏字段回复停止，不退整包。不改累计账、不构造假history、不增加项目词表。49沿祖先未采用提案保持。
+**第一因果错误：** attempt3实际为“找不到原协议控制 Agent 会话，不能脱离上下文继续修复”，不是预算耗尽或模型再次答错。pending_author已核身份并有snapshot binding；采用校验给出source_closure_rewrite权限后，Runner却仍调用要求真实history的continue_session。现有两种闭包模式共用范围推导/restore，最小接线使已有source_closure_rewrite也走原continue_scoped_unit_repair。local owned/schema/合并均缩至授权闭包，兄弟只读、原完整来源/语义/采用门不变；普通history通道仍拒虚构会话，累计账不清零。仅增加validator身份，不增平台或临床特例。
 
-**本包证据：** 前包1798pass对应9431f58f及fc25实跑，不当新字段恢复全窗。当前相连v2为1681pass/1fail/140.84秒；新增重复消费者夹具缺生产finding.message，补齐后最终受影响54pass/1628deselected/3.78秒/exit0/5SWIG，末全窗未重跑，窗口不累加。最新publication-policy-preflight-20261010-v1从fc25经冻结祖先：47reusable/2resume/41refresh，0模型/0库写/hash保持。新字段恢复尚未真实运行，不是临床验收。
+**实证与限制：** 四相连原模块v1为1816pass/3fail/147.18秒，三个新增断言读错Schema $ref；修正并增加第二错误多轮反例后v2为57pass/1fail/4.17秒，唯一夹具错用候选末位置，改为来源身份。最终受影响v3为58pass/1762deselected/4.27秒/exit0/5SWIG；末全窗未重跑，不拼总数。C03同会话01a122e0…定向续审exit0/1轮/no fallback/16源码只读，120min静默完成等待，未读临床/跑测试，只有程序/context分离。采纳末transport失败断言及第二语义门反例，最后测试补强由所有者验证。详见reviews/rv1006-publication-closure-owner-disposition-20261010.md。接线不能证明模型下一答正确；原可选/建议/限定错误仍需原门拒绝。
 
-**独审及下一动作：** 新批准C03 CodeBuddy/DeepSeek/max/session01a122e0-696b-7146-9a31-8969fdc03ed0，257.691秒/exit0/1轮/no fallback，120min静默完成等待、16源码只读。内assert被transport兜底吞掉的假绿已修，检查移到run后；末停止/reader检查所有者验证，未再独审，仅程序/context分离。详见reviews/rv1006-publication-policy-owner-disposition-20261010.md。下一冻结并从fc25合法新建90步核47/2/41，不复活旧Job、不重读47成功。完整同源包、同包工作稿及UI更正后新旧结果未达；Goal active/claims_complete=false；继承七dirty和临床材料不stage、不清理。
+**恢复计划：** 新只读publication-closure-preflight-20261010-v1从38e4沿冻结祖先解析46–48成功/49未采用提案，47reusable/2resume_partial/41refresh_required，0模型/0库写/hash保持。下一冻结同版本源码，经合法API新建90步核逐项决策一致后局部接续；旧失败终态不复活，47成功不重读，现存产物目录不覆盖。继承7份dirty和私有原答/原件/DB/env不stage、不清理。当前新接线尚未真实运行；不是患者缺证或临床采用。
 
-| 用户流程节点 | 已证与首个未完成 |
-|---|---|
-| 完整要求快照 | DOCX官方rev21/23父条86组件141条件；85发现90深审，最新44完成、祖先46–48成功可核；45作者待核，49未运行/祖先提案待恢复及41未读，不称共同发布 |
-| 资料/事实资格/工作稿 | 5PDF24页历史提取保持；旧81组件/0controls准备例不是新同包，当前整例工作稿未达 |
-| 原件导航 | Ego真实连续页和局部宽屏检查已有；新报告回源/Q3未达，不造框 |
-| 有源更正与新旧结果 | 旧UI描述更正0规则关联；新完整要求下更正→相关重算→新工作稿→旧历史仍未达 |
-| 首屏接入 | 184bdb60/8acd30c7已push只改入排侧，不重派、不改共享首页 |
-
+| 用户流程节点 | 现有入口/已证 | 首个未完成与预期动作 |
+|---|---|---|
+| 完整要求快照 | DOCX官方Job1153e25b…rev21/23父条86组件141条件；85发现90深审；当前44完成，沿冻结祖先另有46–48成功可核 | 45未核作者、49未采用提案及41未读；合法恢复后共同发布完整同源包，不能以官方publishable代替 |
+| 资料完成→事实资格→工作稿 | 5PDF24页保存；既有候选/事实/Profile/资格消费者；上传者负责归属，保留记录 | 旧81组件/0controls准备例不是新同包；需要按完整当前规则生成可用结果和具体未决 |
+| 原件导航 | Ego正式连续页、切文件/缩放/返回及局部宽屏已核；无准确坐标不造框 | 新工作稿各项回源及完整Q3未达 |
+| 一次更正→新旧结果 | 旧UI描述更正追加写、Profile3→4、旧hash保持 | 旧更正0规则关联；必须在新完整同源包从正式UI更正/补证，相关重算、新工作稿、旧报告回看 |
+| 工作台首屏接入 | 入排侧184bdb60/8acd30c7已push，共享首页没改 | 不重复派工、不以合成绑定代替最终真实接入 |
 
 ## 历史记录（以下不覆盖上述当前事实）
 
