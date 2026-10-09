@@ -5977,6 +5977,55 @@ def _future_observation_scope_repair_path(
     return (candidate_index, (matches[0],)) if len(matches) == 1 else None
 
 
+def _missing_anchor_atom_repair_path(
+    error: ProtocolControlAgentWireValidationError,
+    wire: ProtocolControlAgentWire,
+    output: ProtocolControlBatchDispositionHydrated,
+    candidate_indexes: set[int],
+) -> tuple[int, int, int] | None:
+    """Bind a gate-owned path to the current atom, never to a shared span alone."""
+    if (set(error.error_class_codes) != {"PUBLICATION_GATE_REJECTED", "TIME_ANCHOR_MISSING"}
+            or error.repair_scope_unknown or len(candidate_indexes) != 1
+            or error.allow_candidate_repartition or error.allow_source_closure_rewrite
+            or error.allow_source_insert or len(error.validation_findings) != 1):
+        return None
+    index = next(iter(candidate_indexes))
+    if not 0 <= index < len(wire.candidate_drafts) or index >= len(output.candidates):
+        return None
+    finding = error.validation_findings[0]
+    path = re.fullmatch(
+        r"/obligation_expression/groups/(0|[1-9]\d*)/atoms/(0|[1-9]\d*)/time_constraint",
+        str(finding.get("json_path", "")),
+    )
+    if finding.get("code") != "TIME_ANCHOR_MISSING" or path is None:
+        return None
+    candidate = output.candidates[index]
+    if (candidate.semantics is None or error.candidate_ids != (candidate.control_candidate_id,)
+            or finding.get("owner_candidate_id") != candidate.control_candidate_id):
+        return None
+    group_index, atom_index = map(int, path.groups())
+    try:
+        atom = wire.candidate_drafts[index].obligation_expression.groups[group_index].atoms[atom_index]
+        hydrated = candidate.semantics.obligation_expression.groups[group_index].atoms[atom_index]
+    except IndexError:
+        return None
+    excerpt_hash = hashlib.sha256(json.dumps(
+        atom.source_excerpts, ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    if (atom.time_constraint is not None or not atom.source_span_ids
+            or wire.candidate_drafts[index].source_structure_unit_ids != candidate.frozen_structure_unit_ids
+            or atom.source_span_ids != hydrated.source_span_ids
+            or atom.source_excerpts != hydrated.source_excerpts
+            or finding.get("entity_id") != f"{candidate.control_candidate_id}/{hydrated.obligation_id}"
+            or set(finding.get("structure_unit_ids") or ()) != set(candidate.frozen_structure_unit_ids)
+            or set(error.structure_unit_ids) != set(candidate.frozen_structure_unit_ids)
+            or set(finding.get("obligation_source_span_ids") or ()) != set(atom.source_span_ids)
+            or set(error.obligation_source_span_ids) != set(atom.source_span_ids)
+            or finding.get("source_excerpt_sha256") != excerpt_hash):
+        return None
+    return index, group_index, atom_index
+
+
 def _early_anchor_atom_repair_path(
     error: ProtocolControlAgentWireValidationError,
     wire: ProtocolControlAgentWire | None,
@@ -6840,7 +6889,7 @@ def _merge_time_operand_repair(
 
 def _merge_obligation_atom_repair(
     raw_text: str, baseline: Mapping[str, Any], path: tuple[int, int, int],
-    *, numeric_predicate_only: bool = False,
+    *, numeric_predicate_only: bool = False, missing_anchor_only: bool = False,
 ) -> ProtocolControlAgentWire:
     """Splice a checked atom into the original batch; all siblings remain byte-identical."""
 
@@ -6896,6 +6945,12 @@ def _merge_obligation_atom_repair(
             for field, value in original["evaluation"].items():
                 if field not in allowed and replacement_json["evaluation"][field] != value:
                     raise ValueError(f"数值条件修订不得改变 evaluation/{field}")
+        if missing_anchor_only:
+            if original["time_constraint"] is not None or replacement_json["time_constraint"] is None:
+                raise ValueError("时间锚点修订只能补齐已定位的缺失时间约束")
+            for field, value in original["evaluation"].items():
+                if field not in {"time_operand_attribute", "time_purpose"} and replacement_json["evaluation"][field] != value:
+                    raise ValueError(f"时间锚点修订不得改变 evaluation/{field}")
         merged["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index] = replacement_json
         return ProtocolControlAgentWire.model_validate(merged)
     except (json.JSONDecodeError, ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
@@ -6911,6 +6966,7 @@ def _build_obligation_atom_repair_prompt(
     path: tuple[int, int, int],
     problem: str,
     *, numeric_predicate_only: bool = False, field_patch: bool = False,
+    missing_anchor_only: bool = False,
 ) -> str:
     candidate_index, group_index, atom_index = path
     candidate = baseline["candidate_drafts"][candidate_index]
@@ -6947,6 +7003,10 @@ def _build_obligation_atom_repair_prompt(
     return (
         "仅修订一个已有义务原子的结构，不新增临床含义。"
         "原句、义务类型、强度、来源定位、后续义务和研究者判断属性必须原样保留；"
+        + ("本次仅补齐已定位原子的 time_constraint，以及与该约束配套的 "
+           "evaluation.time_operand_attribute 和 evaluation.time_purpose；"
+           "其他求值字段、观察政策和所有兄弟项必须原样保留。不得借用兄弟项的时窗。"
+           if missing_anchor_only else "")
         + ("本次仅允许修订 evaluation 的 determination_mode、operation、predicate、operand_attribute；"
            "时间字段、命题、观察采用政策及其他所有字段必须原样保留。"
            "比较条件的source_clause与source_clauses互斥：单段填写source_clause时source_clauses为空；"
@@ -8208,6 +8268,7 @@ class ProtocolControlAgentRunner:
         future_repair_path: tuple[int, int, int] | None = None
         calendar_repair_path: tuple[int, int, int] | None = None
         atom_repair_path: tuple[int, int, int] | None = None
+        missing_anchor_only = False
         time_operand_repair_paths: tuple[tuple[int, int], ...] = ()
         time_operand_repair_candidate: int | None = None
         observation_repair_paths: tuple[tuple[str, int, int], ...] = ()
@@ -8267,7 +8328,8 @@ class ProtocolControlAgentRunner:
                     )
                     if observation_repair_candidate is not None and repair_baseline_raw is not None
                     else _merge_obligation_atom_repair(
-                        raw_text, repair_baseline_raw, atom_repair_path
+                        raw_text, repair_baseline_raw, atom_repair_path,
+                        missing_anchor_only=missing_anchor_only,
                     )
                     if atom_repair_path is not None and repair_baseline_raw is not None
                     else
@@ -8314,6 +8376,7 @@ class ProtocolControlAgentRunner:
                 time_operand_repair_paths = ()
                 time_operand_repair_candidate = None
                 atom_repair_path = None
+                missing_anchor_only = False
                 observation_repair_paths = ()
                 observation_repair_candidate = None
                 evidence_source_repair_path = None
@@ -10314,10 +10377,12 @@ class ProtocolControlAgentRunner:
                 )
             except Exception as exc:  # noqa: BLE001 - bounded validation boundary
                 previous_atom_repair_path = atom_repair_path
+                previous_missing_anchor_only = missing_anchor_only
                 previous_time_operand_repair_candidate = time_operand_repair_candidate
                 previous_observation_repair_candidate = observation_repair_candidate
                 previous_evidence_source_repair_path = evidence_source_repair_path
                 atom_repair_path = None
+                missing_anchor_only = False
                 time_operand_repair_paths = ()
                 time_operand_repair_candidate = None
                 observation_repair_paths = ()
@@ -10361,6 +10426,9 @@ class ProtocolControlAgentRunner:
                 focused_invalid_indexes: tuple[int, ...] = ()
                 if output is None and previous_atom_repair_path is not None:
                     repair_candidate_indexes.add(previous_atom_repair_path[0])
+                    if previous_missing_anchor_only and repair_baseline_raw is not None:
+                        atom_repair_path = previous_atom_repair_path
+                        missing_anchor_only = True
                 if output is None and previous_time_operand_repair_candidate is not None:
                     repair_candidate_indexes.add(previous_time_operand_repair_candidate)
                 if output is None and previous_observation_repair_candidate is not None:
@@ -10745,6 +10813,13 @@ class ProtocolControlAgentRunner:
                     if duration_atom_path is not None:
                         repair_baseline_raw = wire.model_dump(mode="json")
                         atom_repair_path = duration_atom_path
+                    missing_anchor_path = _missing_anchor_atom_repair_path(
+                        error, wire, output, repair_candidate_indexes
+                    )
+                    if missing_anchor_path is not None:
+                        repair_baseline_raw = wire.model_dump(mode="json")
+                        atom_repair_path = missing_anchor_path
+                        missing_anchor_only = True
                 attempts.append(
                     ProtocolControlAgentAttempt(
                         attempt=len(attempts) + 1,
@@ -11134,6 +11209,16 @@ class ProtocolControlAgentRunner:
                     and callable(getattr(transport, "continue_atom", None))
                 )
                 if not atom_only:
+                    if missing_anchor_only:
+                        return build_result(
+                            status="需要核对", batch_id=batch.batch_id,
+                            session_id=session_id, attempts=attempts,
+                            source_interpretation=source_interpretation,
+                            source_statement_coverage=latest_source_statement_coverage,
+                            source_target_review=latest_source_target_review,
+                            source_candidate_alignment=checkpoint_alignment(),
+                            partial_wire=partial_wire,
+                        )
                     atom_repair_path = None
                 time_operand_only = (
                     time_operand_repair_candidate is not None
@@ -11319,7 +11404,8 @@ class ProtocolControlAgentRunner:
                     )
                 elif atom_only and repair_baseline_raw is not None and atom_repair_path is not None:
                     repair_prompt = _build_obligation_atom_repair_prompt(
-                        batch, repair_baseline_raw, atom_repair_path, str(error)
+                        batch, repair_baseline_raw, atom_repair_path, str(error),
+                        missing_anchor_only=missing_anchor_only,
                     )
                 elif observation_only and repair_baseline_raw is not None and observation_repair_candidate is not None:
                     repair_prompt = _build_observation_policy_repair_prompt(

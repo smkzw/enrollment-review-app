@@ -43,6 +43,7 @@ from app.agents.protocol_control_deconstructor import (
     _future_prohibition_repair_path,
     _future_observation_scope_repair_path,
     _early_anchor_atom_repair_path,
+    _missing_anchor_atom_repair_path,
     _calendar_bound_repair_path,
     _treatment_duration_atom_repair_path,
     _merge_calendar_bound_repair,
@@ -11750,6 +11751,135 @@ def test_future_prohibition_patch_splits_only_current_text_and_continuation(shar
     repair["continuing_obligation"]["source_excerpts"] = ["原文不存在的后续要求"]
     with pytest.raises(ProtocolControlAgentWireValidationError, match="FUTURE_PROHIBITION_REPAIR_INVALID"):
         _merge_future_prohibition_repair(json.dumps(repair), initial, path)
+
+
+def _shared_source_missing_anchor_fixture():
+    batch = _batch()
+    source = "筛选前7天内记录年龄资料并完成检查甲"
+    batch.owned_units[0].excerpt = "年龄至少18岁；" + source
+    draft = _candidate().model_dump(mode="json")
+    first = draft["obligation_expression"]["groups"][0]["atoms"][0]
+    first["kind"] = "must_record"
+    first["statement"] = "记录年龄资料"
+    _replace_atom_source(first, "span:01", source)
+    first["time_constraint"] = {"anchor_type": "screening_date", "direction": "before", "upper_bound_days": 7}
+    first["evaluation"] = _timed_evaluation(first["statement"], "span:01", source)
+    second = deepcopy(first)
+    second["kind"] = "complete_or_verify"
+    second["statement"] = "筛选前7天内完成检查甲"
+    second["evaluation"] = _evaluation(second["statement"], "span:01", source)
+    second["time_constraint"] = None
+    draft["obligation_expression"]["groups"][0]["atoms"].append(second)
+    initial = _wire(candidate=ProtocolControlAgentWireCandidate.model_validate(draft))
+    return batch, initial
+
+
+def _missing_anchor_issue(batch, output):
+    from app.protocols.protocol_control_gate import _check_time_constraints, ProtocolControlGateError
+    candidate = output.candidates[0]
+    with pytest.raises(ProtocolControlGateError) as caught:
+        _check_time_constraints(
+            entity_id=candidate.control_candidate_id,
+            texts=[], expressions=[candidate.semantics.obligation_expression],
+            expression_paths=["/obligation_expression"], flat_atoms=[],
+            global_time_constraint=None, structure_unit_ids=candidate.frozen_structure_unit_ids,
+        )
+    return publication_repair_error(
+        issues=[caught.value], candidate_by_id={candidate.control_candidate_id: candidate},
+        control_to_candidate={}, default_structure_unit_ids=batch.owned_structure_unit_ids,
+    )
+
+
+@pytest.mark.parametrize("tamper", [None, "path", "hash", "owner", "entity", "spans", "class", "reorder"])
+def test_missing_anchor_path_binds_current_atom_not_shared_source(tamper):
+    batch, initial = _shared_source_missing_anchor_fixture()
+    output = hydrate_protocol_control_agent_output(initial, batch)
+    error = _missing_anchor_issue(batch, output)
+    if tamper in {"path", "hash", "owner", "entity", "spans"}:
+        key, value = {
+            "path": ("json_path", "/obligation_expression/groups/0/atoms/0/time_constraint"),
+            "hash": ("source_excerpt_sha256", "a" * 64),
+            "owner": ("owner_candidate_id", "unknown-candidate"),
+            "entity": ("entity_id", "unknown-candidate/unknown-atom"),
+            "spans": ("obligation_source_span_ids", ["span:02"]),
+        }[tamper]
+        error.validation_findings[0][key] = value
+    elif tamper == "class":
+        error.error_class_codes += ("NUMERIC_VALUE_NOT_IN_SOURCE",)
+    elif tamper == "reorder":
+        initial.candidate_drafts[0].obligation_expression.groups[0].atoms.reverse()
+    assert _missing_anchor_atom_repair_path(error, initial, output, {0}) == (
+        (0, 0, 1) if tamper is None else None
+    )
+
+
+@pytest.mark.parametrize("escape_first", [False, True, "repeat", "no_capability"])
+def test_missing_anchor_runner_preserves_shared_source_sibling_and_rechecks_gate(escape_first):
+    batch, initial = _shared_source_missing_anchor_fixture()
+    original = initial.model_dump(mode="json")
+    atom = deepcopy(original["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][1])
+    atom["time_constraint"] = {"anchor_type": "screening_date", "direction": "before", "upper_bound_days": 7}
+    atom["evaluation"]["time_operand_attribute"] = "date_range"
+    atom["evaluation"]["time_purpose"] = "interval_condition"
+
+    class AtomTransport(_FakeTransport):
+        def continue_atom(self, *, session_id, prompt):
+            self.prompts.append(prompt)
+            assert "本次仅补齐已定位原子的 time_constraint" in prompt
+            proposal = deepcopy(atom)
+            if escape_first == "repeat" or (escape_first is True and len(self.prompts) == 2):
+                proposal["evaluation"]["proposition"] = "未授权更改临床含义"
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"atom": proposal}))
+
+        def continue_candidate(self, **kwargs):
+            pytest.fail("已定位时间原子不得回退整候选")
+
+    transport = AtomTransport([ProtocolControlAgentResponse(session_id="shared-source", text=initial.model_dump_json())])
+    if escape_first == "no_capability":
+        transport.continue_atom = None
+    calls = 0
+
+    def validate(output):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise _missing_anchor_issue(batch, output)
+        from app.protocols.protocol_control_gate import _check_time_constraints
+        candidate = output.candidates[0]
+        _check_time_constraints(
+            entity_id=candidate.control_candidate_id, texts=[],
+            expressions=[candidate.semantics.obligation_expression],
+            expression_paths=["/obligation_expression"], flat_atoms=[],
+            global_time_constraint=None, structure_unit_ids=candidate.frozen_structure_unit_ids,
+        )
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=2).run(batch, transport, output_validator=validate)
+    if escape_first in {"repeat", "no_capability"}:
+        assert result.status == "需要核对" and result.final_output is None
+        assert calls == 1
+        assert len(transport.prompts) == (3 if escape_first == "repeat" else 1)
+        assert initial.model_dump(mode="json") == original
+        if escape_first == "repeat":
+            assert "停止自动修订" in result.attempts[-1].issues[-1]
+        return
+    assert result.status == "已解析", [a.issues for a in result.attempts]
+    assert calls == 2
+    assert len(transport.prompts) == (3 if escape_first else 2)
+    # Hydration IDs include the revised candidate identity; source and meaning do not.
+    assert result.final_output.candidates[0].semantics.obligation_expression.groups[0].atoms[0].model_dump(exclude={"obligation_id"}) == (
+        hydrate_protocol_control_agent_output(initial, batch).candidates[0].semantics.obligation_expression.groups[0].atoms[0].model_dump(exclude={"obligation_id"})
+    )
+    merged = _merge_obligation_atom_repair(
+        json.dumps({"atom": atom}), original, (0, 0, 1), missing_anchor_only=True,
+    ).model_dump(mode="json")
+    expected = deepcopy(original)
+    expected["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][1] = (
+        merged["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][1]
+    )
+    assert merged == expected
+    assert initial.model_dump(mode="json") == original
+    if escape_first:
+        assert result.attempts[1].error_classes == ["ATOM_REPAIR_INVALID"]
 
 
 def test_early_anchor_atom_repair_is_unique_and_cannot_target_siblings() -> None:

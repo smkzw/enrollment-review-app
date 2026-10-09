@@ -6854,6 +6854,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "native-row-action-coverage/v2",
                   "native-scope-source-runtime-separation/v1",
                   "native-table-review-scope/v3", "located-publication-recovery/v1",
+                  "missing-anchor-scoped-atom-recovery/v1",
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   "scoped-exception-dnf/v1"))
     )

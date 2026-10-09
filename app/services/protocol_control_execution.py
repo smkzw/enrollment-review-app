@@ -2108,6 +2108,7 @@ def _deep_component_identity(
                                        NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
                                        NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
                                        "located-publication-recovery/v1",
+                                       "missing-anchor-scoped-atom-recovery/v1",
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),
         "requested_route_sha256": (
