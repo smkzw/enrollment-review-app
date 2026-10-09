@@ -1,6 +1,6 @@
-# HANDOFF｜1006V1｜当前继续执行，不是暂停
+# HANDOFF｜1006V1｜用户要求无损暂停
 
-更新2026-10-09。Goal active，claims_complete=false；用户已授权1006V1隔离实现、真实产品调用和工程Git里程碑。正式事实自动采用、临床签发另守权限。历史“当前/未运行”以implement附录对应时间点理解，不能覆盖本表。
+更新2026-10-09。用户最新要求完成手头工作后暂停；不启动新作业，Goal paused，claims_complete=false。历史授权保留但不自行恢复临床/模型运行。正式事实自动采用、临床签发另守权限。任务未完成，不归档；历史“当前/未运行”不能覆盖本表。
 
 ## 五分钟入口
 
@@ -8,7 +8,11 @@
 
 ## 当前身份
 
-当前最新真实终态：源码931a50c0的Job4e6f940ad400427d87301658e506984e为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID；2调用218.128199秒/exit3，43completed、44failed_final、46queued。exec60695结束，85发现及43成功零新调用。有效操作兄弟实际已保存；次数回包重复填写两个互斥的同源字段，ATOM_REPAIR_INVALID，不是端点故障或缺临床原件。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。
+当前最新真实终态：已push源码78064244160d2f24e8541bb539a2f88459628a6d，Job604d997a075f4e13b44933b578f8350d为failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED；2调用230.955691秒/exit3，43completed、44failed_final、46queued。exec67835结束，85发现及43成功零新调用。有效操作兄弟保存，重复来源字段不再是本次首错；新对应回答8个引句均为真实候选原句，但1–6不在当前来源陈述局部摘录范围，部分来自同一候选的其他有源段落，现有grounded_atoms筛选拒绝。不能称模型捏造引用或自报完整已采信，也尚不能仅凭这个筛选差异宣布候选医学含义正确。检查点ba28351dc6e042fbbd215aa725ef8e79，真实产物rv1006-conditioned-numeric-api-20261009-v1。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。
+
+暂停前最新只读预检rv1006-pause-recovery-preflight-20261009-v1.json：以604d997a为源，43reusable/1resume_partial/46refresh_required，0模型/0库写/hash保持。无running或活动租约。原答、失败、累计调用及旧报告不清理；不重跑现有目录，不复活失败作业，不清零旧预算。首次恢复仅核身份/租约及冻结原答，复现当前陈述与候选有源闭包的引用资格差异；有据局部修复后重新预检，再从合法入口新建。不能直接过滤旧回答、重签proof或凭关闭gate采用。数字单位/意义仍需完整核对。
+
+### 已结束功能包的历史记录（不覆盖上方暂停状态）
 
 当前增量只允许精确重复的来源字段折叠，原答不改；局部比较只能省略已逐分支证明的共同前提、保留完整后果。任意数字片段方案已撤回，整摘录+短比较漏量词/例外反例现拒；不改单位/临床值/观察政策。Grok同会话续审294.278秒/exit0/no fallback，末收紧所有者验证；最终三相连1040pass/10.55秒/exit0/v3，非临床验收。下一从4e6f最新预检再合法创建，新增量尚未真实运行。细账见implement及所有者取舍，完整共同发布/病例/UI更正/Q3仍未达。
 
@@ -34,15 +38,15 @@
 |---|---|
 | 唯一worktree | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；09-11-e2e-eligibility-review |
-| 当前代码基础 | 931a50c0已push；条件数值来源增量按明确文件提交后冻结新prepare |
-| 当前最新真实Job | 4e6f940ad400427d87301658e506984e，failed_final；exec60695结束，不复活旧终态 |
-| 最新真实运行 | 源码931a50c0，43completed/44failed_final/46queued；2调用218.128199秒/exit3 |
+| 当前代码基础 | 78064244160d2f24e8541bb539a2f88459628a6d已push；暂停记录提交不改变本次运行代码身份 |
+| 当前最新真实Job | 604d997a075f4e13b44933b578f8350d，failed_final；exec67835结束，不复活旧终态 |
+| 最新真实运行 | 源码78064244，43completed/44failed_final/46queued；2调用230.955691秒/exit3 |
 | 上游第23失败检查点 | c1fea38816e84c729b9b1587a8818619；已由a513局部恢复保存，旧原答/hash保持，不回改成功 |
 | 当前隔离DB | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 真实产物 | 同根/rv1006-alignment-item-recovery-api-20261009-v1，prepare/execute保存；第44检查点c24db052640f4588ada92088d9993f6a；不覆盖/重跑 |
+| 真实产物 | 同根/rv1006-conditioned-numeric-api-20261009-v1，prepare/execute/两次实际请求及回答保存；第44检查点ba28351dc6e042fbbd215aa725ef8e79；不覆盖/重跑 |
 | 模型路线 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high，输出65536，产品自己的harness直连 |
-| 当前新预检 | 同根/rv1006-candidate-closure-preflight-20261009-v2.json：43reusable/1resume_partial/46refresh；0调用/0写/DBhash保持，完整90步创建计划需逐项一致 |
-| 新代码实际临床运行 | 逐项恢复包已在4e6f实际运行；条件数值来源增量尚未新运行，未共同发布/新病例工作稿 |
+| 当前新预检 | 同根/rv1006-pause-recovery-preflight-20261009-v1.json：最新604d997a为源，43reusable/1resume_partial/46refresh；0调用/0写/DBhash保持；恢复后变更须重核 |
+| 新代码实际运行 | 条件数值来源增量已在604d997a实际运行；未共同发布/新病例工作稿，不是临床验收 |
 | 继承dirty | 7份旧delivery文件未动，不stage；大量继承untracked不清理/不批量stage |
 | 外部可复查范围 | Git源码/合成用例/净化工程报告；真实原件、DB、提示、原答和病例截图仅本机受控可读，外部审阅不可读 |
 
@@ -102,11 +106,12 @@ C03：CodeBuddy/codebuddy-cli/deepseek-v4.1-flash:max，session01a11d4f-08dd-746
 
 ## 接续步骤与退出
 
-1. 核提交/dirty及当前补丁验证；最新来源为27f0终态，37/42成功核对账与第44源解释保持。43成功依当前完整门证明复用、1局部恢复、46未读不隐藏。按最新定位恢复预检从合法入口创建新Job并逐项对90步；不能复活失败作业或覆盖旧目录；真歧义保留具体影响，不强行清空。
-2. 无新证据同失败两次停该分支，归因来源→解释→装配→验证→采用→界面首错；推进独立病例消费者，不把所有模型输出都UNKNOWN或以扩大整包预算恢复格式错误。
-3. 完整官方+跨章同源包成立后从合法入口共同发布隔离项目；来源身份及正式采用权限分别核。原政策齐全的新141条件进入消费者，不沿用旧81组件缺policy作结论。
-4. 新合法项目下继承有源资料/候选并实际核资格→全当前节点工作稿；未核或不可读范围具体限制，独立有据结果保持可用，不授予未批准自动数值采用。
-5. Ego Lite正式入口一次有源更正/补证→相关失效/重算→新工作稿→旧报告回看，原件/旧hash不变。集中宽屏和恢复验收按03_ACCEPTANCE，达到后按窗口回交，不擅扩新优化。
-6. 当前没有完整共同发布/新工作稿/规则关联更正/新旧审核报告/Q3；claims_complete=false。
+1. 先等待用户明确解除暂停。核HEAD/dirty/当前源604d997a/原答/租约；以78064244的冻结运行及检查点ba28351dc6e042fbbd215aa725ef8e79零调用复现：所有8个引句均匹配候选，当前陈述筛选却排除闭包兄弟。检查build_candidate_alignment_prompt、validate_candidate_alignment及其保存/恢复消费者，不先重读方案，不机械过滤回答或把筛选范围直接扩大为采信。
+2. 若需最小修复，按相连功能一次验证正例、无关来源/弱分支/例外/量词反例及消费者；最新只读预检重核成功43组与第44部分恢复范围。从现有合法API新建、核完整90步计划，保留旧终态与所有未读范围；当前记录不授权暂停期间启动该步。
+3. 无新证据同失败两次停该分支，归因来源→解释→装配→验证→采用→界面首错；推进独立病例消费者，不把所有模型输出都UNKNOWN或以扩大整包预算恢复格式错误。
+4. 完整官方+跨章同源包成立后从合法入口共同发布隔离项目；来源身份及正式采用权限分别核。原政策齐全的新141条件进入消费者，不沿用旧81组件缺policy作结论。
+5. 新合法项目下继承有源资料/候选并实际核资格→全当前节点工作稿；未核或不可读范围具体限制，独立有据结果保持可用，不授予未批准自动数值采用。
+6. Ego Lite正式入口一次有源更正/补证→相关失效/重算→新工作稿→旧报告回看，原件/旧hash不变。集中宽屏和恢复验收按03_ACCEPTANCE，达到后按窗口回交，不擅扩新优化。
+7. 当前没有完整共同发布/新工作稿/规则关联更正/新旧审核报告/Q3；claims_complete=false。暂停记录不是交付验收。
 
 历史完整账本留implement附录、Git历史及原受控回执；本机绝对路径只证明本机可读。测试数量、候选数量、正常stop、HTTP200或同模型会商一致都不是临床批准。
