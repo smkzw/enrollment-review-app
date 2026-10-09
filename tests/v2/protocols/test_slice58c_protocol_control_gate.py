@@ -21,7 +21,10 @@ from app.domain.contracts.enums import (
     ReviewStage,
     StudyPhase,
     TimeDirection,
+    TruthValue,
 )
+from app.domain.control_layer_evaluation import compose_control_layers
+from app.domain.publication import canonical_hash
 from app.domain.contracts.phase_applicability import (
     PhaseApplicabilityCandidateDraft,
     PhaseApplicabilityDisposition,
@@ -4319,6 +4322,118 @@ def _conditional_shorten_manifest() -> ProtocolSectionCoverageManifest:
         "首次给药前24个月不得暴露；"
         "经药物清除剂进行洗脱可缩短至首次给药前6个月。"
     )
+
+
+def _shared_exception_fixture(*, omit_branch: bool = False):
+    common = "除条件丙之外"
+    triggers = ControlConditionDnf(groups=[ControlConditionGroup(
+        trigger_branch_id=f"branch-{index}",
+        atoms=[ControlConditionAtom(
+            condition_atom_id=f"atom-{index}", statement=f"条件{label}成立",
+            source_span_ids=["span:control"],
+            source_excerpts=[f"条件{label}"] if omit_branch and index == 1
+                            else [f"{common}，条件{label}"],
+        )],
+    ) for index, label in enumerate(("甲", "乙"))])
+    exceptions = ControlExceptionDnf(groups=[ControlExceptionGroup(
+        exception_group_id="exception-common",
+        atoms=[ControlConditionAtom(condition_atom_id="exception-atom", statement="条件丙",
+            source_span_ids=["span:control"], source_excerpts=[common])],
+        waives_trigger_branch_ids=["branch-0", "branch-1"],
+    )])
+    control = _control(trigger_expression=triggers, exception_expression=exceptions,
+        obligation_expression=ControlObligationDnf(groups=[ControlObligationGroup(
+            obligation_group_id="obligation-common",
+            applies_to_trigger_branch_ids=["branch-0", "branch-1"],
+            atoms=[_obligation(statement="必须记录用药日期")],
+        )]))
+    manifest = _manifest_with_control_excerpt(
+        "除条件丙之外，条件甲；除条件丙之外，条件乙。必须记录用药日期。")
+    return control, manifest
+
+
+def test_shared_exception_repeated_quote_does_not_prove_global_scope() -> None:
+    control, manifest = _shared_exception_fixture()
+    with pytest.raises(ProtocolControlGateError, match="EXCEPTION_SCOPE_ALL_UNSUPPORTED") as caught:
+        _gate_control_with_manifest(control, manifest)
+    assert caught.value.json_path == "/exception_expression/groups"
+    assert caught.value.structure_unit_ids == ("su-control",)
+    assert "不要" in str(caught.value)
+
+
+def test_shared_exception_existing_per_branch_contract_is_usable() -> None:
+    control, manifest = _shared_exception_fixture()
+    original = control.exception_expression.groups[0]
+    control.exception_expression.groups = [original.model_copy(deep=True, update={
+        "exception_group_id": f"exception-{index}",
+        "waives_trigger_branch_ids": [f"branch-{index}"],
+        "atoms": [atom.model_copy(deep=True, update={
+            "condition_atom_id": f"exception-atom-{index}-{position}",
+        }) for position, atom in enumerate(original.atoms)],
+    }) for index in range(2)]
+    published = _gate_control_with_manifest(control, manifest).controls[0]
+    truths = {
+        (atom.obligation_id if layer == "obligation" else atom.condition_atom_id): TruthValue.TRUE
+        for layer in ("applicability", "trigger", "obligation", "exception")
+        for group in (getattr(published, f"{layer}_expression").groups
+                      if getattr(published, f"{layer}_expression") is not None else ())
+        for atom in group.atoms
+    }
+    truths[published.exception_expression.groups[1].atoms[0].condition_atom_id] = TruthValue.FALSE
+    result = compose_control_layers(published,
+        control_sha256=canonical_hash(published.model_dump(mode="json")), atom_truths=truths)
+    assert result.remaining_trigger_branches == {"branch-0": TruthValue.FALSE, "branch-1": TruthValue.TRUE}
+
+
+def test_shared_exception_cannot_expand_to_branch_without_same_source_exception() -> None:
+    control, manifest = _shared_exception_fixture(omit_branch=True)
+    with pytest.raises(ProtocolControlGateError, match="EXCEPTION_SCOPE_ALL_UNSUPPORTED"):
+        _gate_control_with_manifest(control, manifest)
+
+
+def test_shared_exception_duplicate_same_scope_still_rejected() -> None:
+    control, manifest = _shared_exception_fixture()
+    original = control.exception_expression.groups[0]
+    control.exception_expression.groups = [original.model_copy(deep=True, update={
+        "exception_group_id": f"exception-{index}",
+        "waives_trigger_branch_ids": ["branch-0"],
+        "atoms": [atom.model_copy(deep=True, update={
+            "condition_atom_id": f"exception-atom-{index}-{position}",
+        }) for position, atom in enumerate(original.atoms)],
+    }) for index in range(2)]
+    with pytest.raises(ProtocolControlGateError, match="DNF_DUPLICATE_GROUP"):
+        _gate_control_with_manifest(control, manifest)
+
+
+def test_shared_exception_parenthetical_scope_cannot_spread_to_sibling() -> None:
+    control, _ = _shared_exception_fixture()
+    text = "若条件甲（除条件丙之外）或条件乙成立，则必须记录用药日期。"
+    for branch in control.trigger_expression.groups:
+        branch.atoms[0].source_excerpts = [text]
+    original = control.exception_expression.groups[0]
+    control.exception_expression.groups = [original.model_copy(deep=True, update={
+        "exception_group_id": f"exception-{index}",
+        "waives_trigger_branch_ids": [f"branch-{index}"],
+        "atoms": [atom.model_copy(deep=True, update={
+            "condition_atom_id": f"exception-atom-{index}-{position}",
+        }) for position, atom in enumerate(original.atoms)],
+    }) for index in range(2)]
+    with pytest.raises(ProtocolControlGateError, match="EXCEPTION_SCOPE_SOURCE_UNDISTINGUISHED"):
+        _gate_control_with_manifest(control, _manifest_with_control_excerpt(text))
+
+
+def test_shared_exception_single_partial_group_cannot_spread_same_excerpt() -> None:
+    control, _ = _shared_exception_fixture()
+    text = "若条件甲（除条件丙之外）或条件乙成立，则必须记录用药日期。条件丁。"
+    for branch in control.trigger_expression.groups:
+        branch.atoms[0].source_excerpts = [text.split("条件丁")[0]]
+    control.trigger_expression.groups.append(ControlConditionGroup(
+        trigger_branch_id="branch-2", atoms=[ControlConditionAtom(
+            condition_atom_id="atom-2", statement="条件丁成立",
+            source_span_ids=["span:control"], source_excerpts=["条件丁"],
+        )]))
+    with pytest.raises(ProtocolControlGateError, match="EXCEPTION_SCOPE_SOURCE_UNDISTINGUISHED"):
+        _gate_control_with_manifest(control, _manifest_with_control_excerpt(text))
 
 
 def test_conditional_shorten_accepts_explicit_24_to_6_activation() -> None:

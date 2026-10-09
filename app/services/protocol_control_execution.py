@@ -2091,7 +2091,8 @@ def _deep_component_identity(
                                        NATIVE_ROW_ACTION_COVERAGE_VERSION,
                                        NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
                                        NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION,
-                                       "located-publication-recovery/v1")),
+                                       "located-publication-recovery/v1",
+                                       "scoped-exception-dnf/v1")),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}
         ).get("deep"),

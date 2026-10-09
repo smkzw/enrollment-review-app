@@ -2069,7 +2069,10 @@ def _check_dnf(
                 entity_id=entity_id,
             )
         fingerprint = json.dumps(
-            atom_payloads,
+            {"atoms": atom_payloads, "exception_scope": {
+                field: list(getattr(group, field, ()) or ())
+                for field in ("waives_trigger_branch_ids", "activates_obligation_group_ids")
+            }} if getattr(group, "waives_trigger_branch_ids", None) is not None else atom_payloads,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -3213,6 +3216,7 @@ def _constraint_has_calendar_bound(constraint: object | None) -> bool:
 def _check_branch_scope_and_paired_consequences(
     *,
     entity_id: str,
+    units: Sequence[ProtocolStructureUnit],
     trigger_expression: object | None,
     obligation_expression: object | None,
     exception_expression: object | None,
@@ -3286,6 +3290,7 @@ def _check_branch_scope_and_paired_consequences(
 
     activated_obligation_ids: set[str] = set()
     if exception_expression is not None:
+        exception_branch_sources: dict[str, dict[str, tuple[str, ...]]] = {}
         if not trigger_groups:
             _fail(
                 "EXCEPTION_TRIGGER_MISSING",
@@ -3323,9 +3328,38 @@ def _check_branch_scope_and_paired_consequences(
             ):
                 _fail(
                     "EXCEPTION_SCOPE_ALL_UNSUPPORTED",
-                    "例外作用于全部触发分支时必须有来源明确支持",
+                    "例外作用于全部触发分支时必须有来源明确支持；"
+                    "请保留已核的共同触发条件，逐项核对例外与具体触发分支的来源关系；"
+                    "不要为修订例外范围而删除共同条件，也不要仅添加全部等字样冒充原文支持",
                     entity_id=entity_id,
+                    structure_unit_ids=[unit.structure_unit_id for unit in units],
+                    json_path="/exception_expression/groups",
                 )
+            exception_key = json.dumps([
+                {key: value for key, value in atom.model_dump(mode="json").items()
+                 if key != "condition_atom_id"}
+                for atom in group.atoms
+            ], ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            prior_sources = exception_branch_sources.setdefault(exception_key, {})
+            for branch in trigger_groups:
+                branch_id = branch.trigger_branch_id
+                if branch_id not in scoped_ids:
+                    continue
+                branch_sources = tuple(sorted({
+                    _normalize_clause_fragment(excerpt)
+                    for atom in branch.atoms for excerpt in atom.source_excerpts
+                }))
+                if any(other_id != branch_id and sources == branch_sources
+                       for other_id, sources in prior_sources.items()):
+                    _fail(
+                        "EXCEPTION_SCOPE_SOURCE_UNDISTINGUISHED",
+                        "同一例外分别作用于不同分支时，必须保留可区分的分支原文依据；"
+                        "复制同一整段摘录不能证明例外同时适用于各分支",
+                        entity_id=entity_id,
+                        structure_unit_ids=[unit.structure_unit_id for unit in units],
+                        json_path="/exception_expression/groups",
+                    )
+                prior_sources[branch_id] = branch_sources
 
             activates = list(getattr(group, "activates_obligation_group_ids", ()) or ())
             if activates and list(activates) != sorted(set(activates)):
@@ -4383,6 +4417,7 @@ def _validate_candidate(
     )
     _check_branch_scope_and_paired_consequences(
         entity_id=candidate_id,
+        units=units,
         trigger_expression=getattr(semantics, "trigger_expression", None),
         obligation_expression=obligation_expression,
         exception_expression=getattr(semantics, "exception_expression", None),
@@ -4680,6 +4715,7 @@ def _validate_control(
     )
     _check_branch_scope_and_paired_consequences(
         entity_id=control_id,
+        units=units,
         trigger_expression=getattr(control, "trigger_expression", None),
         obligation_expression=obligation_expression,
         exception_expression=exception_expression,

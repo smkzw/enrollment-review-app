@@ -6373,7 +6373,8 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "invalid-wire-scoped-post-enrollment-repair/v1",
                   "native-row-action-coverage/v2",
                   "native-scope-source-runtime-separation/v1",
-                  "native-table-review-scope/v3", "located-publication-recovery/v1"))
+                  "native-table-review-scope/v3", "located-publication-recovery/v1",
+                  "scoped-exception-dnf/v1"))
     )
 
 
