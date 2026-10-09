@@ -7038,6 +7038,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "missing-anchor-scoped-atom-recovery/v1",
                   "unaccepted-author-proposal-revalidation/v1",
                   "completed-result-current-gate-revalidation/v1",
+                  "source-closure-scoped-unit-repair/v1",
                   protocol_control_execution_module.SOURCE_STAGE_ECHO_VERSION,
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   "scoped-exception-dnf/v1"))

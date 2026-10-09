@@ -2,17 +2,17 @@
 
 ## 当前事实
 
-**实际状态：** 已push源码4bd40fe51ea299dfe0f531a9a7bf27ff41faa11d的合法Job093f40aa13784946b4f8d3415f745a54已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，3物理调用189.9354220830137秒/exit3；85发现和44成功零新调用，44完成/45失败/45未执行。检查点23df0b9397044830977c26f1e03121c6。此轮失败在来源阶段字段漏重复、两次局部回填未通过，未到作者/嵌套来源修订，不能称新恢复已实证成功。原件/旧Job/保护库/来源库保持，无共同发布/启用/签发。
+**实际状态：** 已push源码c8c9005097066680cefefe2defb8316e67a61d8e的Job88efd2f742b5416f84aae7d86b3b4f5f已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，19物理调用756.5914077500347秒。85发现及原44成功零新调用，46/47/48新保存；47完成、45/49失败、41未读。外层exit0因私有包装器没传播driver失败码，下一SystemExit已修，不能据此说业务成功。旧Job/原件/保护库/来源库不变，0共同发布/启用/签发。
 
-**首因与执行选择：** 所有者直接实施＋既有批准C03针对性独审，因为来源字段的确定性投影及恢复证明影响后续采用。前轮修订提示变更后，775a的有效来源未保留原读取回执，刷新导致重读；093f有实际原答与成功局部修订可重放。当前最小包仅复制已经原校验证实逐字有源的阶段字段，不选新阶段、不补时间窗/时长/部分词、不改原答；新证明重放成功修订、核失败回复hash、扣已花次数，当前完整门仍运行。先无模型验证和真实来源只读预检，再决定合法接续；不继续碰运气重读。
+**首因与执行选择：** 所有者集成＋单批准工程独审。45来源尾句未读全，不能冻结为忠实未决；49先误关联无该行来源目录，后无候选却称已覆盖，原门正确拒绝。当前source-closure-scoped-unit-repair/v1沿原闭包授权仅修局部，程序保留兄弟并完整后验，不构造假history。所有局部IDs/spans/owned元数据同步更新并经Batch原合同校验。坏局部回复保存失败、停止该分支而不扩大整组；原累计次数不归零。
 
-**本包证据：** 最终源码三相连原模块1661passed/164.75秒/5SWIG，JUnit artifacts/rv1006-source-stage-echo-connected-20261010-v2.xml；前窗1659pass/2fail为旧测试仍要求一次阶段重复补写和validator身份漏新项，已依当前行为更新，不放宽来源门、不累计窗口。最终只读预检rv1006-stage-echo-preflight-20261010-v2.json为44reusable/1resume_partial/45refresh，0模型/0写/database_unchanged=true。45实际原答及合法回填可重放，原24修订扣已用2，余额22；新证明v6只保留有源阶段逐字投影，不并入失败提案，不更改旧原答或终态。
+**本包证据：** 新当前源只读预检rv1006-scoped-unit-repair-preflight-20261010-v1.json：47reusable/2resume_partial/41refresh，0模型/0库写/hash保持。两失败分别来源补全及未采用提案恢复。最终四相连原模块1798pass/180.76秒/exit0/5SWIG，JUnit artifacts/rv1006-scoped-unit-repair-connected-20261010-v1.xml；聚焦20pass不累加。中间14pass/2fail查出真实IDs未缩窄已修，不松门。新产品接续尚未开始。前包1661pass对应源码及预检已实际用于88efd，旧44/1/45不再是下一计划。
 
-**独审及下一动作：** 既有批准C03 CodeBuddy/DeepSeek/max同会话stage_echo审阅210.986秒/exit0/no fallback，120min等待；同家族仅程序分离，未读临床/DB/env/运行测试。旧续跑比较问题已有修复，补标题范围独立反例和证明元数据；末小修由最终所有者窗口核验，非独立模型金标。其他来源错误仍拒绝，不扩为通用补答。详情reviews/rv1006-pending-author-owner-disposition-20261010.md。下一冻结源码并合法接续093f，入队90步逐项核44/1/45，不复活旧Job。完整同源包、同包病例工作稿及正式UI更正后新旧结果仍未达；Goal active/claims_complete=false，七份继承dirty及临床/库/env不纳入提交。
+**独审及下一动作：** 批准C03 CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max同session01a1226e-303b-7746-9434-5b2568b22ffe，247.681秒/exit0/1轮/no fallback，120min完成等待，无临床/库/env/测试，非模型独立金标。F1状态泄漏采纳；F2空来源既有Schema否证；F3保留完整来源后置门；IDs错配是所有者另查，末代码未再独审。细账见reviews/rv1006-pending-author-owner-disposition-20261010.md。下一冻结、从88efd合法新建90步逐项核47/2/41，不复活旧Job。完整同源包、同包病例工作稿及UI更正后新旧结果仍未达；Goal active/claims_complete=false；继承七dirty/原件/库/env/原答不stage不清理。
 
 | 用户流程节点 | 已证与首个未完成 |
 |---|---|
-| 完整要求快照 | DOCX官方rev21/23父条86组件141条件；85发现90深审，44完成；45局部修订及45未执行待接续，不称共同发布 |
+| 完整要求快照 | DOCX官方rev21/23父条86组件141条件；85发现90深审，47完成；45来源补全/49局部修订及41未读待接续，不称共同发布 |
 | 资料/事实资格/工作稿 | 5PDF24页历史提取保持；旧81组件/0controls准备例不是新同包，当前整例工作稿未达 |
 | 原件导航 | Ego真实连续页和局部宽屏检查已有；新报告回源/Q3未达，不造框 |
 | 有源更正与新旧结果 | 旧UI描述更正0规则关联；新完整要求下更正→相关重算→新工作稿→旧历史仍未达 |

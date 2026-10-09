@@ -63,6 +63,7 @@ from app.agents.protocol_control_deconstructor import (
     _missing_evidence_source_type_paths,
     _merge_evidence_source_types_repair,
     _restore_bounded_wire_repair,
+    _merge_scoped_unit_repair,
     _repair_problem_guidance,
     _invalid_candidate_payload,
     _single_invalid_candidate_payload,
@@ -11484,6 +11485,90 @@ def test_successful_source_insert_allows_one_bounded_candidate_correction(drop_t
     if prior_candidate:
         assert result.partial_wire.candidate_drafts[0] == initial.candidate_drafts[0]
     assert transport.prompts[-1].find("只修复指定的一个候选") >= 0
+
+
+@pytest.mark.parametrize("bad_patch", [None, "extra_unit", "missing_unit", "cross_source", "dropped_requirement"])
+def test_scoped_unit_repair_preserves_siblings_and_rejects_scope_escape(bad_patch):
+    original = _wire(candidate=_candidate())
+    before = original.model_dump(mode="json")
+    patch = original.model_copy(update={
+        "dispositions": [original.dispositions[0]],
+        "candidate_drafts": [original.candidate_drafts[0].model_copy(update={"title": "修订后的有源要求"})],
+    }).model_dump(mode="json")
+    if bad_patch == "extra_unit":
+        patch["dispositions"].append(before["dispositions"][1])
+    elif bad_patch == "missing_unit":
+        patch["dispositions"] = [before["dispositions"][1]]
+    elif bad_patch == "cross_source":
+        patch["candidate_drafts"][0]["source_structure_unit_ids"] = ["su-01", "su-02"]
+    elif bad_patch == "dropped_requirement":
+        patch["candidate_drafts"] = []
+        patch["dispositions"][0].update(disposition="supporting_or_supplement", notes="不得借说明删除要求")
+    if bad_patch in {"extra_unit", "missing_unit", "cross_source"}:
+        with pytest.raises(ProtocolControlAgentWireValidationError, match="REPAIR_SCOPE_ESCAPE"):
+            _merge_scoped_unit_repair(json.dumps(patch), original, {"su-01"})
+    else:
+        merged = _merge_scoped_unit_repair(json.dumps(patch), original, {"su-01"})
+        if bad_patch == "dropped_requirement":
+            with pytest.raises(ProtocolControlAgentWireValidationError, match="REPAIR_SCOPE_ESCAPE"):
+                _restore_bounded_wire_repair(original, merged, mutable_structure_unit_ids={"su-01"},
+                    mutable_candidate_source_keys={("su-01",)}, mutable_candidate_source_union={"su-01"},
+                    allow_candidate_repartition=True, allow_post_enrollment_reclassification=True)
+        else:
+            assert merged.dispositions[1] == original.dispositions[1]
+            assert merged.candidate_drafts[0].title == "修订后的有源要求"
+    assert original.model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("resume", [False, True])
+@pytest.mark.parametrize("reply", ["valid", "bad_json", "empty_sources"])
+def test_scoped_unit_repair_runs_through_current_consumer_without_full_history(resume, reply):
+    batch, original = _batch(), _wire(candidate=_candidate())
+    patch = original.model_copy(update={
+        "dispositions": [original.dispositions[0]],
+        "candidate_drafts": [original.candidate_drafts[0].model_copy(update={"title": "修订后的有源要求"})],
+    })
+    class Transport(_FakeTransport):
+        def restore_scoped_session(self, *, session_id, context_sha256):
+            assert session_id == "scope" and len(context_sha256) == 64
+        def continue_session(self, **kwargs):
+            pytest.fail("局部闭包不重发整组或恢复虚构历史")
+        def continue_scoped_unit_repair(self, *, session_id, prompt, batch):
+            self.prompts.append(prompt)
+            ProtocolControlDispositionBatch.model_validate(batch.model_dump(mode="python"))
+            assert list(batch.owned_structure_unit_ids) == ["su-01"]
+            assert batch.owned_source_span_ids == ["span:01"]
+            assert "su-02" in [x.structure_unit_id for x in batch.context_units]
+            assert "尚未采用" in prompt
+            payload = patch.model_dump(mode="json")
+            if reply == "empty_sources":
+                payload["candidate_drafts"][0]["source_structure_unit_ids"] = []
+            return ProtocolControlAgentResponse(session_id=session_id, text=(
+                "{" if reply == "bad_json" else json.dumps(payload)))
+    transport = Transport([] if resume else [ProtocolControlAgentResponse(session_id="scope", text=original.model_dump_json())])
+    seen = []
+    def validate(output):
+        seen.append(output)
+        if output.candidates[0].title != "修订后的有源要求":
+            raise ProtocolControlAgentWireValidationError("ACTION_TARGET_SCOPE_MISMATCH", "有源范围修订",
+                structure_unit_ids=["su-01"], candidate_ids=[output.candidates[0].control_candidate_id],
+                allow_candidate_repartition=True)
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION, statements=[],
+        units_without_statement=list(batch.owned_structure_unit_ids))
+    result = ProtocolControlAgentRunner(max_schema_repairs=3).run(batch, transport, output_validator=validate,
+        **({"resume_pending_author_wire": original, "resume_source_interpretation": inventory,
+            "resume_session_id": "scope"} if resume else {}))
+    if reply != "valid":
+        assert result.status == "需要核对"
+        assert len(seen) == 1 and len(transport.prompts) == (1 if resume else 2)
+        assert result.final_output is None
+        assert result.attempts[-1].raw_output_text
+        assert "不得退回整组改写" in " ".join(result.attempts[-1].issues)
+        assert original == _wire(candidate=_candidate())
+        return
+    assert result.status == "已解析", [a.issues for a in result.attempts]
+    assert len(seen) == 2 and result.partial_wire.dispositions[1] == original.dispositions[1]
+    assert result.final_output is not None and original == _wire(candidate=_candidate())
 
 
 def test_explicit_candidate_repartition_preserves_authorized_source_union() -> None:

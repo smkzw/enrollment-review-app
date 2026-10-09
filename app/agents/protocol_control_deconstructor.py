@@ -5056,6 +5056,36 @@ def _validate_bounded_output_repair(
         )
 
 
+def _merge_scoped_unit_repair(
+    raw_text: str, previous: ProtocolControlAgentWire, authorized_units: set[str],
+) -> ProtocolControlAgentWire:
+    """Splice the explicit source closure; full hydration and scope gates still follow."""
+    patch = _parse_repartition_with_checked_time(raw_text, previous)
+    known_units = {item.structure_unit_id for item in previous.dispositions}
+    if (not authorized_units or not authorized_units <= known_units
+            or {item.structure_unit_id for item in patch.dispositions} != authorized_units
+            or any(not set(item.source_structure_unit_ids) <= authorized_units
+                   for item in patch.candidate_drafts)):
+        raise ProtocolControlAgentWireValidationError(
+            "REPAIR_SCOPE_ESCAPE", "局部修订必须完整处置授权单元，不得携带其他单元候选或处置",
+            structure_unit_ids=sorted(authorized_units),
+        )
+    if any(set(item.source_structure_unit_ids) & authorized_units
+           and not set(item.source_structure_unit_ids) <= authorized_units
+           for item in previous.candidate_drafts):
+        raise ProtocolControlAgentWireValidationError(
+            "REPAIR_SCOPE_ESCAPE", "局部修订范围没有包含原候选的完整来源闭包",
+            structure_unit_ids=sorted(authorized_units),
+        )
+    changes = {item.structure_unit_id: item for item in patch.dispositions}
+    return previous.model_copy(update={
+        "dispositions": [changes.get(item.structure_unit_id, item) for item in previous.dispositions],
+        "candidate_drafts": [item for item in previous.candidate_drafts
+                             if set(item.source_structure_unit_ids).isdisjoint(authorized_units)]
+                            + patch.candidate_drafts,
+    })
+
+
 def _restore_bounded_wire_repair(
     previous: ProtocolControlAgentWire,
     current: ProtocolControlAgentWire,
@@ -8274,6 +8304,7 @@ class ProtocolControlAgentRunner:
         allow_candidate_repartition = False
         allow_source_closure_rewrite = False
         allow_post_enrollment_reclassification = False
+        scoped_unit_repair_ids: set[str] = set()
         allow_source_insert = False
         pending_source_insert: tuple[ProtocolControlAgentWire, set[str], set[str]] | None = None
         source_insert_candidate_only = False
@@ -8437,6 +8468,8 @@ class ProtocolControlAgentRunner:
                     )
                     if candidate_repair_index is not None
                     and (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                    else _merge_scoped_unit_repair(raw_text, repair_baseline_wire, scoped_unit_repair_ids)
+                    if scoped_unit_repair_ids and repair_baseline_wire is not None
                     else _parse_repartition_with_checked_time(raw_text, repair_baseline_wire)
                     if allow_post_enrollment_reclassification and repair_baseline_wire is not None
                     else parse_protocol_control_agent_wire(raw_text)
@@ -8447,6 +8480,7 @@ class ProtocolControlAgentRunner:
                 bounded_atom_patch_applied = any(path is not None for path in (
                     calendar_repair_path, future_repair_path, atom_repair_path,
                 ))
+                scoped_unit_repair_ids = set()
                 repair_baseline_raw = None
                 post_treatment_repair_index = None
                 future_repair_path = None
@@ -10458,6 +10492,8 @@ class ProtocolControlAgentRunner:
                 )
             except Exception as exc:  # noqa: BLE001 - bounded validation boundary
                 previous_atom_repair_path = atom_repair_path
+                failed_scoped_unit_repair = bool(scoped_unit_repair_ids)
+                scoped_unit_repair_ids = set()
                 previous_missing_anchor_only = missing_anchor_only
                 previous_time_operand_repair_candidate = time_operand_repair_candidate
                 previous_observation_repair_candidate = observation_repair_candidate
@@ -11235,6 +11271,7 @@ class ProtocolControlAgentRunner:
                 )
                 if (
                     no_progress
+                    or failed_scoped_unit_repair
                     or (current_scope_path is not None and (
                         current_scope_path in future_observation_scope_paths
                         or future_observation_scope_repairs >= (
@@ -11254,6 +11291,10 @@ class ProtocolControlAgentRunner:
                         attempts[-1].issues.append(
                             "校验问题缺少完整的机器可读修订范围，"
                             "本批次停止自动修订并转为需要核对"
+                        )
+                    if failed_scoped_unit_repair:
+                        attempts[-1].issues.append(
+                            "局部来源修订未通过，保留原提案及失败原答；不得退回整组改写"
                         )
                     if calendar_scope_ambiguous:
                         attempts[-1].issues.append(
@@ -11423,6 +11464,11 @@ class ProtocolControlAgentRunner:
                 post_treatment_repair_index = (
                     next(iter(repair_candidate_indexes)) if post_treatment_only else None
                 )
+                scoped_unit_repair = (
+                    not post_treatment_only and allow_candidate_repartition
+                    and repair_baseline_wire is not None and bool(mutable_candidate_source_union)
+                    and callable(getattr(transport, "continue_scoped_unit_repair", None))
+                )
                 repair_prompt = build_protocol_control_repair_prompt(
                     batch,
                     problem=str(error),
@@ -11555,7 +11601,54 @@ class ProtocolControlAgentRunner:
                     )
                 try:
                     repair_used = True
-                    if resuming_partial and allow_source_insert:
+                    if scoped_unit_repair:
+                        scoped_unit_repair_ids = set(mutable_candidate_source_union)
+                        owned_units = [item for item in batch.owned_units
+                                       if item.structure_unit_id in scoped_unit_repair_ids]
+                        context_units = [*batch.context_units, *[item for item in batch.owned_units
+                                         if item.structure_unit_id not in scoped_unit_repair_ids]]
+                        local_fields = batch.model_dump(mode="python")
+                        local_fields.update(
+                            owned_units=owned_units, context_units=context_units,
+                            owned_structure_unit_ids=[item.structure_unit_id for item in owned_units],
+                            context_structure_unit_ids=[item.structure_unit_id for item in context_units],
+                            owned_source_span_ids=sorted({span for item in owned_units for span in item.source_span_ids}),
+                            context_source_span_ids=sorted({span for item in context_units for span in item.source_span_ids}),
+                        )
+                        for field in ("pre_enrollment_structure_unit_ids", "structural_only_structure_unit_ids"):
+                            local_fields[field] = [unit_id for unit_id in local_fields[field]
+                                                   if unit_id in scoped_unit_repair_ids]
+                        for field in (
+                            "table_context_reading_bounds", "table_footnote_context_links",
+                            "owned_visit_instance_by_structure_unit_id",
+                            "owned_procedure_semantic_families_by_structure_unit_id",
+                            "owned_required_action_kinds_by_structure_unit_id",
+                            "owned_required_procedure_target_ids_by_structure_unit_id",
+                        ):
+                            local_fields[field] = {unit_id: value for unit_id, value in local_fields.get(field, {}).items()
+                                                   if unit_id in scoped_unit_repair_ids}
+                        local_batch = ProtocolControlDispositionBatch.model_validate(local_fields)
+                        local_wire = repair_baseline_wire.model_copy(update={
+                            "dispositions": [item for item in repair_baseline_wire.dispositions
+                                             if item.structure_unit_id in scoped_unit_repair_ids],
+                            "candidate_drafts": [item for item in repair_baseline_wire.candidate_drafts
+                                                 if set(item.source_structure_unit_ids) <= scoped_unit_repair_ids],
+                        })
+                        repair_prompt = build_protocol_control_agent_prompt(
+                            local_batch, prompt_template=prompt_template,
+                            include_schema=False, source_interpretation=source_interpretation,
+                        ) + (
+                            "\n本次只修订上述 owned_units 的来源闭包，context_units 仅供只读核对。"
+                            "只返回这些单元的 dispositions 和候选；其余内容由系统保留。"
+                            "下列提案尚未采用，须按原文核实错误关联，不得因无正确关联就称要求已覆盖。"
+                            "独立要求应保留有源候选；真正后续事项按原文处置，不能改为支持说明来绕过要求。"
+                            "修订后仍须完整来源、含义、覆盖及发布核对。问题：" + str(error)
+                            + "\n原局部提案：" + local_wire.model_dump_json()
+                        )
+                        response = transport.continue_scoped_unit_repair(
+                            session_id=session_id, prompt=repair_prompt, batch=local_batch,
+                        )
+                    elif resuming_partial and allow_source_insert:
                         if not (source_insert_candidate_only or source_insert_candidates_only):
                             raise RuntimeError("局部恢复缺少独立来源补入通道")
                         response = transport.start_source_insert(

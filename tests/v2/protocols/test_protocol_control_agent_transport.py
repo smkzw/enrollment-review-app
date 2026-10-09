@@ -1574,6 +1574,31 @@ def test_scoped_snapshot_resume_enables_only_self_contained_requests(method):
     assert len(completions.calls) == 1
 
 
+@pytest.mark.parametrize("backend", ["mtplx", "ollama-cloud"])
+def test_scoped_unit_repair_uses_frozen_local_schema_and_does_not_invent_history(backend):
+    client, completions = _client(['{}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(client=client,
+        backend=backend, model="test-independent-model", model_identity_check=False)
+    batch = _batch()
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.continue_scoped_unit_repair(session_id="scope", prompt="只核授权来源", batch=batch)
+    assert not completions.calls
+    transport.restore_scoped_session(session_id="scope", context_sha256="a" * 64)
+    answer = transport.continue_scoped_unit_repair(session_id="scope", prompt="只核授权来源", batch=batch)
+    assert answer.session_id == "scope" and not transport._histories
+    request = completions.calls[0]
+    expected_format = protocol_control_batch_response_format(batch)
+    if "response_format" in request:
+        assert request["response_format"] == expected_format
+    else:
+        assert json.dumps(expected_format["json_schema"]["schema"], ensure_ascii=False,
+                          separators=(",", ":")) in request["messages"][0]["content"]
+    assert [x["role"] for x in request["messages"]] == ["user"]
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.continue_session(session_id="scope", prompt="不可恢复整组历史")
+    assert len(completions.calls) == 1
+
+
 def test_length_finish_reason_retries_once_then_succeeds_in_same_call() -> None:
     client, completions = _client(
         [

@@ -1495,6 +1495,25 @@ class OpenAICompatibleProtocolControlAgentTransport:
             )
         return [{"role": "user", "content": prompt}]
 
+    def continue_scoped_unit_repair(
+        self, *, session_id: str, prompt: str, batch: ProtocolControlDispositionBatch,
+    ) -> ProtocolControlAgentResponse:
+        """Read a host-selected source closure without reconstructing old conversation."""
+        if not prompt.strip() or not batch.owned_units:
+            raise ValueError("局部来源修订缺少提示或授权单元")
+        if session_id not in self._histories and session_id not in self._scoped_resume_contexts:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        response_format = protocol_control_batch_response_format(batch)
+        messages = self._single_requirement_messages(prompt, response_format)
+        try:
+            text = self._complete(messages, response_format=response_format)
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id, str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
     def continue_session(
         self,
         *,

@@ -2,6 +2,20 @@
 
 ## 实际产物与边界
 
+### 当前增量：来源闭包局部修订（基础c8c9005097066680cefefe2defb8316e67a61d8e）
+
+该基础的实际Job88efd2f742b5416f84aae7d86b3b4f5f已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID：19物理调用756.5914077500347秒，47完成、45/49失败、41未读。85发现及原44成功零新调用；46/47/48实际保存。阶段重复投影已越过前一来源首错，但没有共同发布。该私有包装器未传播driver.main返回码，所以外层exit0不代表产品成功；下一包装器改为raise SystemExit，不更改旧回执。
+
+45的来源尾句没有完整进入解释，实际预检选择source-unit-quote-completion-seed-proof/v1，不能把漏读当忠实未决。49作者把本行关联到没有本行来源的目录目标，下一答改supporting且无候选，现有REPAIR_SCOPE_ESCAPE拒绝正确；保存的未采用提案没有全会话历史，不能盲用continue_session。两者为不同失败家族，不转嫁研究者。
+
+本包source-closure-scoped-unit-repair/v1只进validator身份。复用现有错误授权和传递来源闭包，模型只返回局部处置/候选；宿主原样保留其余单元，再运行原restore/hydrate/来源/发布与语义核对。适配器显式支持真实history或scoped绑定；自含请求不伪造history，原continue_session仍拒绝无历史。Ollama原生JSON不发送response_format，严格Schema嵌入实际提示；本地结构化模式仍传严格Schema。不新增框架/路线/字段真相，不弱化supporting删除要求的拒绝。
+
+首聚焦窗7pass/8fail为新增夹具默认空候选和native JSON参数断言错误，随后14pass/2fail揭示真实请求构造缺陷：model_copy只缩owned_units却留整组owned IDs/spans。现同步筛选所有owned元数据、把非目标移到只读context，并经原Batch.model_validate，不能仅改测试容忍整组。最终聚焦20pass/1035deselected/2.32秒/exit0。坏JSON及空来源分别显式保存失败，禁止扩大整组补答；有余量时仍不额外花一次无意义调用。
+
+C03既有同角色CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max，session01a1226e-303b-7746-9434-5b2568b22ffe，scoped_unit_repair报告247.681秒/exit0/1轮/no fallback，120min完成等待。20聚焦只读，无临床/库/env/测试/网络；同家族仅程序/context分离。F1状态泄漏采纳：异常清除局部模式并显式停止该分支、保留原提案/原答/旧账。F2空来源由既有Candidate Field(min_length=1)在解析阶段拒绝，新Runner反例证实；不重复加门。F3来源span仍原后置门验证，不另造弱门。独审未检查请求Schema本体，实际聚焦测试发现的IDs错配由所有者修复，末代码未再派审，不声称顾问全面核验。
+
+最新实际只读预检rv1006-scoped-unit-repair-preflight-20261010-v1.json：47reusable/2resume_partial/41refresh，0模型/0库写/database_unchanged=true。45补来源范围，49未采用提案局部恢复；下一合法新Job须实际90步逐项一致且保留旧终态。最终相连命令：env PYTHONPATH=. .venv/bin/python -m pytest tests/v2/protocols/test_slice58c_control_deconstructor.py tests/v2/protocols/test_slice58c_protocol_control_gate.py tests/v2/protocols/test_protocol_control_agent_transport.py tests/v2/services/test_protocol_control_execution.py -q --tb=short --junitxml=artifacts/rv1006-scoped-unit-repair-connected-20261010-v1.xml，1798pass/180.76秒/exit0/5SWIG；聚焦不相加。真实新接续尚未开始，不宣称已采用或临床验收。原件/旧Job/库/七份继承dirty保持。
+
 ### 当前增量：有源阶段重复字段（基础4bd40fe5）
 
 最新实际Job093f40aa13784946b4f8d3415f745a54：3物理调用189.9354220830137秒/exit3，44完成、45失败、45未读；检查点23df0b9397044830977c26f1e03121c6。原校验已经证实affected_stage逐字有源，却因time_words未重复同字段再次要求模型补写；两次局部修订未完成。此轮没有到作者/嵌套政策修订。替代解释包括模型采样波动与阶段字段提示冗余；本包只处理确定性重复，不证明其他临床含义已核。

@@ -2115,6 +2115,7 @@ def _deep_component_identity(
                                        "missing-anchor-scoped-atom-recovery/v1",
                                        "unaccepted-author-proposal-revalidation/v1",
                                        "completed-result-current-gate-revalidation/v1",
+                                       "source-closure-scoped-unit-repair/v1",
                                        SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),
