@@ -29,3 +29,34 @@
 ## 限制与下一实际动作
 
 完整同源要求包未发布；不把第23受限能力当整个方案完成。集中检查结束核最终身份/真实复用，再经合法产品API创建版本化隔离Job，仅对第23必要范围恢复并读剩余范围。病例5PDF24页已有只读来源准备，待完整同源包后走正式新项目/上传/资格消费；旧81组件病例不是新141条件链。没有复制旧批准或手填verified。所有临床原答/DB仅本机受控可读，外部审阅不可读；交付净化源码、合成反例、工程报告和检查证据。
+# Subsequent actual run and bounded path-preflight correction
+
+The committed 9b45dfa4 product run a513a024… ended with 23 accepted deep batches,
+batch24 rejected and66 unexecuted: 11 new physical calls /328.159519s /exit3.
+The saved22 batches and85 discovery steps used zero new calls; the local context
+completion really saved batch23. Old jobs, protected files and source database
+were unchanged. No joint publication, activation or signing occurred.
+
+First cause in batch24: the relative-stage selector only required time text and
+a procedure target, although the existing compiler also requires a frozen prior
+stage matching the scope and a later stage matching that target. A topic scope
+and generic schedule-visit phrase therefore entered an impossible short reader;
+its unknown IDs were correctly rejected. The repair moves those existing
+mechanical prerequisites before dispatch. It does not infer relative semantics,
+weaken the compiler or approve the failed response. Direct owner implementation
+is sufficient for this deterministic preflight; prior C03 did not review it.
+
+Validation identity changes only; actual read-only product restoration shows no
+eligible relative-stage items, and reuse preflight retains23/partial1/unread66
+with zero calls/writes and unchanged database. Four connected modules:
+1256pass/1fail/134.34s/exit1. The sole failure was an explicit expected validator
+version missing the new preflight version; real zero-call reuse passed. After
+correcting only that assertion, the same test passed /2.25s /exit0. No repeated
+full window, no additive totals, five existing SWIG warnings. JUnit files:
+rv1006-relative-stage-preflight-connected-20261009-v1.xml and
+rv1006-relative-stage-gate-identity-expectation-20261009-v1.xml.
+
+Next actual continuation uses the existing legal API and bounded independent
+read policy, preserving a first eligible unresolved failure while other sources
+can be read; a second failure still stops and publication remains blocked.
+This is not a new queue, a reset call budget, clinical approval or completion.

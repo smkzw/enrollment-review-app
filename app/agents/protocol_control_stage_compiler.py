@@ -49,6 +49,7 @@ from .protocol_control_source_interpretation import (
 
 STAGE_BOUND_REQUIREMENT_VERSION = "phase5/control-stage-bound-requirement/v10"
 RELATIVE_STAGE_REQUIREMENT_VERSION = "phase5/control-relative-stage-requirement/v9"
+RELATIVE_STAGE_PREFLIGHT_VERSION = "relative-stage-frozen-target-preflight/v1"
 SHARED_PROHIBITION_REQUIREMENT_VERSION = "phase5/control-shared-prohibition-requirement/v4"
 
 
@@ -314,13 +315,33 @@ def can_compile_relative_stage_requirement(
         resolve_ancestor_scope_citation(unit, statement.scope_quote, [*batch.owned_units, *batch.context_units])
     except ValueError:
         return False
+    procedure = next((item for item in batch.known_procedure_targets
+                      if item.catalog_item_id == review.target_id), None)
+    if procedure is None:
+        return False
+    target_stage_id = procedure_execution_workflow_stage_id(
+        procedure, batch.known_workflow_stage_targets,
+    )
+    stage = next((item for item in batch.known_workflow_stage_targets
+                  if item.workflow_stage_id == target_stage_id), None)
+    if stage is None:
+        return False
+    # These are existing assembly prerequisites, not evidence of relative meaning.
+    scope_parts = _time_parts(statement.scope_quote)
+    ordered = list(ReviewStage)
+    if not scope_parts or not any(
+        ordered.index(previous.review_stage) < ordered.index(stage.review_stage)
+        and all(part in normalize_source_excerpt(" ".join(filter(None, (
+            previous.display_name, previous.visit_instance, previous.visit_window,
+        )))) for part in scope_parts)
+        for previous in batch.known_workflow_stage_targets
+    ):
+        return False
     return bool(
         statement.force == "required"
         and statement.scope_quote
         and not statement.exception_words
         and not statement.unresolved
-        and review.target_id
-        and any(item.catalog_item_id == review.target_id for item in batch.known_procedure_targets)
         and review.source_time_excerpt
         and normalize_source_excerpt(review.source_time_excerpt)
         in normalize_source_excerpt(statement.quoted_text)

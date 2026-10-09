@@ -12812,6 +12812,31 @@ def test_relative_stage_requirement_preserves_after_stage_without_new_calendar_w
         compile_stage_bound_requirement(batch, invented_time, review, relative)
 
 
+@pytest.mark.parametrize("case", ["topic_scope", "same_stage", "unknown_stage"])
+def test_relative_stage_preflight_rejects_missing_frozen_predecessor(case) -> None:
+    batch, inventory, review, _ = _stage_bound_example()
+    batch.owned_units[0].excerpt = "检查评估：流程表规定的访视节点完成检查。"
+    statement = inventory.statements[0]
+    statement.quoted_text = "流程表规定的访视节点完成检查。"
+    statement.scope_quote = "检查评估："
+    statement.time_words = ["流程表规定的访视节点"]
+    review.source_action_excerpt = statement.quoted_text
+    review.source_time_excerpt = statement.time_words[0]
+    review.target_id = batch.known_procedure_targets[0].catalog_item_id
+    if case != "topic_scope":
+        statement.scope_quote = "筛选期："
+        batch.owned_units[0].excerpt = "筛选期：" + statement.quoted_text
+        target = batch.known_procedure_targets[0]
+        if case == "same_stage":
+            target.review_stage = ReviewStage.SCREENING
+            target.visit_instance = batch.known_workflow_stage_targets[0].visit_instance
+        else:
+            target.visit_instance = "不在冻结目录的访视"
+    assert not can_compile_relative_stage_requirement(batch, inventory, review)
+    with pytest.raises(StageBoundCompilationGap, match="不具备"):
+        build_relative_stage_requirement_prompt(batch, inventory, review)
+
+
 @pytest.mark.parametrize("case", ["complete", "broken_first", "joint_failure"])
 def test_two_sourced_actions_insert_together_without_rewriting_existing_draft(case) -> None:
     batch, inventory, first_review, first = _stage_bound_example()
