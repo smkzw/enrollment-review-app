@@ -64,6 +64,7 @@ from app.agents.protocol_control_discovery_transport import (
 )
 from app.agents.protocol_control_source_interpretation import (
     SOURCE_COVERAGE_VALIDATION_VERSION,
+    SOURCE_ATTRIBUTION_VALIDATION_VERSION,
     SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
     SOURCE_TARGET_REVIEW_GAP_VERSION,
     SOURCE_QUOTE_RECOVERY_VERSION,
@@ -2068,6 +2069,7 @@ def _deep_component_identity(
         "validator_version": "/".join((CONTROL_PUBLICATION_GATE_VERSION,
                                        RESTRICTED_DEFINITION_VALIDATION_VERSION,
                                        SOURCE_COVERAGE_VALIDATION_VERSION,
+                                       SOURCE_ATTRIBUTION_VALIDATION_VERSION,
                                        SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
                                        SOURCE_TARGET_REVIEW_GAP_VERSION,
                                        PROCEDURE_RESTRICTION_VALIDATION_VERSION,

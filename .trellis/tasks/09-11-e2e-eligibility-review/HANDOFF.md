@@ -8,7 +8,11 @@
 
 ## 当前身份
 
-当前实际终态：674dfffa已push，合法Job4731c111f0f94e38b7ed1c3b8c47363a为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，1物理调用112.355218秒/exit3；85发现及23成功深审零新调用复用，第24因TEMPORAL_SCOPE_UNRESOLVED失败、66未执行。exec96634已结束，产物rv1006-relative-stage-preflight-api-20261009-v1，不覆盖/复活。原Job/保护库/来源库不变；以下a513/5afb/c18为历史，不当现行。
+当前实际终态：7a902e87已push，合法Job81d60142796b4e48bac3c5af60b20bde为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，23物理调用709.942941秒/exit3；85发现及旧23成功零新调用复用，第24–26已完成，第27归因范围校验失败、63未执行。exec18934已结束，检查点bccc859eca60403d9fa8d07d87a08851，产物rv1006-procedure-context-temporal-api-20261009-v1不覆盖/复活。原Job/保护库/来源库不变。
+
+当前最小修复为通用外部文档段首归因：同单元有界标题、逐字唯一、遇新的冒号标签/研究采纳/另一权威中断；作者与独立目标核对共门，不自动关闭、不改force。仅validator身份变，26成功当前重验零调用复用，第27旧失败不追认成功。最终26受影响例通过、最新v3预检26reusable/64refresh、0调用/0写/hash保持；四模块1299pass是最后锚点增量前的窗口，不能冒称最终源码全窗。C03两次独审的结构漏洞已修，最后锚点由所有者实际验证。新合法Job未启动；共同发布/新完整病例闭环/Q3仍未达。详情见implement及reviews/rv1006-external-header-source-owner-disposition-20261009.md。
+
+### 上游功能包记录（历史，不覆盖当前表）
 
 相对阶段前置保护已实际避免重复错误请求；下一首阻断是来源漏前置清单和同单元未装配时间兄弟。当前最小包只补核完整前缀＋原文疑问，不允许改动作/阶段/兄弟；完整时间单元仅可整体不可执行保存，无关additional、定义依赖、漏读和坏证明仍拒。四相连模块1271pass/4fail，测试夹具两个原因修正后同四例4pass；产品未变、不累加或重跑全窗。新批准C03独审有明确未读消费者/无法diff/未测试限制。只读恢复实际选中索引8；23/1/66预检0模型/0写/hash保持。下一合法新Job未运行，完整共同发布/工作稿/UI更正仍未完成。详细命令、证据限制及取舍合并在implement与既有所有者记录。
 
@@ -20,15 +24,15 @@
 |---|---|
 | 唯一worktree | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；09-11-e2e-eligibility-review |
-| 当前代码基础 | 674dfffa已push；来源范围与时间兄弟包为本地补丁，不归给旧提交 |
-| 当前最新真实Job | 4731c111f0f94e38b7ed1c3b8c47363a，failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID |
-| 最新真实运行 | 源码674dfffa，1物理调用/112.355218秒；23completed、24failed、66未读；85发现及旧23成功零新调用。shell3与实际失败相符 |
+| 当前代码基础 | 7a902e87已push；外部标题归因包为本地补丁，不归给旧提交 |
+| 当前最新真实Job | 81d60142796b4e48bac3c5af60b20bde，failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID |
+| 最新真实运行 | 源码7a902e87，23物理调用/709.942941秒；26completed、27failed、63未读；85发现及旧23成功零新调用。shell3与实际失败相符 |
 | 上游第23失败检查点 | c1fea38816e84c729b9b1587a8818619；已由a513局部恢复保存，旧原答/hash保持，不回改成功 |
 | 当前隔离DB | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 真实产物 | 同根/rv1006-relative-stage-preflight-api-20261009-v1，prepare/execute均保存，不覆盖/重跑 |
+| 真实产物 | 同根/rv1006-procedure-context-temporal-api-20261009-v1，prepare/execute均保存，不覆盖/重跑 |
 | 模型路线 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high，输出65536，产品自己的harness直连 |
-| 当前新预检 | 同根/rv1006-procedure-context-temporal-preflight-20261009-v2.json：23reusable/1resume_partial/66refresh，0调用/0写/DBhash保持；产品恢复实际选中索引8 |
-| 新代码实际临床运行 | 674dfffa前置已实跑；新范围/时间兄弟包未实跑，仍无共同发布/完整新工作稿 |
+| 当前新预检 | 同根/rv1006-external-header-source-preflight-20261009-v3.json：26reusable/64refresh，0调用/0写/DBhash保持 |
+| 新代码实际临床运行 | 7a902e87范围/时间兄弟包已实跑，第24–26完成；新标题归因包未实跑，仍无共同发布/完整新工作稿 |
 | 继承dirty | 7份旧delivery文件未动，不stage；大量继承untracked不清理/不批量stage |
 | 外部可复查范围 | Git源码/合成用例/净化工程报告；真实原件、DB、提示、原答和病例截图仅本机受控可读，外部审阅不可读 |
 
@@ -36,7 +40,7 @@
 
 | 用户动作 | 已实现/已证 | 首个未完成 |
 |---|---|---|
-| 从DOCX准备完整要求 | 官方1153e25b4eba40db964202a1c3ed07c3草稿rev21，23父条/86组件/141条件；200有源资料政策草稿覆盖141条件；85发现/90深审，目前23完成 | 第24及66未执行；publishable只是官方草稿门，不是同源共同发布 |
+| 从DOCX准备完整要求 | 官方1153e25b4eba40db964202a1c3ed07c3草稿rev21，23父条/86组件/141条件；200有源资料政策草稿覆盖141条件；85发现/90深审，目前26完成 | 第27及63未执行；publishable只是官方草稿门，不是同源共同发布 |
 | 读取整例资料 | 5PDF24页、14组已实读保存；458候选→407事实/40事件/11暴露；32资格候选关联30事实、426候选受限 | 不同分母不代表准确率；新完整要求消费/数字位置/手写归属仍有具体待核 |
 | 使用当前节点工作稿 | 冻结资格与R1正常/风险/受限消费者已接线 | 现准备病例仍旧81组件/0controls；旧REVIEW_SOURCE_POLICY_NOT_READY不说明新141条件失败 |
 | 回看原件 | Ego147正式非Mock，连续24页/切文件/文字/缩放/返回正确个例；行政噪声收起，临床内容保留；宽屏局部无横溢出 | 新完整报告回源和完整Q3尚未完成；无坐标不造框 |

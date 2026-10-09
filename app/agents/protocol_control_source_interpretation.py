@@ -39,6 +39,7 @@ SOURCE_TARGET_REVIEW_VALIDATION_VERSION = "source-native-procedure-row-validatio
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
 SOURCE_TARGET_REVIEW_GAP_VERSION = "source-target-unresolved-cause/v1"
+SOURCE_ATTRIBUTION_VALIDATION_VERSION = "source-external-header-scope/v1"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -60,12 +61,12 @@ def _same_explicit_day_week_window(source: str, target: str) -> bool:
     return left_days == right_days
 
 _EXTERNAL_ATTRIBUTION_RE = re.compile(
-    r"(?:指南|指导原则|共识|文献|报告|教科书|研究论文)"
-    r"[^。！？；;]{0,40}(?:建议|推荐|指出|认为|报道|提出|描述)"
+    r"(?:指南|指导原则|共识|文献|报告|教科书|研究论文|说明书)"
+    r"[^。！？；;]{0,40}?(?:建议|推荐|指出|认为|报道|提出|描述|提示|记载|载明)"
 )
 _STUDY_ADOPTION_RE = re.compile(
     r"(?:本研究|本方案|本试验|本项目)[^。！？；;]{0,40}"
-    r"(?:规定|要求|设定|排除|不得|禁止|必须|须|应)|"
+    r"(?:规定|要求|设定|排除|不得|禁止|必须|须|应|采用|采纳|执行|遵循)|"
     r"(?:入选|排除|入组)标准|不得随机|不得入组|不予入组"
 )
 
@@ -82,7 +83,16 @@ def _object_in_action_clause(text: str, action: str, action_at: int, object_text
     return object_text in text[start:end]
 
 
-def _attribution_in_same_sentence(source: str, quote: str, attribution: str) -> bool:
+def _external_header_end(text: str, before: int) -> int:
+    attribution = _EXTERNAL_ATTRIBUTION_RE.search(text[:before])
+    if attribution is None:
+        return -1
+    return min((pos for mark in "：:" if (
+        pos := text.find(mark, attribution.end(), before)
+    ) >= 0), default=-1)
+
+
+def _attribution_in_source_scope(source: str, quote: str, attribution: str) -> bool:
     text = normalize_source_excerpt(source)
     action = normalize_source_excerpt(quote)
     basis = normalize_source_excerpt(attribution)
@@ -90,14 +100,30 @@ def _attribution_in_same_sentence(source: str, quote: str, attribution: str) -> 
         return False
     action_at = text.find(action)
     basis_at = text.find(basis)
-    if action_at < 0 or basis_at < 0 or text.find(action, action_at + 1) >= 0:
+    if (action_at < 0 or basis_at < 0 or text.find(action, action_at + 1) >= 0
+            or text.find(basis, basis_at + 1) >= 0):
         return False
     if basis_at + len(basis) >= action_at + len(action):
         return False
     start = max((text.rfind(mark, 0, action_at) for mark in "。！？；;"), default=-1) + 1
     ends = [text.find(mark, action_at + len(action)) for mark in "。！？；;"]
     end = min((pos for pos in ends if pos >= 0), default=len(text))
-    return basis_at >= start and not _STUDY_ADOPTION_RE.search(text[start:end])
+    header_colon = _external_header_end(text, action_at)
+    if (header_colon >= 0
+            and any(mark in text[header_colon + 1:action_at] for mark in "：:")):
+        return False
+    if basis_at >= start:
+        return not _STUDY_ADOPTION_RE.search(text[start:end])
+    # A verbatim colon header owns only this source unit, until another authority intervenes.
+    header_end = len(basis)
+    return bool(
+        basis_at == 0 and basis.endswith(("：", ":"))
+        and header_end <= action_at
+        and not any(mark in basis for mark in "。！？；;")
+        and not any(mark in text[header_end:action_at] for mark in "：:")
+        and not _STUDY_ADOPTION_RE.search(text[:end])
+        and not _EXTERNAL_ATTRIBUTION_RE.search(text[header_end:action_at])
+    )
 
 
 def _has_external_attribution_before_action(source: str, quote: str) -> bool:
@@ -109,8 +135,14 @@ def _has_external_attribution_before_action(source: str, quote: str) -> bool:
     start = max((text.rfind(mark, 0, action_at) for mark in "。！？；;"), default=-1) + 1
     ends = [text.find(mark, action_at + len(action)) for mark in "。！？；;"]
     end = min((pos for pos in ends if pos >= 0), default=len(text))
-    return bool(_EXTERNAL_ATTRIBUTION_RE.search(text[start:action_at + len(action)])) and not bool(
-        _STUDY_ADOPTION_RE.search(text[start:end])
+    header_end = _external_header_end(text, action_at)
+    if header_end >= 0:
+        return _attribution_in_source_scope(source, quote, text[:header_end + 1])
+    if (_EXTERNAL_ATTRIBUTION_RE.search(text[start:action_at + len(action)])
+            and not _STUDY_ADOPTION_RE.search(text[start:end])):
+        return True
+    return header_end >= 0 and _attribution_in_source_scope(
+        source, quote, text[:header_end + 1],
     )
 
 
@@ -1824,12 +1856,12 @@ def validate_source_target_review(
             if (statement.control_authority != "cited_external_rationale"
                     or not attribution
                     or attribution != normalize_source_excerpt(statement.attribution_quote or "")
-                    or not _attribution_in_same_sentence(
+                    or not _attribution_in_source_scope(
                         owned[statement.structure_unit_id].excerpt,
                         statement.quoted_text, item.attribution_excerpt or "",
                     )):
                 reject(item, "SOURCE_ATTRIBUTION_UNCONFIRMED", "attribution_excerpt",
-                       "外部资料归因必须与已核陈述和同句原文一致")
+                       "外部资料归因必须与已核陈述及有界原文范围一致")
             if (entry := coverage_by_index[item.statement_index]).action_candidate_indexes:
                 reject(item, "EXTERNAL_RATIONALE_STILL_CONTROL", "decision",
                        "同一外部资料说明仍被写成候选控制，不能同时声明无需新增要求")
@@ -2936,11 +2968,11 @@ def validate_source_interpretation(
         if item.control_authority == "cited_external_rationale":
             if (item.eligibility_sequence != "current_or_unknown"
                     or item.eligibility_sequence_quote is not None
-                    or not _attribution_in_same_sentence(
+                    or not _attribution_in_source_scope(
                         unit.excerpt, item.quoted_text, item.attribution_quote or "",
                     )):
                 reject("SOURCE_ATTRIBUTION_INVALID",
-                       "外部资料说明须由同句在前的逐字归因支持，且不得含本研究采纳要求",
+                       "外部资料说明须由同句在前或同单元段首冒号标题的逐字归因支持，且不得含本研究采纳要求",
                        "attribution_quote", "correct_source_scope")
         elif item.attribution_quote is not None:
             reject("SOURCE_ATTRIBUTION_UNEXPECTED",

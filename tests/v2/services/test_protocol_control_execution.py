@@ -6239,6 +6239,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
         "/".join((protocol_control_execution_module.CONTROL_PUBLICATION_GATE_VERSION,
                   protocol_control_execution_module.RESTRICTED_DEFINITION_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_COVERAGE_VALIDATION_VERSION,
+                  protocol_control_execution_module.SOURCE_ATTRIBUTION_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_REVIEW_GAP_VERSION,
                   protocol_control_execution_module.PROCEDURE_RESTRICTION_VALIDATION_VERSION,

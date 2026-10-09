@@ -3994,22 +3994,30 @@ def test_external_attribution_inside_full_sentence_quote_still_needs_review() ->
         assert target_review_indexes(inventory, coverage, batch) == [0]
 
 
-def test_runner_keeps_external_rationale_out_of_new_control() -> None:
+@pytest.mark.parametrize("source, quote, attribution", [
+    ("某共识建议设置观察期以识别对照反应者（予以排除）。",
+     "识别对照反应者（予以排除）", "某共识建议"),
+    ("另一药物说明书安全性信息提示：常见反应包括头痛；另需注意其他风险。",
+     "另需注意其他风险", "另一药物说明书安全性信息提示："),
+    ("某指南记载:\n常见反应包括头痛。\n另需注意其他风险。",
+     "另需注意其他风险", "某指南记载:"),
+])
+def test_runner_keeps_external_rationale_out_of_new_control(source, quote, attribution) -> None:
     batch = _batch().model_copy(deep=True)
-    batch.owned_units[0].excerpt = "某共识建议设置观察期以识别对照反应者（予以排除）。"
+    batch.owned_units[0].excerpt = source
     inventory = SourceInterpretation(
         version=SOURCE_INTERPRETATION_VERSION,
         statements=[SourceStatement(
-            structure_unit_id="su-01", quoted_text="识别对照反应者（予以排除）",
+            structure_unit_id="su-01", quoted_text=quote,
             force="prohibited", decision_functions=["background"], time_words=[],
-            control_authority="cited_external_rationale", attribution_quote="某共识建议",
+            control_authority="cited_external_rationale", attribution_quote=attribution,
         )], units_without_statement=["su-02"],
     )
     review = SourceTargetReview.model_validate({
         "version": SOURCE_TARGET_REVIEW_VERSION,
         "items": [{"statement_index": 0, "decision": "cited_external_rationale",
-                   "target_id": None, "source_action_excerpt": "识别对照反应者（予以排除）",
-                   "attribution_excerpt": "某共识建议"}],
+                   "target_id": None, "source_action_excerpt": quote,
+                   "attribution_excerpt": attribution}],
     })
 
     class Transport(_FakeTransport):
@@ -4026,6 +4034,96 @@ def test_runner_keeps_external_rationale_out_of_new_control() -> None:
     assert result.status == "已解析"
     assert result.final_output is not None and not result.final_output.candidates
     assert result.source_target_review == review
+
+
+@pytest.mark.parametrize("source", [
+    "某说明书提示常见反应。另需注意其他风险。",
+    "背景介绍。某说明书提示：常见反应包括头痛。另需注意其他风险。",
+    "某说明书提示：常见反应包括头痛。本方案要求另需注意其他风险。",
+    "某说明书提示：本研究采用该建议。另需注意其他风险。",
+    "某说明书提示：常见反应包括头痛。另一指南建议：另需注意其他风险。",
+    "某说明书提示：一般人群处理原则。入组要求：另需注意其他风险。",
+    "某说明书提示：一般人群处理原则。另一项要求:另需注意其他风险。",
+    "某说明书提示：另需注意其他风险。另需注意其他风险。",
+])
+def test_external_header_cannot_cross_authority_or_unproven_scope(source) -> None:
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[0].excerpt = source
+    inventory = SourceInterpretation(
+        version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(
+            structure_unit_id="su-01", quoted_text="另需注意其他风险", force="required",
+            decision_functions=["background"], time_words=[],
+            control_authority="cited_external_rationale", attribution_quote="某说明书提示：",
+        )], units_without_statement=["su-02"],
+    )
+    with pytest.raises(SourceInterpretationValidationError, match="逐字归因"):
+        validate_source_interpretation(batch, inventory)
+
+
+def test_external_header_requires_attribution_and_fresh_target_review() -> None:
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[0].excerpt = "某说明书提示：常见反应包括头痛。另需注意其他风险。"
+    statement = SourceStatement(
+        structure_unit_id="su-01", quoted_text="另需注意其他风险", force="required",
+        decision_functions=["background"], time_words=[],
+    )
+    inventory = SourceInterpretation(
+        version=SOURCE_INTERPRETATION_VERSION, statements=[statement],
+        units_without_statement=["su-02"],
+    )
+    with pytest.raises(SourceInterpretationValidationError, match="逐字归因"):
+        validate_source_interpretation(batch, inventory)
+    statement.control_authority = "cited_external_rationale"
+    statement.attribution_quote = "某说明书提示："
+    validate_source_interpretation(batch, inventory)
+    coverage = [SourceStatementCoverage(
+        statement_index=0, structure_unit_id="su-01",
+        disposition="supporting_or_supplement", status="not_located",
+    )]
+    assert target_review_indexes(inventory, coverage, batch) == [0]
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "cited_external_rationale",
+                   "target_id": None, "source_action_excerpt": statement.quoted_text,
+                   "attribution_excerpt": statement.attribution_quote}],
+    })
+    validate_source_target_review(batch, inventory, coverage, review)
+    with pytest.raises(SourceTargetReviewValidationError, match="候选控制"):
+        validate_source_target_review(batch, inventory, [coverage[0].model_copy(
+            update={"action_candidate_indexes": [0]},
+        )], review)
+    batch.owned_units[0].excerpt = (
+        "某说明书提示：常见反应包括头痛。本研究规定另需注意其他风险。"
+    )
+    with pytest.raises(SourceTargetReviewValidationError, match="有界原文范围"):
+        validate_source_target_review(batch, inventory, coverage, review)
+
+
+@pytest.mark.parametrize("separator", ["。", "；", "，"])
+@pytest.mark.parametrize("attribution", ["某指南推荐：", "某指南推荐"])
+@pytest.mark.parametrize("prefix", ["", "注："])
+def test_new_header_does_not_force_study_obligation_to_external_authority(separator, attribution, prefix) -> None:
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[0].excerpt = (
+        f"{prefix}某指南推荐：一般人群处理原则{separator}入组要求：受试者须完成筛选期全部访视。"
+    )
+    statement = SourceStatement(
+        structure_unit_id="su-01", quoted_text="受试者须完成筛选期全部访视",
+        force="required", decision_functions=["action"], time_words=["筛选期"],
+    )
+    inventory = SourceInterpretation(
+        version=SOURCE_INTERPRETATION_VERSION, statements=[statement],
+        units_without_statement=["su-02"],
+    )
+    validate_source_interpretation(batch, inventory)
+    statement.control_authority = "cited_external_rationale"
+    statement.attribution_quote = prefix + attribution
+    with pytest.raises(SourceInterpretationValidationError, match="逐字归因"):
+        validate_source_interpretation(batch, inventory)
+    statement.attribution_quote = prefix + "某指南推荐：一般人群处理原则" + separator + "入组要求："
+    with pytest.raises(SourceInterpretationValidationError, match="逐字归因"):
+        validate_source_interpretation(batch, inventory)
 
 
 def test_atom_repair_explains_null_time_constraint_without_inventing_a_window() -> None:
