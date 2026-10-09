@@ -155,6 +155,7 @@ from .protocol_control_source_interpretation import (
     build_source_scope_correction_prompt,
     build_source_target_review_prompt,
     source_target_context_recheck_needed,
+    source_target_cocited_units,
     build_source_unit_comparison_prompt,
     normalize_source_excerpt,
     simple_visit_action_preserves_time,
@@ -8305,7 +8306,11 @@ class ProtocolControlAgentRunner:
                                          if latest_source_target_review is not None else [])
                             if item.decision in {"covered_by_official", "covered_by_procedure", "background_context", "definition_dependency"}
                             or (item.statement_index in resumed_review_indexes
-                                and item.decision != "unresolved")
+                                and item.decision != "unresolved"
+                                and (item.decision != "additional_requirement"
+                                     or not (source_target_cocited_units(batch, wire,
+                                         {source_interpretation.statements[item.statement_index].structure_unit_id})
+                                         - {source_interpretation.statements[item.statement_index].structure_unit_id})))
                         }
                         current_coverage = {
                             entry.statement_index: entry for entry in coverage
@@ -9864,9 +9869,20 @@ class ProtocolControlAgentRunner:
                                 source_interpretation.statements[index].structure_unit_id
                                 for index in unresolved_indexes
                             }
-                            if units & unresolved_units:
+                            additional_spans = {span for unit in batch.owned_units
+                                if unit.structure_unit_id in units for span in unit.source_span_ids}
+                            unresolved_spans = {span for unit in batch.owned_units
+                                if unit.structure_unit_id in unresolved_units for span in unit.source_span_ids}
+                            shared_candidate = any(
+                                (set(candidate.source_structure_unit_ids) & units
+                                 or set(candidate.source_span_ids) & additional_spans)
+                                and (set(candidate.source_structure_unit_ids) & unresolved_units
+                                     or set(candidate.source_span_ids) & unresolved_spans)
+                                for candidate in wire.candidate_drafts
+                            )
+                            if units & unresolved_units or shared_candidate:
                                 # Unit-scoped insertion cannot authorize a still-unknown
-                                # sibling simply because a bounded insert failed.
+                                # sibling or split a shared candidate's source meaning.
                                 _require_resolved_source_target_review(
                                     batch, source_interpretation, target_review,
                                 )

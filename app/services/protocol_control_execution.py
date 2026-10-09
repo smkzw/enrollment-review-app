@@ -125,10 +125,12 @@ from app.services.protocol_control_definition_scope import (
 )
 from app.llm.logical_call_budget import LogicalCallBudget
 from app.services.protocol_control_restricted_source import (
+    _coverage_matches_current_proofs,
     _temporal_restriction_indexes,
     TEMPORAL_RESTRICTION_VERSION,
     WHOLE_UNIT_RESTRICTION_VERSION,
     PROCEDURE_RESTRICTION_VALIDATION_VERSION,
+    CITATION_CLOSURE_RESTRICTION_VALIDATION_VERSION,
     PROCEDURE_SOURCE_CONTEXT_VERSION,
     procedure_correspondence_source_gaps,
     procedure_correspondence_scope_indexes,
@@ -2080,6 +2082,8 @@ def _deep_component_identity(
                                        SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
                                        SOURCE_TARGET_COCITED_CONTEXT_VERSION,
                                        PROCEDURE_RESTRICTION_VALIDATION_VERSION,
+                                       CITATION_CLOSURE_RESTRICTION_VALIDATION_VERSION,
+                                       "source-target-additional-recovery/v1",
                                        PROCEDURE_SOURCE_CONTEXT_VERSION,
                                        RELATIVE_STAGE_PREFLIGHT_VERSION,
                                        RELATIVE_STAGE_SOURCE_DIMENSION_VERSION,
@@ -2865,7 +2869,7 @@ def _preserved_unresolved_review_proof(
     review = SourceTargetReview.model_validate(saved["source_target_review"])
     validate_source_interpretation(batch, source)
     _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(wire, batch))
-    if coverage != source_statement_coverage(batch, source, wire):
+    if not _coverage_matches_current_proofs(batch, _saved_failed_deep_run_result(batch, saved)):
         raise ValueError("原未决的来源覆盖与当前草稿不一致")
     validate_source_target_review(batch, source, coverage, review)
     unresolved = sorted(item.statement_index for item in review.items if item.decision == "unresolved")

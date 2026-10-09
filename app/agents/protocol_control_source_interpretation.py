@@ -1624,6 +1624,17 @@ def source_target_context_recheck_needed(
     )
 
 
+def source_target_cocited_units(batch, wire, selected_units):
+    owned = {unit.structure_unit_id for unit in batch.owned_units}
+    context = set()
+    if wire is not None:
+        for candidate in wire.candidate_drafts:
+            cited = set(candidate.source_structure_unit_ids) & owned
+            if cited & selected_units:
+                context.update(cited)
+    return context
+
+
 def build_source_target_review_prompt(
     batch: ProtocolControlDispositionBatch,
     interpretation: SourceInterpretation,
@@ -1701,11 +1712,7 @@ def build_source_target_review_prompt(
     ]
     selected_units = {interpretation.statements[index].structure_unit_id for index in indexes}
     context_units = set(selected_units) if include_owned_context else set()
-    if wire is not None:
-        for candidate in wire.candidate_drafts:
-            cited = set(candidate.source_structure_unit_ids) & set(owned_by_id)
-            if cited & selected_units:
-                context_units.update(cited)
+    context_units.update(source_target_cocited_units(batch, wire, selected_units))
     owned_context = ""
     if include_owned_context or context_units - selected_units:
         owned_context = (

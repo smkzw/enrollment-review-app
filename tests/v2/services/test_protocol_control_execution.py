@@ -249,6 +249,116 @@ def _independent_candidate_and_unresolved_review():
     return batch, result
 
 
+def _citation_connected_unresolved_review(*, aligned=False):
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _candidate_for_second_unit
+    batch, result = _independent_candidate_and_unresolved_review()
+    for unit, statement in zip(batch.owned_units, result.source_interpretation.statements, strict=True):
+        unit.excerpt = statement.quoted_text
+    candidate = result.partial_wire.candidate_drafts[0]
+    candidate.source_structure_unit_ids = list(batch.owned_structure_unit_ids)
+    candidate.source_span_ids = list(batch.owned_source_span_ids)
+    other = _candidate_for_second_unit()
+    atom = other.obligation_expression.groups[0].atoms[0]
+    atom.evaluation = type(atom.evaluation).model_validate(
+        _evaluation(atom.statement, "span:02", batch.owned_units[1].excerpt))
+    candidate.obligation_expression.groups[0].atoms.append(atom)
+    evidence = other.minimum_evidence[0]
+    evidence.atom_refs = [evidence.atom_refs[0].model_copy(update={"atom_index": 1})]
+    candidate.minimum_evidence.append(evidence)
+    result.partial_wire.dispositions[1].disposition = StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE
+    result.partial_wire.dispositions[1].notes = None
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire)
+    if aligned:
+        from app.agents.protocol_control_candidate_alignment import SourceCandidateAlignment, bind_candidate_alignment
+        from tests.v2.protocols.test_slice58c_control_deconstructor import _two_independent_candidate_linked_alignment_material
+        candidate.obligation_expression.groups[0].atoms[0].statement = "年龄达到18岁"
+        raw = protocol_control_execution_module.source_statement_coverage(
+            batch, result.source_interpretation, result.partial_wire)
+        payload = _two_independent_candidate_linked_alignment_material()[-1]
+        payload["items"] = payload["items"][:1]
+        alignment = SourceCandidateAlignment.model_validate(payload)
+        result.source_candidate_alignment = bind_candidate_alignment(batch, result.source_interpretation,
+            raw, result.partial_wire, alignment, alignment.model_dump_json(exclude={"proofs"}))
+        result.source_statement_coverage = [entry.model_copy(update={"status": "semantically_aligned",
+            "candidate_indexes": [0]}) if entry.statement_index == 0 else entry for entry in raw]
+        result.source_target_review.items.insert(0, result.source_target_review.items[0].model_copy(update={
+            "statement_index": 0, "decision": "additional_requirement",
+            "source_action_excerpt": result.source_interpretation.statements[0].quoted_text,
+            "unresolved_aspects": ["已有候选另有完整表达核对"], "unresolved_cause": None}))
+    return batch, result
+
+
+@pytest.mark.parametrize("defect", [None, "omitted_source", "official", "clear", "changed_value"])
+def test_citation_connected_restriction_keeps_complete_source_not_a_verified_sibling(defect):
+    batch, result = _citation_connected_unresolved_review()
+    if defect == "omitted_source":
+        batch.owned_units[0].excerpt += "；仅适用于既往接受治疗者"
+    elif defect == "official":
+        result.partial_wire.dispositions[0].disposition = StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY
+        result.partial_wire.dispositions[0].linked_official_code = "EX-01"
+    elif defect == "clear":
+        result.source_interpretation.statements[1].unresolved = []
+        result.source_target_review.items[0].decision = "additional_requirement"
+    elif defect == "changed_value":
+        result.partial_wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0].evaluation.predicate.value = 19
+    if defect == "official":
+        with pytest.raises(ProtocolControlAgentWireValidationError, match="CANDIDATE_DISPOSITION_MISMATCH"):
+            protocol_control_execution_module.restricted_batch_from_review(batch, result)
+        return
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    if defect is not None:
+        assert output is None
+        return
+    assert output is not None and not output.candidates
+    assert [item.source_structure_unit_id for item in output.restricted_statements] == ["su-01", "su-02"]
+    assert output.restricted_statements[0].limitation_kind == "consumer_unavailable"
+    assert output.restricted_statements[1].limitation_kind == "interpretation_unresolved"
+    assert all(not item.dependency_refs and item.independent_scope_proof is None
+               for item in output.restricted_statements)
+    protocol_control_execution_module._validate_deep_batch_output(batch, output)
+    assert type(output).model_validate(output.model_dump(mode="json")) == output
+
+
+@pytest.mark.parametrize("foreign", [None, "unit", "span"])
+def test_citation_restriction_closes_unit_and_span_chains_without_touching_unrelated(foreign):
+    from app.services.protocol_control_restricted_source import _citation_restricted_units
+    units = {str(n): SimpleNamespace(source_span_ids=[f"span:{n}"]) for n in range(4)}
+    candidates = [SimpleNamespace(frozen_structure_unit_ids=["0", "1"], source_span_ids=["span:0", "span:1"]),
+                  SimpleNamespace(frozen_structure_unit_ids=["2"], source_span_ids=["span:1", "span:2"]),
+                  SimpleNamespace(frozen_structure_unit_ids=["3"], source_span_ids=["span:3"])]
+    if foreign == "unit":
+        candidates[1].frozen_structure_unit_ids.append("foreign")
+    elif foreign == "span":
+        candidates[1].source_span_ids.append("foreign")
+    assert _citation_restricted_units(units, candidates, {"0"}) == (
+        {"0", "1", "2"} if foreign is None else None)
+
+
+@pytest.mark.parametrize("defect", [None, "missing_proof", "response_hash", "candidate", "coverage"])
+def test_restricted_coverage_requires_actual_bound_alignment_not_a_status_label(defect):
+    from app.services.protocol_control_restricted_source import _coverage_matches_current_proofs
+    from app.agents.protocol_control_candidate_alignment import bind_partial_candidate_alignment
+    from tests.v2.agents.test_protocol_control_candidate_alignment import _mixed_validity_alignment_material
+    batch, source, wire, raw, alignment = _mixed_validity_alignment_material()
+    bound, failures = bind_partial_candidate_alignment(batch, source, raw, wire, alignment,
+        alignment.model_dump_json(exclude={"proofs"}), [(0, 0), (1, 1)])
+    assert len(failures) == 1
+    _, result = _unresolved_batch_review()
+    result.source_interpretation, result.partial_wire, result.source_candidate_alignment = source, wire, bound
+    result.source_statement_coverage = [entry.model_copy(update={"status": "semantically_aligned",
+        "candidate_indexes": [0]}) if entry.statement_index == 0 else entry for entry in raw]
+    if defect == "missing_proof":
+        bound.proofs = []
+    elif defect == "response_hash":
+        bound.proofs[0].response_sha256 = "0" * 64
+    elif defect == "candidate":
+        wire.candidate_drafts[0].title += "已修改"
+    elif defect == "coverage":
+        result.source_statement_coverage[0].candidate_indexes = [1]
+    assert _coverage_matches_current_proofs(batch, result) == (defect is None)
+
+
 @pytest.mark.parametrize("code, message", [
     ("SOURCE_TARGET_REVIEW_UNRESOLVED", "对应关系仍需核清"),
     ("SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE", "尚缺可靠的装配核验能力"),
@@ -5481,6 +5591,8 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
     ("unresolved", "changed_proof"), ("unresolved", "restriction_error"),
     ("temporal", None), ("temporal", "changed_proof"), ("temporal", "restriction_error"),
     ("whole_temporal_definition", None),
+    ("citation", None), ("citation", "changed_proof"), ("citation", "restriction_error"),
+    ("citation_aligned", None), ("citation_aligned", "changed_proof"),
 ])
 def test_preserved_failure_revalidates_restricted_source_through_actual_job_checkpoint(
     data_paths, session_factory, monkeypatch, kind, failure,
@@ -5495,6 +5607,8 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
         batch, result = _restriction_case(kind)
         declaration_text = result.source_definition_consumers.model_dump_json()
         result.source_definition_consumers = None
+    elif kind in {"citation", "citation_aligned"}:
+        batch, result = _citation_connected_unresolved_review(aligned=kind == "citation_aligned")
     else:
         batch, result = (_independent_candidate_and_temporal_gap(same_unit=True)
                          if kind == "temporal" else _independent_candidate_and_unresolved_review())
@@ -5502,7 +5616,7 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
         result.source_interpretation.statements[1].decision_functions.append("time_validity")
     if failure == "source_clear":
         result.source_interpretation.statements[1].unresolved = []
-    if kind == "unresolved":
+    if kind in {"unresolved", "citation", "citation_aligned"}:
         result.attempts[-1].error_detail = {
             "code": "SOURCE_TARGET_REVIEW_UNRESOLVED", "statement_ids": [1],
             "source_refs": ["span:02"], "json_path": "/items",
@@ -6359,7 +6473,10 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   protocol_control_execution_module.SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_REVIEW_GAP_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
+                  protocol_control_execution_module.SOURCE_TARGET_COCITED_CONTEXT_VERSION,
                   protocol_control_execution_module.PROCEDURE_RESTRICTION_VALIDATION_VERSION,
+                  protocol_control_execution_module.CITATION_CLOSURE_RESTRICTION_VALIDATION_VERSION,
+                  "source-target-additional-recovery/v1",
                   protocol_control_execution_module.PROCEDURE_SOURCE_CONTEXT_VERSION,
                   protocol_control_execution_module.RELATIVE_STAGE_PREFLIGHT_VERSION,
                   protocol_control_execution_module.RELATIVE_STAGE_SOURCE_DIMENSION_VERSION,
@@ -6374,6 +6491,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "native-row-action-coverage/v2",
                   "native-scope-source-runtime-separation/v1",
                   "native-table-review-scope/v3", "located-publication-recovery/v1",
+                  protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   "scoped-exception-dnf/v1"))
     )
 

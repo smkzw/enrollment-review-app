@@ -15,7 +15,7 @@
   "branch": "codex/phase5-clinical-facts-profile",
   "base_branch": "codex/phase5-clinical-facts-profile",
   "worktree_path": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile",
-  "commit": "46237852",
+  "commit": "b8a6f564",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -40,17 +40,17 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "2026-10-09继续1006V1，Goal active。源码46237852的Job2f63ef87383c42f2b9dea9bff596d048已failed_final，10调用405.756969秒/exit3，43完成/44失败/46未执行；85发现及43成功零新调用复用。新包补有源共同引用上下文并绑定pending诊断输出hash，不放宽采用；C03只读审阅完成、1109相连检查通过。下一对2f63零调用预检再合法新建，旧Job/目录/原件不重跑或回改。完整共同发布、同包工作稿、UI更正及新旧结果未达；claims_complete=false，任务不归档。",
+  "notes": "2026-10-09继续1006V1，Goal active。源码b8a6f564的Jobf7cfd0a33fca4513adf51ecdf66f5da7已failed_final，7调用455.554881秒/exit3，43完成/44失败/46未执行；85发现及43成功零调用。旧负核对阻挡新共同上下文，现仅重核受影响范围；共同引用未决闭包非执行保存、实际已绑定核对在消费重验，不猜依赖。C03同批准会话续审exit0/no fallback。四模块1457pass/2新增夹具fail，修夹具后末57pass/9.23s/exit0、非末全窗重跑。当前源只读预检43/1/46、0调用/0写/hash保持；下一合法接续，不回改旧Job。完整共同发布、同包工作稿、UI更正及新旧结果未达；claims_complete=false，不归档。",
   "meta": {
     "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",
     "current_scope": "1006V1 frozen delivery window: complete same-source requirements, isolated current-node work draft, source navigation, one UI correction/supplement, affected recalculation and old/new history; R1/1001V1 retained.",
     "claims_complete": false,
-    "review_packet_status": "cocited_context_and_diagnostic_identity_verified_pending_actual_resume",
+    "review_packet_status": "citation_context_recovery_and_restricted_consumer_verified_pending_actual_resume",
     "runtime_goal_status_observed": "active",
     "current_handoff": "HANDOFF.md",
     "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",
-    "last_verified_source_commit": "46237852",
+    "last_verified_source_commit": "b8a6f564",
     "current_review_index": "review_index_20261006_1006V1.json",
     "historical_notes_20261006": "1006V1连续实施，Goal active，claims_complete=false。资料14组/24页、30事实及实际UI更正/Profile4成立；完整要求/工作稿/新报告未达。关系字段修复7a613204/822检查、末尾句界修复3472fa28/845检查已普通push；两旧原答零调用重验通过但未采用。v5合法部分恢复7调用/212.4902s，总37；29来源/24核对保存，研究目的用途及期别定义对应两项未核清。原库/旧Job不改，不重复整批或另复制大库。前端最终34检查/Ego成立，原198/展示190，原件/7份继承dirty保留。"
   }

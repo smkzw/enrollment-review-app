@@ -14110,6 +14110,36 @@ def _owned_context_target_example():
     return batch, inventory, wire, review
 
 
+def test_resume_rechecks_additional_requirement_without_reusing_a_negative_comparison():
+    from tests.v2.services.test_protocol_control_execution import _citation_connected_unresolved_review
+    batch, fixture = _citation_connected_unresolved_review()
+    inventory, wire, review = fixture.source_interpretation, fixture.partial_wire, fixture.source_target_review
+    inventory.statements[1].unresolved = []
+    review.items[0].decision = "additional_requirement"
+    review.items[0].unresolved_cause = None
+    answer = review.items[0].model_copy(update={"decision": "unresolved",
+        "unresolved_aspects": ["已有要求与例外的关系尚未核清"],
+        "unresolved_cause": "target_correspondence"})
+    coverage = source_statement_coverage(batch, inventory, wire)
+    class Transport(_FakeTransport):
+        calls = 0
+        def start_source_target_review(self, *, prompt):
+            self.calls += 1
+            assert "本次必须且只能返回这些 statement_index：[1]" in prompt
+            assert "本条完整原文关系上下文：" in prompt
+            return ProtocolControlAgentResponse(session_id="fresh-target-review",
+                text=SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[answer]).model_dump_json())
+    transport = Transport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=0, max_transport_retries=0).run(
+        batch, transport, resume_wire=wire, resume_source_interpretation=inventory,
+        resume_source_target_review=review, resume_source_statement_coverage=coverage,
+        resume_session_id="saved", output_validator=lambda _output: None)
+    # Fresh comparison, then the existing bounded local correspondence check.
+    assert transport.calls == 2
+    assert result.status == "需要核对" and result.final_output is None
+    assert result.source_target_review.items[0].decision == "unresolved"
+
+
 @pytest.mark.parametrize("mismatch", [None, "source", "target", "unknown", "single"])
 def test_owned_context_target_recheck_selects_exact_source_not_coverage(mismatch):
     from app.agents.protocol_control_source_interpretation import source_target_context_recheck_needed

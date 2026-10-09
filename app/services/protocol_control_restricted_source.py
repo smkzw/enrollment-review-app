@@ -11,6 +11,10 @@ from app.agents.protocol_control_deconstructor import (
     source_statement_coverage,
     validate_protocol_control_agent_wire,
 )
+from app.agents.protocol_control_candidate_alignment import (
+    reusable_proven_alignment_items,
+    validate_candidate_alignment,
+)
 from app.agents.protocol_control_source_interpretation import (
     SourceInterpretation,
     SourceStatementCoverage,
@@ -49,6 +53,51 @@ WHOLE_UNIT_RESTRICTION_VERSION = "source-whole-unit-restricted-disposition/v2"
 PROCEDURE_RESTRICTION_VALIDATION_VERSION = "procedure-source-restricted-retention/v3"
 RESTRICTED_DEFINITION_VALIDATION_VERSION = "restricted-definition-registration-validation/v1"
 PROCEDURE_SOURCE_CONTEXT_VERSION = "procedure-source-context-completeness/v3"
+CITATION_CLOSURE_RESTRICTION_VALIDATION_VERSION = "source-citation-restricted-retention/v1"
+
+
+def _coverage_matches_current_proofs(batch, result) -> bool:
+    """Failure checkpoints use draft indexes; only verified pairs can change status."""
+    raw = source_statement_coverage(batch, result.source_interpretation, result.partial_wire)
+    alignment = result.source_candidate_alignment
+    if alignment is None:
+        return result.source_statement_coverage == raw
+    try:
+        validate_candidate_alignment(batch, result.source_interpretation, raw, result.partial_wire, alignment)
+        proven = reusable_proven_alignment_items(
+            batch, result.source_interpretation, raw, result.partial_wire, alignment,
+        )
+    except (ValueError, TypeError, KeyError, IndexError, StopIteration):
+        return False
+    if len(proven) != sum(item.decision == "fully_expressed" for item in alignment.items):
+        return False
+    accepted = {}
+    for item in proven:
+        accepted.setdefault(item.statement_index, item.candidate_index)
+    expected = [entry.model_copy(update={"status": "semantically_aligned",
+        "candidate_indexes": [accepted[entry.statement_index]]})
+        if entry.statement_index in accepted else entry for entry in raw]
+    return result.source_statement_coverage == expected
+
+
+def _citation_restricted_units(units, candidates, seed):
+    """Restrict every citation-connected candidate, never infer medical dependency."""
+    restricted = set(seed)
+    owned_spans = {span for unit in units.values() for span in unit.source_span_ids}
+    while True:
+        spans = {span for unit_id in restricted for span in units[unit_id].source_span_ids}
+        expanded = set(restricted)
+        for candidate in candidates:
+            cited = set(candidate.frozen_structure_unit_ids)
+            if cited & restricted or set(candidate.source_span_ids) & spans:
+                if not cited <= set(units) or not set(candidate.source_span_ids) <= owned_spans:
+                    return None
+                expanded.update(cited)
+                expanded.update(unit_id for unit_id, unit in units.items()
+                    if set(unit.source_span_ids) & set(candidate.source_span_ids))
+        if expanded == restricted:
+            return restricted
+        restricted = expanded
 
 
 def _unit_statements_cover_source(unit, interpretation, indexes) -> bool:
@@ -436,8 +485,7 @@ def _whole_unit_restriction(
     review = result.source_target_review
     original = hydrate_protocol_control_agent_output(result.partial_wire, batch)
     if (check_protocol_control_batch_candidates(batch, original)
-            or result.source_statement_coverage
-            != source_statement_coverage(batch, interpretation, result.partial_wire)):
+            or not _coverage_matches_current_proofs(batch, result)):
         return None
     units = {unit.structure_unit_id: unit for unit in batch.owned_units}
     reviewed = {item.statement_index: item for item in review.items}
@@ -455,6 +503,11 @@ def _whole_unit_restriction(
     restricted_indexes = uncertain_indexes | temporal_indexes
     restricted_units = {interpretation.statements[index].structure_unit_id
                         for index in restricted_indexes}
+    seed_units = set(restricted_units)
+    restricted_units = _citation_restricted_units(units, original.candidates, seed_units)
+    if restricted_units is None:
+        return None
+    citation_expanded = restricted_units != seed_units
     by_unit: dict[str, list[int]] = {}
     for index, statement in enumerate(interpretation.statements):
         by_unit.setdefault(statement.structure_unit_id, []).append(index)
@@ -462,7 +515,10 @@ def _whole_unit_restriction(
     procedure_units = {unit_id for unit_id in restricted_units
                        if dispositions[unit_id].disposition
                        == StructureUnitDispositionKind.REQUIRED_PROCEDURE}
-    if not procedure_units and not any(len(by_unit[unit_id]) > 1 for unit_id in restricted_units):
+    if (not procedure_units and not citation_expanded
+            and not any(len(by_unit.get(unit_id, [])) > 1 for unit_id in restricted_units)):
+        return None
+    if any(unit_id not in by_unit for unit_id in restricted_units):
         return None
     coverage = {item.statement_index: item for item in result.source_statement_coverage}
     for unit_id, indexes in by_unit.items():
@@ -522,7 +578,8 @@ def _whole_unit_restriction(
         return None
     statements = []
     for unit_id in sorted(restricted_units):
-        temporal_only = not uncertain_indexes.intersection(by_unit[unit_id])
+        citation_only = unit_id not in seed_units
+        temporal_only = unit_id in seed_units and not uncertain_indexes.intersection(by_unit[unit_id])
         correspondence_only = unit_id in procedure_units and all(
             not interpretation.statements[index].unresolved
             and (reviewed[index].decision != "unresolved"
@@ -543,10 +600,12 @@ def _whole_unit_restriction(
                 restricted_statement_id=f"restricted:{digest}",
                 source_structure_unit_id=unit_id, source_statement_index=index,
                 source_quote=source.quoted_text, source_span_ids=sorted(units[unit_id].source_span_ids),
-                limitation_kind=("consumer_unavailable" if temporal_only or correspondence_only
+                limitation_kind=("consumer_unavailable" if citation_only or temporal_only or correspondence_only
                                  else "interpretation_unresolved"),
                 unresolved_dimensions=[
-                    ("同一原文单元的持续期或跨节点要求尚未完成核对，未证明各要求可独立采用；本单元整体保留待核"
+                    ("本条与尚未核清内容共同使用同一段依据，暂不能可靠区分各自影响；暂不用于判断"
+                     if citation_only else
+                     "同一原文单元的持续期或跨节点要求尚未完成核对，未证明各要求可独立采用；本单元整体保留待核"
                      if temporal_only else
                      "本条另有要求尚未完成装配，且未证明与同单元未决要求独立；完整来源保留但暂不能用于判断"
                      if index in reviewed and reviewed[index].decision == "additional_requirement" else
@@ -655,8 +714,7 @@ def _restricted_statement_batch_from_review(
                        for item in review.items)):
             return None
         original = hydrate_protocol_control_agent_output(result.partial_wire, batch)
-        if (result.source_statement_coverage
-                != source_statement_coverage(batch, interpretation, result.partial_wire)):
+        if not _coverage_matches_current_proofs(batch, result):
             return None
     else:
         if (interpretation.units_without_statement
