@@ -1675,13 +1675,30 @@ class OpenAICompatibleProtocolControlAgentTransport:
     ) -> ProtocolControlAgentResponse:
         """Repair one obligation atom while preserving the logical session."""
 
+        return self._continue_atom_repair(session_id=session_id, prompt=prompt)
+
+    def continue_numeric_predicate(
+        self, *, session_id: str, prompt: str,
+    ) -> ProtocolControlAgentResponse:
+        """Return only the authorized numeric fields; the owner keeps the atom."""
+
+        return self._continue_atom_repair(
+            session_id=session_id, prompt=prompt, numeric_predicate_only=True,
+        )
+
+    def _continue_atom_repair(
+        self, *, session_id: str, prompt: str, numeric_predicate_only: bool = False,
+    ) -> ProtocolControlAgentResponse:
+
         if not prompt.strip():
             raise ValueError("单义务原子修订提示不能为空")
         if session_id not in self._histories and session_id not in self._scoped_resume_contexts:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         # The prompt carries the frozen atom and its source. Sending the full
         # batch history would turn a one-atom repair into another full review.
-        response_format = protocol_control_atom_repair_response_format()
+        response_format = protocol_control_atom_repair_response_format(
+            numeric_predicate_only=numeric_predicate_only,
+        )
         repair_messages = self._single_requirement_messages(prompt, response_format)
         try:
             text = self._complete(

@@ -1264,6 +1264,36 @@ def test_future_prohibition_repair_receives_nested_schema(mode: str) -> None:
         assert "continuing_obligation" in call["response_format"]["json_schema"]["schema"]["properties"]
 
 
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+def test_numeric_field_patch_preserves_history_and_sends_only_authorized_schema(mode):
+    client, completions = _client(['{"wire":1}', '{"evaluation_patch":{}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    first = transport.start(prompt="完整冻结批次")
+    history = transport.history(first.session_id)
+    response = transport.continue_numeric_predicate(session_id=first.session_id, prompt="冻结数值字段")
+    assert response.session_id == first.session_id
+    assert transport.history(first.session_id) == history
+    call = completions.calls[1]
+    assert len(call["messages"]) == 1
+    if mode == "json_schema":
+        schema = call["response_format"]["json_schema"]
+        assert schema["name"] == "protocol_control_numeric_evaluation_patch_v1"
+        assert set(schema["schema"]["properties"]) == {"evaluation_patch"}
+        patch = schema["schema"]["$defs"]["NumericEvaluationPatch"]
+        assert set(patch["properties"]) == {
+            "determination_mode", "operation", "predicate", "operand_attribute"}
+        assert patch["additionalProperties"] is False
+        assert set(patch["required"]) == set(patch["properties"])
+        assert "ProtocolControlAgentWireObligationAtom" not in schema["schema"]["$defs"]
+    else:
+        assert "完整 JSON Schema" in call["messages"][0]["content"]
+        assert '"evaluation_patch"' in call["messages"][0]["content"]
+        assert call.get("response_format") == ({"type": "json_object"} if mode == "json_object" else None)
+
+
 def test_local_repairs_send_only_frozen_source_and_keep_fallback_history() -> None:
     client, completions = _client([
         '{"wire":1}', '{"atom":{}}', '{"items":[]}', '{"items":[]}', '{"candidate_draft":{}}',

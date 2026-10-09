@@ -13601,7 +13601,9 @@ def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_f
 
 @pytest.mark.parametrize("reply_kind", ["valid", "unchanged", "changed_source", "transport", "exhausted",
     "wrong_predicate", "changed_proposition", "changed_policy", "multi_number",
-    "equivalent_source_fields", "different_source_fields"])
+    "equivalent_source_fields", "different_source_fields", "patch_valid", "patch_wrong_predicate",
+    "patch_parent_excerpt", "patch_unauthorized_field", "patch_missing_field",
+    "patch_downgrade", "patch_equivalent_source_fields"])
 def test_alignment_numeric_gap_repairs_only_selected_atom_then_revalidates(reply_kind):
     batch, inventory, review, wire, alignment = _two_independent_candidate_linked_alignment_material()
     batch.owned_units[1].excerpt = "研究背景说明"
@@ -13662,19 +13664,42 @@ def test_alignment_numeric_gap_repairs_only_selected_atom_then_revalidates(reply
         def start_source_insert(self, **kwargs):
             pytest.fail("Existing source-linked atom must not create a duplicate requirement")
 
+    if reply_kind.startswith("patch_"):
+        def continue_numeric_predicate(self, *, session_id, prompt):
+            response = self.continue_atom(session_id=session_id, prompt=prompt)
+            assert "evaluation_patch" in prompt
+            assert "整段上下文仅用于理解适用关系" in prompt
+            evaluation = json.loads(response.text)["atom"]["evaluation"]
+            patch = {key: evaluation[key] for key in (
+                "determination_mode", "operation", "predicate", "operand_attribute")}
+            if reply_kind == "patch_wrong_predicate":
+                patch["predicate"]["value"] = 21
+            elif reply_kind == "patch_parent_excerpt":
+                patch["predicate"]["source_clause"] = "纳入条件：年龄至少18岁；其他要求另述。"
+            elif reply_kind == "patch_unauthorized_field":
+                patch["proposition"] = "年龄低于18岁"
+            elif reply_kind == "patch_missing_field":
+                patch.pop("operand_attribute")
+            elif reply_kind == "patch_downgrade":
+                patch.update(determination_mode="semantic", operation=None, predicate=None, operand_attribute=None)
+            elif reply_kind == "patch_equivalent_source_fields":
+                patch["predicate"]["source_clauses"] = [patch["predicate"]["source_clause"]]
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"evaluation_patch": patch}, ensure_ascii=False))
+        NumericTransport.continue_numeric_predicate = continue_numeric_predicate
+
     transport = NumericTransport([])
     result = ProtocolControlAgentRunner(max_schema_repairs=0 if reply_kind == "exhausted" else 2).run(
         batch, transport, resume_wire=wire, resume_source_interpretation=inventory,
         resume_session_id="saved-wire", output_validator=lambda _output: None)
     assert transport.atom_calls == (0 if reply_kind in {"exhausted", "multi_number"} else 1), [
         (attempt.error_classes, attempt.issues) for attempt in result.attempts]
-    if reply_kind in {"valid", "equivalent_source_fields"}:
+    if reply_kind in {"valid", "equivalent_source_fields", "patch_valid", "patch_equivalent_source_fields"}:
         assert result.final_output is not None, [(attempt.error_classes, attempt.issues) for attempt in result.attempts]
         assert transport.alignment_calls == 2
         final = result.partial_wire.model_dump(mode="json")
         restored = final["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]
         expected_atom = good_atom.model_dump(mode="json")
-        if reply_kind == "equivalent_source_fields":
+        if reply_kind in {"equivalent_source_fields", "patch_equivalent_source_fields"}:
             predicate = expected_atom["evaluation"]["predicate"]
             predicate["source_clauses"] = [predicate["source_clause"]]
             predicate["source_clause"] = None
@@ -13687,9 +13712,10 @@ def test_alignment_numeric_gap_repairs_only_selected_atom_then_revalidates(reply
         assert result.final_output is None
         assert result.partial_wire.model_dump(mode="json") == original
         assert transport.alignment_calls <= 2
-        if reply_kind in {"changed_proposition", "changed_policy"}:
+        if reply_kind in {"changed_proposition", "changed_policy", "patch_parent_excerpt", "patch_unauthorized_field",
+                          "patch_missing_field", "patch_downgrade"}:
             assert any("ATOM_REPAIR_INVALID" in attempt.error_classes for attempt in result.attempts)
-        if reply_kind == "wrong_predicate":
+        if reply_kind in {"wrong_predicate", "patch_wrong_predicate"}:
             assert transport.alignment_calls == 2
             assert any(attempt.raw_output_text and '"value": 21' in attempt.raw_output_text
                        for attempt in result.attempts)

@@ -1716,13 +1716,32 @@ def protocol_control_calendar_bound_repair_response_format() -> dict[str, object
     }
 
 
-def protocol_control_atom_repair_response_format() -> dict[str, object]:
+def protocol_control_atom_repair_response_format(
+    *, numeric_predicate_only: bool = False,
+) -> dict[str, object]:
     """Restrict a structural repair to one obligation atom."""
 
     original = protocol_control_agent_json_schema()
     definitions = original["$defs"]
+    if numeric_predicate_only:
+        fields = ("determination_mode", "operation", "predicate", "operand_attribute")
+        definitions = deepcopy(definitions)
+        properties = {
+            "determination_mode": {"type": "string", "const": "deterministic"},
+            "operation": {"type": "string", "const": "value_comparison"},
+            "predicate": {"$ref": "#/$defs/AtomicPredicate"},
+            "operand_attribute": {"type": "string", "const": "value"},
+        }
+        definitions["NumericEvaluationPatch"] = {
+            "type": "object",
+            "properties": properties,
+            "required": list(fields),
+            "additionalProperties": False,
+        }
+    root_name = "NumericEvaluationPatch" if numeric_predicate_only else "ProtocolControlAgentWireObligationAtom"
+    root_field = "evaluation_patch" if numeric_predicate_only else "atom"
     reachable: set[str] = set()
-    pending: list[str] = ["ProtocolControlAgentWireObligationAtom"]
+    pending: list[str] = [root_name]
     while pending:
         name = pending.pop()
         if name in reachable:
@@ -1742,15 +1761,15 @@ def protocol_control_atom_repair_response_format() -> dict[str, object]:
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": "protocol_control_atom_repair_v1",
+            "name": "protocol_control_numeric_evaluation_patch_v1" if numeric_predicate_only else "protocol_control_atom_repair_v1",
             "strict": True,
             "schema": {
                 "$defs": {name: definitions[name] for name in definitions if name in reachable},
                 "type": "object",
                 "properties": {
-                    "atom": {"$ref": "#/$defs/ProtocolControlAgentWireObligationAtom"}
+                    root_field: {"$ref": f"#/$defs/{root_name}"}
                 },
-                "required": ["atom"],
+                "required": [root_field],
                 "additionalProperties": False,
             },
         },
@@ -6796,11 +6815,28 @@ def _merge_obligation_atom_repair(
 
     try:
         payload = json.loads(raw_text)
+        field_patch = False
+        if numeric_predicate_only and isinstance(payload, dict) and set(payload) == {"evaluation_patch"}:
+            patch = payload["evaluation_patch"]
+            allowed = {"determination_mode", "operation", "predicate", "operand_attribute"}
+            if not isinstance(patch, dict) or set(patch) != allowed:
+                raise ValueError("数值修订必须且仅能包含四个获准的求值字段")
+            if (patch["determination_mode"] != "deterministic"
+                    or patch["operation"] != "value_comparison"
+                    or not isinstance(patch["predicate"], dict)
+                    or patch["operand_attribute"] != "value"):
+                raise ValueError("数值比较修订不得删除或降级已定位的比较条件")
+            candidate_index, group_index, atom_index = path
+            frozen_atom = deepcopy(baseline["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index])
+            frozen_atom["evaluation"].update(patch)
+            payload = {"atom": frozen_atom}
+            field_patch = True
         if not isinstance(payload, dict) or set(payload) != {"atom"}:
             raise ValueError("义务原子修订只接受 atom")
         if _find_forbidden_provider_key(payload) is not None:
             raise ValueError("义务原子修订不得填写系统身份")
-        if isinstance(payload["atom"], dict) and isinstance(payload["atom"].get("time_constraint"), dict):
+        if (not field_patch and isinstance(payload["atom"], dict)
+                and isinstance(payload["atom"].get("time_constraint"), dict)):
             _normalize_absent_time_bound_flags(payload["atom"])
         if numeric_predicate_only and isinstance(payload["atom"], dict):
             predicate = (payload["atom"].get("evaluation") or {}).get("predicate")
@@ -6808,7 +6844,8 @@ def _merge_obligation_atom_repair(
                     and predicate.get("source_clauses") == [predicate["source_clause"]]):
                 # Equivalent duplicate source fields are formatting, not a choice of evidence.
                 predicate["source_clause"] = None
-        _preserve_unstated_observation_selection(payload["atom"])
+        if not field_patch:
+            _preserve_unstated_observation_selection(payload["atom"])
         candidate_index, group_index, atom_index = path
         merged = deepcopy(dict(baseline))
         original = merged["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index]
@@ -6842,7 +6879,7 @@ def _build_obligation_atom_repair_prompt(
     baseline: Mapping[str, Any],
     path: tuple[int, int, int],
     problem: str,
-    *, numeric_predicate_only: bool = False,
+    *, numeric_predicate_only: bool = False, field_patch: bool = False,
 ) -> str:
     candidate_index, group_index, atom_index = path
     candidate = baseline["candidate_drafts"][candidate_index]
@@ -6857,6 +6894,25 @@ def _build_obligation_atom_repair_prompt(
         for unit in batch.owned_units
         if unit.structure_unit_id in owned_ids
     ]
+    if field_patch:
+        if not numeric_predicate_only:
+            raise ValueError("仅数值求值修订支持字段补丁")
+        return (
+            "只修订冻结原子的四个数值求值字段，不重写整个原子，不新增临床含义。"
+            "只返回含 evaluation_patch 的 JSON；补丁必须且仅能包含 determination_mode、"
+            "operation、predicate、operand_attribute。原句、时间、研究者判断、观察采用政策、"
+            "来源和兄弟原子由宿主原样保留。不得把它们放进补丁。"
+            "本次仅补已定位的数值比较：determination_mode 为 deterministic，operation 为 "
+            "value_comparison，predicate 非空，operand_attribute 为 value；无法支持时不得伪造比较。"
+            "predicate 的比较方向、数值和单位必须由原文支持；不能通过改变阈值解决结构错误。"
+            "predicate.source_clause 或 source_clauses 中每个逐字摘录必须包含在冻结原子"
+            "evaluation.source_excerpts 的某一项中。整段上下文仅用于理解适用关系，"
+            "不得用整段替代原子已冻结的局部摘录；需要扩大来源或改动原句时，不得在本次补丁中做。"
+            "source_clause 与 source_clauses 互斥；单段用前者，多段用后者。"
+            "原文存在单位必须保留；不得补推时间或观察政策，不得声称已采用或已通过。\n"
+            f"问题：{problem}\n原子位置：{path}\n"
+            f"冻结原子：{_stable_json(atom)}\n冻结上下文：{_stable_json(sources)}"
+        )
     return (
         "仅修订一个已有义务原子的结构，不新增临床含义。"
         "原句、义务类型、强度、来源定位、后续义务和研究者判断属性必须原样保留；"
@@ -9743,7 +9799,8 @@ class ProtocolControlAgentRunner:
                                 numeric_failures = [failure for failure in alignment_failures
                                     if failure.get("reason") == "numeric_predicate_missing"
                                     and len(failure.get("atom_paths", [])) == 1]
-                                atom_reader = getattr(transport, "continue_atom", None)
+                                patch_reader = getattr(transport, "continue_numeric_predicate", None)
+                                atom_reader = patch_reader if callable(patch_reader) else getattr(transport, "continue_atom", None)
                                 if (len(numeric_failures) == 1
                                         and numeric_failures[0]["statement_ids"] == cited_unexpressed
                                         and callable(atom_reader)
@@ -9763,7 +9820,7 @@ class ProtocolControlAgentRunner:
                                             atom_response = atom_reader(session_id=session_id,
                                                 prompt=_build_obligation_atom_repair_prompt(
                                                     batch, baseline, path, _stable_json(failure),
-                                                    numeric_predicate_only=True))
+                                                    numeric_predicate_only=True, field_patch=callable(patch_reader)))
                                             if atom_response.session_id != session_id:
                                                 raise ValueError("义务局部修订不得更换原会话")
                                             revised = _merge_obligation_atom_repair(
