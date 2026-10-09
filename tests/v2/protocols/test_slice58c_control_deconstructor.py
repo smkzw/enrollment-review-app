@@ -13591,7 +13591,8 @@ def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_f
 
 
 @pytest.mark.parametrize("reply_kind", ["valid", "unchanged", "changed_source", "transport", "exhausted",
-    "wrong_predicate", "changed_proposition", "changed_policy", "multi_number"])
+    "wrong_predicate", "changed_proposition", "changed_policy", "multi_number",
+    "equivalent_source_fields", "different_source_fields"])
 def test_alignment_numeric_gap_repairs_only_selected_atom_then_revalidates(reply_kind):
     batch, inventory, review, wire, alignment = _two_independent_candidate_linked_alignment_material()
     batch.owned_units[1].excerpt = "研究背景说明"
@@ -13639,7 +13640,12 @@ def test_alignment_numeric_gap_repairs_only_selected_atom_then_revalidates(reply
             elif reply_kind == "changed_policy":
                 atom.evaluation = atom.evaluation.model_copy(update={
                     "observation_policy": atom.evaluation.observation_policy.model_copy(update={"mode": "any"})})
-            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"atom": atom.model_dump(mode="json")}, ensure_ascii=False))
+            response_atom = atom.model_dump(mode="json")
+            if reply_kind in {"equivalent_source_fields", "different_source_fields"}:
+                predicate = response_atom["evaluation"]["predicate"]
+                predicate["source_clauses"] = [predicate["source_clause"] if reply_kind == "equivalent_source_fields"
+                                              else "另一段原文"]
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"atom": response_atom}, ensure_ascii=False))
 
         def continue_candidate(self, **kwargs):
             pytest.fail("Known atom scope must not expand to a full candidate")
@@ -13653,12 +13659,19 @@ def test_alignment_numeric_gap_repairs_only_selected_atom_then_revalidates(reply
         resume_session_id="saved-wire", output_validator=lambda _output: None)
     assert transport.atom_calls == (0 if reply_kind in {"exhausted", "multi_number"} else 1), [
         (attempt.error_classes, attempt.issues) for attempt in result.attempts]
-    if reply_kind == "valid":
+    if reply_kind in {"valid", "equivalent_source_fields"}:
         assert result.final_output is not None, [(attempt.error_classes, attempt.issues) for attempt in result.attempts]
         assert transport.alignment_calls == 2
         final = result.partial_wire.model_dump(mode="json")
         restored = final["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]
-        assert restored == good_atom.model_dump(mode="json")
+        expected_atom = good_atom.model_dump(mode="json")
+        if reply_kind == "equivalent_source_fields":
+            predicate = expected_atom["evaluation"]["predicate"]
+            predicate["source_clauses"] = [predicate["source_clause"]]
+            predicate["source_clause"] = None
+            assert any(attempt.raw_output_text and '"source_clause": "年龄至少18岁"' in attempt.raw_output_text
+                       for attempt in result.attempts)
+        assert restored == expected_atom
         final["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0] = original["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]
         assert final == original
     else:

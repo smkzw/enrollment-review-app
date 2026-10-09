@@ -159,7 +159,8 @@ def _conditioned_action_material(prefix="已完成核查者"):
                    "source_span_ids": list(unit.source_span_ids), "source_excerpts": [part]})
                    for part in ("领取材料", "回收材料")]
     for atom in group.atoms:
-        atom.evaluation = atom.evaluation.model_copy(update={"proposition": atom.statement})
+        atom.evaluation = type(atom.evaluation).model_validate(
+            _evaluation(atom.statement, unit.source_span_ids[0], atom.source_excerpts[0]))
     condition = {"statement": prefix, "evaluation": _evaluation(prefix, unit.source_span_ids[0], text),
         "source_span_ids": list(unit.source_span_ids), "source_excerpts": [text],
         "time_constraint": None, "requires_professional_judgment": False}
@@ -216,6 +217,52 @@ def test_source_bound_common_trigger_preserves_visit_not_date_window(mutation):
         for stage in batch.known_workflow_stage_targets:
             stage.source_span_ids = []
     if mutation not in {None, "conditional"}:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+
+
+@pytest.mark.parametrize("mutation", [None, "number_only", "wrong_direction", "wrong_unit", "missing_trigger", "unscoped",
+    "whole_quote_unscoped", "lost_quantifier", "lost_exception"])
+def test_conditioned_numeric_consequence_uses_own_quote_without_losing_parent_scope(mutation):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentWire
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _evaluation
+    batch, source, wire, coverage, alignment = _conditioned_action_material()
+    old, replacement = "领取材料", "领取次数至多3次"
+    unit = batch.owned_units[0]
+    full_consequence = ("任一访视" + replacement if mutation == "lost_quantifier" else
+                        replacement + "，尚未同意者除外" if mutation == "lost_exception" else replacement)
+    unit.excerpt = unit.excerpt.replace(old, full_consequence).replace("，回收材料", "")
+    unit.member_texts = [unit.excerpt]
+    source.statements[0].quoted_text = source.statements[0].quoted_text.replace(old, full_consequence).replace("，回收材料", "")
+    source.statements[0].decision_functions = ["action", "threshold"]
+    alignment.items[0].source_excerpt = source.statements[0].quoted_text
+    alignment.items[0].candidate_atom_quotes = [alignment.items[0].candidate_atom_quotes[0], replacement]
+    payload = json.loads(wire.model_dump_json().replace(old, full_consequence).replace("，回收材料", ""))
+    group = payload["candidate_drafts"][0]["obligation_expression"]["groups"][0]
+    group["atoms"] = group["atoms"][:1]
+    atom = group["atoms"][0]
+    atom["statement"] = replacement
+    if mutation in {"whole_quote_unscoped", "lost_quantifier", "lost_exception"}:
+        atom["source_excerpts"] = [source.statements[0].quoted_text]
+    evaluation = _evaluation(replacement, unit.source_span_ids[0], replacement)
+    evaluation.update(determination_mode="deterministic", operation="value_comparison", operand_attribute="value",
+        predicate={"predicate_id": "synthetic-count", "subject": "领取", "attribute": "次数",
+                   "source_clause": replacement, "comparator": "lte", "value": 3, "unit": "次"})
+    if mutation == "number_only":
+        evaluation["predicate"]["source_clause"] = "3"
+    elif mutation == "wrong_direction":
+        evaluation["predicate"]["comparator"] = "gte"
+    elif mutation == "wrong_unit":
+        evaluation["predicate"]["unit"] = "天"
+    atom["evaluation"] = evaluation
+    wire = ProtocolControlAgentWire.model_validate(payload)
+    if mutation == "missing_trigger":
+        alignment.items[0].candidate_atom_quotes.pop(0)
+    elif mutation in {"unscoped", "whole_quote_unscoped"}:
+        wire.candidate_drafts[0].obligation_expression.groups[0].applies_to_trigger_branch_indexes = []
+    if mutation:
         with pytest.raises(ValueError):
             validate_candidate_alignment(batch, source, coverage, wire, alignment)
     else:

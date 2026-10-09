@@ -8,7 +8,9 @@
 
 ## 当前身份
 
-当前最新真实终态：源码43928e2779dc52b1560c3378298df9dc4f66d785的Jobcbf562cbfc7e46999e85d8fbe68d04c1为failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED；1调用149.215157秒/exit3，43completed、44failed_final、46queued。exec91631结束，85发现及43成功零新调用。原答中操作句有效，次数句缺确定比较；旧整答校验使有效兄弟未保存。新代码只读重验保留有效项、定位唯一原子，未调用模型或写库，不把重验当采用。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。
+当前最新真实终态：源码931a50c0的Job4e6f940ad400427d87301658e506984e为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID；2调用218.128199秒/exit3，43completed、44failed_final、46queued。exec60695结束，85发现及43成功零新调用。有效操作兄弟实际已保存；次数回包重复填写两个互斥的同源字段，ATOM_REPAIR_INVALID，不是端点故障或缺临床原件。旧Job/原件/保护库/来源库保持，0共同发布/启用/签发。
+
+当前增量只允许精确重复的来源字段折叠，原答不改；局部比较只能省略已逐分支证明的共同前提、保留完整后果。任意数字片段方案已撤回，整摘录+短比较漏量词/例外反例现拒；不改单位/临床值/观察政策。Grok同会话续审294.278秒/exit0/no fallback，末收紧所有者验证；最终三相连1040pass/10.55秒/exit0/v3，非临床验收。下一从4e6f最新预检再合法创建，新增量尚未真实运行。细账见implement及所有者取舍，完整共同发布/病例/UI更正/Q3仍未达。
 
 当前逐项保存/原子修订包已实现：完整原答hash绑定、坏身份整拒、局部坏含义不抹合法兄弟；不完整结论保留为不完整。触发分支显式全部绑定、阶段边界、唯一数值方向、修订只改四个求值字段、失败回原稿及共用预算均有反例。单批准C03 Grok/high，session318e06ad-e6b0-4d87-8b4d-8e38660ff615，781.912秒/exit0/no fallback/1轮；四项风险采纳，末修所有者验证，顾问未读临床或跑测试。最终1029相连检查13.48秒/exit0/v8，不累加中间失败窗；详见implement及reviews/rv1006-alignment-item-recovery-owner-disposition-20261009.md。新包尚未真实运行；下一最新预检以cbf562为来源，合法新建并核90步，原43成功不重复读取。共同发布、新病例工作稿、正式UI更正及Q3仍未完成。
 
@@ -32,15 +34,15 @@
 |---|---|
 | 唯一worktree | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile |
 | 分支/任务 | codex/phase5-clinical-facts-profile；09-11-e2e-eligibility-review |
-| 当前代码基础 | 43928e2779dc52b1560c3378298df9dc4f66d785已push；逐项恢复包按明确文件提交后冻结新prepare |
-| 当前最新真实Job | cbf562cbfc7e46999e85d8fbe68d04c1，failed_final；exec91631结束，不复活旧终态 |
-| 最新真实运行 | 源码43928e27，43completed/44failed_final/46queued；1调用149.215157秒/exit3 |
+| 当前代码基础 | 931a50c0已push；条件数值来源增量按明确文件提交后冻结新prepare |
+| 当前最新真实Job | 4e6f940ad400427d87301658e506984e，failed_final；exec60695结束，不复活旧终态 |
+| 最新真实运行 | 源码931a50c0，43completed/44failed_final/46queued；2调用218.128199秒/exit3 |
 | 上游第23失败检查点 | c1fea38816e84c729b9b1587a8818619；已由a513局部恢复保存，旧原答/hash保持，不回改成功 |
 | 当前隔离DB | /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3 |
-| 真实产物 | 同根/rv1006-candidate-closure-api-20261009-v1，prepare/execute保存；第44检查点9906bbc5bf604edbb4833857244fbb75；不覆盖/重跑 |
+| 真实产物 | 同根/rv1006-alignment-item-recovery-api-20261009-v1，prepare/execute保存；第44检查点c24db052640f4588ada92088d9993f6a；不覆盖/重跑 |
 | 模型路线 | 官方OmniRouter/cms-router/glm-5.3-flash/high；跨章Ollama cloud/deepseek-v4.1-flash/high，输出65536，产品自己的harness直连 |
 | 当前新预检 | 同根/rv1006-candidate-closure-preflight-20261009-v2.json：43reusable/1resume_partial/46refresh；0调用/0写/DBhash保持，完整90步创建计划需逐项一致 |
-| 新代码实际临床运行 | 来源闭包包已在cbf562实际运行；逐项恢复包尚未新运行，未共同发布/新病例工作稿 |
+| 新代码实际临床运行 | 逐项恢复包已在4e6f实际运行；条件数值来源增量尚未新运行，未共同发布/新病例工作稿 |
 | 继承dirty | 7份旧delivery文件未动，不stage；大量继承untracked不清理/不批量stage |
 | 外部可复查范围 | Git源码/合成用例/净化工程报告；真实原件、DB、提示、原答和病例截图仅本机受控可读，外部审阅不可读 |
 

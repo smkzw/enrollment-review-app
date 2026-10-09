@@ -837,11 +837,27 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                                 and "threshold" not in functions and not directions):
                 if len(numbers) != 1 or len(directions) != 1 or not predicates:
                     raise ValueError("数值原文不能由模糊比较条件宣布完整")
+                conditioned_consequences = []
+                for group in candidate.obligation_expression.groups:
+                    group_selected = [atom for atom in group.atoms if atom in obligation_selected]
+                    if not _conditioned_obligations_cover_source(
+                            source, scope, candidate, group, group_selected, selected_atoms):
+                        conditioned_consequences = []
+                        break
+                    fragments = [_source_fragment(source, scope, normalize_source_excerpt(quote))
+                                 for atom in group_selected for quote in atom.source_excerpts]
+                    offset = min(source.index(fragment) for fragment in fragments if fragment is not None)
+                    conditioned_consequences.append(source[offset:].strip("，,。；;：: "))
                 for predicate in predicates:
                     clauses = [normalize_source_excerpt(value)
                                for value in predicate.exact_source_clauses]
+                    # Only a proved common trigger may be omitted; retain the entire consequence.
+                    comparison_source_preserved = any(source in clause or (
+                        conditioned_consequences and clause in source
+                        and all(consequence in clause for consequence in conditioned_consequences)
+                    ) for clause in clauses)
                     if (predicate.comparator.value not in directions
                             or str(predicate.value) not in numbers
-                            or not any(source in clause for clause in clauses)
+                            or not comparison_source_preserved
                             or (predicate.unit and normalize_source_excerpt(predicate.unit) not in source)):
                         raise ValueError("候选比较方向、数值或单位与原文不一致")

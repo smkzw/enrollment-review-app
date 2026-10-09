@@ -6798,6 +6798,12 @@ def _merge_obligation_atom_repair(
             raise ValueError("义务原子修订不得填写系统身份")
         if isinstance(payload["atom"], dict) and isinstance(payload["atom"].get("time_constraint"), dict):
             _normalize_absent_time_bound_flags(payload["atom"])
+        if numeric_predicate_only and isinstance(payload["atom"], dict):
+            predicate = (payload["atom"].get("evaluation") or {}).get("predicate")
+            if (isinstance(predicate, dict) and predicate.get("source_clause")
+                    and predicate.get("source_clauses") == [predicate["source_clause"]]):
+                # Equivalent duplicate source fields are formatting, not a choice of evidence.
+                predicate["source_clause"] = None
         _preserve_unstated_observation_selection(payload["atom"])
         candidate_index, group_index, atom_index = path
         merged = deepcopy(dict(baseline))
@@ -6852,6 +6858,9 @@ def _build_obligation_atom_repair_prompt(
         "原句、义务类型、强度、来源定位、后续义务和研究者判断属性必须原样保留；"
         + ("本次仅允许修订 evaluation 的 determination_mode、operation、predicate、operand_attribute；"
            "时间字段、命题、观察采用政策及其他所有字段必须原样保留。"
+           "比较条件的source_clause与source_clauses互斥：单段填写source_clause时source_clauses为空；"
+           "多段填写source_clauses时source_clause为null，不能同时填写。"
+           "原文有次数、天数等单位时必须保留该单位，不能改写为unitless；只有真正无量纲的值才用unitless。"
            if numeric_predicate_only else "只能根据冻结原文修订求值和时间字段。")
         + "若原文无法支持修订，不得猜测。"
         "返回的是完整原子，不是单个字段补丁：数值比较的单位须按原文填写，"
