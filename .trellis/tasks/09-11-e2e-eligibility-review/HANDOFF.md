@@ -2,13 +2,13 @@
 
 ## 当前事实（替代下方历史“当前”表述）
 
-实际源码fb18725743b12b3b9583fdf660f4ea703ebe8521已push，合法Job7f5f9d2cb8ae4bf1b009b3a2b852670c failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，2物理调用212.5900415419601秒/exit3。85发现/44深审零新调用，44完成/45失败/45未执行。检查点d6f8bcf48d8d435a97c35c0e01fee126，payload sha d1c2565f00521dcb4b237323f166d4109acd57f6778d3ed469ab1f4b092c60ba；仅来源解释有效，无合法partial_wire/source_target_review。第二实际请求为items观察政策补充，未用单候选no-repeat修订Schema，也未进入定位重复检查。旧Job/来源库/保护库保持，无共同发布/启用/签发。
+已push源码ea69c598c1e852649fd29be1e528ad96a10f3c78的合法Job e9d430bde1f348e89c1a04005238fa52 failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，7调用282.43470083305147秒/exit3；85发现及44深审零新调用，44完成/45失败/45未执行。检查点636ce6401fdb4a459f4c67ca97b2b5d9，sha9dca2e4e026306a549632742d9babcd326cda215176ae6ad8fb653708513684d，仅来源解释有效。来源定位重复停止实际触发，旧Job/保护库/来源库保持，无发布/启用/签发。
 
-当前首因：多候选缺观察说明经局部补充后，验证才揭示被遮蔽的日期属性缺失；分支提前退出。最小接线仅按typed日期路径用既有字段工具，保留政策/原文/兄弟/阈值，仍完整校验且共用同repair预算/会话。非日期次生错误、缺reader、错位置、额外字段、换会话、未决日期和额度耗尽失败关闭，不退回整组。已有Schema修复保留为一致性成果，不称本次实际效果已证。
+当前因果修复：整句混合要求中的括号禁令已为有源独立原子，存在性校验不能仍要求它重复全部后果；但原首提案会漏括号外条件，独审反例采纳后要求同一候选逐字引用覆盖整句全文，不借另一候选、不猜重复位置、不删除外部条件。v48只证引用保留，语义/条件/例外/来源目标仍核查。另一原子时间缺失是真错误，仍拒；服务补传来源hash，不补临床日期。冻结首答只读经实际消费门重放只剩时间缺失，拆离条件的后来回答仍拒；0模型/不写库/不改旧proof，非真实恢复。
 
-集中验证：三相连最终1502passed/115.13秒/exit0/5SWIG，JUnit artifacts/rv1006-sequential-field-recovery-connected-20261010-v2.xml；首1499pass/1fail为新时间夹具默认字段，修夹具非降产品门，不累加。批准C03 CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max/session01a12229-5f16-755d-a91d-35d4ba1cf6ec，95.156秒/exit0/no fallback，120min完成等待。实际11读超过10并读了未列transport，报告保留限制；无测试/临床/HEAD diff，程序分离非独立模型金标。采纳其他次生错误反例；额外字段forbid及实际提示对象由所有者确认，不无据删字段。取舍reviews/rv1006-sequential-field-recovery-owner-disposition-20261010.md。当前只读预检rv1006-sequential-fields-preflight-20261010-v1.json：44reuse/1partial/45refresh、0模型/0写/hash保持。私有产物根/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003，本机可读，外部不可读；不交付临床原文/原答/库/环境。
+三相连最终1611passed/112.29秒/exit0/5SWIG、git diff --check通过。批准C03 CodeBuddy/DeepSeek/max/session01a1223d-4646-771a-81d1-155312fe9a81，首154.575/续194.39秒/exit0/no fallback，120min完成等待，8/8和3/3源码只读；未读临床/库/env、不测试。同模型家族仅程序分离，续轮未读条件函数及测试，所有者完整读核，不冒称全语义已独审。取舍reviews/rv1006-parenthetical-source-coverage-owner-disposition-20261010.md。
 
-下一冻结修复源码，合法入口新建并逐项核90步复用计划后继续未完成范围。既有单未决继续独立读取政策可用于新作业，不原地改旧Job；第二未决仍停止，发布仍完整验门。完整官方/跨章同源包、同包病例当前节点工作稿、正式UI更正与新旧报告均未达。Goal active，claims_complete=false；本文件不是暂停指令。不重复旧43/44读数，不再复制10GB隔离库，不修改七份继承dirty。
+下一仅当前合同只读预检、冻结代码后合法新建并核90步计划，继续未完成范围；不复活旧Job/不重跑已有输出目录/不复制10GB库。完整官方与跨章同源包、同包病例当前节点工作稿、UI有源更正后的新旧结果均未达。Goal active、claims_complete=false，本文件不是暂停。七份继承dirty和私人临床原答/原件/数据库/env保持，外部审阅仅可获得净化代码/合成测试，不能把本机私有路径当外部可读。
 
 ## 历史记录（以下不覆盖上述当前事实）
 

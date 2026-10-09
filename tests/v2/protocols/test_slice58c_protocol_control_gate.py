@@ -425,6 +425,74 @@ def test_full_paragraph_quote_covers_only_the_prohibition_expressed_by_atom() ->
     assert _uncovered_enrollment_prohibitions(batch, output) == ()
 
 
+@pytest.mark.parametrize("variant, expected_count", [
+    ("fullwidth", 0), ("ascii", 0), ("wrong_source", 1),
+    ("changed_action", 1), ("missing_qualifier", 1), ("second_missing", 1),
+    ("outside_prohibition", 1), ("nested", 1), ("mismatched", 1),
+    ("missing_context", 1), ("borrowed_context", 1), ("changed_context", 1),
+])
+def test_parenthetical_prohibition_presence_does_not_require_other_actions_in_atom(
+    variant: str, expected_count: int,
+) -> None:
+    from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
+
+    prohibition = "复核前不得改变原有治疗方案"
+    excerpt = f"筛选期发现检查异常时，允许复核（{prohibition}），结果正常后进入后续流程。"
+    atom = SimpleNamespace(
+        statement=prohibition, source_excerpts=[prohibition], source_span_ids=["span"],
+    )
+    context = SimpleNamespace(
+        source_span_ids=["span"], source_excerpts=[
+            "筛选期发现检查异常时", "允许复核", "结果正常后进入后续流程",
+        ],
+    )
+    if variant == "ascii":
+        excerpt = excerpt.replace("（", "(").replace("）", ")")
+    elif variant == "wrong_source":
+        atom.source_span_ids = ["another-span"]
+    elif variant == "changed_action":
+        atom.statement = "复核前不得新增治疗"
+        atom.source_excerpts = [atom.statement]
+    elif variant == "missing_qualifier":
+        atom.statement = "不得改变原有治疗方案"
+        atom.source_excerpts = [atom.statement]
+    elif variant == "second_missing":
+        excerpt = excerpt.replace("），", "）（基线前不得改变检查方法），")
+    elif variant == "outside_prohibition":
+        excerpt = excerpt.replace("允许复核", "不得提前结束核查，允许复核")
+    elif variant == "nested":
+        excerpt = excerpt.replace("（复核前", "（仅限特定情形（复核前").replace("），", "）），")
+    elif variant == "mismatched":
+        excerpt = excerpt.replace("（", "(")
+    elif variant == "missing_context":
+        context.source_excerpts = []
+    elif variant == "borrowed_context":
+        context.source_span_ids = ["another-span"]
+    elif variant == "changed_context":
+        context.source_excerpts[0] = "筛选期所有受试者"
+    batch = SimpleNamespace(
+        owned_units=[SimpleNamespace(
+            structure_unit_id="unit", excerpt=excerpt, source_span_ids=["span"],
+            heading_path=["筛选期"], table_context=None,
+        )], known_official_targets=[], known_procedure_targets=[],
+    )
+    output = SimpleNamespace(
+        dispositions=[SimpleNamespace(
+            structure_unit_id="unit", disposition=StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+            linked_control_candidate_ids=["candidate"],
+        )], candidates=[SimpleNamespace(
+            control_candidate_id="candidate",
+            semantics=SimpleNamespace(
+                trigger_expression=SimpleNamespace(groups=[SimpleNamespace(atoms=[context])]),
+                obligation_expression=SimpleNamespace(groups=[SimpleNamespace(atoms=[atom])]),
+            ),
+        )],
+    )
+    assert len(_uncovered_enrollment_prohibitions(batch, output)) == expected_count
+    # This proves presence, not clinical equivalence or authorization to publish.
+    assert atom.statement == atom.source_excerpts[0]
+
+
 def test_split_current_and_future_prohibition_requires_same_action_and_source() -> None:
     from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
 

@@ -62,7 +62,7 @@ from app.protocols.source_time_fragments import (
 from app.protocols.control_scope_sources import immediate_cell_scope_label, validate_scope_citations
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v47"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v48"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -221,6 +221,56 @@ def _split_prohibition_atom_covers_clause(clause: str, atom: object) -> bool:
         for first, second in ((current_prefix, future_prefix), (future_prefix, current_prefix))
         for separator in ("、", "，", ",", "和", "及", "与")
     )
+
+
+def _parenthetical_prohibitions_are_quoted(
+    clause: str, atoms: Sequence[object], source_span_ids: Sequence[str],
+) -> bool:
+    """Check literal presence only; conditional meaning still needs source review."""
+
+    fragments = list(re.finditer(r"（[^（）()]+）|\([^（）()]+\)", clause))
+    remainder = re.sub(r"（[^（）()]+）|\([^（）()]+\)", "", clause)
+    if not fragments or any(char in remainder for char in "（）()"):
+        return False
+    if _PROHIBITION_WORD_RE.search(remainder):
+        return False
+    prohibitions = [match.group()[1:-1] for match in fragments
+                    if _PROHIBITION_WORD_RE.search(match.group()[1:-1])]
+    if not prohibitions:
+        return False
+    allowed_spans = set(source_span_ids)
+    grounded_atoms = [atom for atom in atoms
+                      if bool(getattr(atom, "source_span_ids", ()))
+                      and set(getattr(atom, "source_span_ids", ())) <= allowed_spans]
+    for fragment in prohibitions:
+        normalized = _normalize_prohibition_quote(fragment)
+        if not any(
+            _normalize_prohibition_quote(str(getattr(atom, "statement", ""))) == normalized
+            and any(_normalize_prohibition_quote(quote) == normalized
+                    for quote in getattr(atom, "source_excerpts", ()) if isinstance(quote, str))
+            for atom in grounded_atoms
+        ):
+            return False
+    # Presence cannot discard the governing context. Require this same
+    # candidate's literal citations to retain every word of the mixed clause.
+    ranges = [(match.start(), match.start() + 1) for match in fragments]
+    ranges.extend((match.end() - 1, match.end()) for match in fragments)
+    for atom in grounded_atoms:
+        for quote in getattr(atom, "source_excerpts", ()):
+            if not isinstance(quote, str):
+                continue
+            bounds = locate_source_quote_offsets(clause, _normalize_prohibition_quote(quote))
+            if bounds is not None:
+                ranges.append(bounds)
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(ranges):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+        else:
+            merged.append((start, end))
+    return source_statement_ranges_cover_unit(clause, merged, allow_joining_punctuation=True)
+
+
 _AND_CUE_RE = re.compile(
     r"(?:且|并且|同时|以及|均须|均需|both|\band\b)", re.IGNORECASE
 )
@@ -4866,12 +4916,18 @@ def _uncovered_enrollment_prohibitions(
         # broader semantic coverage remains for the source review, not regex.
         quoted_clauses: set[str] = set()
         split_atoms: list[object] = []
+        candidate_atoms: list[list[object]] = []
         if disposition.linked_control_candidate_ids:
             for candidate_id in disposition.linked_control_candidate_ids:
                 candidate = by_candidate.get(candidate_id)
                 semantics = getattr(candidate, "semantics", None)
                 if semantics is None:
                     continue
+                candidate_atoms.append([
+                    atom for role in ("applicability_expression", "trigger_expression",
+                                      "obligation_expression", "exception_expression")
+                    for atom in _iter_expression_atoms(getattr(semantics, role, None))
+                ])
                 for group in semantics.obligation_expression.groups:
                     for atom in group.atoms:
                         split_atoms.append(atom)
@@ -4894,7 +4950,9 @@ def _uncovered_enrollment_prohibitions(
             if normalized_quote in quoted_clauses or any(
                 _split_prohibition_atom_covers_clause(normalized_quote, atom)
                 for atom in split_atoms
-            ):
+            ) or any(_parenthetical_prohibitions_are_quoted(
+                normalized_quote, atoms, unit.source_span_ids,
+            ) for atoms in candidate_atoms):
                 continue
             linked_official = getattr(disposition, "linked_official_code", None)
             linked_procedures = set(

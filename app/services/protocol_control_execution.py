@@ -1965,6 +1965,7 @@ def _validate_deep_batch_output(
                 candidate_ids=error.candidate_ids,
                 obligation_source_span_ids=error.obligation_source_span_ids,
                 json_path=error.json_path,
+                source_excerpt_sha256=error.source_excerpt_sha256,
             )
             for error in errors
         ],

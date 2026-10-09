@@ -2847,7 +2847,10 @@ def _now() -> datetime:
 
 def test_deep_repair_reports_independent_candidates_together(monkeypatch) -> None:
     errors = (
-        ProtocolControlGateError("TIME_ANCHOR_MISSING", "缺少锚点", entity_id="first"),
+        ProtocolControlGateError(
+            "TIME_ANCHOR_MISSING", "缺少锚点", entity_id="first",
+            source_excerpt_sha256="a" * 64,
+        ),
         ProtocolControlGateError("BASELINE_VALUE_SCOPE_MISSING", "缺少关系", entity_id="second"),
     )
     monkeypatch.setattr(
@@ -2869,6 +2872,8 @@ def test_deep_repair_reports_independent_candidates_together(monkeypatch) -> Non
     )
     assert set(exc.value.candidate_ids) == {"first", "second"}
     assert set(exc.value.structure_unit_ids) == {"u1", "u2"}
+    assert next(item for item in exc.value.validation_findings
+                if item["code"] == "TIME_ANCHOR_MISSING")["source_excerpt_sha256"] == "a" * 64
 
 
 def test_deep_repair_resolves_candidate_repartition_before_field_repair(monkeypatch) -> None:
