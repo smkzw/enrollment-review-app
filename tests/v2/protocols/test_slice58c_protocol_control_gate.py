@@ -3844,6 +3844,8 @@ def test_missing_time_anchor_reports_exact_atom_and_statement() -> None:
         "control:baseline-selection/condition-baseline-selection"
     )
     assert excerpt in str(caught.value)
+    assert caught.value.json_path == "/expressions/0/groups/0/atoms/0/time_constraint"
+    assert caught.value.obligation_source_span_ids == ("span:control",)
 
 
 @pytest.mark.parametrize("excerpt", [

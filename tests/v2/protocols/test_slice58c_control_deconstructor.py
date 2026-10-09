@@ -8560,6 +8560,166 @@ def test_located_failure_identity_keeps_long_distinct_conditions_and_separate_ca
     assert identity(finding) != identity({**finding, "entity_id": "candidate-b"})
 
 
+def test_actual_prohibition_producer_keeps_distinct_source_clause_locations():
+    from app.agents.protocol_control_deconstructor import _located_publication_failure_identities
+    from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
+
+    batch = _batch()
+    batch.owned_units[1].excerpt = "筛选期不得调整治疗。筛选期不得补做评估。"
+    output = hydrate_protocol_control_agent_output(_wire(candidate=_candidate()), batch)
+    issue = _uncovered_enrollment_prohibitions(batch, output)[0]
+    assert issue.entity_id == "su-02"
+    assert issue.json_path == "/source_units/su-02/clauses/0"
+    error = publication_repair_error(
+        issues=[issue], candidate_by_id={c.control_candidate_id: c for c in output.candidates},
+        control_to_candidate={}, default_structure_unit_ids=batch.owned_structure_unit_ids,
+    )
+    identity = _located_publication_failure_identities(error, [c.control_candidate_id for c in output.candidates])
+    assert len(identity) == 1
+    changed = deepcopy(error.validation_findings[0])
+    changed["message"] = "同一位置重新表述的提示"
+    same = ProtocolControlAgentWireValidationError(
+        "PUBLICATION_GATE_REJECTED", "显示文案", validation_findings=[changed],
+    )
+    assert _located_publication_failure_identities(same, []) == identity
+    changed["json_path"] = "/source_units/su-02/clauses/1"
+    other = ProtocolControlAgentWireValidationError(
+        "PUBLICATION_GATE_REJECTED", "显示文案", validation_findings=[changed],
+    )
+    assert _located_publication_failure_identities(other, []) != identity
+
+
+@pytest.mark.parametrize("fixed", [False, True])
+def test_actual_time_producer_stops_repeat_but_accepts_valid_recovery(fixed):
+    from app.protocols.protocol_control_gate import _check_time_constraints, ProtocolControlGateError
+
+    batch = _batch()
+    original = _wire(candidate=_candidate())
+    changed = original.model_copy(deep=True)
+    changed.candidate_drafts[0].title = "同源改写后的标题"
+    transport = _FakeTransport([
+        ProtocolControlAgentResponse(session_id="located-time", text=wire.model_dump_json())
+        for wire in (original, changed)
+    ])
+    calls = 0
+
+    def validate(output):
+        nonlocal calls
+        calls += 1
+        candidate = output.candidates[0]
+        atom = SimpleNamespace(
+            condition_atom_id=f"generated-{calls}", statement=f"第{calls}次描述同一时间要求",
+            source_span_ids=["span:01"], source_excerpts=["筛选前7天内完成核查"],
+            time_constraint=(SimpleNamespace(anchor_type="screening_date", direction="before",
+                                            upper_bound_days=7) if fixed and calls == 2 else None),
+        )
+        try:
+            _check_time_constraints(
+                entity_id=candidate.control_candidate_id, texts=atom.source_excerpts,
+                expressions=[SimpleNamespace(groups=[SimpleNamespace(atoms=[atom])])],
+                expression_paths=["/obligation_expression"], flat_atoms=[],
+                global_time_constraint=None, structure_unit_ids=candidate.frozen_structure_unit_ids,
+            )
+        except ProtocolControlGateError as issue:
+            assert issue.code == "TIME_ANCHOR_MISSING"
+            raise publication_repair_error(
+                issues=[issue], candidate_by_id={candidate.control_candidate_id: candidate},
+                control_to_candidate={}, default_structure_unit_ids=batch.owned_structure_unit_ids,
+            ) from issue
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=10).run(batch, transport, output_validator=validate)
+    assert calls == 2 and not transport.responses
+    if fixed:
+        assert result.final_output is not None
+    else:
+        assert result.final_output is None
+        assert "停止自动修订" in result.attempts[-1].issues[-1]
+        finding = result.attempts[-1].error_detail["findings"][0]
+        assert finding["json_path"] == "/obligation_expression/groups/0/atoms/0/time_constraint"
+        assert finding["structure_unit_ids"] == ["su-01"]
+
+
+def test_control_atom_owner_is_resolved_without_granting_unknown_scope():
+    from app.agents.protocol_control_deconstructor import _located_publication_failure_identities
+    from app.protocols.protocol_control_gate import ProtocolControlGateError
+
+    output = hydrate_protocol_control_agent_output(_wire(candidate=_candidate()), _batch())
+    candidate = output.candidates[0]
+    issue = ProtocolControlGateError(
+        "TIME_ANCHOR_MISSING", "同一时间位置", entity_id="control-owned/atom-generated",
+        json_path="/obligation_expression/groups/0/atoms/0/time_constraint",
+        source_excerpt_sha256="a" * 64,
+    )
+    mapped = publication_repair_error(
+        issues=[issue], candidate_by_id={candidate.control_candidate_id: candidate},
+        control_to_candidate={"control-owned": candidate.control_candidate_id},
+        default_structure_unit_ids=["su-01", "su-02"],
+    )
+    assert mapped.candidate_ids == (candidate.control_candidate_id,)
+    assert len(_located_publication_failure_identities(mapped, [candidate.control_candidate_id])) == 1
+    unknown = publication_repair_error(
+        issues=[issue], candidate_by_id={candidate.control_candidate_id: candidate},
+        control_to_candidate={}, default_structure_unit_ids=["su-01", "su-02"],
+    )
+    assert unknown.repair_scope_unknown
+    assert _located_publication_failure_identities(unknown, [candidate.control_candidate_id]) == ()
+
+
+def test_pending_other_candidate_does_not_use_up_located_repair_attempts():
+    from app.agents.protocol_control_deconstructor import _located_publication_failure_identities
+
+    findings = [{"code": "TIME_ANCHOR_MISSING", "entity_id": f"candidate-{i}/atom-{i}",
+                 "candidate_ids": [f"candidate-{i}"], "structure_unit_ids": [f"su-{i}"],
+                 "source_excerpt_sha256": str(i) * 64,
+                 "json_path": "/obligation_expression/groups/0/atoms/0/time_constraint"}
+                for i in (1, 2)]
+    scoped = ProtocolControlAgentWireValidationError(
+        "PUBLICATION_GATE_REJECTED", "当前仅修第一个候选", validation_findings=findings,
+        candidate_ids=["candidate-1"], structure_unit_ids=["su-1"],
+    )
+    identity = _located_publication_failure_identities(scoped, ["candidate-1", "candidate-2"])
+    assert len(identity) == 1 and '"su-1"' in identity[0]
+
+
+def test_different_time_subject_at_same_atom_position_has_its_own_clock():
+    from app.agents.protocol_control_deconstructor import _located_publication_failure_identities
+    from app.protocols.protocol_control_gate import _check_time_constraints, ProtocolControlGateError
+
+    def identities(quote):
+        atom = SimpleNamespace(condition_atom_id="same-generated-id", statement=quote,
+                               source_excerpts=[quote], source_span_ids=["span:01"], time_constraint=None)
+        with pytest.raises(ProtocolControlGateError) as caught:
+            _check_time_constraints(
+                entity_id="candidate-a", texts=[quote], expressions=[SimpleNamespace(
+                    groups=[SimpleNamespace(atoms=[atom])])], flat_atoms=[], global_time_constraint=None,
+                structure_unit_ids=["su-01"], expression_paths=["/obligation_expression"],
+            )
+        owner = SimpleNamespace(frozen_structure_unit_ids=["su-01"])
+        error = publication_repair_error(
+            issues=[caught.value], candidate_by_id={"candidate-a": owner}, control_to_candidate={},
+            default_structure_unit_ids=["su-01"],
+        )
+        return _located_publication_failure_identities(error, ["candidate-a"])
+
+    first = identities("筛选前7天内完成检查甲")
+    second = identities("筛选前7天内完成检查乙")
+    assert len(first) == len(second) == 1
+    assert first != second
+
+
+def test_stale_control_mapping_cannot_create_repair_ownership():
+    from app.protocols.protocol_control_gate import ProtocolControlGateError
+
+    error = publication_repair_error(
+        issues=[ProtocolControlGateError("TIME_ANCHOR_MISSING", "原子时间缺口",
+                                        entity_id="old-control/atom")],
+        candidate_by_id={}, control_to_candidate={"old-control": "unknown-candidate"},
+        default_structure_unit_ids=["su-01"],
+    )
+    assert error.repair_scope_unknown
+    assert not error.candidate_ids
+
+
 def test_post_hydration_repair_restores_changes_outside_original_scope() -> None:
     batch = _batch()
     valid_wire = _wire(candidate=_candidate())

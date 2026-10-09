@@ -122,7 +122,8 @@ def publication_repair_error(
         owner = entity_id.split("/", 1)[0]
         if owner in candidate_by_id:
             return owner
-        return control_to_candidate.get(entity_id)
+        mapped = control_to_candidate.get(owner)
+        return mapped if mapped in candidate_by_id else None
 
     repair_scopes = []
     repair_scope_unknown = False
@@ -219,11 +220,15 @@ def publication_repair_error(
         validation_findings=[{
             "code": issue.code, "entity_id": issue.entity_id,
             "message": issue.message,
-            "structure_unit_ids": list(getattr(issue, "structure_unit_ids", ()) or ()),
+            "structure_unit_ids": list(getattr(issue, "structure_unit_ids", ()) or (
+                candidate_by_id[owner].frozen_structure_unit_ids if owner is not None else ())),
             "candidate_ids": list(getattr(issue, "candidate_ids", ()) or ()),
+            "owner_candidate_id": owner,
             "obligation_source_span_ids": list(getattr(issue, "obligation_source_span_ids", ()) or ()),
             "json_path": getattr(issue, "json_path", None),
-        } for issue in issues],
+            "source_excerpt_sha256": getattr(issue, "source_excerpt_sha256", None),
+        } for issue in issues
+          for owner in (candidate_for_entity(issue.entity_id),)],
     )
 
 

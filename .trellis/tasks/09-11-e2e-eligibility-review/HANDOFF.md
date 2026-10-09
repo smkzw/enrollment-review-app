@@ -2,11 +2,11 @@
 
 ## 当前事实（替代下方历史“当前”表述）
 
-实际源码88f04a34e669988dda6a6ebe49713ff0268b42c1已push，合法Job e4630f512fbf47b1a0498deb336f0084 failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，14物理调用528.232509708032秒/exit3。85发现/43旧深审零新调用；第44完整来源核对后保存6条严格非执行限制、0候选，实际44深审完成；第45输出结构失败，45未执行。前包原文补齐不是完整采用，不能用completed改称全部临床通过。检查点44为7c4bb7d6502a43c2a4f548540fb4dd1e、45为c959a32eea0d4f55baf08de9ccbf8842。旧Job/来源库/保护库保持，无共同发布/启用/签发，当前无运行会话。
+实际源码7067b423e4a97eae195451cb824ed0406651c61d已push，合法Job ea9ea5766c774c7bbc612fb76c9a9040 failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，25物理调用721.8571786249522秒/exit3。85发现/44旧深审零新调用；第44完整来源保存6条严格非执行限制、0候选，实际44深审完成，第45失败、45未执行。第45检查点27445ef57ab64f779c0d968da8ff4fe1仅来源解释有效，没有合法partial_wire/source_target_review。旧Job/来源库/保护库保持，无共同发布/启用/签发，当前无产品运行会话。
 
-首因：第45候选修订回答只剩缺少观察采用说明，但多候选逐项恢复仅接通日期字段，未接已有观察字段处理器。最小补丁接通相同候选的缺失政策字段，原来源/兄弟/阈值/时间冻结，完整候选与整批、后续消费者仍核验。字段不足不默认single，不把未知改合格，不重读整包；当前修复没有改变Schema/编译/临床采用合同，实际源码hash另由prepare记录。直接执行，不新增会商：可由确定性来源、位置、预算、会话、Schema及消费者反例关闭接口缺口；前一包C03不冒称审过此补丁。
+首因：真实禁用覆盖/时间锚点错误缺少停止器要求的定位字段，生成ID/措辞变化又掩盖重复，六轮未消除同一问题。最小包补冻结出错整句、稳定路径、来源摘录hash及只针对选中范围的重复计数；独立诊断owner不能扩大candidate_ids或修订权限。完整来源/时间/数值/兄弟/发布门保持。主线程集成＋批准C03独审，首审与同会话续审均exit0/no fallback，顾问未读临床或实跑测试；同段不同要求的末hash反例由所有者补齐。意见、反证和限制见reviews/rv1006-source-located-stop-owner-disposition-20261010.md。
 
-集中验证：三相连模块1483passed/113.25秒/exit0，5SWIG；JUnit artifacts/rv1006-candidate-policy-followup-connected-20261010-v2.xml。首聚焦窗28pass/1新夹具fail1.81秒（夹具例外无触发），修合成夹具后完整通过，不改产品门、不累计通过数。当前只读预检rv1006-candidate-policy-followup-preflight-20261010-v1.json：44reuse/1partial/45refresh、0模型/0写/hash保持，第45只保留来源，不借失败回答取得语义批准。私有产物在/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003；本机可读，外部不可读。公开交付不含临床原文/原答/库/环境。
+集中验证：四相连模块最终1679passed/109.67秒/exit0，5SWIG；JUnit artifacts/rv1006-source-located-stop-connected-20261010-v4.xml。首窗两项实际授权回归、第三窗六项新增NameError均修复，原危险反例保留；窗口不累加，不冒称临床验收。当前只读预检rv1006-source-located-stop-preflight-20261010-v1.json：44reuse/1partial/45refresh、0模型/0写/hash保持。私有产物根/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003，本机可读，外部不可读；不交付临床原文/原答/库/环境。
 
 下一冻结修复源码，合法入口新建并逐项核90步复用计划后继续未完成范围。既有单未决继续独立读取政策可用于新作业，不原地改旧Job；第二未决仍停止，发布仍完整验门。完整官方/跨章同源包、同包病例当前节点工作稿、正式UI更正与新旧报告均未达。Goal active，claims_complete=false；本文件不是暂停指令。不重复旧43/44读数，不再复制10GB隔离库，不修改七份继承dirty。
 

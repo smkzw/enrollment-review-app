@@ -7085,15 +7085,44 @@ def _located_publication_failure_identities(
     if error.repair_scope_unknown:
         return ()
     owners = {candidate_id: index for index, candidate_id in enumerate(candidate_ids)}
-    return tuple(sorted({_stable_json({
-        "candidate_index": owners[item["entity_id"]],
-        "code": item.get("code"), "json_path": item["json_path"],
-        "structure_unit_ids": sorted(item["structure_unit_ids"]),
-        "source_span_ids": sorted(item.get("obligation_source_span_ids", ())),
-        "message_sha256": _sha256(item["message"]),
-    }) for item in error.validation_findings
-        if item.get("entity_id") in owners and item.get("structure_unit_ids")
-        and item.get("json_path") and isinstance(item.get("message"), str)}))
+    identities: set[str] = set()
+    for item in error.validation_findings:
+        units = set(item.get("structure_unit_ids") or ())
+        path = item.get("json_path")
+        entity_id = item.get("entity_id")
+        if not units or not path or not isinstance(entity_id, str):
+            continue
+        if error.structure_unit_ids and not units <= set(error.structure_unit_ids):
+            continue
+        owner = entity_id.split("/", 1)[0]
+        if owner not in owners:
+            owner = item.get("owner_candidate_id")
+        source_finding = (item.get("code") == "ENROLLMENT_PROHIBITION_UNCOVERED"
+                          and entity_id in units
+                          and str(path).startswith(f"/source_units/{entity_id}/clauses/"))
+        if not source_finding and owner not in owners:
+            continue
+        if not source_finding and error.candidate_ids and owner not in error.candidate_ids:
+            continue
+        identity = {
+            "candidate_index": None if source_finding else owners[owner],
+            "code": item.get("code"), "json_path": path,
+            "structure_unit_ids": sorted(units),
+            "source_span_ids": sorted(item.get("obligation_source_span_ids", ())),
+        }
+        if item.get("code") == "TIME_ANCHOR_MISSING":
+            excerpt_hash = item.get("source_excerpt_sha256")
+            if not isinstance(excerpt_hash, str) or not excerpt_hash:
+                continue
+            identity["source_excerpt_sha256"] = excerpt_hash
+        # These producers locate the defect without generated IDs or prose.
+        # Other findings retain their existing distinct-condition fingerprint.
+        if item.get("code") not in {"ENROLLMENT_PROHIBITION_UNCOVERED", "TIME_ANCHOR_MISSING"}:
+            if not isinstance(item.get("message"), str):
+                continue
+            identity["message_sha256"] = _sha256(item["message"])
+        identities.add(_stable_json(identity))
+    return tuple(sorted(identities))
 
 
 class ProtocolControlAgentRunner:
@@ -10311,7 +10340,7 @@ class ProtocolControlAgentRunner:
                     invalid_fingerprint_counts.get(invalid_fingerprint, 0) + 1
                 )
                 located_fingerprints = _located_publication_failure_identities(
-                    validation_error, candidate_ids)
+                    error, candidate_ids)
                 for fingerprint in located_fingerprints:
                     key = (fingerprint, "located-publication-defect", "")
                     invalid_fingerprint_counts[key] = invalid_fingerprint_counts.get(key, 0) + 1

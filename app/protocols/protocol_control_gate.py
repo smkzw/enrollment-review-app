@@ -96,10 +96,12 @@ class ProtocolControlGateError(ValueError):
         candidate_ids: Sequence[str] = (),
         obligation_source_span_ids: Sequence[str] = (),
         json_path: str | None = None,
+        source_excerpt_sha256: str | None = None,
     ) -> None:
         self.code = code
         self.message = message
         self.json_path = json_path
+        self.source_excerpt_sha256 = source_excerpt_sha256
         self.entity_id = entity_id
         self.structure_unit_ids = tuple(sorted(set(structure_unit_ids)))
         self.candidate_ids = tuple(sorted(set(candidate_ids)))
@@ -124,6 +126,7 @@ class ProtocolControlGateIssue:
     candidate_ids: tuple[str, ...] = ()
     obligation_source_span_ids: tuple[str, ...] = ()
     json_path: str | None = None
+    source_excerpt_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -485,6 +488,7 @@ def _fail(
     candidate_ids: Sequence[str] = (),
     obligation_source_span_ids: Sequence[str] = (),
     json_path: str | None = None,
+    source_excerpt_sha256: str | None = None,
 ) -> None:
     raise ProtocolControlGateError(
         code,
@@ -494,6 +498,7 @@ def _fail(
         candidate_ids=candidate_ids,
         obligation_source_span_ids=obligation_source_span_ids,
         json_path=json_path,
+        source_excerpt_sha256=source_excerpt_sha256,
     )
 
 
@@ -2815,6 +2820,8 @@ def _check_time_constraints(
     expressions: Sequence[object | None],
     flat_atoms: Sequence[object],
     global_time_constraint: object | None,
+    structure_unit_ids: Sequence[str] = (),
+    expression_paths: Sequence[str] = (),
 ) -> None:
     atoms: list[object] = list(flat_atoms)
     for expression in expressions:
@@ -3121,17 +3128,21 @@ def _check_time_constraints(
             )
 
     global_anchor = _value(getattr(global_time_constraint, "anchor_type", None))
-    for expression in expressions:
+    for expression_index, expression in enumerate(expressions):
+        expression_path = (expression_paths[expression_index]
+                           if expression_index < len(expression_paths)
+                           else f"/expressions/{expression_index}")
         groups = list(getattr(expression, "groups", ()) or ())
         if groups:
             atom_groups = [
-                (group, atom)
-                for group in groups
-                for atom in getattr(group, "atoms", ()) or ()
+                (group, atom, f"{expression_path}/groups/{group_index}/atoms/{atom_index}")
+                for group_index, group in enumerate(groups)
+                for atom_index, atom in enumerate(getattr(group, "atoms", ()) or ())
             ]
         else:
-            atom_groups = [(None, atom) for atom in _iter_expression_atoms(expression)]
-        for group, atom in atom_groups:
+            atom_groups = [(None, atom, f"{expression_path}/atoms/{atom_index}")
+                           for atom_index, atom in enumerate(_iter_expression_atoms(expression))]
+        for group, atom, atom_path in atom_groups:
             # Exception condition atoms express predicates only; substitute
             # windows must live on activated obligation groups.
             group_fields = getattr(type(group), "model_fields", {}) if group is not None else {}
@@ -3166,6 +3177,12 @@ def _check_time_constraints(
                     "时间性原子缺少命名时间锚点"
                     + (f"；原句：{statement}" if statement else ""),
                     entity_id=f"{entity_id}/{atom_id}",
+                    structure_unit_ids=structure_unit_ids,
+                    obligation_source_span_ids=getattr(atom, "source_span_ids", ()),
+                    json_path=f"{atom_path}/time_constraint",
+                    source_excerpt_sha256=hashlib.sha256(json.dumps(
+                        source_excerpts, ensure_ascii=False, separators=(",", ":")
+                    ).encode("utf-8")).hexdigest(),
                 )
             anchor = _value(getattr(constraint, "anchor_type", None))
             if not anchor:
@@ -4424,6 +4441,9 @@ def _validate_candidate(
     )
     _check_time_constraints(
         entity_id=candidate_id,
+        structure_unit_ids=candidate.frozen_structure_unit_ids,
+        expression_paths=("/applicability_expression", "/trigger_expression",
+                          "/obligation_expression", "/exception_expression"),
         texts=texts,
         expressions=(
             getattr(semantics, "applicability_expression", None),
@@ -4722,6 +4742,9 @@ def _validate_control(
     )
     _check_time_constraints(
         entity_id=control_id,
+        structure_unit_ids=control.source_structure_unit_ids,
+        expression_paths=("/applicability_expression", "/trigger_expression",
+                          "/obligation_expression", "/exception_expression"),
         texts=_texts_for_control(control),
         expressions=(
             getattr(control, "applicability_expression", None),
@@ -4829,8 +4852,8 @@ def _uncovered_enrollment_prohibitions(
             headings.extend(getattr(table_context, "column_headers", ()))
         stage_in_context = bool(_ENROLLMENT_STAGE_RE.search(" ".join(headings)))
         clauses = [
-            clause.strip()
-            for clause in re.split(r"[。；;\n]", unit.excerpt)
+            (clause_index, clause.strip())
+            for clause_index, clause in enumerate(re.split(r"[。；;\n]", unit.excerpt))
             if _ENROLLMENT_PROHIBITION_RE.search(clause)
             or (
                 stage_in_context
@@ -4863,7 +4886,7 @@ def _uncovered_enrollment_prohibitions(
                                     or _normalize_prohibition_quote(quote) == normalized
                                 ):
                                     quoted_clauses.add(normalized)
-        for clause in clauses:
+        for clause_index, clause in clauses:
             quote = clause.strip()
             normalized_quote = _normalize_prohibition_quote(quote)
             if (unit.structure_unit_id, normalized_quote) in restricted_quotes:
@@ -4913,10 +4936,12 @@ def _uncovered_enrollment_prohibitions(
                 ProtocolControlGateError(
                     "ENROLLMENT_PROHIBITION_UNCOVERED",
                     "冻结原文含当前入排阶段的禁止性要求，但该句未获独立来源绑定的候选，"
-                    "也没有同句逐字来源证明已由正式条款或流程事项覆盖；须按原文核对，不能仅凭同段其他候选省略。",
+                    "也没有同句逐字来源证明已由正式条款或流程事项覆盖；须按原文核对，不能仅凭同段其他候选省略。"
+                    f"需核对的完整来源句：{quote}",
                     entity_id=unit.structure_unit_id,
                     structure_unit_ids=[unit.structure_unit_id],
                     obligation_source_span_ids=unit.source_span_ids,
+                    json_path=f"/source_units/{unit.structure_unit_id}/clauses/{clause_index}",
                 )
             )
             break
@@ -5575,6 +5600,7 @@ def check_protocol_control_publication(*args: Any, **kwargs: Any) -> ProtocolCon
                     exc.candidate_ids,
                     exc.obligation_source_span_ids,
                     exc.json_path,
+                    exc.source_excerpt_sha256,
                 ),
             ),
         )
