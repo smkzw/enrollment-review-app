@@ -98,6 +98,7 @@ from app.agents.protocol_control_source_interpretation import (
     normalize_mixed_schedule_scopes,
     normalize_source_stage_echo,
     SOURCE_STAGE_ECHO_VERSION,
+    SOURCE_HEADING_SCOPE_RECHECK_VERSION,
     schedule_column_links,
     validate_source_target_review,
     validated_source_review_seed,
@@ -116,6 +117,7 @@ from app.agents.protocol_control_candidate_alignment import (
     SOURCE_CANDIDATE_ALIGNMENT_VERSION,
     SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
     SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION,
+    SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION,
     SourceCandidateAlignment,
     SourceCandidateAlignmentItem,
     SourceCandidateAlignmentProof,
@@ -2125,6 +2127,8 @@ def _deep_component_identity(
                                        "scoped-prohibition-modality-and-candidate-continuation/v1",
                                        "bound-negative-semantic-closure-recovery/v1",
                                        SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION,
+                                       SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION,
+                                       SOURCE_HEADING_SCOPE_RECHECK_VERSION,
                                        SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),
@@ -2619,8 +2623,11 @@ def _revalidated_source_seed_proof(
     question_corrected: set[int] = set()
     for attempt in ([] if stage_echo_indexes else attempts[len(witnessed):]):
         detail = attempt.get("error_detail") if isinstance(attempt, Mapping) else None
-        if not isinstance(detail, Mapping) or detail.get("workflow_phase") != "source_scope_question_recheck":
+        if not isinstance(detail, Mapping) or detail.get("workflow_phase") not in {
+            "source_scope_question_recheck", "source_heading_scope_recheck",
+        }:
             break
+        heading_recheck = detail["workflow_phase"] == "source_heading_scope_recheck"
         index = detail.get("statement_id")
         if (len(corrected) + len(question_corrected) >= max_source_corrections
                 or type(index) is not int or not 0 <= index < len(actual.statements)
@@ -2630,19 +2637,20 @@ def _revalidated_source_seed_proof(
         statement = actual.statements[index]
         unit = next(unit for unit in batch.owned_units
                     if unit.structure_unit_id == statement.structure_unit_id)
-        if (detail.get("code") != "SOURCE_SCOPE_QUESTION_RECHECK"
-                or detail.get("json_path") != f"statements[{index}].unresolved"
+        if (detail.get("code") != ("SOURCE_HEADING_SCOPE_RECHECK" if heading_recheck else "SOURCE_SCOPE_QUESTION_RECHECK")
+                or detail.get("json_path") != f"statements[{index}].{'scope_quote' if heading_recheck else 'unresolved'}"
                 or detail.get("source_refs") != list(unit.source_span_ids)
-                or detail.get("source_context_sha256") != source_question_context_identity(statement, batch)
+                or (detail.get("guidance_version") != SOURCE_HEADING_SCOPE_RECHECK_VERSION if heading_recheck
+                    else detail.get("source_context_sha256") != source_question_context_identity(statement, batch))
                 or detail.get("precondition_sha256") != hashlib.sha256(statement.model_dump_json().encode()).hexdigest()):
             return None
         text = actual_text(attempt)
         if text is None:
             return None
         try:
-            actual = apply_source_scope_question_recheck(
-                batch, actual, index, SourceInterpretation.model_validate_json(text),
-            )
+            actual = (apply_source_scope_correction(batch, actual, index, SourceScopeCorrection.model_validate_json(text))
+                      if heading_recheck else apply_source_scope_question_recheck(
+                          batch, actual, index, SourceInterpretation.model_validate_json(text)))
         except (ValueError, KeyError, TypeError):
             return None
         question_corrected.add(index)
@@ -4067,6 +4075,7 @@ def _saved_source_scope_question_history(saved: Mapping[str, Any] | None) -> lis
                    and attempt["error_detail"].get("workflow_phase") in {
                        "source_scope_question_recheck", "source_context_completion",
                        "source_unit_quote_completion",
+                       "source_heading_scope_recheck",
                    }]
         if nested and history:
             outputs = saved.get("attempt_raw_outputs", [])

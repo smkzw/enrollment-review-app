@@ -270,6 +270,227 @@ def test_scoped_source_sibling_does_not_replace_current_requirement(change):
         assert reusable_proven_alignment_items(batch, source, coverage, wire, restored) == []
 
 
+def _repeat_count_material():
+    from app.domain.contracts.repeat_scheme import RepeatScheme
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _evaluation
+    batch, source, wire, coverage, alignment = _conditioned_action_material()
+    unit, statement = batch.owned_units[0], source.statements[0]
+    text = "本次节点允许复查3次"
+    unit.excerpt = statement.quoted_text = text
+    unit.member_texts = [text]
+    statement.decision_functions = ["action"]
+    statement.affected_stage = None
+    statement.force = "descriptive"
+    candidate = wire.candidate_drafts[0]
+    candidate.trigger_expression = None
+    group = candidate.obligation_expression.groups[0]
+    group.applies_to_trigger_branch_indexes = []
+    atom = group.atoms[0].model_copy(deep=True, update={"statement": text,
+        "source_excerpts": [text]})
+    evaluation = _evaluation(text, unit.source_span_ids[0], text)
+    evaluation["repeat_scheme"] = RepeatScheme(
+        scope="本次节点的复查", source_span_ids=list(unit.source_span_ids), source_excerpts=[text],
+        permission="optional", trigger="unconditional", count_status="specified",
+        maximum_repeats=3, count_scope="per_current_episode", time_status="not_specified",
+        result_use="not_specified", no_repeat_result_use="unresolved",
+    ).model_dump(mode="json")
+    atom.evaluation = type(atom.evaluation).model_validate(evaluation)
+    group.atoms = [atom]
+    alignment.items[0].source_excerpt = text
+    alignment.items[0].candidate_atom_quotes = [text]
+    return batch, source, wire, coverage, alignment
+
+
+@pytest.mark.parametrize("change", [None, "wrong_count", "unknown_count", "missing_scheme",
+    "wrong_source", "historical_scheme", "threshold", "dose", "frequency", "time_window",
+    "event_count", "mandatory_permission"])
+def test_source_repeat_count_uses_its_contract_not_a_measurement_predicate(change):
+    batch, source, wire, coverage, alignment = _repeat_count_material()
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    scheme = atom.evaluation.repeat_scheme
+    if change == "wrong_count":
+        atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": scheme.model_copy(
+            update={"maximum_repeats": 4})})
+    elif change == "unknown_count":
+        atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": scheme.model_copy(
+            update={"count_status": "unresolved", "maximum_repeats": None, "count_scope": None})})
+    elif change == "missing_scheme":
+        atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": None})
+    elif change == "wrong_source":
+        atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": scheme.model_copy(
+            update={"source_span_ids": ["foreign-source"]})})
+    elif change == "historical_scheme":
+        atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": scheme.model_copy(
+            update={"version": "repeat-scheme/v3"})})
+    elif change == "threshold":
+        source.statements[0].decision_functions = ["threshold"]
+    elif change == "mandatory_permission":
+        atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": scheme.model_copy(update={"permission": "required"})})
+    elif change in {"dose", "frequency", "time_window", "event_count"}:
+        text = {"dose": "本次节点给予3mg", "frequency": "本次节点发生至少3次事件",
+                "time_window": "本次节点3天内复查", "event_count": "本次节点发生3次事件"}[change]
+        batch.owned_units[0].excerpt = source.statements[0].quoted_text = text
+        batch.owned_units[0].member_texts = [text]
+        atom.statement = text
+        atom.source_excerpts = [text]
+        atom.evaluation = atom.evaluation.model_copy(update={"proposition": text,
+            "source_excerpts": [text], "repeat_scheme": scheme.model_copy(update={"source_excerpts": [text]})})
+        alignment.items[0].source_excerpt = text
+        alignment.items[0].candidate_atom_quotes = [text]
+    if change:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+        proof = bind_candidate_alignment(batch, source, coverage, wire, alignment,
+            alignment.model_dump_json(exclude={"proofs"}))
+        restored = SourceCandidateAlignment.model_validate_json(proof.model_dump_json())
+        assert len(reusable_proven_alignment_items(batch, source, coverage, wire, restored)) == 1
+        from app.domain.repeat_observation_count import evaluate_repeat_count
+        from app.domain.contracts.enums import TruthValue
+        assert evaluate_repeat_count(scheme, repeat_group_ids=(),
+            qualified_scope="per_current_episode", scope_complete=True).result.truth == TruthValue.TRUE
+        assert evaluate_repeat_count(scheme, repeat_group_ids=["a", "b", "c", "d"],
+            qualified_scope="per_current_episode", scope_complete=True).result.truth == TruthValue.FALSE
+        assert evaluate_repeat_count(scheme, repeat_group_ids=["a"],
+            qualified_scope="per_current_episode", scope_complete=False).result.truth == TruthValue.UNKNOWN
+        assert scheme.permission == "optional" and scheme.no_repeat_result_use == "unresolved"
+        atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": scheme.model_copy(
+            update={"maximum_repeats": 4})})
+        assert reusable_proven_alignment_items(batch, source, coverage, wire, restored) == []
+
+
+@pytest.mark.parametrize("change", [None, "unknown_scope", "changed_policy", "changed_statement",
+    "changed_time", "wrong_count", "missing_scheme", "historical_scheme"])
+def test_source_repeat_count_field_repair_preserves_siblings_and_consumer_unknowns(change):
+    from app.agents.protocol_control_deconstructor import (
+        _merge_obligation_atom_repair, _build_obligation_atom_repair_prompt,
+        ProtocolControlAgentWireValidationError,
+    )
+    batch, source, wire, coverage, alignment = _repeat_count_material()
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    good = atom.model_copy(deep=True)
+    atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": None})
+    baseline = wire.model_dump(mode="json")
+    prompt = _build_obligation_atom_repair_prompt(batch, baseline, (0, 0, 0), "次数合同缺失",
+                                                repeat_scheme_only=True)
+    assert "本次只允许补 evaluation.repeat_scheme" in prompt
+    if change == "unknown_scope":
+        good.evaluation.repeat_scheme.count_scope = "unresolved"
+    elif change == "changed_policy":
+        good.evaluation = good.evaluation.model_copy(update={"observation_policy":
+            good.evaluation.observation_policy.model_copy(update={"mode": "any"})})
+    elif change == "changed_statement":
+        good.statement = "另一项要求"
+    elif change == "changed_time":
+        good.evaluation = good.evaluation.model_copy(update={"time_purpose": "unresolved"})
+    elif change == "wrong_count":
+        good.evaluation.repeat_scheme.maximum_repeats = 4
+    elif change == "missing_scheme":
+        good.evaluation = good.evaluation.model_copy(update={"repeat_scheme": None})
+    elif change == "historical_scheme":
+        good.evaluation.repeat_scheme.version = "repeat-scheme/v3"
+    raw = json.dumps({"atom": good.model_dump(mode="json")}, ensure_ascii=False)
+    if change in {"changed_policy", "changed_statement", "changed_time", "missing_scheme", "historical_scheme"}:
+        with pytest.raises(ProtocolControlAgentWireValidationError):
+            _merge_obligation_atom_repair(raw, baseline, (0, 0, 0), repeat_scheme_only=True)
+        assert wire.model_dump(mode="json") == baseline
+        return
+    merged = _merge_obligation_atom_repair(raw, baseline, (0, 0, 0), repeat_scheme_only=True)
+    if change == "wrong_count":
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, merged, alignment)
+        return
+    validate_candidate_alignment(batch, source, coverage, merged, alignment)
+    final = merged.model_dump(mode="json")
+    final["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["repeat_scheme"] = None
+    assert final == baseline
+    if change == "unknown_scope":
+        from app.domain.repeat_observation_count import evaluate_repeat_count
+        from app.domain.contracts.enums import TruthValue
+        assert evaluate_repeat_count(good.evaluation.repeat_scheme, repeat_group_ids=(),
+            qualified_scope="per_current_episode", scope_complete=True).result.truth == TruthValue.UNKNOWN
+
+
+@pytest.mark.parametrize("reply", ["valid", "wrong_count", "changed_policy", "transport"])
+def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(reply):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner, ProtocolControlAgentResponse
+    from tests.v2.protocols.test_slice58c_control_deconstructor import (
+        _FakeTransport, _two_independent_candidate_linked_alignment_material, _evaluation,
+    )
+    _, _, repeat_wire, _, _ = _repeat_count_material()
+    scheme = repeat_wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0].evaluation.repeat_scheme
+    batch, source, review, original_wire, payload = _two_independent_candidate_linked_alignment_material()
+    text = "本次节点允许复查3次"
+    batch.owned_units[0].excerpt = source.statements[0].quoted_text = text
+    batch.owned_units[1].excerpt = "研究背景说明"
+    source.statements = source.statements[:1]
+    source.statements[0].force = "descriptive"
+    source.units_without_statement = [batch.owned_units[1].structure_unit_id]
+    wire = _wire(candidate=original_wire.candidate_drafts[0])
+    wire.candidate_drafts[0].applicability_expression = None
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    atom.statement = "本节点可复查3次"
+    atom.source_excerpts = [text]
+    evaluation = _evaluation(atom.statement, atom.source_span_ids[0], text)
+    evaluation["repeat_scheme"] = scheme.model_copy(update={"source_span_ids": list(atom.source_span_ids),
+        "source_excerpts": [text]}).model_dump(mode="json")
+    atom.evaluation = type(atom.evaluation).model_validate(evaluation)
+    for evidence in wire.candidate_drafts[0].minimum_evidence:
+        evidence.description = text
+        evidence.source_policy.source_excerpts = [text]
+    payload["items"] = payload["items"][:1]
+    payload["items"][0]["source_excerpt"] = text
+    alignment = SourceCandidateAlignment.model_validate(payload)
+    alignment.items[0].candidate_atom_quotes = [atom.statement]
+    good = atom.model_copy(deep=True)
+    atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": None})
+    original = wire.model_dump(mode="json")
+    review = SourceTargetReview.model_validate({"version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "additional_requirement", "target_id": None,
+            "source_action_excerpt": source.statements[0].quoted_text, "target_action_excerpt": None,
+            "source_time_excerpt": None, "target_time_excerpt": None,
+            "unresolved_aspects": ["次数合同尚未结构化"]}]})
+    class Transport(_FakeTransport):
+        atom_calls = alignment_calls = 0
+        def start_source_target_review(self, *, prompt, target_ids=None):
+            return ProtocolControlAgentResponse(session_id="source-check", text=review.model_dump_json())
+        def start_source_candidate_alignment(self, *, prompt):
+            self.alignment_calls += 1
+            return ProtocolControlAgentResponse(session_id="alignment", text=alignment.model_dump_json(exclude={"proofs"}))
+        def continue_atom(self, *, session_id, prompt):
+            self.atom_calls += 1
+            assert "本次只允许补 evaluation.repeat_scheme" in prompt
+            if reply == "transport":
+                raise RuntimeError("synthetic unavailable")
+            proposed = good.model_copy(deep=True)
+            if reply == "wrong_count":
+                proposed.evaluation.repeat_scheme.maximum_repeats = 4
+            elif reply == "changed_policy":
+                proposed.evaluation = proposed.evaluation.model_copy(update={"observation_policy":
+                    proposed.evaluation.observation_policy.model_copy(update={"mode": "any"})})
+            return ProtocolControlAgentResponse(session_id=session_id,
+                text=json.dumps({"atom": proposed.model_dump(mode="json")}, ensure_ascii=False))
+        def continue_numeric_predicate(self, **kwargs):
+            pytest.fail("An action count must not request a measurement predicate")
+        def continue_scoped_unit_repair(self, **kwargs):
+            pytest.fail("A missing scheme must not rewrite the source unit")
+    transport = Transport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=2).run(batch, transport,
+        resume_source_interpretation=source, resume_wire=wire, resume_session_id="original-wire",
+        output_validator=lambda _output: None)
+    assert transport.atom_calls == 1, [(attempt.error_classes, attempt.issues) for attempt in result.attempts]
+    if reply == "valid":
+        assert result.final_output is not None
+        assert transport.alignment_calls == 2
+        final = result.partial_wire.model_dump(mode="json")
+        final["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["repeat_scheme"] = None
+        assert final == original
+    else:
+        assert result.final_output is None and result.partial_wire.model_dump(mode="json") == original
+        assert transport.alignment_calls <= 2
+
+
 @pytest.mark.parametrize("outside_quote", ["条件甲", "不存在的原句", " "])
 def test_duplicate_grounded_atoms_cannot_mask_an_unsupported_quote(outside_quote):
     batch, source, wire, coverage, alignment = _conditioned_action_material()

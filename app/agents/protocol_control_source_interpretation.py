@@ -456,7 +456,25 @@ class SourceScopeCorrection(ContractModel):
     scope_context_unit_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     affected_stage: str | None = None
     time_words: list[str] = Field(...)
+    heading_topic_quotes: list[str] = Field(default_factory=list, exclude_if=lambda value: not value)
     unresolved: str | None = None
+
+
+SOURCE_HEADING_SCOPE_RECHECK_VERSION = "source-heading-scope-recheck/v1"
+
+
+def heading_scope_requires_recheck(batch, statement) -> bool:
+    """Select a heading-only classification for review, never decide its meaning."""
+    unit = next(item for item in batch.owned_units
+                if item.structure_unit_id == statement.structure_unit_id)
+    stage = normalize_source_excerpt(statement.affected_stage or "")
+    return bool(stage and statement.scope_quote is None
+                and stage in {normalize_source_excerpt(part) for part in unit.heading_path}
+                and stage not in normalize_source_excerpt(statement.quoted_text)
+                and not _EXPLICIT_TIME_FRAGMENT_RE.search(stage)
+                and not any(stage in {normalize_source_excerpt(target.display_name),
+                                      *[normalize_source_excerpt(quote) for quote in target.source_excerpts]}
+                            for target in batch.known_workflow_stage_targets))
 
 
 def native_schedule_scope_requires_recheck(
@@ -543,6 +561,11 @@ def build_source_scope_correction_prompt(
         "scope_quote 填 null；本条没有对应时间原文则 time_words 填空数组。"
         "本条括号内的临床子条件若有独立回溯期限也要逐项列出，文献书名的版本年份不算；"
         "本条及所属标题直接写出的时间不得删除。无法确认时 unresolved 写原因，"
+        "章节主题与受试者访视不是同一个概念。若确认旧阶段只是章节主题，"
+        "heading_topic_quotes逐字填写该完整所属标题；标题仍保留在冻结来源和本次核对原答中，"
+        "scope_quote与scope_context_unit_id必须原样保留，不把主题新增为访视范围；"
+        "只可移除仅从这个标题复制的阶段或时间字段。正文时间、真实访视、窗口和条件不得删除。"
+        "没有这种归类修订时heading_topic_quotes为空数组；无法确认是主题还是时点时保留疑问。"
         "I/II/III/IV 期是研究期别，不是受试者访视阶段或动作时间：保留在原句或有据共享范围，"
         "不要放进 affected_stage、time_words。"
         "其余字段按原文填写；能够确认则 unresolved 为 null。"
@@ -746,17 +769,35 @@ def apply_source_scope_correction(
                  if item.structure_unit_id == statement.structure_unit_id), None)
     if unit is None or correction.structure_unit_id != statement.structure_unit_id or correction.unresolved:
         raise ValueError("单条来源范围仍未核清")
+    heading_topics = {normalize_source_excerpt(quote) for quote in correction.heading_topic_quotes}
+    headings = {normalize_source_excerpt(part) for part in unit.heading_path}
+    if (heading_topics and (len(heading_topics) != len(correction.heading_topic_quotes)
+            or not heading_topics <= headings
+            or correction.scope_quote != statement.scope_quote
+            or correction.scope_context_unit_id != statement.scope_context_unit_id
+            or any(not quote or _EXPLICIT_TIME_FRAGMENT_RE.search(quote)
+                   or quote in normalize_source_excerpt(statement.quoted_text)
+                   or any(quote in {normalize_source_excerpt(target.display_name),
+                                   *[normalize_source_excerpt(text) for text in target.source_excerpts]}
+                          for target in batch.known_workflow_stage_targets)
+                   for quote in heading_topics)
+            or normalize_source_excerpt(correction.affected_stage or "") in heading_topics
+            or any(normalize_source_excerpt(word) in heading_topics for word in correction.time_words))):
+        raise ValueError("主题归类只可保留完整所属标题，不得删除正文时间或已核范围")
     direct_locations = [statement.quoted_text, *unit.heading_path]
     for word in statement.time_words:
         if is_study_phase_label(word):
             continue
         normalized = normalize_source_excerpt(word)
+        if normalized in heading_topics:
+            continue
         if any(normalized in normalize_source_excerpt(part) for part in direct_locations) and word not in correction.time_words:
             raise ValueError("陈述或标题中的明确时间不可在局部校正时删除")
-    if statement.affected_stage and not is_study_phase_label(statement.affected_stage) and any(
+    if (statement.affected_stage and normalize_source_excerpt(statement.affected_stage) not in heading_topics
+            and not is_study_phase_label(statement.affected_stage) and any(
         normalize_source_excerpt(statement.affected_stage) in normalize_source_excerpt(part)
         for part in direct_locations
-    ) and correction.affected_stage != statement.affected_stage:
+    ) and correction.affected_stage != statement.affected_stage):
         raise ValueError("陈述或标题中的明确阶段不可在局部校正时删除")
     updated = interpretation.model_copy(deep=True)
     phase_supported = any(

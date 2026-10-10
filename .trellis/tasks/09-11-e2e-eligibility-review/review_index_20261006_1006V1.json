@@ -23,7 +23,22 @@
     "counts_are_live_not_terminal": false,
     "source_checkpoint": "8d167240750b47a5b446d0c1f6338cd0",
     "pending_author_checkpoint": null,
-    "first_causal_error": "Scoped repair ran once and persisted its unit marker. Alignment incorrectly required each statement in all independently bound obligation groups. The conditional group fix does not settle remaining source time, exception or branch meaning; frozen real reply still rejected without proof binding.",
+    "first_causal_error": "Frozen source treated a chapter topic as visit/time and an allowed repeat count as a measurement comparator. Heading role needs a bounded source recheck; repeat count uses the existing typed scheme. No current proof or clinical adoption from the diagnostic.",
+    "source_heading_and_repeat_recovery": {
+      "base_head": "5749dd12",
+      "validator_versions": ["source-heading-scope-recheck/v1", "source-repeat-count-alignment/v1"],
+      "final_affected": {"passed": 183, "failed": 0, "errors": 0, "junit_seconds": 4.528, "exit_code": 0, "junit": "artifacts/rv1006-source-role-repeat-recovery-connected-20261010-v7.xml"},
+      "windows_not_additive": true,
+      "full_suite": false,
+      "product_recovery_executed": false,
+      "source_diagnostic": {"physical_calls": 1, "seconds": 57.0941650000168, "provider": "ollama-cloud", "model": "deepseek-v4.1-flash", "effort": "high", "output_limit": 65536, "database_write": false, "proof_binding": false, "clinical_adoption": false, "private_record": "rv1006-source-role-diagnostic-20261010-v1"},
+      "conference": {"session_id": "01a122e0-696b-7146-9a31-8969fdc03ed0", "exit_codes": [0, 0], "source_reads": ["12/12", "14/14"], "fallback": null, "model_independent": false, "last_report": "runs/conference/rv1006-post-publication-policy-recovery-20261010/evidence_single_object_source_role_repair.md"},
+      "owner_final_hardening_after_review": true,
+      "owner_disposition": "reviews/rv1006-source-role-repeat-owner-disposition-20261010.md",
+      "latest_source_preflight": "not_yet_run",
+      "preserves_prior_unit_attempt_marker": true,
+      "nonstandard_heading_meaning_not_deterministically_proven": true
+    },
     "source_conditional_group_alignment": {
       "validator_version": "source-conditional-group-alignment/v1",
       "final_affected": {"passed": 128, "deselected": 1738, "seconds": 2.22, "exit_code": 0, "warnings": 5, "junit": "artifacts/rv1006-source-branch-scope-connected-20261010-v3.xml"},

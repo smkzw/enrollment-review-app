@@ -40,13 +40,13 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "1006V1持续/Goal active/claims_complete=false。effc96431实际8239d4cb failed_final，3调用350.384634s/44完成45失败45未执行，实际持久化单元尝试标记。条件绑定兄弟组逐项核对与消费者一致，限定有源、已关联、完整条件蕴含；共享整段/未知/无绑定仍拒。同单元解释进入新hash。四原模块末选择窗128pass/2.22s/exit0；C03两轮同批准会话exit0/no fallback，范围词缺失推断拒绝，兄弟资格由末反例验证。真实最终答零调用重验仍拒时间/例外及分支，不绑定证明。先查首错而非重复作者或长作业；完整同包工作稿/UI更正未达；七dirty保留。",
+  "notes": "1006V1持续/Goal active/claims_complete=false。当前实际8239仍failed_final，44完成/45失败/45未执行；旧单元尝试标记保留。标题角色与复查次数最小包183相连检查通过，整来源重验/原答历史/仅缺失scheme字段恢复，事件计数和许可矛盾拒绝；未知不默认。产品来源诊断1调用57.094165s仅合同通过，0库写/0采用。批准C03两审exit0/no fallback，同模型家族程序分离且未跑测试/临床；末保护所有者反例验证。当前预检/真实恢复尚未运行，完整同源包及病例/UI更正闭环未达；七份继承dirty及私有材料保留。详见implement/HANDOFF及source-role-repeat取舍。",
   "meta": {
     "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",
     "current_scope": "1006V1 frozen delivery window: complete same-source requirements, isolated current-node work draft, source navigation, one UI correction/supplement, affected recalculation and old/new history; R1/1001V1 retained.",
     "claims_complete": false,
-    "review_packet_status": "source_conditional_group_alignment_verified_real_reply_still_rejected",
+    "review_packet_status": "source_heading_repeat_local_recovery_verified_pending_product_run",
     "runtime_goal_status_observed": "active",
     "current_handoff": "HANDOFF.md",
     "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",

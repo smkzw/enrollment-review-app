@@ -5103,6 +5103,103 @@ def test_source_scope_correction_is_local_and_preserves_direct_time() -> None:
         apply_source_scope_correction(batch, original, 0, wrong_unit)
 
 
+def _heading_topic_scope_material():
+    batch = _batch().model_copy(deep=True)
+    unit = batch.owned_units[1]
+    unit.heading_path = ["资料记录", "异常结果的处理"]
+    unit.excerpt = "处理前记录末次用药日期"
+    inventory = _source_inventory({"version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁", "force": "required", "time_words": []},
+            {"structure_unit_id": "su-02", "quoted_text": unit.excerpt, "force": "required",
+             "affected_stage": "异常结果的处理", "time_words": ["处理前", "异常结果的处理"]}],
+        "units_without_statement": []})
+    correction = SourceScopeCorrection(version="phase5/control-source-scope-correction/v1",
+        structure_unit_id="su-02", scope_quote=None, affected_stage=None,
+        time_words=["处理前"], heading_topic_quotes=["异常结果的处理"])
+    return batch, inventory, correction
+
+
+@pytest.mark.parametrize("change", [None, "lost_title", "invented_title", "lost_body_time",
+    "real_period", "known_visit", "changed_scope", "unresolved"])
+def test_heading_topic_reclassification_preserves_source_and_true_time(change):
+    from app.agents.protocol_control_source_interpretation import heading_scope_requires_recheck
+    batch, inventory, correction = _heading_topic_scope_material()
+    original = inventory.model_dump(mode="json")
+    assert heading_scope_requires_recheck(batch, inventory.statements[1])
+    if change == "lost_title":
+        correction.heading_topic_quotes = []
+    elif change == "invented_title":
+        correction.heading_topic_quotes = ["不存在的标题"]
+    elif change == "lost_body_time":
+        correction.time_words = []
+    elif change == "real_period":
+        batch.owned_units[1].heading_path[-1] = "基线期"
+        inventory.statements[1].affected_stage = "基线期"
+        inventory.statements[1].time_words[-1] = "基线期"
+        correction.heading_topic_quotes = ["基线期"]
+    elif change == "known_visit":
+        batch.known_workflow_stage_targets[0].display_name = "异常结果的处理"
+    elif change == "changed_scope":
+        inventory.statements[1].scope_quote = "处理前"
+    elif change == "unresolved":
+        correction.unresolved = "标题是否表示事件时点尚不清楚"
+    if change:
+        with pytest.raises(ValueError):
+            apply_source_scope_correction(batch, inventory, 1, correction)
+    else:
+        revised = apply_source_scope_correction(batch, inventory, 1, correction)
+        validate_source_interpretation(batch, revised)
+        assert revised.statements[1].time_words == ["处理前"]
+        assert revised.statements[1].scope_quote is None
+        assert batch.owned_units[1].heading_path == ["资料记录", "异常结果的处理"]
+        assert not heading_scope_requires_recheck(batch, revised.statements[1])
+        assert inventory.model_dump(mode="json") == original
+        assert revised.statements[0] == inventory.statements[0]
+        assert revised.statements[1].model_dump(exclude={"scope_quote", "affected_stage", "time_words"}) == (
+            inventory.statements[1].model_dump(exclude={"scope_quote", "affected_stage", "time_words"}))
+
+
+@pytest.mark.parametrize("reply", ["valid", "unchanged", "transport", "exhausted"])
+def test_runner_heading_topic_recheck_is_saved_bounded_and_not_an_author_rewrite(reply):
+    batch, inventory, correction = _heading_topic_scope_material()
+    class HeadingTransport(_FakeTransport):
+        scope_calls = 0
+        def correct_source_scope(self, *, prompt):
+            self.scope_calls += 1
+            assert "章节主题与受试者访视不是同一个概念" in prompt
+            if reply == "transport":
+                raise RuntimeError("synthetic unavailable")
+            proposal = (correction.model_copy(update={"scope_quote": None,
+                "affected_stage": "异常结果的处理", "time_words": ["处理前", "异常结果的处理"],
+                "heading_topic_quotes": []}) if reply == "unchanged" else correction)
+            return ProtocolControlAgentResponse(session_id="heading-review", text=proposal.model_dump_json())
+    transport = HeadingTransport([ProtocolControlAgentResponse(session_id="wire", text=_wire().model_dump_json())])
+    result = ProtocolControlAgentRunner(max_schema_repairs=0 if reply == "exhausted" else 1).run(
+        batch, transport, resume_source_interpretation=inventory, output_validator=lambda _output: None)
+    assert transport.scope_calls == (0 if reply == "exhausted" else 1)
+    history = result.source_scope_question_history
+    assert len(history) == 1 and history[0]["error_detail"]["workflow_phase"] == "source_heading_scope_recheck"
+    assert history[0]["error_detail"]["precondition_sha256"]
+    if reply == "valid":
+        assert result.source_interpretation.statements[1].affected_stage is None
+        assert result.source_interpretation.statements[1].time_words == ["处理前"]
+        assert result.source_interpretation.statements[0] == inventory.statements[0]
+        assert len(transport.prompts) == 1
+    else:
+        assert result.source_interpretation == inventory and not transport.prompts
+        assert result.final_output is None
+        if reply in {"unchanged", "exhausted"}:
+            from app.services.protocol_control_execution import _saved_source_scope_question_history
+            saved_history = _saved_source_scope_question_history(json.loads(json.dumps({
+                "source_scope_question_history": result.source_scope_question_history}, ensure_ascii=False)))
+            again = HeadingTransport([])
+            second = ProtocolControlAgentRunner(max_schema_repairs=0 if reply == "exhausted" else 1).run(batch, again,
+                resume_source_interpretation=inventory, resume_source_scope_question_history=saved_history,
+                output_validator=lambda _output: None)
+            assert again.scope_calls == 0 and second.final_output is None
+
+
 def test_runner_repairs_two_source_scopes_without_rereading_other_statements() -> None:
     batch = _batch().model_copy(deep=True)
     original = _source_inventory({

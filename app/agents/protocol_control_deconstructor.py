@@ -136,6 +136,8 @@ from .protocol_control_source_interpretation import (
     SourceInterpretationValidationError,
     SourceQuoteCorrection,
     SourceScopeCorrection,
+    SOURCE_HEADING_SCOPE_RECHECK_VERSION,
+    heading_scope_requires_recheck,
     SourceStatement,
     SourceStatementCoverage,
     schedule_column_links,
@@ -7061,6 +7063,7 @@ def _merge_time_operand_repair(
 def _merge_obligation_atom_repair(
     raw_text: str, baseline: Mapping[str, Any], path: tuple[int, int, int],
     *, numeric_predicate_only: bool = False, missing_anchor_only: bool = False,
+    repeat_scheme_only: bool = False,
 ) -> ProtocolControlAgentWire:
     """Splice a checked atom into the original batch; all siblings remain byte-identical."""
 
@@ -7116,6 +7119,16 @@ def _merge_obligation_atom_repair(
             for field, value in original["evaluation"].items():
                 if field not in allowed and replacement_json["evaluation"][field] != value:
                     raise ValueError(f"数值条件修订不得改变 evaluation/{field}")
+        if repeat_scheme_only:
+            if replacement_json["time_constraint"] != original["time_constraint"]:
+                raise ValueError("复查合同修订不得改变时间约束")
+            scheme = replacement.evaluation.repeat_scheme
+            if scheme is None or original["evaluation"].get("repeat_scheme") is not None:
+                raise ValueError("只可补齐已定位的缺失复查合同")
+            scheme.require_current_extraction()
+            for field, value in original["evaluation"].items():
+                if field != "repeat_scheme" and replacement_json["evaluation"][field] != value:
+                    raise ValueError(f"复查合同修订不得改变 evaluation/{field}")
         if missing_anchor_only:
             if original["time_constraint"] is not None or replacement_json["time_constraint"] is None:
                 raise ValueError("时间锚点修订只能补齐已定位的缺失时间约束")
@@ -7138,6 +7151,7 @@ def _build_obligation_atom_repair_prompt(
     problem: str,
     *, numeric_predicate_only: bool = False, field_patch: bool = False,
     missing_anchor_only: bool = False,
+    repeat_scheme_only: bool = False,
 ) -> str:
     candidate_index, group_index, atom_index = path
     candidate = baseline["candidate_drafts"][candidate_index]
@@ -7174,6 +7188,14 @@ def _build_obligation_atom_repair_prompt(
     return (
         "仅修订一个已有义务原子的结构，不新增临床含义。"
         "原句、义务类型、强度、来源定位、后续义务和研究者判断属性必须原样保留；"
+        + ("本次只允许补 evaluation.repeat_scheme，其他所有字段原样保留。"
+           "本条是有源动作次数，不是检验阈值，不填写虚假的数值比较。"
+           "使用repeat-scheme/v4；逐项说明允许或禁止、触发、次数、次数适用范围、期限、"
+           "复查结果及不复查时结果的采用。原文没有说明的范围或结果采用规则写unresolved，"
+           "不得默认每次初查、当前节点或自动保留初查结果。"
+           "复查合同的source_span_ids/source_excerpts必须来自本原子已冻结来源，"
+           "不得借兄弟来源补日期、条件或结果采用规则。返回完整atom，由宿主只合并获准字段。"
+           if repeat_scheme_only else "")
         + ("本次仅补齐已定位原子的 time_constraint，以及与该约束配套的 "
            "evaluation.time_operand_attribute 和 evaluation.time_purpose；"
            "其他求值字段、观察政策和所有兄弟项必须原样保留。不得借用兄弟项的时窗。"
@@ -7183,7 +7205,7 @@ def _build_obligation_atom_repair_prompt(
            "比较条件的source_clause与source_clauses互斥：单段填写source_clause时source_clauses为空；"
            "多段填写source_clauses时source_clause为null，不能同时填写。"
            "原文有次数、天数等单位时必须保留该单位，不能改写为unitless；只有真正无量纲的值才用unitless。"
-           if numeric_predicate_only else "只能根据冻结原文修订求值和时间字段。")
+           if numeric_predicate_only else "" if repeat_scheme_only else "只能根据冻结原文修订求值和时间字段。")
         + "若原文无法支持修订，不得猜测。"
         "返回的是完整原子，不是单个字段补丁：数值比较的单位须按原文填写，"
         "确为无量纲时写 unitless；求值规格须同时保留非空观察采用说明，"
@@ -7504,11 +7526,13 @@ class ProtocolControlAgentRunner:
                   if attempt.error_detail and attempt.error_detail.get("workflow_phase") in {
                       "source_scope_question_recheck", "source_context_completion",
                       "source_unit_quote_completion",
+                      "source_heading_scope_recheck",
                   }],
             ])
             if any(attempt.error_detail and attempt.error_detail.get("workflow_phase") in {
                 "source_scope_question_recheck", "source_function_field_repair", "source_context_completion",
                 "source_unit_quote_completion",
+                "source_heading_scope_recheck",
             }
                    for attempt in attempts):
                 values.setdefault("repair_used", True)
@@ -7668,6 +7692,7 @@ class ProtocolControlAgentRunner:
         question_history = [dict(item) for item in resume_source_scope_question_history]
         seen_questions: set[int] = set()
         seen_context_attempts: set[int] = set()
+        seen_heading_attempts: set[tuple[int, str]] = set()
         seen_unit_completions: set[tuple[str, str]] = set()
         for record in question_history:
             attempt = ProtocolControlAgentAttempt.model_validate(record)
@@ -7675,9 +7700,11 @@ class ProtocolControlAgentRunner:
             index = detail.get("statement_id")
             context_completion = detail.get("workflow_phase") == "source_context_completion"
             unit_completion = detail.get("workflow_phase") == "source_unit_quote_completion"
+            heading_recheck = detail.get("workflow_phase") == "source_heading_scope_recheck"
             if (source_interpretation is None or detail.get("workflow_phase") != "source_scope_question_recheck"
-                    and not context_completion and not unit_completion
-                    or detail.get("code") != ("SOURCE_UNIT_QUOTE_COMPLETION" if unit_completion
+                    and not context_completion and not unit_completion and not heading_recheck
+                    or detail.get("code") != ("SOURCE_HEADING_SCOPE_RECHECK" if heading_recheck
+                                              else "SOURCE_UNIT_QUOTE_COMPLETION" if unit_completion
                                               else "SOURCE_CONTEXT_COMPLETION" if context_completion
                                               else "SOURCE_SCOPE_QUESTION_RECHECK")
                     or type(index) is not int or not 0 <= index < len(source_interpretation.statements)):
@@ -7685,11 +7712,17 @@ class ProtocolControlAgentRunner:
             statement = source_interpretation.statements[index]
             unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == statement.structure_unit_id)
             if (detail.get("source_refs") != list(unit.source_span_ids)
-                    or detail.get("json_path") != f"statements[{index}].{'quoted_text' if unit_completion else 'scope_quote' if context_completion else 'unresolved'}"
+                    or detail.get("json_path") != f"statements[{index}].{'quoted_text' if unit_completion else 'scope_quote' if context_completion or heading_recheck else 'unresolved'}"
                     or not isinstance(detail.get("precondition_sha256"), str)
                     or len(detail["precondition_sha256"]) != 64
                     or (attempt.raw_output_text is not None and _sha256(attempt.raw_output_text) != attempt.raw_output_sha256)):
                 raise ValueError("来源疑问的历史核对见证损坏，未发送请求")
+            if heading_recheck:
+                if detail.get("guidance_version") != SOURCE_HEADING_SCOPE_RECHECK_VERSION:
+                    raise ValueError("标题范围核对合同已变，不能复用旧见证")
+                if attempt.outcome != "transport_failed" and detail.get("called", True) is not False:
+                    seen_heading_attempts.add((index, detail["precondition_sha256"]))
+                continue
             if unit_completion:
                 if detail.get("structure_unit_id") != statement.structure_unit_id:
                     raise ValueError("局部补读历史与冻结单元身份不一致")
@@ -8245,6 +8278,59 @@ class ProtocolControlAgentRunner:
                         "逐字定位时填写 scope_quote；否则留空。仍须返回全部原文陈述，"
                         "不得改写原文、推断医学含义或遗漏其他单元。"
                     )
+        if source_interpretation is not None:
+            for index, statement in enumerate(source_interpretation.statements):
+                if not heading_scope_requires_recheck(batch, statement):
+                    continue
+                response = None
+                called = False
+                unit = next(unit for unit in batch.owned_units
+                            if unit.structure_unit_id == statement.structure_unit_id)
+                detail = {"workflow_phase": "source_heading_scope_recheck",
+                    "code": "SOURCE_HEADING_SCOPE_RECHECK", "statement_id": index,
+                    "json_path": f"statements[{index}].scope_quote", "source_refs": list(unit.source_span_ids),
+                    "precondition_sha256": _sha256(statement.model_dump_json()),
+                    "guidance_version": SOURCE_HEADING_SCOPE_RECHECK_VERSION,
+                    "retry_class": "source_semantic_review", "affected_dependents": [index]}
+                try:
+                    corrector = getattr(transport, "correct_source_scope", None)
+                    if ((index, detail["precondition_sha256"]) in seen_heading_attempts
+                            or source_repairs >= source_repair_limit or not callable(corrector)):
+                        raise ValueError("标题范围尚未核清，未重复调用或扩大读取")
+                    prompt = build_source_scope_correction_prompt(batch, statement,
+                        "旧阶段仅来自完整章节标题，而非本条正文。核实标题是主题还是实际审核时点；"
+                        "只能修范围、阶段和时间字段，原句、条件、例外及兄弟陈述保留。")
+                    detail["prompt_sha256"] = _sha256(prompt)
+                    source_repairs += 1
+                    called = True
+                    response = corrector(prompt=prompt)
+                    correction = SourceScopeCorrection.model_validate_json(response.text)
+                    revised_source = apply_source_scope_correction(batch, source_interpretation, index, correction)
+                    if heading_scope_requires_recheck(batch, revised_source.statements[index]):
+                        raise ValueError("标题用途仍未说明，不能照抄旧分类充当核对")
+                    validate_source_interpretation(batch, revised_source)
+                    source_interpretation = revised_source
+                    repair_used = True
+                    attempts.append(ProtocolControlAgentAttempt(attempt=len(attempts) + 1,
+                        session_id=response.session_id, raw_output_sha256=_sha256(response.text),
+                        raw_output_text=response.text, raw_output_chars=len(response.text),
+                        outcome="parsed", error_detail=detail,
+                        issues=["仅核标题范围；原文、正文时间及兄弟陈述保留，目标含义仍须核对"]))
+                except Exception as error:
+                    code = protocol_control_call_failure_code(error) or "SOURCE_HEADING_SCOPE_RECHECK_INVALID"
+                    detail["called"] = called
+                    attempts.append(ProtocolControlAgentAttempt(attempt=len(attempts) + 1,
+                        session_id=response.session_id if response else "heading-scope-failed",
+                        raw_output_sha256=_sha256(response.text if response else str(error)),
+                        raw_output_text=response.text if response else None if called else str(error),
+                        raw_output_chars=len(response.text) if response else None if called else len(str(error)),
+                        outcome="schema_invalid" if response else "transport_failed" if called else "publication_invalid",
+                        error_classes=[code], error_detail=detail, issues=[str(error)[:1200]]))
+                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                        session_id=session_id or "heading-scope-failed", attempts=attempts,
+                        source_interpretation=source_interpretation, partial_wire=partial_wire,
+                        source_target_review=resume_source_target_review,
+                        source_statement_coverage=list(resume_source_statement_coverage))
         if source_interpretation is not None and callable(source_reader):
             for index, statement in enumerate(source_interpretation.statements):
                 if (index in seen_questions or not can_recheck_source_scope_question(statement, batch)
@@ -10296,9 +10382,16 @@ class ProtocolControlAgentRunner:
                             ]
                             if cited_unexpressed:
                                 numeric_failures = [failure for failure in alignment_failures
-                                    if failure.get("reason") == "numeric_predicate_missing"
+                                    if failure.get("reason") in {"numeric_predicate_missing", "repeat_scheme_missing"}
                                     and len(failure.get("atom_paths", [])) == 1]
-                                patch_reader = getattr(transport, "continue_numeric_predicate", None)
+                                from .protocol_control_candidate_alignment import source_declares_uncompared_action_count
+                                repeat_scheme_only = (len(numeric_failures) == 1
+                                    and numeric_failures[0]["reason"] == "repeat_scheme_missing"
+                                    and len(numeric_failures[0]["statement_ids"]) == 1
+                                    and source_declares_uncompared_action_count(source_interpretation.statements[
+                                        numeric_failures[0]["statement_ids"][0]]))
+                                patch_reader = (None if repeat_scheme_only else
+                                                getattr(transport, "continue_numeric_predicate", None))
                                 atom_reader = patch_reader if callable(patch_reader) else getattr(transport, "continue_atom", None)
                                 if (len(numeric_failures) == 1
                                         and numeric_failures[0]["statement_ids"] == [
@@ -10321,11 +10414,15 @@ class ProtocolControlAgentRunner:
                                             atom_response = atom_reader(session_id=session_id,
                                                 prompt=_build_obligation_atom_repair_prompt(
                                                     batch, baseline, path, _stable_json(failure),
-                                                    numeric_predicate_only=True, field_patch=callable(patch_reader)))
+                                                    numeric_predicate_only=not repeat_scheme_only,
+                                                    repeat_scheme_only=repeat_scheme_only,
+                                                    field_patch=callable(patch_reader)))
                                             if atom_response.session_id != session_id:
                                                 raise ValueError("义务局部修订不得更换原会话")
                                             revised = _merge_obligation_atom_repair(
-                                                atom_response.text, baseline, path, numeric_predicate_only=True)
+                                                atom_response.text, baseline, path,
+                                                numeric_predicate_only=not repeat_scheme_only,
+                                                repeat_scheme_only=repeat_scheme_only)
                                         except Exception as atom_error:  # noqa: BLE001 - preserve failed scoped reply
                                             code = protocol_control_call_failure_code(atom_error) or "ATOM_REPAIR_INVALID"
                                             attempts.append(ProtocolControlAgentAttempt(

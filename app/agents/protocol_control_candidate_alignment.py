@@ -23,6 +23,7 @@ NATIVE_ROW_ACTION_COVERAGE_VERSION = "native-row-action-coverage/v2"
 CANDIDATE_SOURCE_CLOSURE_CONTEXT_VERSION = "candidate-source-closure-context/v1"
 SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION = "statement-grounded-candidate-quotes/v1"
 SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION = "source-conditional-group-alignment/v1"
+SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION = "source-repeat-count-alignment/v1"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
@@ -30,20 +31,21 @@ class SourceCandidateAlignmentValidationError(ValueError):
 
 
 class CandidateNumericAlignmentError(SourceCandidateAlignmentValidationError):
-    def __init__(self, *, item, candidate, atoms, source_refs):
+    def __init__(self, *, item, candidate, atoms, source_refs, repeat_scheme_only=False):
         paths = [(item.candidate_index, group_index, atom_index)
                  for group_index, group in enumerate(candidate.obligation_expression.groups)
                  for atom_index, atom in enumerate(group.atoms)
                  if atom in atoms and any(_NUMBER.search(quote)
-                     and any(re.search(pattern, quote) for pattern, _ in _COMPARISON_WORDS)
+                     and (repeat_scheme_only or any(re.search(pattern, quote) for pattern, _ in _COMPARISON_WORDS))
                      for quote in atom.source_excerpts)]
         self.error_detail = {
-            "reason": "numeric_predicate_missing",
+            "reason": "repeat_scheme_missing" if repeat_scheme_only else "numeric_predicate_missing",
             "source_refs": list(source_refs),
             "atom_paths": [list(path) for path in paths],
             "required_source_excerpt": item.source_excerpt,
         }
-        super().__init__("数值原文缺少可核验的比较条件，不能宣布完整")
+        super().__init__("动作次数缺少有源复查合同，不能宣布完整" if repeat_scheme_only else
+                         "数值原文缺少可核验的比较条件，不能宣布完整")
 
 
 class EvidencePolicyCheckError(SourceCandidateAlignmentValidationError):
@@ -423,6 +425,50 @@ def _independent_source_obligation_groups(unit, statement, interpretation, cover
     return independent
 
 
+def source_declares_uncompared_action_count(statement) -> bool:
+    from .protocol_control_source_interpretation import normalize_source_excerpt
+    source = normalize_source_excerpt(statement.quoted_text)
+    numbers = set(_NUMBER.findall(source))
+    return bool("action" in statement.decision_functions
+                and "threshold" not in statement.decision_functions and len(numbers) == 1
+                and f"{next(iter(numbers))}次" in source
+                and re.search(r"复查|复测|复验|复检|重测|重复(?:测量|检查|检验|检测)|再次(?:测量|检查|检验|检测)|retest|recheck|repeat(?:ed)?(?:measurements?|tests?|examinations?)", source, re.IGNORECASE)
+                and not any(re.search(pattern, source) for pattern, _direction in _COMPARISON_WORDS))
+
+
+def _source_repeat_count_is_preserved(unit, statement, source, numbers, directions, predicates, atoms):
+    """A declared repeat count is not a measurement-comparison predicate.
+
+    This proves only the source count's representation. Permission, trigger,
+    acquisition qualification and result use remain with the repeat consumers.
+    """
+    if len(numbers) != 1 or directions or predicates:
+        return False
+    from app.domain.contracts.repeat_scheme import RepeatScheme, validate_repeat_source
+    from .protocol_control_source_interpretation import normalize_source_excerpt
+
+    number = next(iter(numbers))
+    if f"{number}次" not in source:
+        return False
+    schemes = []
+    for atom in atoms:
+        evaluation = atom.evaluation
+        if evaluation is None or evaluation.repeat_scheme is None:
+            continue
+        scheme = RepeatScheme.model_validate(evaluation.repeat_scheme.model_dump(mode="json"))
+        scheme.require_current_extraction()
+        validate_repeat_source(scheme, evaluation.source_span_ids, evaluation.source_excerpts)
+        if ((scheme.permission == "required" and statement.force not in {"required", "conditional"})
+                or (scheme.permission == "optional" and statement.force in {"required", "prohibited"})
+                or (scheme.permission == "forbidden" and statement.force != "prohibited")):
+            return False
+        if (scheme.count_status == "specified" and str(scheme.maximum_repeats) == number
+                and set(scheme.source_span_ids) <= set(unit.source_span_ids)
+                and any(source == normalize_source_excerpt(quote) for quote in scheme.source_excerpts)):
+            schemes.append(scheme)
+    return len(schemes) == 1
+
+
 def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
     from app.protocols.procedure_catalog import schedule_column_scope
 
@@ -539,6 +585,10 @@ def _alignment_input_identity(batch, interpretation, wire, item):
                                    if row.structure_unit_id == statement.structure_unit_id]}
                               if candidate.trigger_expression is not None
                               and len(candidate.obligation_expression.groups) > 1 else {}),
+                           **({"repeat_count_alignment": SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION}
+                              if any(atom.evaluation is not None and atom.evaluation.repeat_scheme is not None
+                                     for group in candidate.obligation_expression.groups for atom in group.atoms)
+                              else {}),
                            **({"candidate_source_closure_version": CANDIDATE_SOURCE_CLOSURE_CONTEXT_VERSION,
                                "candidate_source_closure": _candidate_source_closure(batch, candidate)}
                               if len(candidate.source_structure_unit_ids) > 1 else {}),
@@ -872,6 +922,11 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
             predicates = [atom.evaluation.predicate for atom in selected_atoms
                           if getattr(atom, "evaluation", None) is not None
                           and atom.evaluation.predicate is not None]
+            if (source_declares_uncompared_action_count(statement) and len(obligation_selected) == 1
+                    and obligation_selected[0].evaluation is not None
+                    and obligation_selected[0].evaluation.repeat_scheme is None and not predicates):
+                raise CandidateNumericAlignmentError(item=item, candidate=candidate, atoms=obligation_selected,
+                    source_refs=unit.source_span_ids, repeat_scheme_only=True)
             if len(numbers) == 1 and len(directions) == 1 and not predicates:
                 raise CandidateNumericAlignmentError(
                     item=item, candidate=candidate, atoms=obligation_selected,
@@ -917,7 +972,12 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 if (len(source_modes) != 1 or statement_modes != source_modes
                         or (proposition_modes and not source_modes <= proposition_modes)):
                     raise ValueError("候选数量范围未在对应原句中保留")
-            if numbers and not (native_visit_scope and source in rendered
+            repeat_count_preserved = source_declares_uncompared_action_count(statement) and (
+                _source_repeat_count_is_preserved(
+                    unit, statement, source, numbers, directions, predicates, obligation_selected,
+                )
+            )
+            if numbers and not repeat_count_preserved and not (native_visit_scope and source in rendered
                                 and "threshold" not in functions and not directions):
                 if len(numbers) != 1 or len(directions) != 1 or not predicates:
                     raise ValueError("数值原文不能由模糊比较条件宣布完整")
