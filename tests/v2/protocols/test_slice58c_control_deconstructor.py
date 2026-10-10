@@ -14600,6 +14600,139 @@ def _two_independent_candidate_linked_alignment_material():
     return batch, inventory, review, wire, alignment
 
 
+@pytest.mark.parametrize("fault", [None, "unbound", "positive", "ambiguity", "shared_source", "two_units"])
+def test_reviewed_semantic_closure_requires_bound_negative_and_complete_source(fault):
+    from app.agents.protocol_control_deconstructor import _reviewed_semantic_closure_repair
+    from app.agents.protocol_control_candidate_alignment import (
+        SourceCandidateAlignment, bind_partial_candidate_alignment,
+    )
+    batch, inventory, _, wire, raw = _two_independent_candidate_linked_alignment_material()
+    coverage = source_statement_coverage(batch, inventory, wire)
+    alignment, failures = bind_partial_candidate_alignment(
+        batch, inventory, coverage, wire, SourceCandidateAlignment.model_validate(raw),
+        json.dumps(raw, ensure_ascii=False), [(0, 0), (1, 1)],
+    )
+    assert not failures
+    indexes = [1]
+    if fault == "unbound":
+        alignment = SourceCandidateAlignment.model_validate(raw)
+    elif fault == "positive":
+        indexes = [0]
+    elif fault == "ambiguity":
+        inventory.statements[1].unresolved = ["当前来源未明确对象"]
+    elif fault == "shared_source":
+        wire.candidate_drafts[1].source_structure_unit_ids = ["su-01", "su-02"]
+    elif fault == "two_units":
+        indexes = [0, 1]
+    error = _reviewed_semantic_closure_repair(batch, inventory, wire, coverage, alignment, indexes)
+    if fault:
+        assert error is None
+    else:
+        assert error.code == "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"
+        assert error.structure_unit_ids == ("su-02",)
+        assert error.candidate_ids == (hydrate_protocol_control_agent_output(wire, batch).candidates[1].control_candidate_id,)
+        assert error.allow_source_closure_rewrite and not error.allow_source_insert
+
+
+@pytest.mark.parametrize("reply", ["valid", "unchanged", "bad_json", "escape", "budget"])
+def test_reviewed_semantic_closure_reuses_scoped_splice_and_rechecks_consumer(reply):
+    batch, inventory, review, wire, alignment = _two_independent_candidate_linked_alignment_material()
+    quote, initial = "记录评估结论并告知下一步安排", "记录评估结论"
+    batch.owned_units[1].excerpt = quote
+    inventory.statements[1].quoted_text = quote
+    inventory.statements[1].time_words = []
+    inventory.statements[1].decision_functions = ["action"]
+    review.items[1].source_action_excerpt = quote
+    review.items[1].source_time_excerpt = None
+    review.items[1].unresolved_aspects = ["未完整表达两个动作"]
+    first_atom = wire.candidate_drafts[1].obligation_expression.groups[0].atoms[0]
+    first_atom.statement = initial
+    first_atom.source_excerpts = [quote]
+    first_atom.evaluation = type(first_atom.evaluation).model_validate(_evaluation(initial, "span:02", quote))
+    wire.candidate_drafts[1].minimum_evidence[0].source_policy.source_excerpts = [quote]
+    alignment["items"][1].update(source_excerpt=quote, candidate_atom_quotes=[initial],
+                                 unresolved_dimensions=["告知下一步安排"])
+    before = wire.model_dump(mode="json")
+    corrected = wire.candidate_drafts[1].model_copy(deep=True)
+    atom = corrected.obligation_expression.groups[0].atoms[0]
+    atom.statement = inventory.statements[1].quoted_text
+    atom.evaluation = type(atom.evaluation).model_validate(_evaluation(atom.statement, "span:02", atom.statement))
+    patch = wire.model_copy(update={"dispositions": [wire.dispositions[1]], "candidate_drafts": [corrected]})
+    class Transport(_FakeTransport):
+        scoped_calls = 0
+        def restore_scoped_session(self, **kwargs):
+            pass
+        def start_source_target_review(self, *, prompt):
+            indexes = json.loads(prompt.split("本次必须且只能返回这些 statement_index：", 1)[1].split("。", 1)[0])
+            return ProtocolControlAgentResponse(session_id="target", text=review.model_copy(update={
+                "items": [item for item in review.items if item.statement_index in indexes],
+            }).model_dump_json())
+        def start_source_candidate_alignment(self, *, prompt):
+            selected = json.loads(prompt.split("待核对应：", 1)[1])
+            payload = deepcopy(alignment)
+            payload["items"] = [item for item in payload["items"] if any(
+                (item["statement_index"], item["candidate_index"]) == (entry["statement_index"], entry["candidate_index"])
+                for entry in selected)]
+            if self.scoped_calls and reply == "valid":
+                for item in payload["items"]:
+                    entry = next(entry for entry in selected if entry["statement_index"] == item["statement_index"])
+                    item.update(decision="fully_expressed", candidate_atom_quotes=entry["allowed_candidate_atom_quotes"],
+                                unresolved_dimensions=[])
+            return ProtocolControlAgentResponse(session_id="alignment", text=json.dumps(payload, ensure_ascii=False))
+        def continue_session(self, **kwargs):
+            pytest.fail("A bound semantic omission cannot authorize whole-batch rewriting")
+        def continue_scoped_unit_repair(self, *, session_id, prompt, batch):
+            self.scoped_calls += 1
+            assert batch.owned_structure_unit_ids == ["su-02"]
+            assert "su-01" in batch.context_structure_unit_ids
+            payload = patch.model_dump(mode="json")
+            if reply == "unchanged":
+                payload["candidate_drafts"] = [before["candidate_drafts"][1]]
+            elif reply == "escape":
+                payload["dispositions"].append(before["dispositions"][0])
+            return ProtocolControlAgentResponse(session_id=session_id,
+                text="{" if reply == "bad_json" else json.dumps(payload, ensure_ascii=False))
+    transport = Transport([])
+    consumed = []
+    result = ProtocolControlAgentRunner(max_schema_repairs=0 if reply == "budget" else 2).run(
+        batch, transport, resume_wire=wire, resume_source_interpretation=inventory,
+        resume_session_id="saved", output_validator=consumed.append,
+    )
+    assert wire.model_dump(mode="json") == before
+    assert transport.scoped_calls == (0 if reply == "budget" else 1), [(attempt.error_classes, attempt.issues) for attempt in result.attempts]
+    assert consumed
+    if reply == "valid":
+        assert result.final_output is not None, [attempt.issues for attempt in result.attempts]
+        assert len(consumed) == 3
+        assert result.partial_wire.candidate_drafts[0] == wire.candidate_drafts[0]
+        assert result.partial_wire.dispositions[0] == wire.dispositions[0]
+    else:
+        assert result.final_output is None
+        assert result.partial_wire is not None
+        if reply != "budget":
+            saved = type(result).model_validate_json(result.model_dump_json())
+            assert saved.reviewed_semantic_repair_unit_ids == ["su-02"]
+            restored_transport = Transport([])
+            restored = ProtocolControlAgentRunner(max_schema_repairs=2).run(
+                batch, restored_transport, resume_wire=saved.partial_wire,
+                resume_source_interpretation=inventory, resume_session_id="saved",
+                resume_reviewed_semantic_repair_unit_ids=saved.reviewed_semantic_repair_unit_ids,
+                output_validator=consumed.append,
+            )
+            assert restored_transport.scoped_calls == 0 and restored.final_output is None
+            assert restored.reviewed_semantic_repair_unit_ids == ["su-02"]
+
+
+@pytest.mark.parametrize("ids,resume", [(["unknown"], True), (["su-02", "su-02"], True), ([1], True), (["su-02"], False)])
+def test_reviewed_semantic_closure_resume_markers_require_current_partial_scope(ids, resume):
+    transport = _FakeTransport([])
+    with pytest.raises(ValueError, match="相容的局部草稿"):
+        ProtocolControlAgentRunner().run(_batch(), transport,
+            resume_wire=_wire(candidate=_candidate()) if resume else None,
+            resume_reviewed_semantic_repair_unit_ids=ids)
+    assert transport.prompts == []
+
+
 @pytest.mark.parametrize("failure_kind", ["transport", "interrupted", "identity", "budget"])
 def test_alignment_transport_failure_keeps_partial_and_does_not_expand(failure_kind):
     from app.agents.protocol_control_agent_transport import ProtocolControlAgentCallError, ProtocolControlModelIdentityError

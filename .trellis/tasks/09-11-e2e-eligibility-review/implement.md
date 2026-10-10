@@ -1,13 +1,13 @@
 <!-- RV1006-CURRENT:BEGIN -->
 ## 当前1006V1交付窗口（持续实施，非暂停）
 
-**事实与执行选择：** Goal active、claims_complete=false；所有者直接集成＋原批准C03定向独审。已push源码1ef15ff1的合法Job f6007096f0a843e49562c5f243b24a92为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，1物理调用220.722366秒/exit3；85发现及44成功零新调用，45失败/45未执行，第49未到达。检查点40abf3a785af410da0df0d9b4344db33；累计修订15/24不刷新。旧Job、原件、保护库及来源库保持；0共同发布/启用/签发。
+**事实与执行选择：** Goal active、claims_complete=false；所有者直接集成＋批准C03定向独审。源码bfc0f68b的合法Job8db633e43c68401eb0cfcd2aba3f0846已failed_final/PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，9物理调用471.429326秒/exit3；85发现及44成功零新调用，第45失败、45未执行，第49未到达。检查点92b98cb5dd524b85a1967f7b815332f2有有效partial_wire，无pending_author_wire。旧Job、原件、保护库及来源库保持，0共同发布/启用/签发。
 
-**首因与最小包：** 上位完整引用已恢复，原禁止来源遗漏不再报错；禁止原子被上位句另一可选操作的语气误拒，后续单候选又要求并不存在的旧会话。最小修复复用逐字括号禁止证明，仅两处语气门看本片段；时间/持续期间仍看原完整来源。独立豁免误写recommended继续拒。已重新验证的有源快照允许自含单候选核对，不造历史、不开放整组/多候选通道；定位、兄弟/来源冻结、完整门及预算保持。新增validator，不改作者/编译/模型。
+**第一因果错误与最小包：** 语气串项和虚构旧会话两处已越过；当前是真实语义遗漏，不是可改名的来源歧义。一个完整单元里的条件、允许操作、数量和后果未完整进入候选，原禁止片段有源仍不等于整段已覆盖。仅当当前输入/原答绑定的incomplete核对成立、同单元无真实疑问/无跨单元共同候选，才连接原scoped-unit接口；不是重复新增候选或整组重答。宿主保留范围外兄弟，完整来源/装配/消费者/语义/发布再验。同单元是含义门保护而非逐字段冻结。一次失败或无改善停止，已尝试单元随partial和服务检查点保存/恢复；不因新Job重复授权，不升级旧临床批准。
 
-**集中证据与取舍：** 最终四原模块受影响窗190pass/3不适用组合skip/1680deselected/6.39秒/exit0/5SWIG；JUnit artifacts/rv1006-scoped-modality-followup-connected-20261010-v4.xml。含真实Transport/Runner后续修订经过三次消费者、独立兄弟保持、坏来源/整组响应/无绑定/零预算拒。前窗失败按夹具span数量、身份/提示/拒绝层断言归因，未删保护，不累加/未末全库重跑。C03原批准会话exit0/1轮/no fallback，报告18只读；120min静默完成等待，146.402秒只是等待壁钟。采纳期间消费者漏上位范围反例，focus从共用时间来源函数撤回、末期间正反例由所有者核验；未diff/临床/全部消费者/跑测试，不是医学批准。详见reviews/rv1006-modality-followup-owner-disposition-20261010.md。
+**集中证据与审阅取舍：** 四原模块最终受影响窗88pass/1800deselected/4.28秒/exit0/5SWIG，JUnit artifacts/rv1006-bound-negative-semantic-connected-20261010-v5.xml；无绑定/正核对/来源变化/真实歧义/跨单元/坏格式/越界/零预算及跨运行不再修订反例保留，正确局部提案三次经过消费、独立兄弟保持。中间4/1/1/2失败为时间夹具、模拟返回过期序号/对应及末身份/消费次数断言，修测试合同不放宽门，窗口不累加。C03原批准CodeBuddy/DeepSeek/max同会话1轮exit0/no fallback，12只读，96.86秒为完成等待；Bash/diff拒绝、未临床/测试/完整保存消费者。采纳持久标记及映射长度检查，末保存/恢复由所有者验证，非独立模型金标或医学批准。
 
-**实际预检与接续：** f600新只读modality-followup-preflight-20261010-v1为47reusable/2resume_partial/41refresh_required，90项逐项计划、0模型/0库写/hash保持，终态无租约。第45/49只按合法未采用提案恢复，累计15保留。新包尚未产品调用；下一唯一新目录合法API创建并核90步，不复活失败Job、不用合成答案或旧证明采用。完整同源包、同包5PDF24页工作稿及正式UI更正新旧结果/Q3仍未达。继承7dirty与私有材料不stage/不清理。
+**接续和未完成：** 最新8db来源零模型只读预检为47reusable/2resume_partial/41refresh_required，90步逐项/0写/hash保持/exit0；下一合法新建、核90步一致并用唯一新目录。旧待作者15次及各实际9次调用分别保留，不能把valid partial当跨运行总账完整证明；本次每深审逻辑单元新增上限8物理请求，包含核对、修订与传输重试，旧账不改，未执行不计成功。禁止复活失败Job、伪造未知、手填批准或以候选引文代替采用。完整同源包、同包5PDF24页工作稿及正式UI更正后的新旧结果/Q3仍未达。七份继承dirty和私有材料不stage/不清理，详细取舍见reviews/rv1006-bound-negative-semantic-owner-disposition-20261010.md。
 
 **当前实际进展：** 源码d660ebb4的合法Job2d60c099d5bc4eb59f50a0eacca431cc已failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，13物理调用623.5134456250817秒/exit3，85发现及43成功零新调用复用，44失败/46未执行；检查点e5051e44b5444925a6035122a80247e7。数值四字段修订parsed后重核，来源疑问2/4被误称新增，已有条件3/5又走重复补入；原额外来源/错误求值正确拒绝，终态回退草稿不称修订已保存。当前最小包禁止来源未决升级新增，已有条件引用仅阻止重复补入、不能证明语义；实际未决依赖仍由既有R1闭包严格非执行留存，坏数值/未核候选不得混入。作者/编译器不改，仅新增两项validator身份，旧版受限回执失效有界刷新、损坏仍硬拒。单批准C03初审及同会话续审exit0/no fallback，421.966/240.425秒，源码只读/程序分离，非医学批准；持续引用孤立反例由当前域合同否证，多余补丁撤回。完整相连v3为1593pass/7fail/168.27s；修正预期与夹具后最终受影响v9为86pass/1520deselected/9.15s/exit0/5SWIG，末全窗未重跑、窗口不累计。新源最终只读预检仍须核实际43reusable/1resume_partial/46refresh、0模型/0写/hash保持后合法新建。原件/保护库/旧回执及七份继承dirty保持。完整共同发布、同包病例工作稿、UI更正后的新旧报告仍未达；claims_complete=false，Goal active。详见reviews/rv1006-source-uncertainty-owner-disposition-20261010.md；下方前次记录属历史，不覆盖本段。
 

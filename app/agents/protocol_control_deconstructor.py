@@ -4408,6 +4408,9 @@ class ProtocolControlAgentRunResult(ContractModel):
         default_factory=list, exclude_if=lambda value: not value,
     )
     partial_wire: ProtocolControlAgentWire | None = None
+    reviewed_semantic_repair_unit_ids: list[str] = Field(
+        default_factory=list, exclude_if=lambda value: not value,
+    )
     # A parsed author proposal is not a gate-valid draft or source-review proof.
     pending_author_wire: ProtocolControlAgentWire | None = Field(default=None, exclude_if=lambda value: value is None)
     pending_author_source_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$", exclude_if=lambda value: value is None)
@@ -5102,6 +5105,47 @@ def _merge_scoped_unit_repair(
                              if set(item.source_structure_unit_ids).isdisjoint(authorized_units)]
                             + patch.candidate_drafts,
     })
+
+
+def _reviewed_semantic_closure_repair(
+    batch: ProtocolControlDispositionBatch,
+    source: SourceInterpretation,
+    wire: ProtocolControlAgentWire,
+    coverage: Sequence[SourceStatementCoverage],
+    alignment: SourceCandidateAlignment | None,
+    statement_indexes: Sequence[int],
+) -> ProtocolControlAgentWireValidationError | None:
+    """Authorize one complete, unambiguous source unit from a bound negative review."""
+    if alignment is None or not statement_indexes:
+        return None
+    bound = reusable_proven_alignment_items(
+        batch, source, coverage, wire, alignment, require_positive=False,
+    )
+    negative = [item for item in bound
+                if item.decision == "incomplete"
+                and item.statement_index in statement_indexes]
+    if not negative:
+        return None
+    units = {source.statements[index].structure_unit_id for index in statement_indexes}
+    if len(units) != 1 or any(statement.unresolved for statement in source.statements
+                              if statement.structure_unit_id in units):
+        return None
+    indexes = [index for index, candidate in enumerate(wire.candidate_drafts)
+               if set(candidate.source_structure_unit_ids) & units]
+    if (not indexes or any(set(wire.candidate_drafts[index].source_structure_unit_ids) != units
+                           for index in indexes)):
+        return None
+    candidate_ids = _candidate_ids_from_wire(wire, batch)
+    if len(candidate_ids) != len(wire.candidate_drafts):
+        return None
+    return ProtocolControlAgentWireValidationError(
+        "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+        "已核原文与候选不等义；只修订这个完整来源单元，不新增原文含义："
+        + _stable_json([item.model_dump(mode="json") for item in negative]),
+        structure_unit_ids=sorted(units),
+        candidate_ids=[candidate_ids[index] for index in indexes],
+        allow_source_closure_rewrite=True,
+    )
 
 
 def _restore_bounded_wire_repair(
@@ -7375,6 +7419,7 @@ class ProtocolControlAgentRunner:
         resume_source_target_review: SourceTargetReview | None = None,
         resume_source_statement_coverage: Sequence[SourceStatementCoverage] = (),
         resume_source_candidate_alignment: SourceCandidateAlignment | None = None,
+        resume_reviewed_semantic_repair_unit_ids: Sequence[str] = (),
         resume_source_scope_question_history: Sequence[Mapping[str, object]] = (),
         resume_source_scope_correction_indexes: Sequence[int] = (),
         resume_source_unit_completion_ids: Sequence[str] = (),
@@ -7430,12 +7475,19 @@ class ProtocolControlAgentRunner:
         pending_author_wire: ProtocolControlAgentWire | None = None
         pending_author_source_sha256: str | None = None
         repairs = source_repairs = 0
+        if (any(type(unit) is not str for unit in resume_reviewed_semantic_repair_unit_ids)
+                or len(set(resume_reviewed_semantic_repair_unit_ids)) != len(resume_reviewed_semantic_repair_unit_ids)
+                or not set(resume_reviewed_semantic_repair_unit_ids) <= set(batch.owned_structure_unit_ids)
+                or (resume_reviewed_semantic_repair_unit_ids and resume_wire is None)):
+            raise ValueError("已尝试来源单元必须随同当前相容的局部草稿恢复")
+        reviewed_semantic_repair_units = set(resume_reviewed_semantic_repair_unit_ids)
         front_flow_assembled = False
         front_target_review: SourceTargetReview | None = None
         front_candidate_alignment: SourceCandidateAlignment | None = None
         workflow_path_executed = "not_started"
         pending_alignment_atom_baseline = None
         def build_result(**values) -> ProtocolControlAgentRunResult:
+            values.setdefault("reviewed_semantic_repair_unit_ids", sorted(reviewed_semantic_repair_units))
             if (values.get("final_output") is None and values.get("partial_wire") is None
                     and values.get("capability_wire") is None
                     and source_interpretation is not None and pending_author_source_sha256
@@ -10314,6 +10366,21 @@ class ProtocolControlAgentRunner:
                                     index for entry in affected
                                     for index in cited_candidates[entry.statement_index]
                                 })
+                                semantic_repair = (
+                                    _reviewed_semantic_closure_repair(
+                                        batch, source_interpretation, wire, coverage,
+                                        candidate_alignment, cited_unexpressed,
+                                    ) if not alignment_failures else None
+                                )
+                                if (semantic_repair is not None
+                                        and not set(semantic_repair.structure_unit_ids)
+                                        & reviewed_semantic_repair_units
+                                        and callable(getattr(transport, "continue_scoped_unit_repair", None))
+                                        and max(repairs, source_repairs) < self._max_schema_repairs):
+                                    reviewed_semantic_repair_units.update(semantic_repair.structure_unit_ids)
+                                    # The existing host splice, full gates and fresh source review
+                                    # remain authoritative; a negative review is not adoption.
+                                    raise semantic_repair
                                 attempts.append(ProtocolControlAgentAttempt(
                                     attempt=len(attempts) + 1,
                                     session_id=review_basis_session,

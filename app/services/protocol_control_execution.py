@@ -2122,6 +2122,7 @@ def _deep_component_identity(
                                        "scoped-source-record-semantics-recovery/v1",
                                        "scoped-source-governing-citation/v1",
                                        "scoped-prohibition-modality-and-candidate-continuation/v1",
+                                       "bound-negative-semantic-closure-recovery/v1",
                                        SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),
@@ -4523,6 +4524,8 @@ def _execute_deep(
             resume_review.coverage if resume_interpretation is not None else ()
         ),
         resume_source_candidate_alignment=resume_candidate_alignment,
+        resume_reviewed_semantic_repair_unit_ids=(resume_alignment_saved.get("reviewed_semantic_repair_unit_ids", [])
+            if resume_wire is not None and resume_alignment_saved is not None else ()),
         resume_source_scope_question_history=_saved_source_scope_question_history(resume_alignment_saved),
         resume_source_scope_correction_indexes=resume_review.source_scope_correction_indexes,
         resume_source_unit_completion_ids=(resume_review.source_seed_proof or {}).get(
@@ -4635,6 +4638,7 @@ def _execute_deep(
                 "failure_reason_version": SOURCE_REQUIREMENT_FAILURE_REASON_VERSION,
                 "batch_id": batch.batch_id,
                 "session_id": result.session_id,
+                "reviewed_semantic_repair_unit_ids": result.reviewed_semantic_repair_unit_ids,
                 "partial_wire": (
                     result.partial_wire.model_dump(mode="json")
                     if result.partial_wire is not None else None
