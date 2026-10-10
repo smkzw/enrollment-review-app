@@ -2119,6 +2119,7 @@ def _deep_component_identity(
                                        "publication-candidate-missing-policy-recovery/v1",
                                        "publication-source-closure-scoped-resume/v1",
                                        "scoped-source-proposal-missing-policy-recovery/v1",
+                                       "scoped-source-record-semantics-recovery/v1",
                                        SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),

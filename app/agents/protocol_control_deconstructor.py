@@ -31,7 +31,7 @@ from copy import deepcopy
 from functools import partial
 from types import SimpleNamespace
 from typing import Literal, Protocol
-from app.domain.contracts.record_semantics import RECORD_SEMANTICS_GUIDANCE
+from app.domain.contracts.record_semantics import RECORD_SEMANTICS_GUIDANCE, RecordSemantics
 
 from pydantic import Field, ValidationError, model_serializer, model_validator
 
@@ -733,6 +733,17 @@ class _ObservationPolicyRepairItem(_WireModel):
 
 class _ObservationPolicyRepair(_WireModel):
     items: list[_ObservationPolicyRepairItem] = Field(min_length=1)
+
+
+class _RecordSemanticsRepairItem(_WireModel):
+    layer: Literal["applicability", "trigger", "obligation", "exception"]
+    group_index: int = Field(ge=0)
+    atom_index: int = Field(ge=0)
+    semantics: RecordSemantics
+
+
+class _RecordSemanticsRepair(_WireModel):
+    items: list[_RecordSemanticsRepairItem] = Field(min_length=1)
 
 
 class _EvidenceSourcePolicyRepair(_WireModel):
@@ -1812,6 +1823,13 @@ def protocol_control_observation_repair_response_format() -> dict[str, object]:
             "schema": schema,
         },
     }
+
+
+def protocol_control_record_semantics_repair_response_format() -> dict[str, object]:
+    return {"type": "json_schema", "json_schema": {
+        "name": "protocol_control_record_semantics_repair_v1", "strict": True,
+        "schema": _RecordSemanticsRepair.model_json_schema(),
+    }}
 
 
 def protocol_control_evidence_source_repair_response_format() -> dict[str, object]:
@@ -6510,8 +6528,9 @@ def _invalid_observation_policy_paths(
     error: ProtocolControlAgentWireValidationError | ValidationError,
     baseline: Mapping[str, Any],
     candidate_index: int,
+    *, field: Literal["observation_policy", "record_semantics"] = "observation_policy",
 ) -> tuple[tuple[str, int, int], ...]:
-    """Select only same-candidate atoms whose sole missing field is selection policy."""
+    """Locate a sole selected metadata defect without granting atom-wide repair."""
 
     candidate_relative = isinstance(error, ValidationError)
     cause = error if candidate_relative else error.__cause__
@@ -6531,7 +6550,8 @@ def _invalid_observation_policy_paths(
             if len(location) > 2 and isinstance(location[2], str) else ""
         )
         if (
-            "求值规格须说明观察选择规则" not in item["msg"]
+            (field == "observation_policy" and "求值规格须说明观察选择规则" not in item["msg"])
+            or (field == "record_semantics" and location[7:9] != ("evaluation", "record_semantics"))
             or
             len(location) < 7
             or layer not in {"applicability", "trigger", "obligation", "exception"}
@@ -6547,8 +6567,21 @@ def _invalid_observation_policy_paths(
             evaluation = atom["evaluation"]
         except (KeyError, IndexError, TypeError):
             return ()
-        if not isinstance(evaluation, dict) or evaluation.get("observation_policy") is not None:
+        if not isinstance(evaluation, dict) or (field == "observation_policy"
+                                               and evaluation.get("observation_policy") is not None):
             return ()
+        if field == "record_semantics":
+            semantics = evaluation.get(field)
+            if (not isinstance(semantics, dict)
+                    or semantics.get("target_kind") not in {"other", "unresolved"}
+                    or semantics.get("proposition_direction") not in {"event_present", "event_absent"}):
+                return ()
+            try:
+                # Classify a direction-only contract failure, without adopting
+                # this hypothetical value as a model answer or clinical fact.
+                RecordSemantics.model_validate({**semantics, "proposition_direction": "unresolved"})
+            except ValidationError:
+                return ()
         paths.add((layer, group_index, atom_index))
     return tuple(sorted(paths))
 
@@ -6558,21 +6591,24 @@ def _merge_observation_policy_repair_payload(
     baseline: Mapping[str, Any],
     candidate_index: int,
     paths: tuple[tuple[str, int, int], ...],
+    *, field: Literal["observation_policy", "record_semantics"] = "observation_policy",
 ) -> dict[str, Any]:
-    """Stage only authorized policies; this payload is not an accepted wire."""
+    """Stage only the selected metadata field; this is not an accepted wire."""
 
     try:
-        repair = _ObservationPolicyRepair.model_validate_json(raw_text)
+        repair = (_ObservationPolicyRepair if field == "observation_policy"
+                  else _RecordSemanticsRepair).model_validate_json(raw_text)
         returned = [(item.layer, item.group_index, item.atom_index) for item in repair.items]
         if sorted(returned) != list(paths):
-            raise ValueError("观察采用说明的原子位置与授权范围不一致")
+            raise ValueError("修订字段的原子位置与授权范围不一致")
         merged = deepcopy(dict(baseline))
         candidate = merged["candidate_drafts"][candidate_index]
         for item in repair.items:
             atom = candidate[f"{item.layer}_expression"]["groups"][item.group_index]["atoms"][item.atom_index]
-            proposed = item.policy.model_dump(mode="json")
-            existing = atom["evaluation"].get("observation_policy")
-            if existing is not None and {
+            proposed_value = item.policy if field == "observation_policy" else item.semantics
+            proposed = proposed_value.model_dump(mode="json")
+            existing = atom["evaluation"].get(field)
+            if field == "observation_policy" and existing is not None and {
                 key: value for key, value in proposed.items() if key != "scope"
             } != {
                 key: value for key, value in existing.items() if key != "scope"
@@ -6581,7 +6617,16 @@ def _merge_observation_policy_repair_payload(
             direct_sources = list(zip(
                 atom["source_span_ids"], atom["source_excerpts"], strict=True,
             ))
-            if any(
+            if field == "record_semantics":
+                if (not isinstance(existing, dict)
+                        or any(proposed[key] != existing.get(key)
+                               for key in ("target_kind", "record_obligation", "source_excerpts"))):
+                    raise ValueError("本次只能修正事件方向，不得改记录义务、对象分类或引用来源")
+                if any(not any(excerpt in source for _, source in direct_sources)
+                       or not any(excerpt in source for source in atom["evaluation"]["source_excerpts"])
+                       for excerpt in item.semantics.source_excerpts):
+                    raise ValueError("记录用途的原文不属于所在控制原子及求值规格")
+            elif any(
                 not any(
                     span_id == direct_span and isinstance(direct_excerpt, str)
                     and excerpt in direct_excerpt
@@ -6592,11 +6637,11 @@ def _merge_observation_policy_repair_payload(
                 )
             ):
                 raise ValueError("观察选择的原文不属于所在控制原子")
-            atom["evaluation"]["observation_policy"] = proposed
+            atom["evaluation"][field] = proposed
         return merged
     except (ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
         raise ProtocolControlAgentWireValidationError(
-            "OBSERVATION_REPAIR_INVALID",
+            "OBSERVATION_REPAIR_INVALID" if field == "observation_policy" else "RECORD_SEMANTICS_REPAIR_INVALID",
             _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
         ) from exc
 
@@ -6622,8 +6667,9 @@ def _merge_observation_policy_repair(
 def _invalid_scoped_observation_payload(
     raw_text: str, previous: ProtocolControlAgentWire, authorized_units: set[str],
     batch: ProtocolControlDispositionBatch,
+    *, field: Literal["observation_policy", "record_semantics"] = "observation_policy",
 ) -> tuple[dict[str, Any], int, tuple[tuple[str, int, int], ...]] | None:
-    """Splice an unaccepted local proposal only when its sole defect is a missing policy."""
+    """Splice an unaccepted local proposal only for one typed metadata defect."""
     salvage = _invalid_candidate_payload(raw_text)
     if salvage is None or len(salvage[1]) != 1:
         return None
@@ -6655,7 +6701,7 @@ def _invalid_scoped_observation_payload(
     try:
         ProtocolControlAgentWireCandidate.model_validate(drafts[invalid_indexes[0]])
     except ValidationError as cause:
-        paths = _invalid_observation_policy_paths(cause, merged, index)
+        paths = _invalid_observation_policy_paths(cause, merged, index, field=field)
         return (merged, index, paths) if paths else None
     return None
 
@@ -8423,6 +8469,7 @@ class ProtocolControlAgentRunner:
         time_operand_repair_candidate: int | None = None
         observation_repair_paths: tuple[tuple[str, int, int], ...] = ()
         observation_repair_candidate: int | None = None
+        observation_repair_field: Literal["observation_policy", "record_semantics"] = "observation_policy"
         evidence_source_repair_path: tuple[int, int] | None = None
         evidence_source_types_repair_paths: tuple[tuple[int, int], ...] = ()
         reviewed_source_type_repairs: set[tuple[int, int]] = set()
@@ -8441,6 +8488,7 @@ class ProtocolControlAgentRunner:
                     repair_baseline_raw = _merge_observation_policy_repair_payload(
                         raw_text, repair_baseline_raw, observation_repair_candidate,
                         observation_repair_paths,
+                        field=observation_repair_field,
                     )
                     wire = parse_protocol_control_agent_wire(_stable_json(repair_baseline_raw))
                 wire = wire or (
@@ -10546,6 +10594,7 @@ class ProtocolControlAgentRunner:
                 time_operand_repair_candidate = None
                 observation_repair_paths = ()
                 observation_repair_candidate = None
+                observation_repair_field = "observation_policy"
                 evidence_source_repair_path = None
                 error = (
                     exc
@@ -10733,9 +10782,22 @@ class ProtocolControlAgentRunner:
                     )
                     if scoped_policy is not None:
                         repair_baseline_raw, observation_repair_candidate, observation_repair_paths = scoped_policy
+                        atom_repair_path = None
                         repair_candidate_indexes = {observation_repair_candidate}
                         focused_invalid_indexes = ()
                         failed_scoped_unit_repair = False
+                    elif callable(getattr(transport, "continue_record_semantics", None)):
+                        scoped_record = _invalid_scoped_observation_payload(
+                            raw_text, repair_baseline_wire, failed_scoped_unit_ids, batch,
+                            field="record_semantics",
+                        )
+                        if scoped_record is not None:
+                            repair_baseline_raw, observation_repair_candidate, observation_repair_paths = scoped_record
+                            atom_repair_path = None
+                            observation_repair_field = "record_semantics"
+                            repair_candidate_indexes = {observation_repair_candidate}
+                            focused_invalid_indexes = ()
+                            failed_scoped_unit_repair = False
                 if output is not None and output_validator is not None:
                     candidate_source_by_id = {
                         candidate.control_candidate_id: tuple(
@@ -11336,7 +11398,7 @@ class ProtocolControlAgentRunner:
                     no_progress
                     or failed_scoped_unit_repair
                     or (previous_observation_repair_candidate is not None
-                        and error.code == "OBSERVATION_REPAIR_INVALID")
+                        and error.code in {"OBSERVATION_REPAIR_INVALID", "RECORD_SEMANTICS_REPAIR_INVALID"})
                     or (error.code == "CANDIDATE_REPAIR_INVALID"
                         and candidate_repair_index is not None
                         and not (time_operand_repair_candidate is not None
@@ -11428,7 +11490,9 @@ class ProtocolControlAgentRunner:
                     observation_repair_candidate is not None
                     and bool(observation_repair_paths)
                     and repair_baseline_raw is not None
-                    and callable(getattr(transport, "continue_observation_policies", None))
+                    and callable(getattr(transport, "continue_record_semantics"
+                                         if observation_repair_field == "record_semantics"
+                                         else "continue_observation_policies", None))
                 )
                 if not observation_only:
                     observation_repair_candidate = None
@@ -11616,6 +11680,17 @@ class ProtocolControlAgentRunner:
                         observation_repair_paths,
                         str(error),
                     )
+                    if observation_repair_field == "record_semantics":
+                        candidate = repair_baseline_raw["candidate_drafts"][observation_repair_candidate]
+                        selected = [{"layer": layer, "group_index": group, "atom_index": atom,
+                            "atom": candidate[f"{layer}_expression"]["groups"][group]["atoms"][atom]}
+                            for layer, group, atom in observation_repair_paths]
+                        repair_prompt = (RECORD_SEMANTICS_GUIDANCE
+                            + "\n仅修订列出原子的 evaluation.record_semantics 中 proposition_direction；不得改条件、数值、日期、观察选择、来源或兄弟。"
+                            "target_kind、record_obligation和source_excerpts必须与原值一致。"
+                            "只能返回对应位置的 items 与 semantics。若用途未核清，填写unresolved并保留本原子逐字依据。"
+                            "source_excerpts必须来自同一原子的source_excerpts，不能引用旁段。"
+                            + "\n原子：" + _stable_json(selected) + "\n问题：" + str(error))
                 elif evidence_source_only and repair_baseline_raw is not None and evidence_source_repair_path is not None:
                     repair_prompt = _build_evidence_source_policy_repair_prompt(
                         batch, repair_baseline_raw, evidence_source_repair_path, str(error)
@@ -11757,7 +11832,10 @@ class ProtocolControlAgentRunner:
                             session_id=session_id, prompt=repair_prompt
                         )
                     elif observation_only:
-                        response = transport.continue_observation_policies(
+                        reader = (transport.continue_record_semantics
+                                  if observation_repair_field == "record_semantics"
+                                  else transport.continue_observation_policies)
+                        response = reader(
                             session_id=session_id, prompt=repair_prompt
                         )
                     elif evidence_source_only:

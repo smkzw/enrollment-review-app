@@ -50,6 +50,7 @@ from app.agents.protocol_control_deconstructor import (
     protocol_control_batch_response_format,
     protocol_control_atom_repair_response_format,
     protocol_control_observation_repair_response_format,
+    protocol_control_record_semantics_repair_response_format,
     protocol_control_time_operand_repair_response_format,
     protocol_control_evidence_source_repair_response_format,
     protocol_control_evidence_source_types_repair_response_format,
@@ -1764,6 +1765,21 @@ class OpenAICompatibleProtocolControlAgentTransport:
                 str(exc),
                 uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
             ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def continue_record_semantics(self, *, session_id: str, prompt: str) -> ProtocolControlAgentResponse:
+        """Repair only host-selected question-purpose metadata without a history rewrite."""
+        if not prompt.strip():
+            raise ValueError("记录用途修订提示不能为空")
+        if session_id not in self._histories and session_id not in self._scoped_resume_contexts:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        response_format = protocol_control_record_semantics_repair_response_format()
+        try:
+            text = self._complete(self._single_requirement_messages(prompt, response_format),
+                                  response_format=response_format)
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(session_id, str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout)) from exc
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
     def continue_time_operands(

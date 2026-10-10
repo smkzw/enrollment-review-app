@@ -11737,8 +11737,12 @@ def test_pending_publication_closure_uses_real_scoped_transport_not_missing_hist
 
 
 @pytest.mark.parametrize("fault", [None, "budget", "missing_reader", "cross_source", "cross_span",
-    "mixed_error", "bad_json", "position", "quote", "extra_field", "transport", "second_gate"])
-def test_scoped_missing_policy_uses_field_reader_and_preserves_actual_proposal(fault):
+    "mixed_error", "bad_json", "position", "quote", "extra_field", "transport", "second_gate",
+    "record_obligation", "record_target", "evaluation_quote"])
+@pytest.mark.parametrize("repair_field", ["observation_policy", "record_semantics"])
+def test_scoped_missing_policy_uses_field_reader_and_preserves_actual_proposal(fault, repair_field):
+    if repair_field == "observation_policy" and fault in {"record_obligation", "record_target", "evaluation_quote"}:
+        pytest.skip("Counterexample concerns record-purpose metadata, not observation choice")
     from app.agents.protocol_control_agent_transport import OpenAICompatibleProtocolControlAgentTransport
     from app.protocols.protocol_control_gate import validate_protocol_control_batch_candidates
 
@@ -11755,7 +11759,16 @@ def test_scoped_missing_policy_uses_field_reader_and_preserves_actual_proposal(f
         "candidate_drafts": [original.candidate_drafts[0].model_copy(update={"title": "修订后的有源要求"})],
     }).model_dump(mode="json")
     atom = proposal["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]
-    atom["evaluation"]["observation_policy"] = None
+    if repair_field == "observation_policy":
+        atom["evaluation"]["observation_policy"] = None
+    else:
+        atom["evaluation"]["record_semantics"] = {
+            "target_kind": "other", "record_obligation": "unresolved",
+            "proposition_direction": "event_present", "source_excerpts": atom["source_excerpts"],
+        }
+        if fault == "evaluation_quote":
+            atom["source_excerpts"] = [atom["source_excerpts"][0] + "；另有未采用说明"]
+            atom["evaluation"]["record_semantics"]["source_excerpts"] = ["另有未采用说明"]
     if fault == "cross_source":
         proposal["candidate_drafts"][0]["source_structure_unit_ids"] = ["su-01", "su-02"]
     elif fault == "cross_span":
@@ -11764,10 +11777,19 @@ def test_scoped_missing_policy_uses_field_reader_and_preserves_actual_proposal(f
         atom["statement"] = ""
     policy = {"mode": "unresolved", "scope": "原文未明确采用哪次记录",
               "source_span_ids": atom["source_span_ids"], "source_excerpts": atom["source_excerpts"]}
+    if repair_field == "record_semantics":
+        policy = {**atom["evaluation"]["record_semantics"], "proposition_direction": "unresolved"}
+        if fault == "record_obligation":
+            policy["record_obligation"] = "not_required_by_source"
+        elif fault == "record_target":
+            policy["target_kind"] = "event_history"
     if fault == "quote":
-        policy = {**policy, "source_span_ids": ["span:02"], "source_excerpts": ["禁止使用救援药物"]}
+        policy = {**policy, "source_excerpts": ["禁止使用救援药物"]}
+        if repair_field == "observation_policy":
+            policy["source_span_ids"] = ["span:02"]
     repair = {"items": [{"layer": "obligation", "group_index": 0,
-                         "atom_index": 1 if fault == "position" else 0, "policy": policy}]}
+                         "atom_index": 1 if fault == "position" else 0,
+                         "policy" if repair_field == "observation_policy" else "semantics": policy}]}
     if fault == "extra_field":
         repair["items"][0]["statement"] = "越权改写"
     requests = []
@@ -11784,7 +11806,8 @@ def test_scoped_missing_policy_uses_field_reader_and_preserves_actual_proposal(f
     transport = Transport(client=SimpleNamespace(), backend="ollama-cloud",
         model="deepseek-v4.1-flash", model_identity_check=False)
     if fault == "missing_reader":
-        transport.continue_observation_policies = None
+        setattr(transport, "continue_observation_policies" if repair_field == "observation_policy"
+                else "continue_record_semantics", None)
     seen = []
 
     def consume(output):
@@ -11811,7 +11834,8 @@ def test_scoped_missing_policy_uses_field_reader_and_preserves_actual_proposal(f
     if len(requests) == 2:
         messages, response_format = requests[1]
         assert [item["role"] for item in messages] == ["user"]
-        assert "仅为列出的条件或义务原子补充观察采用说明" in messages[0]["content"]
+        assert ("仅为列出的条件或义务原子补充观察采用说明" if repair_field == "observation_policy"
+                else "仅修订列出原子的 evaluation.record_semantics") in messages[0]["content"]
         assert "修订后的有源要求" not in messages[0]["content"]
         assert set(response_format["json_schema"]["schema"]["properties"]) == {"items"}
     if fault is None:
@@ -11820,7 +11844,7 @@ def test_scoped_missing_policy_uses_field_reader_and_preserves_actual_proposal(f
         target = next(item for item in result.partial_wire.candidate_drafts
                       if item.source_structure_unit_ids == ["su-01"])
         expected = deepcopy(proposal["candidate_drafts"][0])
-        expected["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["observation_policy"] = policy
+        expected["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"][repair_field] = policy
         assert target == ProtocolControlAgentWireCandidate.model_validate(expected)
         sibling = next(item for item in result.partial_wire.candidate_drafts
                        if item.source_structure_unit_ids == ["su-02"])

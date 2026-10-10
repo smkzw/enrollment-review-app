@@ -1,5 +1,5 @@
 <!-- RV1006-CONTEXT:BEGIN -->
-现行唯一状态（2026-10-10）：Goal active/claims_complete=false；1006V1持续。b898aaba合法9be5397f…failed_final，1调用231.549s/exit3，44完成45失败45未执行。实际局部答唯一候选四处漏观察采用说明，原Schema拒绝正确；当前最小包沿已有字段reader，仅补授权字段、保持实际提案和兄弟，完整来源/含义门不变。相连反例发现scoped分派抢先，已修；75受影响pass/3.88s/exit0，末全模块未重跑。批准C03同会话16源码只读/exit0/no fallback，末修由所有者验证，非医学批准。最新9be只读预检47reusable/2resume/41refresh、0模型0写/hash保持；下一冻结合法接续，跨Job不能直接重用无效raw，不冒称零调用恢复。完整共同发布、同包5PDF24页工作稿、UI更正后新旧结果/Q3未达。细账仅任务implement/HANDOFF/index，以下均历史。
+现行唯一状态（2026-10-10）：Goal active/claims_complete=false；1006V1持续。ec3ba1fb合法c3760c70…failed_final，1调用254.736s/exit3，44完成45失败45未执行。两个trigger非事件条件写成事件发生方向；原合同正确拒绝。当前最小字段修订只允许方向，记录义务/对象/引句及其他内容冻结，引用同时核原子与求值规格，完整来源/含义门不变。相连检查发现atom reader竞争，已修；末90pass/3不适用组合skip/6.23s/exit0，未末全模块重跑。批准C03同会话18源码只读/exit0/no fallback，记录义务降级和引用子集意见已采纳末验，非医学批准。最新c376只读预检47reusable/2resume/41refresh、0模型0写/hash保持；下一合法接续，跨Job不能接旧无效raw，不假称零调用恢复。完整共同发布、同包5PDF24页工作稿、UI更正后新旧结果/Q3未达。细账仅任务implement/HANDOFF/index，以下均历史。
 
 ### 以下为历史快照，不覆盖上方现行状态
 当前功能包最终核对：recommended时间项保持为方案建议而非强制入排条件，完整同单元的必做兄弟也不丢弃；仅可非执行留存，不得取得事实refs或签发资格。1282相连pass/113.54秒，增量批准独审4读/exit0且保留未读边界；最终v2预检23/1/66无模型无写/hash保持。实际补来源/共同发布尚未运行，当前新Job及临床层状态以任务单一当前表为准，不与下方历史拼完成率。

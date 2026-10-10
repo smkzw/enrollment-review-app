@@ -1,0 +1,15 @@
+# 同一来源恢复边界：记录用途字段独审
+
+沿原批准 C03/evidence_single_object 路线及会话，基础 ec3ba1fb。任务所有者继续集成；只读当前源码，不允许 shell、网络、env、数据库、临床原答/原件、写文件、递归派工、测试。最多18次必要源码读取，指出读取局限。不要把本说明当正确性证明。
+
+ec3ba1fb 的隔离合法产品作业 c3760c70…真实调用1次254.736秒，Schema拒绝局部候选的两个trigger原子：evaluation.record_semantics同时声明target_kind=other和proposition_direction=event_present。旧原答、累计预算与未采用草稿保留，未发布/启用/签发。不存在病例缺证，也不能让宿主机械改成阴性或unresolved。
+
+当前增量复用 scoped 来源草稿 → typed field reader → 完整校验：只在唯一无效候选的全部错误位置均是 evaluation.record_semantics 时开放这一个字段。RecordSemantics使用既有合同。输出仅items及原子位置/semantics，引用只能来自同原子逐字来源；条件、值、时间、否定、观察政策、来源和兄弟都由宿主保留。拒绝混合错误、错位置、旁段引用、越权字段和坏JSON。全Schema/hydrate/来源与语义/发布门重跑；错误不是合法临床未决，未打开全包回退。只新增validator组成，现有累计schema修订预算不清零。
+
+重点阅读：app/agents/protocol_control_deconstructor.py的_RecordSemanticsRepair、_invalid_observation_policy_paths、_invalid_scoped_observation_payload、_merge_observation_policy_repair_payload以及Runner的捕获→字段选择→提示/reader分派→合并/预算/第二门；app/agents/protocol_control_agent_transport.py的continue_record_semantics、_single_requirement_messages及checked scoped binding；app/domain/contracts/record_semantics.py；现有记录用途消费者中event_history/record_obligation/proposition_direction的真实使用；tests/v2/protocols/test_slice58c_control_deconstructor.py的test_scoped_missing_policy_uses_field_reader_and_preserves_actual_proposal；服务的新增validator身份。
+
+集中87pass/1759deselected/4.84秒，不是临床验收。第一版81pass/6fail发现已有atom reader仍抢先，已在成功选择typed字段后清空竞争atom位置，不能仅看helper正确。参数化分别覆盖两字段的正例、预算/缺能力、越源、混合错误、错JSON/位置/引句/字段、传输、第二门拒绝；真实transport与hydrate/来源门实际执行，截断_complete只提供合成答。
+
+请挑战：错误位置分类是否过宽；record_obligation若被修成not_required_by_source会否成为无记录阴性的后门；引用/授权范围是否足够；索引及兄弟是否保持；是否存在另一reader抢先；失败/缺能力是否退整候选；现有消费者是否另有真实含义核对，不能把Schema通过等于记录义务核实。给出可达反例和最小修复，不建议新框架/改整个流程/放宽来源标准。
+
+跨Job仍只恢复合法pending_author_wire，无法直接续上旧无效raw；新Job将沿合法入口重新生成一次局部提案。此次字段恢复只在同次运行生效，尚未真实产品实跑。审阅不是模型独立金标、研究者判断或医学批准。
