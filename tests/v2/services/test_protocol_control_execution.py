@@ -7051,7 +7051,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   protocol_control_execution_module.SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION,
                   protocol_control_execution_module.SOURCE_HEADING_SCOPE_RECHECK_VERSION,
                   "source-single-atom-sibling-recovery/v1",
-                  "source-repeat-field-patch/v1",
+                  "source-repeat-field-patch/v2",
                   protocol_control_execution_module.SOURCE_EVENT_INTERVAL_ALIGNMENT_VERSION,
                   protocol_control_execution_module.SOURCE_STAGE_ECHO_VERSION,
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,

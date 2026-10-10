@@ -1321,7 +1321,7 @@ def test_numeric_field_patch_preserves_history_and_sends_only_authorized_schema(
     assert len(call["messages"]) == 1
     if mode == "json_schema":
         schema = call["response_format"]["json_schema"]
-        assert schema["name"] == ("protocol_control_repeat_evaluation_patch_v1" if repeat else "protocol_control_numeric_evaluation_patch_v1")
+        assert schema["name"] == ("protocol_control_repeat_evaluation_patch_v2" if repeat else "protocol_control_numeric_evaluation_patch_v1")
         assert set(schema["schema"]["properties"]) == {"evaluation_patch"}
         patch = schema["schema"]["$defs"]["RepeatEvaluationPatch" if repeat else "NumericEvaluationPatch"]
         assert set(patch["properties"]) == ({"repeat_scheme"} if repeat else {
@@ -1329,6 +1329,10 @@ def test_numeric_field_patch_preserves_history_and_sends_only_authorized_schema(
         assert patch["additionalProperties"] is False
         assert set(patch["required"]) == set(patch["properties"])
         assert "ProtocolControlAgentWireObligationAtom" not in schema["schema"]["$defs"]
+        if repeat:
+            meaning = schema["schema"]["$defs"]["RepeatSchemeMeaning"]
+            assert not {"source_span_ids", "source_excerpts"} & set(meaning["properties"])
+            assert "RepeatScheme" not in schema["schema"]["$defs"]
     else:
         assert "完整 JSON Schema" in call["messages"][0]["content"]
         assert '"evaluation_patch"' in call["messages"][0]["content"]

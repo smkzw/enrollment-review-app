@@ -1766,8 +1766,13 @@ def protocol_control_atom_repair_response_format(
         }
     if repeat_scheme_only:
         definitions = deepcopy(definitions)
+        meaning = deepcopy(definitions["RepeatScheme"])
+        for field in ("source_span_ids", "source_excerpts"):
+            meaning["properties"].pop(field)
+            meaning["required"].remove(field)
+        definitions["RepeatSchemeMeaning"] = meaning
         definitions["RepeatEvaluationPatch"] = {
-            "type": "object", "properties": {"repeat_scheme": {"$ref": "#/$defs/RepeatScheme"}},
+            "type": "object", "properties": {"repeat_scheme": {"$ref": "#/$defs/RepeatSchemeMeaning"}},
             "required": ["repeat_scheme"], "additionalProperties": False,
         }
     root_name = ("RepeatEvaluationPatch" if repeat_scheme_only else
@@ -1794,7 +1799,7 @@ def protocol_control_atom_repair_response_format(
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": ("protocol_control_repeat_evaluation_patch_v1" if repeat_scheme_only else
+            "name": ("protocol_control_repeat_evaluation_patch_v2" if repeat_scheme_only else
                      "protocol_control_numeric_evaluation_patch_v1" if numeric_predicate_only else "protocol_control_atom_repair_v1"),
             "strict": True,
             "schema": {
@@ -7092,6 +7097,17 @@ def _merge_obligation_atom_repair(
                 raise ValueError("数值比较修订不得删除或降级已定位的比较条件")
             candidate_index, group_index, atom_index = path
             frozen_atom = deepcopy(baseline["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index])
+            if repeat_scheme_only:
+                scheme = patch["repeat_scheme"]
+                if not isinstance(scheme, dict):
+                    raise ValueError("复查含义补丁必须非空")
+                scheme = deepcopy(scheme)
+                # The evaluation owns this scope; legacy full patches must match it exactly.
+                for field in ("source_span_ids", "source_excerpts"):
+                    if field in scheme and scheme[field] != frozen_atom["evaluation"][field]:
+                        raise ValueError(f"复查含义补丁不得改变冻结来源 {field}")
+                    scheme[field] = deepcopy(frozen_atom["evaluation"][field])
+                patch = {"repeat_scheme": scheme}
             frozen_atom["evaluation"].update(patch)
             payload = {"atom": frozen_atom}
             field_patch = True
@@ -7182,6 +7198,8 @@ def _build_obligation_atom_repair_prompt(
                 "仅补冻结原子中缺失的复查合同，不重发或改写原子。"
                 "只返回 evaluation_patch 对象，其中必须且只能包含 repeat_scheme。"
                 "本次只允许补 evaluation.repeat_scheme，其他字段和兄弟由宿主原样保留。"
+                "repeat_scheme只填写含义字段，不输出source_span_ids/source_excerpts；"
+                "来源定位和逐字摘录由宿主从本原子的冻结求值来源逐项保留，不重新编号或借兄弟摘录。"
                 "使用repeat-scheme/v4，所有明确值须有本原子已冻结来源；未明范围和结果采用保留未核实。"
                 "不制造检验比较、来源编号、条件身份、日期或计算方式。"
                 "result_use 不是 combine 时，result_combine/result_population 必须为null，"

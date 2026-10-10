@@ -2132,7 +2132,7 @@ def _deep_component_identity(
                                        SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION,
                                        SOURCE_HEADING_SCOPE_RECHECK_VERSION,
                                        "source-single-atom-sibling-recovery/v1",
-                                       "source-repeat-field-patch/v1",
+                                       "source-repeat-field-patch/v2",
                                        SOURCE_EVENT_INTERVAL_ALIGNMENT_VERSION,
                                        SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,

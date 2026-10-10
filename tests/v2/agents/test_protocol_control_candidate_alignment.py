@@ -497,7 +497,8 @@ def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(re
                 proposed.evaluation = proposed.evaluation.model_copy(update={"observation_policy":
                     proposed.evaluation.observation_policy.model_copy(update={"mode": "any"})})
             return ProtocolControlAgentResponse(session_id=session_id,
-                text=json.dumps({"evaluation_patch": {"repeat_scheme": proposed.evaluation.repeat_scheme.model_dump(mode="json")}}
+                text=json.dumps({"evaluation_patch": {"repeat_scheme": proposed.evaluation.repeat_scheme.model_dump(
+                    mode="json", exclude={"source_span_ids", "source_excerpts"})}}
                     if field_patch and reply != "changed_policy" else {"atom": proposed.model_dump(mode="json")}, ensure_ascii=False))
         def continue_numeric_predicate(self, **kwargs):
             pytest.fail("An action count must not request a measurement predicate")
@@ -526,7 +527,7 @@ def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(re
             assert result.partial_wire.candidate_drafts[1].model_dump(mode="json") == original["candidate_drafts"][1]
 
 
-@pytest.mark.parametrize("change", [None, "extra_field", "missing_scheme", "null_scheme", "contradictory_result", "old_scheme"])
+@pytest.mark.parametrize("change", [None, "host_sources", "changed_source", "changed_quote", "extra_field", "missing_scheme", "null_scheme", "contradictory_result", "old_scheme", "foreign_trigger", "foreign_condition", "duplicate_frozen_sources", "unpaired_frozen_sources"])
 def test_repeat_field_patch_splices_only_current_scheme(change):
     from app.agents.protocol_control_deconstructor import (
         _merge_obligation_atom_repair, ProtocolControlAgentWireValidationError,
@@ -536,8 +537,16 @@ def test_repeat_field_patch_splices_only_current_scheme(change):
     scheme = atom.evaluation.repeat_scheme.model_dump(mode="json")
     atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": None})
     baseline = wire.model_dump(mode="json")
+    unchanged_wire = wire.model_dump(mode="json")
     patch = {"repeat_scheme": scheme}
-    if change == "extra_field":
+    if change == "host_sources":
+        scheme.pop("source_span_ids")
+        scheme.pop("source_excerpts")
+    elif change == "changed_source":
+        scheme["source_span_ids"] = ["another-source"]
+    elif change == "changed_quote":
+        scheme["source_excerpts"] = ["另一项要求"]
+    elif change == "extra_field":
         patch["proposition"] = "其他判断"
     elif change == "missing_scheme":
         patch = {}
@@ -547,8 +556,21 @@ def test_repeat_field_patch_splices_only_current_scheme(change):
         scheme.update(result_use="unresolved", result_population="unresolved")
     elif change == "old_scheme":
         scheme["version"] = "repeat-scheme/v3"
+    elif change == "foreign_trigger":
+        scheme.update(trigger="source_condition", trigger_excerpt="其他要求的前提",
+                      trigger_condition_id="some-condition")
+    elif change == "foreign_condition":
+        scheme.update(trigger="source_condition", trigger_excerpt=scheme["source_excerpts"][0],
+                      trigger_condition_id="unregistered-condition")
+    elif change in {"duplicate_frozen_sources", "unpaired_frozen_sources"}:
+        scheme.pop("source_span_ids")
+        scheme.pop("source_excerpts")
+        frozen = baseline["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]
+        frozen["source_span_ids"] *= 2
+        if change == "duplicate_frozen_sources":
+            frozen["source_excerpts"] *= 2
     raw = json.dumps({"evaluation_patch": patch}, ensure_ascii=False)
-    if change:
+    if change not in {None, "host_sources"}:
         with pytest.raises(ProtocolControlAgentWireValidationError):
             _merge_obligation_atom_repair(raw, baseline, (0, 0, 0), repeat_scheme_only=True)
     else:
@@ -557,7 +579,45 @@ def test_repeat_field_patch_splices_only_current_scheme(change):
         dumped = merged.model_dump(mode="json")
         dumped["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["repeat_scheme"] = None
         assert dumped == baseline
+    assert wire.model_dump(mode="json") == unchanged_wire
+
+
+@pytest.mark.parametrize("full_legacy_patch", [False, True])
+def test_repeat_patch_uses_frozen_evaluation_subset_not_wider_atom(full_legacy_patch):
+    from app.agents.protocol_control_deconstructor import _merge_obligation_atom_repair
+    from app.domain.contracts.repeat_scheme import validate_repeat_source
+    _, _, wire, _, _ = _repeat_count_material()
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    scheme = atom.evaluation.repeat_scheme.model_dump(mode="json")
+    atom.source_excerpts = ["先说明适用对象；" + atom.source_excerpts[0]]
+    atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": None})
+    baseline = wire.model_dump(mode="json")
+    if not full_legacy_patch:
+        for field in ("source_span_ids", "source_excerpts"):
+            scheme.pop(field)
+    merged = _merge_obligation_atom_repair(json.dumps({"evaluation_patch": {"repeat_scheme": scheme}},
+        ensure_ascii=False), baseline, (0, 0, 0), repeat_scheme_only=True)
+    final = merged.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    assert final.source_excerpts == atom.source_excerpts
+    assert final.evaluation.repeat_scheme.source_excerpts == atom.evaluation.source_excerpts
+    assert final.evaluation.repeat_scheme.source_excerpts != final.source_excerpts
+    validate_repeat_source(final.evaluation.repeat_scheme, final.evaluation.source_span_ids,
+                          final.evaluation.source_excerpts)
     assert wire.model_dump(mode="json") == baseline
+
+
+def test_repeat_meaning_request_excludes_source_authorship():
+    import jsonschema
+    from app.agents.protocol_control_deconstructor import protocol_control_atom_repair_response_format
+    _, _, wire, _, _ = _repeat_count_material()
+    scheme = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0].evaluation.repeat_scheme.model_dump(mode="json")
+    scheme["permission_condition_id"] = None
+    request_schema = protocol_control_atom_repair_response_format(repeat_scheme_only=True)["json_schema"]["schema"]
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({"evaluation_patch": {"repeat_scheme": scheme}}, request_schema)
+    for field in ("source_span_ids", "source_excerpts"):
+        scheme.pop(field)
+    jsonschema.validate({"evaluation_patch": {"repeat_scheme": scheme}}, request_schema)
 
 
 @pytest.mark.parametrize("change", [None, "visit_substitution", "named_visit", "reverse", "missing_word", "wrong_source", "numeric_window", "executable_time", "vague"])

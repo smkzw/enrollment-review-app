@@ -2,7 +2,21 @@
 
 本包基于5749dd12，标题/次数源码9fb3ade37和兄弟解耦28858ba已push；当前复查字段/事件表示增量基于28858ba。现行Goal active/claims_complete=false。执行为所有者集成＋批准C03定向独审：来源角色与结果采用存在实质含义不确定性，数据库及修订由单一所有者管理。
 
-## 当前请求差额合同（43b）
+## 当前冻结求值来源包（cda）
+
+6adae67e实际合法Jobcda69aef5dee410f981fefcc8da06ad7，4物理调用317.083154秒/exit3/failed_final，44成功/45失败/45未读，检查点41da21ddaced4a7eb4b363b2f647c0a8。原空差额问题已通过，新复查短答一来源编号配三段摘录被域合同拒；另一分支覆盖反馈仍待重验。43b预检47/2/41、0调用/0写/全库hash保持与实际计划一致，旧记录及保护/来源库保持；0共同发布/激活/签发。原答仅受控本地rv1006-target-gap-api-20261010-v1，外部审阅不可读。
+
+本包不继续教模型填写系统已有来源：只让RepeatSchemeMeaning返回临床含义字段，宿主深拷贝冻结求值来源两数组。旧完整字段补丁如带来源，须与冻结求值数组逐位相等，旧完整atom路径仍由原来源/字段冻结及域合同把关。新增source-repeat-field-patch/v2验证身份，基础作者/编译器不变，旧工件须当前重验。无临床数值、项目名称或药名特例；没有改来源唯一/包含/触发条件/次数/兄弟/预算/回退保护。
+
+C03已批准同会话CodeBuddy/deepseek-v4.1-flash/max源码只读15/15，exit0/no fallback，实际完成等待81.953925秒。MF1成立：原子来源可比求值来源宽，复制前者会在下游失败；已从evaluation复制，新增严格子集正例及旧完整补丁兼容。S1无需另造检查：现有validate_control_repeat_conditions要求条件在本候选内，新增同源引句配未登记身份的反例拒绝。S2兼容正例与危险反例纳入最终窗；S3采用来源层级注释。顾问没运行测试/读临床，diff权限不可用；报告把旧完整atom也说成新等值分支不准确，实际旧路径未改、保留原门。最终收紧和反例由所有者验证，不称重新独审或模型金标，不执行顾问末尾新建任务询问。
+
+最终三相连受影响窗60pass/779deselected/3.82秒/exit0/5SWIG；首56pass/1fail为新请求夹具serializer省可空必填字段，补显式null，不改生产Schema；中间57检查与最终窗不相加。命令：`.venv/bin/python -m pytest tests/v2/agents/test_protocol_control_candidate_alignment.py tests/v2/protocols/test_protocol_control_agent_transport.py tests/v2/services/test_protocol_control_execution.py -q -k 'repeat or numeric_field_patch or gate_only_change_revalidates or local_repairs_send_only' --tb=short --junitxml=artifacts/rv1006-repeat-host-sources-connected-20261010-v3.xml`。非全库/临床；新合同尚未真实运行。
+
+效率事实：4实际模型receipt均stop；请求分别8.853324/5.778293/27.272220/17.043129秒，合计约58.95秒，整驱动317.08秒。input16668/16725/15417/2247、output2894/2312/10975/6560、缓存2560/14848/9472/0；reasoning usage未报为unknown。大载荷恢复/保存成本显著，但没有独占CPU分解，不能宣称余下全部数据库耗时。源及临床语义尚未完成，减少元数据生成不自动提升医学准确性。
+
+最终cda当前复用预检完成47reusable/2resume_partial/41refresh、0调用/0写/全库hash保持，源failed_final且无租约/活动Job；私有rv1006-repeat-host-sources-preflight-20261010-v1.json。下一新受控Job逐项核90步决定再局部接续，不删旧坏答字段后签proof、不复活旧终态。真实答若仍有结果采用/分支含义问题，从第一个源偏差定位；不靠来源复制自动采信。完整同源包、同包病例工作稿、规则关联UI更正和Q3未达，claims_complete=false。
+
+## 历史请求差额合同（43b）
 
 be580a33真实Job43b282bed9b447d9bef5b9f5fa87275d failed_final/PROTOCOL_CONTROL_SOURCE_TARGET_FOCUSED_INVALID，2调用274.7841240420239秒/exit3，检查点adf8213cb2764e2a9aac2d424d3850fd。85发现/44成功零新调用，45失败/45未执行；新字段和事件修复尚未到达。e640入队前预检47/2/41且0模型/0写/全库hash保持，实际90步一致，旧Job/原件/来源与保护库不变。
 

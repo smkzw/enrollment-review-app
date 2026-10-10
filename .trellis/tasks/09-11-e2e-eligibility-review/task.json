@@ -40,13 +40,13 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "1006V1持续/Goal active/claims_complete=false。be580a33真实Job43b282bed9b447d9bef5b9f5fa87275d failed_final/2调用274.784124s/44完成45失败45未执行，检查点adf8213cb2764e2a9aac2d424d3850fd。目标核对选增量但空差额被原门拒；新请求anyOf和提示与该门一致，不加循环、不改含义校验。82相连选择检查通过，实际失败答零调用只读被新Schema拒/stat保持，0proof/采用。此确定性格式包直接检查关闭，未另独审；前包C03限制保持。新合同未实跑，下一43b当前预检合法新建；旧尝试不重置。完整同源包及病例/UI更正闭环未达；七份继承dirty和私有资料保持。详见implement/HANDOFF及source-role-repeat取舍。",
+  "notes": "1006V1持续/Goal active/claims_complete=false。6adae67实际Jobcda69aef5dee410f981fefcc8da06ad7 failed_final/4调用317.083154秒/44完成45失败45未执行，检查点41da21ddaced4a7eb4b363b2f647c0a8。目标差额请求已通过；复查字段来源一编号配三摘录拒绝。新请求只编写含义，宿主保留冻结求值来源；批准C03的来源层级必修已改，现有条件门及反例拒未登记引用，最终相连60pass。下一cda预检合法接续；旧尝试/原答/终态/继承dirty保持。完整同源包及病例UI更正未达，0共同发布/启用/签发。细账见implement/HANDOFF/index。",
   "meta": {
     "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",
     "current_scope": "1006V1 frozen delivery window: complete same-source requirements, isolated current-node work draft, source navigation, one UI correction/supplement, affected recalculation and old/new history; R1/1001V1 retained.",
     "claims_complete": false,
-    "review_packet_status": "source_target_gap_request_contract_verified_pending_product_run",
+    "review_packet_status": "repeat_host_evaluation_sources_reviewed_owner_verified_pending_product_run",
     "runtime_goal_status_observed": "active",
     "current_handoff": "HANDOFF.md",
     "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",
