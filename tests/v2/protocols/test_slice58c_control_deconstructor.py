@@ -11662,7 +11662,7 @@ def test_scoped_unit_repair_runs_through_current_consumer_without_full_history(r
     assert result.final_output is not None and original == _wire(candidate=_candidate())
 
 
-@pytest.mark.parametrize("fault", [None, "bad_json", "sibling_source", "missing_authority", "budget", "second_gate"])
+@pytest.mark.parametrize("fault", [None, "bad_json", "sibling_source", "missing_authority", "budget", "second_gate", "followup", "followup_sibling"])
 def test_pending_publication_closure_uses_real_scoped_transport_not_missing_history(fault):
     from app.agents.protocol_control_agent_transport import OpenAICompatibleProtocolControlAgentTransport
 
@@ -11679,6 +11679,12 @@ def test_pending_publication_closure_uses_real_scoped_transport_not_missing_hist
     class Transport(OpenAICompatibleProtocolControlAgentTransport):
         def _complete(self, messages, *, response_format=None):
             requests.append((messages, response_format))
+            if len(requests) > 1 and fault in {"followup", "followup_sibling"}:
+                candidate = deepcopy(patch["candidate_drafts"][0])
+                candidate["title"] = "后续局部修订"
+                if fault == "followup_sibling":
+                    candidate["source_structure_unit_ids"] = ["su-02"]
+                return json.dumps({"candidate_draft": candidate}, ensure_ascii=False)
             return "{" if fault == "bad_json" else json.dumps(patch, ensure_ascii=False)
 
     transport = Transport(client=SimpleNamespace(), backend="ollama-cloud",
@@ -11687,51 +11693,60 @@ def test_pending_publication_closure_uses_real_scoped_transport_not_missing_hist
     def validate(output):
         seen.append(output)
         candidate = next(item for item in output.candidates if item.frozen_structure_unit_ids == ["su-01"])
-        if candidate.title != "修订后的有源要求":
+        if candidate.title not in {"修订后的有源要求", "后续局部修订"}:
             raise ProtocolControlAgentWireValidationError("PUBLICATION_GATE_REJECTED", "缺少禁止要求的有源完整表达",
                 candidate_ids=[candidate.control_candidate_id], structure_unit_ids=["su-01"],
                 allow_source_closure_rewrite=(fault != "missing_authority"))
-        if fault == "second_gate":
+        if fault == "second_gate" or (fault in {"followup", "followup_sibling"} and candidate.title != "后续局部修订"):
             raise ProtocolControlAgentWireValidationError("RECOMMENDED_MODALITY_UNSUPPORTED", "修订后建议语气仍不受原文支持",
                 candidate_ids=[candidate.control_candidate_id], structure_unit_ids=["su-01"])
 
     inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION, statements=[],
         units_without_statement=list(batch.owned_structure_unit_ids))
-    result = ProtocolControlAgentRunner(max_schema_repairs=0 if fault == "budget" else 2 if fault == "second_gate" else 1).run(
+    result = ProtocolControlAgentRunner(max_schema_repairs=0 if fault == "budget" else 2 if fault in {"second_gate", "followup", "followup_sibling"} else 1).run(
         batch, transport, output_validator=validate, resume_pending_author_wire=original,
         resume_source_interpretation=inventory, resume_session_id="saved-author")
     assert original.model_dump(mode="json") == before
     assert transport._histories == {}  # A checked snapshot is not an invented old conversation.
     assert set(transport._scoped_resume_contexts) == {"saved-author"}
-    assert len(requests) == (0 if fault in {"missing_authority", "budget"} else 1)
+    assert len(requests) == (0 if fault == "budget" else 2 if fault in {"second_gate", "followup", "followup_sibling"} else 1)
     if requests:
         messages, response_format = requests[0]
         assert [item["role"] for item in messages] == ["user"]
-        assert "尚未采用" in messages[0]["content"]
+        assert ("冻结批次、结构单元和候选范围" if fault == "missing_authority" else "尚未采用") in messages[0]["content"]
         schema = response_format["json_schema"]["schema"]
-        disposition_ref = schema["properties"]["dispositions"]["items"]["$ref"]
-        assert schema["$defs"][disposition_ref.rsplit("/", 1)[1]]["properties"][
-            "structure_unit_id"]["enum"] == ["su-01"]
-    if fault is None:
+        if fault == "missing_authority":
+            assert set(schema["properties"]) == {"candidate_draft"}
+            assert "dispositions" not in schema["properties"]
+        else:
+            disposition_ref = schema["properties"]["dispositions"]["items"]["$ref"]
+            assert schema["$defs"][disposition_ref.rsplit("/", 1)[1]]["properties"][
+                "structure_unit_id"]["enum"] == ["su-01"]
+    if fault is None or fault == "followup":
         assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
-        assert result.final_output is not None and len(seen) == 2
+        assert result.final_output is not None and len(seen) == (3 if fault == "followup" else 2)
+        if fault == "followup":
+            assert requests[1][1]["json_schema"]["schema"]["properties"]["candidate_draft"]
+            assert [item["role"] for item in requests[1][0]] == ["user"]
         sibling = next(item for item in result.partial_wire.candidate_drafts
                        if item.source_structure_unit_ids == ["su-02"])
         assert sibling == original.candidate_drafts[1]
         assert result.partial_wire.dispositions[1] == original.dispositions[1]
     else:
         assert result.status == "需要核对" and result.final_output is None
-        assert len(seen) == (2 if fault == "second_gate" else 1)
-        if fault == "second_gate":
+        assert len(seen) == (2 if fault in {"second_gate", "followup_sibling"} else 1)
+        if fault in {"second_gate", "followup_sibling"}:
             target = next(item for item in result.pending_author_wire.candidate_drafts
                           if item.source_structure_unit_ids == ["su-01"])
             assert target.title == "修订后的有源要求"
             assert any("RECOMMENDED_MODALITY_UNSUPPORTED" in attempt.error_classes for attempt in result.attempts)
         else:
             assert result.pending_author_wire == original
-        if fault in {"missing_authority", "second_gate"}:
-            assert result.attempts[-1].outcome == "transport_failed"
-            assert "找不到原协议控制 Agent 会话" in " ".join(result.attempts[-1].issues)
+        if fault == "missing_authority":
+            assert result.attempts[-1].outcome != "transport_failed"
+            assert "CANDIDATE_REPAIR_SHAPE_INVALID" in result.attempts[-1].error_classes
+        if fault in {"second_gate", "followup_sibling"}:
+            assert result.attempts[-1].outcome != "transport_failed"
         if fault in {"bad_json", "sibling_source"}:
             assert "不得退回整组改写" in " ".join(result.attempts[-1].issues)
 

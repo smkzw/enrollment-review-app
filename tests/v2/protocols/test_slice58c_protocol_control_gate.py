@@ -2052,6 +2052,54 @@ def test_optional_action_cannot_be_rewritten_as_mandatory() -> None:
         )
 
 
+@pytest.mark.parametrize("brackets", [("（", "）"), ("(", ")")])
+@pytest.mark.parametrize("cue", ["允许进行复查", "建议进行复查", "无需进行复查"])
+def test_parenthetical_prohibition_keeps_own_modality_with_governing_context(brackets, cue):
+    from app.protocols.protocol_control_gate import _check_obligation_modality_fidelity
+
+    prohibition = "复查前不得调整治疗"
+    quoted = brackets[0] + prohibition + brackets[1]
+    governing = f"在条件满足时{cue}{quoted}"
+    atom = _obligation(kind=ControlObligationKind.PROHIBIT_EVENT,
+        statement=prohibition, source_span_ids=["span:context", "span:fragment"],
+        source_excerpts=[governing, quoted])
+    expression = _explicit_obligation_dnf(atoms=[atom])
+    before = atom.model_dump(mode="json")
+    _check_obligation_modality_and_event_anchor(entity_id="candidate", obligation_expression=expression)
+    _check_obligation_modality_fidelity(entity_id="candidate", obligation_expression=expression)
+    assert atom.model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("fault", ["missing_fragment", "changed_statement", "exemption_prohibition"])
+def test_parenthetical_prohibition_focus_does_not_drop_own_optional_cue(fault):
+    prohibition = "复查前不得调整治疗"
+    if fault == "exemption_prohibition":
+        prohibition = "无需进行复查且不得调整治疗"
+    quoted = f"（{prohibition}）"
+    governing = f"在条件满足时允许进行复查{quoted}"
+    statement = "复查前不得调整其他治疗" if fault == "changed_statement" else prohibition
+    quotes = [governing] if fault == "missing_fragment" else [governing, quoted]
+    expression = _explicit_obligation_dnf(atoms=[_obligation(
+        kind=ControlObligationKind.PROHIBIT_EVENT, statement=statement,
+        source_span_ids=[f"span:{index}" for index in range(len(quotes))], source_excerpts=quotes)])
+    with pytest.raises(ProtocolControlGateError, match="EXEMPTION_MODALITY_OVERSTATED" if fault == "exemption_prohibition" else "OPTIONAL_ACTION_MODALITY_DROPPED"):
+        _check_obligation_modality_and_event_anchor(entity_id="candidate", obligation_expression=expression)
+
+
+def test_parenthetical_prohibition_modality_focus_keeps_governing_period_requirement():
+    statement = "不得使用限制治疗"
+    excerpt = f"治疗期（{statement}）"
+    atom = _obligation(kind=ControlObligationKind.PROHIBIT_EVENT, statement=statement,
+        source_span_ids=["span:period", "span:fragment"], source_excerpts=[excerpt, f"（{statement}）"])
+    expression = _explicit_obligation_dnf(atoms=[atom])
+    with pytest.raises(ProtocolControlGateError, match="PROSPECTIVE_PERIOD_MISSING"):
+        _check_time_constraints(entity_id="candidate", texts=[excerpt], expressions=[expression],
+            flat_atoms=[], global_time_constraint=None)
+    atom.prospective_period = ProspectivePeriod(period="treatment_period")
+    _check_time_constraints(entity_id="candidate", texts=[excerpt], expressions=[expression],
+        flat_atoms=[], global_time_constraint=None)
+
+
 def test_optional_action_cue_matches_action_not_unrelated_possibility() -> None:
     optional = _explicit_obligation_dnf(atoms=[_obligation(
         statement="必须重新筛选一次，因为结果可改善",

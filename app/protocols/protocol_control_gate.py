@@ -2281,7 +2281,7 @@ def _check_obligation_modality_and_event_anchor(
     """Preserve optional actions and anchor prohibited events to the event itself."""
 
     for atom in _iter_expression_atoms(obligation_expression):
-        excerpts = " ".join(
+        excerpts = _literal_parenthetical_prohibition_source(atom) or " ".join(
             str(item) for item in getattr(atom, "source_excerpts", ()) or ()
         )
         statement = str(getattr(atom, "statement", ""))
@@ -2661,6 +2661,19 @@ def _has_recommended_cue(source_text: str) -> bool:
     return False
 
 
+def _literal_parenthetical_prohibition_source(atom: object) -> str | None:
+    """Focus force checks only after literal fragment and context coverage."""
+
+    if _value(getattr(atom, "kind", None)) == "prohibit_event" and any(
+        _parenthetical_prohibitions_are_quoted(
+            excerpt, (atom,), getattr(atom, "source_span_ids", ()) or (),
+        ) for excerpt in getattr(atom, "source_excerpts", ()) or ()
+        if isinstance(excerpt, str)
+    ):
+        return str(getattr(atom, "statement", "") or "")
+    return None
+
+
 def _modality_source_for_atom(atom: object) -> str:
     excerpts = [
         str(item) for item in getattr(atom, "source_excerpts", ()) or ()
@@ -2696,7 +2709,7 @@ def _check_obligation_modality_fidelity(
     """Ensure recommended / best-effort cues are preserved without source downgrade."""
 
     for atom in _iter_expression_atoms(obligation_expression):
-        source_text = _modality_source_for_atom(atom)
+        source_text = _literal_parenthetical_prohibition_source(atom) or _modality_source_for_atom(atom)
         modality = _value(getattr(atom, "modality", None)) or ControlObligationModality.MANDATORY.value
         has_recommended = _has_recommended_cue(source_text)
         has_best_effort = bool(_BEST_EFFORT_CUE_RE.search(source_text))

@@ -1566,12 +1566,37 @@ def test_scoped_snapshot_resume_enables_only_self_contained_requests(method):
     assert answer.session_id == "saved"
     assert [m["role"] for m in completions.calls[0]["messages"]] == ["user"]
     assert transport._histories == {}  # No fictitious prior assistant answer.
-    for history_method in [transport.continue_session, transport.continue_candidate, transport.continue_candidates]:
+    for history_method in [transport.continue_session, transport.continue_candidates]:
         with pytest.raises(ProtocolControlAgentCallError):
             history_method(session_id="saved", prompt="不能恢复整包会话")
     with pytest.raises(ProtocolControlAgentCallError):
         transport.history("saved")
     assert len(completions.calls) == 1
+
+
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+def test_scoped_snapshot_candidate_followup_is_local_and_does_not_restore_history(mode):
+    client, completions = _client(['{"candidate_draft":{}}', '{"candidate_draft":{}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(client=client,
+        backend="cms-router", model="test-independent-model", model_identity_check=False,
+        response_format_mode=mode)
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.continue_candidate(session_id="saved", prompt="尚无来源身份")
+    assert not completions.calls
+    transport.restore_scoped_session(session_id="saved", context_sha256="a" * 64)
+    for fields in [(), ("cross_source_relations",)]:
+        result = transport.continue_candidate(session_id="saved", prompt="冻结单一候选与授权范围", fields=fields)
+        assert result.session_id == "saved"
+        call = completions.calls[-1]
+        assert [message["role"] for message in call["messages"]] == ["user"]
+        if mode == "json_schema":
+            assert "candidate_draft" in call["response_format"]["json_schema"]["schema"]["properties"]
+        else:
+            assert "完整 JSON Schema" in call["messages"][0]["content"]
+        assert transport._histories == {}
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.continue_session(session_id="saved", prompt="禁止整包历史回退")
+    assert len(completions.calls) == 2
 
 
 @pytest.mark.parametrize("backend", ["mtplx", "ollama-cloud"])

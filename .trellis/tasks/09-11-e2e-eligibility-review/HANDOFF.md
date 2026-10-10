@@ -2,13 +2,13 @@
 
 ## 当前事实
 
-**事实与执行选择：** Goal active、claims_complete=false；所有者直接集成＋既有批准C03定向独审。已push源码78194eae的合法Jobfc9ffe09f9d64fba846f88e0060d6e00为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，1物理调用255.346745秒/exit3；85发现及44成功零新调用，45失败/45未执行，第49未到达。检查点33c2fc75eeaa4d789b800a83d5c56a13。旧Job、原件、保护库和来源库保持；0共同发布/启用/签发。
+**事实与执行选择：** Goal active、claims_complete=false；所有者直接集成＋原批准C03定向独审。已push源码1ef15ff1的合法Job f6007096f0a843e49562c5f243b24a92为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，1物理调用220.722366秒/exit3；85发现及44成功零新调用，45失败/45未执行，第49未到达。检查点40abf3a785af410da0df0d9b4344db33；累计修订15/24不刷新。旧Job、原件、保护库及来源库保持；0共同发布/启用/签发。
 
-**第一因果错误与最小修复：** 本次局部答Schema已过；禁止片段引用保留原文一对括号却被字面门误拒，同时完整上位情形只留notes而从候选引用消失，后者仍应拒。最小包只允许完全相同片段外恰一对全角/ASCII括号；动作/条件/数量/否定/span/同候选完整上下文仍核。scoped指导保留片段及完整上位原句，不把可选或免除改成必做。独立兄弟原文是允许豁免，却被旧提案标recommended，原拒绝正确；必须沿其合法单独范围核对，不能第一闭包越权改它。新增validator、不改作者/编译/模型或累计13次修订账。
+**首因与最小包：** 上位完整引用已恢复，原禁止来源遗漏不再报错；禁止原子被上位句另一可选操作的语气误拒，后续单候选又要求并不存在的旧会话。最小修复复用逐字括号禁止证明，仅两处语气门看本片段；时间/持续期间仍看原完整来源。独立豁免误写recommended继续拒。已重新验证的有源快照允许自含单候选核对，不造历史、不开放整组/多候选通道；定位、兄弟/来源冻结、完整门及预算保持。新增validator，不改作者/编译/模型。
 
-**实证与限制：** 最终四模块受影响窗96pass/3不适用组合skip/1759deselected/4.48秒/exit0/5SWIG，JUnit artifacts/rv1006-scoped-governing-citation-connected-20261010-v2.xml；未末全模块重跑、窗口不累计。新增全角/ASCII引用和完整上位引用正例，带括号但无上下文/错来源及statement带括号仍拒，旧丢限定/借兄弟/嵌套反例保持。实际4258字符rawhash cec1598c8a35e059ec17ff022d9dcb4a222bc3de8d615de5a1fc813ae478d298；0调用/0写探针实际缺上下文false、合成完整引用true、改动作/错span false，非模型恢复/临床采用。C03原会话11源码只读/exit0/1轮/no fallback，120min静默完成等待；未见窄改动缺陷，边界补验由所有者执行，未diff/测试/临床/全部消费者，非医学批准。取舍reviews/rv1006-governing-citation-owner-disposition-20261010.md。
+**集中证据与取舍：** 最终四原模块受影响窗190pass/3不适用组合skip/1680deselected/6.39秒/exit0/5SWIG；JUnit artifacts/rv1006-scoped-modality-followup-connected-20261010-v4.xml。含真实Transport/Runner后续修订经过三次消费者、独立兄弟保持、坏来源/整组响应/无绑定/零预算拒。前窗失败按夹具span数量、身份/提示/拒绝层断言归因，未删保护，不累加/未末全库重跑。C03原批准会话exit0/1轮/no fallback，报告18只读；120min静默完成等待，146.402秒只是等待壁钟。采纳期间消费者漏上位范围反例，focus从共用时间来源函数撤回、末期间正反例由所有者核验；未diff/临床/全部消费者/跑测试，不是医学批准。详见reviews/rv1006-modality-followup-owner-disposition-20261010.md。
 
-**恢复计划与边界：** 新只读governing-citation-preflight-20261010-v1从fc9沿冻结祖先47reusable/2resume_partial/41refresh_required，0模型/0库写/hash保持，终态无租约；当前合法pending草稿两候选/累计13修订。下一同版本合法API新建并核90步，保留47成功；只修证实的引用问题及随后获准的独立兄弟，不复活旧失败/覆盖目录。只读合成变体不进入产品，方向字段恢复本次未触发不冒称已实跑。继承7dirty及私有材料不stage/不清理。新引用包尚未产品实跑；完整同源包、同包病例工作稿及UI更正新旧报告仍未达。
+**实际预检与接续：** f600新只读modality-followup-preflight-20261010-v1为47reusable/2resume_partial/41refresh_required，90项逐项计划、0模型/0库写/hash保持，终态无租约。第45/49只按合法未采用提案恢复，累计15保留。新包尚未产品调用；下一唯一新目录合法API创建并核90步，不复活失败Job、不用合成答案或旧证明采用。完整同源包、同包5PDF24页工作稿及正式UI更正新旧结果/Q3仍未达。继承7dirty与私有材料不stage/不清理。
 
 | 用户流程节点 | 现有入口/已证 | 首个未完成与预期动作 |
 |---|---|---|

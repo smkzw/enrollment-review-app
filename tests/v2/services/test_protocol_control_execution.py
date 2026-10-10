@@ -7044,6 +7044,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "scoped-source-proposal-missing-policy-recovery/v1",
                   "scoped-source-record-semantics-recovery/v1",
                   "scoped-source-governing-citation/v1",
+                  "scoped-prohibition-modality-and-candidate-continuation/v1",
                   protocol_control_execution_module.SOURCE_STAGE_ECHO_VERSION,
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   "scoped-exception-dnf/v1"))

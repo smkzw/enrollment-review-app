@@ -1,0 +1,14 @@
+# 同一局部恢复边界：独立禁止语气与后续候选核对
+
+沿批准C03原会话/路线，只读源码；禁止shell、网络、env、DB、临床原件、修改、测试和递归派工。最多18次必要源码读取。基础1ef15ff1994978c8aa18cc2892eacdc0864d1d2c；当前工作树有限补丁是本次审阅对象。任务所有者集成，不把会商意见当医学批准。
+
+实际隔离Job f6007096…在1调用220.722366秒后failed_final。完整上位原句已进入引用，来源遗漏门不再报错；括号中禁止项却被上位句另一项的允许语气误拦。另一个候选真正把豁免写成recommended，原拒绝应保持。后续候选修订又因为不存在旧会话而失败；现场只有经过来源与当前门重新验证的局部快照身份，并没有完整历史。
+
+改动：
+1. gate复用_parenthetical_prohibitions_are_quoted的逐字片段、同候选引用和上位覆盖证明，只为prohibit_event提供本原子语气来源；普通原子仍用原完整引用。保留全部引用，主张/条件/span/完整来源仍由原消费者核验；不能用引文证明医学含义。_modality_source_for_atom推荐强度检查也共用同一精确证明。请挑战独立片段、括号条件、双重禁止、可选语气或豁免在本片段内、缺上位全文、原子改义、不同来源时的危险反例。
+2. continue_candidate允许已登记_scoped_resume_contexts且没有_histories的会话发起自含单候选请求，Schema仍仅candidate_draft；不制造user/assistant旧历史，不开放continue_session或continue_candidates。已有真实历史行为不变。宿主现有定位错误确定目标、冻结兄弟/来源/原预算，合并后完整Schema/来源/语义/采用门重跑。请检查是否存在跨目标或缺授权的可达绕过，不将模型返回当批准。
+3. execution只追加validator组成scoped-prohibition-modality-and-candidate-continuation/v1，不改变作者、编译、模型或累计修订次数。
+
+必要阅读：app/protocols/protocol_control_gate.py上述三个函数及_uncovered_enrollment_prohibitions；app/agents/protocol_control_agent_transport.py::continue_candidate/restore_scoped_session与continue_session；deconstructor的resume_pending_author_wire绑定、candidate_only定位/修复prompt、_merge_candidate_repair及作用域核验；tests/v2/protocols/test_slice58c_control_deconstructor.py::test_pending_publication_closure_uses_real_scoped_transport_not_missing_history、transport snapshot测试、gate parenthetical/optional负例。仅按需要读完整定义，不重读历史。
+
+输出可达问题、反证、最小建议、未读范围。不建议关闭gate/伪造history/追加整组读取或疾病词表。特别核对：没有来源闭包修订许可时，只能走普通已定位单候选，返回整组仍拒；零剩余额度不发请求；合法后续应重新经过消费者而非仅Schema通过。

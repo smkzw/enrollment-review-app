@@ -1587,17 +1587,17 @@ class OpenAICompatibleProtocolControlAgentTransport:
         fields: tuple[str, ...] = (),
         relation_stage_ids: tuple[str, ...] | None = None,
     ) -> ProtocolControlAgentResponse:
-        """Repair one candidate in the same history without regenerating the batch."""
+        """Repair one candidate using real history or a host-checked local snapshot."""
 
         if not prompt.strip():
             raise ValueError("单候选修订提示不能为空")
         history = self._histories.get(session_id)
-        if history is None:
+        if history is None and session_id not in self._scoped_resume_contexts:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         response_format = protocol_control_candidate_repair_response_format(
             fields=fields, relation_stage_ids=relation_stage_ids,
         )
-        logical_history = [*history, *self._single_requirement_messages(prompt, response_format)]
+        logical_history = [*(history or []), *self._single_requirement_messages(prompt, response_format)]
         try:
             text = self._complete(logical_history, response_format=response_format)
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
@@ -1606,10 +1606,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
                 str(exc),
                 uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
             ) from exc
-        self._histories[session_id] = [
-            *logical_history,
-            {"role": "assistant", "content": text},
-        ]
+        if history is not None:
+            self._histories[session_id] = [
+                *logical_history,
+                {"role": "assistant", "content": text},
+            ]
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
     def continue_post_treatment_repair(
