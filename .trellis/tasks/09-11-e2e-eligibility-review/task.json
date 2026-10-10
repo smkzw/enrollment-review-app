@@ -40,13 +40,13 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "1006V1持续/Goal active/claims_complete=false。eb43dfac实际Job47e3cc50117348da91e49157146a4005 failed_final/3调用370.888264秒/44完成45失败45未执行，检查点7198f99a9c7b4e7784cfc749c914600a。候选无额外资料声明，核对答擅加有效性维度，原门正确拒；复查字段路径未到。共享合法范围进入请求Schema及两处生产入口，原临床门不变，直接确定性验证192pass。最新47e3只读预检47/2/41、0调用0写全库hash保持。下一先一次实际产品harness局部诊断，再据首错决定合法保存接续，不整组盲重读；旧终态和继承dirty保持。完整同源包及病例UI更正未达，0共同发布/启用/签发。",
+  "notes": "1006V1持续/Goal active/claims_complete=false。3db56bea实际f56472f355c1433980080dab1ad05740 failed_final/5调用386.154724秒，44完成45失败45未读，检查点6d5ddd068f074dac908b46ebb9de4960。政策范围及复查字段来源实际已过；局部动作/整句支持及若则条件/宽段归属错层沿原函数修复。最终相连206pass、两轮批准C03 exit0且撤回旧来源层级建议；实际原答三项零调用表示通过，不签proof/不采用。当前只读预检运行，完成后合法新建保存接续；旧终态/原件/继承dirty保持。完整同包病例更正闭环未达，0共同发布/启用/签发。",
   "meta": {
     "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",
     "current_scope": "1006V1 frozen delivery window: complete same-source requirements, isolated current-node work draft, source navigation, one UI correction/supplement, affected recalculation and old/new history; R1/1001V1 retained.",
     "claims_complete": false,
-    "review_packet_status": "alignment_policy_request_scope_owner_verified_pending_bounded_product_diagnostic",
+    "review_packet_status": "condition_action_support_reviewed_owner_verified_pending_product_run",
     "runtime_goal_status_observed": "active",
     "current_handoff": "HANDOFF.md",
     "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",

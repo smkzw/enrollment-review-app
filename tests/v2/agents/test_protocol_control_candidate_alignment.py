@@ -270,6 +270,56 @@ def test_scoped_source_sibling_does_not_replace_current_requirement(change):
         assert reusable_proven_alignment_items(batch, source, coverage, wire, restored) == []
 
 
+@pytest.mark.parametrize("form", ["comma", "if_then", "long_if_then"])
+@pytest.mark.parametrize("change", [None, "negated_condition", "partial_condition",
+    "same_activation", "extra_consequence", "missing_sibling_source"])
+def test_conditioned_source_sibling_checks_only_its_own_obligations(form, change):
+    batch, source, wire, coverage, alignment = _scoped_sibling_material()
+    current = source.statements[-1]
+    old = current.quoted_text
+    text = {"comma": "结果有效者，记录处理日期", "if_then": "若结果有效者则记录处理日期",
+            "long_if_then": "如果结果有效者则记录处理日期"}[form]
+    if change == "negated_condition":
+        text = text.replace("结果有效者", "并非结果有效者")
+    elif change == "partial_condition":
+        text = text.replace("结果有效者", "全部结果有效者")
+    elif change == "extra_consequence":
+        text += "并且领取材料"
+    unit = batch.owned_units[0]
+    unit.excerpt = unit.excerpt.replace(old, text)
+    unit.member_texts = [unit.excerpt]
+    current.quoted_text = text
+    alignment.items[0].statement_index = len(source.statements) - 1
+    alignment.items[0].source_excerpt = text
+    alignment.items[0].candidate_atom_quotes = ["结果有效者", "记录处理日期"]
+    if change == "same_activation":
+        wire.candidate_drafts[0].obligation_expression.groups[0].applies_to_trigger_branch_indexes = [1]
+    elif change == "missing_sibling_source":
+        source.statements[0].unresolved = ["完整来源尚未核实"]
+    if change:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+        bound = bind_candidate_alignment(batch, source, coverage, wire, alignment,
+            alignment.model_dump_json(exclude={"proofs"}))
+        assert len(reusable_proven_alignment_items(batch, source, coverage, wire, bound)) == 1
+
+
+@pytest.mark.parametrize("broad_only", [False, True])
+def test_scoped_sibling_context_does_not_replace_its_local_source(broad_only):
+    batch, source, wire, coverage, alignment = _scoped_sibling_material()
+    atom = wire.candidate_drafts[0].obligation_expression.groups[-1].atoms[0]
+    atom.source_excerpts = [batch.owned_units[0].excerpt]
+    if not broad_only:
+        atom.source_excerpts.append(atom.statement)
+    if broad_only:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+
+
 def _repeat_count_material():
     from app.domain.contracts.repeat_scheme import RepeatScheme
     from tests.v2.protocols.test_slice58c_control_deconstructor import _evaluation
@@ -358,6 +408,56 @@ def test_source_repeat_count_uses_its_contract_not_a_measurement_predicate(chang
         atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": scheme.model_copy(
             update={"maximum_repeats": 4})})
         assert reusable_proven_alignment_items(batch, source, coverage, wire, restored) == []
+
+
+@pytest.mark.parametrize("change", [None, "wrong_count", "missing_scheme", "foreign_action",
+    "wrong_permission", "incomplete_scope"])
+def test_conditioned_repeat_uses_frozen_local_action_sources(change):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentWireConditionDnf
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _evaluation
+    batch, source, wire, coverage, alignment = _repeat_count_material()
+    unit, statement = batch.owned_units[0], source.statements[0]
+    text = "资料已经核清，允许复查3次"
+    unit.excerpt = statement.quoted_text = text
+    unit.member_texts = [text]
+    candidate = wire.candidate_drafts[0]
+    atom = candidate.obligation_expression.groups[0].atoms[0]
+    atom.statement = "允许复查3次"
+    atom.source_excerpts = [atom.statement]
+    scheme = atom.evaluation.repeat_scheme.model_copy(deep=True,
+        update={"source_excerpts": [atom.statement]})
+    atom.evaluation = atom.evaluation.model_copy(update={"proposition": atom.statement,
+        "source_excerpts": [atom.statement], "repeat_scheme": scheme})
+    condition = {"statement": "资料已经核清", "evaluation": _evaluation(
+        "资料已经核清", unit.source_span_ids[0], "资料已经核清"),
+        "source_span_ids": list(unit.source_span_ids), "source_excerpts": ["资料已经核清"],
+        "time_constraint": None, "requires_professional_judgment": False}
+    candidate.trigger_expression = ProtocolControlAgentWireConditionDnf.model_validate({
+        "groups": [{"atoms": [condition]}]})
+    candidate.obligation_expression.groups[0].applies_to_trigger_branch_indexes = [0]
+    alignment.items[0].source_excerpt = text
+    alignment.items[0].candidate_atom_quotes = ["资料已经核清", "允许复查3次"]
+    if change == "wrong_count":
+        scheme.maximum_repeats = 4
+    elif change == "missing_scheme":
+        atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": None})
+    elif change == "foreign_action":
+        scheme.source_excerpts = ["记录3次结果"]
+    elif change == "wrong_permission":
+        scheme.permission = "required"
+    elif change == "incomplete_scope":
+        candidate.trigger_expression.groups[0].atoms[0].statement = "资料已经核清或尚未核查"
+    if change:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+        from app.domain.repeat_observation_count import evaluate_repeat_count
+        from app.domain.contracts.enums import TruthValue
+        assert evaluate_repeat_count(scheme, repeat_group_ids=(),
+            qualified_scope="per_current_episode", scope_complete=True).result.truth == TruthValue.TRUE
+        assert evaluate_repeat_count(scheme, repeat_group_ids=["a", "b", "c", "d"],
+            qualified_scope="per_current_episode", scope_complete=True).result.truth == TruthValue.FALSE
 
 
 @pytest.mark.parametrize("change", [None, "unknown_scope", "changed_policy", "changed_statement",

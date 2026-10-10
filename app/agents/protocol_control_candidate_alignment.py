@@ -27,6 +27,7 @@ SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION = "source-conditional-group-alignment
 SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION = "source-repeat-count-alignment/v1"
 SOURCE_EVENT_INTERVAL_ALIGNMENT_VERSION = "source-event-interval-alignment/v1"
 SOURCE_POLICY_REQUEST_SCOPE_VERSION = "source-policy-request-scope/v1"
+SOURCE_CONDITION_ACTION_SUPPORT_VERSION = "source-condition-action-support/v1"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
@@ -188,27 +189,37 @@ def _split_obligations_cover_source(source: str, scope: str, atoms) -> bool:
     return remainder in {"", "且", "并且", "同时"}
 
 
+def _conditioned_source_atoms(source, scope, atoms, selected_atoms):
+    """Match a complete literal condition prefix, including paired if/then syntax."""
+    from .protocol_control_source_interpretation import normalize_source_excerpt
+    fragments = [fragment for atom in atoms for quote in atom.source_excerpts
+                 if (fragment := _source_fragment(source, scope, normalize_source_excerpt(quote))) is not None]
+    if not fragments or any(source.count(fragment) != 1 for fragment in fragments):
+        return [], 0
+    offset = min(source.index(fragment) for fragment in fragments)
+    prefix = source[:offset].strip("，,。；;：: ")
+    conditions = []
+    for atom in selected_atoms:
+        text = normalize_source_excerpt(atom.statement)
+        if text and prefix in {text, f"若{text}则", f"如果{text}则"}:
+            conditions.append(atom)
+    return conditions, offset
+
+
 def _conditioned_obligations_cover_source(source, scope, candidate, group, atoms, selected_atoms):
     """A literal common trigger may carry the prefix, never the consequence."""
     if candidate.trigger_expression is None:
         return False
-    from .protocol_control_source_interpretation import normalize_source_excerpt
-
-    fragments = [fragment for atom in atoms for quote in atom.source_excerpts
-                 if (fragment := _source_fragment(source, scope, normalize_source_excerpt(quote))) is not None]
-    if not fragments or any(source.count(fragment) != 1 for fragment in fragments):
-        return False
-    offset = min(source.index(fragment) for fragment in fragments)
-    prefix = source[:offset].strip("，,。；;：: ")
+    conditions, offset = _conditioned_source_atoms(source, scope, atoms, selected_atoms)
     branches = candidate.trigger_expression.groups
     indexes = group.applies_to_trigger_branch_indexes
-    if (not prefix or not indexes or any(index >= len(branches) for index in indexes)):
+    if (not conditions or not indexes or any(index >= len(branches) for index in indexes)):
         return False
-    if not all(any(atom in selected_atoms and normalize_source_excerpt(atom.statement) == prefix
+    if not all(any(atom in conditions
                    for atom in branches[index].atoms) for index in indexes):
         return False
     relevant = [branch for branch in branches if any(
-        atom in selected_atoms and normalize_source_excerpt(atom.statement) == prefix for atom in branch.atoms)]
+        atom in conditions for atom in branch.atoms)]
     if not all(any(all(atom in branch.atoms for atom in branches[index].atoms)
                    for index in indexes) for branch in relevant):
         return False
@@ -448,14 +459,23 @@ def _independent_source_obligation_groups(unit, statement, interpretation, cover
                 and candidate_index in entry.action_candidate_indexes
                 and (entry.status != "expressed" or candidate_index in entry.candidate_indexes)):
             others.append(other)
-    other_atoms = [atom for other in others for atom in _statement_grounded_atoms(unit, other, candidate)]
-    current_atoms = _statement_grounded_atoms(unit, statement, candidate)
     from .protocol_control_source_interpretation import normalize_source_excerpt
-    source_parts = re.split("[，,]", normalize_source_excerpt(statement.quoted_text), maxsplit=1)
-    source_conditions = [atom for branch in branches for atom in branch.atoms
-                         if atom in selected_atoms and atom in current_atoms
-                         and len(source_parts) == 2
-                         and normalize_source_excerpt(atom.statement) == source_parts[0]]
+    def local_atoms(source_statement):
+        text = normalize_source_excerpt(source_statement.quoted_text)
+        scope = normalize_source_excerpt(source_statement.scope_quote or "")
+        # A broad context excerpt is not proof that an atom belongs to this sentence.
+        return [atom for atom in _statement_grounded_atoms(unit, source_statement, candidate)
+                if any(_source_fragment(text, scope, normalize_source_excerpt(quote)) is not None
+                       for quote in atom.source_excerpts)]
+    other_atoms = [atom for other in others for atom in local_atoms(other)]
+    current_atoms = local_atoms(statement)
+    source_conditions, _ = _conditioned_source_atoms(
+        normalize_source_excerpt(statement.quoted_text),
+        normalize_source_excerpt(statement.scope_quote or ""),
+        [atom for group in selected_groups for atom in group.atoms if atom in selected_atoms],
+        [atom for branch in branches for atom in branch.atoms
+         if atom in selected_atoms and atom in current_atoms],
+    )
     independent = []
     for group in groups:
         if group in selected_groups:
@@ -515,7 +535,11 @@ def _source_repeat_count_is_preserved(unit, statement, source, numbers, directio
             return False
         if (scheme.count_status == "specified" and str(scheme.maximum_repeats) == number
                 and set(scheme.source_span_ids) <= set(unit.source_span_ids)
-                and any(source == normalize_source_excerpt(quote) for quote in scheme.source_excerpts)):
+                and any(
+                    (quote := normalize_source_excerpt(excerpt)) == source
+                    or (quote in source and quote == normalize_source_excerpt(atom.statement)
+                        and set(_NUMBER.findall(quote)) == numbers)
+                    for excerpt in scheme.source_excerpts)):
             schemes.append(scheme)
     return len(schemes) == 1
 
