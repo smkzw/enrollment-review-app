@@ -91,6 +91,43 @@ def _mixed_validity_alignment_material():
     return batch, source, wire, source_statement_coverage(batch, source, wire), alignment
 
 
+@pytest.mark.parametrize("question", ["适用对象未核清", "相对时间的起算点未核清"])
+def test_unresolved_source_cannot_skip_review_by_literal_candidate_quote(question):
+    from app.agents.protocol_control_source_interpretation import target_review_indexes
+    from tests.v2.services.test_protocol_control_execution import _independent_candidate_and_unresolved_review
+
+    batch, result = _independent_candidate_and_unresolved_review()
+    source, wire = result.source_interpretation, result.partial_wire
+    original = source_statement_coverage(batch, source, wire)
+    assert original[0].status == "expressed"
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    alignment = SourceCandidateAlignment.model_validate({
+        "version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+        "items": [{"statement_index": 0, "candidate_index": 0,
+                   "decision": "fully_expressed", "source_excerpt": source.statements[0].quoted_text,
+                   "candidate_atom_quotes": [atom.statement], "unresolved_dimensions": []}],
+    })
+    prior = bind_candidate_alignment(batch, source, original, wire, alignment,
+                                     alignment.model_dump_json(exclude={"proofs"}))
+    source.statements[0].unresolved = [question]
+    coverage = source_statement_coverage(batch, source, wire)
+    assert coverage[0].status == "candidate_linked"
+    assert coverage[0].candidate_indexes == []
+    assert coverage[0].action_candidate_indexes == [0]
+    assert 0 in target_review_indexes(source, coverage, batch)
+    with pytest.raises(ValueError, match="来源仍有未核清范围"):
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    assert reusable_proven_alignment_items(batch, source, coverage, wire, prior) == []
+    negative = alignment.model_copy(deep=True)
+    negative.items[0].decision = "uncertain"
+    negative.items[0].unresolved_dimensions = [question]
+    validate_candidate_alignment(batch, source, coverage, wire, negative)
+    # Clearing a question is a separate source revision, not an alignment vote.
+    source.statements[0].unresolved = []
+    assert source_statement_coverage(batch, source, wire) == original
+    validate_candidate_alignment(batch, source, original, wire, alignment)
+
+
 def test_partial_alignment_preserves_actual_response_and_good_sibling_only():
     batch, source, wire, coverage, alignment = _mixed_validity_alignment_material()
     raw = alignment.model_dump_json(exclude={"proofs"})

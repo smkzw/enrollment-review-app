@@ -2713,6 +2713,58 @@ def test_restricted_review_preserves_normalized_numeric_candidate(value, unit) -
     assert len(output.restricted_statements) == 1
 
 
+@pytest.mark.parametrize("failure", [None, "no_review", "positive_review", "transport", "missing_source", "incomplete_source", "only_correspondence"])
+def test_literal_unresolved_candidate_uses_existing_restriction_not_approval(failure):
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _candidate_for_second_unit
+    batch, result = _independent_candidate_and_unresolved_review()
+    for unit, statement in zip(batch.owned_units, result.source_interpretation.statements, strict=True):
+        unit.excerpt = statement.quoted_text
+    other = _candidate_for_second_unit()
+    quote = result.source_interpretation.statements[1].quoted_text
+    atom = other.obligation_expression.groups[0].atoms[0]
+    atom.statement = quote
+    atom.evaluation = type(atom.evaluation).model_validate(_evaluation(quote, "span:02", quote))
+    other.exception_expression = other.applicability_expression = None
+    result.partial_wire.candidate_drafts.append(other)
+    result.partial_wire.dispositions[1].disposition = StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE
+    result.partial_wire.dispositions[1].notes = None
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire)
+    assert result.source_statement_coverage[0].status == "expressed"
+    assert result.source_statement_coverage[1].status == "candidate_linked"
+    if failure == "no_review":
+        result.source_target_review.items = []
+    elif failure == "positive_review":
+        result.source_target_review.items[0].decision = "additional_requirement"
+    elif failure == "transport":
+        result.attempts[-1].error_classes = ["SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED"]
+    elif failure == "missing_source":
+        result.source_interpretation.statements[1].quoted_text = "不存在的原文"
+    elif failure == "incomplete_source":
+        batch.owned_units[1].excerpt += "；仅适用于事先获准者"
+    elif failure == "only_correspondence":
+        result.source_interpretation.statements[1].unresolved = []
+        atom.statement = "记录相关资料"
+        result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+            batch, result.source_interpretation, result.partial_wire)
+    if failure in {"no_review", "positive_review", "missing_source"}:
+        with pytest.raises(ValueError):
+            protocol_control_execution_module.restricted_batch_from_review(batch, result)
+        return
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    if failure:
+        assert output is None
+        return
+    assert output is not None and len(output.candidates) == 1
+    assert output.candidates[0].semantics == protocol_control_execution_module.hydrate_protocol_control_agent_output(
+        result.partial_wire, batch).candidates[0].semantics
+    assert len(output.restricted_statements) == 1
+    assert output.restricted_statements[0].source_quote == quote
+    assert output.restricted_statements[0].limitation_kind == "interpretation_unresolved"
+    saved = type(output).model_validate_json(output.model_dump_json())
+    protocol_control_execution_module._validate_deep_batch_output(batch, saved)
+
+
 @pytest.mark.parametrize(("quote", "value", "comparator", "unit", "expected"), [
     ("Age at least 18 years", 18, Comparator.GTE, "years", None),
     ("Age at least 18 years", 18, Comparator.LT, "years", "COMPARATOR_CHANGED"),
@@ -7055,6 +7107,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   protocol_control_execution_module.SOURCE_EVENT_INTERVAL_ALIGNMENT_VERSION,
                   protocol_control_execution_module.SOURCE_POLICY_REQUEST_SCOPE_VERSION,
                   protocol_control_execution_module.SOURCE_CONDITION_ACTION_SUPPORT_VERSION,
+                  protocol_control_execution_module.SOURCE_UNRESOLVED_COVERAGE_VERSION,
                   protocol_control_execution_module.SOURCE_STAGE_ECHO_VERSION,
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   "scoped-exception-dnf/v1"))

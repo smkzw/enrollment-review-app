@@ -28,6 +28,7 @@ SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION = "source-repeat-count-alignment/v1"
 SOURCE_EVENT_INTERVAL_ALIGNMENT_VERSION = "source-event-interval-alignment/v1"
 SOURCE_POLICY_REQUEST_SCOPE_VERSION = "source-policy-request-scope/v1"
 SOURCE_CONDITION_ACTION_SUPPORT_VERSION = "source-condition-action-support/v1"
+SOURCE_UNRESOLVED_COVERAGE_VERSION = "source-unresolved-coverage/v1"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
@@ -935,8 +936,8 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 or normalize_source_excerpt(item.source_excerpt) != normalize_source_excerpt(statement.quoted_text)):
             raise ValueError("候选语义核对未绑定本条原文与已有动作候选")
         unit = units[statement.structure_unit_id]
-        if item.decision == "fully_expressed" and statement.unresolved and unit.table_context is not None:
-            raise ValueError("表格来源仍有未核清范围，动作文字对应不能代替来源核对")
+        if item.decision == "fully_expressed" and statement.unresolved:
+            raise ValueError("来源仍有未核清范围，动作文字对应不能代替来源核对")
         native_visit_scope = native_schedule_visit_scope_is_preserved(batch, statement, candidate)
         validate_scope_citations(
             candidate.review_node_bindings,

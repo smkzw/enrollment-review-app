@@ -1,8 +1,24 @@
 # 来源角色与复查次数｜所有者取舍
 
-本包基于5749dd12，标题/次数源码9fb3ade37和兄弟解耦28858ba已push；当前复查字段/事件表示增量基于28858ba。现行Goal active/claims_complete=false。执行为所有者集成＋批准C03定向独审：来源角色与结果采用存在实质含义不确定性，数据库及修订由单一所有者管理。
+当前用户要求无损暂停，Goal已实查/更新paused，claims_complete=false。最新真实运行基于07c8a12c；恢复检查和最后小包完成，未启动下一Job。以下早期基础和“下一”仅历史。
 
-## 当前局部动作与条件支持（f564）
+## 当前来源未决覆盖与暂停取舍（88eab441）
+
+实际88eab4414fca4af1ae1671dc4d9f6361已failed_final/PROTOCOL_CONTROL_EVIDENCE_POLICY_UNJUSTIFIED，6物理调用371.370317秒；旧三个对应问题通过。第一因果错误是已有时间起点unresolved的来源因整句文字对应被标expressed而跳过目标核对，最后政策模型猜event_date，现有时间门正确拒绝。修复不教模型猜锚点：来源未决必须进入既有目标核对，fully_expressed拒绝；同源整单元所有点均实际未决才沿既有R1严格保留为非执行记录，正常独立候选保持。纯对应缺口、传输错误、无来源和未核完整范围不能转临床未决过门。
+
+C03沿批准会话01a122e0-696b-7146-9a31-8969fdc03ed0，CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max，11/12只读、63.857637秒完成等待/exit0/no fallback；没读临床、没跑测试、diff不可用，不是模型独立或医学批准。B1可选显示建议一度加入，但实际旧受限产物预检因此拒绝；所有者撤回，保留旧内容身份，实际具体问题已有aspects。B2核对顺序经所有者当前source-question循环及_execute_deep调用核实；不扩大can_recheck范围或预算，不保证来源疑问必然可自动解决。顾问对部分旧错误分类/纯对应用例的读码意见不代替实际测试。
+
+集中v1为34pass/1fail，新正例暴露单未决候选缺已有全单元受限路径，产品沿原路径扩展但未放宽源/依赖门。v2为123pass/2fail，均新夹具缺导入及目标核对范围不成立，修夹具；v3最终125pass/1699deselected/14.91秒/exit0/5SWIG。命令：`.venv/bin/python -m pytest tests/v2/agents/test_protocol_control_candidate_alignment.py tests/v2/services/test_protocol_control_execution.py tests/v2/protocols/test_slice58c_control_deconstructor.py tests/v2/domain/test_control_catalog_restricted_contract.py -q -k 'unresolved_source_cannot_skip or literal_unresolved_candidate or restricted or source_statement_coverage or native_action_alignment or gate_only_change_revalidates' --tb=short --junitxml=artifacts/rv1006-unresolved-source-coverage-20261010-v3.xml`。
+
+随后仅撤回可选显示文字，最终源码七受限保存反例7pass/542deselected/0.68秒/exit0/5SWIG：`.venv/bin/python -m pytest tests/v2/services/test_protocol_control_execution.py -q -k literal_unresolved_candidate --tb=short --junitxml=artifacts/rv1006-unresolved-source-final-pause-20261010-v1.xml`。不把窗口相加或称末全库通过。新source-unresolved-coverage/v1仅验证身份，作者/编译器未变。
+
+实际最终只读产品预检exit0，88为源，47reusable/2resume_partial/41refresh_required，0模型/0写/全库hash保持；首次exit1为上述文字身份差异，无成功回执，不改历史。新run_rv1006_unresolved_source_20261010.py已准备但未执行；用户恢复后核身份与租约，合法新建并核90步一致，不能复活88或覆盖目录。当前源码尚无新产品保存证明，完整同源发布/病例工作稿/UI更正新旧报告仍未完成。合理替代解释：文字对应曾只证明动作，不证明时间策略；此次故障可能仍含真实原文歧义而非仅提示错误，必须保留具体未决，不能用模型投票消失。
+
+## 历史基础
+
+本包基于5749dd12，标题/次数源码9fb3ade37和兄弟解耦28858ba已push；当时复查字段/事件表示增量基于28858ba。执行为所有者集成＋批准C03定向独审，数据库及修订由单一所有者管理。
+
+## 历史局部动作与条件支持（f564）
 
 3db56bea实际f56472f355c1433980080dab1ad05740失败，5调用386.154724秒，44/45/45；政策范围门已通过，冻结求值来源的复查字段补丁及完整wire成功。随后整句来源要求拒局部动作，若则前缀及广域上下文又掩盖兄弟局部所有权。当前复用原函数收紧局部归属：广段含本句不等于原子属于本句；兄弟仍有单句coverage、局部出处和显式分支包含。完整来源、条件、否定、量词、次数/许可/结果政策保护保留，无病种项目硬编码。
 

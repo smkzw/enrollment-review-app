@@ -4712,7 +4712,7 @@ def source_statement_coverage(
                 )
             # Physical visit correspondence selects a semantic check; it is not
             # proof that the candidate's policies and other relations are faithful.
-            if expressed and not native_visit_scope:
+            if expressed and not native_visit_scope and not statement.unresolved:
                 linked_candidates.append(candidate_index)
         disposition = dispositions[statement.structure_unit_id]
         quote = normalize_source_excerpt(statement.quoted_text)

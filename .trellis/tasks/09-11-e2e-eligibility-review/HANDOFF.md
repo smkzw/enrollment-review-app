@@ -1,12 +1,18 @@
-# HANDOFF｜1006V1｜已解除暂停，实施中
+# HANDOFF｜1006V1｜2026-10-10无损暂停
 
 ## 当前事实
 
-**当前优先事实（2026-10-10）：** Goal active/claims_complete=false。源码3db56bea实际Jobf56472f355c1433980080dab1ad05740 failed_final/PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID，5物理调用386.154724秒/exit3；44完成、45失败、45未读，检查点6d5ddd068f074dac908b46ebb9de4960。新政策范围请求已实际通过；复查字段短答及完整wire重验成功，但来源整句/局部动作错层及条件兄弟归属仍拒，旧Job终态不改。
+本次六个代码/测试文件与暂停记录同一明确提交保存；准确记录提交可用`git log -1 --format=fuller -- .trellis/tasks/09-11-e2e-eligibility-review/HANDOFF.md`查回，不将最后真实运行07c8a12c误作本包新代码已经运行。代码/记录提交不是规则采用或临床签发。
 
-**本次最小包及证据：** 所有者实施＋批准C03定向只读审阅。完整前缀/若则/如果则共用已有分支包含及后果合取；次数合同允许冻结局部动作的逐字出处，不推断触发/范围/结果政策；兄弟归属需要本句局部摘录，广段仅作上下文。原域门、临床数值、兄弟、预算和历史不改。最终四相连受影响206pass/1695deselected/2.59秒/exit0/5SWIG，非全库或临床。两次C03同批准会话14/16及7/8读、exit0/no fallback，等待90.761/55.161秒，未测试/临床/diff不可用；旧S1经当前求值来源代码反证撤回。顾问边界B1/B2保留：仅宽来源或混合组未有局部所有权证据仍拒，不扩大语法。
+**当前优先事实（2026-10-10）：** 用户要求完成手头工作后暂停；Goal工具已实查并更新paused，claims_complete=false，任务未完成/不归档。最后真实运行源码07c8a12c58a836442649e2af919883b4c5337b96，Job88eab4414fca4af1ae1671dc4d9f6361为failed_final/PROTOCOL_CONTROL_EVIDENCE_POLICY_UNJUSTIFIED，6物理调用371.370317秒/exit3，44完成/45失败/45未执行，检查点2bafa9ed291e472c8d428c59ed7669f9。旧条件/次数/来源三项对应在真实第8答通过；首错变为已有时间起点未决的来源被逐字对应跳过目标核对，随后模型无据填event_date，现有时间门正确拒绝。旧终态/原答不改。
 
-**实际零调用及下一动作：** f564原第8作者和第9对应原答只读重放，当前三项0/1/2来源表示校验通过，原答hash保持；0模型/0写/proof/采用、stat保持，未全库hash。首v1尚有兄弟错误，v2因广域/局部区分已通过；私有驱动一次缺__file__退出1未读库、修执行环境后exit0，非产品故障。当前只读复用预检正在执行，须核结果再合法新建保存；不从原答人工签proof。完整同源包、新同包24页工作稿、正式UI更正后的新旧结果/Q3未达，0共同发布/启用/签发，7份继承dirty及原件保持。
+**本次最小包及证据：** 六个源码/测试文件修改见implement及review_index；来源unresolved不能凭文字对应获fully_expressed或跳过目标核对。所有语义点均有真实来源未决且经既有目标核对时，沿原R1整单元非执行留存，保留独立正常候选；无源、传输失败、未核范围和普通对应缺口不能借此通过。source-unresolved-coverage/v1只更新验证身份。四相连受影响125pass/1699deselected/14.91秒；末撤回可选显示文字后，受限保存七反例7pass/542deselected/0.68秒，两窗口均exit0/5SWIG、不累加。125窗不是末文字撤回后的全窗。C03同批准会话11/12读取、63.857637秒/exit0/no fallback，源码只读，无临床/测试/diff及模型独立金标；可选显示建议被实际历史身份检查反证，已撤回。
+
+**实际零调用及恢复入口：** 最终rv1006-unresolved-source-preflight-20261010-v1.json已exit0，来源88eab4414fca4af1ae1671dc4d9f6361：47可复用（1–44/46–48）、2部分接续（45/49）、41读取或刷新（50–90），0模型/0写/全库hash保持。首次预检因可选显示文字改变旧受限保存内容exit1，撤回文字后通过，旧产物未改。检查和本次review/测试均结束；尚未新建或运行下一Job，不等方案读取，不增加调用。
+
+恢复先读本节与implement文头，不重读全部历史。唯一worktree/分支不变；先核实际HEAD/dirty、env路线、数据库归属/终态/租约与预检身份。私有根/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003，数据库rv1006-relation-field-source-resume-20261007-v2/data/enrollment-review-v2.sqlite3。run_rv1006_unresolved_source_20261010.py已准备但未执行；预定新目录rv1006-unresolved-source-api-20261010-v1未运行，不覆盖旧目录。用户解除暂停后才从合法入口新建，并核90步与预检一致；相容成功部分复用、不重读，身份变化先零调用重新验证而非保证永远不重验。官方cms-router/glm-5.3-flash/high（OmniRouter）、跨章ollama-cloud/deepseek-v4.1-flash/high保持，不用工程CLI读病例。
+
+完整同源包、新同包5PDF24页工作稿、正式UI有源更正及新旧报告/Q3未达，0共同发布/启用/签发。七份继承dirty不stage/revert，大量私有未跟踪资料不清理。临床原答/数据库/私有脚本仅本机受控可读，外部仅源码、合成用例和净化工程记录。后文旧“当前/下一/active”均历史，不能覆盖此暂停点。
 
 ### 前一资料政策范围包（历史，不覆盖上方当前事实）
 

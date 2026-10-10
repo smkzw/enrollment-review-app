@@ -496,7 +496,12 @@ def _whole_unit_restriction(
     procedure_units = {unit_id for unit_id in restricted_units
                        if dispositions[unit_id].disposition
                        == StructureUnitDispositionKind.REQUIRED_PROCEDURE}
-    if (not procedure_units and not citation_expanded
+    source_unresolved_units = all(
+        by_unit.get(unit_id) and all(index in uncertain_indexes
+            and interpretation.statements[index].unresolved for index in by_unit[unit_id])
+        for unit_id in restricted_units
+    )
+    if (not procedure_units and not citation_expanded and not source_unresolved_units
             and not any(len(by_unit.get(unit_id, [])) > 1 for unit_id in restricted_units)):
         return None
     if any(unit_id not in by_unit for unit_id in restricted_units):

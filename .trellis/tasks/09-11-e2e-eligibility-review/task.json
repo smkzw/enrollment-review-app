@@ -40,17 +40,17 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "1006V1持续/Goal active/claims_complete=false。3db56bea实际f56472f355c1433980080dab1ad05740 failed_final/5调用386.154724秒，44完成45失败45未读，检查点6d5ddd068f074dac908b46ebb9de4960。政策范围及复查字段来源实际已过；局部动作/整句支持及若则条件/宽段归属错层沿原函数修复。最终相连206pass、两轮批准C03 exit0且撤回旧来源层级建议；实际原答三项零调用表示通过，不签proof/不采用。当前只读预检运行，完成后合法新建保存接续；旧终态/原件/继承dirty保持。完整同包病例更正闭环未达，0共同发布/启用/签发。",
+  "notes": "2026-10-10用户要求无损暂停，Goal实查/更新paused，claims_complete=false。07c8a12c实际88eab4414fca4af1ae1671dc4d9f6361 failed_final/EVIDENCE_POLICY_UNJUSTIFIED，6调用371.370317秒，44完成45失败45未读，检查点2bafa9ed291e472c8d428c59ed7669f9。旧三项对应实际已过，新首错为来源疑问被逐字对应跳过核对。最小包沿既有目标核对/R1受限留存修复，125相连通过，撤回可选显示文字后七保存反例通过；批准C03只读11/12/exit0。最终预检47可复用/2部分接续/41刷新，0模型/0写/全库hash保持；所有检查结束，新Job未运行。恢复核身份后合法新建、相容成功不重读；不复活旧终态。完整同源包/病例更正新旧报告未达，0发布/启用/签发，任务不归档。",
   "meta": {
-    "execution_paused_by_user": false,
+    "execution_paused_by_user": true,
     "current_checkpoint": "implement.md",
     "current_scope": "1006V1 frozen delivery window: complete same-source requirements, isolated current-node work draft, source navigation, one UI correction/supplement, affected recalculation and old/new history; R1/1001V1 retained.",
     "claims_complete": false,
-    "review_packet_status": "condition_action_support_reviewed_owner_verified_pending_product_run",
-    "runtime_goal_status_observed": "active",
+    "review_packet_status": "unresolved_source_coverage_reviewed_owner_verified_preflight_passed_paused_before_product_run",
+    "runtime_goal_status_observed": "paused",
     "current_handoff": "HANDOFF.md",
     "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",
-    "last_verified_source_commit": "78194eae3d780e972fa49ed93bd7d5cc771ca3b3",
+    "last_verified_source_commit": "07c8a12c58a836442649e2af919883b4c5337b96",
     "current_review_index": "review_index_20261006_1006V1.json",
     "historical_notes_20261006": "1006V1连续实施，Goal active，claims_complete=false。资料14组/24页、30事实及实际UI更正/Profile4成立；完整要求/工作稿/新报告未达。关系字段修复7a613204/822检查、末尾句界修复3472fa28/845检查已普通push；两旧原答零调用重验通过但未采用。v5合法部分恢复7调用/212.4902s，总37；29来源/24核对保存，研究目的用途及期别定义对应两项未核清。原库/旧Job不改，不重复整批或另复制大库。前端最终34检查/Ego成立，原198/展示190，原件/7份继承dirty保留。"
   }
