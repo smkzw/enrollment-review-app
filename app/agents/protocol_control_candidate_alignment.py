@@ -24,6 +24,7 @@ CANDIDATE_SOURCE_CLOSURE_CONTEXT_VERSION = "candidate-source-closure-context/v1"
 SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION = "statement-grounded-candidate-quotes/v1"
 SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION = "source-conditional-group-alignment/v1"
 SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION = "source-repeat-count-alignment/v1"
+SOURCE_EVENT_INTERVAL_ALIGNMENT_VERSION = "source-event-interval-alignment/v1"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
@@ -244,11 +245,32 @@ def _common_trigger_preserves_visit_time(batch, statement, candidate, selected_a
     )
 
 
-def _matches_time_anchor_direction(word: str, atoms) -> bool:
+def _matches_time_anchor_direction(word: str, atoms, *, source: str = "") -> bool:
+    from .protocol_control_source_interpretation import normalize_source_excerpt
+
     anchors = {anchor for label, anchor in _ANCHOR_WORDS if label in word}
     directions = ({"before"} if "前" in word and "后" not in word else
                   {"after"} if "后" in word and "前" not in word else
                   {"on"} if "进入" in word else set())
+    if not anchors and len(directions) == 1 and len(word) > 2 and source and not _NUMBER.search(word):
+        # Prove source representation only; never substitute a named visit date.
+        # The existing interval consumer keeps this software capability gap UNKNOWN.
+        return any(
+            (constraint := getattr(atom, "time_constraint", None)) is not None
+            and constraint.anchor_type.value == "event_date"
+            and constraint.direction.value in directions
+            and all(getattr(constraint, field) is None for field in (
+                "lower_bound_days", "upper_bound_days", "lower_bound", "upper_bound",
+                "half_life_multiplier", "combined_window_selection"))
+            and (spec := getattr(atom, "evaluation", None)) is not None
+            and spec.determination_mode == "semantic" and spec.time_purpose == "interval_condition"
+            and word in normalize_source_excerpt(atom.statement)
+            and word in normalize_source_excerpt(spec.proposition or "")
+            and word in source
+            and any(normalize_source_excerpt(quote) == source for quote in atom.source_excerpts)
+            and any(normalize_source_excerpt(quote) == source for quote in spec.source_excerpts)
+            for atom in atoms
+        )
     return len(anchors) == 1 and len(directions) == 1 and any(
         constraint.anchor_type.value in anchors and constraint.direction.value in directions
         for atom in atoms
@@ -587,6 +609,15 @@ def _alignment_input_identity(batch, interpretation, wire, item):
                               and len(candidate.obligation_expression.groups) > 1 else {}),
                            **({"repeat_count_alignment": SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION}
                               if any(atom.evaluation is not None and atom.evaluation.repeat_scheme is not None
+                                     for group in candidate.obligation_expression.groups for atom in group.atoms)
+                              else {}),
+                           **({"event_interval_alignment": SOURCE_EVENT_INTERVAL_ALIGNMENT_VERSION}
+                              if any(atom.time_constraint is not None and atom.time_constraint.anchor_type.value == "event_date"
+                                     and atom.evaluation is not None and atom.evaluation.determination_mode == "semantic"
+                                     and atom.evaluation.time_purpose == "interval_condition"
+                                     and all(getattr(atom.time_constraint, field) is None for field in (
+                                         "lower_bound_days", "upper_bound_days", "lower_bound", "upper_bound",
+                                         "half_life_multiplier", "combined_window_selection"))
                                      for group in candidate.obligation_expression.groups for atom in group.atoms)
                               else {}),
                            **({"candidate_source_closure_version": CANDIDATE_SOURCE_CLOSURE_CONTEXT_VERSION,
@@ -949,13 +980,13 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                         and simple_visit_action_preserves_time(batch, statement, candidate)):
                     continue
                 if (normalized_word not in scope or _NUMBER.search(normalized_word)
-                        or not _matches_time_anchor_direction(normalized_word, selected_atoms)):
+                        or not _matches_time_anchor_direction(normalized_word, selected_atoms, source=source)):
                     raise ValueError("候选未逐项保留来源时点或例外")
             if "time_validity" in functions and not shared_prohibition_time and not common_trigger_time and not simple_visit_action_preserves_time(
                 batch, statement, candidate
             ):
                 for word in statement.time_words:
-                    if not _matches_time_anchor_direction(word, selected_atoms):
+                    if not _matches_time_anchor_direction(word, selected_atoms, source=source):
                         raise ValueError("候选时间锚点或方向未由原文逐项证明")
             if "threshold" in functions and not numbers:
                 source_modes = {mode for mode, words in _QUANTIFIER_GROUPS.items()

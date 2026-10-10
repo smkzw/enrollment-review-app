@@ -414,7 +414,8 @@ def test_source_repeat_count_field_repair_preserves_siblings_and_consumer_unknow
 
 @pytest.mark.parametrize("reply", ["valid", "wrong_count", "changed_policy", "transport"])
 @pytest.mark.parametrize("unresolved_sibling", [False, True])
-def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(reply, unresolved_sibling):
+@pytest.mark.parametrize("field_patch", [False, True])
+def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(reply, unresolved_sibling, field_patch):
     from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner, ProtocolControlAgentResponse
     from tests.v2.protocols.test_slice58c_control_deconstructor import (
         _FakeTransport, _two_independent_candidate_linked_alignment_material, _evaluation,
@@ -496,12 +497,15 @@ def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(re
                 proposed.evaluation = proposed.evaluation.model_copy(update={"observation_policy":
                     proposed.evaluation.observation_policy.model_copy(update={"mode": "any"})})
             return ProtocolControlAgentResponse(session_id=session_id,
-                text=json.dumps({"atom": proposed.model_dump(mode="json")}, ensure_ascii=False))
+                text=json.dumps({"evaluation_patch": {"repeat_scheme": proposed.evaluation.repeat_scheme.model_dump(mode="json")}}
+                    if field_patch and reply != "changed_policy" else {"atom": proposed.model_dump(mode="json")}, ensure_ascii=False))
         def continue_numeric_predicate(self, **kwargs):
             pytest.fail("An action count must not request a measurement predicate")
         def continue_scoped_unit_repair(self, **kwargs):
             pytest.fail("A missing scheme must not rewrite the source unit")
     transport = Transport([])
+    if field_patch:
+        transport.continue_repeat_scheme = transport.continue_atom
     result = ProtocolControlAgentRunner(max_schema_repairs=2).run(batch, transport,
         resume_source_interpretation=source, resume_wire=wire, resume_session_id="original-wire",
         output_validator=lambda _output: None)
@@ -520,6 +524,87 @@ def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(re
             assert any(attempt.error_detail and attempt.error_detail.get("workflow_phase") == "reviewed_atom_repair"
                        and attempt.outcome == "parsed" for attempt in result.attempts)
             assert result.partial_wire.candidate_drafts[1].model_dump(mode="json") == original["candidate_drafts"][1]
+
+
+@pytest.mark.parametrize("change", [None, "extra_field", "missing_scheme", "null_scheme", "contradictory_result", "old_scheme"])
+def test_repeat_field_patch_splices_only_current_scheme(change):
+    from app.agents.protocol_control_deconstructor import (
+        _merge_obligation_atom_repair, ProtocolControlAgentWireValidationError,
+    )
+    batch, source, wire, coverage, alignment = _repeat_count_material()
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    scheme = atom.evaluation.repeat_scheme.model_dump(mode="json")
+    atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": None})
+    baseline = wire.model_dump(mode="json")
+    patch = {"repeat_scheme": scheme}
+    if change == "extra_field":
+        patch["proposition"] = "其他判断"
+    elif change == "missing_scheme":
+        patch = {}
+    elif change == "null_scheme":
+        patch["repeat_scheme"] = None
+    elif change == "contradictory_result":
+        scheme.update(result_use="unresolved", result_population="unresolved")
+    elif change == "old_scheme":
+        scheme["version"] = "repeat-scheme/v3"
+    raw = json.dumps({"evaluation_patch": patch}, ensure_ascii=False)
+    if change:
+        with pytest.raises(ProtocolControlAgentWireValidationError):
+            _merge_obligation_atom_repair(raw, baseline, (0, 0, 0), repeat_scheme_only=True)
+    else:
+        merged = _merge_obligation_atom_repair(raw, baseline, (0, 0, 0), repeat_scheme_only=True)
+        validate_candidate_alignment(batch, source, coverage, merged, alignment)
+        dumped = merged.model_dump(mode="json")
+        dumped["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["repeat_scheme"] = None
+        assert dumped == baseline
+    assert wire.model_dump(mode="json") == baseline
+
+
+@pytest.mark.parametrize("change", [None, "visit_substitution", "named_visit", "reverse", "missing_word", "wrong_source", "numeric_window", "executable_time", "vague"])
+def test_source_event_interval_alignment_retains_non_executable_consumer_gap(change):
+    from app.domain.contracts.rules import TimeConstraint
+    from app.projections.control_calculation_experiment import _proposition_observation
+    from app.domain.contracts.enums import TruthValue
+    from tests.v2.protocols.test_slice58c_control_deconstructor import (
+        _two_independent_candidate_linked_alignment_material, _evaluation,
+    )
+    batch, source, _, wire, payload = _two_independent_candidate_linked_alignment_material()
+    word = "筛选前" if change == "named_visit" else "此前" if change == "vague" else "核查前"
+    text = f"{word}不得更改记录"
+    batch.owned_units[1].excerpt = source.statements[1].quoted_text = text
+    source.statements[1].force = "prohibited"
+    source.statements[1].time_words = [word]
+    candidate = wire.candidate_drafts[1]
+    atom = candidate.obligation_expression.groups[0].atoms[0]
+    atom.kind = ControlObligationKind.PROHIBIT_EVENT
+    atom.statement = text if change != "missing_word" else "不得更改记录"
+    atom.source_excerpts = [text]
+    evaluation = _evaluation(atom.statement, atom.source_span_ids[0], text)
+    evaluation.update(time_purpose="event_membership" if change == "executable_time" else "interval_condition",
+                      time_operand_attribute="date_range")
+    if change == "wrong_source":
+        evaluation["source_excerpts"] = ["其他操作前不得更改记录"]
+    atom.evaluation = type(atom.evaluation).model_validate(evaluation)
+    atom.time_constraint = TimeConstraint.model_validate({
+        "anchor_type": "screening_date" if change == "visit_substitution" else "event_date",
+        "direction": "after" if change == "reverse" else "before",
+        "upper_bound_days": 2 if change == "numeric_window" else None,
+    })
+    for evidence in candidate.minimum_evidence:
+        evidence.source_policy.source_excerpts = [text]
+    payload["items"][1].update(source_excerpt=text, candidate_atom_quotes=[atom.statement],
+        decision="fully_expressed", unresolved_dimensions=[])
+    coverage = source_statement_coverage(batch, source, wire)
+    alignment = SourceCandidateAlignment.model_validate(payload)
+    if change:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+        bound = bind_candidate_alignment(batch, source, coverage, wire, alignment, alignment.model_dump_json())
+        assert bound.proofs
+        truth, reasons = _proposition_observation(atom, [{"status": "entails_agreed"}], SimpleNamespace())
+        assert truth == TruthValue.UNKNOWN and reasons == ["interval_calculation_unsupported"]
 
 
 @pytest.mark.parametrize("outside_quote", ["条件甲", "不存在的原句", " "])

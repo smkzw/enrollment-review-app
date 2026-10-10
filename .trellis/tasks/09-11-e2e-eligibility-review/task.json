@@ -40,13 +40,13 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "1006V1持续/Goal active/claims_complete=false。实际9fb源码Job2ffbbe31已failed_final，8调用434.418653s，44完成/45失败/45未执行；3标题修订保存、4目标核对和1候选核对，次数缺字段未发起因未决兄弟错误耦合。最小解耦包68相连检查通过，单字段/兄弟/预算/完整核对保留，未完成仍基线回退、不采用。批准C03同会话续审14/14、exit0/no fallback，173.919s，非临床金标且未测/diff不可用。新包真实恢复尚未运行，下一以2ff当前预检合法新建；旧尝试不重置。完整同源包及病例/UI更正闭环未达；七份继承dirty及私有材料保留。详见implement/HANDOFF及source-role-repeat取舍。",
+  "notes": "1006V1持续/Goal active/claims_complete=false。28858ba真实Jobe6403055908246638489d210d560efb8 failed_final/4调用294.313331s/44完成45失败45未执行，检查点501100cd8dfd41cdba38ba910bac1c2b。复查回答结构矛盾与固定访视对应函数误拒事件区间为首错；新包仅补repeat_scheme、严格事件来源表示，原消费者仍UNKNOWN能力缺口。最终123相连选择检查通过；批准C03同会话15/15/exit0/no fallback，69.55s，非独立模型金标且未测/diff不可用。实际第1声明只读零调用重放通过、合成消费者UNKNOWN、0proof/采用/stat保持，非全库hash。新包产品恢复尚未运行，下一以e640当前预检合法新建；旧尝试不重置。完整同源包及病例/UI更正闭环未达；七份继承dirty及私有材料保留。详见implement/HANDOFF及source-role-repeat取舍。",
   "meta": {
     "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",
     "current_scope": "1006V1 frozen delivery window: complete same-source requirements, isolated current-node work draft, source navigation, one UI correction/supplement, affected recalculation and old/new history; R1/1001V1 retained.",
     "claims_complete": false,
-    "review_packet_status": "source_heading_recovery_run_atom_sibling_decoupling_verified_pending_product_run",
+    "review_packet_status": "repeat_field_event_interval_verified_pending_product_run",
     "runtime_goal_status_observed": "active",
     "current_handoff": "HANDOFF.md",
     "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",

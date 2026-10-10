@@ -1709,8 +1709,17 @@ class OpenAICompatibleProtocolControlAgentTransport:
             session_id=session_id, prompt=prompt, numeric_predicate_only=True,
         )
 
+    def continue_repeat_scheme(
+        self, *, session_id: str, prompt: str,
+    ) -> ProtocolControlAgentResponse:
+        """Return the missing repeat scheme, not a rewritten obligation."""
+        return self._continue_atom_repair(
+            session_id=session_id, prompt=prompt, repeat_scheme_only=True,
+        )
+
     def _continue_atom_repair(
         self, *, session_id: str, prompt: str, numeric_predicate_only: bool = False,
+        repeat_scheme_only: bool = False,
     ) -> ProtocolControlAgentResponse:
 
         if not prompt.strip():
@@ -1721,6 +1730,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
         # batch history would turn a one-atom repair into another full review.
         response_format = protocol_control_atom_repair_response_format(
             numeric_predicate_only=numeric_predicate_only,
+            repeat_scheme_only=repeat_scheme_only,
         )
         repair_messages = self._single_requirement_messages(prompt, response_format)
         try:

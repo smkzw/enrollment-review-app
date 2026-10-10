@@ -1741,12 +1741,14 @@ def protocol_control_calendar_bound_repair_response_format() -> dict[str, object
 
 
 def protocol_control_atom_repair_response_format(
-    *, numeric_predicate_only: bool = False,
+    *, numeric_predicate_only: bool = False, repeat_scheme_only: bool = False,
 ) -> dict[str, object]:
     """Restrict a structural repair to one obligation atom."""
 
     original = protocol_control_agent_json_schema()
     definitions = original["$defs"]
+    if numeric_predicate_only and repeat_scheme_only:
+        raise ValueError("单字段修订不能同时更改数值比较和复查合同")
     if numeric_predicate_only:
         fields = ("determination_mode", "operation", "predicate", "operand_attribute")
         definitions = deepcopy(definitions)
@@ -1762,8 +1764,15 @@ def protocol_control_atom_repair_response_format(
             "required": list(fields),
             "additionalProperties": False,
         }
-    root_name = "NumericEvaluationPatch" if numeric_predicate_only else "ProtocolControlAgentWireObligationAtom"
-    root_field = "evaluation_patch" if numeric_predicate_only else "atom"
+    if repeat_scheme_only:
+        definitions = deepcopy(definitions)
+        definitions["RepeatEvaluationPatch"] = {
+            "type": "object", "properties": {"repeat_scheme": {"$ref": "#/$defs/RepeatScheme"}},
+            "required": ["repeat_scheme"], "additionalProperties": False,
+        }
+    root_name = ("RepeatEvaluationPatch" if repeat_scheme_only else
+                 "NumericEvaluationPatch" if numeric_predicate_only else "ProtocolControlAgentWireObligationAtom")
+    root_field = "evaluation_patch" if numeric_predicate_only or repeat_scheme_only else "atom"
     reachable: set[str] = set()
     pending: list[str] = [root_name]
     while pending:
@@ -1785,7 +1794,8 @@ def protocol_control_atom_repair_response_format(
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": "protocol_control_numeric_evaluation_patch_v1" if numeric_predicate_only else "protocol_control_atom_repair_v1",
+            "name": ("protocol_control_repeat_evaluation_patch_v1" if repeat_scheme_only else
+                     "protocol_control_numeric_evaluation_patch_v1" if numeric_predicate_only else "protocol_control_atom_repair_v1"),
             "strict": True,
             "schema": {
                 "$defs": {name: definitions[name] for name in definitions if name in reachable},
@@ -7070,12 +7080,12 @@ def _merge_obligation_atom_repair(
     try:
         payload = json.loads(raw_text)
         field_patch = False
-        if numeric_predicate_only and isinstance(payload, dict) and set(payload) == {"evaluation_patch"}:
+        if (numeric_predicate_only or repeat_scheme_only) and isinstance(payload, dict) and set(payload) == {"evaluation_patch"}:
             patch = payload["evaluation_patch"]
-            allowed = {"determination_mode", "operation", "predicate", "operand_attribute"}
+            allowed = {"repeat_scheme"} if repeat_scheme_only else {"determination_mode", "operation", "predicate", "operand_attribute"}
             if not isinstance(patch, dict) or set(patch) != allowed:
-                raise ValueError("数值修订必须且仅能包含四个获准的求值字段")
-            if (patch["determination_mode"] != "deterministic"
+                raise ValueError("局部修订必须且仅能包含获准的求值字段")
+            if numeric_predicate_only and (patch["determination_mode"] != "deterministic"
                     or patch["operation"] != "value_comparison"
                     or not isinstance(patch["predicate"], dict)
                     or patch["operand_attribute"] != "value"):
@@ -7167,6 +7177,24 @@ def _build_obligation_atom_repair_prompt(
         if unit.structure_unit_id in owned_ids
     ]
     if field_patch:
+        if repeat_scheme_only:
+            return (
+                "仅补冻结原子中缺失的复查合同，不重发或改写原子。"
+                "只返回 evaluation_patch 对象，其中必须且只能包含 repeat_scheme。"
+                "本次只允许补 evaluation.repeat_scheme，其他字段和兄弟由宿主原样保留。"
+                "使用repeat-scheme/v4，所有明确值须有本原子已冻结来源；未明范围和结果采用保留未核实。"
+                "不制造检验比较、来源编号、条件身份、日期或计算方式。"
+                "result_use 不是 combine 时，result_combine/result_population 必须为null，"
+                "未知结果采用用result_use=unresolved，不把unknown组合字段填成非空。"
+                "result_use=combine 时，方式和初查参与范围分别保留原文规定或unresolved。"
+                "count_status=specified 须同时有maximum_repeats和count_scope；范围不明用unresolved。"
+                "time_status=specified 才能有time_limit；没有规定与未核清须分开。"
+                "条件性触发必须绑定既有完整条件；来源不能证明时用unresolved，不伪造身份。"
+                "无复查时结果采用no_repeat_result_use必须明确，原文不明用unresolved。"
+                "Schema通过不等于采用，宿主仍将完整重验。\n"
+                f"问题：{problem}\n原子位置：{path}\n"
+                f"冻结原子：{_stable_json(atom)}\n冻结上下文：{_stable_json(sources)}"
+            )
         if not numeric_predicate_only:
             raise ValueError("仅数值求值修订支持字段补丁")
         return (
@@ -10390,7 +10418,7 @@ class ProtocolControlAgentRunner:
                                     and len(numeric_failures[0]["statement_ids"]) == 1
                                     and source_declares_uncompared_action_count(source_interpretation.statements[
                                         numeric_failures[0]["statement_ids"][0]]))
-                                patch_reader = (None if repeat_scheme_only else
+                                patch_reader = (getattr(transport, "continue_repeat_scheme", None) if repeat_scheme_only else
                                                 getattr(transport, "continue_numeric_predicate", None))
                                 atom_reader = patch_reader if callable(patch_reader) else getattr(transport, "continue_atom", None)
                                 if (len(numeric_failures) == 1

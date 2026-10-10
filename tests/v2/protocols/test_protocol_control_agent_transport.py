@@ -1304,7 +1304,8 @@ def test_empty_frozen_target_set_requires_null_not_an_invented_identifier():
 
 
 @pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
-def test_numeric_field_patch_preserves_history_and_sends_only_authorized_schema(mode):
+@pytest.mark.parametrize("repeat", [False, True])
+def test_numeric_field_patch_preserves_history_and_sends_only_authorized_schema(mode, repeat):
     client, completions = _client(['{"wire":1}', '{"evaluation_patch":{}}'])
     transport = OpenAICompatibleProtocolControlAgentTransport(
         client=client, backend="cms-router", model="deepseek-latest-cloud",
@@ -1312,18 +1313,19 @@ def test_numeric_field_patch_preserves_history_and_sends_only_authorized_schema(
     )
     first = transport.start(prompt="完整冻结批次")
     history = transport.history(first.session_id)
-    response = transport.continue_numeric_predicate(session_id=first.session_id, prompt="冻结数值字段")
+    reader = transport.continue_repeat_scheme if repeat else transport.continue_numeric_predicate
+    response = reader(session_id=first.session_id, prompt="冻结求值字段")
     assert response.session_id == first.session_id
     assert transport.history(first.session_id) == history
     call = completions.calls[1]
     assert len(call["messages"]) == 1
     if mode == "json_schema":
         schema = call["response_format"]["json_schema"]
-        assert schema["name"] == "protocol_control_numeric_evaluation_patch_v1"
+        assert schema["name"] == ("protocol_control_repeat_evaluation_patch_v1" if repeat else "protocol_control_numeric_evaluation_patch_v1")
         assert set(schema["schema"]["properties"]) == {"evaluation_patch"}
-        patch = schema["schema"]["$defs"]["NumericEvaluationPatch"]
-        assert set(patch["properties"]) == {
-            "determination_mode", "operation", "predicate", "operand_attribute"}
+        patch = schema["schema"]["$defs"]["RepeatEvaluationPatch" if repeat else "NumericEvaluationPatch"]
+        assert set(patch["properties"]) == ({"repeat_scheme"} if repeat else {
+            "determination_mode", "operation", "predicate", "operand_attribute"})
         assert patch["additionalProperties"] is False
         assert set(patch["required"]) == set(patch["properties"])
         assert "ProtocolControlAgentWireObligationAtom" not in schema["schema"]["$defs"]
