@@ -1999,7 +1999,10 @@ def build_source_target_review_prompt(
         '"target_action_excerpt":null,"source_object_excerpt":null,"target_object_excerpt":null,'
         '"source_time_excerpt":null,"target_time_excerpt":null,"target_scope_excerpt":null,'
         '"unresolved_aspects":[],"unresolved_cause":null,"non_control_basis_excerpt":null,"attribution_excerpt":null}]}。枚举值只选一个，未知目标填 null；'
-        '非跨章节关系的对象与另一来源时期字段一律填 null。\n'
+        '非跨章节关系的对象与另一来源时期字段一律填 null。'
+        'unresolved_aspects 的 [] 仅适用于不需要记录差额的决定；'
+        'decision=additional_requirement 或 unresolved 时必须填写至少一个具体差额或疑问，'
+        '例如 ["说明本条哪一项含义尚未被所引用目标覆盖"]；不得照抄示例文字或返回空数组。\n'
         f"本次必须且只能返回这些 statement_index：{json.dumps(indexes)}。"
         "不得返回同单元其他陈述或上一轮整批清单；items 数量必须与本次序号数量相同。\n"
         f"待核陈述：{json.dumps(source, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}\n"
@@ -2028,6 +2031,19 @@ def source_target_review_response_format(
     *, target_ids: list[str] | None = None,
 ) -> dict[str, object]:
     schema = SourceTargetReview.model_json_schema()
+    item_schema = schema["$defs"]["SourceTargetReviewItem"]
+    decisions = item_schema["properties"]["decision"]["enum"]
+    # The request contract must express the same required gap as the source gate.
+    item_schema["anyOf"] = [
+        {"properties": {
+            "decision": {"enum": ["additional_requirement", "unresolved"]},
+            "unresolved_aspects": {"minItems": 1},
+        }, "required": ["unresolved_aspects"]},
+        {"properties": {"decision": {"enum": [
+            decision for decision in decisions
+            if decision not in {"additional_requirement", "unresolved"}
+        ]}}},
+    ]
     if target_ids is not None:
         if any(not isinstance(value, str) or not value.strip() for value in target_ids):
             raise ValueError("冻结目标编号不得为空")

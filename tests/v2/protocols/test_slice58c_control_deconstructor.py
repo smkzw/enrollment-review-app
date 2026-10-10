@@ -4400,6 +4400,21 @@ def test_source_target_review_requires_real_target_excerpts_and_matching_time() 
     )
 
 
+@pytest.mark.parametrize("decision", ["additional_requirement", "unresolved", "covered_by_official",
+                                     "covered_by_procedure", "background_context", "definition_dependency"])
+@pytest.mark.parametrize("has_gap", [False, True])
+def test_source_target_gap_schema_matches_existing_gate_contract(decision, has_gap) -> None:
+    from jsonschema import Draft202012Validator
+    item = SourceTargetReviewItem(
+        statement_index=0, decision=decision, source_action_excerpt="完成检查",
+        unresolved_aspects=["已有目标未说明操作时点"] if has_gap else [],
+    )
+    schema = source_target_review_response_format()["json_schema"]["schema"]
+    payload = SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[item]).model_dump(mode="json")
+    errors = list(Draft202012Validator(schema).iter_errors(payload))
+    assert bool(errors) == (decision in {"additional_requirement", "unresolved"} and not has_gap)
+
+
 def test_source_target_review_does_not_relabel_old_receipts_as_current() -> None:
     current = json.dumps({"version": SOURCE_TARGET_REVIEW_VERSION, "items": []})
     for prior_version in ("phase5/control-source-target-review/v17",

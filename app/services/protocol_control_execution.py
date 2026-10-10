@@ -2099,6 +2099,7 @@ def _deep_component_identity(
                                        "source-target-additional-recovery/v1",
                                        "numeric-evaluation-field-patch/v1",
                                        "source-target-frozen-id-schema/v1",
+                                       "source-target-nonempty-gap-schema/v1",
                                        "source-unresolved-addition-guard/v1",
                                        "source-role-citation-insertion-guard/v1",
                                        PROCEDURE_SOURCE_CONTEXT_VERSION,
