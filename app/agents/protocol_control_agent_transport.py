@@ -1347,12 +1347,16 @@ class OpenAICompatibleProtocolControlAgentTransport:
             ) from exc
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
+    def configure_source_candidate_alignment_scope(self, *, review_scope) -> None:
+        self._candidate_alignment_response_format = candidate_alignment_response_format(review_scope=review_scope)
+
     def start_source_candidate_alignment(self, *, prompt: str) -> ProtocolControlAgentResponse:
         if not prompt.strip():
             raise ValueError("原文与候选对应核对提示不能为空")
         session_id = f"protocol-control-candidate-alignment-{uuid4().hex}"
         try:
-            response_format = candidate_alignment_response_format()
+            response_format = getattr(self, "_candidate_alignment_response_format", None) or candidate_alignment_response_format()
+            self._candidate_alignment_response_format = None
             text = self._complete(
                 self._single_requirement_messages(prompt, response_format),
                 response_format=response_format,

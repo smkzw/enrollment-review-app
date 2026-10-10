@@ -482,8 +482,15 @@ def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(re
         atom_calls = alignment_calls = 0
         def start_source_target_review(self, *, prompt, target_ids=None):
             return ProtocolControlAgentResponse(session_id="source-check", text=review.model_dump_json())
+        def configure_source_candidate_alignment_scope(self, *, review_scope):
+            self.review_scope = review_scope
         def start_source_candidate_alignment(self, *, prompt):
             self.alignment_calls += 1
+            selected = json.loads(prompt.split("待核对应：", 1)[1])
+            assert {(item["statement_index"], item["candidate_index"]) for item in selected} == {
+                (item["statement_index"], item["candidate_index"]) for item in self.review_scope}
+            assert [item["required_evidence_policy_checks"] for item in selected] == [
+                item["policy_check_keys"] for item in self.review_scope]
             return ProtocolControlAgentResponse(session_id="alignment", text=alignment.model_dump_json(exclude={"proofs"}))
         def continue_atom(self, *, session_id, prompt):
             self.atom_calls += 1
@@ -618,6 +625,83 @@ def test_repeat_meaning_request_excludes_source_authorship():
     for field in ("source_span_ids", "source_excerpts"):
         scheme.pop(field)
     jsonschema.validate({"evaluation_patch": {"repeat_scheme": scheme}}, request_schema)
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_candidate_policy_request_scope_matches_existing_validation(explicit):
+    from app.agents.protocol_control_candidate_alignment import (
+        build_candidate_alignment_prompt, configure_candidate_alignment_request,
+        _validate_evidence_policy_checks,
+    )
+    batch, source, wire, coverage, alignment = _repeat_count_material()
+    candidate = wire.candidate_drafts[0]
+    row = candidate.minimum_evidence[0]
+    row.required_source_types = ["病历"] if explicit else []
+    row.source_policy = row.source_policy.model_copy(update={
+        "requires_contemporaneous_objective_source": False if explicit else None,
+        "allows_screening_record_transcription": None,
+        "result_validity_status": "not_specified", "result_validity_constraint": None,
+    })
+    class Transport:
+        def configure_source_candidate_alignment_scope(self, *, review_scope):
+            self.scope = review_scope
+    transport = Transport()
+    configure_candidate_alignment_request(transport, wire, [(0, 0)])
+    prompt = build_candidate_alignment_prompt(batch, source, wire, [(0, 0)])
+    selected = json.loads(prompt.split("待核对应：", 1)[1])[0]
+    keys = selected["required_evidence_policy_checks"]
+    assert keys == transport.scope[0]["policy_check_keys"]
+    assert len(keys) == (4 if explicit else 0)
+    assert all(set(key) == {"evidence_index", "dimension"} for key in keys)
+    if explicit:
+        with pytest.raises(ValueError, match="遗漏"):
+            _validate_evidence_policy_checks(candidate, alignment.items[0])
+    else:
+        _validate_evidence_policy_checks(candidate, alignment.items[0])
+
+
+@pytest.mark.parametrize("change", [None, "extra_policy", "wrong_statement", "wrong_candidate", "too_many_items"])
+def test_scoped_alignment_schema_rejects_unrequested_fields_and_pairs(change):
+    import jsonschema
+    _, _, _, _, alignment = _repeat_count_material()
+    schema = candidate_alignment_response_format(review_scope=[{
+        "statement_index": 0, "candidate_index": 0, "policy_check_keys": [],
+    }])["json_schema"]["schema"]
+    payload = alignment.model_dump(mode="json", exclude={"proofs"})
+    item = payload["items"][0]
+    if change == "extra_policy":
+        item["evidence_policy_checks"] = [{"evidence_index": 0, "dimension": "result_validity",
+            "validity_status": "not_specified", "source_span_id": "same-source", "source_excerpt": "本次说明"}]
+    elif change == "wrong_statement":
+        item["statement_index"] = 1
+    elif change == "wrong_candidate":
+        item["candidate_index"] = 1
+    elif change == "too_many_items":
+        payload["items"] *= 2
+    if change:
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(payload, schema)
+    else:
+        jsonschema.validate(payload, schema)
+
+
+@pytest.mark.parametrize("dimension", ["result_validity", "required_source_types"])
+def test_scoped_alignment_schema_preserves_independent_value_review(dimension):
+    import jsonschema
+    _, _, _, _, alignment = _repeat_count_material()
+    schema = candidate_alignment_response_format(review_scope=[{
+        "statement_index": 0, "candidate_index": 0,
+        "policy_check_keys": [{"evidence_index": 0, "dimension": dimension}],
+    }])["json_schema"]["schema"]
+    payload = alignment.model_dump(mode="json", exclude={"proofs"})
+    payload["items"][0]["evidence_policy_checks"] = [{"evidence_index": 0, "dimension": dimension,
+        "validity_status": "unknown" if dimension == "result_validity" else None,
+        "source_types": ["原文明确种类"] if dimension == "required_source_types" else None,
+        "source_span_id": "same-source", "source_excerpt": "本次说明"}]
+    jsonschema.validate(payload, schema)
+    payload["items"][0]["evidence_policy_checks"][0]["evidence_index"] = 1
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(payload, schema)
 
 
 @pytest.mark.parametrize("change", [None, "visit_substitution", "named_visit", "reverse", "missing_word", "wrong_source", "numeric_window", "executable_time", "vague"])

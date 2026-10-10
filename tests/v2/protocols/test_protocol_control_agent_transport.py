@@ -1339,6 +1339,39 @@ def test_numeric_field_patch_preserves_history_and_sends_only_authorized_schema(
         assert call.get("response_format") == ({"type": "json_object"} if mode == "json_object" else None)
 
 
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+def test_alignment_policy_scope_reaches_request_once_without_changing_history(mode):
+    client, completions = _client(['{"wire":1}', '{"items":[]}', '{"items":[]}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    first = transport.start(prompt="冻结作者内容")
+    history = transport.history(first.session_id)
+    transport.configure_source_candidate_alignment_scope(review_scope=[{
+        "statement_index": 7, "candidate_index": 2, "policy_check_keys": [],
+    }])
+    transport.start_source_candidate_alignment(prompt="只核本次范围")
+    assert transport.history(first.session_id) == history
+    call = completions.calls[1]
+    if mode == "json_schema":
+        response = call["response_format"]["json_schema"]
+        assert response["name"].endswith("scoped_v1")
+        item = response["schema"]["properties"]["items"]["items"]["anyOf"][0]
+        assert item["properties"]["statement_index"]["const"] == 7
+        assert item["properties"]["candidate_index"]["const"] == 2
+        assert item["properties"]["evidence_policy_checks"]["maxItems"] == 0
+    else:
+        body = call["messages"][0]["content"].replace(" ", "")
+        assert '"const":7' in body and '"maxItems":0' in body
+    transport.start_source_candidate_alignment(prompt="下个调用须重新限定")
+    second = completions.calls[2]
+    if mode == "json_schema":
+        assert not second["response_format"]["json_schema"]["name"].endswith("scoped_v1")
+    else:
+        assert '"const":7' not in second["messages"][0]["content"].replace(" ", "")
+
+
 def test_local_repairs_send_only_frozen_source_and_keep_fallback_history() -> None:
     client, completions = _client([
         '{"wire":1}', '{"atom":{}}', '{"items":[]}', '{"items":[]}', '{"candidate_draft":{}}',

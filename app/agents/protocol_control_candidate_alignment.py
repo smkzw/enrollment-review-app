@@ -6,6 +6,7 @@ import json
 import hashlib
 import re
 from dataclasses import asdict
+from copy import deepcopy
 from typing import Literal
 
 from pydantic import Field, StrictBool, model_serializer, model_validator
@@ -25,6 +26,7 @@ SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION = "statement-grounded-candidate-quotes/v1"
 SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION = "source-conditional-group-alignment/v1"
 SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION = "source-repeat-count-alignment/v1"
 SOURCE_EVENT_INTERVAL_ALIGNMENT_VERSION = "source-event-interval-alignment/v1"
+SOURCE_POLICY_REQUEST_SCOPE_VERSION = "source-policy-request-scope/v1"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
@@ -350,14 +352,41 @@ class SourceCandidateAlignment(ContractModel):
     proofs: list[SourceCandidateAlignmentProof] = Field(default_factory=list)
 
 
-def candidate_alignment_response_format() -> dict[str, object]:
+def candidate_alignment_response_format(*, review_scope=None) -> dict[str, object]:
     schema = SourceCandidateAlignment.model_json_schema()
     schema["properties"].pop("proofs")
     schema.get("$defs", {}).pop("SourceCandidateAlignmentProof", None)
+    if review_scope is not None:
+        if not review_scope:
+            raise ValueError("候选核对范围不能为空")
+        variants = []
+        seen = set()
+        for entry in review_scope:
+            pair = entry["statement_index"], entry["candidate_index"]
+            if pair in seen or any(type(index) is not int or index < 0 for index in pair):
+                raise ValueError("候选核对范围身份重复或无效")
+            seen.add(pair)
+            item = deepcopy(schema["$defs"]["SourceCandidateAlignmentItem"])
+            for field, index in zip(("statement_index", "candidate_index"), pair, strict=True):
+                item["properties"][field]["const"] = index
+            checks = []
+            for key in entry["policy_check_keys"]:
+                check = deepcopy(schema["$defs"]["EvidencePolicyCheck"])
+                check["properties"]["evidence_index"]["const"] = key["evidence_index"]
+                check["properties"]["dimension"]["const"] = key["dimension"]
+                checks.append(check)
+            policy = item["properties"]["evidence_policy_checks"]
+            policy["maxItems"] = len(checks)
+            if checks:
+                policy["items"] = {"anyOf": checks}
+            variants.append(item)
+        schema["properties"]["items"]["items"] = {"anyOf": variants}
+        schema["properties"]["items"]["maxItems"] = len(variants)
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": "protocol_control_candidate_alignment_v8_policy_v2",
+            "name": ("protocol_control_candidate_alignment_v8_policy_v2_scoped_v1"
+                     if review_scope is not None else "protocol_control_candidate_alignment_v8_policy_v2"),
             "strict": True,
             "schema": schema,
         },
@@ -502,6 +531,10 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
         selected.append({
             "statement_index": statement_index,
             "candidate_index": candidate_index,
+            "required_evidence_policy_checks": [
+                {"evidence_index": index, "dimension": dimension}
+                for index, dimension in _evidence_policy_dimensions(candidate)
+            ],
             "candidate_quote_scope_version": SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
             "required_source_excerpt": statement.quoted_text,
             "source_statement": statement.model_dump(mode="json"),
@@ -557,6 +590,8 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
         "不得因义务句子逐字相同就忽略新增的资料限制；无源新增限制选 incomplete，"
         "只有原文无法判清才选 uncertain。description 中明确标作示例的记录种类不构成硬限制。"
         "evidence_policy_checks 按 minimum_evidence 原顺序填写 evidence_index。先独立读原文政策，再比较候选，不能照抄候选值；"
+        "本次可核字段仅限required_evidence_policy_checks列出的编号和维度；列表为空时必须返回空数组。"
+        "该列表只限定本次范围，不提供正确答案；不得自行新增有效期核对或其他维度。"
         "对有明确资料种类、原件/转述布尔声明或有效期约束的行，逐项核 contemporaneous_objective_source、"
         "screening_record_transcription、result_validity；资料种类非空时另核 required_source_types。"
         "布尔只填 boolean_value 真/假/null，有效期填 validity_status 及仅 specified 时的完整 validity_constraint，"
@@ -771,8 +806,8 @@ def reusable_proven_alignment_items(batch, interpretation, coverage, wire, align
     return kept
 
 
-def _validate_evidence_policy_checks(candidate, item) -> None:
-    """Validate reviewed dimensions and provenance, not infer their meaning."""
+def _evidence_policy_dimensions(candidate):
+    """Share the frozen field scope between request and validation."""
     expected = {}
     for index, evidence in enumerate(candidate.minimum_evidence):
         if not has_explicit_evidence_policy(evidence):
@@ -785,6 +820,22 @@ def _validate_evidence_policy_checks(candidate, item) -> None:
         expected[index, "result_validity"] = (policy.result_validity_status, policy.result_validity_constraint)
         if evidence.required_source_types:
             expected[index, "required_source_types"] = frozenset(evidence.required_source_types)
+    return expected
+
+
+def configure_candidate_alignment_request(transport, wire, pairs):
+    configure = getattr(transport, "configure_source_candidate_alignment_scope", None)
+    if callable(configure):
+        configure(review_scope=[{
+            "statement_index": statement_index, "candidate_index": candidate_index,
+            "policy_check_keys": [{"evidence_index": index, "dimension": dimension}
+                for index, dimension in _evidence_policy_dimensions(wire.candidate_drafts[candidate_index])],
+        } for statement_index, candidate_index in pairs])
+
+
+def _validate_evidence_policy_checks(candidate, item) -> None:
+    """Validate reviewed dimensions and provenance, not infer their meaning."""
+    expected = _evidence_policy_dimensions(candidate)
     seen = set()
     for check in item.evidence_policy_checks:
         key = check.evidence_index, check.dimension

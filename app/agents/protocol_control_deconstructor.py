@@ -106,6 +106,7 @@ from .protocol_control_candidate_alignment import (
     bind_candidate_alignment,
     bind_partial_candidate_alignment,
     build_candidate_alignment_prompt,
+    configure_candidate_alignment_request,
     evidence_policy_alignment_pairs,
     require_evidence_policy_alignment,
     reviewed_source_type_mismatch_paths,
@@ -7604,6 +7605,7 @@ class ProtocolControlAgentRunner:
                         if pending:
                             if not callable(reader):
                                 raise ValueError("当前读取通道未提供资料来源限制核对")
+                            configure_candidate_alignment_request(transport, saved_wire, pending)
                             response = reader(prompt=build_candidate_alignment_prompt(
                                 batch, inventory, saved_wire, pending,
                             ))
@@ -10083,6 +10085,7 @@ class ProtocolControlAgentRunner:
                             if pending_alignment_pairs and callable(alignment_reader):
                                 alignment_response = None
                                 try:
+                                    configure_candidate_alignment_request(transport, wire, pending_alignment_pairs)
                                     alignment_response = alignment_reader(prompt=build_candidate_alignment_prompt(
                                         batch, source_interpretation, wire, pending_alignment_pairs,
                                     ))
