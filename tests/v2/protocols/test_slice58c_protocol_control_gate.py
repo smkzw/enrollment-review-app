@@ -4524,6 +4524,32 @@ def test_shared_exception_existing_per_branch_contract_is_usable() -> None:
     assert result.remaining_trigger_branches == {"branch-0": TruthValue.FALSE, "branch-1": TruthValue.TRUE}
 
 
+@pytest.mark.parametrize("second_truth", [TruthValue.FALSE, TruthValue.TRUE, TruthValue.UNKNOWN])
+def test_source_scoped_sibling_keeps_each_obligation_in_actual_consumer(second_truth) -> None:
+    def condition(identity, text):
+        return ControlConditionAtom(condition_atom_id=identity, statement=text,
+            source_span_ids=["span:control"], source_excerpts=[text])
+    triggers = ControlConditionDnf(groups=[
+        ControlConditionGroup(trigger_branch_id="branch-0", atoms=[condition("a0", "条件甲")]),
+        ControlConditionGroup(trigger_branch_id="branch-1", atoms=[
+            condition("a1", "条件甲"), condition("b1", "条件乙")]),
+    ])
+    control = _control(trigger_expression=triggers, obligation_expression=ControlObligationDnf(groups=[
+        ControlObligationGroup(obligation_group_id="first", applies_to_trigger_branch_ids=["branch-0"],
+            atoms=[_obligation(obligation_id="o0", statement="记录操作日期", source_excerpts=["记录操作日期"])]),
+        ControlObligationGroup(obligation_group_id="second", applies_to_trigger_branch_ids=["branch-1"],
+            atoms=[_obligation(obligation_id="o1", statement="记录结论", source_excerpts=["记录结论"])]),
+    ]))
+    manifest = _manifest_with_control_excerpt("条件甲，记录操作日期；条件甲且条件乙，记录结论。")
+    published = _gate_control_with_manifest(control, manifest).controls[0]
+    result = compose_control_layers(published,
+        control_sha256=canonical_hash(published.model_dump(mode="json")),
+        atom_truths={"a0": TruthValue.TRUE, "a1": TruthValue.TRUE, "b1": second_truth,
+                     "o0": TruthValue.FALSE, "o1": TruthValue.TRUE})
+    assert result.obligation_group_activation == {"first": TruthValue.TRUE, "second": second_truth}
+    assert result.obligation_group_truth == {"first": TruthValue.FALSE, "second": TruthValue.TRUE}
+
+
 def test_shared_exception_cannot_expand_to_branch_without_same_source_exception() -> None:
     control, manifest = _shared_exception_fixture(omit_branch=True)
     with pytest.raises(ProtocolControlGateError, match="EXCEPTION_SCOPE_ALL_UNSUPPORTED"):

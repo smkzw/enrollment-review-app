@@ -22,6 +22,7 @@ NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION = "native-table-review-scope/v3"
 NATIVE_ROW_ACTION_COVERAGE_VERSION = "native-row-action-coverage/v2"
 CANDIDATE_SOURCE_CLOSURE_CONTEXT_VERSION = "candidate-source-closure-context/v1"
 SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION = "statement-grounded-candidate-quotes/v1"
+SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION = "source-conditional-group-alignment/v1"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
@@ -195,10 +196,16 @@ def _conditioned_obligations_cover_source(source, scope, candidate, group, atoms
     offset = min(source.index(fragment) for fragment in fragments)
     prefix = source[:offset].strip("，,。；;：: ")
     branches = candidate.trigger_expression.groups
-    if (not prefix or set(group.applies_to_trigger_branch_indexes) != set(range(len(branches)))):
+    indexes = group.applies_to_trigger_branch_indexes
+    if (not prefix or not indexes or any(index >= len(branches) for index in indexes)):
         return False
     if not all(any(atom in selected_atoms and normalize_source_excerpt(atom.statement) == prefix
-                   for atom in branch.atoms) for branch in branches):
+                   for atom in branches[index].atoms) for index in indexes):
+        return False
+    relevant = [branch for branch in branches if any(
+        atom in selected_atoms and normalize_source_excerpt(atom.statement) == prefix for atom in branch.atoms)]
+    if not all(any(all(atom in branch.atoms for atom in branches[index].atoms)
+                   for index in indexes) for branch in relevant):
         return False
     return _split_obligations_cover_source(source[offset:], scope, atoms)
 
@@ -361,6 +368,61 @@ def _statement_grounded_atoms(unit, statement, candidate):
                     for quote in atom.source_excerpts))]
 
 
+def _independent_source_obligation_groups(unit, statement, interpretation, coverage,
+                                        candidate, candidate_index, selected_atoms):
+    """Keep unscoped alternatives strict; scoped source siblings activate separately.
+
+    This is only literal/source and activation evidence, not approval of another
+    statement's meaning. Its own source coverage and review remain mandatory.
+    """
+    groups = candidate.obligation_expression.groups
+    if candidate.trigger_expression is None or candidate.exception_expression is not None:
+        return []
+    branches = candidate.trigger_expression.groups
+    selected_groups = [group for group in groups if any(atom in selected_atoms for atom in group.atoms)]
+    if not selected_groups or any(not group.applies_to_trigger_branch_indexes for group in groups):
+        return []
+    if any(index >= len(branches) for group in groups for index in group.applies_to_trigger_branch_indexes):
+        return []
+    by_statement = {entry.statement_index: entry for entry in coverage}
+    others = []
+    for index, other in enumerate(interpretation.statements):
+        entry = by_statement.get(index)
+        if (other != statement and other.structure_unit_id == statement.structure_unit_id
+                and not other.unresolved and entry is not None
+                and entry.structure_unit_id == other.structure_unit_id
+                and entry.status in {"candidate_linked", "semantically_aligned", "expressed"}
+                and candidate_index in entry.action_candidate_indexes
+                and (entry.status != "expressed" or candidate_index in entry.candidate_indexes)):
+            others.append(other)
+    other_atoms = [atom for other in others for atom in _statement_grounded_atoms(unit, other, candidate)]
+    current_atoms = _statement_grounded_atoms(unit, statement, candidate)
+    from .protocol_control_source_interpretation import normalize_source_excerpt
+    source_parts = re.split("[，,]", normalize_source_excerpt(statement.quoted_text), maxsplit=1)
+    source_conditions = [atom for branch in branches for atom in branch.atoms
+                         if atom in selected_atoms and atom in current_atoms
+                         and len(source_parts) == 2
+                         and normalize_source_excerpt(atom.statement) == source_parts[0]]
+    independent = []
+    for group in groups:
+        if group in selected_groups:
+            continue
+        if (not all(atom in other_atoms and atom not in current_atoms for atom in group.atoms)
+                or any(set(group.applies_to_trigger_branch_indexes)
+                       == set(selected.applies_to_trigger_branch_indexes) for selected in selected_groups)):
+            continue
+        # Every sibling route must still activate a group carrying this source
+        # requirement. Exact condition-atom inclusion proves implication; no
+        # word matching, inferred mutually-exclusive states or OR shortcut.
+        if all(any(
+            all(atom in [*branches[index].atoms, *source_conditions]
+                for atom in branches[selected_index].atoms)
+            for selected in selected_groups for selected_index in selected.applies_to_trigger_branch_indexes
+        ) for index in group.applies_to_trigger_branch_indexes):
+            independent.append(group)
+    return independent
+
+
 def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
     from app.protocols.procedure_catalog import schedule_column_scope
 
@@ -471,6 +533,12 @@ def _alignment_input_identity(batch, interpretation, wire, item):
                            "coverage_manifest_id": batch.coverage_manifest_id,
                            "statement": statement.model_dump(mode="json"),
                            "source_unit": unit.model_dump(mode="json"),
+                           **({"conditional_group_alignment": SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION,
+                               "same_unit_statements": [row.model_dump(mode="json")
+                                   for row in interpretation.statements
+                                   if row.structure_unit_id == statement.structure_unit_id]}
+                              if candidate.trigger_expression is not None
+                              and len(candidate.obligation_expression.groups) > 1 else {}),
                            **({"candidate_source_closure_version": CANDIDATE_SOURCE_CLOSURE_CONTEXT_VERSION,
                                "candidate_source_closure": _candidate_source_closure(batch, candidate)}
                               if len(candidate.source_structure_unit_ids) > 1 else {}),
@@ -753,11 +821,17 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
         if item.decision == "fully_expressed":
             if not any(atom in obligation_atoms for atom in selected_atoms):
                 raise ValueError("候选未引用承担本条要求的义务原子")
+            independent_groups = _independent_source_obligation_groups(
+                unit, statement, interpretation, coverage, candidate, item.candidate_index,
+                selected_atoms,
+            )
+            relevant_groups = [group for group in candidate.obligation_expression.groups
+                               if group not in independent_groups]
             if any(not any(atom in selected_atoms for atom in group.atoms)
-                   for group in candidate.obligation_expression.groups):
+                   for group in relevant_groups):
                 raise ValueError("候选存在未覆盖本条要求的另一义务分支")
             obligation_selected = [atom for atom in selected_atoms if atom in obligation_atoms]
-            for group in candidate.obligation_expression.groups:
+            for group in relevant_groups:
                 group_selected = [atom for atom in group.atoms if atom in obligation_selected]
                 action_cell_preserved = native_visit_scope and native_schedule_action_cell_is_preserved(
                     batch, statement, unit, group_selected,
@@ -848,7 +922,7 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 if len(numbers) != 1 or len(directions) != 1 or not predicates:
                     raise ValueError("数值原文不能由模糊比较条件宣布完整")
                 conditioned_consequences = []
-                for group in candidate.obligation_expression.groups:
+                for group in relevant_groups:
                     group_selected = [atom for atom in group.atoms if atom in obligation_selected]
                     if not _conditioned_obligations_cover_source(
                             source, scope, candidate, group, group_selected, selected_atoms):

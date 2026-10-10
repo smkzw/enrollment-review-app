@@ -191,6 +191,85 @@ def test_alignment_prompt_offers_only_current_statement_quotes_keeps_context():
     assert len(reusable_proven_alignment_items(batch, source, coverage, wire, bound)) == 1
 
 
+def _scoped_sibling_material():
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentWireConditionDnf
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _evaluation
+    batch, source, wire, coverage, alignment = _conditioned_action_material()
+    unit, statement = batch.owned_units[0], source.statements[0]
+    text = "结果有效者，记录处理日期"
+    unit.excerpt += "。" + text
+    unit.member_texts = [unit.excerpt]
+    sibling = statement.model_copy(deep=True, update={"quoted_text": text})
+    source.statements.append(sibling)
+    candidate = wire.candidate_drafts[0]
+    base_condition = candidate.trigger_expression.groups[0].atoms[0].model_copy(deep=True)
+    base_condition.source_excerpts = ["已完成核查者"]
+    base_condition.evaluation = type(base_condition.evaluation).model_validate(
+        _evaluation(base_condition.statement, unit.source_span_ids[0], "已完成核查者"))
+    sibling_condition = base_condition.model_copy(deep=True, update={"statement": "结果有效者",
+        "source_excerpts": ["结果有效者"]})
+    sibling_condition.evaluation = type(sibling_condition.evaluation).model_validate(
+        _evaluation(sibling_condition.statement, unit.source_span_ids[0], "结果有效者"))
+    candidate.trigger_expression = ProtocolControlAgentWireConditionDnf.model_validate({"groups": [
+        {"atoms": [base_condition]}, {"atoms": [base_condition, sibling_condition]},
+    ]})
+    group = candidate.obligation_expression.groups[0]
+    group.applies_to_trigger_branch_indexes = [0]
+    atom = group.atoms[0].model_copy(deep=True, update={"statement": "记录处理日期",
+        "source_excerpts": ["记录处理日期"]})
+    atom.evaluation = type(atom.evaluation).model_validate(
+        _evaluation(atom.statement, unit.source_span_ids[0], atom.statement))
+    candidate.obligation_expression.groups.append(group.model_copy(deep=True,
+        update={"atoms": [atom], "applies_to_trigger_branch_indexes": [1]}))
+    coverage.append(coverage[0].model_copy(update={"statement_index": len(source.statements) - 1}))
+    return batch, source, wire, coverage, alignment
+
+
+@pytest.mark.parametrize("change", [None, "missing_sibling_source", "unresolved_sibling",
+    "unscoped_group", "same_binding", "wrong_trigger", "unknown_atom", "exception",
+    "missing_sibling_coverage", "unlinked_sibling", "wrong_sibling_candidate",
+    "shared_source_quote"])
+def test_scoped_source_sibling_does_not_replace_current_requirement(change):
+    batch, source, wire, coverage, alignment = _scoped_sibling_material()
+    candidate = wire.candidate_drafts[0]
+    if change == "missing_sibling_source":
+        source.statements.pop()
+    elif change == "unresolved_sibling":
+        source.statements[-1].unresolved = ["原文范围未明"]
+    elif change == "unscoped_group":
+        candidate.obligation_expression.groups[-1].applies_to_trigger_branch_indexes = []
+    elif change == "same_binding":
+        candidate.obligation_expression.groups[-1].applies_to_trigger_branch_indexes = [0]
+    elif change == "wrong_trigger":
+        candidate.trigger_expression.groups[0].atoms[0].statement = "尚未完成核查者"
+    elif change == "unknown_atom":
+        atom = candidate.obligation_expression.groups[-1].atoms[0].model_copy(deep=True,
+            update={"statement": "自行增加的要求", "source_excerpts": ["自行增加的要求"]})
+        candidate.obligation_expression.groups[-1].atoms.append(atom)
+    elif change == "exception":
+        candidate.exception_expression = candidate.trigger_expression.model_copy(deep=True)
+    elif change == "missing_sibling_coverage":
+        coverage.pop()
+    elif change == "unlinked_sibling":
+        coverage[-1].status = "unresolved"
+    elif change == "wrong_sibling_candidate":
+        coverage[-1].action_candidate_indexes = [1]
+    elif change == "shared_source_quote":
+        candidate.obligation_expression.groups[-1].atoms[0].source_excerpts = [
+            batch.owned_units[0].excerpt]
+    if change:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+        proof = bind_candidate_alignment(batch, source, coverage, wire, alignment,
+            alignment.model_dump_json(exclude={"proofs"}))
+        restored = SourceCandidateAlignment.model_validate_json(proof.model_dump_json())
+        assert len(reusable_proven_alignment_items(batch, source, coverage, wire, restored)) == 1
+        source.statements[-1].quoted_text = "结果有效者，不得记录处理日期"
+        assert reusable_proven_alignment_items(batch, source, coverage, wire, restored) == []
+
+
 @pytest.mark.parametrize("outside_quote", ["条件甲", "不存在的原句", " "])
 def test_duplicate_grounded_atoms_cannot_mask_an_unsupported_quote(outside_quote):
     batch, source, wire, coverage, alignment = _conditioned_action_material()
