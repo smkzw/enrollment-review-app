@@ -1,0 +1,13 @@
+# 同一恢复边界：括号边界和上位情形
+
+沿原批准C03路线/会话，基础78194eae，只读源码，禁止shell/网络/env/DB/临床资料/修改/测试/递归派工。最多12次必要读取。任务所有者集成，不申请新Phase，不把本说明当结论。
+
+新隔离Job fc9ffe09…1调用255.346745秒，Schema已通过，但来源禁止事项覆盖和另一个建议语气门仍拒绝。旧完整混合句包括有条件允许行为、括号中的禁止、数量及后续免除；新提案只引用触发短语和带外括号的禁止片段，上位情形其他文字留notes。此答不能因Schema通过当已完整覆盖。
+
+当前最小增量：_parenthetical_prohibitions_are_quoted原来要求禁止statement与引用完全等字，若引用保留原文外括号则误拒；只增允许同一个完全匹配片段外有一对全角或ASCII括号。不去任何其他限定词，不接受嵌套/混搭括号、不改变full governing-context范围对账、来源span/候选局部性、语义核对或采用门。scoped修订提示要求禁止原子保留逐字禁止片段及完整上位原句引用；完整引用不变成“可选=必做”，只是保证核对上下文不消失。只新增validator组成，不改作者/模型/编译器；旧成功仍按当前门重新核。
+
+阅读app/protocols/protocol_control_gate.py::_parenthetical_prohibitions_are_quoted及_uncovered_enrollment_prohibitions、相关source_statement_ranges_cover_unit/locate_source_quote_offsets；deconstructor中scoped来源闭包提示与原字段scope；test_parenthetical_prohibition_presence_does_not_require_other_actions_in_atom及邻近“全段引句不能代替第二禁止”测试；execution的新scoped-source-governing-citation/v1身份。挑战尤其是条件/数量/否定丢失、完整原文被当完整含义、错误来源/嵌套括号/借兄弟引用。不要为通过当前例建议删除范围对账或让宿主填患者/规则含义。
+
+该窗口只修证实误拦和引用恢复指导。当前读到的遗漏确实还需要真实模型核对，模型没有做到就停止该分支，不因为引用更长就采用；另一个建议语气兄弟不得随第一闭包擅改。跨Job无效raw问题不扩展，累计预算保留。
+
+输出可达问题/反证/最小建议/未读范围。工程意见不是临床批准，不代跑产品。

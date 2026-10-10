@@ -40,17 +40,17 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "1006V1持续/Goal active/claims_complete=false。ec3ba1fb实际c3760c70 failed_final，1调用254.736374s/44完成45失败45未读；两个非事件条件却声明事件发生方向。最小修订只改方向，记录义务/对象/引句和兄弟冻结，完整门及预算保持；atom reader竞争已修。末受影响90pass/3不适用组合skip/6.23s，不累加。C03同批准会话18只读/exit0/no fallback，末收紧所有者验证。最新c376预检47/2/41、0模型0写/hash保持；下一合法接续核90步，不复活旧Job或无效raw。同包工作稿/UI更正未达，继承七dirty保持。",
+  "notes": "1006V1持续/Goal active/claims_complete=false。78194eae实际fc9ffe09 failed_final，1调用255.346745s/44完成45失败45未读；Schema过但禁止引用缺上位情形、带原括号误拒，独立兄弟把允许豁免误称recommended。只放行完全相同片段的一对括号，完整上下文/含义仍核；局部提示保留上位引用，不强化可选。末受影响96pass/3不适用组合skip/4.48s，不累加。C03同批准会话11只读/exit0/no fallback，边界末验所有者完成。最新fc9预检47/2/41、0模型0写/hash保持；下一合法接续，累计13修订不清零，继承七dirty保持。同包工作稿/UI更正未达。",
   "meta": {
     "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",
     "current_scope": "1006V1 frozen delivery window: complete same-source requirements, isolated current-node work draft, source navigation, one UI correction/supplement, affected recalculation and old/new history; R1/1001V1 retained.",
     "claims_complete": false,
-    "review_packet_status": "scoped_record_metadata_owner_verified_preflight_ready",
+    "review_packet_status": "scoped_governing_citation_owner_verified_preflight_ready",
     "runtime_goal_status_observed": "active",
     "current_handoff": "HANDOFF.md",
     "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",
-    "last_verified_source_commit": "ec3ba1fb3ef6f2d84073516a249715cf9c760774",
+    "last_verified_source_commit": "78194eae3d780e972fa49ed93bd7d5cc771ca3b3",
     "current_review_index": "review_index_20261006_1006V1.json",
     "historical_notes_20261006": "1006V1连续实施，Goal active，claims_complete=false。资料14组/24页、30事实及实际UI更正/Profile4成立；完整要求/工作稿/新报告未达。关系字段修复7a613204/822检查、末尾句界修复3472fa28/845检查已普通push；两旧原答零调用重验通过但未采用。v5合法部分恢复7调用/212.4902s，总37；29来源/24核对保存，研究目的用途及期别定义对应两项未核清。原库/旧Job不改，不重复整批或另复制大库。前端最终34检查/Ego成立，原198/展示190，原件/7份继承dirty保留。"
   }

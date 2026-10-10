@@ -430,6 +430,9 @@ def test_full_paragraph_quote_covers_only_the_prohibition_expressed_by_atom() ->
     ("changed_action", 1), ("missing_qualifier", 1), ("second_missing", 1),
     ("outside_prohibition", 1), ("nested", 1), ("mismatched", 1),
     ("missing_context", 1), ("borrowed_context", 1), ("changed_context", 1),
+    ("fullwidth_source", 0), ("ascii_source", 0), ("wrapped_missing_context", 1),
+    ("wrapped_wrong_source", 1),
+    ("whole_context_source", 0), ("wrapped_statement", 1),
 ])
 def test_parenthetical_prohibition_presence_does_not_require_other_actions_in_atom(
     variant: str, expected_count: int,
@@ -448,6 +451,15 @@ def test_parenthetical_prohibition_presence_does_not_require_other_actions_in_at
     )
     if variant == "ascii":
         excerpt = excerpt.replace("（", "(").replace("）", ")")
+    elif variant in {"fullwidth_source", "ascii_source", "wrapped_missing_context", "wrapped_wrong_source"}:
+        atom.source_excerpts = [f"（{prohibition}）"]
+        if variant == "ascii_source":
+            excerpt = excerpt.replace("（", "(").replace("）", ")")
+            atom.source_excerpts = [f"({prohibition})"]
+        elif variant == "wrapped_missing_context":
+            context.source_excerpts = []
+        elif variant == "wrapped_wrong_source":
+            atom.source_span_ids = ["another-span"]
     elif variant == "wrong_source":
         atom.source_span_ids = ["another-span"]
     elif variant == "changed_action":
@@ -470,6 +482,12 @@ def test_parenthetical_prohibition_presence_does_not_require_other_actions_in_at
         context.source_span_ids = ["another-span"]
     elif variant == "changed_context":
         context.source_excerpts[0] = "筛选期所有受试者"
+    elif variant == "whole_context_source":
+        atom.source_excerpts = [f"（{prohibition}）"]
+        context.source_excerpts = [excerpt.rstrip("。")]
+    elif variant == "wrapped_statement":
+        atom.statement = f"（{prohibition}）"
+        atom.source_excerpts = [atom.statement]
     batch = SimpleNamespace(
         owned_units=[SimpleNamespace(
             structure_unit_id="unit", excerpt=excerpt, source_span_ids=["span"],
@@ -490,7 +508,10 @@ def test_parenthetical_prohibition_presence_does_not_require_other_actions_in_at
     )
     assert len(_uncovered_enrollment_prohibitions(batch, output)) == expected_count
     # This proves presence, not clinical equivalence or authorization to publish.
-    assert atom.statement == atom.source_excerpts[0]
+    assert atom.statement == (prohibition if variant in {
+        "fullwidth_source", "ascii_source", "wrapped_missing_context", "wrapped_wrong_source",
+        "whole_context_source",
+    } else atom.source_excerpts[0])
 
 
 def test_split_current_and_future_prohibition_requires_same_action_and_source() -> None:

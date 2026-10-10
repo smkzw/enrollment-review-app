@@ -246,7 +246,9 @@ def _parenthetical_prohibitions_are_quoted(
         normalized = _normalize_prohibition_quote(fragment)
         if not any(
             _normalize_prohibition_quote(str(getattr(atom, "statement", ""))) == normalized
-            and any(_normalize_prohibition_quote(quote) == normalized
+            and any(_normalize_prohibition_quote(quote) in {
+                        normalized, f"（{normalized}）", f"({normalized})",
+                    }
                     for quote in getattr(atom, "source_excerpts", ()) if isinstance(quote, str))
             for atom in grounded_atoms
         ):

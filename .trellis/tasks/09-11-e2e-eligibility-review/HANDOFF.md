@@ -2,13 +2,13 @@
 
 ## 当前事实
 
-**事实与执行选择：** Goal active、claims_complete=false；所有者直接集成＋既有批准C03定向独审。已push源码ec3ba1fb3ef6f2d84073516a249715cf9c760774的合法Jobc3760c70180a44fd8a2c82fb3a93d14b为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，1物理调用254.736374秒/exit3；85发现及44成功零新调用，45失败/45未执行，第49未到达。检查点d86a65540059476f8e38d6324065748f。旧Job、原件、保护库和来源库保持；0共同发布/启用/签发。
+**事实与执行选择：** Goal active、claims_complete=false；所有者直接集成＋既有批准C03定向独审。已push源码78194eae的合法Jobfc9ffe09f9d64fba846f88e0060d6e00为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，1物理调用255.346745秒/exit3；85发现及44成功零新调用，45失败/45未执行，第49未到达。检查点33c2fc75eeaa4d789b800a83d5c56a13。旧Job、原件、保护库和来源库保持；0共同发布/启用/签发。
 
-**第一因果错误与最小修复：** 本次局部提案含政策，但两个trigger原子把非既往事件检验条件写成事件发生方向，Schema正确拒绝；不是病例缺证或研究者未判断。沿同一未采用草稿/字段恢复路径，只修这类方向合同错误，target_kind、record_obligation及source_excerpts冻结，条件/时间/政策/兄弟不变；引用同时属于原子和求值规格。混合错误/越界/坏字段/缺能力/预算/传输失败不退整批。新增validator组成、不改作者/编译/模型及累计预算。原atom reader竞争路径已清除，不能仅看helper通过。
+**第一因果错误与最小修复：** 本次局部答Schema已过；禁止片段引用保留原文一对括号却被字面门误拒，同时完整上位情形只留notes而从候选引用消失，后者仍应拒。最小包只允许完全相同片段外恰一对全角/ASCII括号；动作/条件/数量/否定/span/同候选完整上下文仍核。scoped指导保留片段及完整上位原句，不把可选或免除改成必做。独立兄弟原文是允许豁免，却被旧提案标recommended，原拒绝正确；必须沿其合法单独范围核对，不能第一闭包越权改它。新增validator、不改作者/编译/模型或累计13次修订账。
 
-**实证与限制：** 末四模块受影响窗90pass/3skip/1759deselected/6.23秒/exit0/5SWIG，JUnit artifacts/rv1006-scoped-record-metadata-connected-20261010-v3.xml；3skip为观察政策不适用的记录用途反例组合，不是跳过失败。v1的6失败是真实atom-reader抢先，修分派后87pass，审阅收紧后补三反例；窗口不累计、不冒称末全模块重跑。真实13905字符原答零模型只读探针定位两个trigger方向，hash2c9754bd536ce903c88682fe91af5090b4fb933591969599803de7d62305f2dc；只证结构、未证授权/临床采用。C03原会话01a122e0…18源码只读/exit0/1轮/no fallback，120min静默完成等待；指出记录义务降级及求值摘录子集问题，采纳并由所有者末验，非医学批准。未读全部消费者、未跑测试或看临床。取舍reviews/rv1006-record-metadata-owner-disposition-20261010.md。
+**实证与限制：** 最终四模块受影响窗96pass/3不适用组合skip/1759deselected/4.48秒/exit0/5SWIG，JUnit artifacts/rv1006-scoped-governing-citation-connected-20261010-v2.xml；未末全模块重跑、窗口不累计。新增全角/ASCII引用和完整上位引用正例，带括号但无上下文/错来源及statement带括号仍拒，旧丢限定/借兄弟/嵌套反例保持。实际4258字符rawhash cec1598c8a35e059ec17ff022d9dcb4a222bc3de8d615de5a1fc813ae478d298；0调用/0写探针实际缺上下文false、合成完整引用true、改动作/错span false，非模型恢复/临床采用。C03原会话11源码只读/exit0/1轮/no fallback，120min静默完成等待；未见窄改动缺陷，边界补验由所有者执行，未diff/测试/临床/全部消费者，非医学批准。取舍reviews/rv1006-governing-citation-owner-disposition-20261010.md。
 
-**恢复计划与边界：** 新只读record-metadata-preflight-20261010-v1从c376沿冻结祖先47reusable/2resume_partial/41refresh_required，0模型/0库写/hash保持；实际终态无租约。下一同版本经合法API新建并核90步决策一致，保留47成功、不复活旧失败/覆盖旧目录。跨Job只保存合法未采用pending_author_wire，不能接续本次无效raw；新Job会重新生成一次授权局部提案，方向字段路径仅在同运行接续，不假称零调用接回。累计预算不清零。继承7份dirty及私有原答/原件/DB/env不stage、不清理。新方向修订尚未产品实跑；完整同源包、同包病例工作稿及UI更正新旧报告仍未达。
+**恢复计划与边界：** 新只读governing-citation-preflight-20261010-v1从fc9沿冻结祖先47reusable/2resume_partial/41refresh_required，0模型/0库写/hash保持，终态无租约；当前合法pending草稿两候选/累计13修订。下一同版本合法API新建并核90步，保留47成功；只修证实的引用问题及随后获准的独立兄弟，不复活旧失败/覆盖目录。只读合成变体不进入产品，方向字段恢复本次未触发不冒称已实跑。继承7dirty及私有材料不stage/不清理。新引用包尚未产品实跑；完整同源包、同包病例工作稿及UI更正新旧报告仍未达。
 
 | 用户流程节点 | 现有入口/已证 | 首个未完成与预期动作 |
 |---|---|---|
