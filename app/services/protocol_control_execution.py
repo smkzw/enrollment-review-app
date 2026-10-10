@@ -2129,6 +2129,7 @@ def _deep_component_identity(
                                        SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION,
                                        SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION,
                                        SOURCE_HEADING_SCOPE_RECHECK_VERSION,
+                                       "source-single-atom-sibling-recovery/v1",
                                        SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),

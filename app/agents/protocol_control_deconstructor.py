@@ -10394,9 +10394,8 @@ class ProtocolControlAgentRunner:
                                                 getattr(transport, "continue_numeric_predicate", None))
                                 atom_reader = patch_reader if callable(patch_reader) else getattr(transport, "continue_atom", None)
                                 if (len(numeric_failures) == 1
-                                        and numeric_failures[0]["statement_ids"] == [
-                                            item.statement_index for item in additional
-                                            if obligation_candidates.get(item.statement_index)]
+                                        and len(numeric_failures[0]["statement_ids"]) == 1
+                                        and numeric_failures[0]["statement_ids"][0] in cited_unexpressed
                                         and callable(atom_reader)
                                         and max(repairs, source_repairs) < self._max_schema_repairs):
                                     failure = numeric_failures[0]

@@ -7049,6 +7049,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   protocol_control_execution_module.SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION,
                   protocol_control_execution_module.SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION,
                   protocol_control_execution_module.SOURCE_HEADING_SCOPE_RECHECK_VERSION,
+                  "source-single-atom-sibling-recovery/v1",
                   protocol_control_execution_module.SOURCE_STAGE_ECHO_VERSION,
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   "scoped-exception-dnf/v1"))

@@ -413,7 +413,8 @@ def test_source_repeat_count_field_repair_preserves_siblings_and_consumer_unknow
 
 
 @pytest.mark.parametrize("reply", ["valid", "wrong_count", "changed_policy", "transport"])
-def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(reply):
+@pytest.mark.parametrize("unresolved_sibling", [False, True])
+def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(reply, unresolved_sibling):
     from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner, ProtocolControlAgentResponse
     from tests.v2.protocols.test_slice58c_control_deconstructor import (
         _FakeTransport, _two_independent_candidate_linked_alignment_material, _evaluation,
@@ -423,11 +424,34 @@ def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(re
     batch, source, review, original_wire, payload = _two_independent_candidate_linked_alignment_material()
     text = "本次节点允许复查3次"
     batch.owned_units[0].excerpt = source.statements[0].quoted_text = text
-    batch.owned_units[1].excerpt = "研究背景说明"
-    source.statements = source.statements[:1]
+    if not unresolved_sibling:
+        batch.owned_units[1].excerpt = "研究背景说明"
+        source.statements = source.statements[:1]
     source.statements[0].force = "descriptive"
-    source.units_without_statement = [batch.owned_units[1].structure_unit_id]
-    wire = _wire(candidate=original_wire.candidate_drafts[0])
+    source.units_without_statement = [] if unresolved_sibling else [batch.owned_units[1].structure_unit_id]
+    wire = original_wire.model_copy(deep=True) if unresolved_sibling else _wire(candidate=original_wire.candidate_drafts[0])
+    if unresolved_sibling:
+        sibling_text = "复检前不得进行干预"
+        batch.owned_units[1].excerpt = source.statements[1].quoted_text = sibling_text
+        source.statements[1].force = "prohibited"
+        source.statements[1].time_words = ["复检前"]
+        source.statements[1].decision_functions = ["action", "time_validity"]
+        sibling = wire.candidate_drafts[1]
+        sibling_atom = sibling.obligation_expression.groups[0].atoms[0]
+        sibling_atom.kind = type(sibling_atom.kind)("prohibit_medication_or_treatment_exposure")
+        sibling_atom.statement = "不得进行干预"
+        sibling_atom.source_excerpts = [sibling_text]
+        sibling_atom.evaluation = type(sibling_atom.evaluation).model_validate(
+            _evaluation(sibling_atom.statement, sibling_atom.source_span_ids[0], sibling_text))
+        for evidence in sibling.minimum_evidence:
+            evidence.description = sibling_text
+            evidence.source_policy.source_excerpts = [sibling_text]
+        payload["items"][1].update(source_excerpt=sibling_text,
+            candidate_atom_quotes=[sibling_atom.statement], decision="fully_expressed",
+            unresolved_dimensions=[])
+        review.items[1].source_action_excerpt = sibling_text
+        review.items[1].source_time_excerpt = "复检前"
+        review.items[1].unresolved_aspects = ["复检前的时间关系尚未核实"]
     wire.candidate_drafts[0].applicability_expression = None
     atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
     atom.statement = "本节点可复查3次"
@@ -439,18 +463,20 @@ def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(re
     for evidence in wire.candidate_drafts[0].minimum_evidence:
         evidence.description = text
         evidence.source_policy.source_excerpts = [text]
-    payload["items"] = payload["items"][:1]
+    payload["items"] = payload["items"] if unresolved_sibling else payload["items"][:1]
     payload["items"][0]["source_excerpt"] = text
     alignment = SourceCandidateAlignment.model_validate(payload)
     alignment.items[0].candidate_atom_quotes = [atom.statement]
     good = atom.model_copy(deep=True)
     atom.evaluation = atom.evaluation.model_copy(update={"repeat_scheme": None})
     original = wire.model_dump(mode="json")
+    sibling_review = review.items[1:] if unresolved_sibling else []
     review = SourceTargetReview.model_validate({"version": SOURCE_TARGET_REVIEW_VERSION,
         "items": [{"statement_index": 0, "decision": "additional_requirement", "target_id": None,
             "source_action_excerpt": source.statements[0].quoted_text, "target_action_excerpt": None,
             "source_time_excerpt": None, "target_time_excerpt": None,
             "unresolved_aspects": ["次数合同尚未结构化"]}]})
+    review.items.extend(sibling_review)
     class Transport(_FakeTransport):
         atom_calls = alignment_calls = 0
         def start_source_target_review(self, *, prompt, target_ids=None):
@@ -480,7 +506,7 @@ def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(re
         resume_source_interpretation=source, resume_wire=wire, resume_session_id="original-wire",
         output_validator=lambda _output: None)
     assert transport.atom_calls == 1, [(attempt.error_classes, attempt.issues) for attempt in result.attempts]
-    if reply == "valid":
+    if reply == "valid" and not unresolved_sibling:
         assert result.final_output is not None
         assert transport.alignment_calls == 2
         final = result.partial_wire.model_dump(mode="json")
@@ -489,6 +515,11 @@ def test_source_repeat_count_runner_requests_only_missing_scheme_and_rechecks(re
     else:
         assert result.final_output is None and result.partial_wire.model_dump(mode="json") == original
         assert transport.alignment_calls <= 2
+        if reply == "valid" and unresolved_sibling:
+            assert transport.alignment_calls == 2
+            assert any(attempt.error_detail and attempt.error_detail.get("workflow_phase") == "reviewed_atom_repair"
+                       and attempt.outcome == "parsed" for attempt in result.attempts)
+            assert result.partial_wire.candidate_drafts[1].model_dump(mode="json") == original["candidate_drafts"][1]
 
 
 @pytest.mark.parametrize("outside_quote", ["条件甲", "不存在的原句", " "])
