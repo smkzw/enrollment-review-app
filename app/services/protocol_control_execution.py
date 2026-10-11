@@ -256,7 +256,10 @@ _DISCOVERY_STEP_PREFIX = "discovery_"
 _DEEP_STEP_PREFIX = "deep_"
 _INDEPENDENT_DEEP_READ_POLICY = {
     "step_prefix": _DEEP_STEP_PREFIX,
-    "error_codes": ["PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED"],
+    "error_codes": [
+        "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED",
+        "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+    ],
     "max_failed_steps": 2,
 }
 # Recorded on every relation with verified consumers: this per-batch closure
@@ -3197,8 +3200,66 @@ def _preserved_temporal_restriction_proof(
 def _preserved_source_review_proof(
     batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
 ) -> dict[str, Any] | None:
-    return (_preserved_unresolved_review_proof(batch, saved)
+    return (_preserved_negative_alignment_proof(batch, saved)
+            or _preserved_unresolved_review_proof(batch, saved)
             or _preserved_temporal_restriction_proof(batch, saved))
+
+
+def _preserved_negative_alignment_proof(
+    batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Preserve a witnessed, exhausted proposal failure, not a source restriction."""
+    attempts = saved.get("attempts")
+    if not isinstance(attempts, list) or not attempts:
+        return None
+    last = attempts[-1]
+    if (not isinstance(last, Mapping) or last.get("outcome") != "publication_invalid"
+            or last.get("error_classes") != ["SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"]
+            or not isinstance(last.get("error_detail"), Mapping)
+            or not isinstance(saved.get("partial_wire"), Mapping)):
+        return None
+    detail = last["error_detail"]
+    ids = detail.get("statement_ids")
+    if (detail.get("code") != "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"
+            or detail.get("retry_class") != "source_semantic_review"
+            or not isinstance(ids, list) or not ids
+            or any(type(index) is not int for index in ids)
+            or ids != sorted(set(ids))):
+        return None
+    result = _saved_failed_deep_run_result(batch, saved)
+    source, wire = result.source_interpretation, result.partial_wire
+    if source is None or result.source_candidate_alignment is None:
+        return None
+    validate_source_interpretation(batch, source)
+    _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(wire, batch))
+    if not _coverage_matches_current_proofs(batch, result):
+        raise ValueError("未核候选的来源覆盖与实际对应证明不一致")
+    bound = reusable_proven_alignment_items(
+        batch, source, result.source_statement_coverage, wire,
+        result.source_candidate_alignment, require_positive=False,
+    )
+    negatives = [item for item in bound if item.decision == "incomplete"]
+    if ids != sorted({item.statement_index for item in negatives}):
+        return None
+    units = {source.statements[index].structure_unit_id for index in ids}
+    if (any(source.statements[index].unresolved for index in ids)
+            or not units <= set(result.reviewed_semantic_repair_unit_ids)):
+        return None
+    refs = sorted({span for unit in batch.owned_units
+                   if unit.structure_unit_id in units for span in unit.source_span_ids})
+    if (detail.get("source_refs") != refs
+            or detail.get("candidate_indexes") != sorted({item.candidate_index for item in negatives})
+            or detail.get("affected_dependents") != detail["candidate_indexes"]):
+        return None
+    return {
+        "schema_version": "phase5/preserved-negative-alignment-proof/v1",
+        "diagnostic_sha256": hashlib.sha256(json.dumps(
+            saved, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest(),
+        "statement_ids": ids, "source_refs": refs,
+        "error_code": "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+        "adopted": False,
+    }
 
 
 def _missing_failed_diagnostic_proof(store: JobStore, source_job_id: str, step_id: str) -> dict[str, Any]:
@@ -4389,7 +4450,9 @@ def _execute_deep(
             checkpoint_id, diagnostic, prior_review = partial
             try:
                 prior_result = _saved_failed_deep_run_result(batch, diagnostic)
-                restricted = restricted_batch_from_review(batch, prior_result)
+                restricted = (None if proof["schema_version"]
+                    == "phase5/preserved-negative-alignment-proof/v1"
+                    else restricted_batch_from_review(batch, prior_result))
             except ValueError as exc:
                 raise StepFailure(
                     retryable=False, error_code="PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID",
@@ -4564,7 +4627,11 @@ def _execute_deep(
         if isinstance(result, ProtocolControlAgentRunResult):
             if result.final_output is not None:
                 _validate_saved_source_review(batch, result)
-            restricted_batch = restricted_batch_from_review(batch, result)
+            negative_proof = (_preserved_negative_alignment_proof(
+                batch, result.model_dump(mode="json"),
+            ) if result.final_output is None else None)
+            if negative_proof is None:
+                restricted_batch = restricted_batch_from_review(batch, result)
     except ValueError as exc:
         restricted_error = exc
     if restricted_batch is not None:

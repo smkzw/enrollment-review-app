@@ -6147,7 +6147,10 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
     assert entry["decision"] == "preserve_unresolved"
     assert entry["unresolved_review_proof"]["adopted"] is False
     assert payload["execution_control"]["continue_after_final_failure"] == {
-        "step_prefix": "deep_", "error_codes": ["PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED"],
+        "step_prefix": "deep_", "error_codes": [
+            "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED",
+            "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+        ],
         "max_failed_steps": 2,
     }
     read_steps = []
@@ -6183,6 +6186,8 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
     ("whole_temporal_definition", None),
     ("citation", None), ("citation", "changed_proof"), ("citation", "restriction_error"),
     ("citation_aligned", None), ("citation_aligned", "changed_proof"),
+    ("negative_alignment", None), ("negative_alignment", "changed_proof"),
+    ("negative_alignment", "second_failure"),
 ])
 def test_preserved_failure_revalidates_restricted_source_through_actual_job_checkpoint(
     data_paths, session_factory, monkeypatch, kind, failure,
@@ -6193,7 +6198,9 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
 
     module = protocol_control_execution_module
     declaration_text = None
-    if kind == "whole_temporal_definition":
+    if kind == "negative_alignment":
+        batch, result = _exhausted_negative_alignment_fixture()
+    elif kind == "whole_temporal_definition":
         batch, result = _restriction_case(kind)
         declaration_text = result.source_definition_consumers.model_dump_json()
         result.source_definition_consumers = None
@@ -6220,7 +6227,7 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
         payload={"synthetic": True}, steps=[StepSpec(step_id="deep_0001", name="核对")],
     )
     def fail_old(_):
-        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED",
+        raise StepFailure(retryable=False, error_code=proof["error_code"],
                           detail="保留原未决", diagnostic_checkpoint=diagnostic)
     assert JobRunner(session_factory, {PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: fail_old},
                      worker_id="old-restriction", now=_now).run_job(old.job_id)
@@ -6243,12 +6250,20 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
         }},
     }
     ref = ArtifactStore(data_paths).put("evaluation_manifest", json.dumps(plan).encode()).storage_ref
+    current_steps = [StepSpec(step_id="deep_0001", name="重新核对已保存来源")]
+    if kind == "negative_alignment":
+        current_steps.extend([
+            StepSpec(step_id="deep_0002", name="独立来源核对"),
+            StepSpec(step_id="gate", name="完整采用检查", depends_on=["deep_0001", "deep_0002"]),
+        ])
+        if failure == "second_failure":
+            current_steps.insert(2, StepSpec(step_id="deep_0003", name="未发送的后续核对"))
     current = JobService(session_factory, now=_now).create_job(
         idempotency_key="current-restricted-revalidation", job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
         payload={"deep_source_job_id": old.job_id, "deep_reuse_plan": plan,
                  "deep_reuse_plan_artifact_ref": ref,
                  "execution_control": {"continue_after_final_failure": module._INDEPENDENT_DEEP_READ_POLICY}},
-        steps=[StepSpec(step_id="deep_0001", name="重新核对已保存来源")],
+        steps=current_steps,
     )
     closure = {"deep_plan": plan_data,
                "deep_step_ids": [{"step_id": "deep_0001", "batch_id": batch.batch_id}]}
@@ -6281,8 +6296,19 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
             raise ValueError("逐项来源证明损坏")
         monkeypatch.setattr(module, "restricted_batch_from_review", invalid_restriction)
     config = SimpleNamespace(data_paths=data_paths, session_factory=session_factory, now=_now)
+    def execute(context):
+        if kind == "negative_alignment" and context.step_id == "deep_0002":
+            if failure == "second_failure":
+                raise StepFailure(retryable=False,
+                    error_code="PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+                    detail="第二个独立来源仍有含义不一致")
+            return {"independent_source_checked": True}
+        assert context.step_id != "deep_0003", "原有两次失败边界不得刷新"
+        assert context.step_id != "gate", "失败要求不得进入完整采用"
+        return module._execute_deep(context, config)
+
     runner = JobRunner(session_factory,
-        {PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: lambda context: module._execute_deep(context, config)},
+        {PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: execute},
         worker_id="restricted-revalidation", now=_now)
     assert runner.run_job(current.job_id)
     with session_factory() as session:
@@ -6291,13 +6317,30 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
         assert store.get_job(old.job_id).state == "failed_final"
         saved = store.get_last_checkpoint(current.job_id, "deep_0001")
     assert _job_checkpoint_fingerprint(session_factory, old.job_id) == history
-    if failure is not None:
+    if failure is not None and failure != "second_failure":
         assert job.state == "failed_final"
         assert job.error_code == {
             "changed_proof": "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
             "source_clear": "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED",
             "restriction_error": "PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID",
         }[failure]
+        return
+    if kind == "negative_alignment":
+        assert job.state == "failed_final"
+        assert job.error_code == "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"
+        assert saved[1]["new_model_calls"] == 0
+        assert saved[1]["model_call_receipts"] == []
+        assert saved[1]["adopted"] is False
+        assert saved[1]["partial_wire"] == diagnostic["partial_wire"]
+        assert saved[1]["source_candidate_alignment"] == diagnostic["source_candidate_alignment"]
+        with session_factory() as session:
+            steps = {step.step_id: step for step in JobStore(session, now=_now).list_steps(current.job_id)}
+        assert steps["deep_0001"].state == "failed_final"
+        assert steps["deep_0002"].state == ("failed_final" if failure == "second_failure" else "completed")
+        if failure == "second_failure":
+            assert steps["deep_0003"].state != "completed"
+        assert steps["gate"].state == "failed_final"
+        assert not declarations_called
         return
     assert job.state == "completed"
     assert saved[1]["new_model_calls"] == int(declaration_text is not None)
@@ -7368,12 +7411,94 @@ def _partial_alignment_failure_fixture():
     return batch, result
 
 
-def test_failure_checkpoint_preserves_partial_candidate_alignment_and_revalidates(monkeypatch) -> None:
+def _exhausted_negative_alignment_fixture():
+    from app.agents.protocol_control_candidate_alignment import SourceCandidateAlignment, bind_candidate_alignment
+
+    batch, result = _partial_alignment_failure_fixture()
+    # This family isolates a semantic failure, not a missing temporal anchor.
+    replacement = "拟参加者须接受治疗"
+    batch.owned_units[1].excerpt = replacement
+    payload = result.model_dump_json().replace("拟参加者须持续接受治疗7天", replacement)
+    result = type(result).model_validate_json(payload)
+    result.source_interpretation.statements[1].time_words = []
+    result.source_interpretation.statements[1].decision_functions = ["action"]
+    result.source_target_review.items[1].source_time_excerpt = None
+    alignment_payload = result.source_candidate_alignment.model_dump(mode="json", exclude={"proofs"})
+    alignment_payload["items"][1]["unresolved_dimensions"] = ["接受治疗不等于记录安排"]
+    result.source_candidate_alignment = bind_candidate_alignment(
+        batch, result.source_interpretation, result.source_statement_coverage,
+        result.partial_wire, SourceCandidateAlignment.model_validate(alignment_payload),
+        json.dumps(alignment_payload, ensure_ascii=False),
+    )
+    result.reviewed_semantic_repair_unit_ids = ["su-02"]
+    result.attempts[-1].error_classes = ["SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"]
+    result.attempts[-1].error_detail = {
+        "code": "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED", "statement_ids": [1],
+        "candidate_indexes": [1], "source_refs": ["span:02"],
+        "json_path": "/items", "retry_class": "source_semantic_review",
+        "affected_dependents": [1],
+    }
+    return batch, result
+
+
+@pytest.mark.parametrize("fault", [
+    None, "unbound", "changed_candidate", "changed_reply", "boolean_range",
+    "wrong_range", "wrong_refs", "wrong_dependents", "technical_failure",
+    "source_ambiguity", "repair_not_used", "coverage_changed",
+])
+def test_preserved_negative_alignment_requires_actual_exhausted_proof(fault):
+    from copy import deepcopy
+
+    batch, result = _exhausted_negative_alignment_fixture()
+    saved = result.model_dump(mode="json")
+    original = deepcopy(saved)
+    bad = deepcopy(saved)
+    detail = bad["attempts"][-1]["error_detail"]
+    if fault == "unbound":
+        bad["source_candidate_alignment"]["proofs"] = []
+    elif fault == "changed_candidate":
+        bad["partial_wire"]["candidate_drafts"][1]["applicable_population"] += "限定于额外人群"
+    elif fault == "changed_reply":
+        bad["source_candidate_alignment"]["items"][1]["decision"] = "fully_expressed"
+        bad["source_candidate_alignment"]["items"][1]["unresolved_dimensions"] = []
+    elif fault == "boolean_range":
+        detail["statement_ids"] = [True]
+    elif fault == "wrong_range":
+        detail["statement_ids"] = [0]
+    elif fault == "wrong_refs":
+        detail["source_refs"] = ["foreign-source"]
+    elif fault == "wrong_dependents":
+        detail["affected_dependents"] = [0]
+    elif fault == "technical_failure":
+        bad["attempts"][-1]["error_classes"] = ["MODEL_IDENTITY_INVALID"]
+    elif fault == "source_ambiguity":
+        bad["source_interpretation"]["statements"][1]["unresolved"] = ["原文时间起点不明"]
+    elif fault == "repair_not_used":
+        bad["reviewed_semantic_repair_unit_ids"] = []
+    elif fault == "coverage_changed":
+        bad["source_statement_coverage"] = []
+    try:
+        proof = protocol_control_execution_module._preserved_negative_alignment_proof(batch, bad)
+    except ValueError:
+        assert fault is not None
+    else:
+        if fault is None:
+            assert proof["adopted"] is False
+            assert proof["statement_ids"] == [1]
+            assert proof["error_code"] == "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"
+        else:
+            assert proof is None, fault
+    assert saved == original
+
+
+@pytest.mark.parametrize("fixture_kind", ["partial", "exhausted_negative"])
+def test_failure_checkpoint_preserves_partial_candidate_alignment_and_revalidates(monkeypatch, fixture_kind) -> None:
     from app.agents.protocol_control_candidate_alignment import SOURCE_CANDIDATE_ALIGNMENT_VERSION
     from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
     from app.workflow.errors import StepFailure
 
-    batch, fixture = _partial_alignment_failure_fixture()
+    batch, fixture = (_exhausted_negative_alignment_fixture() if fixture_kind == "exhausted_negative"
+                      else _partial_alignment_failure_fixture())
     module = protocol_control_execution_module
     monkeypatch.setattr(module, "_closure_checkpoint", lambda *_: {"deep_plan": {
         "batches": [batch.model_dump(mode="json")],
@@ -7401,12 +7526,16 @@ def test_failure_checkpoint_preserves_partial_candidate_alignment_and_revalidate
     )
     monkeypatch.setattr(module, "_require_schedule_member_sources", lambda *_: None)
     monkeypatch.setattr(module, "_frozen_official_predicates", lambda *_: ({}, {}))
-    monkeypatch.setattr(module, "restricted_batch_from_review", lambda *_: None)
-    monkeypatch.setattr(module, "_validate_deep_batch_output", lambda *_: None)
-    monkeypatch.setattr(
-        module, "hydrate_protocol_control_agent_output",
-        lambda wire, batch: SimpleNamespace(batch_id=batch.batch_id),
-    )
+    if fixture_kind == "exhausted_negative":
+        monkeypatch.setattr(module, "restricted_batch_from_review", lambda *_:
+            pytest.fail("已证实的失败提案不得转换成原文歧义"))
+    else:
+        monkeypatch.setattr(module, "restricted_batch_from_review", lambda *_: None)
+        monkeypatch.setattr(module, "_validate_deep_batch_output", lambda *_: None)
+        monkeypatch.setattr(
+            module, "hydrate_protocol_control_agent_output",
+            lambda wire, batch: SimpleNamespace(batch_id=batch.batch_id),
+        )
     monkeypatch.setattr(module, "_resolve_transport", lambda *_ , **__: SimpleNamespace(
         start_source_interpretation=lambda **_: None,
         take_call_receipts=lambda: [],
@@ -7428,6 +7557,11 @@ def test_failure_checkpoint_preserves_partial_candidate_alignment_and_revalidate
         for item in diagnostic["source_candidate_alignment"]["items"]
     ] == [(0, "fully_expressed"), (1, "incomplete")]
     assert diagnostic["partial_wire"] is not None
+    if fixture_kind == "exhausted_negative":
+        assert raised.value.error_code == "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"
+        assert diagnostic["reviewed_semantic_repair_unit_ids"] == ["su-02"]
+        assert diagnostic["source_target_review"] == fixture.source_target_review.model_dump(mode="json")
+        return
 
     coverage = [
         module.SourceStatementCoverage.model_validate(item)
