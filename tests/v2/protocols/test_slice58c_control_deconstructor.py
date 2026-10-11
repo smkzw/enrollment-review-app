@@ -2290,6 +2290,31 @@ def test_repair_guidance_distinguishes_same_stage_and_cross_stage() -> None:
     assert "末次给药" not in calendar
 
 
+def test_unsupported_recommendation_repair_preserves_permission_and_waiver() -> None:
+    guidance = _repair_problem_guidance("RECOMMENDED_MODALITY_UNSUPPORTED")
+    assert "不把 recommended 机械改成 mandatory" in guidance
+    assert "repeat_scheme.permission=optional" in guidance
+    assert "不要求证明可选操作已经完成" in guidance
+    assert "no_repeat_result_use 保留 unresolved" in guidance
+    assert "verify_result_validity" in guidance and "complete_or_verify" in guidance
+    assert "不要求证明免予操作未发生" in guidance
+    recommendation = _repair_problem_guidance("RECOMMENDED_MODALITY_DROPPED")
+    assert "使用 recommended" in recommendation
+    assert "repeat_scheme.permission" not in recommendation
+
+
+def test_permission_repair_material_changes_repair_identity_not_base_author(monkeypatch) -> None:
+    from app.agents import protocol_control_deconstructor as module
+
+    repair = module.protocol_control_agent_repair_contract_sha256()
+    base = module.protocol_control_agent_repair_contract_sha256(base_only=True)
+    author = module.protocol_control_agent_prompt_template_sha256(module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE)
+    monkeypatch.setattr(module, "_PERMISSION_MODALITY_REPAIR_GUIDANCE", "different bounded repair")
+    assert module.protocol_control_agent_repair_contract_sha256() != repair
+    assert module.protocol_control_agent_repair_contract_sha256(base_only=True) == base
+    assert module.protocol_control_agent_prompt_template_sha256(module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE) == author
+
+
 def test_real_transport_inventory_is_checked_before_full_wire() -> None:
     batch = _batch()
     source = _source_inventory({

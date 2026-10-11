@@ -2383,6 +2383,21 @@ _CONTROL_REPAIR_CONTRACT = (
 _CALENDAR_BOUND_REPAIR_PROMPT_VERSION = "phase5/calendar-bound-repair-prompt/v4"
 _AFFECTED_STAGE_REPAIR_GUIDANCE_VERSION = "phase5/affected-stage-repair-guidance/v5"
 _OPTIONAL_ACTION_REPAIR_GUIDANCE_VERSION = "phase5/optional-action-repair-guidance/v2"
+_PERMISSION_MODALITY_REPAIR_GUIDANCE = (
+    "本轮重点：recommended 只表示原文建议，不表示许可或豁免。先从授权原文区分"
+    "建议执行、允许执行、条件成立可免予执行与明确必做，不把 recommended 机械改成 mandatory。"
+    "允许复查用现有 evaluation.repeat_scheme.permission=optional 保留许可、触发条件、"
+    "次数限制和结果采用政策；没有该语义时不得为了修字段新增复查方案。"
+    "义务命题应核对原文规定的许可边界或实际执行后的限制，不要求证明可选操作已经完成；"
+    "其他必做或禁止动作分别保留其自己的条件、原文和强度，不借许可措辞削弱它们。"
+    "未发生复查不证明许可违规，也不能仅因 optional 自动采用初查结果；"
+    "原文未规定的 no_repeat_result_use 保留 unresolved，不补日期、批准或结果政策。"
+    "若原文是条件性免予检查，复用现有免予表达：同一义务组中的 verify_result_validity"
+    "保留有源有效期，complete_or_verify 核对免予适用状态且不携带该时间约束；"
+    "最低证据证明免予条件，不要求证明免予操作未发生，不把它改写成禁止或必做。"
+    "只修授权语义点及其真实依赖；不能完整表达时保留具体软件或来源未决，"
+    "不能通过改强度、删除条件或代填研究者判断来通过校验。"
+)
 _SOURCE_INSERT_GUIDANCE_VERSION = "phase5/source-insert-guidance/v8"
 _TREATMENT_DURATION_REPAIR_GUIDANCE_VERSION = "phase5/treatment-duration-repair-guidance/v2"
 _ATOM_REPAIR_GUIDANCE_VERSION = "phase5/atom-repair-guidance/v4"
@@ -2735,6 +2750,8 @@ def _repair_problem_guidance(problem: str) -> str:
             "必做原子不能连带引用后续的建议措辞，建议原子须保留建议原文并使用 recommended。"
             "不得把明确剂量、频次等必做要求降为建议，也不得把建议动作写成必须完成。"
         )
+    if "RECOMMENDED_MODALITY_UNSUPPORTED" in problem:
+        return _PERMISSION_MODALITY_REPAIR_GUIDANCE
     if "RECOMMENDED_MODALITY_" in problem:
         return (
             "本轮重点：原文含‘建议’或同义措辞的原子必须使用 modality=recommended，"
@@ -3006,6 +3023,7 @@ def protocol_control_agent_repair_contract_sha256(
         parts.append(_CANDIDATE_FIELD_REPAIR_VERSION)
         parts.append(SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION)
         parts.append(_SCOPED_SOURCE_CONTEXT_REPAIR_GUIDANCE)
+        parts.append(_PERMISSION_MODALITY_REPAIR_GUIDANCE)
     material = "\n".join(parts)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 

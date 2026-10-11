@@ -3,6 +3,8 @@
 from datetime import date
 from fractions import Fraction
 
+import pytest
+
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.enums import DatePrecision, FactPolarity
 from app.domain.contracts.evidence import ClinicalFact
@@ -56,6 +58,34 @@ def test_unsupported_operation_and_empty_scope_do_not_produce_value():
     assert aggregate_numeric_acquisitions(
         [[_fact("a", 2)]], operation="median", unit_required=True,
     )[2] == ("repeat_result_combination_unverified",)
+
+
+@pytest.mark.parametrize("policy,complete,expected_reason", [
+    ("unresolved", True, "repeat_absence_policy_unverified"),
+    ("no_result", True, "repeat_result_required_not_supplied"),
+    ("retain_initial", False, "repeat_result_scope_incomplete"),
+    ("retain_initial", True, None),
+])
+def test_optional_repeat_is_not_an_implicit_initial_result_fallback(policy, complete, expected_reason):
+    appearance = observation_appearance_id("initial", "source")
+    graph = analyze_observation_appearances(
+        [{"fact_id": "initial", "locator_id": "source", "appearance_id": appearance}],
+        [], origins={appearance: "initial"},
+    )
+    initial = graph["acquisition_groups"][0]["group_id"]
+    scheme = RepeatScheme(
+        scope="本次提供资料", source_span_ids=["span"],
+        source_excerpts=["允许复查；结果采用按本项明确政策核对。"],
+        permission="optional", trigger="unconditional", count_status="not_specified",
+        time_status="not_specified", result_use="not_specified", no_repeat_result_use=policy,
+    )
+    selected = select_repeat_result_groups(
+        scheme, graph, initial_group_id=initial, repeat_group_ids=(),
+        scope_complete=complete, initial_scope_complete=True, supplied_scope_sha256="a" * 64,
+    )
+    assert selected.reason_codes == (() if expected_reason is None else (expected_reason,))
+    assert selected.selected_group_ids == ((initial,) if expected_reason is None else ())
+    assert selected.replacement_authorized is False
 
 
 def test_reused_fact_needs_a_quoted_repeat_chain_and_qualified_source_positions():

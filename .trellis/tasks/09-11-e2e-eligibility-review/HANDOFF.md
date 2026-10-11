@@ -2,9 +2,11 @@
 
 ## 当前事实
 
-**现行接续（2026-10-11）：** Goal active、claims_complete=false；基础06b4037b2240ba730450a0ecb9accb7e84ef5350。最新实际Job1f2628c5d8fc49faa8c8d46305a9a8c9终态failed_final/PROTOCOL_CONTROL_SOURCE_UNIT_QUOTE_COMPLETION_INVALID，2新调用259.502127084秒/exit3，49深审完成/39未读，45负核对未采用、51补读失败。49真实R1非执行保存已证，0共同发布/启用/签发。下方先前当前段均为历史，不覆盖本段。
+**现行接续（2026-10-11）：** Goal active、claims_complete=false；最新实际产品源码3c9a760e3976004a3e965cc8745c6b23db253d1e。Job17d7208734384ea7b3b83f9dde0d153e终态failed_final/PROTOCOL_CONTROL_LOGICAL_BUDGET_EXHAUSTED，8新调用330.604505834秒/exit3，44深审完成/45排队；45失败，下游依赖失败。旧49真实R1保存有效，但此次没有到达它，不能把预检49可复用写成49实际执行。0共同发布/启用/签发。下方先前当前段均为历史，不覆盖本段。
 
-51“真正漏读”的旧归因撤回：先决已有eligibility_sequence_quote，只是捕获统计未计；被拒补读不采用。当前包唯一同源物理先决计覆盖，typed证明只可恢复原来源并新作者/新核对；不恢复坏答或旧批准，累计预算不清零。45只改既有局部修订材料，审核节点不能无据收窄原文适用范围；基础作者/Schema/编译器不变。相连277pass/1395deselected/31.59秒，末proof类型条件之后未全窗重跑；两次批准C03同会话续审exit0/no fallback，同模型家族、未读全部测试/预算，非医学批准。只读当前预检49reusable/1resume_partial/40refresh，0调用/0写/全库hash保持。新实际运行尚未启动；创建时重验90步。详见implement当前表与reviews/rv1006-capture-scope-owner-disposition-20261011.md。原件、旧库/旧终态、七份继承dirty保留。
+51“真正漏读”的旧归因撤回：先决已有eligibility_sequence_quote，只是捕获统计未计；被拒补读不采用。捕获包末proof类型条件后19原模块例通过，不再重复277窗。a456的24次准入未先核45旧账39次而0新调用拒绝，属所有者配置错误；随后实际累计47保留39+8，未清零。45新作者目前首先错把许可/免予放入recommended，旧人群范围问题尚未达到核对，不能宣称已解决。
+
+本次仅修RECOMMENDED_MODALITY_UNSUPPORTED的定向提示，复用既有许可与豁免结构，实际文本进入repair hash；不改基础作者/Schema/编译，不翻转强度或自动采用。相连75pass/1304deselected/2.24秒/exit0；包含无复查时不可凭optional采用初查的实际消费者反例，非临床验收。旧CodeBuddy续审429/exit3未接受；新live C03 Grok/grok-build/grok-4.7/high只读8定义、fresh context、exit0/no fallback，未读病例/运行测试，所有者另核下游。当前新包尚未真实运行；先核累计账和全部90步预检，实际结果决定下一动作。取舍reviews/rv1006-permission-modality-owner-disposition-20261011.md。原件、旧库/旧终态、七份继承dirty保留，完整同源包、病例工作稿、更正新旧结果仍未完成。
 
 ### 以下非执行留存包为历史；51缺文判断已被实际字段反证
 
