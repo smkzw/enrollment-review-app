@@ -265,6 +265,14 @@ __all__ = [
 
 PUBLICATION_REPAIR_SCOPE_VERSION = "phase5/publication-candidate-repair-scope/v2"
 _CANDIDATE_FIELD_REPAIR_VERSION = "phase5/candidate-field-repair/v2"
+_SCOPED_SOURCE_CONTEXT_REPAIR_GUIDANCE = (
+    "本次来源闭包修订须区分原文适用范围与系统审核位置。"
+    "applicable_population、条件、时间和例外只能由本动作原文、直接上位范围或经核实的结构关系支持；"
+    "context_units、已有官方/流程目标及其访视标签仅供核对关系，不能自动借作当前动作的限制。"
+    "review_stage及workflow_stage_id说明在哪里核查，不证明原文只适用于该阶段。"
+    "未能找到限定的原文及关系时，不为匹配目录而新增时期或缩窄人群；"
+    "明确未限定与原文存在歧义要分别保留，不能推断全方案没有其他限制。"
+)
 SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION = "phase5/source-requirement-failure-policy/v5"
 # Reporting changes do not change author/repair prompts or invalidate successful reads.
 SOURCE_REQUIREMENT_FAILURE_REASON_VERSION = "phase5/source-requirement-failure-reason/v2"
@@ -2997,6 +3005,7 @@ def protocol_control_agent_repair_contract_sha256(
         parts.append(PUBLICATION_REPAIR_SCOPE_VERSION)
         parts.append(_CANDIDATE_FIELD_REPAIR_VERSION)
         parts.append(SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION)
+        parts.append(_SCOPED_SOURCE_CONTEXT_REPAIR_GUIDANCE)
     material = "\n".join(parts)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
@@ -12033,7 +12042,7 @@ class ProtocolControlAgentRunner:
                         repair_prompt = build_protocol_control_agent_prompt(
                             local_batch, prompt_template=prompt_template,
                             include_schema=False, source_interpretation=source_interpretation,
-                        ) + (
+                        ) + _SCOPED_SOURCE_CONTEXT_REPAIR_GUIDANCE + (
                             "\n本次只修订上述 owned_units 的来源闭包，context_units 仅供只读核对。"
                             "只返回这些单元的 dispositions 和候选；其余内容由系统保留。"
                             "下列提案尚未采用，须按原文核实错误关联，不得因无正确关联就称要求已覆盖。"

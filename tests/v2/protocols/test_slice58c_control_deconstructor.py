@@ -15345,6 +15345,8 @@ def test_reviewed_semantic_closure_reuses_scoped_splice_and_rechecks_consumer(re
             self.scoped_calls += 1
             assert batch.owned_structure_unit_ids == ["su-02"]
             assert "su-01" in batch.context_structure_unit_ids
+            assert "原文适用范围与系统审核位置" in prompt
+            assert "不能自动借作当前动作的限制" in prompt
             payload = patch.model_dump(mode="json")
             if reply == "unchanged":
                 payload["candidate_drafts"] = [before["candidate_drafts"][1]]
@@ -15381,6 +15383,16 @@ def test_reviewed_semantic_closure_reuses_scoped_splice_and_rechecks_consumer(re
             )
             assert restored_transport.scoped_calls == 0 and restored.final_output is None
             assert restored.reviewed_semantic_repair_unit_ids == ["su-02"]
+
+
+def test_scoped_context_guidance_is_repair_material_not_new_author_or_source_identity(monkeypatch):
+    from app.agents import protocol_control_deconstructor as module
+    batch = _batch()
+    author_before = module.build_protocol_control_agent_prompt(batch)
+    repair_before = module.protocol_control_agent_repair_contract_sha256()
+    monkeypatch.setattr(module, "_SCOPED_SOURCE_CONTEXT_REPAIR_GUIDANCE", "changed downstream scope guidance")
+    assert module.protocol_control_agent_repair_contract_sha256() != repair_before
+    assert module.build_protocol_control_agent_prompt(batch) == author_before
 
 
 @pytest.mark.parametrize("ids,resume", [(["unknown"], True), (["su-02", "su-02"], True), ([1], True), (["su-02"], False)])

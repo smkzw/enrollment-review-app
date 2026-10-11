@@ -1120,6 +1120,122 @@ def test_source_capture_ignores_only_proven_table_display_separators(defect):
     assert source_unit_quotes_cover_source(unit, result.source_interpretation, [0, 1]) is (defect is None)
 
 
+@pytest.mark.parametrize("defect", [None, "missing_word", "wrong_boundary", "not_after", "late_boundary"])
+def test_source_capture_counts_literal_sequence_witness_without_assigning_sibling_scope(defect):
+    from app.agents.protocol_control_source_interpretation import source_unit_quotes_cover_source
+    batch, result = _same_unit_two_requirement_review()
+    unit = batch.owned_units[0]
+    first, second = result.source_interpretation.statements
+    boundary = "完成前置审核后"
+    unit.excerpt = first.quoted_text + "；" + boundary + "，" + second.quoted_text
+    second.eligibility_sequence = "after_eligibility_decision"
+    second.eligibility_sequence_quote = boundary
+    if defect == "missing_word":
+        unit.excerpt += "，并保留原记录"
+    elif defect == "wrong_boundary":
+        second.eligibility_sequence_quote = "其他审核通过后"
+    elif defect == "not_after":
+        second.eligibility_sequence = "current_or_unknown"
+    elif defect == "late_boundary":
+        unit.excerpt = first.quoted_text + "；" + second.quoted_text + "；" + boundary
+    before = result.source_interpretation.model_dump(mode="json")
+    assert source_unit_quotes_cover_source(unit, result.source_interpretation, [0, 1]) is (defect is None)
+    assert result.source_interpretation.model_dump(mode="json") == before
+    assert first.eligibility_sequence == "current_or_unknown"
+
+
+@pytest.mark.parametrize("defect", [None, "same_validator", "still_missing", "wrong_refs", "bad_source_hash", "bad_response_hash", "missing_history"])
+def test_rejected_quote_completion_only_reopens_fresh_authorship_when_original_capture_is_proven(
+    monkeypatch, defect,
+):
+    from copy import deepcopy
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
+    from app.agents import protocol_control_source_interpretation as capture
+    module = protocol_control_execution_module
+    batch, fixture = _procedure_correspondence_review(single=True)
+    unit = batch.owned_units[0]
+    source = fixture.source_interpretation
+    boundary = "完成前置审核后"
+    unit.excerpt = boundary + "，" + unit.excerpt
+    source.statements[0].eligibility_sequence = "after_eligibility_decision"
+    source.statements[0].eligibility_sequence_quote = boundary
+    class Transport:
+        calls = 0
+        def start_source_interpretation(self, *, prompt):
+            self.calls += 1
+            return ProtocolControlAgentResponse(session_id="historical-capture", text=source.model_dump_json())
+    transport = Transport()
+    # Reproduce the old capture checker, not a successful clinical proposal.
+    with monkeypatch.context() as historical:
+        historical.setattr(capture, "source_unit_quotes_cover_source", lambda *args: False)
+        result = ProtocolControlAgentRunner(max_schema_repairs=2).run(batch, transport,
+            resume_source_interpretation=source,
+            resume_source_unit_completion_ids=(unit.structure_unit_id,))
+    assert result.attempts[-1].error_classes == ["SOURCE_UNIT_QUOTE_COMPLETION_INVALID"]
+    proof = dict(schema_version="phase5/source-unit-quote-completion-seed-proof/v1",
+        source_job_id="historical-source", checkpoint_id="historical-checkpoint", step_id="deep_0001",
+        source_unit_completion_ids=[unit.structure_unit_id], adopted=False, source_repair_limit=2,
+        source_sha256=hashlib.sha256(source.model_dump_json().encode()).hexdigest())
+    saved = dict(source_interpretation=source.model_dump(mode="json"),
+        partial_wire=None, source_target_review=None, source_statement_coverage=[], source_candidate_alignment=None,
+        attempts=[{**item.model_dump(mode="json"), "raw_output_text": item.raw_output_text}
+                  for item in result.attempts],
+        source_scope_question_history=result.source_scope_question_history,
+        source_review_reuse=module._source_review_reuse_record(module._ResumedSourceReview(
+            state="absent", reason="source_unit_quote_completion_required", source_seed_proof=proof)))
+    saved["source_scope_question_history"][-1]["raw_output_text"] = result.attempts[-1].raw_output_text
+    if defect == "still_missing":
+        unit.excerpt += "，必须保留原记录"
+    elif defect == "wrong_refs":
+        saved["attempts"][-1]["error_detail"]["source_refs"] = ["foreign-source"]
+        saved["source_scope_question_history"][-1] = deepcopy(saved["attempts"][-1])
+    elif defect == "bad_source_hash":
+        saved["source_review_reuse"]["source_seed_proof"]["source_sha256"] = "0" * 64
+    elif defect == "bad_response_hash":
+        saved["attempts"][-1]["raw_output_sha256"] = "0" * 64
+        saved["source_scope_question_history"][-1] = deepcopy(saved["attempts"][-1])
+    elif defect == "missing_history":
+        saved["source_scope_question_history"] = []
+    before = deepcopy(saved)
+    if defect:
+        with pytest.raises(ValueError):
+            module._resumable_unit_completion_failure(batch, saved,
+                capture_validation_changed=defect != "same_validator")
+    else:
+        resume = module._resumable_unit_completion_failure(batch, saved, capture_validation_changed=True)
+        assert resume.reason == "source_capture_revalidated_requires_fresh_author"
+        assert resume.source_seed_proof["source_unit_completion_ids"] == []
+        assert resume.source_seed_proof["source_repair_limit"] == 2
+        assert resume.source_seed_proof["adopted"] is False
+    assert saved == before and transport.calls == 1
+    if defect is None:
+        prompt = module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE
+        payload = {"runner_limits": {"deep_max_schema_repairs": 2}}
+        current = module._deep_component_identity(payload, prompt)
+        saved.update(stage="deep_failure_diagnostic", schema_version="phase5/deep-failure-diagnostic/v3",
+            batch_id=batch.batch_id, transport_identity={},
+            prompt_template_sha256=current["prompt_material_sha256"],
+            component_identity={**current, "validator_version": "historical-capture-checker"},
+            repair_contract_sha256="0" * 64)
+        class Store:
+            def get_job(self, _):
+                raw = json.dumps(payload)
+                return SimpleNamespace(payload_json=raw, payload_sha256=hashlib.sha256(raw.encode()).hexdigest())
+            def list_steps(self, _):
+                return [SimpleNamespace(step_id="deep_0001", state="failed_final")]
+            def get_last_checkpoint(self, _, step):
+                return ("closure", {"stage": "closure", "deep_plan": {}}) if step == module.STEP_CLOSURE else ("failure", saved)
+        monkeypatch.setattr(module.ProtocolControlDiscoveryToDeepPlan, "model_validate",
+            staticmethod(lambda _: SimpleNamespace(batches=[batch])))
+        before = deepcopy(saved)
+        restored = module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
+        assert restored[1]["partial_wire"] is None and restored[2].review is None
+        assert restored[2].source_seed_proof["source_unit_completion_ids"] == []
+        assert restored[2].source_seed_proof["source_repair_limit"] == 2
+        assert restored[1]["source_scope_question_history"] == before["source_scope_question_history"]
+        assert saved == before and transport.calls == 1
+
+
 @pytest.mark.parametrize("invalid", [False, True])
 def test_runner_local_source_unit_quote_completion_does_not_reuse_semantic_draft(invalid):
     from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner

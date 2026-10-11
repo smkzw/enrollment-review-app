@@ -41,7 +41,7 @@ SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v22"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
 SOURCE_COVERAGE_VALIDATION_VERSION = "source-owned-inventory-validation/v1"
 SOURCE_UNIT_QUOTE_COMPLETION_VERSION = "source-unit-quote-completion/v1"
-SOURCE_TABLE_MEMBER_COVERAGE_VERSION = "source-table-member-display-coverage/v1"
+SOURCE_TABLE_MEMBER_COVERAGE_VERSION = "source-table-member-display-coverage/v2"
 SOURCE_TARGET_REVIEW_VALIDATION_VERSION = "source-native-procedure-row-validation/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
@@ -326,6 +326,21 @@ def source_unit_quotes_cover_source(unit, interpretation: SourceInterpretation, 
         if any(start < bounds[1] and bounds[0] < end for start, end in ranges):
             return False
         extra.append(bounds)
+    for index in indexes:
+        statement = interpretation.statements[index]
+        if (statement.eligibility_sequence != "after_eligibility_decision"
+                or statement.eligibility_sequence_context is not None):
+            continue
+        bounds = locate_source_quote_offsets(unit.excerpt, statement.eligibility_sequence_quote or "")
+        action = locate_source_quote_offsets(unit.excerpt, statement.quoted_text)
+        if bounds is None or action is None or bounds[1] > action[0]:
+            return False
+        # This field already preserves the literal antecedent. Counting its
+        # capture does not assign that antecedent to any other statement.
+        if not any(start <= bounds[0] and bounds[1] <= end for start, end in [*ranges, *extra]):
+            if any(start < bounds[1] and bounds[0] < end for start, end in [*ranges, *extra]):
+                return False
+            extra.append(bounds)
     # Only separators reconstructed from frozen table members are display
     # characters. A literal pipe inside a cell remains source content.
     if (unit.table_context is not None and unit.member_texts is not None

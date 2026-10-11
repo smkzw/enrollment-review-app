@@ -2,6 +2,12 @@
 
 ## 当前事实
 
+**现行接续（2026-10-11）：** Goal active、claims_complete=false；基础06b4037b2240ba730450a0ecb9accb7e84ef5350。最新实际Job1f2628c5d8fc49faa8c8d46305a9a8c9终态failed_final/PROTOCOL_CONTROL_SOURCE_UNIT_QUOTE_COMPLETION_INVALID，2新调用259.502127084秒/exit3，49深审完成/39未读，45负核对未采用、51补读失败。49真实R1非执行保存已证，0共同发布/启用/签发。下方先前当前段均为历史，不覆盖本段。
+
+51“真正漏读”的旧归因撤回：先决已有eligibility_sequence_quote，只是捕获统计未计；被拒补读不采用。当前包唯一同源物理先决计覆盖，typed证明只可恢复原来源并新作者/新核对；不恢复坏答或旧批准，累计预算不清零。45只改既有局部修订材料，审核节点不能无据收窄原文适用范围；基础作者/Schema/编译器不变。相连277pass/1395deselected/31.59秒，末proof类型条件之后未全窗重跑；两次批准C03同会话续审exit0/no fallback，同模型家族、未读全部测试/预算，非医学批准。只读当前预检49reusable/1resume_partial/40refresh，0调用/0写/全库hash保持。新实际运行尚未启动；创建时重验90步。详见implement当前表与reviews/rv1006-capture-scope-owner-disposition-20261011.md。原件、旧库/旧终态、七份继承dirty保留。
+
+### 以下非执行留存包为历史；51缺文判断已被实际字段反证
+
 **当前包优先（2026-10-11）：** Goal实查active、claims_complete=false；源码基础c54eae58e35b4344cfc97ff749ad8226974b5fef已push，本包新修改另按Git实际提交核。七份继承dirty和私有资料保留。所有者集成＋既有批准C03定向审阅，修已有R1非执行消费者、表格显示覆盖及局部补读接线，不新增框架或临床特例。下方旧“当前”均为历史。
 
 最新真实Job12631b78b0d443f39c14d4bdd382888a运行c54eae5，failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，10新物理调用513.850568791秒/exit3；48完成、39未读、45/49/51失败。47旧成功零新调用复用，第50组真实新增完成。49检查点74f1c84e942d4b1e854081c9b49530df；2/3/8不再误补当前义务，7仍真实source_ambiguity，零候选；51检查点ceb2dde163cd44cc84037db653bfabbb，为typed TEMPORAL_SCOPE_UNRESOLVED、零候选。原件、旧Job、来源与保护库保持；0共同发布/启用/签发。

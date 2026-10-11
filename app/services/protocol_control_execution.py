@@ -2783,6 +2783,7 @@ def _obsolete_native_author_basis(
 
 def _resumable_unit_completion_failure(
     batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
+    *, capture_validation_changed: bool = False,
 ) -> _ResumedSourceReview | None:
     """Keep the failed capture and its ledger together; never fall back to authorship."""
     attempts = saved.get("attempts") or []
@@ -2790,9 +2791,13 @@ def _resumable_unit_completion_failure(
     detail = last.get("error_detail") if isinstance(last, Mapping) else None
     if not isinstance(detail, Mapping) or detail.get("workflow_phase") != "source_unit_quote_completion":
         return None
+    transport_failed = (last.get("error_classes") == ["SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED"]
+                        and last.get("outcome") == "transport_failed")
+    rejected_capture = (capture_validation_changed
+                        and last.get("error_classes") == ["SOURCE_UNIT_QUOTE_COMPLETION_INVALID"]
+                        and last.get("outcome") == "schema_invalid")
     if (detail.get("code") != "SOURCE_UNIT_QUOTE_COMPLETION"
-            or last.get("error_classes") != ["SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED"]
-            or last.get("outcome") != "transport_failed" or detail.get("called") is not True):
+            or not (transport_failed or rejected_capture) or detail.get("called") is not True):
         raise ValueError("SOURCE_UNIT_QUOTE_COMPLETION_STOPPED：补读内容未通过核对，不自动重读原批次")
     reuse = saved.get("source_review_reuse")
     proof = reuse.get("source_seed_proof") if isinstance(reuse, Mapping) else None
@@ -2825,6 +2830,22 @@ def _resumable_unit_completion_failure(
     remaining = [value for value in planned if not source_unit_quotes_cover_source(
         owned[value], interpretation, [index for index, item in enumerate(interpretation.statements)
                                       if item.structure_unit_id == value])]
+    if rejected_capture:
+        if remaining:
+            raise ValueError("SOURCE_UNIT_QUOTE_COMPLETION_STOPPED：原来源仍有遗漏，不重复已拒绝的补读")
+        raw = last.get("raw_output_text")
+        source_sha256 = hashlib.sha256(interpretation.model_dump_json().encode()).hexdigest()
+        if (proof.get("source_sha256") != source_sha256
+                or not isinstance(raw, str) or not raw.strip()
+                or hashlib.sha256(raw.encode()).hexdigest() != last.get("raw_output_sha256")):
+            raise ValueError("原来源或被拒补读的回执摘要损坏，不能跳过补读")
+        return _ResumedSourceReview(state="absent", reason="source_capture_revalidated_requires_fresh_author",
+            source_seed_proof={**proof,
+                "schema_version": "phase5/source-capture-revalidated-proof/v1",
+                "source_unit_completion_ids": [],
+                "source_sha256": source_sha256,
+                "rejected_completion_sha256": last.get("raw_output_sha256"),
+                "adopted": False})
     if unit_id not in remaining:
         raise ValueError("失败补读已无来源缺口，记录矛盾")
     return _ResumedSourceReview(state="absent", reason="source_unit_quote_completion_transport_resume",
@@ -2927,9 +2948,15 @@ def _validated_deep_partial_source(
     changed_components = not _same_deep_components_with_current_gate(
         saved_components, current_components,
     )
-    completion_resume = _resumable_unit_completion_failure(batch, saved)
+    completion_resume = _resumable_unit_completion_failure(batch, saved,
+        capture_validation_changed=(saved_components.get("validator_version")
+                                    != current_components["validator_version"]))
     if completion_resume is not None:
-        if changed_components or repair_identity != protocol_control_agent_repair_contract_sha256():
+        if (changed_components
+                or (repair_identity != protocol_control_agent_repair_contract_sha256()
+                    and not (completion_resume.reason == "source_capture_revalidated_requires_fresh_author"
+                             and (completion_resume.source_seed_proof or {}).get("schema_version")
+                             == "phase5/source-capture-revalidated-proof/v1"))):
             raise ValueError("失败补读的当前合同已变，不自动退回整批读取")
         return checkpoint_id, saved, completion_resume
     pending_source = any(
