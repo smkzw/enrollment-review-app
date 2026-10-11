@@ -24,6 +24,7 @@ from app.agents.protocol_control_source_interpretation import (
     validate_restricted_definition_consumers,
     validate_source_interpretation,
     validate_source_target_review,
+    completed_quote_review_indexes,
     source_unit_quotes_cover_source,
     validate_completed_quote_review,
 )
@@ -710,6 +711,7 @@ def _restricted_statement_batch_from_review(
         return None
     validate_source_target_review(
         batch, interpretation, result.source_statement_coverage, review,
+        completed_quote_indexes=completed_quote_review_indexes(interpretation, result.source_scope_question_history),
     )
     covered = {"covered_by_official", "covered_by_procedure"}
     temporal_indexes = _temporal_restriction_indexes(batch, result) or set()
@@ -927,6 +929,8 @@ def restricted_batch_from_review(
     validate_source_target_review(
         batch, result.source_interpretation, result.source_statement_coverage,
         result.source_target_review,
+        completed_quote_indexes=completed_quote_review_indexes(result.source_interpretation,
+                                                              result.source_scope_question_history),
     )
     output = _whole_unit_restriction(batch, result)
     if output is not None:

@@ -107,6 +107,7 @@ from app.agents.protocol_control_source_interpretation import (
     validate_source_target_review,
     validated_source_review_seed,
     target_review_indexes,
+    completed_quote_review_indexes,
     _time_words_cover_stage_label,
     source_unit_quotes_cover_source,
     validate_completed_quote_review,
@@ -2360,8 +2361,11 @@ def _resumable_saved_source_review(
             state="refresh_required", reason="saved_source_coverage_identity_invalid",
         )
     try:
-        expected = target_review_indexes(interpretation, coverage, batch)
-        retained = validated_source_review_seed(batch, interpretation, coverage, review)
+        completed_indexes = completed_quote_review_indexes(interpretation, _saved_source_scope_question_history(saved))
+        expected = target_review_indexes(interpretation, coverage, batch,
+                                        completed_quote_indexes=completed_indexes)
+        retained = validated_source_review_seed(batch, interpretation, coverage, review,
+                                              completed_quote_indexes=completed_indexes)
     except SourceTargetReviewValidationError:
         return _ResumedSourceReview(
             state="refresh_required", reason="current_validators_reject_saved_source_review",
@@ -3232,7 +3236,8 @@ def _preserved_unresolved_review_proof(
     _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(wire, batch))
     if not _coverage_matches_current_proofs(batch, _saved_failed_deep_run_result(batch, saved)):
         raise ValueError("原未决的来源覆盖与当前草稿不一致")
-    validate_source_target_review(batch, source, coverage, review)
+    validate_source_target_review(batch, source, coverage, review,
+        completed_quote_indexes=completed_quote_review_indexes(source, _saved_source_scope_question_history(saved)))
     unresolved = sorted(item.statement_index for item in review.items if item.decision == "unresolved")
     # A definition with an available dependency route needs a fresh semantic
     # review, not a frozen failure caused by the older permission restriction.
@@ -3831,6 +3836,7 @@ def _validate_saved_source_review(
     validate_source_interpretation(batch, interpretation)
     validate_completed_quote_review(interpretation, result.source_target_review,
                                     result.source_scope_question_history)
+    completed_indexes = completed_quote_review_indexes(interpretation, result.source_scope_question_history)
     sequence_units = {statement.structure_unit_id for statement in interpretation.statements
         if statement.eligibility_sequence == "after_eligibility_decision"
         and statement.eligibility_sequence_context is None}
@@ -3899,12 +3905,13 @@ def _validate_saved_source_review(
             expected_wire = covered_front_wire(batch, interpretation, result.source_front_target_review)
             if expected_wire != result.partial_wire:
                 raise ValueError("已有覆盖的装配链接与实际来源核对不一致")
-            required_indexes = set(target_review_indexes(interpretation, derived, batch))
+            required_indexes = set(target_review_indexes(interpretation, derived, batch,
+                                                        completed_quote_indexes=completed_indexes))
             validate_source_target_review(batch, interpretation, derived,
                 result.source_front_target_review.model_copy(update={"items": [
                     item for item in result.source_front_target_review.items
                     if item.statement_index in required_indexes
-                ]}))
+                ]}), completed_quote_indexes=completed_indexes)
         else:
             alignment = result.source_candidate_alignment
             pairs = {(entry.statement_index, index) for entry in raw_front_coverage
@@ -3924,8 +3931,10 @@ def _validate_saved_source_review(
     )
     validate_source_target_review(
         batch, interpretation, result.source_statement_coverage, review,
+        completed_quote_indexes=completed_indexes,
     )
-    if target_review_indexes(interpretation, result.source_statement_coverage, batch) and not result.source_target_review:
+    if target_review_indexes(interpretation, result.source_statement_coverage, batch,
+                            completed_quote_indexes=completed_indexes) and not result.source_target_review:
         raise ValueError("待核来源陈述缺少逐项核对结果")
     if any(item.decision == "unresolved" for item in review.items):
         raise ValueError("来源逐项核对仍有未闭合要求")
@@ -5556,6 +5565,8 @@ def _deep_results(
                 validate_source_target_review(
                     batch, run_result.source_interpretation,
                     run_result.source_statement_coverage, run_result.source_target_review,
+                    completed_quote_indexes=completed_quote_review_indexes(run_result.source_interpretation,
+                                                                         run_result.source_scope_question_history),
                 )
             except ValueError as exc:
                 raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_SOURCE_RELATION_INVALID",

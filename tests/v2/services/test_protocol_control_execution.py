@@ -1091,6 +1091,55 @@ def test_source_unit_quote_completion_preserves_meaning_and_requires_full_captur
     assert result.source_interpretation.model_dump(mode="json") == before
 
 
+@pytest.mark.parametrize("defect", [None, "antecedent", "sibling", "still_missing", "changed_meaning"])
+@pytest.mark.parametrize("separator", ["；", "；\n"])
+def test_source_unit_completion_ranges_preserve_antecedent_and_adjacent_actions(defect, separator):
+    from app.agents.protocol_control_source_interpretation import (
+        SourceInterpretation, apply_source_unit_quote_completion, source_unit_quote_completion_prompt,
+        source_unit_quotes_cover_source,
+    )
+
+    batch, result = _same_unit_two_requirement_review()
+    unit, source = batch.owned_units[0], result.source_interpretation
+    prefix, tail = "完成资格核对后，", "，参见附表。"
+    first, second = "登记后续随访计划", "记录研究治疗安排"
+    unit.excerpt = prefix + first + separator + second + tail
+    for statement, quote in zip(source.statements, [first, second], strict=True):
+        statement.quoted_text = quote
+        statement.time_words = []
+        statement.eligibility_sequence = "after_eligibility_decision"
+        statement.eligibility_sequence_quote = prefix
+    before = source.model_dump(mode="json")
+    material = json.loads(source_unit_quote_completion_prompt(batch, source, unit.structure_unit_id).split("\n", 1)[1])
+    windows = material["allowed_quote_ranges"]
+    assert windows[0]["start_offset"] == len(prefix)
+    assert windows[0]["end_offset_exclusive"] == len(prefix + first + separator)
+    assert windows[1]["start_offset"] == len(prefix + first)
+    assert windows[1]["end_offset_exclusive"] == len(unit.excerpt)
+    assert prefix not in windows[0]["maximum_contiguous_excerpt"]
+    assert second not in windows[0]["maximum_contiguous_excerpt"]
+    proposal = SourceInterpretation(version=source.version,
+        statements=[item.model_copy(deep=True) for item in source.statements], units_without_statement=[])
+    proposal.statements[1].quoted_text += tail
+    if defect == "antecedent":
+        proposal.statements[0].quoted_text = prefix + first
+    elif defect == "sibling":
+        proposal.statements[0].quoted_text = first + separator + second
+    elif defect == "still_missing":
+        proposal.statements[1].quoted_text = second
+    elif defect == "changed_meaning":
+        proposal.statements[1].eligibility_sequence = "current_or_unknown"
+    if defect:
+        with pytest.raises(ValueError):
+            apply_source_unit_quote_completion(batch, source, unit.structure_unit_id, proposal)
+    else:
+        revised = apply_source_unit_quote_completion(batch, source, unit.structure_unit_id, proposal)
+        assert source_unit_quotes_cover_source(unit, revised, [0, 1])
+        assert revised.statements[0] == source.statements[0]
+        assert revised.statements[1].model_dump(exclude={"quoted_text"}) == source.statements[1].model_dump(exclude={"quoted_text"})
+    assert source.model_dump(mode="json") == before
+
+
 @pytest.mark.parametrize("defect", [None, "literal_pipe", "missing_word", "repeated_member", "missing_members", "missing_spans", "not_table"])
 def test_source_capture_ignores_only_proven_table_display_separators(defect):
     from app.agents.protocol_control_source_interpretation import source_unit_quotes_cover_source
@@ -1118,6 +1167,39 @@ def test_source_capture_ignores_only_proven_table_display_separators(defect):
     elif defect == "not_table":
         unit.table_context = None
     assert source_unit_quotes_cover_source(unit, result.source_interpretation, [0, 1]) is (defect is None)
+
+
+@pytest.mark.parametrize("separator", ["。", "。\n"])
+def test_source_unit_completion_ranges_do_not_invite_swallowing_a_later_antecedent(separator):
+    from app.agents.protocol_control_source_interpretation import (
+        apply_source_unit_quote_completion, source_unit_quote_completion_prompt,
+    )
+    batch, result = _same_unit_two_requirement_review()
+    unit, source = batch.owned_units[0], result.source_interpretation
+    first, missing, prefix, second, tail = "登记筛选检查", "补充检查记录。", "完成资格核对后，", "记录后续安排", "，见附表。"
+    unit.excerpt = first + separator + missing + prefix + second + tail
+    for statement, quote in zip(source.statements, [first, second], strict=True):
+        statement.quoted_text = quote
+        statement.time_words = []
+        statement.eligibility_sequence = "current_or_unknown"
+        statement.eligibility_sequence_quote = None
+    source.statements[1].eligibility_sequence = "after_eligibility_decision"
+    source.statements[1].eligibility_sequence_quote = prefix
+    material = json.loads(source_unit_quote_completion_prompt(batch, source, unit.structure_unit_id).split("\n", 1)[1])
+    assert material["allowed_quote_ranges"][0]["maximum_contiguous_excerpt"] == first + separator + missing
+    assert material["allowed_quote_ranges"][1]["start_offset"] == len(first + separator + missing + prefix)
+    valid = type(source)(version=source.version,
+                         statements=[item.model_copy(deep=True) for item in source.statements],
+                         units_without_statement=[])
+    valid.statements[0].quoted_text += separator + missing
+    valid.statements[1].quoted_text += tail
+    completed = apply_source_unit_quote_completion(batch, source, unit.structure_unit_id, valid)
+    assert completed.statements == valid.statements
+    assert completed.units_without_statement == source.units_without_statement
+    invalid = valid.model_copy(deep=True)
+    invalid.statements[0].quoted_text += prefix
+    with pytest.raises(ValueError):
+        apply_source_unit_quote_completion(batch, source, unit.structure_unit_id, invalid)
 
 
 @pytest.mark.parametrize("defect", [None, "missing_word", "wrong_boundary", "not_after", "late_boundary"])
@@ -1311,6 +1393,89 @@ def test_completed_source_quote_requires_full_fresh_review_or_unresolved(decisio
             validate_completed_quote_review(result.source_interpretation, result.source_target_review, history)
     else:
         validate_completed_quote_review(result.source_interpretation, result.source_target_review, history)
+
+
+@pytest.mark.parametrize("defect", [None, "missing_review", "abbreviated", "foreign_index", "foreign_unit", "unparsed_history"])
+def test_completed_source_quote_schedules_the_same_scope_at_production_and_save(defect):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
+    from app.agents.protocol_control_source_interpretation import (
+        SourceTargetReview, completed_quote_review_indexes, target_review_indexes,
+        build_source_target_review_prompt, validate_source_target_review,
+    )
+
+    batch, fixture = _procedure_correspondence_review(single=True)
+    unit, source, wire = batch.owned_units[0], fixture.source_interpretation, fixture.partial_wire
+    prefix, original, tail = "资格核对完成后，", "登记后续访视安排", "，见附表。"
+    unit.excerpt = prefix + original + tail
+    statement = source.statements[0]
+    statement.quoted_text = original + tail
+    statement.time_words = []
+    statement.eligibility_sequence = "after_eligibility_decision"
+    statement.eligibility_sequence_quote = prefix
+    wire.dispositions[0].disposition = StructureUnitDispositionKind.POST_TREATMENT_EXECUTION
+    wire.dispositions[0].linked_procedure_catalog_item_id = None
+    coverage = protocol_control_execution_module.source_statement_coverage(batch, source, wire)
+    raw = source.model_dump_json()
+    history = [{"attempt": 1, "session_id": "synthetic-source-completion",
+        "raw_output_sha256": hashlib.sha256(raw.encode()).hexdigest(), "raw_output_text": raw,
+        "outcome": "parsed", "error_detail": {"workflow_phase": "source_unit_quote_completion",
+            "code": "SOURCE_UNIT_QUOTE_COMPLETION", "statement_id": 0,
+            "structure_unit_id": unit.structure_unit_id, "source_refs": list(unit.source_span_ids),
+            "json_path": "statements[0].quoted_text", "precondition_sha256": "a" * 64,
+            "expanded_statement_indexes": [0]}}]
+    if defect in {"foreign_index", "foreign_unit"}:
+        if defect == "foreign_index":
+            history[0]["error_detail"]["expanded_statement_indexes"] = [1]
+        else:
+            history[0]["error_detail"]["structure_unit_id"] = "foreign-unit"
+        with pytest.raises(ValueError):
+            completed_quote_review_indexes(source, history)
+        transport = _FakeTransport([])
+        with pytest.raises(ValueError):
+            ProtocolControlAgentRunner(max_schema_repairs=2).run(batch, transport,
+                resume_source_interpretation=source, resume_source_scope_question_history=history)
+        assert transport.prompts == []
+        return
+    if defect == "unparsed_history":
+        history[0]["outcome"] = "transport_failed"
+        assert completed_quote_review_indexes(source, history) == set()
+        assert target_review_indexes(source, coverage, batch) == []
+        return
+    indexes = completed_quote_review_indexes(source, history)
+    assert target_review_indexes(source, coverage, batch) == []
+    assert target_review_indexes(source, coverage, batch, completed_quote_indexes=indexes) == [0]
+    item = fixture.source_target_review.items[0].model_copy(update={
+        "decision": "not_current_control", "source_action_excerpt": original if defect == "abbreviated" else statement.quoted_text,
+        "non_control_basis_excerpt": prefix, "target_id": None, "target_action_excerpt": None,
+        "unresolved_aspects": [], "unresolved_cause": None,
+    })
+    review = SourceTargetReview(version=fixture.source_target_review.version,
+                              items=[] if defect == "missing_review" else [item])
+    prompt = build_source_target_review_prompt(batch, source, coverage, completed_quote_indexes=indexes)
+    assert statement.quoted_text in prompt and "completed_source_requires_full_excerpt" in prompt
+    if defect:
+        with pytest.raises(ValueError):
+            validate_source_target_review(batch, source, coverage, review, completed_quote_indexes=indexes)
+        return
+
+    class Transport(_FakeTransport):
+        review_calls = 0
+
+        def start_source_target_review(self, *, prompt):
+            self.review_calls += 1
+            assert statement.quoted_text in prompt and "completed_source_requires_full_excerpt" in prompt
+            return ProtocolControlAgentResponse(session_id="fresh-completed-range-review", text=review.model_dump_json())
+
+    transport = Transport([ProtocolControlAgentResponse(session_id="source-author", text=wire.model_dump_json())])
+    result = ProtocolControlAgentRunner(max_schema_repairs=2).run(batch, transport,
+        resume_source_interpretation=source, resume_source_scope_question_history=history,
+        output_validator=lambda output: protocol_control_execution_module._validate_deep_batch_output(batch, output))
+    assert transport.review_calls == 1 and result.status == "已解析"
+    assert result.source_scope_question_history == history
+    protocol_control_execution_module._validate_saved_source_review(batch, result)
+    result.source_target_review = None
+    with pytest.raises(ValueError, match="新增原文范围"):
+        protocol_control_execution_module._validate_saved_source_review(batch, result)
 
 
 @pytest.mark.parametrize("transport_failure", [True, False])
@@ -3315,7 +3480,8 @@ def test_actual_deep_gate_keeps_numeric_hard_stop_beside_structural_scope(monkey
     assert len(result.attempts[0].error_detail["findings"]) == 2
 
 
-def test_cross_chapter_source_pair_requires_independent_target_result(monkeypatch) -> None:
+@pytest.mark.parametrize("completed_scope", [False, True])
+def test_cross_chapter_source_pair_requires_independent_target_result(monkeypatch, completed_scope) -> None:
     action = "每次给药10 mg，每日1次"
     source_unit = SimpleNamespace(structure_unit_id="su-a", source_span_ids=["span:a"])
     target_unit = SimpleNamespace(structure_unit_id="su-b", source_span_ids=["span:b"])
@@ -3326,8 +3492,9 @@ def test_cross_chapter_source_pair_requires_independent_target_result(monkeypatc
     plan = SimpleNamespace(batches=[source_batch, target_batch])
     monkeypatch.setattr(protocol_control_execution_module.ProtocolControlDiscoveryToDeepPlan,
                         "model_validate", staticmethod(lambda _: plan))
+    scopes = []
     monkeypatch.setattr(protocol_control_execution_module, "validate_source_target_review",
-                        lambda *_: None)
+                        lambda *_, **kwargs: scopes.append(kwargs.get("completed_quote_indexes", set())))
     monkeypatch.setattr(protocol_control_execution_module, "_validate_saved_source_review",
                         lambda *_: None)
     statement = SimpleNamespace(structure_unit_id="su-a", quoted_text=action, force="required",
@@ -3346,7 +3513,16 @@ def test_cross_chapter_source_pair_requires_independent_target_result(monkeypatc
                                     source_target_review=SimpleNamespace(items=[relation]),
                                     source_interpretation=SimpleNamespace(statements=[statement]),
                                     source_statement_coverage=[],
+                                    source_scope_question_history=[],
                                     source_definition_consumers=None)
+    if completed_scope:
+        source_result.source_interpretation.statements.insert(0, SimpleNamespace(
+            structure_unit_id="su-a", quoted_text="核对完成后登记后续安排", decision_functions=["action"]))
+        source_result.source_target_review.items.insert(0, SimpleNamespace(
+            decision="not_current_control", statement_index=0))
+        relation.statement_index = 1
+        source_result.source_scope_question_history = [{"outcome": "parsed", "error_detail": {
+            "workflow_phase": "source_unit_quote_completion", "expanded_statement_indexes": [0]}}]
     candidate = SimpleNamespace(control_candidate_id="candidate-b", frozen_structure_unit_ids=["su-b"],
                                 semantics=SimpleNamespace(
                                     applicability_expression=None, trigger_expression=None,
@@ -3391,6 +3567,7 @@ def test_cross_chapter_source_pair_requires_independent_target_result(monkeypatc
         context, config, closure,
     )
     assert len(proofs) == 1
+    assert scopes == [{0} if completed_scope else set()]
     assert proofs[0].target_candidate_id == "candidate-b"
     assert definition_consumers == []
     target_result.status = "待跨章核验"

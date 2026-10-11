@@ -360,6 +360,34 @@ def source_unit_quotes_cover_source(unit, interpretation: SourceInterpretation, 
     )
 
 
+def _source_unit_completion_ranges(unit, interpretation: SourceInterpretation, indexes):
+    ranges = {index: locate_source_quote_offsets(unit.excerpt, interpretation.statements[index].quoted_text)
+              for index in indexes}
+    if any(bounds is None for bounds in ranges.values()):
+        raise ValueError("原摘录无法唯一定位，不生成补读范围")
+    ordered = sorted(ranges, key=lambda index: ranges[index])
+    if any(ranges[left][1] > ranges[right][0] for left, right in zip(ordered, ordered[1:])):
+        raise ValueError("原摘录存在交叠，不生成补读范围")
+    antecedents = {}
+    for index in indexes:
+        statement = interpretation.statements[index]
+        if statement.eligibility_sequence == "after_eligibility_decision" and statement.eligibility_sequence_context is None:
+            bounds = locate_source_quote_offsets(unit.excerpt, statement.eligibility_sequence_quote or "")
+            if bounds is None or bounds[1] > ranges[index][0]:
+                raise ValueError("原先后依据无法定位于动作之前，不生成补读范围")
+            antecedents[index] = bounds
+    windows = {}
+    for position, index in enumerate(ordered):
+        lower = ranges[ordered[position - 1]][1] if position else 0
+        upper = ranges[ordered[position + 1]][0] if position + 1 < len(ordered) else len(unit.excerpt)
+        upper = min([upper, *(bounds[0] for other, bounds in antecedents.items()
+                             if other != index and ranges[index][1] <= bounds[0] < upper)])
+        if index in antecedents:
+            lower = max(lower, antecedents[index][1])
+        windows[index] = (lower, upper)
+    return windows
+
+
 def source_unit_quote_completion_prompt(
     batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation, unit_id: str,
 ) -> str:
@@ -368,11 +396,16 @@ def source_unit_quote_completion_prompt(
                if statement.structure_unit_id == unit_id]
     if not indexes or source_unit_quotes_cover_source(unit, interpretation, indexes):
         raise ValueError("来源单元没有需要补读的摘录范围")
+    windows = _source_unit_completion_ranges(unit, interpretation, indexes)
     return (
         "你是内置方案Agent的局部原文补读步骤，不生成规则、不判受试者，也不消除原有疑问。"
         "下方只有一个授权来源单元的摘录未覆盖全部正文。核实缺失文字是否是原陈述的连续尾部或前部，"
         "仅可扩展对应quoted_text，逐字保留原摘录；不得缩短、换句、拼接、改变其他任何字段或陈述顺序。"
         "原有unresolved全部保留；范围、时间、用途、例外及兄弟原样返回。"
+        "allowed_quote_ranges是宿主按原件位置给出的连续扩展上界，不是要求全部填满。"
+        "每条quoted_text不得越过自己的上界，不得吞并兄弟摘录；"
+        "已单列的eligibility_sequence_quote保持在动作之前，不能重复并入quoted_text。"
+        "末尾遗漏只能由实际相邻且范围允许的陈述补齐，不能把整个单元塞进第一条。"
         "包含上位条件、列表连接或例外的文字不得跳过；补齐后其含义还须由后续作者和核对步骤重审。"
         "如果缺失文字是另一条独立要求而非现有陈述的连续部分，本步骤不能新增或改写语义，"
         "返回原陈述，系统将保存不完整来源并要求另行有界处理，不为了覆盖而吞并。"
@@ -383,6 +416,10 @@ def source_unit_quote_completion_prompt(
                       "statement_indexes": indexes,
                       "statements": [interpretation.statements[index].model_dump(mode="json")
                                      for index in indexes],
+                      "allowed_quote_ranges": [{"statement_index": index,
+                          "start_offset": windows[index][0], "end_offset_exclusive": windows[index][1],
+                          "maximum_contiguous_excerpt": unit.excerpt[windows[index][0]:windows[index][1]]}
+                          for index in indexes],
                       "version": interpretation.version}, ensure_ascii=False)
     )
 
@@ -398,13 +435,15 @@ def apply_source_unit_quote_completion(
             or len(proposal.statements) != len(indexes)):
         raise ValueError("局部来源补读必须保留指定单元的全部陈述及顺序")
     result = interpretation.model_copy(deep=True)
+    windows = _source_unit_completion_ranges(unit, interpretation, indexes)
     for index, revised in zip(indexes, proposal.statements, strict=True):
         original = interpretation.statements[index]
         old = locate_source_quote_offsets(unit.excerpt, original.quoted_text)
         new = locate_source_quote_offsets(unit.excerpt, revised.quoted_text)
         if (original.model_dump(mode="json", exclude={"quoted_text"})
                 != revised.model_dump(mode="json", exclude={"quoted_text"})
-                or old is None or new is None or not (new[0] <= old[0] < old[1] <= new[1])):
+                or old is None or new is None or not (new[0] <= old[0] < old[1] <= new[1])
+                or not (windows[index][0] <= new[0] < new[1] <= windows[index][1])):
             raise ValueError("局部补读只能逐字扩展原摘录，不能改变已保存语义或疑问")
         result.statements[index] = revised.model_copy(deep=True)
     validate_source_interpretation(batch, result)
@@ -1300,8 +1339,8 @@ class SourceTargetReview(ContractModel):
     items: list[SourceTargetReviewItem]
 
 
-def validate_completed_quote_review(interpretation, review, history) -> None:
-    """An expanded capture needs a fresh full-excerpt review or an explicit unresolved item."""
+def completed_quote_review_indexes(interpretation, history) -> set[int]:
+    """Derive the additional review scope from the actual source-completion ledger."""
     expanded = set()
     for record in history:
         detail = record.get("error_detail") or {}
@@ -1312,7 +1351,17 @@ def validate_completed_quote_review(interpretation, review, history) -> None:
                 or any(type(index) is not int or not 0 <= index < len(interpretation.statements) for index in indexes)
                 or len(set(indexes)) != len(indexes)):
             raise ValueError("补齐原文的核对范围记录损坏")
+        if ("structure_unit_id" in detail and any(
+                interpretation.statements[index].structure_unit_id != detail["structure_unit_id"]
+                for index in indexes)):
+            raise ValueError("补齐原文的核对范围不属于历史来源单元")
         expanded.update(indexes)
+    return expanded
+
+
+def validate_completed_quote_review(interpretation, review, history) -> None:
+    """An expanded capture needs a fresh full-excerpt review or an explicit unresolved item."""
+    expanded = completed_quote_review_indexes(interpretation, history)
     items = {item.statement_index: item for item in review.items} if review is not None else {}
     for index in expanded:
         item = items.get(index)
@@ -1784,7 +1833,12 @@ def target_review_indexes(
     interpretation: SourceInterpretation,
     coverage: list[SourceStatementCoverage],
     batch: ProtocolControlDispositionBatch | None = None,
+    *,
+    completed_quote_indexes: Sequence[int] = (),
 ) -> list[int]:
+    if any(type(index) is not int or not 0 <= index < len(interpretation.statements)
+           for index in completed_quote_indexes):
+        raise ValueError("补齐原文的核对范围记录损坏")
     for entry in coverage:
         if (entry.statement_index >= len(interpretation.statements)
                 or entry.structure_unit_id != interpretation.statements[entry.statement_index].structure_unit_id):
@@ -1798,7 +1852,8 @@ def target_review_indexes(
     return [
         entry.statement_index
         for entry in coverage
-        if (interpretation.statements[entry.statement_index].control_authority
+        if (entry.statement_index in completed_quote_indexes
+            or interpretation.statements[entry.statement_index].control_authority
             == "cited_external_rationale"
             or interpretation.statements[entry.statement_index].eligibility_sequence_context is not None
             or (entry.status != "expressed"
@@ -1927,8 +1982,10 @@ def build_source_target_review_prompt(
     comparison_target_id: str | None = None,
     include_owned_context: bool = False,
     wire=None,
+    completed_quote_indexes: Sequence[int] = (),
 ) -> str:
-    indexes = target_review_indexes(interpretation, coverage, batch)
+    indexes = target_review_indexes(interpretation, coverage, batch,
+                                   completed_quote_indexes=completed_quote_indexes)
     coverage_by_index = {entry.statement_index: entry for entry in coverage}
     source = [
         {
@@ -1938,6 +1995,8 @@ def build_source_target_review_prompt(
             "linked_official_code": coverage_by_index[index].linked_official_code,
             "linked_procedure_target_ids": coverage_by_index[index].linked_procedure_target_ids,
             "quoted_text": interpretation.statements[index].quoted_text,
+            **({"completed_source_requires_full_excerpt": True}
+               if index in completed_quote_indexes else {}),
             "force": interpretation.statements[index].force,
             "scope_quote": interpretation.statements[index].scope_quote,
             **({"scope_context_source": _cell_scope_label_packet(batch, next(
@@ -2025,6 +2084,9 @@ def build_source_target_review_prompt(
         )
     return owned_context + (
         "你是本系统方案 Agent 的逐项来源核对步骤。仅核下面列出的陈述，不生成新规则或判断受试者。"
+        "标有 completed_source_requires_full_excerpt 的条目刚补齐原文；"
+        "须核清补齐后全部条件、对象、例外和依赖，source_action_excerpt逐字保留整个quoted_text；"
+        "不能只核旧片段。尚不能核清时返回unresolved并说明具体疑问。"
         f"先后关系核对政策：{SOURCE_TARGET_SEQUENCE_REVIEW_VERSION}。"
         "每条只可选：已有官方入排完整覆盖、已有访视流程完整覆盖、尚有增量要求、"
         "只读单元可能复述同一要求（仅待跨章核验）、"
@@ -2276,8 +2338,11 @@ def validate_source_target_review(
     interpretation: SourceInterpretation,
     coverage: list[SourceStatementCoverage],
     review: SourceTargetReview,
+    *,
+    completed_quote_indexes: Sequence[int] = (),
 ) -> None:
-    expected = target_review_indexes(interpretation, coverage, batch)
+    expected = target_review_indexes(interpretation, coverage, batch,
+                                    completed_quote_indexes=completed_quote_indexes)
     if sorted(item.statement_index for item in review.items) != sorted(expected):
         raise SourceTargetReviewValidationError(
             "逐项来源核对必须且只能覆盖本次待核陈述",
@@ -2326,6 +2391,9 @@ def validate_source_target_review(
         )
         if not action or (action not in quoted and not same_sentence_subject_extension):
             reject(item, "SOURCE_ACTION_MISMATCH", "source_action_excerpt", f"第{item.statement_index}条动作摘录不属于冻结陈述")
+        if item.statement_index in completed_quote_indexes and item.decision != "unresolved" and action != quoted:
+            reject(item, "COMPLETED_SOURCE_ACTION_INCOMPLETE", "source_action_excerpt",
+                   "新增原文范围尚未被完整核对，不能采用其原有结论")
         if statement.decision_functions == ["unclassified"] and item.decision != "unresolved":
             reject(item, "SOURCE_FUNCTION_UNRESOLVED", "decision",
                    "原文对本节点审核的用途仍未核清，不能仅凭文字对应宣称已覆盖或无需审核")
@@ -2672,6 +2740,8 @@ def validated_source_review_seed(
     interpretation: SourceInterpretation,
     coverage: list[SourceStatementCoverage],
     review: SourceTargetReview,
+    *,
+    completed_quote_indexes: Sequence[int] = (),
 ) -> SourceTargetReview | None:
     """Retain individually current decisions for recovery, never final adoption.
 
@@ -2679,7 +2749,8 @@ def validated_source_review_seed(
     invalidate its scope; a semantically invalid item cannot discard a valid
     sibling. The full-review validator remains mandatory at final consumption.
     """
-    expected = set(target_review_indexes(interpretation, coverage, batch))
+    expected = set(target_review_indexes(interpretation, coverage, batch,
+                                       completed_quote_indexes=completed_quote_indexes))
     indexes = [item.statement_index for item in review.items]
     coverage_indexes = [entry.statement_index for entry in coverage]
     if (len(coverage_indexes) != len(set(coverage_indexes))
@@ -2696,6 +2767,7 @@ def validated_source_review_seed(
         try:
             validate_source_target_review(
                 batch, interpretation, [coverage_by_index[item.statement_index]], single,
+                completed_quote_indexes=completed_quote_indexes,
             )
         except SourceTargetReviewValidationError:
             continue

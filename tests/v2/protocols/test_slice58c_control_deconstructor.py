@@ -14961,10 +14961,22 @@ def _consent_policy_alignment_response(quote, prompt):
     }, ensure_ascii=False))
 
 
-def test_stage_bound_insert_uses_product_reader_and_keeps_original_candidate() -> None:
+@pytest.mark.parametrize("completed_scope", [False, True])
+def test_stage_bound_insert_uses_product_reader_and_keeps_original_candidate(completed_scope) -> None:
     batch, inventory, review, selection = _stage_bound_example()
     batch.owned_units[0].excerpt = "年龄至少18岁；" + batch.owned_units[0].excerpt
     original = _wire(candidate=_candidate()).model_dump_json()
+    history = []
+    if completed_scope:
+        review.source_action_excerpt = inventory.statements[0].quoted_text
+        raw = inventory.model_dump_json()
+        history = [{"attempt": 1, "session_id": "synthetic-completion",
+            "raw_output_sha256": hashlib.sha256(raw.encode()).hexdigest(), "raw_output_text": raw,
+            "outcome": "parsed", "error_detail": {"workflow_phase": "source_unit_quote_completion",
+                "code": "SOURCE_UNIT_QUOTE_COMPLETION", "statement_id": 0,
+                "structure_unit_id": batch.owned_units[0].structure_unit_id,
+                "source_refs": list(batch.owned_units[0].source_span_ids), "json_path": "statements[0].quoted_text",
+                "precondition_sha256": "a" * 64, "expanded_statement_indexes": [0]}}]
 
     class StageReaderTransport(_FakeTransport):
         def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
@@ -14987,13 +14999,15 @@ def test_stage_bound_insert_uses_product_reader_and_keeps_original_candidate() -
         batch,
         StageReaderTransport([ProtocolControlAgentResponse(session_id="wire-1", text=original)]),
         output_validator=lambda output: validated.append(output),
+        resume_source_interpretation=inventory if completed_scope else None,
+        resume_source_scope_question_history=history,
     )
     assert result.status == "已解析"
     assert result.final_output is not None
     assert len(result.final_output.candidates) == 2
     assert len(validated) == 2
     assert result.source_target_review is not None
-    assert result.source_target_review.items == []
+    assert result.source_target_review.items == ([review] if completed_scope else [])
     assert any(item.session_id == "stage-1" for item in result.attempts)
 
 

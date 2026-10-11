@@ -7,7 +7,7 @@
   "claims_complete": false,
   "current_state": {
     "updated": "2026-10-11",
-    "base_head": "8c1fee44",
+    "base_head": "05fb1545",
     "runtime_state": "active",
     "claims_complete": false,
     "latest_actual_job": "244296b31b9e4c459e0f162d64e7e427",
@@ -23,7 +23,23 @@
     "counts_are_live_not_terminal": false,
     "source_checkpoint": "490c682caafa4dd6834a1e510f02d75a",
     "unaccepted_partial_wire_checkpoint": "0309626663fc4d189f44e4732d9c7193",
-    "first_causal_error": "Deep45 rejection is correctly classified and independent46 ran; its saving consumer rejects SOURCE_SEQUENCE_CAPTURE_INCOMPLETE (uncaptured table reference). No clinical ambiguity/adoption is inferred.",
+    "first_causal_error": "Latest saved Job remains 244/8c1fee44. Local diagnostics corrected capture and missing expanded-range review selection; final restricted projection validates, without writes. Referenced table exists in frozen source but only its caption entered the request; adjacent Phase II heading with selected Phase III still needs actual scope/context verification, not a clinical-ambiguity relabel.",
+    "completed_range_review_package": {
+      "owner_disposition": "reviews/rv1006-completed-source-review-owner-disposition-20261011.md",
+      "new_job_or_saved_result": false,
+      "automatic_adoption": false,
+      "connected_window": {"passed": 134, "failed": 0, "deselected": 1623, "seconds": 5.65, "exit_code": 0, "full_suite": false, "junit": "artifacts/rv1006-completed-range-review-connected-20261011-v6.xml"},
+      "conference": {"route": "grok/grok-build/grok-4.7/high", "session_id": "9528fee9-c5e0-4628-8502-8522c6885b5b", "exit_codes": [0, 0], "fallback": false, "clinical_sources_read": false, "tests_run": false, "final_foreign_unit_and_short_compiler_owner_checked": true},
+      "diagnostics": [
+        {"private_dir": "rv1006-saved-capture-product-diagnostic-20261011-v1", "new_calls": 1, "seconds": 18.725251667, "exit_code": 3, "consumer_validated": false},
+        {"private_dir": "rv1006-completion-ranges-product-diagnostic-20261011-v1", "new_calls": 2, "seconds": 22.496059625, "exit_code": 3, "consumer_validated": false},
+        {"private_dir": "rv1006-completed-range-review-product-diagnostic-20261011-v1", "new_calls": 1, "seconds": 48.119789457996376, "exit_code": 0, "consumer_validated": true, "earlier_calls_preserved": 3, "actual_route": "ollama-cloud/deepseek-v4.1-flash/high", "max_tokens": 65536, "input_tokens": 17534, "output_tokens_including_unreported_reasoning": 14401, "total_tokens": 31935, "cache_tokens": 0, "cost": null, "logical_source_session_recovered": false, "history_identity": "actual retained response request ID, explicitly diagnostic only"}
+      ],
+      "all_diagnostics_database_write": false,
+      "all_diagnostics_full_database_hash_unchanged": true,
+      "full_case_joint_publication_ui_correction_or_q3": false,
+      "optional_flow_front_review_migrated": false
+    },
     "saved_capture_recovery_package": {
       "recovery_version": "saved-sequence-capture-local-recovery/v1",
       "global_validator_identity_changed": false,

@@ -164,6 +164,7 @@ from .protocol_control_source_interpretation import (
     build_source_quote_correction_prompt,
     build_source_scope_correction_prompt,
     build_source_target_review_prompt,
+    completed_quote_review_indexes,
     source_target_context_recheck_needed,
     source_target_cocited_units,
     build_source_unit_comparison_prompt,
@@ -7583,6 +7584,9 @@ class ProtocolControlAgentRunner:
                 retained = validated_source_review_seed(
                     batch, resume_source_interpretation, saved_coverage,
                     resume_source_target_review,
+                    completed_quote_indexes=completed_quote_review_indexes(
+                        resume_source_interpretation, resume_source_scope_question_history,
+                    ),
                 )
             except (SourceTargetReviewValidationError, SourceInterpretationValidationError):
                 resumed_review_items = {}
@@ -7946,6 +7950,8 @@ class ProtocolControlAgentRunner:
                         and (unit.table_context is None
                              or detail.get("native_guidance_version") == NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION)):
                     seen_questions.add(index)
+        if source_interpretation is not None:
+            completed_quote_review_indexes(source_interpretation, question_history)
         # Legacy records predate the explicit dispatch flag and count conservatively.
         source_repairs = sum((item.get("error_detail") or {}).get("called", True) is not False
                              for item in question_history)
@@ -9148,8 +9154,20 @@ class ProtocolControlAgentRunner:
                         *(target.catalog_item_id for target in batch.known_procedure_targets),
                         *(unit.structure_unit_id for unit in batch.context_units),
                     ])
+                # Source-completion reviews share one scope across planning, repair and validation.
+                completed_indexes = (completed_quote_review_indexes(source_interpretation,
+                    [*question_history, *[attempt.model_dump(mode="json") for attempt in attempts]])
+                    if source_interpretation is not None else set())
+                select_target_review = partial(target_review_indexes,
+                    completed_quote_indexes=completed_indexes)
+                build_target_review_prompt = partial(build_source_target_review_prompt,
+                    completed_quote_indexes=completed_indexes)
+                validate_target_review = partial(validate_source_target_review,
+                    completed_quote_indexes=completed_indexes)
+                source_review_seed = partial(validated_source_review_seed,
+                    completed_quote_indexes=completed_indexes)
                 review_indexes = (
-                    target_review_indexes(source_interpretation, coverage, batch)
+                    select_target_review(source_interpretation, coverage, batch)
                     if source_interpretation is not None else []
                 )
                 if source_interpretation is not None and review_indexes:
@@ -9174,7 +9192,7 @@ class ProtocolControlAgentRunner:
                         if proposed is None:
                             return None
                         try:
-                            return validated_source_review_seed(
+                            return source_review_seed(
                                 batch, source_interpretation, coverage, proposed,
                             )
                         except (SourceTargetReviewValidationError, ValueError, KeyError, TypeError):
@@ -9240,18 +9258,14 @@ class ProtocolControlAgentRunner:
                             if entry.statement_index not in reusable_indexes
                         ]
                         pending_items = []
-                        if target_review_indexes(source_interpretation, pending_coverage, batch):
+                        if select_target_review(source_interpretation, pending_coverage, batch):
                             if not callable(reviewer):
                                 review_unavailable = True
                                 raise RuntimeError("逐项来源核对服务不可用，不能跳过未闭合陈述")
-                            review_prompt = build_source_target_review_prompt(
+                            review_prompt = build_target_review_prompt(
                                 batch, source_interpretation, pending_coverage, wire=wire,
                             )
-                            expanded = sorted({index for record in [*question_history, *[
-                                attempt.model_dump(mode="json") for attempt in attempts]]
-                                if record.get("outcome") == "parsed"
-                                and (record.get("error_detail") or {}).get("workflow_phase") == "source_unit_quote_completion"
-                                for index in record["error_detail"].get("expanded_statement_indexes", [])})
+                            expanded = sorted(completed_indexes)
                             if expanded:
                                 review_prompt += ("\n本次补齐原文的陈述索引=" + json.dumps(expanded)
                                     + "。这些条目的source_action_excerpt须逐字保留补齐后的整个quoted_text，"
@@ -9266,7 +9280,7 @@ class ProtocolControlAgentRunner:
                                 try:
                                     review_validation_snapshot = pending_review
                                     review_validation_kind = "assembled_pending_review"
-                                    validate_source_target_review(
+                                    validate_target_review(
                                         batch, source_interpretation, pending_coverage, pending_review,
                                     )
                                     break
@@ -9463,7 +9477,7 @@ class ProtocolControlAgentRunner:
                                                 == ["background"]
                                             )
                                             if background_confirmed:
-                                                validate_source_target_review(
+                                                validate_target_review(
                                                     batch, revised_source, [revised_entry],
                                                     SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION,
                                                                        items=[overclaimed]),
@@ -9584,7 +9598,7 @@ class ProtocolControlAgentRunner:
                                                 review_response = None
                                                 raise
                                     if corrected is None:
-                                        correction_prompt = build_source_target_review_prompt(
+                                        correction_prompt = build_target_review_prompt(
                                             batch, source_interpretation, invalid_entries,
                                             comparison_target_id=overclaimed.target_id if compare_one else None,
                                             wire=wire,
@@ -9634,7 +9648,7 @@ class ProtocolControlAgentRunner:
                                             raise ValueError("单条范围复核不得改引未提供的目标")
                                         review_validation_snapshot = corrected
                                         review_validation_kind = "rejected_local_correction"
-                                        validate_source_target_review(
+                                        validate_target_review(
                                             batch, source_interpretation, invalid_entries, corrected,
                                         )
                                         attempts.append(ProtocolControlAgentAttempt(
@@ -9693,11 +9707,11 @@ class ProtocolControlAgentRunner:
                                     # A classification proposal is not a target-review answer.
                                     local_phase = "SOURCE_TARGET_FOCUSED"
                                     local_response = None
-                                    local_response = reviewer(prompt=build_source_target_review_prompt(
+                                    local_response = reviewer(prompt=build_target_review_prompt(
                                         batch, source_interpretation, [revised_entry], wire=wire,
                                     ))
                                     corrected = SourceTargetReview.model_validate_json(local_response.text)
-                                    validate_source_target_review(
+                                    validate_target_review(
                                         batch, source_interpretation, [revised_entry], corrected,
                                     )
                                     pending_review = SourceTargetReview(
@@ -9760,7 +9774,7 @@ class ProtocolControlAgentRunner:
                                             or entry.status != "candidate_linked" or focused_reads >= 2):
                                         continue
                                     focused_reads += 1
-                                    focused_prompt = build_source_target_review_prompt(
+                                    focused_prompt = build_target_review_prompt(
                                         batch, source_interpretation, [entry], wire=wire,
                                     ) + (
                                         "\n只复核这一条。已有候选覆盖该来源单元的其他要求，不代表本条已覆盖；"
@@ -9778,7 +9792,7 @@ class ProtocolControlAgentRunner:
                                         focused_review = SourceTargetReview.model_validate_json(
                                             focused_response.text
                                         )
-                                        validate_source_target_review(
+                                        validate_target_review(
                                             batch, source_interpretation, [entry], focused_review,
                                         )
                                     except Exception as focused_error:  # noqa: BLE001 - preserve failed read
@@ -9864,7 +9878,7 @@ class ProtocolControlAgentRunner:
                                         outcome="parsed",
                                         issues=["已按单条来源复核，仍须经整批原门禁核对"],
                                     ))
-                                validate_source_target_review(
+                                validate_target_review(
                                     batch, source_interpretation, pending_coverage, pending_review,
                                 )
                             pending_items = pending_review.items
@@ -9874,7 +9888,7 @@ class ProtocolControlAgentRunner:
                         )
                         review_validation_snapshot = target_review
                         review_validation_kind = "assembled_complete_review"
-                        validate_source_target_review(
+                        validate_target_review(
                             batch, source_interpretation, coverage, target_review,
                         )
                         # A split point must not lose the owned paragraph's exception.
@@ -9895,7 +9909,7 @@ class ProtocolControlAgentRunner:
                             context_reads += 1
                             entry = next(entry for entry in coverage
                                          if entry.statement_index == item.statement_index)
-                            context_prompt = build_source_target_review_prompt(
+                            context_prompt = build_target_review_prompt(
                                 batch, source_interpretation, [entry],
                                 comparison_target_id=item.target_id, include_owned_context=True, wire=wire,
                             )
@@ -9910,14 +9924,14 @@ class ProtocolControlAgentRunner:
                             try:
                                 review_response = reviewer(prompt=context_prompt)
                                 corrected = SourceTargetReview.model_validate_json(review_response.text)
-                                validate_source_target_review(
+                                validate_target_review(
                                     batch, source_interpretation, [entry], corrected,
                                 )
                                 proposed_review = target_review.model_copy(update={"items": [
                                     corrected.items[0] if old.statement_index == item.statement_index
                                     else old for old in target_review.items
                                 ]})
-                                validate_source_target_review(
+                                validate_target_review(
                                     batch, source_interpretation, coverage, proposed_review,
                                 )
                             except Exception as context_error:
@@ -9992,7 +10006,7 @@ class ProtocolControlAgentRunner:
                                         items=[proposed.items[0] if item.statement_index == contextual_unresolved.statement_index
                                                else item for item in target_review.items],
                                     )
-                                    validate_source_target_review(batch, source_interpretation, coverage, revised)
+                                    validate_target_review(batch, source_interpretation, coverage, revised)
                                     target_review = revised
                                     repaired_review_indexes.add(contextual_unresolved.statement_index)
                                 comparison_detail["pending_correspondence_verified"] = proposed is not None
@@ -10194,9 +10208,10 @@ class ProtocolControlAgentRunner:
                                         remaining = SourceTargetReview(
                                             version=SOURCE_TARGET_REVIEW_VERSION,
                                             items=[entry for entry in target_review.items
-                                                   if entry.statement_index not in inserted_indexes],
+                                                   if entry.statement_index not in inserted_indexes
+                                                   or entry.statement_index in completed_indexes],
                                         )
-                                        validate_source_target_review(
+                                        validate_target_review(
                                             batch, source_interpretation, next_coverage, remaining,
                                         )
                                         wire, output, coverage = next_wire, next_output, next_coverage
