@@ -797,6 +797,129 @@ def test_whole_procedure_restriction_preserves_covered_sibling_reason():
     assert output.candidates == [] and sibling.independent_scope_proof is None
 
 
+def _nonexecuting_scope_review(*, sibling=False):
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _table_sequence_material
+
+    batch, interpretation, wire, coverage, review = _table_sequence_material()
+    _, result = _procedure_correspondence_review(single=True)
+    review.items[0] = review.items[0].model_copy(update={
+        "decision": "unresolved", "non_control_basis_excerpt": None,
+        "non_control_sequence_context": None, "unresolved_cause": "source_ambiguity",
+        "unresolved_aspects": ["本条操作是否为当前资格前提仍有分歧"],
+    })
+    if sibling:
+        quote = "轮换处理区域"
+        unit = batch.owned_units[0]
+        unit.excerpt += "；" + quote
+        unit.member_texts = [unit.excerpt]
+        interpretation.statements.append(interpretation.statements[0].model_copy(
+            update={"quoted_text": quote}, deep=True,
+        ))
+        witness = interpretation.statements[1].eligibility_sequence_context
+        review.items.append(review.items[0].model_copy(update={
+            "statement_index": 1, "decision": "not_current_control",
+            "source_action_excerpt": quote,
+            "non_control_basis_excerpt": interpretation.statements[1].eligibility_sequence_quote,
+            "non_control_sequence_context": witness, "unresolved_cause": None,
+            "unresolved_aspects": [],
+        }))
+        coverage = protocol_control_execution_module.source_statement_coverage(batch, interpretation, wire)
+    result.source_interpretation = interpretation
+    result.partial_wire = wire
+    result.source_statement_coverage = coverage
+    result.source_target_review = review
+    result.source_candidate_alignment = None
+    result.source_scope_question_history = []
+    return batch, result
+
+
+@pytest.mark.parametrize("sibling", [False, True])
+def test_reviewed_nonexecuting_source_retains_disagreement_without_adopting_author_label(sibling):
+    from app.services.eligibility_review_projection import _restricted_control_projections
+    from tests.v2.domain.test_control_catalog_restricted_contract import _catalog, _publication
+
+    batch, result = _nonexecuting_scope_review(sibling=sibling)
+    frozen = result.model_dump(mode="json")
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert output is not None and output.candidates == []
+    assert output.dispositions[0].disposition == StructureUnitDispositionKind.RESTRICTED_SOURCE
+    assert len(output.restricted_statements) == (2 if sibling else 1)
+    assert all(item.independent_scope_proof is None for item in output.restricted_statements)
+    assert result.model_dump(mode="json") == frozen
+    readback = type(output).model_validate(output.model_dump(mode="json"))
+    protocol_control_execution_module._validate_deep_batch_output(batch, readback)
+    projected = _restricted_control_projections(_publication(_catalog(
+        restricted=tuple(readback.restricted_statements), allowed=tuple(batch.owned_source_span_ids),
+    )))
+    assert all(item.obligations[0].fact_refs == () for item in projected)
+    if sibling:
+        confirmed = next(item for item in readback.restricted_statements if item.source_statement_index == 1)
+        assert "已核为入排资格判定后的执行内容" in confirmed.unresolved_dimensions[0]
+        assert result.source_target_review.items[1].decision == "not_current_control"
+
+
+@pytest.mark.parametrize("defect", ["unread_prefix", "transport", "bad_witness", "wrong_sequence", "bad_candidate"])
+def test_reviewed_nonexecuting_source_does_not_relax_source_or_executable_boundaries(defect):
+    batch, result = _nonexecuting_scope_review(sibling=True)
+    if defect == "unread_prefix":
+        batch.owned_units[0].excerpt = "仅适用于另一人群：" + batch.owned_units[0].excerpt
+        batch.owned_units[0].member_texts = [batch.owned_units[0].excerpt]
+    elif defect == "transport":
+        result.attempts[-1].outcome = "transport_failed"
+    elif defect == "bad_witness":
+        result.source_target_review.items[1].non_control_basis_excerpt = "无源的先后判断"
+    elif defect == "wrong_sequence":
+        result.source_interpretation.statements[1].eligibility_sequence = "current_or_unknown"
+        result.source_interpretation.statements[1].eligibility_sequence_quote = None
+        result.source_interpretation.statements[1].eligibility_sequence_context = None
+    else:
+        result.partial_wire.candidate_drafts = [_candidate()]
+    try:
+        output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    except ValueError:
+        output = None
+    assert output is None
+
+
+@pytest.mark.parametrize("kind", [StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+                                  StructureUnitDispositionKind.POST_TREATMENT_EXECUTION,
+                                  StructureUnitDispositionKind.NON_ENROLLMENT_EXECUTION])
+def test_typed_temporal_source_keeps_nonexecuting_dispositions_restricted(kind):
+    batch, result = _procedure_correspondence_review()
+    quotes = ["拟参加者须持续接受治疗7天", "建议每日固定时段用药"]
+    batch.owned_units[0].excerpt = "；".join(quotes)
+    result.partial_wire.dispositions[0].disposition = kind
+    result.partial_wire.dispositions[0].linked_procedure_catalog_item_id = None
+    for index, quote in enumerate(quotes):
+        source = result.source_interpretation.statements[index]
+        source.quoted_text = quote
+        source.time_words = ["7天"] if index == 0 else []
+        source.force = "required" if index == 0 else "recommended"
+        result.source_target_review.items[index] = result.source_target_review.items[index].model_copy(update={
+            "decision": "additional_requirement", "target_id": None,
+            "target_action_excerpt": None, "source_action_excerpt": quote,
+            "unresolved_cause": None, "unresolved_aspects": ["本条尚未装配"],
+        })
+    result.attempts[-1].error_classes = ["TEMPORAL_SCOPE_UNRESOLVED"]
+    result.attempts[-1].error_detail = dict(code="TEMPORAL_SCOPE_UNRESOLVED", statement_ids=[0],
+        affected_dependents=[0], json_path="/items", retry_class="temporal_scope_review",
+        source_refs=sorted(batch.owned_units[0].source_span_ids))
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire,
+    )
+    frozen = result.model_dump(mode="json")
+    if kind != StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT:
+        with pytest.raises(SourceTargetReviewValidationError, match="只能覆盖本次待核陈述"):
+            protocol_control_execution_module.restricted_batch_from_review(batch, result)
+        return
+    output = protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert output is not None and output.candidates == []
+    assert len(output.restricted_statements) == 2
+    assert all(item.limitation_kind == "consumer_unavailable" for item in output.restricted_statements)
+    assert result.model_dump(mode="json") == frozen
+    protocol_control_execution_module._validate_deep_batch_output(batch, output)
+
+
 @pytest.mark.parametrize("only_additional", [False, True])
 def test_whole_unresolved_procedure_retains_additional_point_without_claiming_it_executable(only_additional):
     batch, result = _procedure_correspondence_review()
@@ -966,6 +1089,35 @@ def test_source_unit_quote_completion_preserves_meaning_and_requires_full_captur
         for original, updated in zip(result.source_interpretation.statements, revised.statements, strict=True):
             assert original.model_dump(exclude={"quoted_text"}) == updated.model_dump(exclude={"quoted_text"})
     assert result.source_interpretation.model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("defect", [None, "literal_pipe", "missing_word", "repeated_member", "missing_members", "missing_spans", "not_table"])
+def test_source_capture_ignores_only_proven_table_display_separators(defect):
+    from app.agents.protocol_control_source_interpretation import source_unit_quotes_cover_source
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _table_sequence_material
+
+    batch, result = _same_unit_two_requirement_review()
+    table_batch, _, _, _, _ = _table_sequence_material()
+    unit = batch.owned_units[0]
+    texts = [statement.quoted_text for statement in result.source_interpretation.statements]
+    if defect == "literal_pipe":
+        texts[0] += " | 仍须核实"
+    if defect == "missing_word":
+        texts[1] += "，只有满足前置条件才可继续"
+    if defect == "repeated_member":
+        texts[1] = texts[0]
+    unit.excerpt = " | ".join(texts)
+    unit.table_context = table_batch.owned_units[0].table_context
+    unit.member_source_refs = ["cell0", "cell1"]
+    unit.member_texts = texts
+    unit.member_source_span_ids = [list(unit.source_span_ids), list(unit.source_span_ids)]
+    if defect == "missing_members":
+        unit.member_texts = None
+    elif defect == "missing_spans":
+        unit.member_source_span_ids = None
+    elif defect == "not_table":
+        unit.table_context = None
+    assert source_unit_quotes_cover_source(unit, result.source_interpretation, [0, 1]) is (defect is None)
 
 
 @pytest.mark.parametrize("invalid", [False, True])
@@ -1143,16 +1295,25 @@ def test_unit_completion_failure_survives_real_job_checkpoint_without_upstream_r
     assert transport.calls == 2 and blocked.attempts[-1].error_detail["called"] is False
 
 
-@pytest.mark.parametrize("defect", [None, "dependent_additional", "bad_range", "boolean_range", "wrong_refs", "bad_numeric", "foreign_route"])
+@pytest.mark.parametrize("defect", [None, "dependent_additional", "temporal", "temporal_wrong_dependents", "bad_range", "boolean_range", "wrong_refs", "bad_numeric", "foreign_route"])
 def test_saved_source_gap_preflight_preserves_source_but_discards_semantic_draft(monkeypatch, defect):
     module = protocol_control_execution_module
-    batch, result = (_procedure_correspondence_review() if defect == "dependent_additional"
+    temporal = defect in {"temporal", "temporal_wrong_dependents"}
+    batch, result = (_independent_candidate_and_temporal_gap() if temporal
+                     else _procedure_correspondence_review() if defect == "dependent_additional"
                      else _same_unit_two_requirement_review())
-    batch.owned_units[0].excerpt += "，只有后续条件满足才可继续："
+    affected_unit = batch.owned_units[1 if temporal else 0]
+    affected_unit.excerpt += "，只有后续条件满足才可继续："
+    code = "TEMPORAL_SCOPE_UNRESOLVED" if temporal else "SOURCE_TARGET_REVIEW_UNRESOLVED"
     result.attempts[-1].outcome = "publication_invalid"
-    result.attempts[-1].error_classes = ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
-    result.attempts[-1].error_detail = dict(code="SOURCE_TARGET_REVIEW_UNRESOLVED",
-        statement_ids=[1], source_refs=list(batch.owned_units[0].source_span_ids), json_path="/items")
+    result.attempts[-1].error_classes = [code]
+    result.attempts[-1].error_detail = dict(code=code,
+        statement_ids=[1], source_refs=list(affected_unit.source_span_ids), json_path="/items")
+    if temporal:
+        result.attempts[-1].error_detail.update(retry_class="temporal_scope_review", affected_dependents=[1])
+        # Another unit's gap must not expand this typed local recovery. No old
+        # candidate/review survives the seed; subsequent full gates still apply.
+        batch.owned_units[0].excerpt += "，仅在另外的条件满足后执行"
     if defect == "dependent_additional":
         item = result.source_target_review.items[0]
         item.decision = "additional_requirement"
@@ -1178,6 +1339,8 @@ def test_saved_source_gap_preflight_preserves_source_but_discards_semantic_draft
         saved["partial_wire"]["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["predicate"]["value"] = 19
     elif defect == "foreign_route":
         payload["frozen_model_routes"] = {"deep": "0" * 64}
+    elif defect == "temporal_wrong_dependents":
+        saved["attempts"][-1]["error_detail"]["affected_dependents"] = [0]
     before = json.dumps(saved, sort_keys=True)
     class Store:
         def get_job(self, _):
@@ -1195,9 +1358,9 @@ def test_saved_source_gap_preflight_preserves_source_but_discards_semantic_draft
     else:
         recovered = module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
         assert recovered is not None
-        if defect in {None, "dependent_additional"}:
+        if defect in {None, "dependent_additional", "temporal"}:
             assert recovered[1]["partial_wire"] is None and recovered[2].review is None
-            assert recovered[2].source_seed_proof["source_unit_completion_ids"] == [batch.owned_units[0].structure_unit_id]
+            assert recovered[2].source_seed_proof["source_unit_completion_ids"] == [affected_unit.structure_unit_id]
             assert recovered[1]["source_interpretation"] == saved["source_interpretation"]
         else:
             assert recovered[2].source_seed_proof is None
@@ -6202,6 +6365,7 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
     ("whole_temporal_definition", None),
     ("citation", None), ("citation", "changed_proof"), ("citation", "restriction_error"),
     ("citation_aligned", None), ("citation_aligned", "changed_proof"),
+    ("nonexecuting", None), ("nonexecuting", "changed_proof"), ("nonexecuting", "restriction_error"),
     ("negative_alignment", None), ("negative_alignment", "changed_proof"),
     ("negative_alignment", "second_failure"),
     ("negative_alignment", "second_new_failure"),
@@ -6217,6 +6381,12 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
     declaration_text = None
     if kind == "negative_alignment":
         batch, result = _exhausted_negative_alignment_fixture()
+    elif kind == "nonexecuting":
+        batch, result = _nonexecuting_scope_review(sibling=True)
+        result.attempts[-1].error_detail = {
+            "code": "SOURCE_TARGET_REVIEW_UNRESOLVED", "statement_ids": [0],
+            "source_refs": list(batch.owned_source_span_ids), "json_path": "/items",
+        }
     elif kind == "whole_temporal_definition":
         batch, result = _restriction_case(kind)
         declaration_text = result.source_definition_consumers.model_dump_json()

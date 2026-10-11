@@ -66,6 +66,7 @@ from app.agents.protocol_control_discovery_transport import (
 from app.agents.protocol_control_source_interpretation import (
     SOURCE_COVERAGE_VALIDATION_VERSION,
     SOURCE_UNIT_QUOTE_COMPLETION_VERSION,
+    SOURCE_TABLE_MEMBER_COVERAGE_VERSION,
     SOURCE_ATTRIBUTION_VALIDATION_VERSION,
     TABLE_SEQUENCE_SOURCE_VERSION,
     SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
@@ -146,6 +147,7 @@ from app.services.protocol_control_restricted_source import (
     WHOLE_UNIT_RESTRICTION_VERSION,
     PROCEDURE_RESTRICTION_VALIDATION_VERSION,
     CITATION_CLOSURE_RESTRICTION_VALIDATION_VERSION,
+    NONEXECUTING_RESTRICTION_VALIDATION_VERSION,
     PROCEDURE_SOURCE_CONTEXT_VERSION,
     procedure_correspondence_source_gaps,
     procedure_correspondence_scope_indexes,
@@ -2098,6 +2100,7 @@ def _deep_component_identity(
                                        RESTRICTED_DEFINITION_VALIDATION_VERSION,
                                        SOURCE_COVERAGE_VALIDATION_VERSION,
                                        SOURCE_UNIT_QUOTE_COMPLETION_VERSION,
+                                       SOURCE_TABLE_MEMBER_COVERAGE_VERSION,
                                        SOURCE_ATTRIBUTION_VALIDATION_VERSION,
                                        TABLE_SEQUENCE_SOURCE_VERSION,
                                        SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
@@ -2107,6 +2110,7 @@ def _deep_component_identity(
                                        SOURCE_TARGET_COCITED_CONTEXT_VERSION,
                                        PROCEDURE_RESTRICTION_VALIDATION_VERSION,
                                        CITATION_CLOSURE_RESTRICTION_VALIDATION_VERSION,
+                                       NONEXECUTING_RESTRICTION_VALIDATION_VERSION,
                                        "source-target-additional-recovery/v1",
                                        "numeric-evaluation-field-patch/v1",
                                        "source-target-frozen-id-schema/v1",
@@ -2940,12 +2944,13 @@ def _validated_deep_partial_source(
     )
     last_attempt = (saved.get("attempts") or [None])[-1]
     completion_detail = last_attempt.get("error_detail") if isinstance(last_attempt, Mapping) else None
+    completion_code = completion_detail.get("code") if isinstance(completion_detail, Mapping) else None
     if (not changed_components and not pending_source and obsolete_basis is None
             and repair_identity == protocol_control_agent_repair_contract_sha256()
             and isinstance(last_attempt, Mapping) and last_attempt.get("outcome") == "publication_invalid"
-            and last_attempt.get("error_classes") == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+            and completion_code in {"SOURCE_TARGET_REVIEW_UNRESOLVED", "TEMPORAL_SCOPE_UNRESOLVED"}
+            and last_attempt.get("error_classes") == [completion_code]
             and isinstance(completion_detail, Mapping)
-            and completion_detail.get("code") == "SOURCE_TARGET_REVIEW_UNRESOLVED"
             and completion_detail.get("json_path") == "/items"
             and isinstance(saved.get("partial_wire"), Mapping)):
         interpretation = SourceInterpretation.model_validate(source)
@@ -2957,10 +2962,15 @@ def _validated_deep_partial_source(
         witnessed = _resumable_saved_source_review(batch, interpretation, saved)
         review_items = {item.statement_index: item for item in witnessed.review.items} if witnessed.review else {}
         indexes = completion_detail.get("statement_ids")
+        temporal_indexes = (_temporal_restriction_indexes(
+            batch, _saved_failed_deep_run_result(batch, saved), whole_unit=True,
+        ) if completion_code == "TEMPORAL_SCOPE_UNRESOLVED" else None)
         completion_witnessed = (
             isinstance(indexes, list) and bool(indexes) and all(type(index) is int for index in indexes)
             and indexes == sorted(set(indexes)) and set(indexes) <= set(review_items)
-            and any(review_items[index].decision == "unresolved" for index in indexes)
+            and (any(review_items[index].decision == "unresolved" for index in indexes)
+                 if completion_code == "SOURCE_TARGET_REVIEW_UNRESOLVED"
+                 else temporal_indexes == set(indexes))
             and all(review_items[index].decision in {"unresolved", "additional_requirement"} for index in indexes)
             and {item.statement_index for item in review_items.values() if item.decision == "unresolved"} <= set(indexes)
             and completion_detail.get("source_refs") == sorted({
@@ -2970,8 +2980,8 @@ def _validated_deep_partial_source(
             })
         )
         gaps = tuple(unit.structure_unit_id for unit in batch.owned_units
-                     if any(item.structure_unit_id == unit.structure_unit_id
-                            for item in interpretation.statements)
+                     if completion_witnessed and unit.structure_unit_id in {
+                         interpretation.statements[index].structure_unit_id for index in indexes}
                      and not source_unit_quotes_cover_source(unit, interpretation, [
                          index for index, item in enumerate(interpretation.statements)
                          if item.structure_unit_id == unit.structure_unit_id

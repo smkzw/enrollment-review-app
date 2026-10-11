@@ -56,6 +56,7 @@ PROCEDURE_RESTRICTION_VALIDATION_VERSION = "procedure-source-restricted-retentio
 RESTRICTED_DEFINITION_VALIDATION_VERSION = "restricted-definition-registration-validation/v1"
 PROCEDURE_SOURCE_CONTEXT_VERSION = "procedure-source-context-completeness/v3"
 CITATION_CLOSURE_RESTRICTION_VALIDATION_VERSION = "source-citation-restricted-retention/v1"
+NONEXECUTING_RESTRICTION_VALIDATION_VERSION = "reviewed-nonexecuting-source-retention/v1"
 
 
 def _coverage_matches_current_proofs(batch, result) -> bool:
@@ -496,12 +497,28 @@ def _whole_unit_restriction(
     procedure_units = {unit_id for unit_id in restricted_units
                        if dispositions[unit_id].disposition
                        == StructureUnitDispositionKind.REQUIRED_PROCEDURE}
+    nonexecuting_kinds = {
+        StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+        StructureUnitDispositionKind.POST_TREATMENT_EXECUTION,
+        StructureUnitDispositionKind.NON_ENROLLMENT_EXECUTION,
+    }
+    nonexecuting_units = {unit_id for unit_id in restricted_units
+                         if dispositions[unit_id].disposition in nonexecuting_kinds}
+    # A valid, complete review may dispute an author's non-executing label.
+    # Retain the whole source, not that label or an unverified executable rule.
+    nonexecuting_spans = {span for unit_id in nonexecuting_units
+                         for span in units[unit_id].source_span_ids}
+    if any(set(candidate.frozen_structure_unit_ids) & nonexecuting_units
+           or set(candidate.source_span_ids) & nonexecuting_spans
+           for candidate in original.candidates):
+        return None
     source_unresolved_units = all(
         by_unit.get(unit_id) and all(index in uncertain_indexes
             and interpretation.statements[index].unresolved for index in by_unit[unit_id])
         for unit_id in restricted_units
     )
-    if (not procedure_units and not citation_expanded and not source_unresolved_units
+    if (not procedure_units and not nonexecuting_units
+            and not citation_expanded and not source_unresolved_units
             and not any(len(by_unit.get(unit_id, [])) > 1 for unit_id in restricted_units)):
         return None
     if any(unit_id not in by_unit for unit_id in restricted_units):
@@ -512,7 +529,7 @@ def _whole_unit_restriction(
             if dispositions[unit_id].disposition not in {
                 StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
                 StructureUnitDispositionKind.REQUIRED_PROCEDURE,
-            }:
+            } | nonexecuting_kinds:
                 return None
             # A valid target ID in an unresolved review is a comparison, not
             # coverage. Keep the whole procedure unit non-executable; do not
@@ -546,6 +563,12 @@ def _whole_unit_restriction(
                     return None
             elif item.decision == "additional_requirement":
                 if coverage[index].status not in {"expressed", "semantically_aligned"}:
+                    return None
+            elif item.decision == "not_current_control":
+                if (dispositions[unit_id].disposition not in {
+                        StructureUnitDispositionKind.POST_TREATMENT_EXECUTION,
+                        StructureUnitDispositionKind.NON_ENROLLMENT_EXECUTION,
+                    } or statement.eligibility_sequence != "after_eligibility_decision"):
                     return None
             elif item.decision not in {
                 "covered_by_official", "covered_by_procedure", "definition_dependency",
@@ -595,6 +618,8 @@ def _whole_unit_restriction(
                      if temporal_only else
                      "本条另有要求尚未完成装配，且未证明与同单元未决要求独立；完整来源保留但暂不能用于判断"
                      if index in reviewed and reviewed[index].decision == "additional_requirement" else
+                     "本条已核为入排资格判定后的执行内容；与同单元待核内容一并保留，不作为当前入排条件"
+                     if index in reviewed and reviewed[index].decision == "not_current_control" else
                      "系统尚未证明本条与具体操作或访视的对应关系；本单元整体暂不能用于判断"
                      if correspondence_only and reviewed[index].decision == "unresolved" else
                      "本条对应关系已有核对，但尚未证明它与同单元未决要求独立；本单元整体暂不能用于判断"

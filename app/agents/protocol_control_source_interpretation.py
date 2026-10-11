@@ -41,6 +41,7 @@ SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v22"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
 SOURCE_COVERAGE_VALIDATION_VERSION = "source-owned-inventory-validation/v1"
 SOURCE_UNIT_QUOTE_COMPLETION_VERSION = "source-unit-quote-completion/v1"
+SOURCE_TABLE_MEMBER_COVERAGE_VERSION = "source-table-member-display-coverage/v1"
 SOURCE_TARGET_REVIEW_VALIDATION_VERSION = "source-native-procedure-row-validation/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
@@ -325,6 +326,20 @@ def source_unit_quotes_cover_source(unit, interpretation: SourceInterpretation, 
         if any(start < bounds[1] and bounds[0] < end for start, end in ranges):
             return False
         extra.append(bounds)
+    # Only separators reconstructed from frozen table members are display
+    # characters. A literal pipe inside a cell remains source content.
+    if (unit.table_context is not None and unit.member_texts is not None
+            and unit.member_source_span_ids is not None):
+        members = [locate_source_quote_offsets(unit.excerpt, text)
+                   for text in unit.member_texts if text.strip()]
+        if members and all(bounds is not None for bounds in members):
+            members = sorted(members)
+            if unit.excerpt == " | ".join(unit.excerpt[start:end] for start, end in members):
+                for left, right in zip(members, members[1:]):
+                    marker = (left[1] + 1, right[0] - 1)
+                    if not any(start <= marker[0] and marker[1] <= end
+                               for start, end in [*ranges, *extra]):
+                        extra.append(marker)
     return source_statement_ranges_cover_unit(
         unit.excerpt, [*ranges, *extra], allow_joining_punctuation=True,
     )
