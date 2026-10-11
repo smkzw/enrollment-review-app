@@ -360,6 +360,21 @@ def source_unit_quotes_cover_source(unit, interpretation: SourceInterpretation, 
     )
 
 
+SOURCE_SEQUENCE_PREAUTHOR_CAPTURE_VERSION = "source-sequence-preauthor-capture/v2"
+
+
+def missing_sequence_source_units(batch, interpretation: SourceInterpretation) -> tuple[str, ...]:
+    """Use the saving consumer's literal capture boundary before drafting."""
+    sequence_units = {statement.structure_unit_id for statement in interpretation.statements
+                      if statement.eligibility_sequence == "after_eligibility_decision"
+                      and statement.eligibility_sequence_context is None}
+    return tuple(unit.structure_unit_id for unit in batch.owned_units
+                 if unit.structure_unit_id in sequence_units
+                 and not source_unit_quotes_cover_source(unit, interpretation, [
+                     index for index, statement in enumerate(interpretation.statements)
+                     if statement.structure_unit_id == unit.structure_unit_id]))
+
+
 def _source_unit_completion_ranges(unit, interpretation: SourceInterpretation, indexes):
     ranges = {index: locate_source_quote_offsets(unit.excerpt, interpretation.statements[index].quoted_text)
               for index in indexes}

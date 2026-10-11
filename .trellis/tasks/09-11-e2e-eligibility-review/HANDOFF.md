@@ -2,6 +2,14 @@
 
 ## 当前事实
 
+本段为唯一当前事实，以下旧“实际优先/现行/下一”退为历史。Goal active、claims_complete=false，未暂停。最新实际Jobfcce5be6ae1a461caf002c06800495e4运行已push的f25f7eeb，failed_final/PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID，7新物理调用438.37999466699694秒/exit3，85发现及46深审完成，42未读；46已实际恢复完整引用并保存消费，47零新调用。45数值用途仍未核；48漏末尾来源捕获，检查点450707ec1f9d44b995c3c3d177507334，不是缺表/医学歧义。0共同发布/启用/签发，5PDF24页新包工作稿/正式UI关联更正新旧报告/Q3未完成。
+
+本包把既有捕获校验与局部补读提前至作者前，并对受限保存/复用/回放应用同一完整性标准；只改validator/v2，不清调用账、不改来源/作者/模型身份，不重开旧终态。提交身份由本文件最近Git提交核验，不能把f25真实运行当新包已运行。新合成及既有消费者集中末窗220pass/28.29秒/exit0，前1失败为版本串夹具遗漏，修夹具不放宽生产门。批准C03实际Grok/high首审及同会话续审exit0，声明fallback完整保留；顾问不读临床/跑测试，非医学批准。数值第三审没有给出可直接采用拒绝候选的依据，未据此写新数值特例。完整90步当前预检尚未运行，不能用旧预检当准入。下一验证48局部种子、成功兄弟当前门，合法新建后实际消费。参见implement唯一流程表及reviews/rv1006-preauthor-source-capture-owner-disposition-20261011.md。原件/库/七份继承dirty保持，无当前健康产品/会商会话待等。
+
+### 以下为历史快照，不覆盖本次fcce终态及现行补丁
+
+**实际运行优先：** f25f7eeb已push；合法Job7ad1c3dffd194822a75189e0f595b440 failed_final/PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID，4新调用295.6538242499955秒/exit3，85发现及44深审零新调用，44未读。45另一数值用途仍未核（a7017937d11d48dc91d5246c6cccc6a4）；46实际已带完整物理表，漏的是原文末尾引用定位字句（2e8943b128364d13bd24504d6e3f0614），不再是请求没表。0共同发布/启用/签发，旧Job/保护库/来源库/原件保持。下一只核既有来源局部补读合法种子及消费者，不重读整包或新增词表；新终态全部90步预检正在只读核对，当前不是暂停。下方244及旧“尚未新Job”均历史。
+
 **本轮统一接续（基础a201d040）：** Goal实查active，非暂停，claims_complete=false。最新持久化仍为下列244终态。本包通用条件前缀证明v2和明确表号的完整物理表上下文接通；实际90批只有46新增5行，89批材料不变，0调用/0写/全库hash保持。当前完整复用预检50reusable/1resume_partial/39refresh；旧50/2/38不再是准入。45零调用原答证明(2,0)成立、(3,1)仍数值用途未核；不删数值保护或改名真实歧义。不同validator不冻结旧失败，仍沿原局部草稿重核，旧记录不改。六模块1006pass/176.40秒/exit0早于末恢复增量，末增量另记。C03数值两轮及表/恢复三轮均exit0/no fallback，顾问无临床/测试核验；所有者有实际冻结来源/成员文字/hash检查。下一从合法入口新建并核90步决定一致，46新材料不借旧来源种子。完整共同发布、同包5PDF24页工作稿、UI有源更正与新旧报告/Q3仍未达。详见implement单一当前表、review_index及reviews/rv1006-conditional-and-referenced-table-owner-disposition-20261011.md；后文当前段均为历史。
 
 **现行覆盖下方先前当前段：** Goal active、claims_complete=false。已push实际源码8c1fee44、Job244296b31b9e4c459e0f162d64e7e427 failed_final/PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID，4物理调用359.80218570800207秒/exit3，44完成/44排队。45候选语义失败已准确保存；46首次独立继续，保存消费者发现末尾表格引用漏捕获（SOURCE_SEQUENCE_CAPTURE_INCOMPLETE），不是临床原文歧义。0共同发布/启用/签发；5PDF24页新同包工作稿、正式UI关联更正及Q3未完成。

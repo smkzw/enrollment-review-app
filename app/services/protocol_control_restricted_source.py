@@ -17,6 +17,7 @@ from app.agents.protocol_control_candidate_alignment import (
 )
 from app.agents.protocol_control_source_interpretation import (
     SourceInterpretation,
+    SourceInterpretationValidationError,
     SourceStatementCoverage,
     SourceDefinitionConsumers,
     SOURCE_DEFINITION_CONSUMER_VERSION,
@@ -26,6 +27,7 @@ from app.agents.protocol_control_source_interpretation import (
     validate_source_target_review,
     completed_quote_review_indexes,
     source_unit_quotes_cover_source,
+    missing_sequence_source_units,
     validate_completed_quote_review,
 )
 from app.domain.contracts.protocol_controls import (
@@ -910,6 +912,19 @@ def restricted_batch_from_review(
         # non-executable requirement. Do not validate it as an adopted review.
         return None
     if result.source_interpretation is not None:
+        gaps = missing_sequence_source_units(batch, result.source_interpretation)
+        if gaps:
+            unit_id = gaps[0]
+            index = next(index for index, statement in enumerate(result.source_interpretation.statements)
+                         if statement.structure_unit_id == unit_id)
+            unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == unit_id)
+            raise SourceInterpretationValidationError(
+                "SOURCE_SEQUENCE_CAPTURE_INCOMPLETE",
+                "保存的先决与动作来源未完整覆盖，须重新核对受影响来源",
+                statement_id=index, structure_unit_id=unit_id,
+                json_path=f"statements[{index}].quoted_text", source_refs=list(unit.source_span_ids),
+                retry_class="source_semantic_review",
+            )
         validate_completed_quote_review(result.source_interpretation, result.source_target_review,
                                         result.source_scope_question_history)
     output = _restricted_statement_batch_from_review(batch, result)

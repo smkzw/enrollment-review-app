@@ -186,6 +186,7 @@ from .protocol_control_source_interpretation import (
     validate_source_target_review,
     validated_source_review_seed,
     source_unit_comparison_as_review,
+    missing_sequence_source_units,
 )
 
 CONTROL_AGENT_WIRE_VERSION = "phase5/control-agent-wire/v26"
@@ -7955,12 +7956,13 @@ class ProtocolControlAgentRunner:
         # Legacy records predate the explicit dispatch flag and count conservatively.
         source_repairs = sum((item.get("error_detail") or {}).get("called", True) is not False
                              for item in question_history)
-        if resume_source_unit_completion_ids:
+        def complete_source_units(unit_ids):
+            nonlocal source_interpretation, source_repairs
             from .protocol_control_source_interpretation import (
                 apply_source_unit_quote_completion, source_unit_quote_completion_prompt,
                 source_unit_quotes_cover_source,
             )
-            unit_ids = tuple(resume_source_unit_completion_ids)
+            unit_ids = tuple(unit_ids)
             if (source_interpretation is None or resume_wire is not None or resume_source_target_review is not None
                     or resume_source_candidate_alignment is not None or resume_source_statement_coverage
                     or len(set(unit_ids)) != len(unit_ids)
@@ -8024,6 +8026,12 @@ class ProtocolControlAgentRunner:
                         session_id=response.session_id if response else "source-unit-completion-failed",
                         attempts=attempts, source_interpretation=source_interpretation,
                         pending_source_interpretation=source_interpretation)
+            return None
+
+        if resume_source_unit_completion_ids:
+            completion_failure = complete_source_units(resume_source_unit_completion_ids)
+            if completion_failure is not None:
+                return completion_failure
         if resume_source_scope_correction_indexes:
             from .protocol_control_source_interpretation import apply_source_context_completion
 
@@ -8484,6 +8492,16 @@ class ProtocolControlAgentRunner:
                         "逐字定位时填写 scope_quote；否则留空。仍须返回全部原文陈述，"
                         "不得改写原文、推断医学含义或遗漏其他单元。"
                     )
+        if (source_interpretation is not None and resume_wire is None
+                and resume_pending_author_wire is None and resume_source_target_review is None
+                and resume_source_candidate_alignment is None and not resume_source_statement_coverage):
+            # Do not spend author/reviewer calls on a capture defect that saving
+            # already rejects. Completion uses the existing budget and scope.
+            completion_ids = missing_sequence_source_units(batch, source_interpretation)
+            if completion_ids:
+                completion_failure = complete_source_units(completion_ids)
+                if completion_failure is not None:
+                    return completion_failure
         if source_interpretation is not None:
             # Recover only the missing source field, before any candidate proof
             # may be reused. An excerpt is still subject to semantic review.

@@ -1029,6 +1029,35 @@ def test_typed_temporal_procedure_retains_all_same_unit_actions_without_adoption
         assert recommendation.display_label == "方案补充要求"
 
 
+@pytest.mark.parametrize("tail", ["", "，详细安排见后续说明", "，只有以下条件满足才能继续"])
+@pytest.mark.parametrize("captured", [False, True])
+def test_restricted_source_sequence_capture_uses_the_same_gate_as_normal_results(tail, captured):
+    from app.agents.protocol_control_source_interpretation import SourceInterpretationValidationError
+
+    batch, result = _procedure_correspondence_review(single=True)
+    unit = batch.owned_units[0]
+    statement = result.source_interpretation.statements[0]
+    prefix, action = "资格审核完成后，", statement.quoted_text
+    unit.excerpt = prefix + action + tail
+    statement.eligibility_sequence = "after_eligibility_decision"
+    statement.eligibility_sequence_quote = prefix
+    statement.quoted_text = action + tail if captured else action
+    result.source_target_review.items[0].source_action_excerpt = statement.quoted_text
+    result.source_statement_coverage = protocol_control_execution_module.source_statement_coverage(
+        batch, result.source_interpretation, result.partial_wire,
+    )
+    frozen = result.model_dump(mode="json")
+    if tail and not captured:
+        with pytest.raises(SourceInterpretationValidationError) as error:
+            protocol_control_execution_module.restricted_batch_from_review(batch, result)
+        assert error.value.code == "SOURCE_SEQUENCE_CAPTURE_INCOMPLETE"
+        assert error.value.structure_unit_id == unit.structure_unit_id
+    else:
+        # Complete capture is not itself approval of a clinical interpretation.
+        protocol_control_execution_module.restricted_batch_from_review(batch, result)
+    assert result.model_dump(mode="json") == frozen
+
+
 def test_typed_temporal_procedure_cannot_absorb_unrelated_additional_source():
     from app.services.protocol_control_restricted_source import _temporal_restriction_indexes
 
@@ -7555,7 +7584,7 @@ def test_deep_source_corrupt_completed_checkpoint_rejected_before_job_creation(
 
 
 @pytest.mark.parametrize("changed_gate", [True, False])
-@pytest.mark.parametrize("error_code", ["SOURCE_UNRESOLVED_STILL_EXCLUDED", "SOURCE_UNRESOLVED_STILL_ADDED", "SOURCE_SCOPE_INVALID"])
+@pytest.mark.parametrize("error_code", ["SOURCE_UNRESOLVED_STILL_EXCLUDED", "SOURCE_UNRESOLVED_STILL_ADDED", "SOURCE_SEQUENCE_CAPTURE_INCOMPLETE", "SOURCE_SCOPE_INVALID"])
 def test_pending_exclusion_invalidates_only_an_older_restricted_proof(
     data_paths, session_factory, monkeypatch, changed_gate, error_code,
 ):
@@ -7706,6 +7735,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "candidate-time-failure-cause/v1",
                   protocol_control_execution_module.SOURCE_STAGE_ECHO_VERSION,
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
+                  protocol_control_execution_module.SOURCE_SEQUENCE_PREAUTHOR_CAPTURE_VERSION,
                   "scoped-exception-dnf/v1"))
     )
 

@@ -1,0 +1,19 @@
+# 同会话受限捕获边界复核
+
+继续同一只读角色和会话22a88bc8-20dd-43fb-b5ec-cf7f8ac4213e。不得写文件、运行测试、读临床/tmp/env或联网，不发起其他会商。你的初审高后果缺陷已采纳，不再重复全工程审查。
+
+实际当前审阅路线为Grok/grok-build/grok-4.7/high，与产品跨章DeepSeek不是同一模型；仅工程审阅，不是医学金标。首报告中同系列的表述需纠正。主路线CLI返回0但报告不可接受、ZCode失败，声明回退由runner实际执行，不能把CLI的0当审阅已成。
+
+基线f25f7eeb不变，现行补丁版本如下：
+- app/agents/protocol_control_deconstructor.py 5b0c90dd5f2b7163493b00b3bdefd5984dc0088b486f3f35abcfc72f7d7e9529
+- app/agents/protocol_control_source_interpretation.py 60b49a6dd4aaa4fcf3a2b3eceb59d02257ccfbedabe4010834b16654cd724068
+- app/services/protocol_control_execution.py 5c255f2fadc22851d937ac9d5b5d0d20fcb33413df61f86b5480bc23aa1c2890
+- app/services/protocol_control_restricted_source.py 08ff8c7654dd115dbdbf8d540777207392c1405430b0ff9374e8d467a5cf4746
+- tests/v2/protocols/test_slice58c_control_deconstructor.py dad29247adab1886521fc5c4856e5ab20890ed227607a9fd284b82733e624fc7
+- tests/v2/services/test_protocol_control_execution.py 1fd620e3f2a239fdd81129ce2ffc5e093164181be7ad926824246fa7fddf1e70
+
+最小修订：在既有restricted_batch_from_review统一补与正常保存同一missing_sequence_source_units门；所有复用/保存/回放/preserve_unresolved因此经过相同门。旧完成受限证明遇新门只允许refresh_required，不自动改旧终态；同版本损坏硬拒。版本v2只进入validator。失败恢复的既有逐项缺口范围加上整批先决缺口，不留下已核兄弟漏文。新增真实合同函数合成正反例，以及现有合法新Job预检的旧门/同门异常两种场景。原始额度/来源/作者身份不改。
+
+定向检查：上述修订能否实际封住你指出的三条入口与兄弟范围；若不能，给出最小可核反例和修补位置。可延后问题只有在这次确实引入绕过时提升。不要要求未经证明地重开全部已完成批次，亦不要把摘录扩展批准当语义批准。所有者另行集中测试及实际完整预检，不凭你的报告宣布产品或临床完成。
+
+返回：事实与代码行、关闭/未关闭、最高风险、建议/证据不足各自区分。

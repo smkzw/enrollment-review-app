@@ -110,6 +110,8 @@ from app.agents.protocol_control_source_interpretation import (
     completed_quote_review_indexes,
     _time_words_cover_stage_label,
     source_unit_quotes_cover_source,
+    missing_sequence_source_units,
+    SOURCE_SEQUENCE_PREAUTHOR_CAPTURE_VERSION,
     validate_completed_quote_review,
 )
 from app.agents.protocol_control_source_function import (
@@ -2164,6 +2166,7 @@ def _deep_component_identity(
                                        "candidate-time-failure-cause/v1",
                                        SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
+                                       SOURCE_SEQUENCE_PREAUTHOR_CAPTURE_VERSION,
                                        "scoped-exception-dnf/v1")),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}
@@ -3045,14 +3048,7 @@ def _validated_deep_partial_source(
         interpretation = result.source_interpretation
         if interpretation is not None:
             validate_source_interpretation(batch, interpretation)
-            sequence_units = {item.structure_unit_id for item in interpretation.statements
-                if item.eligibility_sequence == "after_eligibility_decision"
-                and item.eligibility_sequence_context is None}
-            gaps = tuple(unit.structure_unit_id for unit in batch.owned_units
-                    if unit.structure_unit_id in sequence_units
-                    and not source_unit_quotes_cover_source(unit, interpretation, [
-                        index for index, item in enumerate(interpretation.statements)
-                        if item.structure_unit_id == unit.structure_unit_id]))
+            gaps = missing_sequence_source_units(batch, interpretation)
             if gaps:
                 seed = dict(saved, partial_wire=None, source_target_review=None,
                     source_statement_coverage=[], source_candidate_alignment=None, session_id=None,
@@ -3113,9 +3109,11 @@ def _validated_deep_partial_source(
                 for span in unit.source_span_ids
             })
         )
+        sequence_gaps = set(missing_sequence_source_units(batch, interpretation))
         gaps = tuple(unit.structure_unit_id for unit in batch.owned_units
-                     if completion_witnessed and unit.structure_unit_id in {
-                         interpretation.statements[index].structure_unit_id for index in indexes}
+                     if completion_witnessed and (unit.structure_unit_id in sequence_gaps
+                         or unit.structure_unit_id in {
+                         interpretation.statements[index].structure_unit_id for index in indexes})
                      and not source_unit_quotes_cover_source(unit, interpretation, [
                          index for index, item in enumerate(interpretation.statements)
                          if item.structure_unit_id == unit.structure_unit_id
@@ -3666,8 +3664,9 @@ def _preflight_deep_source(
                     restricted = ProtocolControlBatchDispositionHydrated.model_validate(saved["restricted_batch"])
                     try:
                         expected = restricted_batch_from_review(batch, result)
-                    except SourceTargetReviewValidationError as exc:
-                        if (exc.code not in {"SOURCE_UNRESOLVED_STILL_EXCLUDED", "SOURCE_UNRESOLVED_STILL_ADDED"}
+                    except (SourceInterpretationValidationError, SourceTargetReviewValidationError) as exc:
+                        if (exc.code not in {"SOURCE_UNRESOLVED_STILL_EXCLUDED", "SOURCE_UNRESOLVED_STILL_ADDED",
+                                            "SOURCE_SEQUENCE_CAPTURE_INCOMPLETE"}
                                 or saved_components["validator_version"] == current_components["validator_version"]):
                             raise
                         # A newly enforced pending-scope check invalidates this
@@ -3889,14 +3888,11 @@ def _validate_saved_source_review(
     validate_completed_quote_review(interpretation, result.source_target_review,
                                     result.source_scope_question_history)
     completed_indexes = completed_quote_review_indexes(interpretation, result.source_scope_question_history)
-    sequence_units = {statement.structure_unit_id for statement in interpretation.statements
-        if statement.eligibility_sequence == "after_eligibility_decision"
-        and statement.eligibility_sequence_context is None}
+    sequence_gaps = set(missing_sequence_source_units(batch, interpretation))
     for unit in batch.owned_units:
         indexes = [index for index, statement in enumerate(interpretation.statements)
                    if statement.structure_unit_id == unit.structure_unit_id]
-        if (unit.structure_unit_id in sequence_units
-                and not source_unit_quotes_cover_source(unit, interpretation, indexes)):
+        if unit.structure_unit_id in sequence_gaps:
             raise SourceInterpretationValidationError("SOURCE_SEQUENCE_CAPTURE_INCOMPLETE",
                 "保存的先决与动作来源未完整覆盖，须重新核对受影响来源",
                 statement_id=indexes[0], structure_unit_id=unit.structure_unit_id,

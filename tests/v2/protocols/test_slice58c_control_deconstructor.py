@@ -4748,7 +4748,7 @@ def test_runner_rejects_candidate_for_action_after_eligibility_decision() -> Non
     inventory = SourceInterpretation(
         version=SOURCE_INTERPRETATION_VERSION,
         statements=[SourceStatement(
-            structure_unit_id="su-01", quoted_text="年龄至少18岁", force="required",
+            structure_unit_id="su-01", quoted_text="再核对年龄至少18岁", force="required",
             time_words=[], eligibility_sequence="after_eligibility_decision",
             eligibility_sequence_quote="先确认符合入排条件的受试者",
         )],
@@ -4764,6 +4764,77 @@ def test_runner_rejects_candidate_for_action_after_eligibility_decision() -> Non
     assert any("POST_ELIGIBILITY_ACTION_AS_CONTROL" in attempt.error_classes
                for attempt in result.attempts)
     assert result.final_output is None
+
+
+@pytest.mark.parametrize("defect", [None, "already_complete", "missing_tail", "changed_action", "changed_force", "zero_budget"])
+def test_sequence_capture_is_completed_before_author_and_rechecked_by_saving_consumer(defect):
+    from app.services.protocol_control_execution import _validate_saved_source_review, _validate_deep_batch_output
+    from app.agents.protocol_control_source_interpretation import missing_sequence_source_units
+
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units = batch.owned_units[:1]
+    batch.owned_structure_unit_ids = ["su-01"]
+    batch.owned_source_span_ids = ["span:01"]
+    boundary = "先确认符合入排条件的受试者"
+    action = "再随机分组并给予研究治疗"
+    tail = "，详细安排见后续说明"
+    batch.owned_units[0].excerpt = boundary + "，" + action + tail + "。"
+    source = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-01", quoted_text=action,
+            force="required", decision_functions=["action"], time_words=[],
+            eligibility_sequence="after_eligibility_decision", eligibility_sequence_quote=boundary)],
+        units_without_statement=[])
+    proposal = source.model_copy(deep=True)
+    proposal.statements[0].quoted_text += tail
+    if defect == "already_complete":
+        source = proposal.model_copy(deep=True)
+    elif defect == "missing_tail":
+        proposal.statements[0].quoted_text = action
+    elif defect == "changed_action":
+        proposal.statements[0].quoted_text = action.replace("并给予", "或给予") + tail
+    elif defect == "changed_force":
+        proposal.statements[0].force = "recommended"
+    wire = ProtocolControlAgentWire.model_validate({
+        "wire_version": CONTROL_AGENT_WIRE_VERSION,
+        "dispositions": [{"structure_unit_id": "su-01", "disposition": "post_treatment_execution",
+            "linked_official_code": None, "linked_procedure_catalog_item_id": None,
+            "linked_procedure_catalog_item_ids": [], "notes": "原文先完成资格确认，后执行研究治疗"}],
+        "candidate_drafts": [],
+    })
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "not_current_control", "target_id": None,
+            "source_action_excerpt": proposal.statements[0].quoted_text,
+            "non_control_basis_excerpt": boundary}],
+    })
+    class Transport(_FakeTransport):
+        source_calls = 0
+        def start_source_interpretation(self, *, prompt):
+            self.source_calls += 1
+            if self.source_calls == 1:
+                return ProtocolControlAgentResponse(session_id="initial-capture", text=source.model_dump_json())
+            assert "局部原文补读" in prompt and tail in prompt
+            assert not self.prompts
+            return ProtocolControlAgentResponse(session_id="local-completion", text=proposal.model_dump_json())
+        def start_source_target_review(self, *, prompt):
+            assert defect in {None, "already_complete"}
+            assert proposal.statements[0].quoted_text in prompt
+            return ProtocolControlAgentResponse(session_id="fresh-review", text=review.model_dump_json())
+    transport = Transport([ProtocolControlAgentResponse(session_id="fresh-author", text=wire.model_dump_json())])
+    before = source.model_dump_json()
+    result = ProtocolControlAgentRunner(max_schema_repairs=0 if defect == "zero_budget" else 1).run(
+        batch, transport, output_validator=lambda value: _validate_deep_batch_output(batch, value))
+    assert source.model_dump_json() == before
+    assert transport.source_calls == (1 if defect in {"already_complete", "zero_budget"} else 2)
+    if defect in {None, "already_complete"}:
+        assert len(transport.prompts) == 1
+        assert result.final_output is not None and not result.final_output.candidates
+        assert missing_sequence_source_units(batch, result.source_interpretation) == ()
+        _validate_saved_source_review(batch, result)
+    else:
+        assert not transport.prompts and result.final_output is None
+        assert result.attempts[-1].error_classes == ["SOURCE_UNIT_QUOTE_COMPLETION_INVALID"]
+        assert result.source_interpretation == source
 
 
 def test_cited_external_rationale_closes_only_its_own_statement() -> None:
