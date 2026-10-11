@@ -2,6 +2,14 @@
 
 ## 当前事实
 
+**现行接续：** Goal active，claims_complete=false；最近真实产品源码c0deee28、Job168d80243fcd41d2b0cbcff590d5f47b failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，9调用450.658400875秒/exit3，52完成/36排队、45与54失败。51–53新增完成；0完整共同发布/启用/签发。当前来源分区与条件判断句包仍按实际Git提交核，不能借下方旧83d/e28bb状态覆盖本段。
+
+**当前完成的软件与核对：** 54保留字面同源先决时间、动作与完整来源，保存消费者也核捕获；缺口以typed错误逐组失效，不把技术问题推给研究者。45原条件对应门不放宽；沿现有continue_atom仅修proposition，限冻结摘录内逐字判断句，其余字段/兄弟不变，完整门及新的含义核对仍必需。两项仅validator身份改变，不新建平台/读道/项目词表。C03 Grok/high新鲜初审及同会话续审exit0/no fallback，末保护所有者验证；非临床批准。原模块窗101pass/1.16秒、服务窗65pass/17.30秒，各exit0/5SWIG、不累加。
+
+**实际复用及下一运行：** 来源168d全部90组只读当前预检50reusable/1resume_partial/39refresh，0调用/0写/全库hash保持。45仅未采用草稿和不变兄弟证明；46/48旧来源捕获不足须刷新，54无合法成功种子；54实际旧拒答现0调用重验passed，保留旧schema_invalid，不造parsed或旧批准。现行无次数测试授权不等于null逻辑账为0；旧55/4及9物理回执保留。新运行从合法产品API创建并核全部90步，不复活旧Job或复制大库。完整同源要求→5PDF24页当前工作稿→正式UI更正→新旧报告仍未成。详见implement当前表、review_index及reviews/rv1006-sequence-condition-owner-disposition-20261011.md。原件/旧终态/七份继承dirty保留；本记录不是暂停。
+
+### 以下许可/豁免包为历史，不覆盖当前事实
+
 **现行接续（2026-10-11）：** Goal active、claims_complete=false；最新实际产品源码83d8ee59。Jobe28bb76f568543c885ea393f96013b9c终态failed_final/PROTOCOL_CONTROL_LOGICAL_BUDGET_EXHAUSTED，8新调用459.565242250秒/exit3，44深审完成/45排队；45失败，下游依赖失败。旧49真实R1保存有效，但此次没有到达它，不能把预检49可复用写成49实际执行。0共同发布/启用/签发。下方先前当前段均为历史，不覆盖本段。
 
 51“真正漏读”的旧归因撤回：先决已有eligibility_sequence_quote，只是捕获统计未计；被拒补读不采用。捕获包末proof类型条件后19原模块例通过，不再重复277窗。历史a456的24次准入未先核45旧账39次而0新调用拒绝，属所有者配置错误；17d720累计47后e28bb累计55，旧账未清零。recommended是17d720首错，已在e28bb修正；旧人群范围尚未重新核对，不能宣称已解决。

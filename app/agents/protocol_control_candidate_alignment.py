@@ -27,12 +27,29 @@ SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION = "source-conditional-group-alignment
 SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION = "source-repeat-count-alignment/v1"
 SOURCE_EVENT_INTERVAL_ALIGNMENT_VERSION = "source-event-interval-alignment/v1"
 SOURCE_POLICY_REQUEST_SCOPE_VERSION = "source-policy-request-scope/v1"
-SOURCE_CONDITION_ACTION_SUPPORT_VERSION = "source-condition-action-support/v1"
+SOURCE_CONDITION_ACTION_SUPPORT_VERSION = "source-condition-action-support/v2"
 SOURCE_UNRESOLVED_COVERAGE_VERSION = "source-unresolved-coverage/v1"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
     pass
+
+
+class CandidatePropositionAlignmentError(SourceCandidateAlignmentValidationError):
+    """A missing source condition can request a proposal, never approve it."""
+
+    def __init__(self, *, item, candidate, atoms, source_refs, condition):
+        paths = [(item.candidate_index, group_index, atom_index)
+                 for group_index, group in enumerate(candidate.obligation_expression.groups)
+                 for atom_index, atom in enumerate(group.atoms)
+                 if atom in atoms and atom.evaluation is not None]
+        self.error_detail = {
+            "reason": "source_condition_unrepresented",
+            "source_refs": list(source_refs), "atom_paths": [list(path) for path in paths],
+            "required_source_excerpt": item.source_excerpt,
+            "required_source_condition": condition,
+        }
+        super().__init__("判断语句未逐项保留来源条件，须局部修订后重新核对")
 
 
 class CandidateNumericAlignmentError(SourceCandidateAlignmentValidationError):
@@ -1049,7 +1066,9 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
             common_trigger_time = _common_trigger_preserves_visit_time(
                 batch, statement, candidate, selected_atoms)
             if statement.exception_words and normalize_source_excerpt(statement.exception_words) not in rendered:
-                raise ValueError("候选未逐项保留来源时点或例外")
+                raise CandidatePropositionAlignmentError(item=item, candidate=candidate,
+                    atoms=obligation_selected, source_refs=unit.source_span_ids,
+                    condition=statement.exception_words)
             for word in statement.time_words:
                 normalized_word = normalize_source_excerpt(word)
                 if normalized_word in rendered:

@@ -7109,6 +7109,7 @@ def _merge_obligation_atom_repair(
     raw_text: str, baseline: Mapping[str, Any], path: tuple[int, int, int],
     *, numeric_predicate_only: bool = False, missing_anchor_only: bool = False,
     repeat_scheme_only: bool = False,
+    proposition_only: bool = False,
 ) -> ProtocolControlAgentWire:
     """Splice a checked atom into the original batch; all siblings remain byte-identical."""
 
@@ -7191,6 +7192,16 @@ def _merge_obligation_atom_repair(
             for field, value in original["evaluation"].items():
                 if field not in {"time_operand_attribute", "time_purpose"} and replacement_json["evaluation"][field] != value:
                     raise ValueError(f"时间锚点修订不得改变 evaluation/{field}")
+        if proposition_only:
+            if replacement_json["time_constraint"] != original["time_constraint"]:
+                raise ValueError("判断句修订不得改变时间约束")
+            proposed = normalize_source_excerpt(replacement_json["evaluation"]["proposition"])
+            if not proposed or not any(proposed in normalize_source_excerpt(excerpt)
+                    for excerpt in original["evaluation"]["source_excerpts"]):
+                raise ValueError("局部判断句须逐字来自本原子冻结摘录，不得夹带其他主张")
+            for field, value in original["evaluation"].items():
+                if field != "proposition" and replacement_json["evaluation"][field] != value:
+                    raise ValueError(f"判断句修订不得改变 evaluation/{field}")
         merged["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index] = replacement_json
         return ProtocolControlAgentWire.model_validate(merged)
     except (json.JSONDecodeError, ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
@@ -7208,6 +7219,7 @@ def _build_obligation_atom_repair_prompt(
     *, numeric_predicate_only: bool = False, field_patch: bool = False,
     missing_anchor_only: bool = False,
     repeat_scheme_only: bool = False,
+    proposition_only: bool = False,
 ) -> str:
     candidate_index, group_index, atom_index = path
     candidate = baseline["candidate_drafts"][candidate_index]
@@ -7222,6 +7234,19 @@ def _build_obligation_atom_repair_prompt(
         for unit in batch.owned_units
         if unit.structure_unit_id in owned_ids
     ]
+    if proposition_only:
+        return (
+            "仅修订冻结原子的 evaluation.proposition，使已有判断句逐项保留冻结来源的条件。"
+            "只能整理同一要求的表达，不增加事实、阈值、时点、义务或例外。"
+            "返回含 atom 的 JSON；除了 evaluation.proposition 外所有字段逐项原样保留，"
+            "宿主仅合并该字段，完整门禁及新的来源含义核对仍须通过。"
+            "新判断句必须是本原子冻结evaluation.source_excerpts内的连续逐字原文，"
+            "不得借整段上下文扩大摘录或拼入额外主张。"
+            "不得仅把原文贴进引用字段来假装表达，也不得用同意或投票替代含义核对。"
+            "不能忠实表达时保留原稿，不猜测；不改其他原子或要求。\n"
+            f"问题：{problem}\n原子位置：{path}\n"
+            f"冻结原子：{_stable_json(atom)}\n冻结上下文：{_stable_json(sources)}"
+        )
     if field_patch:
         if repeat_scheme_only:
             return (
@@ -10489,7 +10514,8 @@ class ProtocolControlAgentRunner:
                             ]
                             if cited_unexpressed:
                                 numeric_failures = [failure for failure in alignment_failures
-                                    if failure.get("reason") in {"numeric_predicate_missing", "repeat_scheme_missing"}
+                                    if failure.get("reason") in {"numeric_predicate_missing", "repeat_scheme_missing",
+                                                                  "source_condition_unrepresented"}
                                     and len(failure.get("atom_paths", [])) == 1]
                                 from .protocol_control_candidate_alignment import source_declares_uncompared_action_count
                                 repeat_scheme_only = (len(numeric_failures) == 1
@@ -10497,7 +10523,10 @@ class ProtocolControlAgentRunner:
                                     and len(numeric_failures[0]["statement_ids"]) == 1
                                     and source_declares_uncompared_action_count(source_interpretation.statements[
                                         numeric_failures[0]["statement_ids"][0]]))
-                                patch_reader = (getattr(transport, "continue_repeat_scheme", None) if repeat_scheme_only else
+                                proposition_only = (len(numeric_failures) == 1
+                                    and numeric_failures[0]["reason"] == "source_condition_unrepresented")
+                                patch_reader = (None if proposition_only else
+                                                getattr(transport, "continue_repeat_scheme", None) if repeat_scheme_only else
                                                 getattr(transport, "continue_numeric_predicate", None))
                                 atom_reader = patch_reader if callable(patch_reader) else getattr(transport, "continue_atom", None)
                                 if (len(numeric_failures) == 1
@@ -10520,15 +10549,16 @@ class ProtocolControlAgentRunner:
                                             atom_response = atom_reader(session_id=session_id,
                                                 prompt=_build_obligation_atom_repair_prompt(
                                                     batch, baseline, path, _stable_json(failure),
-                                                    numeric_predicate_only=not repeat_scheme_only,
+                                                    numeric_predicate_only=not (repeat_scheme_only or proposition_only),
                                                     repeat_scheme_only=repeat_scheme_only,
+                                                    proposition_only=proposition_only,
                                                     field_patch=callable(patch_reader)))
                                             if atom_response.session_id != session_id:
                                                 raise ValueError("义务局部修订不得更换原会话")
                                             revised = _merge_obligation_atom_repair(
                                                 atom_response.text, baseline, path,
-                                                numeric_predicate_only=not repeat_scheme_only,
-                                                repeat_scheme_only=repeat_scheme_only)
+                                                numeric_predicate_only=not (repeat_scheme_only or proposition_only),
+                                                repeat_scheme_only=repeat_scheme_only, proposition_only=proposition_only)
                                         except Exception as atom_error:  # noqa: BLE001 - preserve failed scoped reply
                                             code = protocol_control_call_failure_code(atom_error) or "ATOM_REPAIR_INVALID"
                                             attempts.append(ProtocolControlAgentAttempt(

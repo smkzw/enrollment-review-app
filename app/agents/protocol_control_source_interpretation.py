@@ -39,7 +39,7 @@ from app.protocols.source_time_fragments import intraday_time_fragments
 SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
 SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v22"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
-SOURCE_COVERAGE_VALIDATION_VERSION = "source-owned-inventory-validation/v1"
+SOURCE_COVERAGE_VALIDATION_VERSION = "source-owned-inventory-validation/v2"
 SOURCE_UNIT_QUOTE_COMPLETION_VERSION = "source-unit-quote-completion/v1"
 SOURCE_TABLE_MEMBER_COVERAGE_VERSION = "source-table-member-display-coverage/v2"
 SOURCE_TARGET_REVIEW_VALIDATION_VERSION = "source-native-procedure-row-validation/v2"
@@ -999,6 +999,18 @@ def source_quote_correction_response_format() -> dict[str, object]:
     }
 
 
+def _preceding_sequence_boundary(unit, statement, action_text: str) -> tuple[int, int] | None:
+    """Locate the preserved antecedent, not infer eligibility from wording."""
+    if (statement.eligibility_sequence != "after_eligibility_decision"
+            or statement.eligibility_sequence_context is not None):
+        return None
+    boundary = locate_source_quote_offsets(unit.excerpt, statement.eligibility_sequence_quote or "")
+    action = locate_source_quote_offsets(unit.excerpt, action_text)
+    if boundary is None or action is None or boundary[1] > action[0]:
+        return None
+    return boundary
+
+
 def apply_source_quote_correction(
     batch: ProtocolControlDispositionBatch,
     interpretation: SourceInterpretation,
@@ -1012,6 +1024,18 @@ def apply_source_quote_correction(
     )
     new_quote = normalize_source_excerpt(correction.corrected_quote or "")
     old_quote = normalize_source_excerpt(statement.quoted_text)
+    retained_boundary = ""
+    protected_old_quote = statement.quoted_text
+    if unit is not None:
+        boundary = _preceding_sequence_boundary(unit, statement, correction.corrected_quote or "")
+        old_bounds = locate_source_quote_offsets(unit.excerpt, statement.quoted_text)
+        new_bounds = locate_source_quote_offsets(unit.excerpt, correction.corrected_quote or "")
+        if (boundary is not None and old_bounds is not None and new_bounds is not None
+                and old_bounds == (boundary[0], new_bounds[1])
+                and not unit.excerpt[boundary[1]:new_bounds[0]].strip("，,。；;：: ")):
+            retained_boundary = normalize_source_excerpt(statement.eligibility_sequence_quote or "")
+            protected_old_quote = unit.excerpt[new_bounds[0]:new_bounds[1]]
+    protected_old = normalize_source_excerpt(protected_old_quote)
     protected_marks = re.compile(
         r"不得|不可|不能|不允许|禁止|必须|除外|除非|否则|仅当|只有|如果|可以|应当|建议|"
         r"至少|至多|不超过|不低于|不高于|超过|低于|高于|未|无|不|须|应|若|≤|≥|<|>|"
@@ -1021,17 +1045,29 @@ def apply_source_quote_correction(
         r"[零〇一二两三四五六七八九十百千万]+(?:个)?"
         r"(?:小时|分钟|天|日|周期|周|月|年|次|例|岁|毫克|微克|毫升)(?:内|前|后|以上|以下)?"
     )
+    if retained_boundary and any(mark not in {"若", "如果", "只有", "仅当"}
+            for mark in protected_marks.findall(unicodedata.normalize("NFKC", retained_boundary).casefold())):
+        raise ValueError("先决摘录包含独立强度或否定，不能仅按来源分区校正")
+    if (unit is not None and old_bounds is not None and new_bounds is not None
+            and old_bounds != new_bounds
+            and statement.eligibility_sequence == "after_eligibility_decision"
+            and not retained_boundary):
+        raise ValueError("先决与动作分区未完整保留中间来源")
     # Text similarity locates a spelling repair; it is not semantic equivalence.
     if (
-        protected_marks.findall(unicodedata.normalize("NFKC", statement.quoted_text).casefold())
+        protected_marks.findall(unicodedata.normalize("NFKC", protected_old_quote).casefold())
         != protected_marks.findall(unicodedata.normalize("NFKC", correction.corrected_quote or "").casefold())
-        or chinese_quantity.findall(old_quote) != chinese_quantity.findall(new_quote)
+        or chinese_quantity.findall(protected_old) != chinese_quantity.findall(new_quote)
         or any(
             normalize_source_excerpt(part) in old_quote
             and normalize_source_excerpt(part) not in new_quote
-            for part in [*statement.time_words, statement.exception_words or ""]
+            and normalize_source_excerpt(part) not in retained_boundary
+            for part in statement.time_words
             if normalize_source_excerpt(part)
         )
+        or (statement.exception_words is not None
+            and normalize_source_excerpt(statement.exception_words) in old_quote
+            and normalize_source_excerpt(statement.exception_words) not in new_quote)
     ):
         raise ValueError("局部摘录校正不得改变否定、强度、数量、已核时间或例外")
     if (
@@ -1041,12 +1077,16 @@ def apply_source_quote_correction(
         or not new_quote
         or not any(new_quote in normalize_source_excerpt(part)
                    for part in [*unit.heading_path, unit.excerpt])
-        or re.findall(r"\d+(?:\.\d+)?", old_quote) != re.findall(r"\d+(?:\.\d+)?", new_quote)
-        or SequenceMatcher(None, old_quote, new_quote).ratio() < 0.75
+        or re.findall(r"\d+(?:\.\d+)?", protected_old) != re.findall(r"\d+(?:\.\d+)?", new_quote)
+        or SequenceMatcher(None, protected_old, new_quote).ratio() < 0.75
     ):
         raise ValueError("校正后的摘录不能证明是同一来源要求")
     updated = interpretation.model_copy(deep=True)
     updated.statements[statement_index].quoted_text = correction.corrected_quote
+    if retained_boundary and not source_unit_quotes_cover_source(unit, updated, [
+            index for index, item in enumerate(updated.statements)
+            if item.structure_unit_id == unit.structure_unit_id]):
+        raise ValueError("先决与动作分区未逐项覆盖完整来源单元")
     isolated = SourceInterpretation(
         version=SOURCE_INTERPRETATION_VERSION,
         statements=[updated.statements[statement_index]],
@@ -3426,10 +3466,14 @@ def validate_source_interpretation(
                     "time_words", "correct_source_scope",
                 )
             normalized_time = normalize_source_excerpt(time_quote)
+            retained_sequence_time = (
+                _preceding_sequence_boundary(unit, item, item.quoted_text) is not None
+                and normalized_time in normalize_source_excerpt(item.eligibility_sequence_quote or "")
+            )
             if not normalized_time or not any(
                 normalized_time in normalize_source_excerpt(part)
                 for part in [item.quoted_text, (item.scope_quote or "") if context_label is None else "", *unit.heading_path]
-            ):
+            ) and not retained_sequence_time:
                 reject("SOURCE_TIME_UNGROUNDED", "时间措辞不属于本条陈述、共享范围或所属标题",
                        "time_words", "correct_source_scope")
         reported_time = [normalize_source_excerpt(word) for word in item.time_words]

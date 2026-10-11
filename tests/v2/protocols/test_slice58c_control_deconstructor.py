@@ -2609,7 +2609,8 @@ def test_source_inventory_corrects_one_nearby_quote_without_rewriting_batch() ->
     }
 
 
-def test_source_inventory_corrects_embedded_eligibility_basis_locally() -> None:
+@pytest.mark.parametrize("retain_boundary_time", [False, True])
+def test_source_inventory_corrects_embedded_eligibility_basis_locally(retain_boundary_time) -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[1].excerpt = "经入排标准判定符合后，筛选时记录末次用药日期并核对既往用药剂量与停药时间"
     invalid = _source_inventory({
@@ -2618,7 +2619,7 @@ def test_source_inventory_corrects_embedded_eligibility_basis_locally() -> None:
             "structure_unit_id": "su-02",
             "quoted_text": batch.owned_units[1].excerpt,
             "force": "required",
-            "time_words": ["筛选时"],
+            "time_words": ["筛选时", *(["经入排标准判定符合后"] if retain_boundary_time else [])],
             "eligibility_sequence": "after_eligibility_decision",
             "eligibility_sequence_quote": "经入排标准判定符合后",
         }],
@@ -2646,6 +2647,94 @@ def test_source_inventory_corrects_embedded_eligibility_basis_locally() -> None:
     assert transport.source_calls == 1, [item.issues for item in result.attempts]
     assert result.source_interpretation.statements[0].quoted_text == "筛选时记录末次用药日期并核对既往用药剂量与停药时间"
     assert [item.outcome for item in result.attempts[:2]] == ["schema_invalid", "parsed"]
+    assert result.source_interpretation.statements[0].time_words == invalid.statements[0].time_words
+    assert result.source_interpretation.statements[0].eligibility_sequence_quote == "经入排标准判定符合后"
+
+
+@pytest.mark.parametrize("fault", [None, "extra_action", "action_time", "action_exception",
+    "different_unit", "duplicate_boundary", "changed_number", "missing_boundary", "wrong_sequence",
+    "unmarked_extra_action", "action_in_boundary"])
+def test_quote_partition_preserves_antecedent_without_deleting_action_dimensions(fault):
+    batch = _batch().model_copy(deep=True)
+    boundary = "若资格核对符合后"
+    action = "给药前记录2次操作，特殊情况不得执行"
+    batch.owned_units[1].excerpt = f"{boundary}，{action}"
+    statement = SourceStatement(structure_unit_id="su-02", quoted_text=batch.owned_units[1].excerpt,
+        force="required", time_words=[boundary, "给药前"],
+        exception_words="特殊情况不得执行", eligibility_sequence="after_eligibility_decision",
+        eligibility_sequence_quote=boundary)
+    new_quote = action
+    if fault == "extra_action":
+        statement.quoted_text = batch.owned_units[1].excerpt = f"{boundary}，必须记录签名，{action}"
+    elif fault == "unmarked_extra_action":
+        statement.quoted_text = batch.owned_units[1].excerpt = f"{boundary}，记录签名，{action}"
+    elif fault == "action_in_boundary":
+        statement.eligibility_sequence_quote = f"{boundary}并必须记录签名"
+        statement.quoted_text = batch.owned_units[1].excerpt = f"{statement.eligibility_sequence_quote}，{action}"
+    elif fault == "action_time":
+        new_quote = action.replace("给药前", "")
+        batch.owned_units[1].excerpt += "；" + new_quote
+    elif fault == "action_exception":
+        new_quote = "给药前记录2次操作"
+    elif fault == "different_unit":
+        batch.owned_units[1].excerpt = action
+    elif fault == "duplicate_boundary":
+        batch.owned_units[1].excerpt += f"；{boundary}"
+    elif fault == "changed_number":
+        new_quote = action.replace("2", "3")
+        batch.owned_units[1].excerpt += "；" + new_quote
+    elif fault == "missing_boundary":
+        statement.eligibility_sequence_quote = None
+    elif fault == "wrong_sequence":
+        statement.eligibility_sequence = "current_or_unknown"
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[statement], units_without_statement=["su-01"])
+    before = inventory.model_dump_json()
+    correction = SourceQuoteCorrection(version="phase5/control-source-quote-correction/v1",
+        structure_unit_id="su-02", corrected_quote=new_quote, unresolved=None)
+    if fault:
+        with pytest.raises(ValueError):
+            apply_source_quote_correction(batch, inventory, 0, correction)
+    else:
+        updated = apply_source_quote_correction(batch, inventory, 0, correction)
+        assert updated.statements[0].quoted_text == action
+        assert updated.statements[0].time_words == statement.time_words
+        assert updated.statements[0].eligibility_sequence_quote == boundary
+        validate_source_interpretation(batch, updated)
+    assert inventory.model_dump_json() == before
+
+
+@pytest.mark.parametrize("extra", [None, "uncaptured", "captured_sibling"])
+def test_sequence_partition_saved_consumer_requires_complete_source_capture(extra):
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentAttempt
+    from app.services.protocol_control_execution import _validate_saved_source_review
+    batch = _batch().model_copy(deep=True)
+    boundary, action = "资格核对符合后", "记录2次操作"
+    batch.owned_units[1].excerpt = f"{boundary}，{action}"
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-02", quoted_text=batch.owned_units[1].excerpt,
+            force="required", time_words=[boundary], eligibility_sequence="after_eligibility_decision",
+            eligibility_sequence_quote=boundary)], units_without_statement=["su-01"])
+    correction = SourceQuoteCorrection(version="phase5/control-source-quote-correction/v1",
+        structure_unit_id="su-02", corrected_quote=action, unresolved=None)
+    updated = apply_source_quote_correction(batch, inventory, 0, correction)
+    if extra:
+        batch.owned_units[1].excerpt += "；核对登记资料"
+        if extra == "captured_sibling":
+            updated.statements.append(SourceStatement(structure_unit_id="su-02",
+                quoted_text="核对登记资料", force="required", time_words=[]))
+    result = ProtocolControlAgentRunResult(status="需要核对", batch_id=batch.batch_id,
+        session_id="source", source_interpretation=updated, attempts=[
+            ProtocolControlAgentAttempt(attempt=1, session_id="source", outcome="parsed",
+                raw_output_sha256=hashlib.sha256(updated.model_dump_json().encode()).hexdigest(), issues=[])])
+    # The saved-review consumer must reject a source gap before looking at any
+    # candidate or reviewer label. Missing downstream review is tested elsewhere.
+    if extra == "uncaptured":
+        with pytest.raises(ValueError, match="未完整覆盖"):
+            _validate_saved_source_review(batch, result)
+    else:
+        _validate_saved_source_review(batch, result)
+    assert inventory.statements[0].quoted_text == f"{boundary}，{action}"
 
 
 def test_source_inventory_rejects_quote_correction_that_changes_number() -> None:
@@ -16066,6 +16155,120 @@ def test_definition_failure_keeps_alignment_and_exact_wire_then_rechecks_changed
     assert first.source_candidate_alignment.proofs[0].candidate_sha256 != (
         second.source_candidate_alignment.proofs[0].candidate_sha256
     )
+
+
+def _source_condition_proposition_material():
+    from app.agents.protocol_control_candidate_alignment import (
+        SourceCandidateAlignment, SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+    )
+    batch = _batch().model_copy(deep=True)
+    quote, paraphrase = "出现异常的情况，记录结果", "出现异常时记录结果"
+    batch.owned_units[0].excerpt = quote
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-01", quoted_text=quote,
+            force="required", decision_functions=["action", "exception"], time_words=[],
+            exception_words="出现异常的情况")], units_without_statement=["su-02"])
+    payload = _candidate().model_dump(mode="json")
+    payload.update(applicability_expression=None, exception_expression=None)
+    atom = payload["obligation_expression"]["groups"][0]["atoms"][0]
+    atom.update(statement=paraphrase, source_excerpts=[quote],
+                evaluation=_evaluation(paraphrase, "span:01", quote))
+    payload["minimum_evidence"][0]["source_policy"] = _evidence_policy("span:01", quote)
+    wire = _wire(candidate=ProtocolControlAgentWireCandidate.model_validate(payload))
+    alignment = SourceCandidateAlignment.model_validate({"version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+        "items": [{"statement_index": 0, "candidate_index": 0, "decision": "fully_expressed",
+            "source_excerpt": quote, "candidate_atom_quotes": [paraphrase], "unresolved_dimensions": []}]})
+    return batch, inventory, wire, alignment
+
+
+@pytest.mark.parametrize("fault", [None, "statement", "count", "source", "time", "policy", "sibling", "extra_claim"])
+def test_proposition_field_repair_freezes_all_other_semantics(fault):
+    batch, _, wire, _ = _source_condition_proposition_material()
+    baseline = wire.model_dump(mode="json")
+    atom = deepcopy(baseline["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0])
+    atom["evaluation"]["proposition"] = "出现异常的情况，记录结果"
+    if fault == "statement":
+        atom["statement"] += "并执行其他操作"
+    elif fault == "count":
+        atom["evaluation"]["determination_mode"] = "deterministic"
+    elif fault == "source":
+        atom["evaluation"]["source_excerpts"] = ["另一要求"]
+    elif fault == "time":
+        atom["evaluation"]["time_purpose"] = "unresolved"
+    elif fault == "policy":
+        atom["evaluation"]["observation_policy"]["scope"] = "新的记录采用口径"
+    elif fault == "extra_claim":
+        atom["evaluation"]["proposition"] += "并完成额外检查"
+    payload = {"atom": atom}
+    if fault == "sibling":
+        payload["candidate_drafts"] = []
+    raw = json.dumps(payload, ensure_ascii=False)
+    if fault:
+        with pytest.raises(ProtocolControlAgentWireValidationError):
+            _merge_obligation_atom_repair(raw, baseline, (0, 0, 0), proposition_only=True)
+    else:
+        revised = _merge_obligation_atom_repair(raw, baseline, (0, 0, 0), proposition_only=True)
+        revised_json = revised.model_dump(mode="json")
+        revised_json["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["proposition"] = atom["statement"]
+        assert revised_json == baseline
+        assert "仅合并该字段" in _build_obligation_atom_repair_prompt(
+            batch, baseline, (0, 0, 0), "条件尚未表达", proposition_only=True)
+    assert wire.model_dump(mode="json") == baseline
+
+
+@pytest.mark.parametrize("reply", ["valid", "unchanged", "escape"])
+def test_source_condition_repair_uses_existing_atom_path_and_fresh_saved_review(reply):
+    from app.services.protocol_control_execution import _validate_saved_source_review
+    batch, inventory, wire, alignment = _source_condition_proposition_material()
+    frozen = wire.model_dump_json(), inventory.model_dump_json()
+    review = SourceTargetReview.model_validate({"version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "additional_requirement", "target_id": None,
+            "source_action_excerpt": inventory.statements[0].quoted_text,
+            "unresolved_aspects": ["既有目录未覆盖该条件及动作"]}]})
+
+    class Transport(_FakeTransport):
+        repairs, reads = 0, 0
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target", text=review.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            self.reads += 1
+            assert self.reads <= 2
+            return ProtocolControlAgentResponse(session_id="review", text=alignment.model_dump_json(exclude={"proofs"}))
+
+        def continue_atom(self, *, session_id, prompt):
+            self.repairs += 1
+            assert self.repairs == 1 and "evaluation.proposition" in prompt
+            atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0].model_dump(mode="json")
+            if reply != "unchanged":
+                atom["evaluation"]["proposition"] = inventory.statements[0].quoted_text
+            if reply == "escape":
+                atom["evaluation"]["observation_policy"]["scope"] = "改动采用口径"
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"atom": atom}, ensure_ascii=False))
+
+        def continue_session(self, **kwargs):
+            pytest.fail("局部条件修订不得整批重读")
+
+        def start_source_insert(self, **kwargs):
+            pytest.fail("已有条件不得重复补入")
+
+    transport = Transport([])
+    consumed = []
+    result = ProtocolControlAgentRunner(max_schema_repairs=3).run(batch, transport,
+        resume_wire=wire, resume_source_interpretation=inventory, resume_session_id="author",
+        output_validator=consumed.append)
+    assert transport.repairs == 1, [(item.error_classes, item.issues) for item in result.attempts]
+    if reply == "valid":
+        assert result.final_output is not None, [(item.error_classes, item.issues) for item in result.attempts]
+        assert transport.reads == 2 and consumed
+        restored = ProtocolControlAgentRunResult.model_validate_json(result.model_dump_json())
+        _validate_saved_source_review(batch, restored)
+        assert restored.source_candidate_alignment.proofs[0].candidate_sha256
+    else:
+        assert result.final_output is None
+        assert result.partial_wire == wire
+    assert (wire.model_dump_json(), inventory.model_dump_json()) == frozen
 
 
 @pytest.mark.parametrize("selected", [None, "visit-a"])

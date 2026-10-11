@@ -3772,6 +3772,19 @@ def _validate_saved_source_review(
     validate_source_interpretation(batch, interpretation)
     validate_completed_quote_review(interpretation, result.source_target_review,
                                     result.source_scope_question_history)
+    sequence_units = {statement.structure_unit_id for statement in interpretation.statements
+        if statement.eligibility_sequence == "after_eligibility_decision"
+        and statement.eligibility_sequence_context is None}
+    for unit in batch.owned_units:
+        indexes = [index for index, statement in enumerate(interpretation.statements)
+                   if statement.structure_unit_id == unit.structure_unit_id]
+        if (unit.structure_unit_id in sequence_units
+                and not source_unit_quotes_cover_source(unit, interpretation, indexes)):
+            raise SourceInterpretationValidationError("SOURCE_SEQUENCE_CAPTURE_INCOMPLETE",
+                "保存的先决与动作来源未完整覆盖，须重新核对受影响来源",
+                statement_id=indexes[0], structure_unit_id=unit.structure_unit_id,
+                json_path=f"statements[{indexes[0]}].quoted_text", source_refs=list(unit.source_span_ids),
+                retry_class="source_semantic_review")
     if result.workflow_variant_requested == "RV1001-FLOW" and result.final_output is not None:
         from app.agents.protocol_control_fixed_flow import supports_front_stage_flow
         if supports_front_stage_flow(batch, interpretation) and result.source_front_target_review is None:
