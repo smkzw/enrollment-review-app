@@ -1449,6 +1449,45 @@ def test_alignment_rejects_prohibition_without_prohibition_atom() -> None:
         validate_candidate_alignment(batch, interpretation, coverage, output, _alignment())
 
 
+@pytest.mark.parametrize("text,reason", [
+    ("给予3 mL药液，分为6个区域，避开2 cm范围", "numeric_relation_unverified"),
+    ("给予3 mL药液", "numeric_relation_unverified"),
+    ("检查结果须在40 U/L以内", "numeric_relation_unverified"),
+    ("检查结果须低于40 U/L", "numeric_predicate_missing"),
+])
+def test_action_completion_does_not_certify_numeric_details(text, reason):
+    from app.agents.protocol_control_candidate_alignment import CandidateNumericAlignmentError
+    from app.domain.contracts.control_evaluation_spec import validate_control_atom_evaluation
+    from tests.v2.protocols.test_slice58c_control_deconstructor import _evaluation
+
+    batch, interpretation, output, coverage, _ = _material()
+    batch.owned_units[0].excerpt = interpretation.statements[0].quoted_text = text
+    atom = output.candidates[0].semantics.obligation_expression.groups[0].atoms[0]
+    atom.kind = ControlObligationKind.COMPLETE_OR_VERIFY
+    atom.statement = text
+    atom.source_excerpts = [text]
+    value = _evaluation(text, "span:01", text)
+    value["observation_policy"]["mode"] = "action_completion"
+    value["observation_policy"]["scope"] = "本次操作"
+    atom.evaluation = type(atom.evaluation).model_validate(value)
+    validate_control_atom_evaluation(atom, require_explicit=True)
+    alignment = _alignment(quote=text)
+    alignment.items[0].source_excerpt = text
+    with pytest.raises(CandidateNumericAlignmentError) as raised:
+        validate_candidate_alignment(batch, interpretation, coverage, output, alignment)
+    assert raised.value.error_detail["reason"] == reason
+    assert raised.value.error_detail["atom_paths"] == [[0, 0, 0]]
+    assert raised.value.error_detail["source_refs"] == batch.owned_units[0].source_span_ids
+    bound, failures = bind_partial_candidate_alignment(
+        batch, interpretation, coverage, output, alignment,
+        alignment.model_dump_json(exclude={"proofs"}), [(0, 0)],
+    )
+    assert bound is None
+    assert failures[0]["reason"] == reason
+    assert failures[0]["statement_ids"] == [0]
+    assert failures[0]["candidate_indexes"] == [0]
+
+
 @pytest.mark.parametrize("word,correct,wrong", [
     ("大于等于", Comparator.GTE, Comparator.GT),
     ("不小于", Comparator.GTE, Comparator.LT),

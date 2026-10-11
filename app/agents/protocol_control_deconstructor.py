@@ -265,7 +265,7 @@ PUBLICATION_REPAIR_SCOPE_VERSION = "phase5/publication-candidate-repair-scope/v2
 _CANDIDATE_FIELD_REPAIR_VERSION = "phase5/candidate-field-repair/v2"
 SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION = "phase5/source-requirement-failure-policy/v5"
 # Reporting changes do not change author/repair prompts or invalidate successful reads.
-SOURCE_REQUIREMENT_FAILURE_REASON_VERSION = "phase5/source-requirement-failure-reason/v1"
+SOURCE_REQUIREMENT_FAILURE_REASON_VERSION = "phase5/source-requirement-failure-reason/v2"
 
 
 class ProtocolControlAgentWireValidationError(ValueError):
@@ -10552,6 +10552,8 @@ class ProtocolControlAgentRunner:
                                         }),
                                         "retry_class": "source_semantic_review",
                                         "affected_dependents": candidate_indexes,
+                                        **({"alignment_failures": deepcopy(alignment_failures)}
+                                           if alignment_failures else {}),
                                     },
                                 ))
                                 return build_result(
@@ -11302,7 +11304,8 @@ class ProtocolControlAgentRunner:
                                 "repair_source_span_ids": list(error.obligation_source_span_ids),
                                 "repair_error_classes": list(error.error_class_codes),
                                 "repair_scope_unknown": error.repair_scope_unknown,
-                            } if validation_error.validation_findings else None
+                            } if (validation_error.validation_findings or error.structure_unit_ids
+                                  or error.candidate_ids or error.candidate_indexes) else None
                         ),
                         rejected_structure_unit_ids=list(
                             error.structure_unit_ids or batch.owned_structure_unit_ids

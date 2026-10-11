@@ -40,7 +40,7 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "2026-10-11用户恢复，Goal active，claims_complete=false。源码145380c2已push并实际运行，Job175747795f5c48bab30de609a60c72d6终态failed_final：47深审实际复用、45负核对保留未采用，49模型清单连接故障、41未执行，0语义调用447.63秒。相同产品模型清单复查成功，未换模型/密钥或关闭身份检查。新只读预检47复用/1保留失败/1接续/41刷新通过、0模型/0写/全库hash保持；合法Job87f0d800a013443a9b8194a61b314111接续中，保留累计账与原两次失败边界。60相连检查及C03两轮只读是工程证据，不是临床验收。完整共同发布/当前节点工作稿/UI更正新旧报告/Q3未达，0启用/签发；任务不归档。",
+  "notes": "2026-10-11用户恢复，Goal active，claims_complete=false。实际源码145380c2的合法Job87f0d800a013443a9b8194a61b314111已failed_final/SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，5调用383.15秒、47完成、45与49失败、41未读；exec95984结束，原件/旧终态保持。45负答未采用，49数值用途及跨单元先后/对象关系未核，逻辑账5/8。当前诊断包132相连通过，实际49原答0调用只读重验，不放宽门或保存新采用；C03参数边界续审为同模型家族源码只读。完整共同发布/当前节点工作稿/UI更正新旧报告/Q3未达，0启用/签发；先核来源对象/关系，不新增参数引擎、不重读47成功，任务不归档。",
   "meta": {
     "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",

@@ -36,20 +36,24 @@ class SourceCandidateAlignmentValidationError(ValueError):
 
 
 class CandidateNumericAlignmentError(SourceCandidateAlignmentValidationError):
-    def __init__(self, *, item, candidate, atoms, source_refs, repeat_scheme_only=False):
+    def __init__(self, *, item, candidate, atoms, source_refs, repeat_scheme_only=False,
+                 relation_unverified=False):
         paths = [(item.candidate_index, group_index, atom_index)
                  for group_index, group in enumerate(candidate.obligation_expression.groups)
                  for atom_index, atom in enumerate(group.atoms)
                  if atom in atoms and any(_NUMBER.search(quote)
-                     and (repeat_scheme_only or any(re.search(pattern, quote) for pattern, _ in _COMPARISON_WORDS))
+                     and (repeat_scheme_only or relation_unverified
+                          or any(re.search(pattern, quote) for pattern, _ in _COMPARISON_WORDS))
                      for quote in atom.source_excerpts)]
         self.error_detail = {
-            "reason": "repeat_scheme_missing" if repeat_scheme_only else "numeric_predicate_missing",
+            "reason": ("repeat_scheme_missing" if repeat_scheme_only else
+                       "numeric_relation_unverified" if relation_unverified else "numeric_predicate_missing"),
             "source_refs": list(source_refs),
             "atom_paths": [list(path) for path in paths],
             "required_source_excerpt": item.source_excerpt,
         }
         super().__init__("动作次数缺少有源复查合同，不能宣布完整" if repeat_scheme_only else
+                         "原文数值的用途与核查方式尚未核清，不能宣布完整" if relation_unverified else
                          "数值原文缺少可核验的比较条件，不能宣布完整")
 
 
@@ -1087,7 +1091,10 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
             if numbers and not repeat_count_preserved and not (native_visit_scope and source in rendered
                                 and "threshold" not in functions and not directions):
                 if len(numbers) != 1 or len(directions) != 1 or not predicates:
-                    raise ValueError("数值原文不能由模糊比较条件宣布完整")
+                    raise CandidateNumericAlignmentError(
+                        item=item, candidate=candidate, atoms=obligation_selected,
+                        source_refs=unit.source_span_ids, relation_unverified=True,
+                    )
                 conditioned_consequences = []
                 for group in relevant_groups:
                     group_selected = [atom for atom in group.atoms if atom in obligation_selected]

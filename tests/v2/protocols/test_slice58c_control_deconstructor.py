@@ -7408,6 +7408,9 @@ def test_wrong_native_procedure_link_is_repaired_before_it_becomes_insert_author
     )
     assert result.status == "已解析", [item.issues for item in result.attempts]
     assert "PROCEDURE_ROW_SOURCE_MISMATCH" in result.attempts[0].error_classes
+    restored = type(result).model_validate_json(result.model_dump_json())
+    assert restored.attempts[0].error_detail["repair_structure_unit_ids"] == [batch.owned_units[0].structure_unit_id]
+    assert restored.attempts[0].error_detail["code"] == "PROCEDURE_ROW_SOURCE_MISMATCH"
     assert len(transport.prompts) == 2
     assert result.partial_wire.candidate_drafts[0] == corrected.candidate_drafts[0]
     _validate_saved_source_review(batch, type(result).model_validate_json(result.model_dump_json()))
@@ -15071,6 +15074,15 @@ def test_alignment_numeric_gap_repairs_only_selected_atom_then_revalidates(reply
         assert result.final_output is None
         assert result.partial_wire.model_dump(mode="json") == original
         assert transport.alignment_calls <= 2
+        if reply_kind == "multi_number":
+            restored = ProtocolControlAgentRunResult.model_validate_json(result.model_dump_json())
+            failures = restored.attempts[-1].error_detail["alignment_failures"]
+            assert failures[0]["reason"] == "numeric_relation_unverified"
+            assert failures[0]["statement_ids"] == [0]
+            assert failures[0]["candidate_indexes"] == [0]
+            assert failures[0]["atom_paths"] == [[0, 0, 0]]
+            from app.services.protocol_control_restricted_source import restricted_batch_from_review
+            assert restricted_batch_from_review(batch, restored) is None
         if reply_kind in {"changed_proposition", "changed_policy", "patch_parent_excerpt", "patch_unauthorized_field",
                           "patch_missing_field", "patch_downgrade"}:
             assert any("ATOM_REPAIR_INVALID" in attempt.error_classes for attempt in result.attempts)
