@@ -2,6 +2,12 @@
 
 ## 当前事实
 
+**现行覆盖下方先前当前段：** Goal active、claims_complete=false。已push实际源码8c1fee44、Job244296b31b9e4c459e0f162d64e7e427 failed_final/PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID，4物理调用359.80218570800207秒/exit3，44完成/44排队。45候选语义失败已准确保存；46首次独立继续，保存消费者发现末尾表格引用漏捕获（SOURCE_SEQUENCE_CAPTURE_INCOMPLETE），不是临床原文歧义。0共同发布/启用/签发；5PDF24页新同包工作稿、正式UI关联更正及Q3未完成。
+
+当前局部保存恢复包仅复用有源解释与旧调用历史，旧wire/核对/覆盖/待修状态全部弃用，必须已有局部补读、新作者及原保存门；不扩大旧预算或重开停止补读。恢复版本只在局部证明，不增加validator字符串。相连原模块末61pass/8.26秒/exit0（非全库/临床），C03 Grok/high两次只读exit0/no fallback，末回执清单补齐所有者核验。244全部90步只读预检50可复用/2部分恢复/38刷新，0模型/0写/全库hash保持，早于四项回执清单补齐；真实新恢复尚未运行。详见implement和reviews/rv1006-saved-capture-owner-disposition-20261011.md。45相同失败不原样重跑，先核通用数值用途及条件分支，不能人工标已核或改名真实未决。本机原答/数据库不提交，七份继承dirty保留；本记录不是暂停。
+
+### 以下0afc及更早记录为历史，不覆盖以上实际244终态
+
 **现行接续：** Goal实查active，claims_complete=false；最近真实产品源码831db58a、Job 0afc18de3f334d92b7c3bce3898769a5 failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，3调用272.7409305000001秒/exit3，44完成/45排队。来源例外字段已实际补正保存；候选核对拒绝另一义务分支/数值用途，终态通用时间错误盖住第一因果失败。候选不采用、0完整共同发布/启用/签发。当前最小修复严格区分被拒候选、真实时间疑问和政策错误；坏JSON立即返回，不借旧否定，新鲜否定不能转已耗尽证明。独立读取白名单/上限2不变，无新平台或模型。三相连原模块末134pass/18.87秒/exit0；C03 Grok/high新鲜初审及同会话续审exit0/no fallback，只读源码，不读临床/跑测试；末政策聚合及真实消费者反例由所有者验证。详见reviews/rv1006-candidate-cause-owner-disposition-20261011.md；本记录不是暂停。
 
 **当前完成的软件与核对：** 54保留字面同源先决时间、动作与完整来源，保存消费者也核捕获；缺口以typed错误逐组失效，不把技术问题推给研究者。45原条件对应门不放宽；沿现有continue_atom仅修proposition，限冻结摘录内逐字判断句，其余字段/兄弟不变，完整门及新的含义核对仍必需。两项仅validator身份改变，不新建平台/读道/项目词表。C03 Grok/high新鲜初审及同会话续审exit0/no fallback，末保护所有者验证；非临床批准。原模块窗101pass/1.16秒、服务窗65pass/17.30秒，各exit0/5SWIG、不累加。

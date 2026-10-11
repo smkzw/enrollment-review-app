@@ -2977,6 +2977,59 @@ def _validated_deep_partial_source(
     completion_code = completion_detail.get("code") if isinstance(completion_detail, Mapping) else None
     if (not changed_components and not pending_source and obsolete_basis is None
             and repair_identity == protocol_control_agent_repair_contract_sha256()
+            and getattr(source_step, "error_code", None) == "PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID"
+            and isinstance(last_attempt, Mapping) and last_attempt.get("outcome") == "parsed"
+            and not last_attempt.get("error_classes")
+            and all(isinstance(item, Mapping) and item.get("outcome") == "parsed"
+                    and not item.get("error_classes") for item in saved.get("attempts", []))
+            and type(saved.get("pending_author_repairs_used", 0)) is int
+            and saved.get("pending_author_repairs_used", 0) == 0
+            and saved.get("pending_author_wire") is None
+            and saved.get("capability_wire") is None
+            and saved.get("source_front_target_review") is None
+            and isinstance(saved.get("partial_wire"), Mapping)):
+        # A parsed proposal can still fail the saving consumer's full-source
+        # check. Recover only the witnessed missing source, never its approval.
+        result = _saved_failed_deep_run_result(batch, saved)
+        interpretation = result.source_interpretation
+        if interpretation is not None:
+            validate_source_interpretation(batch, interpretation)
+            sequence_units = {item.structure_unit_id for item in interpretation.statements
+                if item.eligibility_sequence == "after_eligibility_decision"
+                and item.eligibility_sequence_context is None}
+            gaps = tuple(unit.structure_unit_id for unit in batch.owned_units
+                    if unit.structure_unit_id in sequence_units
+                    and not source_unit_quotes_cover_source(unit, interpretation, [
+                        index for index, item in enumerate(interpretation.statements)
+                        if item.structure_unit_id == unit.structure_unit_id]))
+            if gaps:
+                seed = dict(saved, partial_wire=None, source_target_review=None,
+                    source_statement_coverage=[], source_candidate_alignment=None, session_id=None,
+                    source_front_target_review=None, capability_wire=None, source_review_reuse=None,
+                    pending_author_wire=None, pending_author_wire_sha256=None,
+                    pending_author_source_sha256=None, pending_author_repairs_used=0,
+                    pending_source_definition_consumers=None, pending_source_definition_consumer_attempts=[])
+                return checkpoint_id, seed, _ResumedSourceReview(
+                        state="absent", reason="source_unit_quote_completion_required",
+                        source_seed_proof={
+                            "schema_version": "phase5/source-unit-quote-completion-seed-proof/v1",
+                            "recovery_version": "saved-sequence-capture-local-recovery/v1",
+                            "source_job_id": source_job_id, "checkpoint_id": checkpoint_id,
+                            "step_id": step_id, "source_unit_completion_ids": list(gaps),
+                            "source_sha256": hashlib.sha256(interpretation.model_dump_json().encode()).hexdigest(),
+                            "diagnostic_sha256": hashlib.sha256(json.dumps(saved, ensure_ascii=False,
+                                sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+                            "current_source_equal": True, "reused": ["source_interpretation"],
+                            "discarded": ["partial_wire", "source_target_review", "source_statement_coverage",
+                                "source_candidate_alignment", "session_id", "source_front_target_review",
+                                "capability_wire", "source_review_reuse", "pending_author_wire",
+                                "pending_author_wire_sha256", "pending_author_source_sha256",
+                                "pending_author_repairs_used", "pending_source_definition_consumers",
+                                "pending_source_definition_consumer_attempts"],
+                            "adopted": False, "source_repair_limit": source_repair_limit,
+                        })
+    if (not changed_components and not pending_source and obsolete_basis is None
+            and repair_identity == protocol_control_agent_repair_contract_sha256()
             and isinstance(last_attempt, Mapping) and last_attempt.get("outcome") == "publication_invalid"
             and completion_code in {"SOURCE_TARGET_REVIEW_UNRESOLVED", "TEMPORAL_SCOPE_UNRESOLVED"}
             and last_attempt.get("error_classes") == [completion_code]
@@ -3636,6 +3689,9 @@ def _preflight_deep_source(
         if (step is not None and step.state == "failed_final"
                 and partial is not None and partial[2].source_seed_proof is not None):
             decisions[batch.batch_id]["reason"] = (
+                "source_unit_quote_completion_required"
+                if partial[2].source_seed_proof["schema_version"] == "phase5/source-unit-quote-completion-seed-proof/v1"
+                else
                 "verified_source_interpretation_components_revalidated"
                 if partial[2].source_seed_proof["schema_version"] in {
                     "phase5/revalidated-source-seed-proof/v3", "phase5/revalidated-source-seed-proof/v4",

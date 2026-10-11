@@ -1366,7 +1366,7 @@ def test_unit_completion_failure_survives_real_job_checkpoint_without_upstream_r
     assert runner.run_job(current.job_id)
     with session_factory() as session:
         saved = JobStore(session, now=_now).get_last_checkpoint(current.job_id, "deep_0001")[1]
-    assert saved == {**diagnostic, "attempt": 1}
+    assert saved == {**diagnostic, "attempt": 1, "_runner_failure_origin": "new-failure/v1"}
     if not transport_failure:
         with pytest.raises(ValueError, match="SOURCE_UNIT_QUOTE_COMPLETION_STOPPED"):
             module._resumable_unit_completion_failure(batch, saved)
@@ -1411,11 +1411,12 @@ def test_unit_completion_failure_survives_real_job_checkpoint_without_upstream_r
     assert transport.calls == 2 and blocked.attempts[-1].error_detail["called"] is False
 
 
-@pytest.mark.parametrize("defect", [None, "dependent_additional", "temporal", "temporal_wrong_dependents", "bad_range", "boolean_range", "wrong_refs", "bad_numeric", "foreign_route"])
+@pytest.mark.parametrize("defect", [None, "dependent_additional", "temporal", "temporal_wrong_dependents", "bad_range", "boolean_range", "wrong_refs", "bad_numeric", "foreign_route", "parsed_capture", "parsed_foreign_quote", "parsed_wrong_failure", "parsed_prior_failure", "parsed_author_used", "parsed_two_units"])
 def test_saved_source_gap_preflight_preserves_source_but_discards_semantic_draft(monkeypatch, defect):
     module = protocol_control_execution_module
     temporal = defect in {"temporal", "temporal_wrong_dependents"}
     batch, result = (_independent_candidate_and_temporal_gap() if temporal
+                     else _independent_candidate_and_unresolved_review() if defect == "parsed_two_units"
                      else _procedure_correspondence_review() if defect == "dependent_additional"
                      else _same_unit_two_requirement_review())
     affected_unit = batch.owned_units[1 if temporal else 0]
@@ -1430,6 +1431,25 @@ def test_saved_source_gap_preflight_preserves_source_but_discards_semantic_draft
         # Another unit's gap must not expand this typed local recovery. No old
         # candidate/review survives the seed; subsequent full gates still apply.
         batch.owned_units[0].excerpt += "，仅在另外的条件满足后执行"
+    parsed_capture = defect in {"parsed_capture", "parsed_foreign_quote", "parsed_wrong_failure", "parsed_prior_failure", "parsed_author_used", "parsed_two_units"}
+    if parsed_capture:
+        prefix = "完成资格核对后，"
+        affected_unit.excerpt = prefix + affected_unit.excerpt
+        if defect == "parsed_two_units":
+            batch.owned_units[1].excerpt = prefix + batch.owned_units[1].excerpt + "，另见来源表格"
+        for statement in result.source_interpretation.statements:
+            statement.eligibility_sequence = "after_eligibility_decision"
+            statement.eligibility_sequence_quote = prefix
+        result.attempts[-1].outcome = "parsed"
+        result.attempts[-1].error_classes = []
+        result.attempts[-1].error_detail = None
+        if defect == "parsed_foreign_quote":
+            result.source_interpretation.statements[0].quoted_text = "另一文件的内容"
+        elif defect == "parsed_prior_failure":
+            result.attempts.insert(0, result.attempts[-1].model_copy(update={
+                "outcome": "schema_invalid", "error_classes": ["SCHEMA_INVALID"]}))
+        elif defect == "parsed_author_used":
+            result.pending_author_repairs_used = 1
     if defect == "dependent_additional":
         item = result.source_target_review.items[0]
         item.decision = "additional_requirement"
@@ -1438,7 +1458,7 @@ def test_saved_source_gap_preflight_preserves_source_but_discards_semantic_draft
         item.unresolved_cause = None
         result.attempts[-1].error_detail["statement_ids"] = [0, 1]
     prompt = module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE
-    payload = {}
+    payload = {"runner_limits": {"deep_max_schema_repairs": 7}} if parsed_capture else {}
     current = module._deep_component_identity(payload, prompt)
     saved = dict(result.model_dump(mode="json"), stage="deep_failure_diagnostic",
                  schema_version="phase5/deep-failure-diagnostic/v3", batch_id=batch.batch_id,
@@ -1463,21 +1483,30 @@ def test_saved_source_gap_preflight_preserves_source_but_discards_semantic_draft
             text = json.dumps(payload)
             return SimpleNamespace(payload_json=text, payload_sha256=hashlib.sha256(text.encode()).hexdigest())
         def list_steps(self, _):
-            return [SimpleNamespace(step_id="deep_0001", state="failed_final")]
+            return [SimpleNamespace(step_id="deep_0001", state="failed_final",
+                error_code=("PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID" if parsed_capture
+                    and defect != "parsed_wrong_failure" else "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID"))]
         def get_last_checkpoint(self, _, step):
             return ("closure", {"stage": "closure", "deep_plan": {}}) if step == module.STEP_CLOSURE else ("failure", saved)
     monkeypatch.setattr(module.ProtocolControlDiscoveryToDeepPlan, "model_validate",
                         staticmethod(lambda _: SimpleNamespace(batches=[batch])))
-    if defect in {"bad_numeric", "foreign_route"}:
+    if defect in {"bad_numeric", "foreign_route", "parsed_foreign_quote"}:
         with pytest.raises(ValueError):
             module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
     else:
         recovered = module._validated_deep_partial_source(Store(), payload, "old", batch, "deep_0001", prompt)
         assert recovered is not None
-        if defect in {None, "dependent_additional", "temporal"}:
+        if defect in {None, "dependent_additional", "temporal", "parsed_capture", "parsed_two_units"}:
             assert recovered[1]["partial_wire"] is None and recovered[2].review is None
-            assert recovered[2].source_seed_proof["source_unit_completion_ids"] == [affected_unit.structure_unit_id]
+            assert recovered[2].source_seed_proof["source_unit_completion_ids"] == (
+                list(batch.owned_structure_unit_ids) if defect == "parsed_two_units"
+                else [affected_unit.structure_unit_id])
             assert recovered[1]["source_interpretation"] == saved["source_interpretation"]
+            if parsed_capture:
+                assert recovered[2].source_seed_proof["source_repair_limit"] == 7
+                assert recovered[1]["source_candidate_alignment"] is None
+                assert recovered[1]["source_statement_coverage"] == []
+                assert recovered[1]["attempts"] == saved["attempts"]
         else:
             assert recovered[2].source_seed_proof is None
     assert json.dumps(saved, sort_keys=True) == before
