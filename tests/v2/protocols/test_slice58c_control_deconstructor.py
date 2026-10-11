@@ -16271,6 +16271,116 @@ def test_source_condition_repair_uses_existing_atom_path_and_fresh_saved_review(
     assert (wire.model_dump_json(), inventory.model_dump_json()) == frozen
 
 
+@pytest.mark.parametrize("reply", ["valid", "unavailable", "bad_json", "escape",
+    "policy_bad_json", "policy_transport", "policy_duplicate", "policy_field",
+    "already_reviewed", "policy_empty", "policy_equal"])
+def test_late_policy_negative_repairs_only_its_unit_and_keeps_checked_atom(reply):
+    batch, inventory, first_wire, first_alignment = _source_condition_proposition_material()
+    quote = "筛选时记录末次用药日期"
+    batch.owned_units[1].excerpt = quote
+    inventory.units_without_statement = []
+    inventory.statements.append(SourceStatement(structure_unit_id="su-02", quoted_text=quote,
+        force="required", decision_functions=["action"], time_words=[]))
+    second = first_wire.candidate_drafts[0].model_copy(deep=True)
+    second.source_structure_unit_ids, second.source_span_ids = ["su-02"], ["span:02"]
+    atom = second.obligation_expression.groups[0].atoms[0]
+    atom.statement, atom.source_span_ids, atom.source_excerpts = quote, ["span:02"], [quote]
+    atom.evaluation = type(atom.evaluation).model_validate(_evaluation(quote, "span:02", quote))
+    evidence = second.minimum_evidence[0]
+    evidence.source_policy = type(evidence.source_policy).model_validate(_evidence_policy("span:02", quote))
+    evidence.source_policy.requires_contemporaneous_objective_source = True
+    original = _wire_with_two_candidates(first_wire.candidate_drafts[0], second)
+    corrected = second.model_copy(deep=True)
+    corrected.minimum_evidence[0].source_policy.requires_contemporaneous_objective_source = None
+    patch = original.model_copy(deep=True)
+    patch.dispositions = [row for row in patch.dispositions if row.structure_unit_id == "su-02"]
+    patch.candidate_drafts = [corrected]
+    review = SourceTargetReview.model_validate({"version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "additional_requirement", "target_id": None,
+            "source_action_excerpt": inventory.statements[0].quoted_text,
+            "unresolved_aspects": ["既有目录未覆盖该条件及动作"]}]})
+
+    class Transport(_FakeTransport):
+        atom_repairs, policy_repairs, policy_reads = 0, 0, 0
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target", text=review.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            selected = json.loads(prompt.split("待核对应：", 1)[1])
+            if selected[0]["candidate_index"] == 0:
+                return ProtocolControlAgentResponse(session_id="alignment", text=first_alignment.model_dump_json(exclude={"proofs"}))
+            self.policy_reads += 1
+            assert self.policy_reads == 1
+            if reply == "policy_transport":
+                raise RuntimeError("synthetic transport failure")
+            if reply == "policy_bad_json":
+                return ProtocolControlAgentResponse(session_id="policy", text="{")
+            checks = _synthetic_policy_checks_from_prompt(prompt, 1)
+            checks[0]["boolean_value"] = None
+            if reply == "policy_field":
+                checks[0]["source_excerpt"] = "另一来源"
+            elif reply == "policy_empty":
+                checks = []
+            elif reply == "policy_equal":
+                checks[0]["boolean_value"] = True
+            item = {"statement_index": 1,
+                    "candidate_index": 1, "decision": "incomplete", "source_excerpt": quote,
+                    "candidate_atom_quotes": [quote], "unresolved_dimensions": ["增加无源同期原件要求"],
+                    "evidence_policy_checks": checks}
+            return ProtocolControlAgentResponse(session_id="policy", text=json.dumps({
+                "version": first_alignment.version,
+                "items": [item, item] if reply == "policy_duplicate" else [item],
+            }, ensure_ascii=False))
+
+        def continue_atom(self, *, session_id, prompt):
+            self.atom_repairs += 1
+            assert self.atom_repairs == 1
+            atom = first_wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0].model_dump(mode="json")
+            atom["evaluation"]["proposition"] = inventory.statements[0].quoted_text
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps({"atom": atom}))
+
+        def continue_scoped_unit_repair(self, *, session_id, prompt, batch):
+            self.policy_repairs += 1
+            assert self.policy_repairs == 1 and batch.owned_structure_unit_ids == ["su-02"]
+            payload = patch.model_dump(mode="json")
+            if reply == "escape":
+                payload["dispositions"].append(original.dispositions[0].model_dump(mode="json"))
+            return ProtocolControlAgentResponse(session_id=session_id,
+                text="{" if reply == "bad_json" else json.dumps(payload, ensure_ascii=False))
+
+        def continue_session(self, **kwargs):
+            pytest.fail("真实负核对不得扩大为整批重读")
+
+    transport = Transport([])
+    if reply == "unavailable":
+        transport.continue_scoped_unit_repair = None
+    result = ProtocolControlAgentRunner(max_schema_repairs=3).run(batch, transport,
+        resume_wire=original, resume_source_interpretation=inventory, resume_session_id="author",
+        resume_reviewed_semantic_repair_unit_ids=["su-02"] if reply == "already_reviewed" else [],
+        output_validator=lambda output: None)
+    assert transport.atom_repairs == 1 and transport.policy_reads == 1
+    failed_read = reply in {"policy_bad_json", "policy_transport", "policy_duplicate", "policy_field"}
+    assert transport.policy_repairs == (0 if failed_read or reply in {"unavailable", "already_reviewed"} else 1)
+    saved = result.partial_wire.candidate_drafts[0]
+    expected = original.candidate_drafts[0].model_copy(deep=True)
+    expected_atom = expected.obligation_expression.groups[0].atoms[0]
+    expected_atom.evaluation = expected_atom.evaluation.model_copy(
+        update={"proposition": inventory.statements[0].quoted_text})
+    assert saved == (original.candidate_drafts[0] if failed_read else expected)
+    if failed_read:
+        assert "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED" not in result.attempts[-1].error_classes
+        assert result.reviewed_semantic_repair_unit_ids == []
+    if reply in {"valid", "policy_empty", "policy_equal"}:
+        assert result.final_output is not None, [a.issues for a in result.attempts]
+        assert result.partial_wire.candidate_drafts[1] == corrected
+    else:
+        assert result.final_output is None
+        assert result.partial_wire.candidate_drafts[1] == second
+        assert result.status == "需要核对"
+    assert original.candidate_drafts[0] == first_wire.candidate_drafts[0]
+
+
 @pytest.mark.parametrize("selected", [None, "visit-a"])
 def test_target_review_packet_deduplicates_text_without_merging_visits(selected):
     from app.agents.protocol_control_source_interpretation import _target_review_source_packet

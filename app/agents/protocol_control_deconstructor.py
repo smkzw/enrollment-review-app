@@ -101,6 +101,7 @@ from .protocol_control_candidate_alignment import (
     SOURCE_CANDIDATE_ALIGNMENT_VERSION,
     EVIDENCE_POLICY_ALIGNMENT_VERSION,
     EvidencePolicyCheckError,
+    SourceCandidateAlignmentValidationError,
     SourceCandidateAlignment,
     alignment_with_items,
     bind_candidate_alignment,
@@ -7612,6 +7613,8 @@ class ProtocolControlAgentRunner:
         workflow_path_executed = "not_started"
         pending_alignment_atom_baseline = None
         def build_result(**values) -> ProtocolControlAgentRunResult:
+            nonlocal pending_alignment_atom_baseline, partial_wire
+            nonlocal latest_source_candidate_alignment, latest_source_statement_coverage
             values.setdefault("reviewed_semantic_repair_unit_ids", sorted(reviewed_semantic_repair_units))
             if (values.get("final_output") is None and values.get("partial_wire") is None
                     and values.get("capability_wire") is None
@@ -7656,6 +7659,7 @@ class ProtocolControlAgentRunner:
                         (item.statement_index, item.candidate_index) for item in proven
                     }]
                     response = None
+                    policy_review_complete = False
                     reader = getattr(transport, "start_source_candidate_alignment", None)
                     try:
                         if pending:
@@ -7684,14 +7688,69 @@ class ProtocolControlAgentRunner:
                                 raw_output_chars=len(response.text), raw_output_text=response.text,
                                 outcome="parsed", issues=["已保存资料来源限制的局部核对，仍须通过采用校验"],
                             ))
+                        policy_review_complete = True
                         require_evidence_policy_alignment(
                             batch, inventory, raw_coverage, saved_wire, alignment,
                         )
                     except Exception as policy_error:  # noqa: BLE001 - retain source and failed review
+                        bound = reusable_proven_alignment_items(
+                            batch, inventory, raw_coverage, saved_wire, alignment,
+                            require_positive=False,
+                        ) if alignment is not None else []
+                        negative = [item for item in bound
+                                    if item.decision == "incomplete"
+                                    and (item.statement_index, item.candidate_index) in set(pairs)
+                                    and policy_review_complete
+                                    and isinstance(policy_error, SourceCandidateAlignmentValidationError)
+                                    and not isinstance(policy_error, EvidencePolicyCheckError)]
+                        if negative:
+                            # A valid negative semantic receipt is not a transport or
+                            # policy-field error. Keep unrelated, freshly checked edits.
+                            retain_checked_wire = pending_alignment_atom_baseline is None
+                            if pending_alignment_atom_baseline is not None:
+                                baseline_wire = pending_alignment_atom_baseline[0]
+                                changed = {index for index, (before, after) in enumerate(zip(
+                                    baseline_wire.candidate_drafts, saved_wire.candidate_drafts,
+                                )) if before != after}
+                                positive = {(item.statement_index, item.candidate_index)
+                                            for item in bound if item.decision == "fully_expressed"}
+                                required_changed_pairs = {(row.statement_index, index)
+                                    for row in raw_coverage for index in row.action_candidate_indexes
+                                    if index in changed}
+                                if (len(baseline_wire.candidate_drafts) == len(saved_wire.candidate_drafts)
+                                        and baseline_wire.dispositions == saved_wire.dispositions
+                                        and changed
+                                        and changed <= {index for _, index in positive}
+                                        and changed.isdisjoint(item.candidate_index for item in negative)
+                                        and required_changed_pairs <= positive
+                                        and {pair for pair in pairs if pair[1] in changed} <= positive
+                                        and not any(statement.unresolved
+                                            and statement.structure_unit_id in {
+                                                unit for index in changed
+                                                for unit in saved_wire.candidate_drafts[index].source_structure_unit_ids}
+                                            for statement in inventory.statements)):
+                                    pending_alignment_atom_baseline = None
+                                    retain_checked_wire = True
+                            if retain_checked_wire:
+                                partial_wire = saved_wire
+                                latest_source_candidate_alignment = alignment
+                                latest_source_statement_coverage = raw_coverage
+                            semantic_repair = _reviewed_semantic_closure_repair(
+                                batch, inventory, saved_wire, raw_coverage, alignment,
+                                [item.statement_index for item in negative],
+                            ) if retain_checked_wire else None
+                            if (semantic_repair is not None
+                                    and not set(semantic_repair.structure_unit_ids) & reviewed_semantic_repair_units
+                                    and callable(getattr(transport, "continue_scoped_unit_repair", None))
+                                    and max(repairs, source_repairs) < self._max_schema_repairs):
+                                reviewed_semantic_repair_units.update(semantic_repair.structure_unit_ids)
+                                raise semantic_repair from policy_error
                         from .protocol_control_agent_transport import protocol_control_call_failure_code
                         code = (protocol_control_call_failure_code(policy_error) or (
                                 "EVIDENCE_POLICY_REVIEW_UNAVAILABLE" if not callable(reader)
                                 else "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED" if response is None
+                                else "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED" if negative
+                                     and not isinstance(policy_error, EvidencePolicyCheckError)
                                 else "EVIDENCE_POLICY_UNJUSTIFIED"))
                         attempts.append(ProtocolControlAgentAttempt(
                             attempt=len(attempts) + 1,

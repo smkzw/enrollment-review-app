@@ -2,7 +2,7 @@
 
 ## 当前事实
 
-**现行接续：** Goal active，claims_complete=false；最近真实产品源码c0deee28、Job168d80243fcd41d2b0cbcff590d5f47b failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，9调用450.658400875秒/exit3，52完成/36排队、45与54失败。51–53新增完成；0完整共同发布/启用/签发。当前来源分区与条件判断句包仍按实际Git提交核，不能借下方旧83d/e28bb状态覆盖本段。
+**现行接续：** Goal active，claims_complete=false；最近真实产品源码5bb2d4e6、Job d5898e74c0f54c3ea6bc85ddb60324c6 failed_final/PROTOCOL_CONTROL_EVIDENCE_POLICY_UNJUSTIFIED，5调用287.742400167秒/exit3，44完成/45排队，45后置政策核对失败。0完整共同发布/启用/签发。此前168d/52完成为历史；预检可复用数不冒充实际执行。新后置政策恢复包详见reviews/rv1006-late-policy-owner-disposition-20261011.md：新有效负核对才进入既有局部修订，完整正向证明才保留无关修订，坏格式/来源/传输不降级。末相连56pass/8.25秒/exit0，C03同路线失败后恢复exit0，均非临床验收。只读新预检待接收，随后合法新建；本记录不是暂停。
 
 **当前完成的软件与核对：** 54保留字面同源先决时间、动作与完整来源，保存消费者也核捕获；缺口以typed错误逐组失效，不把技术问题推给研究者。45原条件对应门不放宽；沿现有continue_atom仅修proposition，限冻结摘录内逐字判断句，其余字段/兄弟不变，完整门及新的含义核对仍必需。两项仅validator身份改变，不新建平台/读道/项目词表。C03 Grok/high新鲜初审及同会话续审exit0/no fallback，末保护所有者验证；非临床批准。原模块窗101pass/1.16秒、服务窗65pass/17.30秒，各exit0/5SWIG、不累加。
 
