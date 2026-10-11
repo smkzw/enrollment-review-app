@@ -1229,7 +1229,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--out-dir",
-        help="运行记录与临时数据目录（默认 runs/protocol_control_smoke/<run_id>）",
+        help="运行记录与临时数据目录（默认 output/protocol_control_smoke/<run_id>）",
     )
     parser.add_argument(
         "--fixture",
@@ -1277,7 +1277,7 @@ def main(argv: list[str] | None = None) -> int:
         out_dir = Path(args.out_dir).resolve()
     else:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-        out_dir = REPO_ROOT / "runs" / "protocol_control_smoke" / stamp
+        out_dir = REPO_ROOT / "output" / "protocol_control_smoke" / stamp
     fixture_path = Path(args.fixture).resolve() if args.fixture else None
     selected_phase = StudyPhase(args.study_phase) if args.study_phase else None
 

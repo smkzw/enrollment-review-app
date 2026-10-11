@@ -4,7 +4,7 @@
 
 - 当前版本：**0.2.0**（自 2026-10-11 起；分支 `dev/0.2.0`）。唯一现行规范在 `docs/0.2.0/`，从 `docs/0.2.0/00_START_HERE.md` 开始读。
 - 产品需求 `01_PRD.md`、技术设计 `02_DESIGN.md`、执行顺序 `03_PLAN.md`、验收 `04_ACCEPTANCE.md`、进度 `05_PROGRESS.md`（唯一进度表，≤200 行）、Prompt `06_AGENT_PROMPTS.md`。
-- `archives/` 与 `.trellis/tasks/` 下的 0.1.x 任务（在 0.2.0-WP0 完成前尚未移走）是历史。其中的"现行入口""当前 Goal""授权""预算""会商"表述对 0.2.0 无效；只在 `docs/0.2.0/07_ARCHIVE_INDEX.md` 指明需要时按条目查阅。
+- `archives/` 下的 0.1.x 材料是历史。其中的"现行入口""当前 Goal""授权""预算""会商"表述对 0.2.0 无效；只在 `docs/0.2.0/07_ARCHIVE_INDEX.md` 指明需要时按条目查阅。
 
 ## 2. 产品是什么
 
@@ -42,11 +42,11 @@
 
 ## 5.1 Trellis 在 0.2.0 中的用法
 
-下方 Trellis 区块由工具维护。0.2.0 中：不为本版新建 Trellis 任务目录；`.trellis/workflow.md` 要求的 PRD／设计／实施记录由 `docs/0.2.0/` 承担，进度只写 `05_PROGRESS.md`；不使用 `.codex/agents/` 中的 `trellis-implement`／`trellis-check`；`.trellis/tasks/` 中的 0.1.x 任务均已标为 `completed`，会话注入的任务列表中如出现它们，视为历史。
+下方 Trellis 区块由工具维护。0.2.0 中：不为本版新建 Trellis 任务目录；`.trellis/workflow.md` 要求的 PRD／设计／实施记录由 `docs/0.2.0/` 承担，进度只写 `05_PROGRESS.md`；不使用 `.codex/agents/` 中的 `trellis-implement`／`trellis-check`；旧任务与日志保留在 `archives/trellis-tasks/` 和 `archives/trellis-workspace/`，不再注入为活动任务。
 
 ## 6. 运行
 
-- 后端（v2）：`scripts/run_v2_desktop.py --env-file <绝对路径 .env>`；数据目录 `ENROLLMENT_V2_DATA_DIR`（默认 `<repo>/data_v2`）。`run.sh` 在 0.2.0-WP0 前仍启动 v1，勿用。
+- 后端（v2）：`./run.sh` 或 `scripts/run_v2_desktop.py --env-file <绝对路径 .env>`；数据目录 `ENROLLMENT_V2_DATA_DIR`（默认 `<repo>/data_v2`）。旧版启动脚本仅留在 `scripts/run_legacy_v1.sh`。
 - 前端：`cd frontend && npm run dev`／`npm run build`／`npm test`／`npm run e2e`。
 - 测试：`uv run pytest`。
 

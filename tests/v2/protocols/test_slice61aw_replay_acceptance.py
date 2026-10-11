@@ -9,7 +9,7 @@ from pathlib import Path
 
 SCRIPT = (
     Path(__file__).resolve().parents[3]
-    / ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/"
+    / "archives/trellis-tasks/08-22-phase5-clinical-facts-profile/research/"
     "d001-ii-phase-closure/slice59n_representative_group_control_replay.py"
 )
 

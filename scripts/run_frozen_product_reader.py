@@ -72,7 +72,7 @@ def freeze(source, destination, job_id):
     code = destination / "product-code"
     shutil.copytree(Path("app"), code, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     shutil.copy2(__file__, destination / "runner.py")
-    plan = Path(".trellis/tasks/09-05-phase55-dual-vlm-page-review/MODEL_COMPARISON_20260907.md")
+    plan = Path("archives/trellis-tasks/09-05-phase55-dual-vlm-page-review/MODEL_COMPARISON_20260907.md")
     shutil.copy2(plan, destination / "test-plan.md")
     manifest = {str(p.relative_to(destination)): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in destination.rglob("*") if p.is_file()}

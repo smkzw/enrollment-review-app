@@ -1,5 +1,8 @@
 # Workspace Index
 
+> 0.2.0 只维护 `docs/0.2.0/05_PROGRESS.md`。旧开发者日志位于
+> `archives/trellis-workspace/`；以下通用模板不要求本阶段再建日志或任务。
+
 > Records of all AI Agent work records across all developers
 
 ---

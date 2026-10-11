@@ -1,5 +1,11 @@
 # Development Workflow
 
+## 0.2.0 当前任务约定
+
+本阶段不新建 Trellis 任务或重复的工作日志。PRD／design／implement 分别由
+`docs/0.2.0/01_PRD.md`、`02_DESIGN.md`、`03_PLAN.md`／`05_PROGRESS.md` 承担。
+以下通用流程只在不冲突时适用；历史任务移到 `archives/trellis-tasks/`，不作为活动任务注入。
+
 ---
 
 ## Core Principles

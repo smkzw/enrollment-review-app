@@ -40,7 +40,7 @@ from app.protocols.source_alignment import align_blocks
 
 DEFAULT_OUTPUT = (
     ROOT
-    / ".trellis/tasks/08-14-phase3-protocol-deconstruction/metrics/real-agent-acceptance"
+    / "output/real-agent-acceptance"
 )
 PROMPT_TEMPLATE = (
     "请以资深临床试验医学监查人员的专业语义解构本次已确认期别的正式研究方案。"
