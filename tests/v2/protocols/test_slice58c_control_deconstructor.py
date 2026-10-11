@@ -3928,6 +3928,24 @@ def test_table_sequence_witness_is_read_proposed_saved_and_consumed():
         _validate_saved_source_review(batch, restored)
 
 
+def _table_sequence_active_wire(batch, original, final_wire):
+    quote, span = original.statements[0].quoted_text, batch.owned_source_span_ids[0]
+    candidate = _candidate().model_dump(mode="json")
+    candidate.update(title="执行研究处理", source_span_ids=[span], applicability_expression=None,
+                     exception_expression=None)
+    candidate["obligation_expression"]["groups"][0]["atoms"] = [{
+        "kind": "complete_or_verify", "statement": quote, "evaluation": _evaluation(quote, span, quote),
+        "time_constraint": None, "prospective_period": None, "source_span_ids": [span],
+        "source_excerpts": [quote], "requires_professional_judgment": False,
+    }]
+    candidate["minimum_evidence"][0]["source_policy"] = _evidence_policy(span, quote)
+    wire = final_wire.model_copy(deep=True)
+    wire.dispositions[0].disposition = StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE
+    wire.dispositions[0].notes = None
+    wire.candidate_drafts = [ProtocolControlAgentWireCandidate.model_validate(candidate)]
+    return wire
+
+
 def test_table_sequence_question_restores_only_source_relation_and_survives_resume():
     from app.agents.protocol_control_source_interpretation import source_question_context_identity
     from app.services.protocol_control_execution import _validate_saved_source_review
@@ -3937,9 +3955,16 @@ def test_table_sequence_question_restores_only_source_relation_and_survives_resu
     original.statements[0].eligibility_sequence_quote = None
     original.statements[0].eligibility_sequence_context = None
     before = original.model_dump_json()
+    initial_wire = _table_sequence_active_wire(batch, original, wire)
 
     class Transport(_FakeTransport):
         questions = 0
+
+        def restore_scoped_session(self, **kwargs):
+            pass
+
+        def continue_scoped_unit_repair(self, **kwargs):
+            return ProtocolControlAgentResponse(session_id="saved", text=wire.model_dump_json())
 
         def start_source_interpretation(self, *, prompt):
             self.questions += 1
@@ -3950,8 +3975,9 @@ def test_table_sequence_question_restores_only_source_relation_and_survives_resu
             return ProtocolControlAgentResponse(session_id="review", text=review.model_dump_json())
 
     transport = Transport([ProtocolControlAgentResponse(session_id="author", text=wire.model_dump_json())])
-    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
-        batch, transport, resume_source_interpretation=original, output_validator=lambda _output: None)
+    result = ProtocolControlAgentRunner(max_schema_repairs=3).run(
+        batch, transport, resume_wire=initial_wire, resume_session_id="saved",
+        resume_source_interpretation=original, output_validator=lambda _output: None)
     assert result.final_output is not None, [attempt.issues for attempt in result.attempts]
     assert transport.questions == 1 and original.model_dump_json() == before
     history = result.source_scope_question_history
@@ -3990,6 +4016,57 @@ def test_table_sequence_question_cannot_change_other_semantics(variant):
         proposed.statements[0].eligibility_sequence_context = None
     with pytest.raises(ValueError):
         apply_source_scope_question_recheck(batch, original, 0, proposed)
+
+
+def test_table_sequence_question_skips_unrepresented_descriptive_brother_before_active_requirement():
+    batch, proposed, final_wire, _, _ = _table_sequence_material()
+    target = proposed.model_copy(deep=True)
+    target.statements[0].eligibility_sequence = "current_or_unknown"
+    target.statements[0].eligibility_sequence_quote = None
+    target.statements[0].eligibility_sequence_context = None
+    initial_wire = _table_sequence_active_wire(batch, target, final_wire)
+    brother = batch.owned_units[0].model_copy(deep=True)
+    brother.structure_unit_id = "descriptive-brother"
+    brother.source_ref = brother.source_ref.replace(".r2", ".r3")
+    brother.source_order += 1
+    brother.table_context.row_index = 3
+    brother.table_context.table_path = (3, 1)
+    brother.table_context.member_cell_paths = [(3, 1)]
+    brother.member_source_refs = [ref.replace(".r2", ".r3") for ref in brother.member_source_refs]
+    brother.source_span_ids = [ref.replace(".r2", ".r3") for ref in brother.source_span_ids]
+    brother.member_source_span_ids = [[ref] for ref in brother.source_span_ids]
+    brother.member_texts = ["记录研究处理次数"]
+    brother.excerpt = brother.member_texts[0]
+    batch.owned_units.insert(0, brother)
+    batch.owned_structure_unit_ids.insert(0, brother.structure_unit_id)
+    batch.owned_source_span_ids = sorted(brother.source_span_ids + batch.owned_source_span_ids)
+    description = target.statements[0].model_copy(deep=True)
+    description.structure_unit_id = brother.structure_unit_id
+    description.quoted_text = brother.excerpt
+    description.force = "descriptive"
+    target.statements.insert(0, description)
+    disposition = final_wire.dispositions[0].model_copy(deep=True)
+    disposition.structure_unit_id = brother.structure_unit_id
+    initial_wire.dispositions.insert(0, disposition)
+
+    class Transport(_FakeTransport):
+        questions = []
+
+        def restore_scoped_session(self, **kwargs):
+            pass
+
+        def start_source_interpretation(self, *, prompt):
+            payload = json.loads(prompt.split("\n", 1)[1])
+            self.questions.append(payload["frozen_statement"]["structure_unit_id"])
+            raise RuntimeError("synthetic stop after verifying selected request")
+
+    transport = Transport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=3).run(batch, transport,
+        resume_wire=initial_wire, resume_session_id="saved", resume_source_interpretation=target,
+        output_validator=lambda _output: None)
+    assert transport.questions == ["su-01"]
+    assert result.final_output is None
+    assert result.source_interpretation == target
 
 
 def test_table_sequence_resumed_candidate_is_locally_reclassified_then_freshly_reviewed():
@@ -4078,7 +4155,8 @@ def test_table_sequence_question_actual_history_replays_through_service_seed_pro
     saved["prompt_template_sha256"] = protocol_control_agent_prompt_template_sha256("synthetic prompt")
     components = {"compiler_versions": ["synthetic-compiler/v1"], "validator_version": "synthetic-current/v1"}
     saved["component_identity"] = components
-    question = saved["attempts"][1]["error_detail"]
+    question = next(item["error_detail"] for item in saved["attempts"]
+                    if (item.get("error_detail") or {}).get("workflow_phase") == "source_scope_question_recheck")
     assert question["json_path"] == "statements[0].eligibility_sequence"
     if fault == "wrong_path":
         question["json_path"] = "statements[0].unresolved"

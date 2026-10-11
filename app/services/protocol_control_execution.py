@@ -4036,6 +4036,87 @@ def _frozen_official_predicates(
     return identities, excerpts
 
 
+def _control_budget_identity(job_id: str, step_id: str) -> str:
+    return hashlib.sha256(json.dumps({
+        "job_id": job_id, "step_id": step_id,
+        "policy": "rv1001/deep-request-budget/v1",
+    }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _merge_control_budget_reservations(snapshots: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Count an upstream reservation once, even through multiple derived ledgers."""
+    reservations: dict[tuple[str, int], dict[str, Any]] = {}
+    for snapshot in snapshots:
+        validated = LogicalCallBudget(
+            snapshot["logical_task_id"], max_requests=snapshot["max_requests"],
+            max_output_tokens=snapshot["max_output_tokens"],
+            contract_sha256=snapshot["contract_sha256"], saved=snapshot,
+        ).snapshot()
+        for ordinal, item in enumerate(validated["requests"], start=1):
+            origin = item.get("origin_logical_task_id", validated["logical_task_id"])
+            position = item.get("origin_request_ordinal", ordinal)
+            if not isinstance(origin, str) or not origin or type(position) is not int or position < 1:
+                raise ValueError("历史调用来源身份无效")
+            record = {**item, "origin_logical_task_id": origin, "origin_request_ordinal": position}
+            key = (origin, position)
+            if key in reservations and reservations[key] != record:
+                raise ValueError("同一次历史调用的记录不一致")
+            reservations[key] = record
+    return list(reservations.values())
+
+
+def _inherited_control_budget_requests(
+    context: StepContext, config: ProtocolControlExecutorConfig, basis: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    source_id = context.job_payload.get("deep_source_job_id")
+    if not source_id or not context.step_id.startswith("deep_"):
+        return []
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    snapshots: list[Mapping[str, Any]] = []
+    visited = {context.job_id}
+    with config.session_factory() as session:
+        store = JobStore(session, now=config.now)
+        while source_id:
+            if not isinstance(source_id, str) or source_id in visited:
+                raise ValueError("历史调用来源形成循环或身份异常")
+            visited.add(source_id)
+            job = store.get_job(source_id)
+            payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+            if job.job_type != context.job_type or job.lease_owner is not None or job.state in {"running", "queued"}:
+                raise ValueError("历史调用范围类型不符或仍在执行")
+            for key in ("source_deconstruction_job_id", "source_snapshot_id", "source_content_sha256"):
+                if payload.get(key) != context.job_payload.get(key):
+                    raise ValueError("历史调用不属于同一冻结方案来源")
+            identity = _control_budget_identity(source_id, context.step_id)
+            cache = _ProtocolSemanticBatchFileCache(config.data_paths, source_id)
+            saved = cache.load_call_budget(identity)
+            rows = session.scalars(select(JobCheckpointRecord).where(
+                JobCheckpointRecord.job_id == source_id, JobCheckpointRecord.step_id == context.step_id,
+            ))
+            for row in rows:
+                previous = verify_payload_sha256(row.payload_json, row.payload_sha256)
+                for receipt in previous.get("model_call_receipts", []):
+                    snapshot = receipt.get("logical_call_budget") if isinstance(receipt, Mapping) else None
+                    if not isinstance(snapshot, Mapping) or snapshot.get("requests_used") == 0:
+                        continue
+                    used = snapshot.get("requests_used")
+                    if (snapshot.get("logical_task_id") != identity or saved is None
+                            or previous.get("batch_id") != basis["batch"]["batch_id"]
+                            or type(used) is not int or used < 0
+                            or saved.get("requests", [])[:used] != snapshot.get("requests")):
+                        raise ValueError("历史回执与实际调用账不一致或作用范围改变")
+            if saved is not None:
+                # A reservation without a response may still have reached the
+                # provider. Confirm its batch even when no failure receipt exists.
+                closure = store.get_last_checkpoint(source_id, STEP_CLOSURE)
+                batches = (closure[1].get("deep_plan", {}).get("batches", []) if closure else [])
+                if not any(item.get("batch_id") == basis["batch"]["batch_id"] for item in batches):
+                    raise ValueError("历史预算缺少冻结工作单元的来源证明")
+                snapshots.append(saved)
+            source_id = payload.get("deep_source_job_id")
+    return _merge_control_budget_reservations(list(reversed(snapshots)))
+
+
 def _bind_control_request_budget(
     context: StepContext, config: ProtocolControlExecutorConfig,
     transport: Any, *, request_basis: Callable[[], Mapping[str, Any]],
@@ -4057,17 +4138,29 @@ def _bind_control_request_budget(
         raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_BUDGET_UNSUPPORTED",
                           detail="模型传输尚不支持累计预算，未发送请求。")
     from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
-    identity = hashlib.sha256(json.dumps({
-        "job_id": context.job_id, "step_id": context.step_id,
-        "policy": "rv1001/deep-request-budget/v1",
-    }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-    contract = hashlib.sha256(json.dumps({
-        **request_basis(), "transport": _transport_identity(transport, stage="deep"),
-        "request_limit": request_limit,
-    }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    identity = _control_budget_identity(context.job_id, context.step_id)
     cache = _ProtocolSemanticBatchFileCache(config.data_paths, context.job_id)
     try:
+        basis = request_basis()
+        inherited = _inherited_control_budget_requests(context, config, basis)
+        contract = hashlib.sha256(json.dumps({
+            **basis, "transport": _transport_identity(transport, stage="deep"),
+            "request_limit": request_limit,
+            **({"inherited_reservations": inherited} if inherited else {}),
+        }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
         saved = cache.load_call_budget(identity)
+        if saved is not None and saved.get("requests", [])[:len(inherited)] != inherited:
+            raise ValueError("新任务调用账缺少旧调用，不能重置恢复")
+        if saved is None and inherited:
+            max_output = request_limit * max(transport.max_tokens, PROTOCOL_CONTROL_LENGTH_RETRY_MAX_TOKENS)
+            if len(inherited) >= request_limit or sum(item["requested_max_tokens"] for item in inherited) >= max_output:
+                raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_BUDGET_EXHAUSTED",
+                                  detail="已累计的历史调用达到本次上限，未重新发送；新增任务不会清零。")
+            saved = {"policy": "logical-call-budget/v1", "logical_task_id": identity,
+                     "max_requests": request_limit, "max_output_tokens": max_output,
+                     "contract_sha256": contract, "requests_used": len(inherited),
+                     "reserved_output_tokens": sum(item["requested_max_tokens"] for item in inherited),
+                     "requests": inherited, "reservation_is_actual_usage": False}
         previous_payloads = [context.last_checkpoint] if getattr(context, "last_checkpoint", None) else []
         if getattr(config, "session_factory", None) is not None:
             with config.session_factory() as session:
@@ -4100,6 +4193,13 @@ def _bind_control_request_budget(
             contract_sha256=contract, saved=saved,
             persist=cache.store_call_budget,
         )
+        if inherited:
+            # Save an auditable derived prefix; upstream ledgers are immutable.
+            for count in range(1, len(inherited) + 1):
+                prefix = budget.snapshot()
+                prefix.update(requests=inherited[:count], requests_used=count,
+                              reserved_output_tokens=sum(item["requested_max_tokens"] for item in inherited[:count]))
+                cache.store_call_budget(prefix)
         binder(budget)
         return budget
     except (ValueError, OSError, TypeError, KeyError, AttributeError) as exc:

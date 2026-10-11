@@ -8386,10 +8386,25 @@ class ProtocolControlAgentRunner:
                         source_target_review=resume_source_target_review,
                         source_statement_coverage=list(resume_source_statement_coverage))
         if source_interpretation is not None and callable(source_reader):
+            sequence_coverage = (source_statement_coverage(batch, source_interpretation, partial_wire)
+                                 if partial_wire is not None else [])
             for index, statement in enumerate(source_interpretation.statements):
                 if (index in seen_questions or not can_recheck_source_scope_question(statement, batch)
                         or source_repairs >= source_repair_limit):
                     continue
+                if source_scope_question_json_path(statement, batch, index).endswith(".eligibility_sequence"):
+                    retained_review = resumed_review_items.get(index)
+                    retained_coverage = next((item for item in resume_source_statement_coverage
+                                              if item.statement_index == index), None)
+                    # Table availability is not a reason to reread every action.
+                    # Only an unresolved, actually represented requirement needs
+                    # this recovery; normal source/coverage checks still run below.
+                    if ((not sequence_coverage and statement.force not in {"required", "prohibited", "recommended"})
+                            or sequence_coverage and not sequence_coverage[index].action_candidate_indexes
+                            or retained_review is not None and retained_review.decision != "additional_requirement"
+                            or retained_review is not None and retained_coverage is not None
+                            and retained_coverage.status == "semantically_aligned"):
+                        continue
                 question_response = None
                 question_prompt = build_source_scope_question_prompt(batch, source_interpretation, index)
                 detail = {
@@ -8440,7 +8455,10 @@ class ProtocolControlAgentRunner:
                                         session_id=session_id or (question_response.session_id if question_response else "source-time-question-failed"),
                                         attempts=attempts,
                                         source_interpretation=source_interpretation,
-                                        partial_wire=partial_wire)
+                                        partial_wire=partial_wire,
+                                        source_target_review=resume_source_target_review,
+                                        source_statement_coverage=list(resume_source_statement_coverage),
+                                        source_candidate_alignment=resume_source_candidate_alignment)
         if (workflow_variant == FIXED_FLOW and raw_text is None
                 and source_interpretation is not None
                 and output_validator is not None

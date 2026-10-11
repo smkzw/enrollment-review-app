@@ -26,8 +26,82 @@ from app.llm.logical_call_budget import LogicalCallBudget
 from app.services.job_service import JobService, StepSpec
 from app.workflow.jobstore import JobStore
 from app.workflow.runner import JobRunner, StepContext
+from app.workflow.errors import StepFailure
+from app.llm.logical_call_budget import LogicalCallBudgetExhausted
 
 UNPROVEN = execution._DEFINITION_CONSUMER_SCOPE_UNPROVEN
+
+
+def test_control_budget_new_job_counts_ancestors_once_and_keeps_old_ledgers(
+    monkeypatch, data_paths, session_factory,
+):
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    monkeypatch.setattr(execution, "_transport_identity", lambda *_, **__: "synthetic-model/high")
+    transport = SimpleNamespace(max_tokens=32)
+    transport.bind_logical_call_budget = lambda budget: setattr(transport, "budget", budget)
+    config = execution.ProtocolControlExecutorConfig(data_paths=data_paths, session_factory=session_factory)
+    basis = {"batch": {"batch_id": "synthetic-unit"}, "prompt": "frozen"}
+    requests_per_job = {}
+    counts = {}
+
+    def executor(context):
+        if context.step_id == execution.STEP_CLOSURE:
+            return {"stage": "closure", "deep_plan": {"batches": [basis["batch"]]}}
+        budget = execution._bind_control_request_budget(context, config, transport, request_basis=lambda: basis)
+        counts[context.job_id] = budget.snapshot()["requests_used"]
+        try:
+            for _ in range(requests_per_job.get(context.job_id, 0)):
+                budget.reserve(request_sha256="same-request-is-still-another-call", max_tokens=32)
+        except LogicalCallBudgetExhausted:
+            pass
+        raise StepFailure(retryable=False, error_code="SYNTHETIC_FAILURE", diagnostic_checkpoint={
+            "batch_id": "synthetic-unit", "model_call_receipts": [{"logical_call_budget": budget.snapshot()}],
+        })
+
+    runner = JobRunner(session_factory, {execution.PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: executor}, sleep=lambda _: None)
+    service = JobService(session_factory)
+
+    def run(source=None, limit=3, calls=0):
+        payload = {"deep_request_limit": limit, **({"deep_source_job_id": source} if source else {})}
+        created = service.create_job(idempotency_key=f"budget-{source}-{limit}-{calls}",
+            job_type=execution.PROTOCOL_CONTROL_EXECUTION_JOB_TYPE, payload=payload,
+            steps=[StepSpec(step_id=execution.STEP_CLOSURE, name="冻结来源"),
+                   StepSpec(step_id="deep_0001", name="核对", depends_on=[execution.STEP_CLOSURE], max_attempts=1)])
+        requests_per_job[created.job_id] = calls
+        assert runner.run_job(created.job_id)
+        return created.job_id
+
+    first = run(calls=2)
+    first_cache = _ProtocolSemanticBatchFileCache(data_paths, first)
+    frozen = first_cache.load_call_budget(execution._control_budget_identity(first, "deep_0001"))
+    second = run(first, calls=2)
+    assert counts[second] == 2
+    second_saved = _ProtocolSemanticBatchFileCache(data_paths, second).load_call_budget(
+        execution._control_budget_identity(second, "deep_0001"))
+    assert second_saved["requests_used"] == 3
+    third = run(second)
+    with session_factory() as session:
+        assert JobStore(session).get_job(third).error_code == "PROTOCOL_CONTROL_BUDGET_EXHAUSTED"
+    assert third not in counts
+    # An explicit larger allocation carries the old count; it does not rewrite
+    # the original limits or make duplicate inherited reservations new calls.
+    extended = run(second, limit=5, calls=1)
+    assert counts[extended] == 3
+    extended_saved = _ProtocolSemanticBatchFileCache(data_paths, extended).load_call_budget(
+        execution._control_budget_identity(extended, "deep_0001"))
+    assert extended_saved["requests_used"] == 4
+    assert first_cache.load_call_budget(execution._control_budget_identity(first, "deep_0001")) == frozen
+    assert len(execution._merge_control_budget_reservations([frozen, second_saved, extended_saved])) == 4
+    bad = {**extended_saved, "requests": [dict(item) for item in extended_saved["requests"]]}
+    bad["requests"][0]["request_sha256"] = "different"
+    with pytest.raises(ValueError, match="记录不一致"):
+        execution._merge_control_budget_reservations([frozen, bad])
+    first_identity = execution._control_budget_identity(first, "deep_0001")
+    (first_cache._path(first_identity).parent / "call-budgets" / first_identity / "0002.json").unlink()
+    damaged = run(extended, limit=6)
+    with session_factory() as session:
+        assert JobStore(session).get_job(damaged).error_code == "PROTOCOL_CONTROL_BUDGET_RECORD_INVALID"
+    assert damaged not in counts
 
 
 def _record(consumers=()):

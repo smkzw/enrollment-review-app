@@ -4,7 +4,11 @@
 
 **当前包优先（2026-10-11）：** Goal active、claims_complete=false；当前包基础4ac85430。table-sequence-source-location/v1物理来源关系接入既有SourceInterpretation/source question/局部修订/新鲜目标核对与保存读回；SourceStatement和TargetReview新增可选位置证明，历史无字段不伪补。共用source_scope_question_json_path修复生产账本/Runner/服务种子恢复路径不一致。Runner仅忽略经当前生产者重验保存的旧失败对新独立读取止损的计数，旧失败仍失败且adopted=false；两项新失败仍停、最终采用不绕门。正式数值消费者未因此扩权，无病种/药物阈值特例。
 
-最终三相连104pass/1550deselected/41.20秒/exit0/5SWIG（v6），不是全库/临床。v5新种子夹具漏raw_output_text导致1fail，补实际保存结构后通过，生产验证未放宽。四相连C03源码只读续审均exit0/no fallback，同DeepSeek家族，不是模型独立或医学批准；末路径对齐及服务正反例由所有者检查。新实际预检47reusable/1preserve_unresolved/1resume_partial/41refresh_required，0模型/0写/全库hash保持；47不重读，45不再问，49原账5/8（余3）不重置。当前最后真实运行仍87/145380c2，新包尚未模型调用。下一从新受控合法入口接续49并推进独立未读范围；不用旧failed_final改成功。详见reviews/rv1006-table-sequence-owner-disposition-20261011.md、implement当前流程表及review_index。
+上述包已在push源码853bb90e6dfc403a123206c21937958cf188a67b、合法Job0174a0641924498ab7acaf708072bfeb实际运行：failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，5物理调用369.969596458秒/exit3；47完成、45保留负核对未采用、49失败、41未读；49检查点d521bbfac5ec486a804ec7dcc47893f7。85发现与47深审复用，原件/旧Job/保护库保持，0共同发布/启用/签发。新关系问题误选已处理说明0–4，未到真正未核的7；第4答缺完整对象表头被拒，不是一般JSON错误。更重要的是旧87和017各有独立5/8账，新Job事实上清零，旧“剩三次、不重置”声明撤回，不作为下一运行依据。
+
+当前最小修复以实际候选和当前验证的已有目标/语义对应筛选关系疑问，初次来源的明确义务可问，但不为descriptive自动造患者义务；单问题失败带回旧review/coverage/alignment。现有预算缓存派生账继承全部终态祖先实际预约，按来源身份与序号去重，同SHA的两次请求仍计两次，错范围/缺尾/回退拒绝。实际只读预算审计从017得10次、两原始身份，预约655360不等于实际token；0模型/0库写/stat保持（未全库hash）。新限额必须含这10次，旧8不能假称尚有余量；用户此前允许测试次数不设固定上限，所有者可冻结明确新累计配额，不擅改旧账。
+
+集中四相连原模块v2为110pass/1575deselected/36.80秒/exit0/5SWIG；v1唯一新夹具span排序错误修夹具不松门。批准C03 CodeBuddy/deepseek-v4.1-flash/max同会话续审exit0/no fallback；未读临床/跑测试、同模型家族，不是医学批准。两“必修前核对”实际反证：source_statement_coverage始终enumerate逐序生产，且本循环重新计算，不消费外来乱序；问题失败已实际回传三保留字段。故未按猜测重复改源码。派生origin实际保存读回已由Job测试验证；不为建议新加管理日志。完整共同发布/同包病例工作稿/正式UI更正及历史/Q3仍未达。接续先用当前017的只读复用预检及继承预算，再合法新建，不重启017、不覆盖旧输出；见implement当前表。
 
 ### 以下同日先前包记录为历史，不覆盖上方当前包
 
