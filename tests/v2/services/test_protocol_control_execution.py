@@ -712,6 +712,22 @@ def test_procedure_retention_changes_gate_without_refreshing_unchanged_compilati
     )
 
 
+def test_sequence_review_policy_changes_gate_not_source_or_author_material(monkeypatch):
+    module = protocol_control_execution_module
+    prompt = module.DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE
+    current = module._deep_component_identity({}, prompt)
+    monkeypatch.setattr(module, "SOURCE_TARGET_SEQUENCE_REVIEW_VERSION", "previous-sequence-review")
+    previous = module._deep_component_identity({}, prompt)
+    assert current["validator_version"] != previous["validator_version"]
+    assert current["prompt_material_sha256"] == previous["prompt_material_sha256"]
+    assert current["compiler_versions"] == previous["compiler_versions"]
+    assert module._same_deep_components_with_current_gate(previous, current)
+    assert {name for name in current if current[name] != previous[name]} == {"validator_version"}
+    assert not module._same_deep_components_with_current_gate(
+        dict(previous, prompt_text_sha256="different-author-prompt"), current,
+    )
+
+
 @pytest.mark.parametrize("gap", [None, "prefix", "tail", "bad_wire"])
 @pytest.mark.parametrize("previous_gate", [False, True])
 @pytest.mark.parametrize("failure_kind", ["source_review", "temporal"])

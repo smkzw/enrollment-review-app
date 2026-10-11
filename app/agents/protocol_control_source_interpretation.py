@@ -44,6 +44,9 @@ SOURCE_UNIT_QUOTE_COMPLETION_VERSION = "source-unit-quote-completion/v1"
 SOURCE_TARGET_REVIEW_VALIDATION_VERSION = "source-native-procedure-row-validation/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v9"
+# This review-only revision changes current proof validation, not the frozen
+# source/author generation material; saved answers must pass the current gate.
+SOURCE_TARGET_SEQUENCE_REVIEW_VERSION = "source-target-sequence-disagreement/v1"
 SOURCE_TARGET_REVIEW_GAP_VERSION = "source-target-unresolved-cause/v1"
 SOURCE_ATTRIBUTION_VALIDATION_VERSION = "source-external-header-scope/v2"
 SOURCE_TARGET_CONTEXT_RECHECK_VERSION = "source-owned-context-target-recheck/v1"
@@ -1908,8 +1911,9 @@ def build_source_target_review_prompt(
                 "label_sources": [{"source_span_id": span, "excerpt": text}
                                   for span, text in labels],
                 "reason": "已有链接没有包含本行项目的原始来源；共用脚注不能证明是同一项目。"
-                          "不得宣称这些目标已覆盖。本条动作和时期明确但没有对应目标时，"
-                          "选 additional_requirement；只有本条原文自身无法核清时保留 unresolved。"
+                          "不得宣称这些目标已覆盖。先核本条是否属于当前资格控制；"
+                          "属于当前控制且动作和时期明确但没有对应目标时，选 additional_requirement；"
+                          "判定后执行关系须另核冻结依据，关系未核清时保留 unresolved。"
                           "同一链接覆盖的约束不要求坚持已被此来源核查拒绝的链接。",
             }
     targets, target_excerpts = _target_review_source_packet(batch, comparison_target_id)
@@ -1951,11 +1955,16 @@ def build_source_target_review_prompt(
         )
     return owned_context + (
         "你是本系统方案 Agent 的逐项来源核对步骤。仅核下面列出的陈述，不生成新规则或判断受试者。"
+        f"先后关系核对政策：{SOURCE_TARGET_SEQUENCE_REVIEW_VERSION}。"
         "每条只可选：已有官方入排完整覆盖、已有访视流程完整覆盖、尚有增量要求、"
         "只读单元可能复述同一要求（仅待跨章核验）、"
         "明确属于入排判定后执行而非本节点控制、无法核清。"
-        "只有同一原文单元明确写出先确定入排资格、随后才执行该动作，才能选 not_current_control；"
-        "此时 non_control_basis_excerpt 必须逐字引用该动作之前的先后依据。"
+        "先核本条对当前资格判断的作用，再比较已有目标；未找到目标不等于新增当前控制。"
+        "没有 eligibility_sequence_context 时，只有同一原文单元明确写出先确定入排资格、"
+        "随后才执行该动作，才能选 not_current_control；"
+        "有该定位元组时，可以独立核查其冻结前文、表格和具体对象的跨单元先后关系，"
+        "不能仅因依据位于另一单元就否定关系，也不能凭作者标签或结构相邻接受关系。"
+        "两种路径的 non_control_basis_excerpt 都须逐字引用已给出的先后依据。"
         "现有候选若仍把该动作写成本节点控制，不能选此项，须先修订候选。"
         "仅有治疗期标题、相邻频次或推测将来才发生，不足以排除当前控制，应保留待核。"
         "若上一步已用同句逐字归因将本条标为 cited_external_rationale，且它只是外部资料对"
@@ -2015,7 +2024,7 @@ def build_source_target_review_prompt(
         "条件原文，或把它开头的时间单独放入 target_time_excerpt，其余连续原文放入"
         " target_action_excerpt；不能省略脚注标记、尾部条件，或从另一摘录借时间。"
         "完整引用只是出处证明，仍须独立核对条件、对象、否定和例外是否相同，不表示患者符合。"
-        "目录只有项目名称而无动作依据时，原文动作明确则选 additional_requirement；"
+        "目录只有项目名称而无动作依据时，原文明确属于当前资格控制则选 additional_requirement；"
         "原文自身无法核清才选 unresolved；不得把系统无法证明对应关系说成受试者缺记录。"
         "目标原文按 source_refs 列出的摘录编号在目标来源摘录表中查找；相同位置相同原文只提供一次，"
         "不代表合并不同访视。同一位置不同原文仍分别保留，缺原文的 null 不能作引用。"
@@ -2257,6 +2266,11 @@ def validate_source_target_review(
         if item.decision == "additional_requirement" and statement.unresolved:
             reject(item, "SOURCE_UNRESOLVED_STILL_ADDED", "decision",
                    "来源陈述仍有未核清内容，不能据此新增独立要求；须保留具体来源疑问")
+        if (item.decision == "additional_requirement"
+                and statement.eligibility_sequence == "after_eligibility_decision"):
+            reject(item, "POST_ELIGIBILITY_SCOPE_DISAGREEMENT", "decision",
+                   "已有来源解释将动作限定在资格判定之后，当前核对不得直接补入本节点要求；"
+                   "须独立核实先后依据，确认则按非当前控制核对，关系不同或未核清则保留具体未决。")
         if statement.unresolved and item.decision in {
             "not_current_control", "potential_same_requirement", "cited_external_rationale",
         }:

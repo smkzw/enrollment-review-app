@@ -1,0 +1,11 @@
+# 同包身份取舍的补充核对
+
+同批准路线/会话，最多6次必要只读。边界与前一包相同：不修改、不测试、不读临床/DB/env/tmp、不委派。
+
+前报告对旧版本的推断需要纠正：本包从未改变 SourceTargetReview Schema v23，真实来源也是v23，不存在本包由v22升级导致全部载荷不可读的事实。真正零调用预检：改整体SOURCE_TARGET_REVIEW_POLICY_VERSION v9→v10被aggregate prompt hash判为生成材料变化，90组全部refresh_required；该实验无真实新Job/模型调用，保留预检诊断，撤回此方案。
+
+最终改用现有组件边界：基础生成材料版本v9保持，因为来源解释/作者Schema/编译及真实已执行材料未改。不反算历史哈希、不替换原组成工件。新增SOURCE_TARGET_SEQUENCE_REVIEW_VERSION=source-target-sequence-disagreement/v1写在实际目标核对提示，并进入 _deep_component_identity.validator_version（与既有源行对应/来源未决等核对版本同层）；旧产物仍须当前完整来源核对/装配门重验，不无条件复用。提示的实际文本仍由原模型请求缓存hash绑定，当前新请求不命中旧文本请求。
+
+新 test_sequence_review_policy_changes_gate_not_source_or_author_material 证明只有 validator_version改变、基础作者提示和编译身份不变；源/作者真正变化仍不兼容。旧additional after被新typed门拒，保留真正未决可通过；已确认not_current仍须定位原答和完整门，前包正反例保持。实际整体90组预检结果不能被称为最终方案，正在按现有预检再次验证实际当前来源，未新发模型请求。
+
+请核是否该复用范围越权：这是独立目标复核政策/校验变动，不是作者生成变化；是否需要新框架或只是既有当前gate重验足够。指出具体漏验的入口和反例，不将旧v22推断作为当前事实。若现有消费者确实完整重验，请不建议全量重读来替代它。只核这次身份处置与相邻消费者，首审的语义门结论仍保留其有限边界。

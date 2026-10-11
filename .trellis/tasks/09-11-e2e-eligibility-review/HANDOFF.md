@@ -2,13 +2,15 @@
 
 ## 当前事实
 
-**当前包优先（2026-10-11）：** Goal active、claims_complete=false；当前包基础4ac85430。table-sequence-source-location/v1物理来源关系接入既有SourceInterpretation/source question/局部修订/新鲜目标核对与保存读回；SourceStatement和TargetReview新增可选位置证明，历史无字段不伪补。共用source_scope_question_json_path修复生产账本/Runner/服务种子恢复路径不一致。Runner仅忽略经当前生产者重验保存的旧失败对新独立读取止损的计数，旧失败仍失败且adopted=false；两项新失败仍停、最终采用不绕门。正式数值消费者未因此扩权，无病种/药物阈值特例。
+**当前包优先（2026-10-11）：** Goal工具实查active、claims_complete=false；当前源码基础9e6d36c7c945911fb96e5938f164e498f4d43448，已push。七份继承dirty和私有资料保留。本包只处理先后关系的目标核对冲突，沿既有Job/工件/预算/当前门重验，不加模型、框架或疾病特例。下方旧“当前”均为历史。
 
-上述包已在push源码853bb90e6dfc403a123206c21937958cf188a67b、合法Job0174a0641924498ab7acaf708072bfeb实际运行：failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，5物理调用369.969596458秒/exit3；47完成、45保留负核对未采用、49失败、41未读；49检查点d521bbfac5ec486a804ec7dcc47893f7。85发现与47深审复用，原件/旧Job/保护库保持，0共同发布/启用/签发。新关系问题误选已处理说明0–4，未到真正未核的7；第4答缺完整对象表头被拒，不是一般JSON错误。更重要的是旧87和017各有独立5/8账，新Job事实上清零，旧“剩三次、不重置”声明撤回，不作为下一运行依据。
+最新实际Job c626d8c0ccad4f7790cf16b38cd0d6fe运行源码9e6d36c，failed_final/PROTOCOL_CONTROL_LOGICAL_BUDGET_EXHAUSTED，6新物理调用465.252316666秒/exit3；实际账继承旧10次并累计11–16，耗尽时未第7次发送。47深审完成，45负核对失败未采用，49失败，41未读；49检查点112f2d97c02c49758716c7cc6c10a3fa。7/8两项先后关系已有实际定位原答，局部作者撤掉当前控制候选；这不是最终采用。旧Job/原件/保护库保持，0共同发布/启用/签发。
 
-当前最小修复以实际候选和当前验证的已有目标/语义对应筛选关系疑问，初次来源的明确义务可问，但不为descriptive自动造患者义务；单问题失败带回旧review/coverage/alignment。现有预算缓存派生账继承全部终态祖先实际预约，按来源身份与序号去重，同SHA的两次请求仍计两次，错范围/缺尾/回退拒绝。实际只读预算审计从017得10次、两原始身份，预约655360不等于实际token；0模型/0库写/stat保持（未全库hash）。新限额必须含这10次，旧8不能假称尚有余量；用户此前允许测试次数不设固定上限，所有者可冻结明确新累计配额，不擅改旧账。
+第一因果错误：目标核对提示前文无条件要求先后依据在同一单元，后文却允许已定位的跨单元依据；实际回答按前文否定跨段依据，将2/3/7/8重新列新增要求，补写两次结构失败。旧review在017的失败路径丢失也是历史问题，但不能用它解释新增7/8的全部分歧。当前统一提示；after来源与新增当前要求相冲突时，typed POST_ELIGIBILITY_SCOPE_DISAGREEMENT进入原一次局部核对，不补写控制。独立确认仍需完整原位置/来源；不同或不明可保留具体未决，不把作者标签当医学事实。
 
-集中四相连原模块v2为110pass/1575deselected/36.80秒/exit0/5SWIG；v1唯一新夹具span排序错误修夹具不松门。批准C03 CodeBuddy/deepseek-v4.1-flash/max同会话续审exit0/no fallback；未读临床/跑测试、同模型家族，不是医学批准。两“必修前核对”实际反证：source_statement_coverage始终enumerate逐序生产，且本循环重新计算，不消费外来乱序；问题失败已实际回传三保留字段。故未按猜测重复改源码。派生origin实际保存读回已由Job测试验证；不为建议新加管理日志。完整共同发布/同包病例工作稿/正式UI更正及历史/Q3仍未达。接续先用当前017的只读复用预检及继承预算，再合法新建，不重启017、不覆盖旧输出；见implement当前表。
+最终相连窗v3：114pass/1577deselected/42.84秒/exit0/5SWIG（sequence-disagreement-connected-v3），不是全库/临床。首窗唯一新正例错误沿用了判定后处置，修夹具而非生产门；窗口不累加。C03同批准会话两次增量独审均exit0/no fallback，源码只读、未读临床/跑测试，同DeepSeek家族仅程序/上下文分离。原v22推断已被顾问撤回：Schema一直v23。整体policy v10试验零调用预检导致90组刷新，已撤回且未启动作业；最终source-target-sequence-disagreement/v1只进入核对/验证层，基础来源/作者/编译未改，旧产物必须过当前门。最终c626预检47reusable/1preserve_unresolved/1resume_partial/41refresh，0模型/0写/全库hash保持；49来源核对partially_reused，不复制旧有利答案或反算历史提示。
+
+接续只用c626当前终态及v2预检。旧16次已用完；下一显式累计限额24包含历史16，最多新增8，不改旧额度/账/hash，不重问已保存7/8。创建前核实际90步与预检一致，旧45仍未采用；有新证据才调用，不复活任何终态。完整共同发布、同包5PDF24页工作稿、正式UI更正与新旧结果/Q3仍未完成。此文为里程碑不是暂停；详见implement当前表和reviews/rv1006-sequence-review-owner-disposition-20261011.md。
 
 ### 以下同日先前包记录为历史，不覆盖上方当前包
 

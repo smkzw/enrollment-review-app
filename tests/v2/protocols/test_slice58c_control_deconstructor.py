@@ -3928,6 +3928,102 @@ def test_table_sequence_witness_is_read_proposed_saved_and_consumed():
         _validate_saved_source_review(batch, restored)
 
 
+def test_table_sequence_target_prompt_does_not_require_same_unit_when_context_is_provided():
+    batch, inventory, wire, coverage, _ = _table_sequence_material()
+    prompt = build_source_target_review_prompt(batch, inventory, coverage, wire=wire)
+    assert "没有 eligibility_sequence_context 时" in prompt
+    assert "不能仅因依据位于另一单元就否定关系" in prompt
+    assert "先核本条对当前资格判断的作用，再比较已有目标" in prompt
+    assert "不能根据上一位作者的 after 标签关闭要求" in prompt
+    assert "原文明确属于当前资格控制则选 additional_requirement" in prompt
+
+
+def test_table_sequence_disagreement_cannot_become_a_current_requirement():
+    batch, inventory, wire, coverage, review = _table_sequence_material()
+    additional = review.model_copy(deep=True)
+    item = additional.items[0]
+    item.decision = "additional_requirement"
+    item.non_control_basis_excerpt = None
+    item.non_control_sequence_context = None
+    item.unresolved_aspects = ["已有目标未覆盖，前文关系尚有分歧"]
+    with pytest.raises(SourceTargetReviewValidationError) as caught:
+        validate_source_target_review(batch, inventory, coverage, additional)
+    assert caught.value.code == "POST_ELIGIBILITY_SCOPE_DISAGREEMENT"
+    assert caught.value.statement_index == 0
+    assert caught.value.json_path == "/items/0/decision"
+    assert caught.value.source_refs == tuple(batch.owned_units[0].source_span_ids)
+    item.decision = "unresolved"
+    item.unresolved_cause = "source_ambiguity"
+    validate_source_target_review(batch, inventory, coverage, additional)
+    # This guard neither creates a non-control proof nor forbids a genuinely
+    # current source from having a new requirement.
+    current = inventory.model_copy(deep=True)
+    current.statements[0].eligibility_sequence = "current_or_unknown"
+    current.statements[0].eligibility_sequence_quote = None
+    current.statements[0].eligibility_sequence_context = None
+    item.decision, item.unresolved_cause = "additional_requirement", None
+    current_wire = wire.model_copy(deep=True)
+    current_wire.dispositions[0].disposition = StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE
+    current_wire.dispositions[0].notes = None
+    current_coverage = source_statement_coverage(batch, current, current_wire)
+    validate_source_target_review(batch, current, current_coverage, additional)
+    assert wire.candidate_drafts == []
+
+
+@pytest.mark.parametrize("correction", ["confirmed", "unresolved", "transport"])
+def test_table_sequence_disagreement_uses_one_local_review_not_candidate_insert(correction):
+    batch, inventory, wire, _, review = _table_sequence_material()
+    disputed = review.model_copy(deep=True)
+    item = disputed.items[0]
+    item.decision = "additional_requirement"
+    item.non_control_basis_excerpt = None
+    item.non_control_sequence_context = None
+    item.unresolved_aspects = ["前文与表格对象的关系尚不能确认"]
+    answer = review.model_copy(deep=True)
+    if correction == "unresolved":
+        answer.items[0] = item.model_copy(update={
+            "decision": "unresolved", "unresolved_cause": "source_ambiguity",
+        })
+    frozen = batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()
+
+    class Transport(_FakeTransport):
+        review_calls = 0
+
+        def start_source_target_review(self, *, prompt):
+            self.review_calls += 1
+            if self.review_calls == 1:
+                return ProtocolControlAgentResponse(session_id="initial-review", text=disputed.model_dump_json())
+            assert self.review_calls == 2
+            assert "POST_ELIGIBILITY_SCOPE_DISAGREEMENT" in prompt
+            assert "只复核这一条" in prompt
+            if correction == "transport":
+                raise RuntimeError("isolated targeted review unavailable")
+            return ProtocolControlAgentResponse(session_id="local-review", text=answer.model_dump_json())
+
+        def continue_session(self, **kwargs):
+            pytest.fail("先后分歧不得转为整包重写或新增候选")
+
+        def continue_scoped_unit_repair(self, **kwargs):
+            pytest.fail("核对分歧不得触发候选补写")
+
+    transport = Transport([])
+    result = ProtocolControlAgentRunner(max_schema_repairs=2, max_transport_retries=0).run(
+        batch, transport, resume_source_interpretation=inventory, resume_wire=wire,
+        resume_session_id="saved", output_validator=lambda _: None,
+    )
+    assert transport.review_calls == 2
+    assert result.status == ("已解析" if correction == "confirmed" else "需要核对")
+    assert result.final_output is not None if correction == "confirmed" else result.final_output is None
+    assert any((attempt.error_detail or {}).get("code") == "POST_ELIGIBILITY_SCOPE_DISAGREEMENT"
+               for attempt in result.attempts)
+    assert not any("SOURCE_INSERT_INVALID" in attempt.error_classes for attempt in result.attempts)
+    if correction == "confirmed":
+        from app.services.protocol_control_execution import _validate_saved_source_review
+        _validate_saved_source_review(batch, type(result).model_validate_json(result.model_dump_json()))
+        assert result.final_output.candidates == []
+    assert (batch.model_dump_json(), inventory.model_dump_json(), wire.model_dump_json()) == frozen
+
+
 def _table_sequence_active_wire(batch, original, final_wire):
     quote, span = original.statements[0].quoted_text, batch.owned_source_span_ids[0]
     candidate = _candidate().model_dump(mode="json")
