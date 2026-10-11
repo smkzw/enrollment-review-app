@@ -206,6 +206,133 @@ def test_population_only_randomization_qualification_cannot_create_time_window()
     )
 
 
+def _result_validity_exemption_pair(excerpt: str, days: int):
+    def spec(mode: str, purpose: str):
+        return ControlAtomEvaluationSpec(
+            determination_mode=mode,
+            operation="time_constraint" if mode == "deterministic" else None,
+            operand_attribute="date_range" if mode == "deterministic" else None,
+            time_purpose=purpose,
+            proposition=excerpt,
+            source_span_ids=["span:result-waiver"], source_excerpts=[excerpt],
+            observation_policy=ControlObservationPolicy(
+                mode="unresolved", scope="保留未明确的结果选择范围",
+                source_span_ids=["span:result-waiver"], source_excerpts=[excerpt],
+            ),
+        )
+
+    validity = ControlObligationAtom(
+        obligation_id="validity", kind=ControlObligationKind.VERIFY_RESULT_VALIDITY,
+        statement=excerpt, source_span_ids=["span:result-waiver"], source_excerpts=[excerpt],
+        time_constraint=TimeConstraint(anchor_type="event_date", direction="before", upper_bound_days=days),
+        evaluation=spec("deterministic", "source_validity"),
+    )
+    waiver = ControlObligationAtom(
+        obligation_id="waiver", kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+        statement=excerpt, source_span_ids=["span:result-waiver"], source_excerpts=[excerpt],
+        evaluation=spec("semantic", "not_applicable"),
+    )
+    return validity, waiver
+
+
+def _check_result_validity_exemption_pair(expression) -> None:
+    _check_time_constraints(
+        entity_id="candidate:result-waiver", texts=[], expressions=[expression],
+        flat_atoms=[], global_time_constraint=None,
+    )
+
+
+@pytest.mark.parametrize("excerpt,days", [
+    ("重新筛选时可豁免12天内的检查。", 12),
+    ("重新筛选时，28天内已有检查结果可免予重复检查。", 28),
+    ("重新筛选时，14天内的检查结果无需重复检查。", 14),
+])
+def test_result_validity_exemption_has_one_bound_window(excerpt, days) -> None:
+    validity, waiver = _result_validity_exemption_pair(excerpt, days)
+    expression = _explicit_obligation_dnf(atoms=[validity, waiver])
+    _check_result_validity_exemption_pair(expression)
+    assert waiver.time_constraint is None
+    assert validity.time_constraint.upper_bound_days == days
+
+
+@pytest.mark.parametrize("fault", [
+    "missing_validity", "missing_window", "different_group", "different_span",
+    "different_quote", "wrong_peer_kind", "wrong_time_purpose", "mandatory_action",
+])
+def test_result_validity_exemption_cannot_borrow_unrelated_window(fault) -> None:
+    validity, waiver = _result_validity_exemption_pair("重新筛选时可豁免12天内的检查。", 12)
+    if fault == "missing_validity":
+        expression = _explicit_obligation_dnf(atoms=[waiver])
+    elif fault == "different_group":
+        expression = _explicit_obligation_dnf(groups=[[validity], [waiver]])
+    else:
+        updates = {
+            "missing_window": {"time_constraint": None, "evaluation": validity.evaluation.model_copy(update={
+                "determination_mode": "semantic", "operation": None, "operand_attribute": None,
+                "time_purpose": "not_applicable",
+            })},
+            "different_span": {"source_span_ids": ["span:other"], "evaluation": validity.evaluation.model_copy(update={
+                "source_span_ids": ["span:other"], "observation_policy": None,
+            })},
+            "different_quote": {"source_excerpts": ["重新筛选时，12天内的其他检查结果有效。"], "evaluation": validity.evaluation.model_copy(update={
+                "source_excerpts": ["重新筛选时，12天内的其他检查结果有效。"], "observation_policy": None,
+            })},
+            "wrong_peer_kind": {"kind": ControlObligationKind.COMPLETE_OR_VERIFY},
+            "wrong_time_purpose": {"evaluation": validity.evaluation.model_copy(update={"time_purpose": "event_membership"})},
+        }
+        if fault == "mandatory_action":
+            waiver = waiver.model_copy(update={"statement": "必须在重新筛选前12天内完成检查。"})
+        else:
+            validity = validity.model_copy(update=updates[fault])
+        expression = _explicit_obligation_dnf(atoms=[validity, waiver])
+    with pytest.raises(ProtocolControlGateError, match="TIME_ANCHOR_MISSING"):
+        _check_result_validity_exemption_pair(expression)
+
+
+@pytest.mark.parametrize("addition", [
+    "，并须在随机前完成另一项检查。",
+    "，并必须完成另一项检查。",
+    "或随机前的另一项检查。",
+    "并记录另一项检查。",
+])
+@pytest.mark.parametrize("statement_only", [False, True])
+def test_result_validity_exemption_keeps_independent_action_or_window(addition, statement_only) -> None:
+    excerpt = "重新筛选时可豁免12天内的检查"
+    validity, waiver = _result_validity_exemption_pair(excerpt if statement_only else excerpt + addition, 12)
+    if statement_only:
+        waiver = waiver.model_copy(update={"statement": excerpt + addition})
+    expression = _explicit_obligation_dnf(atoms=[validity, waiver])
+    with pytest.raises(ProtocolControlGateError, match="TIME_ANCHOR_MISSING"):
+        _check_result_validity_exemption_pair(expression)
+
+
+@pytest.mark.parametrize("cue", ["无需", "不需要"])
+def test_result_validity_exemption_negative_need_cannot_swallow_later_must(cue) -> None:
+    validity, waiver = _result_validity_exemption_pair(
+        f"重新筛选时{cue}12天内复查但必须完成另一项检查。", 12,
+    )
+    with pytest.raises(ProtocolControlGateError, match="TIME_ANCHOR_MISSING"):
+        _check_result_validity_exemption_pair(_explicit_obligation_dnf(atoms=[validity, waiver]))
+
+
+@pytest.mark.parametrize("validity_truth", [TruthValue.TRUE, TruthValue.FALSE, TruthValue.UNKNOWN])
+def test_result_validity_exemption_consumer_keeps_validity_result(validity_truth) -> None:
+    validity, waiver = _result_validity_exemption_pair("重新筛选时可豁免12天内的检查。", 12)
+    expression = ControlObligationDnf(groups=[ControlObligationGroup(
+        obligation_group_id="group:result-waiver", atoms=[validity, waiver],
+    )])
+    _check_result_validity_exemption_pair(expression)
+    control = _control(obligation_expression=expression, source_span_ids=["span:result-waiver"])
+    group = control.obligation_expression.groups[0]
+    assert group.obligation_group_id
+    result = compose_control_layers(
+        control, control_sha256=canonical_hash(control.model_dump(mode="json")),
+        atom_truths={"validity": validity_truth, "waiver": TruthValue.TRUE},
+    )
+    assert result.obligation_group_truth[group.obligation_group_id] == validity_truth
+    assert result.obligation_atoms["validity"].truth == validity_truth
+
+
 @pytest.mark.parametrize(
     ("excerpt", "expected"),
     [

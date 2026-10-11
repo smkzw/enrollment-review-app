@@ -2,11 +2,13 @@
 
 ## 当前事实
 
-**现行接续（2026-10-11）：** Goal active、claims_complete=false；最新实际产品源码3c9a760e3976004a3e965cc8745c6b23db253d1e。Job17d7208734384ea7b3b83f9dde0d153e终态failed_final/PROTOCOL_CONTROL_LOGICAL_BUDGET_EXHAUSTED，8新调用330.604505834秒/exit3，44深审完成/45排队；45失败，下游依赖失败。旧49真实R1保存有效，但此次没有到达它，不能把预检49可复用写成49实际执行。0共同发布/启用/签发。下方先前当前段均为历史，不覆盖本段。
+**现行接续（2026-10-11）：** Goal active、claims_complete=false；最新实际产品源码83d8ee59。Jobe28bb76f568543c885ea393f96013b9c终态failed_final/PROTOCOL_CONTROL_LOGICAL_BUDGET_EXHAUSTED，8新调用459.565242250秒/exit3，44深审完成/45排队；45失败，下游依赖失败。旧49真实R1保存有效，但此次没有到达它，不能把预检49可复用写成49实际执行。0共同发布/启用/签发。下方先前当前段均为历史，不覆盖本段。
 
-51“真正漏读”的旧归因撤回：先决已有eligibility_sequence_quote，只是捕获统计未计；被拒补读不采用。捕获包末proof类型条件后19原模块例通过，不再重复277窗。a456的24次准入未先核45旧账39次而0新调用拒绝，属所有者配置错误；随后实际累计47保留39+8，未清零。45新作者目前首先错把许可/免予放入recommended，旧人群范围问题尚未达到核对，不能宣称已解决。
+51“真正漏读”的旧归因撤回：先决已有eligibility_sequence_quote，只是捕获统计未计；被拒补读不采用。捕获包末proof类型条件后19原模块例通过，不再重复277窗。历史a456的24次准入未先核45旧账39次而0新调用拒绝，属所有者配置错误；17d720累计47后e28bb累计55，旧账未清零。recommended是17d720首错，已在e28bb修正；旧人群范围尚未重新核对，不能宣称已解决。
 
-本次仅修RECOMMENDED_MODALITY_UNSUPPORTED的定向提示，复用既有许可与豁免结构，实际文本进入repair hash；不改基础作者/Schema/编译，不翻转强度或自动采用。相连75pass/1304deselected/2.24秒/exit0；包含无复查时不可凭optional采用初查的实际消费者反例，非临床验收。旧CodeBuddy续审429/exit3未接受；新live C03 Grok/grok-build/grok-4.7/high只读8定义、fresh context、exit0/no fallback，未读病例/运行测试，所有者另核下游。当前新包尚未真实运行；先核累计账和全部90步预检，实际结果决定下一动作。取舍reviews/rv1006-permission-modality-owner-disposition-20261011.md。原件、旧库/旧终态、七份继承dirty保留，完整同源包、病例工作稿、更正新旧结果仍未完成。
+许可指导已实际修正两候选的recommended错误，随后因重复时间检查进入无效补答。本次仅gate v48→v49，简单同源同组有效期可承担豁免窗口；复合/独立动作、异源异组、缺窗仍拒。不改作者/Schema/编译/模型。相连末50pass/1317deselected/0.94秒/exit0/5SWIG；C03 Grok/high首审及同会话复核exit0/no fallback，反例采纳，末“无需…但必须”语气匹配修复由所有者验证，顾问不读病例/不跑测试。末完整批次旧提案重验passed/2候选，0模型/0写/stat保持，仍未医学批准。
+
+以e28bb为源完整预检49reusable/2resume_partial/39refresh、0调用/0写/全库hash保持，早于末小修；末单批重验已执行。45按原unaccepted_author_proposal恢复，不再重生成整组；51仅来源种子。未来子作业累计45=55、51=4，不清零旧预算，创建须当前门与全部90步一致。新包尚未真实续跑；来源/语义核对、完整共同发布、5PDF24页工作稿、正式UI关联更正/新旧结果/Q3仍未完成。详见implement当前表和reviews/rv1006-waiver-window-owner-disposition-20261011.md。原件/旧终态、七份继承dirty保留。本记录不是暂停。
 
 ### 以下非执行留存包为历史；51缺文判断已被实际字段反证
 

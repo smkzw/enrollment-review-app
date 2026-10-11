@@ -62,7 +62,7 @@ from app.protocols.source_time_fragments import (
 from app.protocols.control_scope_sources import immediate_cell_scope_label, validate_scope_citations
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v48"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v49"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -2878,6 +2878,61 @@ def _texts_for_control(control: ProtocolReviewControl) -> list[str]:
     return texts
 
 
+def _exemption_validity_is_bound_in_group(atom: object, group: object | None) -> bool:
+    """A co-sourced validity predicate owns the waiver's window, not its action."""
+    evaluation = getattr(atom, "evaluation", None)
+    excerpts = tuple(getattr(atom, "source_excerpts", ()) or ())
+    spans = set(getattr(atom, "source_span_ids", ()) or ())
+    if (
+        group is None
+        or _value(getattr(atom, "kind", None)) != "complete_or_verify"
+        or getattr(atom, "time_constraint", None) is not None
+        or _value(getattr(evaluation, "determination_mode", None)) != "semantic"
+        or _value(getattr(evaluation, "time_purpose", None)) != "not_applicable"
+        or not excerpts
+        or not spans
+    ):
+        return False
+    # The direct source must grant an exemption; an ordinary mandatory action
+    # cannot borrow a neighbouring result's window, even in the same paragraph.
+    def exemption_text(text: str) -> bool:
+        return bool(_EXEMPTION_MODALITY_RE.search(text) or re.search(r"豁免|免予", text))
+
+    def single_window_exemption(text: str) -> bool:
+        if len(list(_TEMPORAL_CUE_RE.finditer(text))) != 1:
+            return False
+        for clause in re.split(r"[，,。；;]", text):
+            if not clause.strip():
+                continue
+            waived = exemption_text(clause)
+            if _TEMPORAL_CUE_RE.search(clause) and not waived:
+                return False
+            # Coordinated actions need their own source ownership; exact equal
+            # quotes alone cannot prove that they share this one validity window.
+            if re.search(r"并|且|或|另|还|以及", clause):
+                return False
+            # Remove the exemption token before scanning for another action;
+            # a match beginning inside "need not" must not swallow a later must.
+            residual = _EXEMPTION_MODALITY_RE.sub(" ", clause)
+            if _ROUTINE_ACTION_RE.search(residual):
+                return False
+        return exemption_text(text)
+
+    if not single_window_exemption(" ".join(excerpts)) or not single_window_exemption(str(getattr(atom, "statement", ""))):
+        return False
+    for peer in getattr(group, "atoms", ()) or ():
+        peer_evaluation = getattr(peer, "evaluation", None)
+        if (
+            _value(getattr(peer, "kind", None)) == "verify_result_validity"
+            and getattr(peer, "time_constraint", None) is not None
+            and _value(getattr(peer_evaluation, "time_purpose", None)) == "source_validity"
+            and tuple(getattr(peer, "source_excerpts", ()) or ()) == excerpts
+            and set(getattr(peer, "source_span_ids", ()) or ()) == spans
+        ):
+            return True
+    return False
+
+
 def _check_time_constraints(
     *,
     entity_id: str,
@@ -3220,6 +3275,8 @@ def _check_time_constraints(
                 source_excerpts or [str(getattr(atom, "statement", ""))]
             )
             if not action_scoped_temporal_cue(atom_text):
+                continue
+            if _exemption_validity_is_bound_in_group(atom, group):
                 continue
             constraint = getattr(atom, "time_constraint", None) or global_time_constraint
             if constraint is None:
