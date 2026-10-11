@@ -2154,6 +2154,7 @@ def _deep_component_identity(
                                        SOURCE_POLICY_REQUEST_SCOPE_VERSION,
                                        SOURCE_CONDITION_ACTION_SUPPORT_VERSION,
                                        SOURCE_UNRESOLVED_COVERAGE_VERSION,
+                                       "candidate-time-failure-cause/v1",
                                        SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        "scoped-exception-dnf/v1")),

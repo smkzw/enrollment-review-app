@@ -10313,8 +10313,8 @@ class ProtocolControlAgentRunner:
                                 pair for pair in alignment_pairs if pair not in resumed_pairs
                             ]
                             alignment_reader = getattr(transport, "start_source_candidate_alignment", None)
+                            alignment_response = None
                             if pending_alignment_pairs and callable(alignment_reader):
-                                alignment_response = None
                                 try:
                                     configure_candidate_alignment_request(transport, wire, pending_alignment_pairs)
                                     alignment_response = alignment_reader(prompt=build_candidate_alignment_prompt(
@@ -10461,6 +10461,12 @@ class ProtocolControlAgentRunner:
                                             source_statement_coverage=coverage, source_target_review=target_review,
                                             source_candidate_alignment=checkpoint_alignment(), partial_wire=wire,
                                         )
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id, session_id=attempts[-1].session_id,
+                                        attempts=attempts, source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        source_candidate_alignment=checkpoint_alignment(), partial_wire=wire,
+                                    )
                             elif retained_alignment_items:
                                 candidate_alignment = alignment_with_items(
                                     resume_source_candidate_alignment, retained_alignment_items,
@@ -10502,6 +10508,75 @@ class ProtocolControlAgentRunner:
                                 ))
                             if temporal_unresolved_indexes:
                                 partial_wire = wire
+                                policy_failures = [failure for failure in alignment_failures
+                                    if failure["code"] == "EVIDENCE_POLICY_UNJUSTIFIED"]
+                                policy_indexes = sorted({index for failure in policy_failures
+                                    for index in failure["statement_ids"]})
+                                if policy_failures and set(policy_indexes) == set(temporal_unresolved_indexes):
+                                    failure = policy_failures[0]
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=alignment_response.session_id,
+                                        raw_output_sha256=_sha256(alignment_response.text),
+                                        raw_output_text=alignment_response.text,
+                                        raw_output_chars=len(alignment_response.text),
+                                        outcome="publication_invalid", issues=[failure["message"]],
+                                        error_classes=[failure["code"]], error_detail={**deepcopy(failure),
+                                            "statement_ids": policy_indexes,
+                                            "candidate_indexes": sorted({index for item in policy_failures
+                                                for index in item["candidate_indexes"]}),
+                                            "source_refs": sorted({span for item in policy_failures
+                                                for span in item["source_refs"]}),
+                                            "affected_dependents": sorted({index for item in policy_failures
+                                                for index in item["affected_dependents"]}),
+                                            "policy_failures": deepcopy(policy_failures)},
+                                    ))
+                                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                                        session_id=session_id, attempts=attempts,
+                                        source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        source_candidate_alignment=checkpoint_alignment(), partial_wire=wire)
+                                rejected_temporal = [failure for failure in alignment_failures
+                                    if set(failure["statement_ids"]) & set(temporal_unresolved_indexes)]
+                                negative_temporal = [item for item in (candidate_alignment.items
+                                    if candidate_alignment else []) if item.decision == "incomplete"
+                                    and item.statement_index in temporal_unresolved_indexes]
+                                failed_indexes = sorted({index for failure in rejected_temporal
+                                    for index in failure["statement_ids"]} | {
+                                    item.statement_index for item in negative_temporal})
+                                if (set(failed_indexes) == set(temporal_unresolved_indexes)
+                                        and all(failure["code"] == "SOURCE_CANDIDATE_ALIGNMENT_INVALID"
+                                                for failure in rejected_temporal)):
+                                    candidate_indexes = sorted({index for failure in rejected_temporal
+                                        for index in failure["candidate_indexes"]} | {
+                                        item.candidate_index for item in negative_temporal})
+                                    # Failed candidate meaning is not an ambiguous source time.
+                                    # Keep the rejection and let the frozen independent-read
+                                    # policy decide whether unrelated steps may continue.
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=session_id,
+                                        raw_output_sha256=_sha256(alignment_response.text
+                                            if alignment_response else candidate_alignment.model_dump_json()),
+                                        raw_output_text=alignment_response.text if alignment_response else None,
+                                        raw_output_chars=len(alignment_response.text) if alignment_response else None,
+                                        outcome="publication_invalid",
+                                        issues=["已有候选未通过原文含义核对；保留对应失败及已核兄弟，不改记为原文时间歧义。"],
+                                        error_classes=["SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"],
+                                        error_detail={"code": "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+                                            "statement_ids": failed_indexes, "candidate_indexes": candidate_indexes,
+                                            "json_path": "/source_candidate_alignment/items",
+                                            "source_refs": sorted({span for index in failed_indexes
+                                                for unit in batch.owned_units if unit.structure_unit_id
+                                                == source_interpretation.statements[index].structure_unit_id
+                                                for span in unit.source_span_ids}),
+                                            "retry_class": "source_semantic_review",
+                                            "affected_dependents": candidate_indexes,
+                                            "alignment_failures": deepcopy(rejected_temporal)},
+                                    ))
+                                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                                        session_id=session_id, attempts=attempts,
+                                        source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        source_candidate_alignment=checkpoint_alignment(), partial_wire=wire)
                                 raise SourceTemporalScopeUnresolved(
                                     statement_ids=tuple(temporal_unresolved_indexes),
                                     json_path="/items",

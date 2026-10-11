@@ -7806,7 +7806,7 @@ def test_preserved_negative_alignment_requires_actual_exhausted_proof(fault):
     assert saved == original
 
 
-@pytest.mark.parametrize("fixture_kind", ["partial", "exhausted_negative"])
+@pytest.mark.parametrize("fixture_kind", ["partial", "exhausted_negative", "fresh_negative"])
 def test_failure_checkpoint_preserves_partial_candidate_alignment_and_revalidates(monkeypatch, fixture_kind) -> None:
     from app.agents.protocol_control_candidate_alignment import SOURCE_CANDIDATE_ALIGNMENT_VERSION
     from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
@@ -7814,6 +7814,11 @@ def test_failure_checkpoint_preserves_partial_candidate_alignment_and_revalidate
 
     batch, fixture = (_exhausted_negative_alignment_fixture() if fixture_kind == "exhausted_negative"
                       else _partial_alignment_failure_fixture())
+    if fixture_kind == "fresh_negative":
+        fixture.attempts[-1].error_classes = ["SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"]
+        fixture.attempts[-1].error_detail.update(code="SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+            json_path="/source_candidate_alignment/items", retry_class="source_semantic_review",
+            candidate_indexes=[1])
     module = protocol_control_execution_module
     monkeypatch.setattr(module, "_closure_checkpoint", lambda *_: {"deep_plan": {
         "batches": [batch.model_dump(mode="json")],
@@ -7845,7 +7850,10 @@ def test_failure_checkpoint_preserves_partial_candidate_alignment_and_revalidate
         monkeypatch.setattr(module, "restricted_batch_from_review", lambda *_:
             pytest.fail("已证实的失败提案不得转换成原文歧义"))
     else:
-        monkeypatch.setattr(module, "restricted_batch_from_review", lambda *_: None)
+        if fixture_kind == "partial":
+            monkeypatch.setattr(module, "restricted_batch_from_review", lambda *_: None)
+        else:
+            assert module.restricted_batch_from_review(batch, fixture) is None
         monkeypatch.setattr(module, "_validate_deep_batch_output", lambda *_: None)
         monkeypatch.setattr(
             module, "hydrate_protocol_control_agent_output",
@@ -7872,6 +7880,11 @@ def test_failure_checkpoint_preserves_partial_candidate_alignment_and_revalidate
         for item in diagnostic["source_candidate_alignment"]["items"]
     ] == [(0, "fully_expressed"), (1, "incomplete")]
     assert diagnostic["partial_wire"] is not None
+    if fixture_kind == "fresh_negative":
+        assert raised.value.error_code == "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"
+        assert raised.value.retryable is False
+        assert diagnostic["reviewed_semantic_repair_unit_ids"] == []
+        assert module._preserved_negative_alignment_proof(batch, diagnostic) is None
     if fixture_kind == "exhausted_negative":
         assert raised.value.error_code == "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"
         assert diagnostic["reviewed_semantic_repair_unit_ids"] == ["su-02"]
@@ -7928,7 +7941,10 @@ def test_failure_checkpoint_preserves_partial_candidate_alignment_and_revalidate
     )
     with pytest.raises(StepFailure) as resumed:
         module._execute_deep(resume_context, SimpleNamespace())
-    assert resumed.value.error_code == "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID"
+    assert resumed.value.error_code == (
+        "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"
+        if fixture_kind == "fresh_negative" else "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID"
+    )
     assert "resume_source_candidate_alignment" in captured, sorted(captured)
     assert captured["resume_source_candidate_alignment"] is not None
     assert [

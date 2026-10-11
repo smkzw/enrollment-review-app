@@ -3,9 +3,9 @@
 
 本轮接续契约：同一隔离库与完整同源范围，完成完整要求→当前节点工作稿→正式UI有源更正→新旧报告。原件、旧终态、采用与签发边界不变。执行选择：所有者集成，跨单元作用域与失败恢复沿批准C03定向只读独审；共享数据和顺序依赖不另派实施者。当前包基础4ac85430，七份继承dirty及私有未跟踪材料保留。下方既往运行与暂停为历史，不覆盖本段及当前流程表。
 
-**最新实际终态：** 已push源码53cdd1bb的Job feecd04fa2d44b35a278b5b8a9ce75eb为failed_final/PROTOCOL_CONTROL_EVIDENCE_POLICY_UNJUSTIFIED，5新物理调用323.948658167秒/exit3。44深审完成、45排队；45后置答复因来源已标例外但exception_words为空而不能绑定，下游依赖失败。85发现及44成功组零新增调用；预检50不等于实际44。旧Job、原件、保护库和来源库保持，0共同发布/启用/签发，claims_complete=false；旧物理调用账不清零。
+**最新实际终态：** 已push源码831db58a的Job 0afc18de3f334d92b7c3bce3898769a5为failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，3新物理调用272.7409305000001秒/exit3。44深审完成、45排队；deep_0045来源例外字段已补正并保存，随后候选含义核对拒绝，终态被通用时间错误盖住。85发现及44成功组零新增调用；预检50不等于实际44。旧Job、原件、保护库和来源库保持，0共同发布/启用/签发，claims_complete=false；旧物理调用账不清零。
 
-**当前最小包：** 只补同一来源陈述的exception_words/unresolved，其他字段/兄弟冻结；非空摘录不等于完整例外，例外用途不靠字面覆盖跳过现有语义核对。失败分类/保存消费者接通，坏内容不重复，网络失败在累计剩余额度内恢复。相连末窗85pass/1847deselected/8.00秒/exit0/5SWIG，早期新增夹具及未调用回执问题真实保留。C03 Grok/high新鲜初审及同会话续审exit0/no fallback，只读源码，不读临床、不跑测试；没有采用按标点或整句禁令猜语义的建议。详见reviews/rv1006-exception-field-owner-disposition-20261011.md。feecd全部90步当前预检50/1/39、0调用/0写/全库hash保持；下一合法新建，旧终态不复活。本段下方前包为历史。
+**当前最小包：** 全部剩余时间范围确为候选核对失败时才归到语义未核；真实时间疑问、混合政策和坏JSON不被盖住。新鲜否定不作已耗尽证明，真实受限消费者拒绝，无final_output或自动采用；独立读取白名单/上限2不变。仅validator增加candidate-time-failure-cause/v1，作者/Schema/编译/模型不变。三相连原模块末窗134pass/1621deselected/18.87秒/exit0/5SWIG，不累计；v4新增夹具旧错误码期待已修。C03 Grok/high新鲜初审和同会话续审exit0/no fallback，源码只读，不读临床/跑测试；政策聚合及真实消费者末反例由所有者核验。详见reviews/rv1006-candidate-cause-owner-disposition-20261011.md。0afc全部90步预检50/1/39、0模型/0写/全库hash保持；下一合法新建，旧终态不复活。本段下方前包为历史。
 
 **当前包及证据：** 所有者集成＋C03单新鲜只读初审/同会话续审：54精确同源前置/动作分区保留time_words与eligibility_sequence_quote，完整同单元捕获、独立动作/否定/数量保护及保存重验成立；typed缺口仅使受影响批次失效。45不放宽原条件对应门，沿既有continue_atom只修evaluation.proposition，其他字段/兄弟冻结，新判断句限冻结摘录内逐字子句，再完整门及新含义核对；不是引用/次数/投票采用。source inventory validator v2与condition validator v2，作者/Schema/编译/模型不变。末相连窗101pass/1204deselected/1.16秒/exit0/5SWIG，不累计旧窗；早新夹具完整实体/import/理由已修，不松门。C03 Grok/high两读exit0/no fallback，末包含保护与typed错误由所有者反例核验。54实际旧拒答0调用/0写只读重验passed，保留schema_invalid，不造新批准。50reusable/1resume_partial/39refresh当前全预检0模型/0写/全库hash保持；46/48旧来源捕获不足刷新，54没有合法成功种子，45按未采用草稿恢复。下一合法产品保存，不把软件/诊断当工作稿完成。详见reviews/rv1006-sequence-condition-owner-disposition-20261011.md。
 
@@ -27,11 +27,11 @@
 
 ### 当前用户流程表
 
-当前feecd全部90步只读预检已完成：50reusable/1resume_partial/39refresh、0调用/0写/全库hash保持，rv1006-exception-field-preflight-20261011-v1.json仅本机。下一合法创建按此实际计划核90步；不得重用已终态作业。
+当前0afc全部90步只读预检已完成：50reusable/1resume_partial/39refresh、0调用/0写/全库hash保持，rv1006-candidate-cause-preflight-20261011-v1.json仅本机。私有预检首次漏PYTHONPATH在导入前退出1、无库写；正确环境重试exit0。下一合法创建按此实际计划核90步；不得重用已终态作业。
 
 | 用户流程节点 | 当前生产/保存/消费证据 | 首个尚未完成与用户动作 |
 |---|---|---|
-| 完整要求快照 | 官方DOCX rev21/23父条86组件141条件；85发现/90深审，最新feecd实际44完成/45排队；来源限定补正与语义消费者已修、当前50/1/39预检通过 | 下一验证实际局部保存及消费；不以旧52组或预检50组冒充本次完成；完整共同发布未成 |
+| 完整要求快照 | 官方DOCX rev21/23父条86组件141条件；85发现/90深审，最新0afc实际44完成/45排队；例外字段已保存、候选核对失败保持；当前50/1/39预检通过 | 下一验证实际失败分类及独立消费；不以旧52组或预检50组冒充本次完成；完整共同发布未成 |
 | 资料→事实资格→工作稿 | 5PDF24页已保存，候选/事实/Profile/资格沿既有入口 | 旧81组件/0controls不代表新包；新范围下有据结论及具体未决未生成 |
 | 原件导航 | 正式Ego连续页/切文件/宽屏已有局部证据，无坐标不造框 | 新完整工作稿逐项回源及Q3未验收 |
 | 更正→新旧结果 | 旧UI追加更正、Profile3→4/旧hash保持 | 旧更正0关联规则；须新包UI有源更正→受影响重算→新报告→旧历史 |

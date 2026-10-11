@@ -14917,7 +14917,9 @@ def test_temporal_candidate_is_reviewed_before_insert_guard_without_forging_acce
     assert result.source_candidate_alignment is None
     assert all(entry.status != "semantically_aligned" for entry in result.source_statement_coverage)
     assert any("SOURCE_CANDIDATE_ALIGNMENT_INVALID" in attempt.error_classes for attempt in result.attempts)
-    assert any("TEMPORAL_SCOPE_UNRESOLVED" in attempt.error_classes for attempt in result.attempts)
+    assert result.attempts[-1].error_classes == ["SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"]
+    assert result.attempts[-1].error_detail["statement_ids"] == [0]
+    assert result.attempts[-1].error_detail["candidate_indexes"] == [0]
 
 
 def _synthetic_policy_checks_from_prompt(prompt, candidate_index=0):
@@ -15747,17 +15749,38 @@ def test_alignment_transport_failure_keeps_partial_and_does_not_expand(failure_k
     assert result.attempts[-1].error_detail["candidate_indexes"] == [0, 1]
 
 
-@pytest.mark.parametrize("invalid_positive", [False, True])
-def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_fails(invalid_positive) -> None:
+@pytest.mark.parametrize("reply_kind", ["negative", "invalid_positive", "policy", "mixed", "mixed_policy", "bad_json"])
+def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_fails(reply_kind, monkeypatch) -> None:
     from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunResult
 
     batch, inventory, review, wire, alignment = (
         _two_independent_candidate_linked_alignment_material()
     )
+    invalid_positive = reply_kind in {"invalid_positive", "policy", "mixed", "mixed_policy"}
     if invalid_positive:
         alignment["items"][1]["decision"] = "fully_expressed"
         alignment["items"][1]["unresolved_dimensions"] = []
         alignment["items"][1]["candidate_atom_quotes"] = ["未由该条原文支持的动作"]
+    if reply_kind in {"policy", "mixed_policy"}:
+        import app.agents.protocol_control_deconstructor as module
+        bind = module.bind_partial_candidate_alignment
+        def policy_rejection(*args, **kwargs):
+            bound, failures = bind(*args, **kwargs)
+            for failure in failures:
+                failure["code"] = "EVIDENCE_POLICY_UNJUSTIFIED"
+            return bound, failures
+        monkeypatch.setattr(module, "bind_partial_candidate_alignment", policy_rejection)
+    if reply_kind in {"mixed", "mixed_policy"}:
+        statement = inventory.statements[0]
+        text = statement.quoted_text + "并连续接受治疗9天"
+        batch.owned_units[0].excerpt = statement.quoted_text = text
+        statement.decision_functions = ["action", "time_validity"]
+        statement.time_words = ["9天"]
+        review.items[0].source_action_excerpt = text
+        review.items[0].source_time_excerpt = "9天"
+        alignment["items"][0].update(decision="uncertain", source_excerpt=text,
+            unresolved_dimensions=["持续期起点尚未核清"])
+        wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0].source_excerpts = [text]
 
     class Transport(_FakeTransport):
         alignment_prompts: list[str] = []
@@ -15771,7 +15794,8 @@ def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_f
         def start_source_candidate_alignment(self, *, prompt: str) -> ProtocolControlAgentResponse:
             self.alignment_prompts.append(prompt)
             return ProtocolControlAgentResponse(
-                session_id="alignment", text=json.dumps(alignment, ensure_ascii=False),
+                session_id="alignment", text=("{" if reply_kind == "bad_json"
+                    else json.dumps(alignment, ensure_ascii=False)),
             )
 
         def start_source_insert(self, *, prompt: str, multiple: bool) -> ProtocolControlAgentResponse:
@@ -15787,6 +15811,19 @@ def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_f
     assert result.status == "需要核对"
     assert result.final_output is None
     assert result.partial_wire == wire
+    if reply_kind == "bad_json":
+        assert result.attempts[-1].error_classes == ["SOURCE_CANDIDATE_ALIGNMENT_INVALID"]
+        assert result.source_candidate_alignment is None
+        return
+    if reply_kind == "policy":
+        assert result.attempts[-1].error_classes == ["EVIDENCE_POLICY_UNJUSTIFIED"]
+        assert result.attempts[-1].error_detail["statement_ids"] == [1]
+        assert result.source_statement_coverage[0].status == "semantically_aligned"
+        return
+    if reply_kind in {"mixed", "mixed_policy"}:
+        assert result.attempts[-1].error_classes == ["TEMPORAL_SCOPE_UNRESOLVED"]
+        assert result.attempts[-1].error_detail["statement_ids"] == [0, 1]
+        return
     assert result.source_candidate_alignment is not None
     saved = ProtocolControlAgentRunResult.model_validate(result.model_dump(mode="json"))
     assert [
@@ -15805,11 +15842,24 @@ def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_f
     assert by_index[1].status == "candidate_linked"
     details = [
         attempt.error_detail for attempt in saved.attempts
-        if "TEMPORAL_SCOPE_UNRESOLVED" in attempt.error_classes
+        if "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED" in attempt.error_classes
     ]
     assert len(details) == 1
     assert details[0]["statement_ids"] == [1]
     assert details[0]["affected_dependents"] == [1]
+    assert details[0]["candidate_indexes"] == [1]
+    assert not any("TEMPORAL_SCOPE_UNRESOLVED" in attempt.error_classes for attempt in saved.attempts)
+    if not invalid_positive:
+        transport.start_source_candidate_alignment = None
+        resumed = ProtocolControlAgentRunner().run(
+            batch, transport, resume_wire=wire, resume_source_interpretation=inventory,
+            resume_session_id="existing-wire", output_validator=lambda _output: None,
+            resume_source_candidate_alignment=saved.source_candidate_alignment,
+        )
+        assert len(transport.alignment_prompts) == 1
+        assert resumed.final_output is None and resumed.partial_wire == wire
+        assert resumed.attempts[-1].error_classes == ["SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"]
+        assert resumed.attempts[-1].raw_output_text is None
 
 
 @pytest.mark.parametrize("reply_kind", ["valid", "unchanged", "changed_source", "transport", "exhausted",

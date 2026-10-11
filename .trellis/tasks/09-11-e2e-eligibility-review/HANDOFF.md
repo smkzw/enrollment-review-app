@@ -2,11 +2,11 @@
 
 ## 当前事实
 
-**现行接续：** Goal工具实查active，claims_complete=false；最近真实产品源码53cdd1bb、Job feecd04fa2d44b35a278b5b8a9ce75eb failed_final/PROTOCOL_CONTROL_EVIDENCE_POLICY_UNJUSTIFIED，5调用323.948658167秒/exit3，44完成/45排队。首因是来源用途已标例外但exception_words为空，后置答复无法绑定，不是临床资料缺失。0完整共同发布/启用/签发。新包复用现有单条字段补正，仅exception_words/unresolved可变，兄弟/原文冻结；摘录不能跳过例外语义核对。传输在原累计剩余额度续读，坏内容不重复；旧核对保留但变更身份后不作批准。相连末85pass/8.00秒/exit0；C03 Grok/high初审及同会话续审exit0/no fallback、源码只读，均非临床验收。详见reviews/rv1006-exception-field-owner-disposition-20261011.md；本记录不是暂停。
+**现行接续：** Goal实查active，claims_complete=false；最近真实产品源码831db58a、Job 0afc18de3f334d92b7c3bce3898769a5 failed_final/PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID，3调用272.7409305000001秒/exit3，44完成/45排队。来源例外字段已实际补正保存；候选核对拒绝另一义务分支/数值用途，终态通用时间错误盖住第一因果失败。候选不采用、0完整共同发布/启用/签发。当前最小修复严格区分被拒候选、真实时间疑问和政策错误；坏JSON立即返回，不借旧否定，新鲜否定不能转已耗尽证明。独立读取白名单/上限2不变，无新平台或模型。三相连原模块末134pass/18.87秒/exit0；C03 Grok/high新鲜初审及同会话续审exit0/no fallback，只读源码，不读临床/跑测试；末政策聚合及真实消费者反例由所有者验证。详见reviews/rv1006-candidate-cause-owner-disposition-20261011.md；本记录不是暂停。
 
 **当前完成的软件与核对：** 54保留字面同源先决时间、动作与完整来源，保存消费者也核捕获；缺口以typed错误逐组失效，不把技术问题推给研究者。45原条件对应门不放宽；沿现有continue_atom仅修proposition，限冻结摘录内逐字判断句，其余字段/兄弟不变，完整门及新的含义核对仍必需。两项仅validator身份改变，不新建平台/读道/项目词表。C03 Grok/high新鲜初审及同会话续审exit0/no fallback，末保护所有者验证；非临床批准。原模块窗101pass/1.16秒、服务窗65pass/17.30秒，各exit0/5SWIG、不累加。
 
-**实际复用及下一运行：** feecd全部90组当前预检50reusable/1resume_partial/39refresh，0调用/0写/全库hash保持，rv1006-exception-field-preflight-20261011-v1.json仅本机。45仍为未采用草稿；旧调用和终态保持。下一在同一已授权隔离数据目录从合法产品API创建，并核全部90步与计划一致；不重复已成功50组或复制大库。完整同源要求→5PDF24页当前工作稿→正式UI更正→新旧报告仍未成。新来源补正必须实际保存、读回、消费，不能只凭85测试宣称完成。七份继承dirty保持，Git不含原件/库/临床原答/env；本记录不是暂停。
+**实际复用及下一运行：** 0afc全部90组当前预检50reusable/1resume_partial/39refresh，0调用/0写/全库hash保持，rv1006-candidate-cause-preflight-20261011-v1.json仅本机。45检查点b9f2977eedcd4c4b8aff0a52f5f5fb00仍为未采用草稿；旧调用/终态不改。下一在同一已授权隔离数据目录从合法API创建，并核全部90步与计划一致；不重读相容成功、不复制大库。新的失败归类须实际保存及独立消费者运行，不凭合成134测试宣称完整交付。七份继承dirty保持，Git不含原件/库/临床原答/env；本记录不是暂停。
 
 ### 以下许可/豁免包为历史，不覆盖当前事实
 
