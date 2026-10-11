@@ -43,6 +43,7 @@ from .control_evidence_dependency import ControlEvidenceAtomReference
 from .control_time_binding import ControlTimeBinding, validate_control_time_bindings
 from .enums import LogicalOperator, PhaseScope, ReviewStage, StableEnum, StudyPhase
 from .rules import ProspectivePeriod, TimeConstraint
+from .source_table_references import explicit_table_reference_context
 from .repeat_scheme import (RepeatEvidenceRole, RepeatEvidenceRoleReference,
                             resolve_repeat_evidence_roles, validate_repeat_evidence_roles)
 
@@ -2919,12 +2920,22 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
             if decision.disposition
             == ProtocolControlDiscoveryDisposition.NON_CONTROL
         }
+        planned_units = {
+            unit.structure_unit_id: unit
+            for batch in self.batches for unit in (*batch.owned_units, *batch.context_units)
+        }
+        referenced_table_ids_by_owned = {
+            owned_id: set(explicit_table_reference_context(planned_units[owned_id], list(planned_units.values())))
+            for owned_id in deep_ids if owned_id in planned_units
+        }
         for owned_id, related_ids in self.related_context_ids_by_owned.items():
             if owned_id not in deep_ids:
                 raise ValueError("跨章节只读线索必须归属深析单元")
             if (len(related_ids) != len(set(related_ids))
                     or owned_id in related_ids
-                    or not set(related_ids) <= expected_set - non_control_ids):
+                    or not set(related_ids) <= expected_set
+                    or set(related_ids) & (non_control_ids
+                    - referenced_table_ids_by_owned.get(owned_id, set()))):
                 raise ValueError("跨章节只读线索必须引用清单中仍可核对的其他单元")
         for decision in self.discovery_decisions:
             if any(
@@ -3008,7 +3019,12 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
                     and (row_key in owned_rows or 0 <= row_key[1] < 5)
                 ):
                     table_context_ids.add(unit.structure_unit_id)
-            if actual_context_ids & (non_control_ids - table_context_ids - note_ids):
+            referenced_table_ids = {
+                context_id for owned_id in batch.owned_structure_unit_ids
+                for context_id in referenced_table_ids_by_owned.get(owned_id, set())
+                if context_id in self.related_context_ids_by_owned.get(owned_id, ())
+            }
+            if actual_context_ids & (non_control_ids - table_context_ids - note_ids - referenced_table_ids):
                 raise ValueError("深析批次 context_units 不得包含非表格前置语境的 non_control 单元")
             if actual_context_ids != expected_context_ids | (actual_context_ids & table_context_ids):
                 raise ValueError("深析批次上下文必须精确闭合到发现阶段声明")

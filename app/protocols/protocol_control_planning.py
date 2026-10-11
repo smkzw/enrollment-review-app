@@ -39,6 +39,7 @@ from app.domain.contracts.protocol_controls import (
 from app.domain.contracts.protocol_ingestion import FrozenProtocolCatalog
 from app.domain.contracts.agent_io import ProtocolSourceMaterial
 from app.domain.contracts.rules import WorkflowStage
+from app.domain.contracts.source_table_references import explicit_table_reference_context
 from app.protocols.adaptive_batch_budget import (
     AdaptiveBatchBudget,
     AdaptiveBatchPlanningError,
@@ -1266,8 +1267,20 @@ def plan_protocol_control_deep_batches_from_discovery(
          if decision_by_id[unit.structure_unit_id].disposition
          != ProtocolControlDiscoveryDisposition.NON_CONTROL],
     )
+    referenced_tables = {
+        unit.structure_unit_id: explicit_table_reference_context(unit, coverage_manifest.units)
+        for unit in deep_units
+    }
+    related_context = {
+        unit.structure_unit_id: tuple(dict.fromkeys((
+            *similar_context.get(unit.structure_unit_id, ()),
+            *referenced_tables[unit.structure_unit_id],
+        )))
+        for unit in deep_units
+        if similar_context.get(unit.structure_unit_id) or referenced_tables[unit.structure_unit_id]
+    }
     context_ids_by_unit_id = {
-        unit_id: tuple(dict.fromkeys((*context_ids_by_unit_id[unit_id], *similar_context.get(unit_id, ()))))
+        unit_id: tuple(dict.fromkeys((*context_ids_by_unit_id[unit_id], *related_context.get(unit_id, ()))))
         for unit_id in context_ids_by_unit_id
     }
     note_links = table_footnote_context_links or {}
@@ -1400,7 +1413,7 @@ def plan_protocol_control_deep_batches_from_discovery(
         discovery_decisions=list(decisions),
         related_context_ids_by_owned={
             unit_id: list(related_ids)
-            for unit_id, related_ids in similar_context.items()
+            for unit_id, related_ids in related_context.items()
         },
         max_owned_units_per_batch=max_owned_units_per_batch,
         batches=batches,

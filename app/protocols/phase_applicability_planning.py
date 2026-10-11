@@ -33,6 +33,12 @@ from app.domain.contracts.protocol_controls import (
     StructureUnitKind,
 )
 from app.domain.contracts.enums import PhaseScope, StudyPhase
+from app.domain.contracts.source_table_references import (
+    _TABLE_REFERENCE_RE,
+    normalize_reference_number as _normalize_reference_number,
+    table_key as _table_key,
+    table_number as _table_number,
+)
 
 PHASE_APPLICABILITY_PLAN_V1_VERSION = "phase5/phase-applicability-plan/v1"
 PHASE_APPLICABILITY_PLAN_V2_VERSION = "phase5/phase-applicability-plan/v2"
@@ -300,8 +306,6 @@ def _heading_runs(
     return tuple(tuple(run) for run in runs)
 
 
-_TABLE_ROW_REF = re.compile(r"^(?P<table>.+?)\.r\d+(?:\.c\d+)?(?:\.p\d+)?$")
-
 _STUDY_DESIGN_PHASE_TERMS = (
     "研究设计",
     "试验设计",
@@ -345,15 +349,6 @@ _CROSS_REFERENCE_TERMS = (
     "see",
 )
 
-_TABLE_REFERENCE_RE = re.compile(
-    r"(?:参见|详见|见|refer(?:\s+to)?|see)\s*(?:第\s*)?"
-    r"(?:表格?|table)\s*(?P<number>[0-9０-９一二三四五六七八九十百]+)",
-    re.IGNORECASE,
-)
-_TABLE_TITLE_NUMBER_RE = re.compile(
-    r"(?:表格?|table)\s*(?P<number>[0-9０-９一二三四五六七八九十百]+)",
-    re.IGNORECASE,
-)
 _HEADING_NUMBER_PREFIX_RE = re.compile(
     r"^\s*(?:第\s*)?(?:[0-9]+(?:[.．][0-9]+)*|[一二三四五六七八九十百]+|[IVXLC]+)"
     r"\s*[、.．:：\-\s]*",
@@ -524,61 +519,8 @@ def _shares_meaningful_heading_ancestor(
     return common >= 2 or (common > 0 and min(len(left_path), len(right_path)) == 1)
 
 
-def _normalize_reference_number(value: str) -> str:
-    digits = "０１２３４５６７８９"
-    value = value.translate(str.maketrans(digits, "0123456789"))
-    if value.isdigit():
-        return str(int(value))
-    if value == "十":
-        return "10"
-    if value in {"百"}:
-        return "100"
-    chinese = {
-        "一": 1,
-        "二": 2,
-        "三": 3,
-        "四": 4,
-        "五": 5,
-        "六": 6,
-        "七": 7,
-        "八": 8,
-        "九": 9,
-    }
-    if value in chinese:
-        return str(chinese[value])
-    if len(value) == 2 and value[0] == "十" and value[1] in chinese:
-        return str(10 + chinese[value[1]])
-    if len(value) == 2 and value[1] == "十" and value[0] in chinese:
-        return str(chinese[value[0]] * 10)
-    return value.casefold()
-
-
-def _table_number(unit: ProtocolStructureUnit) -> str | None:
-    candidates = [*unit.heading_path, unit.excerpt]
-    for value in candidates:
-        match = _TABLE_TITLE_NUMBER_RE.search(value)
-        if match:
-            return _normalize_reference_number(match.group("number"))
-    return None
-
-
 def _is_cross_reference_source(unit: ProtocolStructureUnit) -> bool:
     return _matches_terms(unit, _CROSS_REFERENCE_TERMS)
-
-
-def _table_key(unit: ProtocolStructureUnit) -> tuple[str, str] | None:
-    if unit.table_context is None:
-        return None
-    for source_ref in (unit.source_ref, *unit.member_source_refs):
-        match = _TABLE_ROW_REF.match(source_ref)
-        if match:
-            return ("source", match.group("table"))
-    # Synthetic/legacy structure units may only carry table coordinates.  A
-    # non-empty outer path is still a deterministic table key in that shape.
-    outer_path = tuple(unit.table_context.table_path[:-2])
-    if outer_path:
-        return ("path", ",".join(str(value) for value in outer_path))
-    return ("heading", "\x1f".join(unit.heading_path))
 
 
 def _selected_scope(study_phase: StudyPhase) -> PhaseScope:

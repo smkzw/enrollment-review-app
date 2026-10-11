@@ -343,6 +343,65 @@ def test_conditioned_source_sibling_checks_only_its_own_obligations(form, change
         assert len(reusable_proven_alignment_items(batch, source, coverage, wire, bound)) == 1
 
 
+@pytest.mark.parametrize("form", ["若", "如果"])
+@pytest.mark.parametrize("change", [None, "negated", "partial", "unquoted_condition",
+    "same_activation", "unresolved_sibling", "extra_sibling_atom", "nested", "else",
+    "wrong_condition_source", "opposite_condition", "coordinated_action"])
+def test_full_conditional_quote_keeps_its_own_branch_scope(form, change):
+    batch, source, wire, coverage, alignment = _scoped_sibling_material()
+    current = source.statements[-1]
+    old = current.quoted_text
+    text = f"{form}结果有效者则记录处理日期"
+    if change == "negated":
+        text = text.replace("结果有效者", "并非结果有效者")
+    elif change == "partial":
+        text = text.replace("结果有效者", "全部结果有效者")
+    elif change == "nested":
+        text = text.replace("记录处理日期", "若结果异常者则记录处理日期")
+    elif change == "else":
+        text += "，否则领取文件"
+    elif change == "coordinated_action":
+        text += "并且通知研究者"
+    unit = batch.owned_units[0]
+    unit.excerpt = unit.excerpt.replace(old, text)
+    unit.member_texts = [unit.excerpt]
+    current.quoted_text = text
+    candidate = wire.candidate_drafts[0]
+    atom = candidate.obligation_expression.groups[-1].atoms[0]
+    atom.statement = text
+    atom.source_excerpts = [text]
+    atom.evaluation = atom.evaluation.model_copy(update={"proposition": text,
+        "source_excerpts": [text]})
+    alignment.items[0].statement_index = len(source.statements) - 1
+    alignment.items[0].source_excerpt = text
+    alignment.items[0].candidate_atom_quotes = ["结果有效者", text]
+    if change == "unquoted_condition":
+        alignment.items[0].candidate_atom_quotes = [text]
+    elif change == "same_activation":
+        candidate.obligation_expression.groups[0].applies_to_trigger_branch_indexes = [1]
+    elif change == "unresolved_sibling":
+        source.statements[0].unresolved = ["完整来源尚未核实"]
+    elif change == "extra_sibling_atom":
+        candidate.obligation_expression.groups[0].atoms.append(atom.model_copy(deep=True,
+            update={"statement": "额外发放文件", "source_excerpts": ["额外发放文件"]}))
+    elif change == "wrong_condition_source":
+        candidate.trigger_expression.groups[-1].atoms[-1].source_excerpts = ["记录处理日期"]
+    elif change == "opposite_condition":
+        condition = candidate.trigger_expression.groups[-1].atoms[-1]
+        condition.evaluation = condition.evaluation.model_copy(update={"proposition": "并非结果有效者"})
+    if change not in {None, "coordinated_action"}:
+        with pytest.raises(ValueError):
+            validate_candidate_alignment(batch, source, coverage, wire, alignment)
+    else:
+        validate_candidate_alignment(batch, source, coverage, wire, alignment)
+        raw = alignment.model_dump_json(exclude={"proofs"})
+        bound = bind_candidate_alignment(batch, source, coverage, wire, alignment, raw)
+        restored = SourceCandidateAlignment.model_validate_json(bound.model_dump_json())
+        assert reusable_proven_alignment_items(batch, source, coverage, wire, restored) == bound.items
+        current.quoted_text = text.replace("则", "或", 1)
+        assert reusable_proven_alignment_items(batch, source, coverage, wire, restored) == []
+
+
 @pytest.mark.parametrize("broad_only", [False, True])
 def test_scoped_sibling_context_does_not_replace_its_local_source(broad_only):
     batch, source, wire, coverage, alignment = _scoped_sibling_material()

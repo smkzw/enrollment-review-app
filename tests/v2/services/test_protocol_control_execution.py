@@ -6554,8 +6554,9 @@ def test_independent_deep_read_setting_rejects_implicit_truthiness(data_paths, s
                        deep_independent_reads_after_unresolved=invalid)
 
 
+@pytest.mark.parametrize("gate_changed", [False, True])
 def test_independent_reads_preserve_actual_unresolved_failure_without_model_retry(
-    data_paths, session_factory, monkeypatch,
+    data_paths, session_factory, monkeypatch, gate_changed,
 ) -> None:
     from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunner
     from app.agents.protocol_control_source_interpretation import validate_source_target_review
@@ -6636,6 +6637,25 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
         protocol_control_execution_module._preserved_unresolved_review_proof(batch, bad)
     assert diagnostic == original_diagnostic
 
+    if gate_changed:
+        original_checkpoint = JobStore.get_last_checkpoint
+
+        def previous_validator(self, job_id, step_id):
+            checkpoint = original_checkpoint(self, job_id, step_id)
+            if job_id != first.job_id or step_id != saved_step or checkpoint is None:
+                return checkpoint
+            checkpoint_id, saved = checkpoint
+            saved = dict(saved, component_identity=dict(saved["component_identity"],
+                                                       validator_version="previous-validator"))
+            return checkpoint_id, saved
+
+        def refuse_old_failure_proof(*args, **kwargs):
+            raise AssertionError("Changed validation must recheck, not freeze the old failure")
+
+        monkeypatch.setattr(JobStore, "get_last_checkpoint", previous_validator)
+        monkeypatch.setattr(protocol_control_execution_module, "_preserved_source_review_proof",
+                            refuse_old_failure_proof)
+
     continued = _build_service(data_paths, session_factory, seed,
                               max_deep_units_per_batch=1,
                               deep_independent_reads_after_unresolved=True).create_from_deconstruction(
@@ -6645,6 +6665,12 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
     _, payload = _job_snapshot_and_payload(session_factory, continued.job_id)
     entry = next(value for value in payload["deep_reuse_plan"]["decisions"].values()
                  if value["step_id"] == saved_step)
+    if gate_changed:
+        assert entry["decision"] == "resume_partial"
+        assert "unresolved_review_proof" not in entry
+        monkeypatch.setattr(JobStore, "get_last_checkpoint", original_checkpoint)
+        assert _job_checkpoint_fingerprint(session_factory, first.job_id) == old_history
+        return
     assert entry["decision"] == "preserve_unresolved"
     assert entry["unresolved_review_proof"]["adopted"] is False
     assert payload["execution_control"]["continue_after_final_failure"] == {
@@ -7625,13 +7651,17 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   protocol_control_execution_module.RESTRICTED_DEFINITION_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_COVERAGE_VALIDATION_VERSION,
                   protocol_control_execution_module.SOURCE_UNIT_QUOTE_COMPLETION_VERSION,
+                  protocol_control_execution_module.SOURCE_TABLE_MEMBER_COVERAGE_VERSION,
                   protocol_control_execution_module.SOURCE_ATTRIBUTION_VALIDATION_VERSION,
+                  protocol_control_execution_module.TABLE_SEQUENCE_SOURCE_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
+                  protocol_control_execution_module.SOURCE_TARGET_SEQUENCE_REVIEW_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_REVIEW_GAP_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
                   protocol_control_execution_module.SOURCE_TARGET_COCITED_CONTEXT_VERSION,
                   protocol_control_execution_module.PROCEDURE_RESTRICTION_VALIDATION_VERSION,
                   protocol_control_execution_module.CITATION_CLOSURE_RESTRICTION_VALIDATION_VERSION,
+                  protocol_control_execution_module.NONEXECUTING_RESTRICTION_VALIDATION_VERSION,
                   "source-target-additional-recovery/v1",
                   "numeric-evaluation-field-patch/v1",
         "source-target-frozen-id-schema/v1",
@@ -7647,6 +7677,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   "reviewed-source-type-field-recovery/v1",
                   "validated-snapshot-scoped-session/v1",
                   "phase5/source-function-field-repair/v1",
+                  protocol_control_execution_module.SOURCE_EXCEPTION_FIELD_REPAIR_VERSION,
                   "native-author-note-projection-and-procedure-row-gate/v1",
                   "invalid-wire-scoped-post-enrollment-repair/v1",
                   "native-row-action-coverage/v2",
@@ -7672,6 +7703,7 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   protocol_control_execution_module.SOURCE_POLICY_REQUEST_SCOPE_VERSION,
                   protocol_control_execution_module.SOURCE_CONDITION_ACTION_SUPPORT_VERSION,
                   protocol_control_execution_module.SOURCE_UNRESOLVED_COVERAGE_VERSION,
+                  "candidate-time-failure-cause/v1",
                   protocol_control_execution_module.SOURCE_STAGE_ECHO_VERSION,
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   "scoped-exception-dnf/v1"))

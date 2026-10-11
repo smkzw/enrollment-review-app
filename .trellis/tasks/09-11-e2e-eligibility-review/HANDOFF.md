@@ -2,6 +2,8 @@
 
 ## 当前事实
 
+**本轮统一接续（基础a201d040）：** Goal实查active，非暂停，claims_complete=false。最新持久化仍为下列244终态。本包通用条件前缀证明v2和明确表号的完整物理表上下文接通；实际90批只有46新增5行，89批材料不变，0调用/0写/全库hash保持。当前完整复用预检50reusable/1resume_partial/39refresh；旧50/2/38不再是准入。45零调用原答证明(2,0)成立、(3,1)仍数值用途未核；不删数值保护或改名真实歧义。不同validator不冻结旧失败，仍沿原局部草稿重核，旧记录不改。六模块1006pass/176.40秒/exit0早于末恢复增量，末增量另记。C03数值两轮及表/恢复三轮均exit0/no fallback，顾问无临床/测试核验；所有者有实际冻结来源/成员文字/hash检查。下一从合法入口新建并核90步决定一致，46新材料不借旧来源种子。完整共同发布、同包5PDF24页工作稿、UI有源更正与新旧报告/Q3仍未达。详见implement单一当前表、review_index及reviews/rv1006-conditional-and-referenced-table-owner-disposition-20261011.md；后文当前段均为历史。
+
 **现行覆盖下方先前当前段：** Goal active、claims_complete=false。已push实际源码8c1fee44、Job244296b31b9e4c459e0f162d64e7e427 failed_final/PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID，4物理调用359.80218570800207秒/exit3，44完成/44排队。45候选语义失败已准确保存；46首次独立继续，保存消费者发现末尾表格引用漏捕获（SOURCE_SEQUENCE_CAPTURE_INCOMPLETE），不是临床原文歧义。0共同发布/启用/签发；5PDF24页新同包工作稿、正式UI关联更正及Q3未完成。
 
 当前基础05fb1545的补读接线包已修复同一新增范围在生产/恢复/保存/受限/跨章消费者间丢失，以及扩展吞并相邻前提。末两原模块134pass/1623deselected/5.65秒/exit0，非全库/临床；批准C03 Grok/high新鲜初审和定向续审exit0/no fallback，两项确证采纳，末异单元与短编译保留由所有者反例核验。三次真实局部产品诊断新增1/2/1调用，18.725/22.496/48.120秒；前两拒，末复用真实来源/作者仅补核对，严格受限投影成立。均0写/全库hash保持，未正式保存/共同发布/启用/签发，不是新Job。实际DeepSeek/high/65536，输入17534/输出含未拆思考14401，费用unknown。恢复补读内部逻辑session未在前诊断持久化，末用实际响应request ID，未伪称正式复用批准。末未决的表已存在完整冻结来源，本批仅给表题；该段邻Ⅱ期标题而当前选Ⅲ期，先核引用和期别消费，不把请求漏上下文称原文歧义。详见implement、review_index及reviews/rv1006-completed-source-review-owner-disposition-20261011.md。旧50/2/38预检早于本包，下一合法新Job前重核；45相同失败不原样重跑，先核通用数值用途及条件分支。原件/旧终态/七份继承dirty保留；本记录不是暂停。

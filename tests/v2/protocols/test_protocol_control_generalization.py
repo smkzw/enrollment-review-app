@@ -103,6 +103,125 @@ def test_cross_chapter_short_text_is_not_promoted_to_context() -> None:
     assert _cross_chapter_readonly_context([first], [first, second]) == {}
 
 
+@pytest.mark.parametrize("variant", [None, "fullwidth", "english", "ambiguous", "no_reference", "compound", "spaced_compound", "spaced_emdash", "foreign_row", "compound_match", "emdash_match", "spaced_compound_match", "spaced_emdash_match", "opinion"])
+def test_explicit_table_reference_closes_readonly_source_without_changing_ownership(variant):
+    from app.domain.contracts.protocol_controls import TableCellContext
+    from app.agents.protocol_control_source_interpretation import build_source_interpretation_prompt
+    from app.services.protocol_control_execution import _same_deep_batch_material
+
+    manifest = _manifest(7)
+    source, title, first, second, other, unrelated, extra = manifest.units
+    source.excerpt = "作出资格判断后按参见表 18的安排执行。"
+    title.excerpt = "表 18 给药安排"
+    for unit, row in ((first, 0), (second, 7), (other, 0)):
+        table = 4 if unit != other else 5
+        unit.source_ref = f"body.t{table}.r{row}"
+        unit.member_source_refs = [unit.source_ref]
+        unit.heading_path = ["研究治疗", title.excerpt if unit != other else "表 19 给药安排"]
+        unit.excerpt = "同一表内的完整来源。"
+        unit.unit_kind = StructureUnitKind.TABLE_ROW
+        unit.table_context = TableCellContext(table_path=(row, 0), row_index=row,
+                                             column_index=0, member_cell_paths=[(row, 0)])
+    unrelated.heading_path = ["独立要求"]
+    extra.heading_path = ["另一处来源"]
+    if variant == "fullwidth":
+        source.excerpt = source.excerpt.replace("18", "１８")
+    elif variant == "english":
+        source.excerpt = "After eligibility, see Table 18."
+    elif variant == "ambiguous":
+        other.heading_path[-1] = title.excerpt
+    elif variant == "no_reference":
+        source.excerpt = "作出资格判断后执行给药安排。"
+    elif variant in {"compound", "spaced_compound", "spaced_emdash"}:
+        token = {"compound": "18-2", "spaced_compound": "18 - 2", "spaced_emdash": "18 — 2"}[variant]
+        source.excerpt = source.excerpt.replace("18", token)
+    elif variant in {"compound_match", "emdash_match", "spaced_compound_match", "spaced_emdash_match"}:
+        token = {"compound_match": "18-2", "emdash_match": "18—2",
+                 "spaced_compound_match": "18 - 2", "spaced_emdash_match": "18 — 2"}[variant]
+        source.excerpt = source.excerpt.replace("18", token)
+        for unit in (first, second):
+            unit.heading_path[-1] = title.excerpt.replace("18", token)
+    elif variant == "opinion":
+        source.excerpt = "研究意见表 18中的安排另议。"
+    elif variant == "foreign_row":
+        second.source_ref = "body.t6.r7"
+        second.member_source_refs = [second.source_ref]
+        second.heading_path[-1] = "表 20 另一安排"
+    discovery = plan_protocol_control_discovery(manifest, max_units_per_batch=7)
+    decisions = [[ProtocolControlDiscoveryDecision(
+        structure_unit_id=unit.structure_unit_id,
+        disposition=(ProtocolControlDiscoveryDisposition.CANDIDATE if unit in (source, unrelated)
+                     else ProtocolControlDiscoveryDisposition.NON_CONTROL),
+        rationale="冻结来源处置，不由上下文读取改变。",
+    ) for unit in manifest.units]]
+    before = manifest.model_dump(mode="json")
+    deep = plan_protocol_control_deep_batches_from_discovery(
+        manifest, discovery, decisions, max_owned_units_per_batch=1)
+    expected = ([] if variant in {"ambiguous", "no_reference", "compound", "spaced_compound", "spaced_emdash", "opinion"}
+                else [first.structure_unit_id]
+                + ([] if variant == "foreign_row" else [second.structure_unit_id]))
+    assert deep.batches[0].context_structure_unit_ids == expected
+    assert deep.batches[0].owned_structure_unit_ids == [source.structure_unit_id]
+    assert deep.batches[1].context_structure_unit_ids == []
+    assert deep.deep_structure_unit_ids == (source.structure_unit_id, unrelated.structure_unit_id)
+    assert manifest.model_dump(mode="json") == before
+    assert ProtocolControlDiscoveryToDeepPlan.model_validate(deep.model_dump(mode="json")) == deep
+    prompt = build_source_interpretation_prompt(deep.batches[0])
+    for context_id in expected:
+        assert context_id in prompt
+        assert next(unit.excerpt for unit in manifest.units if unit.structure_unit_id == context_id) in prompt
+    if not expected:
+        return
+    without_reference = manifest.model_copy(deep=True)
+    without_reference.units[0].excerpt = "独立要求。"
+    old = plan_protocol_control_deep_batches_from_discovery(
+        without_reference, discovery, decisions, max_owned_units_per_batch=1)
+    assert not _same_deep_batch_material(old.batches[0], deep.batches[0])
+    assert _same_deep_batch_material(old.batches[1], deep.batches[1])
+    broken = deep.model_dump(mode="json")
+    broken["related_context_ids_by_owned"][source.structure_unit_id].append(extra.structure_unit_id)
+    with pytest.raises(ValueError, match="只读线索"):
+        ProtocolControlDiscoveryToDeepPlan.model_validate(broken)
+    missing = deep.model_dump(mode="json")
+    missing["batches"][0]["context_units"].pop()
+    missing["batches"][0]["context_structure_unit_ids"].pop()
+    missing["batches"][0]["context_source_span_ids"] = sorted({
+        span for unit in missing["batches"][0]["context_units"] for span in unit["source_span_ids"]})
+    with pytest.raises(ValueError, match="闭合|只读线索"):
+        ProtocolControlDiscoveryToDeepPlan.model_validate(missing)
+    changed_reference = deep.model_dump(mode="json")
+    changed_reference["batches"][0]["owned_units"][0]["excerpt"] = "见表 20执行。"
+    with pytest.raises(ValueError, match="只读线索"):
+        ProtocolControlDiscoveryToDeepPlan.model_validate(changed_reference)
+    from app.services import protocol_control_execution as execution
+    payload = {"coverage_manifest": manifest.model_dump(mode="json")}
+    identity = execution._require_frozen_referenced_table_context(payload, deep.batches[0], plan=deep)
+    assert isinstance(identity, str) and len(identity) == 64
+    for mutation in ("subset", "spoof", "hidden_duplicate"):
+        raw = deep.model_dump(mode="json")
+        frozen_payload = manifest.model_dump(mode="json")
+        if mutation == "subset":
+            removed = raw["batches"][0]["context_structure_unit_ids"].pop()
+            raw["batches"][0]["context_units"].pop()
+            raw["related_context_ids_by_owned"][source.structure_unit_id].remove(removed)
+            raw["batches"][0]["context_source_span_ids"] = sorted({
+                span for unit in raw["batches"][0]["context_units"] for span in unit["source_span_ids"]})
+        elif mutation == "spoof":
+            raw["batches"][0]["context_units"][0]["excerpt"] = "被改写的表格内容。"
+        else:
+            duplicate = frozen_payload["units"][4]
+            duplicate["heading_path"][-1] = first.heading_path[-1]
+        forged = ProtocolControlDiscoveryToDeepPlan.model_validate(raw)
+        context = execution.StepContext(job_id="synthetic-job", job_type="protocol_control_deconstruction",
+            job_payload={"coverage_manifest": frozen_payload}, step_id="closure", name="closure",
+            attempt=1, last_checkpoint_id="synthetic-checkpoint", max_attempts=1,
+            last_checkpoint={"stage": "closure", "deep_plan": forged.model_dump(mode="json"),
+                "publication_plan": _build_publication_plan(manifest, deep).model_dump(mode="json")})
+        with pytest.raises(execution.StepFailure) as error:
+            execution._replay_checkpoint(context, None)
+        assert error.value.error_code == "PROTOCOL_CONTROL_TABLE_CONTEXT_INVALID"
+
+
 @pytest.mark.parametrize("note_disposition", [
     ProtocolControlDiscoveryDisposition.CANDIDATE,
     ProtocolControlDiscoveryDisposition.NON_CONTROL,

@@ -1241,6 +1241,10 @@ def _replay_checkpoint(
             **context.job_payload, "deep_step_ids": closure.get("deep_step_ids", []),
         })
         batch = _deep_batch_for_step(scoped_context, deep_plan)
+        reference_context_sha256 = _require_frozen_referenced_table_context(context.job_payload, batch, plan=deep_plan)
+        if reference_context_sha256 is not None and checkpoint.get("source_context_sha256") != reference_context_sha256:
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_CHECKPOINT_INVALID",
+                              detail="已保存结果没有当前引用表格的读取范围证明，不复用旧核对。")
         prompt_template = _prompt_from_payload(context, "deep", config)
         transport = _resolve_transport(config, stage="deep")
         try:
@@ -1319,7 +1323,9 @@ def _replay_checkpoint(
             ) from exc
         return checkpoint
     if stage == "closure":
-        ProtocolControlDiscoveryToDeepPlan.model_validate(checkpoint.get("deep_plan"))
+        plan = ProtocolControlDiscoveryToDeepPlan.model_validate(checkpoint.get("deep_plan"))
+        for batch in plan.batches:
+            _require_frozen_referenced_table_context(context.job_payload, batch, plan=plan)
         ProtocolControlBatchPlan.model_validate(checkpoint.get("publication_plan"))
         return checkpoint
     if stage == "hydrate":
@@ -2193,6 +2199,47 @@ def _same_deep_batch_material(
     old.pop("batch_total")
     new.pop("batch_total")
     return old == new
+
+
+def _require_frozen_referenced_table_context(
+    payload: Mapping[str, Any], batch: ProtocolControlDispositionBatch,
+    *, plan: ProtocolControlDiscoveryToDeepPlan | None = None,
+) -> str | None:
+    from app.domain.contracts.source_table_references import (
+        explicit_table_reference_context, has_explicit_table_reference,
+    )
+
+    if not any(has_explicit_table_reference(unit) for unit in batch.owned_units):
+        return None
+    non_control = ({item.structure_unit_id for item in plan.discovery_decisions
+                    if item.disposition == ProtocolControlDiscoveryDisposition.NON_CONTROL}
+                   if plan is not None else set())
+    declared = ({unit.structure_unit_id: set(plan.related_context_ids_by_owned.get(unit.structure_unit_id, ())) & non_control
+                 for unit in batch.owned_units} if plan is not None else {})
+    try:
+        manifest = ProtocolSectionCoverageManifest.model_validate(payload.get("coverage_manifest"))
+        frozen = {unit.structure_unit_id: unit for unit in manifest.units}
+        expected = set()
+        for unit in batch.owned_units:
+            if frozen.get(unit.structure_unit_id) != unit:
+                raise ValueError("引用原文与冻结来源不一致")
+            referenced = set(explicit_table_reference_context(unit, manifest.units))
+            if declared.get(unit.structure_unit_id, set()) - referenced:
+                raise ValueError("只读准入不能由批次内的部分表格自证")
+            expected.update(referenced)
+        if not expected:
+            return None
+        actual = {unit.structure_unit_id: unit for unit in (*batch.owned_units, *batch.context_units)}
+        if (not expected <= set(actual)
+                or any(frozen.get(unit_id) != unit for unit_id, unit in actual.items())):
+            raise ValueError("引用表格未完整闭合到冻结来源")
+        return hashlib.sha256(json.dumps(
+            [unit.model_dump(mode="json") for unit in (*batch.owned_units, *batch.context_units)],
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+    except (TypeError, ValueError) as exc:
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_TABLE_CONTEXT_INVALID",
+                          detail="引用表格与冻结原文不一致，未调用模型或采用结果。") from exc
 
 
 @dataclass(frozen=True)
@@ -3675,7 +3722,12 @@ def _preflight_deep_source(
                 control = current_payload.get("execution_control")
                 if (isinstance(control, Mapping)
                         and control.get("continue_after_final_failure") == _INDEPENDENT_DEEP_READ_POLICY
-                        and partial[2].source_seed_proof is None):
+                        and partial[2].source_seed_proof is None
+                        and partial[1]["component_identity"]["validator_version"]
+                        == current_components["validator_version"]):
+                    # A changed validator may change the meaning of coverage.
+                    # Recheck the retained draft; do not freeze its old failure
+                    # or mistake ordinary revalidation for damaged history.
                     preserved = _preserved_source_review_proof(batch, partial[1])
                     if preserved is not None:
                         decision, reason = "preserve_unresolved", "same_material_failed_review_no_new_inference"
@@ -4345,6 +4397,7 @@ def _restricted_deep_checkpoint(
         "workflow_variant": context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
         "model_call_receipts": model_call_receipts,
         "batch_id": batch.batch_id,
+        "source_context_sha256": _require_frozen_referenced_table_context(context.job_payload, batch),
         "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(prompt_template),
         "transport_identity": _transport_identity(transport, stage="deep"),
         "component_identity": _deep_component_identity(context.job_payload, prompt_template),
@@ -4505,6 +4558,7 @@ def _execute_deep(
         max_attempts=context.max_attempts,
     )
     batch = _deep_batch_for_step(effective_context, deep_plan)
+    reference_context_sha256 = _require_frozen_referenced_table_context(context.job_payload, batch, plan=deep_plan)
     try:
         _require_schedule_member_sources([*batch.owned_units, *batch.context_units])
     except ValueError as exc:
@@ -4559,6 +4613,9 @@ def _execute_deep(
         saved_wire = previous.get("partial_wire")
         saved_source = previous.get("source_interpretation")
         if saved_wire is not None or saved_source is not None:
+            if reference_context_sha256 is not None and previous.get("source_context_sha256") != reference_context_sha256:
+                raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                                  detail="引用表格范围已经改变，保留旧账本；旧解释不能代替本次完整读取。")
             if (
                 previous.get("schema_version") != "phase5/deep-failure-diagnostic/v3"
                 or previous.get("batch_id") != batch.batch_id
@@ -4731,6 +4788,7 @@ def _execute_deep(
             current_components = _deep_component_identity(context.job_payload, prompt_template)
             prior_components = saved["component_identity"]
             return {**saved, "component_identity": current_components,
+                    "source_context_sha256": reference_context_sha256,
                     "revalidated_from_gate_version": (
                         prior_components["validator_version"]
                         if prior_components["validator_version"] != current_components["validator_version"]
@@ -4966,6 +5024,7 @@ def _execute_deep(
                 "schema_version": "phase5/deep-failure-diagnostic/v3",
                 "failure_reason_version": SOURCE_REQUIREMENT_FAILURE_REASON_VERSION,
                 "batch_id": batch.batch_id,
+                "source_context_sha256": reference_context_sha256,
                 "session_id": result.session_id,
                 "reviewed_semantic_repair_unit_ids": result.reviewed_semantic_repair_unit_ids,
                 "partial_wire": (
@@ -5038,6 +5097,7 @@ def _execute_deep(
         "workflow_variant": context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
         "model_call_receipts": model_call_receipts,
         "batch_id": batch.batch_id,
+        "source_context_sha256": reference_context_sha256,
         "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(
             prompt_template
         ),

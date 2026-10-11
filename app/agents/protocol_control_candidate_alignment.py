@@ -23,7 +23,7 @@ NATIVE_TABLE_ALIGNMENT_CONTEXT_VERSION = "native-table-review-scope/v3"
 NATIVE_ROW_ACTION_COVERAGE_VERSION = "native-row-action-coverage/v2"
 CANDIDATE_SOURCE_CLOSURE_CONTEXT_VERSION = "candidate-source-closure-context/v1"
 SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION = "statement-grounded-candidate-quotes/v1"
-SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION = "source-conditional-group-alignment/v1"
+SOURCE_CONDITIONAL_GROUP_ALIGNMENT_VERSION = "source-conditional-group-alignment/v2"
 SOURCE_REPEAT_COUNT_ALIGNMENT_VERSION = "source-repeat-count-alignment/v1"
 SOURCE_EVENT_INTERVAL_ALIGNMENT_VERSION = "source-event-interval-alignment/v1"
 SOURCE_POLICY_REQUEST_SCOPE_VERSION = "source-policy-request-scope/v1"
@@ -225,6 +225,22 @@ def _conditioned_source_atoms(source, scope, atoms, selected_atoms):
         text = normalize_source_excerpt(atom.statement)
         if text and prefix in {text, f"若{text}则", f"如果{text}则"}:
             conditions.append(atom)
+    if offset == 0:
+        # A full consequence quote may retain its condition too. Prove the
+        # explicit if/then prefix; a broad quote alone grants no branch scope.
+        prefixes = [(atom, marker) for atom in selected_atoms
+                    if (text := normalize_source_excerpt(atom.statement))
+                    and any(normalize_source_excerpt(quote) == text for quote in atom.source_excerpts)
+                    and source.count(text) == 1
+                    and normalize_source_excerpt(getattr(getattr(atom, "evaluation", None),
+                                                          "proposition", None) or "").rstrip("。.;；") == text
+                    for marker in (f"若{text}则", f"如果{text}则")
+                    if source.startswith(marker) and len(source) > len(marker)
+                    and not re.search(r"(?:若|如果).*?则|否则", source[len(marker):])]
+        lengths = {len(marker) for _, marker in prefixes}
+        if len(lengths) == 1:
+            conditions = [atom for atom, _ in prefixes]
+            offset = lengths.pop()
     return conditions, offset
 
 

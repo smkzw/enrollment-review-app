@@ -7,7 +7,7 @@
   "claims_complete": false,
   "current_state": {
     "updated": "2026-10-11",
-    "base_head": "05fb1545",
+    "base_head": "a201d040f9ad5c7c307458f36fb746fdd786e1d0",
     "runtime_state": "active",
     "claims_complete": false,
     "latest_actual_job": "244296b31b9e4c459e0f162d64e7e427",
@@ -23,7 +23,20 @@
     "counts_are_live_not_terminal": false,
     "source_checkpoint": "490c682caafa4dd6834a1e510f02d75a",
     "unaccepted_partial_wire_checkpoint": "0309626663fc4d189f44e4732d9c7193",
-    "first_causal_error": "Latest saved Job remains 244/8c1fee44. Local diagnostics corrected capture and missing expanded-range review selection; final restricted projection validates, without writes. Referenced table exists in frozen source but only its caption entered the request; adjacent Phase II heading with selected Phase III still needs actual scope/context verification, not a clinical-ambiguity relabel.",
+    "first_causal_error": "Latest saved Job remains 244/8c1fee44. Complete explicit conditional prefix was missed; actual one pair now validates, another numeric pair remains unverified. Referenced physical table exists in frozen source but was absent from input. New context closes only batch46; no clinical adoption. Changed validators recheck old failures rather than freezing stale coverage.",
+    "conditional_and_referenced_table_package": {
+      "owner_disposition": "reviews/rv1006-conditional-and-referenced-table-owner-disposition-20261011.md",
+      "conditional_version": "source-conditional-group-alignment/v2",
+      "new_job_or_saved_result": false,
+      "automatic_adoption": false,
+      "connected_window": {"passed": 1006, "failed": 0, "seconds": 176.40, "exit_code": 0, "before_final_failed_validator_increment": true, "full_suite": false, "junit": "artifacts/rv1006-frozen-table-context-consumers-20261011-v6.xml"},
+      "final_failure_resume_window": {"passed": 35, "failed": 0, "deselected": 593, "seconds": 19.23, "exit_code": 0, "junit": "artifacts/rv1006-changed-validator-failure-resume-20261011-v2.xml", "changed_validator_fixture_plan_only": true},
+      "table_plan_audit": {"batches": 90, "unchanged": 89, "changed_batches": [46], "added_physical_rows": 5, "ownership_unchanged": true, "member_sources_valid": true, "model_calls": 0, "database_write": false, "full_database_hash_unchanged": true, "private_record": "rv1006-referenced-table-plan-zero-call-20261011-v2.json"},
+      "preflight": {"source_job": "244296b31b9e4c459e0f162d64e7e427", "reusable": 50, "resume_partial": 1, "refresh_required": 39, "model_calls": 0, "database_write": false, "full_database_hash_unchanged": true, "private_record": "rv1006-referenced-table-preflight-20261011-v1.json"},
+      "conditional_actual_replay": {"proven_pairs": [[2, 0]], "unverified_pairs": [[3, 1]], "reason": "numeric_relation_unverified", "model_calls": 0, "database_write": false, "full_database_hash_unchanged": true},
+      "conference": {"route": "grok/grok-build/grok-4.7/high", "numeric_session": "52fdf730-efe9-4786-8e85-29a493ab7e9e", "numeric_exit_codes": [0, 0], "table_session": "3fc66dd8-25df-429a-ad24-1ec90fad5b9e", "table_exit_codes": [0, 0, 0], "fallback": false, "clinical_sources_read": false, "tests_run": false},
+      "full_case_joint_publication_ui_correction_or_q3": false
+    },
     "completed_range_review_package": {
       "owner_disposition": "reviews/rv1006-completed-source-review-owner-disposition-20261011.md",
       "new_job_or_saved_result": false,
