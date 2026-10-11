@@ -22,10 +22,10 @@ export function ProtocolPublishResult({
       <header className="page-head">
         <h1 className="page-head__title">
           <CheckIcon size={18} />
-          发布完成
+          {result.verificationOnly ? "验证用规则包已发布" : "发布完成"}
         </h1>
         <p className="page-head__note">
-          {isRedo
+          {result.verificationOnly ? "规则包未经医学经理本人审定，仅供构建验证，不能用于正式审核。" : isRedo
             ? `已在目标项目 ${session.targetProjectName ?? ""} 下生成新的不可变规则版本。`
             : "已发布新的正式项目与规则版本。"}
         </p>

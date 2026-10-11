@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import uuid
 from copy import deepcopy
@@ -28,6 +29,7 @@ from app.domain.contracts.agent_io import (
     ProtocolSemanticDeconstructionCandidate,
 )
 from app.domain.contracts.common import DateValue
+from app.domain.contracts.rule_reviews import RuleReviewRecord, ReviewerKind
 from app.domain.contracts.enums import DatePrecision, MetadataResolutionStatus, StudyPhase
 from app.domain.contracts.protocol_drafts import DraftFeedbackKind, ProtocolDraftRevision
 from app.evidence.artifacts import ArtifactStore
@@ -44,6 +46,7 @@ from app.protocols.deconstruction_gate import (
     ProtocolDeconstructionGateResult,
     ProtocolDraftDiffDeclaration,
     ProtocolGateIssue,
+    publication_issue_level,
     _localized_open_list_exception_requires_exclusivity,
     _source_proves_unsupported_member_frequency,
     _substantive_obligation_segments,
@@ -69,6 +72,7 @@ from app.services.protocol_publication_service import (
     PublicationGateError,
     PublicationLineageError,
 )
+from app.services.protocol_rule_review import current_reviews, REVIEW_CONFIG
 from app.services.workbench_project_origin import (
     WORKBENCH_ORIGIN_PAYLOAD_KEY,
     WorkbenchOriginError,
@@ -85,6 +89,7 @@ from app.storage.idempotency import (
 from app.storage.config import DataPaths
 from app.storage.models import JobRecord, JobStepRecord
 from app.storage.repositories import (
+    AppendRepository,
     JobRepository,
     NotFoundError,
     ProjectRepository,
@@ -327,6 +332,7 @@ class ProtocolSessionView:
     target_study_phase_label: str | None
     target_official_version: str | None
     target_rule_set_revision: int | None
+    verification_only: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -366,6 +372,7 @@ class PublicationView:
     rule_set_id: str
     rule_set_revision: int
     replay: bool
+    verification_only: bool = False
 
 
 def _study_phase_label(phase: str | None) -> str | None:
@@ -1310,6 +1317,7 @@ class ProtocolWorkbenchService:
             ),
             target_official_version=merged.get("target_official_version"),
             target_rule_set_revision=merged.get("target_rule_set_revision"),
+            verification_only=merged.get("verification_only"),
         )
 
     def get_identity_review(self, job_id: str) -> IdentityReviewView:
@@ -1346,6 +1354,57 @@ class ProtocolWorkbenchService:
             revision=revision,
             diff=diff_payload,
         )
+
+    @staticmethod
+    def operator_name() -> str:
+        return os.environ.get("ENROLLMENT_OPERATOR_NAME", "本机医学经理").strip() or "本机医学经理"
+
+    def get_rule_reviews(self, job_id: str) -> dict[str, Any]:
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        source = self._load_source_input(merged)
+        revision = self._load_draft_revision(merged)
+        with self.session_factory() as session:
+            entries, history = current_reviews(session, source, revision.content)
+        return {
+            "job_id": job_id, "draft_revision_id": revision.revision_id,
+            "operator_name": self.operator_name(), "entries": entries, "history": history,
+            "all_reviewed": bool(entries) and all(entry["review"] is not None for entry in entries),
+        }
+
+    def review_rule(self, job_id: str, official_code: str, *,
+                    expected_revision_id: str, rule_content_hash: str,
+                    reviewer_kind: ReviewerKind, action: Literal["approved", "revoked"],
+                    note: str | None = None, result_variables: list[str] | None = None) -> dict[str, Any]:
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        source = self._load_source_input(merged)
+        with self.session_factory() as session, session.begin():
+            revision = ProtocolDraftRevisionRepository(session).get(expected_revision_id)
+            head = ProtocolDraftRevisionRepository(session).get_head(revision.draft_id)
+            if (revision.revision_id != merged.get("draft_revision_id") or head is None
+                    or head.revision_id != revision.revision_id
+                    or revision.content.protocol_version_id != source.protocol_version_id
+                    or revision.status.value not in {"draft", "saved", "restored_from"}):
+                raise ProtocolWorkbenchError("REVIEW_DRAFT_CHANGED", title="草稿已改变",
+                                             detail="当前审定页面不是最新可编辑草稿。", recovery="请刷新后重新核对该条。")
+            entries, _ = current_reviews(session, source, revision.content)
+            entry = next((entry for entry in entries if entry["official_code"] == official_code), None)
+            if entry is None or entry["rule_content_hash"] != rule_content_hash:
+                raise ProtocolWorkbenchError("REVIEW_CONTENT_CHANGED", title="条目已改变",
+                                             detail="该条内容与正在审阅的版本不一致。", recovery="请刷新后重新核对该条。")
+            if entry["kind"] != "procedure" and (note == "excluded" or result_variables):
+                raise ProtocolWorkbenchError("REVIEW_SETTINGS_INVALID", title="审定设置不适用",
+                                             detail="只有检查项目可设置排除和必需结果变量。", recovery="请保留入排条款并核对原文。")
+            record = RuleReviewRecord(
+                record_id=f"rule-review:{uuid.uuid4().hex}", draft_id=revision.draft_id,
+                protocol_version_id=source.protocol_version_id, official_code=official_code,
+                rule_content_hash=rule_content_hash, reviewer_kind=reviewer_kind,
+                reviewed_by="构建者（验证）" if reviewer_kind == "builder_verification" else self.operator_name(),
+                reviewed_at=self.now(), action=action, note=note, result_variables=result_variables or [],
+            )
+            AppendRepository(session, REVIEW_CONFIG).save(record)
+        return self.get_rule_reviews(job_id)
 
     def get_generation_preview(self, job_id: str) -> dict[str, Any]:
         """生成期间的逐批只读预览：来自已验证批次的合并候选，非正式草稿。
@@ -3301,10 +3360,6 @@ class ProtocolWorkbenchService:
     ) -> PublicationView:
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
-        self._require_control_publication_references(
-            control_job_id=control_job_id,
-            control_checkpoint_id=control_checkpoint_id,
-        )
         integrity = self.get_integrity(job_id)
         if not integrity.publishable:
             raise ProtocolWorkbenchError(
@@ -3369,6 +3424,7 @@ class ProtocolWorkbenchService:
                     "project_id": result.project_id,
                     "protocol_version_id": result.protocol_version_id,
                     "rule_set_id": result.rule_set_id,
+                    "verification_only": result.verification_only,
                     "awaiting_user": None,
                 },
             )
@@ -3379,6 +3435,7 @@ class ProtocolWorkbenchService:
             rule_set_id=result.rule_set_id,
             rule_set_revision=result.rule_set_revision,
             replay=result.replay,
+            verification_only=result.verification_only,
         )
 
     def publish_re_deconstruction(
@@ -3395,10 +3452,6 @@ class ProtocolWorkbenchService:
         由发布事务内的确定性门禁裁定（跨方案/跨期即拒绝并给出中文下一步）。"""
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
-        self._require_control_publication_references(
-            control_job_id=control_job_id,
-            control_checkpoint_id=control_checkpoint_id,
-        )
         if merged.get("session_kind") != "re_deconstruction":
             raise ProtocolWorkbenchError(
                 "NOT_RE_DECONSTRUCTION_JOB",
@@ -3477,6 +3530,7 @@ class ProtocolWorkbenchService:
                     "project_id": result.project_id,
                     "protocol_version_id": result.protocol_version_id,
                     "rule_set_id": result.rule_set_id,
+                    "verification_only": result.verification_only,
                     "awaiting_user": None,
                 },
             )
@@ -3487,6 +3541,7 @@ class ProtocolWorkbenchService:
             rule_set_id=result.rule_set_id,
             rule_set_revision=result.rule_set_revision,
             replay=result.replay,
+            verification_only=result.verification_only,
         )
 
     # ------------------------------------------------------------------ 测试/恢复辅助
@@ -4072,7 +4127,7 @@ class ProtocolWorkbenchService:
             1
             for check in result.checks
             for issue in check.issues
-            if issue.level == "阻止发布"
+            if publication_issue_level(issue) == "阻止发布"
         )
         return {"publishable": result.publishable, "blocking_count": blocking}
 
@@ -4154,9 +4209,10 @@ class ProtocolWorkbenchService:
             )
             for issue in check.issues:
                 issues.append(self._issue_dto(issue))
-                if issue.level == "阻止发布":
+                level = publication_issue_level(issue)
+                if level == "阻止发布":
                     blocking += 1
-                elif issue.level == "需要核对":
+                elif level == "需要核对":
                     review += 1
                 else:
                     reminder += 1
@@ -4175,7 +4231,7 @@ class ProtocolWorkbenchService:
         return {
             "issue_code": issue.issue_code,
             "check_name": issue.check_name,
-            "level": issue.level,
+            "level": publication_issue_level(issue),
             "problem": issue.problem,
             "impact": issue.impact,
             "next_action": issue.next_action,

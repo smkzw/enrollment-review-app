@@ -717,6 +717,8 @@ export function normalizeStartDeconstruction(
 export function normalizeSession(wire: unknown): ProtocolSessionView {
   const row = requireRecord(wire, "session");
   return {
+    operatorName: optionalString(row.operator_name) ?? "本机医学经理",
+    verificationOnly: row.verification_only === true,
     jobId: requireString(row.job_id, "job_id"),
     jobType: requireString(row.job_type, "job_type"),
     state: requireString(row.state, "state"),
@@ -966,6 +968,7 @@ export function normalizeGenerationPreview(wire: unknown): GenerationPreviewView
 export function normalizePublishResult(wire: unknown): PublishResultView {
   const row = requireRecord(wire, "publish");
   return {
+    verificationOnly: row.verification_only === true,
     jobId: requireString(row.job_id, "job_id"),
     projectId: requireString(row.project_id, "project_id"),
     protocolVersionId: requireString(row.protocol_version_id, "protocol_version_id"),

@@ -62,6 +62,7 @@ from app.domain.publication import canonical_hash
 from app.evidence.artifacts import ArtifactStore
 from app.storage.config import DB_FILENAME, resolve_data_paths
 from app.services.protocol_integrity_payload import protocol_integrity_payload
+from app.services.protocol_rule_review import current_reviews
 from app.projections.evidence_expectation_templates import (
     project_evidence_expectation_templates,
 )
@@ -163,6 +164,7 @@ class ProtocolPublicationResult:
     published_revision_id: str
     template_count: int
     replay: bool = False
+    verification_only: bool = False
 
     def to_stored_id(self) -> str:
         return json.dumps(
@@ -179,6 +181,7 @@ class ProtocolPublicationResult:
                 "integrity_gate_result_id": self.integrity_gate_result_id,
                 "published_revision_id": self.published_revision_id,
                 "template_count": self.template_count,
+                "verification_only": self.verification_only,
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -380,6 +383,15 @@ class ProtocolPublicationService:
         if not gate_result.publishable:
             raise PublicationGateError(gate_result)
 
+        entries, _ = current_reviews(session, request.source_input, draft)
+        missing = [entry["official_code"] for entry in entries if entry["review"] is None]
+        if missing:
+            raise ProtocolPublicationError(
+                "rule_reviews_incomplete", "尚未审定或已修改的条目：" + "、".join(missing),
+            )
+        reviews = [entry["review"] for entry in entries]
+        verification_only = any(record.reviewer_kind == "builder_verification" for record in reviews)
+
         # 2) 组装正式权威链对象（方案版本记录在最后一步按真实引用创建）。
         #    版本身份已被上方校验绑定到草稿/输入；此处直接取草稿版本 id。
         version_id = draft.protocol_version_id
@@ -387,6 +399,9 @@ class ProtocolPublicationService:
         rule_set = self._build_rule_set(
             session, draft, version_id=version_id, target_project=target_project
         )
+        rule_set = rule_set.model_copy(update={
+            "verification_only": verification_only, "review_records": reviews,
+        })
         # 发布工件中的审核节点 ID 按 (rule_set, revision) 命名空间化，
         # 同一草稿在重新发布时不会与旧 revision 的节点行冲突。
         published_stages = self._published_workflow_stages(draft, rule_set)
@@ -508,6 +523,7 @@ class ProtocolPublicationService:
             authority_gate_result_id=authority_gate.gate_result_id,
             integrity_gate_result_id=integrity_gate.gate_result_id,
             published_revision_id=revision.revision_id,
+            verification_only=verification_only,
             template_count=len(
                 self._templates(
                     rule_set, published_stages, procedure_requirements

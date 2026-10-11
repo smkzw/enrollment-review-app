@@ -111,7 +111,6 @@ export function createProtocolWorkbenchHttp(
       const body = new FormData();
       body.append("file", file);
       body.append("idempotency_key", idempotencyKey);
-      body.append("actor", "用户");
       if (options?.projectId !== undefined && options.projectId.length > 0) {
         body.append("project_id", options.projectId);
       }
@@ -144,7 +143,6 @@ export function createProtocolWorkbenchHttp(
           body: JSON.stringify({
             project_id: projectId,
             idempotency_key: idempotencyKey,
-            actor: "用户",
             ...(options?.workbenchOrigin !== undefined
               ? { workbench_origin: options.workbenchOrigin } : {}),
           }),
@@ -359,7 +357,7 @@ export function createProtocolWorkbenchHttp(
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idempotency_key: idempotencyKey, actor: "用户",
+          body: JSON.stringify({ idempotency_key: idempotencyKey,
             ...(options?.controlPublication ? {
               control_job_id: options.controlPublication.jobId,
               control_checkpoint_id: options.controlPublication.checkpointId,

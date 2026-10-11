@@ -36,7 +36,7 @@ from tests.v2.api.protocol_e2e_helpers import (
     build_pipeline_e2e_docx,
     page_texts_from_blocks,
 )
-from tests.v2.protocols.slice4_helpers import confirmed_fixture
+from tests.v2.protocols.slice4_helpers import confirmed_fixture, approve_fixture_entries
 from tests.v2.protocols.joint_publication_helpers import seed_joint_control_publication
 
 
@@ -154,6 +154,7 @@ def _joint_publish_payload(app, job_id: str, *, key: str) -> dict:
     merged = service._merged_payload(job_id)
     source = service._load_source_input(merged)
     spans = service._load_source_spans(merged)
+    approve_fixture_entries(app.state.session_factory, source, view.revision.content)
     control_job, checkpoint = seed_joint_control_publication(
         app.state.session_factory, app.state.data_paths,
         source, view.revision.content, spans, view.revision.revision_id,
@@ -597,7 +598,7 @@ def test_local_feedback_saves_expired_scope_as_pending_not_approval(build_app, d
             assert components[0].get("source_scope_review_ref") is None
             assert components[1] == before["content"]["proposed_rules"][0]["components"][1]
             integrity = client.get(url + "/integrity").json()
-            assert not integrity["publishable"] and integrity["blocking_count"] > 0
+            assert integrity["publishable"] and integrity["reminder_count"] > 0
             pending = app.state.protocol_workbench_service.get_draft_detail(job_id).revision.content
             pending_gate = app.state.protocol_workbench_service.gate.evaluate(source, pending, source_spans=spans)
             codes = {issue.issue_code for check in pending_gate.checks for issue in check.issues}
@@ -605,9 +606,9 @@ def test_local_feedback_saves_expired_scope_as_pending_not_approval(build_app, d
             assert "REVIEW_STAGE_SCOPE_UNVERIFIED" in codes
             assert "METRIC_NOT_IN_SOURCE" not in codes
             from app.services.protocol_publication_service import (
-                ProtocolPublicationRequest, ProtocolPublicationService, PublicationGateError,
+                ProtocolPublicationRequest, ProtocolPublicationService, ProtocolPublicationError,
             )
-            with pytest.raises(PublicationGateError):
+            with pytest.raises(ProtocolPublicationError, match="尚未审定"):
                 ProtocolPublicationService(app.state.session_factory).publish(ProtocolPublicationRequest(
                     idempotency_key="expired-scope-must-not-publish", draft_revision_id=after["revision_id"],
                     source_input=source, source_spans=spans, actor="测试医学监查员",
@@ -1332,11 +1333,11 @@ def test_redundant_source_retirement_keeps_consumers_and_requires_current_review
                 if field not in {"proposed_rules", "draft_revision", "previous_draft_id"}:
                     assert after["content"][field] == before["content"][field]
             integrity = client.get(url + "/integrity").json()
-            assert not integrity["publishable"]
+            assert integrity["publishable"] and integrity["reminder_count"] > 0
             from app.services.protocol_publication_service import (
-                ProtocolPublicationService, ProtocolPublicationRequest, PublicationGateError,
+                ProtocolPublicationService, ProtocolPublicationRequest, ProtocolPublicationError,
             )
-            with pytest.raises(PublicationGateError):
+            with pytest.raises(ProtocolPublicationError, match="尚未审定"):
                 ProtocolPublicationService(app.state.session_factory).publish(ProtocolPublicationRequest(
                     idempotency_key="retirement-is-not-approval", draft_revision_id=after["revision_id"],
                     source_input=source, source_spans=spans, actor="测试用户"))

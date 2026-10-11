@@ -73,7 +73,14 @@ CHECK_NAMES = (
 
 # 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
 # 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
-DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-10-07.58"
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/0.2.0-structural"
+STRUCTURAL_CHECK_NAMES = frozenset({
+    "identity", "parent_catalog", "tree_integrity", "boolean_logic", "diff_integrity",
+})
+
+
+def publication_issue_level(issue: "ProtocolGateIssue") -> str:
+    return issue.level if issue.check_name in STRUCTURAL_CHECK_NAMES else "提醒"
 
 _SOURCED_PERIOD_LEAD = re.compile(
     r"(?:整个)?(?:研究|治疗)期间(?:（[^（）()]+）|\([^（）()]+\))"
@@ -2016,7 +2023,7 @@ class ProtocolDeconstructionGate:
             for name in CHECK_NAMES
         ]
         publishable = not any(
-            issue.level in {"阻止发布", "需要核对"}
+            publication_issue_level(issue) in {"阻止发布", "需要核对"}
             for result in checks
             for issue in result.issues
         )

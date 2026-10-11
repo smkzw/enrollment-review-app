@@ -65,6 +65,22 @@ class AppendedRecordMixin:
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class RuleReviewRecordRow(AppendedRecordMixin, Base):
+    __tablename__ = "rule_review_records"
+
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    record_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    draft_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    protocol_version_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    official_code: Mapped[str] = mapped_column(String(256), nullable=False)
+    rule_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_rule_review_scope", "protocol_version_id", "draft_id", "official_code"),
+        {"sqlite_autoincrement": True},
+    )
+
+
 class RevisionedRecordMixin:
     """可变根公共列：revision 乐观并发 + 时间戳。
 

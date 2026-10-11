@@ -19,6 +19,7 @@ from app.services.protocol_publication_service import (
     ProtocolPublicationService,
     PublicationGateError,
     PublicationLineageError,
+    ProtocolPublicationError,
 )
 from app.storage.concurrency import StaleRevisionError
 from app.storage.idempotency import IdempotencyConflict
@@ -43,7 +44,7 @@ from app.storage.repositories import (
     list_expectation_templates,
 )
 
-from tests.v2.protocols.slice4_helpers import NOW, confirmed_fixture
+from tests.v2.protocols.slice4_helpers import NOW, confirmed_fixture, approve_fixture_entries
 from tests.v2.protocols.test_deconstruction_gate_slice3 import _catalog
 
 
@@ -63,8 +64,13 @@ def _publish(
     *,
     now=NOW,
     actor="医学监查员",
+    reviewed=True,
     **kwargs,
 ):
+    if reviewed:
+        with factory() as session:
+            actual = ProtocolDraftRevisionRepository(session).get(revision_id).content
+        approve_fixture_entries(factory, source_input, actual)
     service = ProtocolPublicationService(factory, now=lambda: now)
     return service.publish(
         ProtocolPublicationRequest(
@@ -175,10 +181,12 @@ def test_client_scope_reference_without_original_reads_cannot_publish(slice4_env
     draft.proposed_rules[0].components[0].source_scope_review_ref = fake
     draft.component_drafts[0].proposed_component = draft.proposed_rules[0].components[0].model_copy(deep=True)
     revision = _save_revision(factory, draft)
-    with pytest.raises(PublicationGateError) as error:
-        _publish(factory, source, draft, spans, revision.revision_id, "pub-fake-source-scope")
+    error = ProtocolPublicationService(factory).gate.evaluate(source, draft, source_spans=spans)
     assert any(item.issue_code == "SOURCE_SCOPE_REVIEW_INVALID"
-               for check in error.value.result.checks for item in check.issues)
+               for check in error.checks for item in check.issues)
+    assert error.publishable  # 提示不能冒充医学经理已经审定。
+    with pytest.raises(ProtocolPublicationError, match="尚未审定"):
+        _publish(factory, source, draft, spans, revision.revision_id, "pub-fake-source-scope", reviewed=False)
     with factory() as session:
         assert _count(session, RuleSetRecord) == 0
         assert _count(session, ProtocolAuthorityRecordRow) == 0
@@ -194,9 +202,12 @@ def test_new_unresolved_scope_blocks_publication_instead_of_reusing_old_clearanc
     cleared = review_official_source_scope(source, draft, official_code="IN-01", transport=ScopeReader(), store=store)
     current = review_official_source_scope(source, cleared, official_code="IN-01", transport=UncertainScopeReader(), store=store)
     revision = _save_revision(factory, current)
-    with pytest.raises(PublicationGateError) as error:
-        _publish(factory, source, current, spans, revision.revision_id, "pub-new-scope-unknown")
-    assert any(item.issue_code == "SOURCE_SCOPE_REVIEW_UNRESOLVED" for check in error.value.result.checks for item in check.issues)
+    error = ProtocolPublicationService(factory).gate.evaluate(source, current, source_spans=spans,
+        scope_review_reader=store.read)
+    assert any(item.issue_code == "SOURCE_SCOPE_REVIEW_UNRESOLVED" for check in error.checks for item in check.issues)
+    assert error.publishable
+    with pytest.raises(ProtocolPublicationError, match="尚未审定"):
+        _publish(factory, source, current, spans, revision.revision_id, "pub-new-scope-unknown", reviewed=False)
     with factory() as session:
         assert _count(session, RuleSetRecord) == 0
         assert _count(session, ProtocolAuthorityRecordRow) == 0
@@ -242,15 +253,16 @@ def test_saved_predicate_quote_cannot_publish_omitted_parent_scope(slice4_env) -
     before = draft.model_dump_json()
     revision = _save_revision(factory, draft)
 
-    with pytest.raises(PublicationGateError) as rejected:
-        _publish(factory, source, draft, spans, revision.revision_id, "pub-omitted-scope")
-
+    rejected = ProtocolPublicationService(factory).gate.evaluate(source, draft, source_spans=spans)
     assert any(
         issue.issue_code == "REVIEW_STAGE_SCOPE_UNVERIFIED"
         and "component-in" in issue.affected_refs
-        for check in rejected.value.result.checks
+        for check in rejected.checks
         for issue in check.issues
     )
+    assert rejected.publishable
+    with pytest.raises(ProtocolPublicationError, match="尚未审定"):
+        _publish(factory, source, draft, spans, revision.revision_id, "pub-omitted-scope", reviewed=False)
     assert draft.model_dump_json() == before
     with factory() as session:
         for model in (ProjectRecord, RuleSetRecord, ProtocolAuthorityRecordRow,
@@ -339,7 +351,7 @@ def test_merged_segment_restrictions_reach_gate_storage_and_clause_consumer(slic
     invalid = draft.model_copy(deep=True)
     invalid.proposed_rules[0].restricted_components[-1].source_span_ids = ["span-ex"]
     rejected = ProtocolDeconstructionGate().evaluate(source, invalid, source_spans=spans)
-    assert not rejected.publishable
+    assert rejected.publishable  # 来源提示保留，正式采用还需逐条审定。
     assert any(
         issue.issue_code == "RESTRICTED_COMPONENT_SOURCE_INVALID"
         for check in rejected.checks for issue in check.issues
@@ -612,6 +624,7 @@ def test_failure_after_formal_writes_rolls_back_entire_publication(
     factory, now = slice4_env
     source_input, draft, spans = confirmed_fixture()
     r1 = _save_revision(factory, draft)
+    approve_fixture_entries(factory, source_input, draft)
     service = ProtocolPublicationService(factory, now=lambda: now)
 
     def fail_template_projection(*args, **kwargs):
@@ -971,11 +984,12 @@ def test_publication_rejects_requirement_source_outside_component(slice4_env) ->
         )
     )
     r1 = _save_revision(factory, malformed)
-    with pytest.raises(PublicationGateError) as exc_info:
+    gate = ProtocolPublicationService(factory).gate.evaluate(source_input, malformed, source_spans=spans)
+    with pytest.raises(ProtocolPublicationError, match="来源超出子规则"):
         _publish(factory, source_input, malformed, spans, r1.revision_id, "pub-req-outside")
     assert any(
         issue.issue_code == "REQUIREMENT_SOURCE_OUTSIDE_COMPONENT"
-        for check in exc_info.value.result.checks
+        for check in gate.checks
         if check.check_name == "source_coverage"
         for issue in check.issues
     )

@@ -6,6 +6,7 @@ from typing import Annotated, Literal, Union
 from pydantic import AliasChoices, Field, StrictInt, model_serializer, model_validator
 
 from .common import ContractModel, RevisionedModel, ScalarValue, VersionedModel
+from .rule_reviews import RuleReviewRecord
 from .control_evidence_origin import ControlEvidenceOrigin
 from .half_life_evidence import HalfLifeEvidence
 from .occurrence_scope import OccurrenceScope
@@ -732,6 +733,16 @@ class RuleSet(RevisionedModel):
     protocol_version_id: str = Field(min_length=1)
     study_phase: StudyPhase
     rules: list[Rule] = Field(min_length=1)
+    verification_only: bool | None = None
+    review_records: list["RuleReviewRecord"] | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_historical_review_payload(self, handler):
+        data = handler(self)
+        for key in ("verification_only", "review_records"):
+            if getattr(self, key) is None:
+                data.pop(key, None)
+        return data
 
     @model_validator(mode="after")
     def validate_rule_tree(self) -> "RuleSet":

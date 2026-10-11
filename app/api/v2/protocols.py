@@ -36,6 +36,8 @@ from app.api.v2.protocol_schemas import (
     ProtocolSessionResponse,
     PublishRequest,
     PublishResponse,
+    RuleReviewRequest,
+    RuleReviewResponse,
     RegisterInterpretationSourcesRequest,
     SourcesResponse,
     StartDeconstructionResponse,
@@ -88,6 +90,8 @@ def _as_utc(value):
 
 def _session_dto(view) -> ProtocolSessionResponse:
     return ProtocolSessionResponse(
+        operator_name=ProtocolWorkbenchService.operator_name(),
+        verification_only=view.verification_only,
         job_id=view.job_id,
         job_type=view.job_type,
         state=view.state,
@@ -328,7 +332,7 @@ def _comparison_side_dto(side) -> DraftComparisonSideResponse:
 
 def _integrity_dto(view) -> IntegrityResponse:
     if view.publishable:
-        summary = "完整性检查已通过，可以进入发布确认。"
+        summary = "未发现结构性错误。请逐条核对提示并完成审定后发布。"
     elif view.blocking_count:
         summary = f"有 {view.blocking_count} 项问题阻止发布，请先修正后再发布。"
     elif view.review_count:
@@ -391,7 +395,7 @@ async def start_deconstruction(
                 original_name=file.filename or "protocol.docx",
                 project_id=project_id.strip(),
                 idempotency_key=idempotency_key,
-                actor=actor,
+                actor=_service(request).operator_name(),
                 workbench_origin=workbench_origin or None,
             )
         else:
@@ -399,7 +403,7 @@ async def start_deconstruction(
                 upload_path=temp_path,
                 original_name=file.filename or "protocol.docx",
                 idempotency_key=idempotency_key,
-                actor=actor,
+                actor=_service(request).operator_name(),
                 workbench_origin=workbench_origin or None,
             )
     finally:
@@ -433,7 +437,7 @@ def start_feedback_re_deconstruction(
         project_id=payload.project_id,
         idempotency_key=payload.idempotency_key,
         interpretation_sources=payload.interpretation_sources,
-        actor=payload.actor,
+        actor=_service(request).operator_name(),
         workbench_origin=payload.workbench_origin,
     )
     if not result.created:
@@ -492,7 +496,7 @@ def confirm_identity(
         official_date_value=body.official_date_value,
         official_date_precision=body.official_date_precision,
         study_phase=body.study_phase,
-        actor=body.actor,
+        actor=_service(request).operator_name(),
         selected_candidate_ids=body.selected_candidate_ids,
     )
     return _session_dto(view)
@@ -543,7 +547,7 @@ def edit_draft(
         job_id,
         draft=body.draft,
         expected_revision_id=body.expected_revision_id,
-        actor=body.actor,
+        actor=_service(request).operator_name(),
     )
     return _draft_dto(view)
 
@@ -563,7 +567,7 @@ def submit_feedback(
         target_component_id=body.target_component_id,
         review_parent_scope=body.review_parent_scope,
         retire_redundant_source=body.retire_redundant_source,
-        actor=body.actor,
+        actor=_service(request).operator_name(),
     )
     return _draft_dto(view)
 
@@ -607,7 +611,7 @@ def register_interpretation_sources(
         expected_revision_id=body.expected_revision_id,
         idempotency_key=body.idempotency_key,
         interpretation_sources=body.interpretation_sources,
-        actor=body.actor,
+        actor=_service(request).operator_name(),
     )
     return SourcesResponse(**payload)
 
@@ -623,6 +627,21 @@ def get_integrity(job_id: str, request: Request) -> IntegrityResponse:
     return _integrity_dto(_service(request).get_integrity(job_id))
 
 
+@router.get("/{job_id}/draft/reviews", response_model=RuleReviewResponse)
+def get_rule_reviews(job_id: str, request: Request):
+    return _service(request).get_rule_reviews(job_id)
+
+
+@router.post("/{job_id}/draft/rules/{official_code}/review", response_model=RuleReviewResponse)
+def review_rule(job_id: str, official_code: str, body: RuleReviewRequest, request: Request):
+    return _service(request).review_rule(job_id, official_code, action="approved", **body.model_dump())
+
+
+@router.delete("/{job_id}/draft/rules/{official_code}/review", response_model=RuleReviewResponse)
+def revoke_rule_review(job_id: str, official_code: str, body: RuleReviewRequest, request: Request):
+    return _service(request).review_rule(job_id, official_code, action="revoked", **body.model_dump())
+
+
 @router.post("/{job_id}/publish", response_model=PublishResponse)
 def publish_deconstruction(
     job_id: str,
@@ -634,7 +653,7 @@ def publish_deconstruction(
         result = service.publish_re_deconstruction(
             job_id,
             idempotency_key=body.idempotency_key,
-            actor=body.actor,
+            actor=service.operator_name(),
             control_job_id=body.control_job_id,
             control_checkpoint_id=body.control_checkpoint_id,
         )
@@ -642,7 +661,7 @@ def publish_deconstruction(
         result = service.publish_first_project(
             job_id,
             idempotency_key=body.idempotency_key,
-            actor=body.actor,
+            actor=service.operator_name(),
             control_job_id=body.control_job_id,
             control_checkpoint_id=body.control_checkpoint_id,
         )
@@ -653,6 +672,7 @@ def publish_deconstruction(
         rule_set_id=result.rule_set_id,
         rule_set_revision=result.rule_set_revision,
         replay=result.replay,
+        verification_only=result.verification_only,
     )
 
 

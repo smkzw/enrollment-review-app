@@ -12,6 +12,7 @@ from app.domain.contracts.protocol_drafts import (
     DraftFeedbackKind,
     ProtocolDraftRevisionDiff,
 )
+from app.domain.contracts.rule_reviews import RuleReviewRecord, ReviewerKind
 from app.domain.contracts.protocol_metadata import InterpretationSource
 
 
@@ -117,6 +118,8 @@ class DraftComparisonResponse(_StrictModel):
 
 
 class ProtocolSessionResponse(_StrictModel):
+    operator_name: str = "本机医学经理"
+    verification_only: bool | None = None
     job_id: str
     job_type: str
     state: str
@@ -344,3 +347,31 @@ class PublishResponse(_StrictModel):
     rule_set_id: str
     rule_set_revision: int
     replay: bool
+    verification_only: bool = False
+
+
+class RuleReviewEntryDTO(_StrictModel):
+    official_code: str
+    kind: Literal["rule", "procedure"]
+    label: str
+    rule_content_hash: str
+    source_refs: list[str]
+    issue_refs: list[str]
+    review: RuleReviewRecord | None
+
+
+class RuleReviewResponse(_StrictModel):
+    job_id: str
+    draft_revision_id: str
+    operator_name: str
+    all_reviewed: bool
+    entries: list[RuleReviewEntryDTO]
+    history: list[RuleReviewRecord]
+
+
+class RuleReviewRequest(_StrictModel):
+    expected_revision_id: str = Field(min_length=1)
+    rule_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reviewer_kind: ReviewerKind
+    note: str | None = None
+    result_variables: list[str] = Field(default_factory=list)

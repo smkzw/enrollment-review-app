@@ -12,14 +12,16 @@ interface ProtocolDraftSourcePaneProps {
   component: ProtocolDraftItemView | null;
   locators: ReadonlyArray<ProtocolSourceLocatorView>;
   fileName: string | null;
+  selectionLabel?: string;
 }
 
 export function ProtocolDraftSourcePane({
   component,
   locators,
   fileName,
+  selectionLabel,
 }: ProtocolDraftSourcePaneProps) {
-  if (component === null) {
+  if (component === null && !selectionLabel) {
     return (
       <EmptyState
         message="请选择规则子项以查看来源定位"
@@ -33,7 +35,7 @@ export function ProtocolDraftSourcePane({
       <header className="protocol-source-pane__head">
         <h3 className="protocol-source-pane__title">来源定位</h3>
         <p className="protocol-source-pane__meta">
-          {fileName ?? "方案文件"} · {component.displayCode}
+          {fileName ?? "方案文件"} · {selectionLabel ?? component?.displayCode}
         </p>
       </header>
 

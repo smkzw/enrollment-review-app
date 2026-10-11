@@ -140,7 +140,7 @@ export function ProtocolDraftWorkbench({
             type="button"
             className="button button--primary"
             disabled={saving || publishing || !integrity.publishable || publicationBlocked}
-            title={integrity.publishable ? "发布正式项目与规则版本" : "请先处理完整性检查中的问题"}
+            title={publicationBlocked ? "请先完成全部条目审定" : integrity.publishable ? "发布已审定规则版本" : "请先处理结构性问题"}
             onClick={onPublish}
           >
             {publishing ? "正在发布…" : "发布"}

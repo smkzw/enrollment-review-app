@@ -43,6 +43,8 @@ export interface StartDeconstructionResult {
 }
 
 export interface ProtocolSessionView {
+  operatorName?: string;
+  verificationOnly?: boolean;
   jobId: string;
   jobType: string;
   state: string;
@@ -446,6 +448,7 @@ export interface SourcesView {
 }
 
 export interface PublishResultView {
+  verificationOnly?: boolean;
   jobId: string;
   projectId: string;
   protocolVersionId: string;

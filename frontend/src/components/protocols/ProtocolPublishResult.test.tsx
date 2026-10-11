@@ -52,6 +52,14 @@ const result: PublishResultView = {
 };
 
 describe("方案发布后入口", () => {
+  it("验证发布与重开摘要均明确显示验证身份", () => {
+    const view = render(<ProtocolPublishResult session={session} result={{ ...result, verificationOnly: true }} />);
+    expect(screen.getByRole("heading", { name: "验证用规则包已发布" })).toBeInTheDocument();
+    expect(screen.getByText(/不能用于正式审核/)).toBeInTheDocument();
+    view.rerender(<ProtocolPublishedSummary session={{ ...session, verificationOnly: true }}
+      draft={{ content: {}, ruleCount: 1, studyPhaseLabel: "III期" } as never} />);
+    expect(screen.getByRole("heading", { name: "验证用规则包已发布" })).toBeInTheDocument();
+  });
   it("发布完成页提供直达受试者资料目录且预选该项目", () => {
     window.location.hash = "#/protocols";
     render(<ProtocolPublishResult session={session} result={result} />);

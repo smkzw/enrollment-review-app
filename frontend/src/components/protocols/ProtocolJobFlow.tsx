@@ -37,8 +37,7 @@ import { ProtocolPublishResult } from "./ProtocolPublishResult";
 import { ProtocolPublishedSummary } from "./ProtocolPublishedSummary";
 import { ProtocolRecoveryBanner } from "./ProtocolRecoveryBanner";
 import { patchComponentSemantics } from "../../domain/protocolManualEdit";
-import { useProtocolControls } from "./useProtocolControls";
-import { ProtocolControlPanel } from "./ProtocolControlPanel";
+import { ProtocolRuleReviewPanel } from "./ProtocolRuleReviewPanel";
 
 interface ProtocolJobFlowProps {
   jobId: string;
@@ -79,17 +78,10 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
   const sessionData = sessionStatus === "success" ? session.state.data : null;
   const jobState = sessionData?.state ?? null;
   const isRedo = sessionData?.sessionKind === "re_deconstruction";
-  const controls = useProtocolControls(jobId, sessionData?.draftRevisionId ?? null,
-    repo.kind === "http" && publishResult === null &&
-    (sessionData?.awaitingUser === "review" || sessionData?.awaitingUser === "publish"));
-  const controlPublication = controls.state.status === "ready"
-    ? { jobId: controls.state.data.jobId, checkpointId: controls.state.data.checkpointId }
-    : undefined;
-  const calculationBlocked = controls.state.status === "ready" && controls.state.data.calculationGaps.length > 0;
-  const calculationMeaningUnresolved = controls.state.status === "ready" &&
-    controls.state.data.calculationGaps.some((gap) => gap.unresolvedAspects.length > 0 ||
-      !["covered_by_official", "covered_by_procedure", "additional_requirement"].includes(gap.reviewDecision ?? ""));
-  const publicationBlocked = repo.kind === "http" && (controlPublication === undefined || calculationBlocked);
+  const [reviewReady, setReviewReady] = useState(false);
+  const onReviewReady = useCallback((ready: boolean) => setReviewReady(ready), []);
+  useEffect(() => { setReviewReady(false); }, [jobId, sessionData?.draftRevisionId]);
+  const publicationBlocked = repo.kind === "http" && !reviewReady;
 
   const identity = useLoad(
     (signal) => repo.getIdentityReview(jobId, { signal }),
@@ -375,17 +367,13 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
 
   const handlePublish = useCallback(async () => {
     if (publicationBlocked) {
-      setPublishError(calculationBlocked
-        ? calculationMeaningUnresolved
-          ? "方案中部分计算原文的适用含义尚待核对，当前不能发布。请查看补充审核要求中的原文。"
-          : "方案中的计算要求尚未接通可靠的取值和计算方式，当前不能发布。请查看补充审核要求中的原文。"
-        : "补充审核要求尚未整理完成，请完成核对后再发布。");
+      setPublishError("请先完成全部条款与检查项目的审定；有修改的条目需要重新审定。");
       return;
     }
     setPublishBusy(true);
     setPublishError(null);
     try {
-      const result = await repo.publish(jobId, `publish-${Date.now()}`, { controlPublication });
+      const result = await repo.publish(jobId, `publish-${Date.now()}`);
       setPublishOpen(false);
       setPublishResult(result);
     } catch (error) {
@@ -399,7 +387,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     } finally {
       setPublishBusy(false);
     }
-  }, [jobId, repo, publicationBlocked, calculationBlocked, calculationMeaningUnresolved, controlPublication]);
+  }, [jobId, repo, publicationBlocked]);
 
   const handleResetTrial = useCallback(() => {
     resetDraftSaved();
@@ -524,7 +512,10 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           sources={redoReview.state.data.sources}
           saving={saveBusy}
           publicationBlocked={publicationBlocked || publishBusy}
-          supplementaryRequirements={repo.kind === "http" ? <ProtocolControlPanel controls={controls} /> : undefined}
+          supplementaryRequirements={repo.kind === "http" ? <ProtocolRuleReviewPanel
+            jobId={jobId} revisionId={comparison.state.data.candidate.revisionId}
+            integrity={redoReview.state.data.integrity} sources={redoReview.state.data.sources}
+            onReady={onReviewReady} /> : undefined}
           feedbackBusy={feedbackBusy}
           onSaveDraft={handleSaveDraft}
           onOpenFeedback={() => {
@@ -613,7 +604,9 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           }}
           saving={saveBusy}
           publicationBlocked={publicationBlocked}
-          supplementaryRequirements={repo.kind === "http" ? <ProtocolControlPanel controls={controls} /> : undefined}
+          supplementaryRequirements={repo.kind === "http" ? <ProtocolRuleReviewPanel
+            jobId={jobId} revisionId={draft.revisionId} integrity={integrity}
+            sources={sources} onReady={onReviewReady} /> : undefined}
           publishing={publishBusy}
           saveError={saveError ?? publishError ?? undefined}
           uatDraftSaved={isStubDemo ? draftSaved : undefined}

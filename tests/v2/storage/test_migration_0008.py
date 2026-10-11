@@ -142,6 +142,7 @@ PHASE5_V2_TABLES = frozenset(
         "subject_page_coverages",
         "subject_page_coverage_entries",
         "judgment_search_summaries",
+        "rule_review_records",
     }
 )
 
