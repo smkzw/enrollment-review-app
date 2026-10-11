@@ -3822,6 +3822,377 @@ def test_source_coverage_rejects_cross_statement_identity() -> None:
     assert error.value.code == "SOURCE_COVERAGE_IDENTITY_INVALID"
 
 
+def _table_sequence_material(*, split=False):
+    from app.agents.protocol_control_source_interpretation import SourceSequenceContext
+    from app.protocols.control_scope_sources import (
+        table_sequence_context_locations, table_sequence_source_packet,
+    )
+    batch = _batch().model_copy(deep=True)
+    quote = "每次按3mL实施研究处理"
+    headings = ["研究处理", "表7处理信息"]
+
+    def row(unit_id, number, values, widths, kind):
+        refs = [f"body.t2.r{number}.c{col}.p0" for col, _ in values]
+        spans = [f"frozen::{ref}" for ref in refs]
+        return ProtocolStructureUnit(
+            structure_unit_id=unit_id, source_ref=f"body.t2.r{number}",
+            member_source_refs=refs, member_texts=[text for _, text in values],
+            source_span_ids=spans, member_source_span_ids=[[span] for span in spans],
+            unit_kind=kind, heading_path=headings, source_order=number + 10,
+            study_phase=StudyPhase.PHASE_II, phase_scopes=[PhaseScope.SHARED],
+            excerpt=" | ".join(text for _, text in values),
+            table_context=TableCellContext(
+                table_path=(number, values[0][0]), row_index=number,
+                column_index=values[0][0],
+                member_cell_paths=[(number, col) for col, _ in values],
+                member_cell_col_spans=widths,
+            ),
+        )
+
+    values = [(1, quote), (2, quote)] if split else [(1, quote)]
+    owned = row("su-01", 2, values, [1, 1] if split else [2], "table_row")
+    header = row("header", 0, [(1, "研究处理甲"), (2, "对照处理乙"), (3, "背景处理丙")],
+                 [1, 1, 1], "table_header")
+    context = _unit("context", 1, "frozen::body.p1",
+                    "先确认符合资格，随后对研究处理甲或对照处理乙实施处理，详见表7。背景处理丙保持不变。")
+    context.heading_path = headings[:1]
+    batch.owned_units = [owned]
+    batch.owned_structure_unit_ids = [owned.structure_unit_id]
+    batch.owned_source_span_ids = list(owned.source_span_ids)
+    batch.context_units = [context, header]
+    batch.context_structure_unit_ids = [item.structure_unit_id for item in batch.context_units]
+    batch.context_source_span_ids = [ref for item in batch.context_units for ref in item.source_span_ids]
+    if split:
+        # Identical wording in two independent cells is not a unique location.
+        return batch, quote
+    packet = table_sequence_source_packet(owned, quote, batch.owned_units, batch.context_units)
+    locations = table_sequence_context_locations(owned, batch.owned_units, batch.context_units)
+    witness = SourceSequenceContext.model_validate({
+        "version": packet["version"], "context_citation": locations["context_locations"][0],
+        "table_reference": locations["table_reference"], "object_citations": packet["object_citations"],
+    })
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-01", quoted_text=quote,
+            force="required", decision_functions=["action"], time_words=[],
+            eligibility_sequence="after_eligibility_decision",
+            eligibility_sequence_quote="先确认符合资格，随后对研究处理甲或对照处理乙实施处理",
+            eligibility_sequence_context=witness)], units_without_statement=[])
+    wire = ProtocolControlAgentWire(wire_version=CONTROL_AGENT_WIRE_VERSION,
+        dispositions=[ProtocolControlAgentWireDisposition(
+            structure_unit_id="su-01", disposition=StructureUnitDispositionKind.POST_TREATMENT_EXECUTION,
+            linked_official_code=None, linked_procedure_catalog_item_id=None,
+            linked_procedure_catalog_item_ids=[], notes="资格确认后执行；不证明受试者合格")],
+        candidate_drafts=[])
+    coverage = source_statement_coverage(batch, inventory, wire)
+    review = SourceTargetReview.model_validate({"version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "not_current_control",
+            "source_action_excerpt": quote,
+            "non_control_basis_excerpt": inventory.statements[0].eligibility_sequence_quote,
+            "non_control_sequence_context": witness.model_dump(mode="json")} ]})
+    return batch, inventory, wire, coverage, review
+
+
+def test_table_sequence_witness_is_read_proposed_saved_and_consumed():
+    from app.services.protocol_control_execution import _validate_saved_source_review
+    batch, inventory, wire, coverage, review = _table_sequence_material()
+    frozen = batch.model_dump_json(), inventory.model_dump_json()
+    validate_source_interpretation(batch, inventory)
+    assert target_review_indexes(inventory, coverage, batch) == [0]
+    validate_source_target_review(batch, inventory, coverage, review)
+
+    class Transport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt):
+            assert '"action_columns": [1, 2]' in prompt
+            assert "位置清单不是先后含义证明" in prompt
+            return ProtocolControlAgentResponse(session_id="source", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            assert "不能根据上一位作者的 after 标签关闭要求" in prompt
+            return ProtocolControlAgentResponse(session_id="review", text=review.model_dump_json())
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=0).run(batch, Transport([
+        ProtocolControlAgentResponse(session_id="author", text=wire.model_dump_json())]),
+        output_validator=lambda _output: None)
+    assert result.status == "已解析", [item.issues for item in result.attempts]
+    assert result.final_output is not None and result.final_output.candidates == []
+    restored = type(result).model_validate_json(result.model_dump_json())
+    _validate_saved_source_review(batch, restored)
+    assert restored.source_target_review.items[0].non_control_sequence_context == inventory.statements[0].eligibility_sequence_context
+    assert (batch.model_dump_json(), inventory.model_dump_json()) == frozen
+    missing = restored.model_copy(deep=True)
+    missing.source_target_review = None
+    with pytest.raises(ValueError):
+        _validate_saved_source_review(batch, missing)
+    batch.context_units[0].excerpt += "新增例外"
+    with pytest.raises(ValueError):
+        _validate_saved_source_review(batch, restored)
+
+
+def test_table_sequence_question_restores_only_source_relation_and_survives_resume():
+    from app.agents.protocol_control_source_interpretation import source_question_context_identity
+    from app.services.protocol_control_execution import _validate_saved_source_review
+    batch, proposed, wire, _, review = _table_sequence_material()
+    original = proposed.model_copy(deep=True)
+    original.statements[0].eligibility_sequence = "current_or_unknown"
+    original.statements[0].eligibility_sequence_quote = None
+    original.statements[0].eligibility_sequence_context = None
+    before = original.model_dump_json()
+
+    class Transport(_FakeTransport):
+        questions = 0
+
+        def start_source_interpretation(self, *, prompt):
+            self.questions += 1
+            assert "只可修改eligibility_sequence" in prompt
+            return ProtocolControlAgentResponse(session_id="question", text=proposed.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="review", text=review.model_dump_json())
+
+    transport = Transport([ProtocolControlAgentResponse(session_id="author", text=wire.model_dump_json())])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        batch, transport, resume_source_interpretation=original, output_validator=lambda _output: None)
+    assert result.final_output is not None, [attempt.issues for attempt in result.attempts]
+    assert transport.questions == 1 and original.model_dump_json() == before
+    history = result.source_scope_question_history
+    assert history[0]["error_detail"]["source_context_sha256"] == source_question_context_identity(
+        original.statements[0], batch) == source_question_context_identity(proposed.statements[0], batch)
+    restored = type(result).model_validate_json(result.model_dump_json())
+    _validate_saved_source_review(batch, restored)
+    again = Transport([])
+    resumed = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        batch, again, resume_wire=restored.partial_wire, resume_source_interpretation=restored.source_interpretation,
+        resume_session_id=restored.session_id, resume_source_target_review=restored.source_target_review,
+        resume_source_statement_coverage=restored.source_statement_coverage,
+        resume_source_scope_question_history=history, output_validator=lambda _output: None)
+    assert resumed.final_output is not None and again.questions == 0
+
+
+@pytest.mark.parametrize("variant", ["force", "quote", "times", "exception", "unresolved", "missing_witness"])
+def test_table_sequence_question_cannot_change_other_semantics(variant):
+    from app.agents.protocol_control_source_interpretation import apply_source_scope_question_recheck
+    batch, proposed, _, _, _ = _table_sequence_material()
+    original = proposed.model_copy(deep=True)
+    original.statements[0].eligibility_sequence = "current_or_unknown"
+    original.statements[0].eligibility_sequence_quote = None
+    original.statements[0].eligibility_sequence_context = None
+    if variant == "force":
+        proposed.statements[0].force = "permitted"
+    elif variant == "quote":
+        proposed.statements[0].quoted_text = "实施研究处理"
+    elif variant == "times":
+        proposed.statements[0].time_words = ["筛选期"]
+    elif variant == "exception":
+        proposed.statements[0].exception_words = "除外"
+    elif variant == "unresolved":
+        proposed.statements[0].unresolved = ["缺少医师判断"]
+    else:
+        proposed.statements[0].eligibility_sequence_context = None
+    with pytest.raises(ValueError):
+        apply_source_scope_question_recheck(batch, original, 0, proposed)
+
+
+def test_table_sequence_resumed_candidate_is_locally_reclassified_then_freshly_reviewed():
+    from app.services.protocol_control_execution import _validate_saved_source_review
+    batch, proposed, final_wire, _, review = _table_sequence_material()
+    original = proposed.model_copy(deep=True)
+    original.statements[0].eligibility_sequence = "current_or_unknown"
+    original.statements[0].eligibility_sequence_quote = None
+    original.statements[0].eligibility_sequence_context = None
+    quote, span = original.statements[0].quoted_text, batch.owned_source_span_ids[0]
+    candidate = _candidate().model_dump(mode="json")
+    candidate.update(title="执行研究处理", source_span_ids=[span], applicability_expression=None,
+                     exception_expression=None)
+    candidate["obligation_expression"]["groups"][0]["atoms"] = [{
+        "kind": "complete_or_verify", "statement": quote, "evaluation": _evaluation(quote, span, quote),
+        "time_constraint": None, "prospective_period": None, "source_span_ids": [span],
+        "source_excerpts": [quote], "requires_professional_judgment": False,
+    }]
+    candidate["minimum_evidence"][0]["source_policy"] = _evidence_policy(span, quote)
+    initial_wire = final_wire.model_copy(deep=True)
+    initial_wire.dispositions[0].disposition = StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE
+    initial_wire.dispositions[0].notes = None
+    initial_wire.candidate_drafts = [ProtocolControlAgentWireCandidate.model_validate(candidate)]
+    frozen = original.model_dump_json(), initial_wire.model_dump_json()
+
+    class Transport(_FakeTransport):
+        scoped_calls = 0
+
+        def restore_scoped_session(self, **kwargs):
+            pass
+
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="question", text=proposed.model_dump_json())
+
+        def continue_scoped_unit_repair(self, *, session_id, prompt, batch):
+            self.scoped_calls += 1
+            assert batch.owned_structure_unit_ids == ["su-01"]
+            return ProtocolControlAgentResponse(session_id=session_id, text=final_wire.model_dump_json())
+
+        def continue_session(self, **kwargs):
+            pytest.fail("来源顺序修订不允许整批重读")
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="review", text=review.model_dump_json())
+
+    transport = Transport([])
+    consumed = []
+    result = ProtocolControlAgentRunner(max_schema_repairs=3).run(
+        batch, transport, resume_source_interpretation=original, resume_wire=initial_wire,
+        resume_session_id="saved", output_validator=consumed.append)
+    assert result.final_output is not None, [(attempt.error_classes, attempt.issues) for attempt in result.attempts]
+    assert transport.scoped_calls == 1 and result.final_output.candidates == []
+    assert result.source_target_review.items[0].non_control_sequence_context is not None
+    _validate_saved_source_review(batch, type(result).model_validate_json(result.model_dump_json()))
+    assert (original.model_dump_json(), initial_wire.model_dump_json()) == frozen
+
+
+@pytest.mark.parametrize("fault", [None, "wrong_path", "missing_context", "changed_context", "precondition"])
+def test_table_sequence_question_actual_history_replays_through_service_seed_proof(fault):
+    from app.services.protocol_control_execution import _revalidated_source_seed_proof
+    from app.agents.protocol_control_deconstructor import protocol_control_agent_prompt_template_sha256
+    batch, proposed, wire, _, review = _table_sequence_material()
+    original = proposed.model_copy(deep=True)
+    original.statements[0].eligibility_sequence = "current_or_unknown"
+    original.statements[0].eligibility_sequence_quote = None
+    original.statements[0].eligibility_sequence_context = None
+
+    class Transport(_FakeTransport):
+        source_calls = 0
+
+        def start_source_interpretation(self, *, prompt):
+            self.source_calls += 1
+            return ProtocolControlAgentResponse(session_id="source",
+                text=(original if self.source_calls == 1 else proposed).model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="review", text=review.model_dump_json())
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch,
+        Transport([ProtocolControlAgentResponse(session_id="author", text=wire.model_dump_json())]),
+        output_validator=lambda _output: None)
+    assert result.final_output is not None
+    saved = result.model_dump(mode="json")
+    saved["attempts"] = [{**attempt.model_dump(mode="json"), "raw_output_text": attempt.raw_output_text}
+                         for attempt in result.attempts]
+    saved["prompt_template_sha256"] = protocol_control_agent_prompt_template_sha256("synthetic prompt")
+    components = {"compiler_versions": ["synthetic-compiler/v1"], "validator_version": "synthetic-current/v1"}
+    saved["component_identity"] = components
+    question = saved["attempts"][1]["error_detail"]
+    assert question["json_path"] == "statements[0].eligibility_sequence"
+    if fault == "wrong_path":
+        question["json_path"] = "statements[0].unresolved"
+    elif fault == "missing_context":
+        question.pop("source_context_sha256")
+    elif fault == "changed_context":
+        batch.context_units[0].excerpt += "另有例外"
+    elif fault == "precondition":
+        question["precondition_sha256"] = "0" * 64
+    proof = _revalidated_source_seed_proof(batch, saved, components,
+        source_job_id="synthetic-old", step_id="deep_0001", checkpoint_id="synthetic-checkpoint")
+    if fault:
+        assert proof is None
+    else:
+        assert proof is not None and proof["schema_version"] == "phase5/revalidated-source-seed-proof/v5"
+        assert proof["reused"] == ["source_interpretation"] and "partial_wire" in proof["discarded"]
+
+
+@pytest.mark.parametrize("variant", ["wrong_reference", "common_word", "other_document",
+    "other_phase", "later_context", "wrong_hash", "wrong_span", "missing_object",
+    "other_object", "missing_header", "later_header", "other_header_document", "header_phase",
+    "changed_header", "overlapping_header", "duplicate_header"])
+def test_table_sequence_witness_rejects_wrong_scope_or_damaged_sources(variant):
+    batch, inventory, _, _, _ = _table_sequence_material()
+    witness = inventory.statements[0].eligibility_sequence_context
+    context, header = batch.context_units
+    if variant == "wrong_reference":
+        witness.table_reference = "表8"
+    elif variant == "common_word":
+        witness.table_reference = "处理"
+    elif variant == "other_document":
+        context.source_span_ids = ["other::body.p1"]
+    elif variant == "other_phase":
+        context.study_phase = StudyPhase.PHASE_III
+    elif variant == "later_context":
+        context.source_order = batch.owned_units[0].source_order + 1
+    elif variant == "wrong_hash":
+        witness.context_citation.source_unit_sha256 = "0" * 64
+    elif variant == "wrong_span":
+        witness.context_citation.source_span_ids = ["frozen::unrelated"]
+    elif variant == "missing_object":
+        witness.object_citations = witness.object_citations[:1]
+    elif variant == "other_object":
+        inventory.statements[0].eligibility_sequence_quote = "背景处理丙保持不变"
+    elif variant == "missing_header":
+        batch.context_units = [context]
+    elif variant == "later_header":
+        header.source_order = batch.owned_units[0].source_order + 1
+    elif variant == "other_header_document":
+        header.source_span_ids = [ref.replace("frozen::", "other::") for ref in header.source_span_ids]
+        header.member_source_span_ids = [[ref] for ref in header.source_span_ids]
+    elif variant == "header_phase":
+        header.phase_scopes = [PhaseScope.PHASE_III]
+    elif variant == "changed_header":
+        header.member_texts[0] = "另一个对象"
+        header.excerpt = " | ".join(header.member_texts)
+    elif variant == "overlapping_header":
+        header.table_context.member_cell_col_spans = [2, 1, 1]
+    else:
+        batch.context_units.append(header.model_copy(deep=True))
+    with pytest.raises(ValueError):
+        validate_source_interpretation(batch, inventory)
+
+
+@pytest.mark.parametrize("variant", ["no_witness", "unresolved", "still_candidate", "unknown_sequence",
+    "changed_basis", "other_decision"])
+def test_table_sequence_relation_requires_fresh_confirmation_not_a_direction_label(variant):
+    batch, inventory, _, coverage, review = _table_sequence_material()
+    if variant == "no_witness":
+        review.items[0].non_control_sequence_context = None
+    elif variant == "unresolved":
+        review.items[0].unresolved_aspects = ["前文未说明是否适用于本项"]
+    elif variant == "still_candidate":
+        coverage[0].action_candidate_indexes = [0]
+    elif variant == "unknown_sequence":
+        inventory.statements[0].eligibility_sequence = "current_or_unknown"
+    elif variant == "changed_basis":
+        review.items[0].non_control_basis_excerpt = "先确认符合资格"
+    else:
+        review.items[0].decision = "background_context"
+    with pytest.raises(ValueError):
+        validate_source_target_review(batch, inventory, coverage, review)
+
+
+@pytest.mark.parametrize("variant", ["partial_action", "omitted_exception", "omitted_time"])
+def test_table_sequence_review_cannot_omit_action_dimensions(variant):
+    batch, inventory, _, coverage, review = _table_sequence_material()
+    statement = inventory.statements[0]
+    if variant == "partial_action":
+        review.items[0].source_action_excerpt = "实施研究处理"
+    elif variant == "omitted_exception":
+        statement.exception_words = "另一个对象的例外"
+    else:
+        statement.time_words = ["另一个对象的时点"]
+    with pytest.raises(ValueError):
+        validate_source_target_review(batch, inventory, coverage, review)
+
+
+def test_table_sequence_location_does_not_infer_chronology_or_choose_duplicate_cells():
+    from app.protocols.control_scope_sources import table_sequence_source_packet, table_sequence_context_locations
+    batch, quote = _table_sequence_material(split=True)
+    assert table_sequence_source_packet(batch.owned_units[0], quote, batch.owned_units, batch.context_units) is None
+    batch, inventory, _, _, _ = _table_sequence_material()
+    context = batch.context_units[0]
+    context.excerpt = "研究处理甲与对照处理乙的操作须先完成，再核对入排资格；详见表7。"
+    packet = table_sequence_context_locations(batch.owned_units[0], batch.owned_units, batch.context_units)
+    assert packet["context_locations"][0]["source_excerpt"] == context.excerpt
+    assert "eligibility_sequence" not in packet  # Location never proves the order.
+    assert "eligibility_sequence_context" not in _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION, "statements": [{
+            "structure_unit_id": "su-01", "quoted_text": "年龄至少18岁", "force": "required", "time_words": []}],
+        "units_without_statement": ["su-02"]}).model_dump(mode="json")["statements"][0]
+
+
 def test_post_eligibility_action_requires_source_order_and_no_current_candidate() -> None:
     batch = _batch()
     batch.owned_units[0].excerpt = (

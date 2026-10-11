@@ -7,7 +7,7 @@
   "claims_complete": false,
   "current_state": {
     "updated": "2026-10-11",
-    "base_head": "4a7b85837a8009535d8c9c17c582ff40695dfbeb",
+    "base_head": "4ac85430",
     "runtime_state": "active",
     "claims_complete": false,
     "latest_actual_job": "87f0d800a013443a9b8194a61b314111",
@@ -23,7 +23,21 @@
     "counts_are_live_not_terminal": false,
     "source_checkpoint": "08334c8ad6c44188abd5d4ad525d229e",
     "pending_author_checkpoint": null,
-    "first_causal_error": "Deep45 bound negative remains unadopted. Deep49 numerical relationship lacks a usable consumer, with the earlier context-to-action eligibility sequence/object relationship not yet verified. Frozen prior context exists but same-unit-only sequence proof cannot represent it. Do not infer that all treatment instructions are after eligibility, release action parameters, or reset scoped repair ledgers.",
+    "first_causal_error": "Deep45 remains an unadopted bound negative. Deep49 has frozen crossparagraph table context not representable by prior same-unit proof. The new physical-source witness, bounded source question and shared producer/resume/seed path are code-verified, not yet clinically run. Do not infer sequence, release numeric parameters or reset scoped repair ledgers.",
+    "table_sequence_and_retained_failure": {
+      "version": "table-sequence-source-location/v1",
+      "owner_disposition": "reviews/rv1006-table-sequence-owner-disposition-20261011.md",
+      "execution_choice": "owner integration plus approved C03 source-only independent-context review",
+      "connected_window": {"passed": 104, "failed": 0, "deselected": 1550, "seconds": 41.20, "exit_code": 0, "junit": "artifacts/rv1006-table-sequence-and-retained-failure-connected-20261011-v6.xml"},
+      "full_suite": false, "windows_not_additive": true,
+      "previous_window": {"passed": 103, "failed": 1, "cause": "new service seed fixture omitted raw_output_text from actual saved checkpoint; fixture corrected, production gate unchanged"},
+      "conference": {"session_id": "01a12864-b116-706d-afa9-3ac9ff69025c", "route": "codebuddy/codebuddy-cli/deepseek-v4.1-flash/max", "followups": ["context_sequence_boundary_followup", "table_sequence_implementation_followup", "retained_failure_counter_followup", "table_sequence_recovery_followup"], "exit_codes": [0,0,0,0], "fallback": null, "model_independent": false, "clinical_sources_read": false, "tests_run": false, "final_shared_path_fix_owner_verified": true},
+      "readonly_preflight": {"source_job": "87f0d800a013443a9b8194a61b314111", "reusable": 47, "preserve_unresolved": 1, "resume_partial": 1, "refresh_required": 41, "model_calls": 0, "database_write": false, "database_unchanged": true, "full_database_hash_checked": true, "exit_code": 0, "private_record": "rv1006-table-sequence-preflight-20261011-v1.json"},
+      "logical_budget_deep49": {"used": 5, "limit": 8, "reset": false},
+      "new_code_actual_product_run": false,
+      "publication_activation_signature": false,
+      "next_action": "Freeze code; create a legal isolated continuation with all 90 decisions verified against preflight, reuse 47, preserve unadopted 45, bounded source question for 49 and independent unread work."
+    },
     "numeric_purpose_diagnostic": {
       "reporting_version": "v2",
       "acceptance_semantics_changed": false,

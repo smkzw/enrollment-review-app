@@ -67,6 +67,7 @@ from app.agents.protocol_control_source_interpretation import (
     SOURCE_COVERAGE_VALIDATION_VERSION,
     SOURCE_UNIT_QUOTE_COMPLETION_VERSION,
     SOURCE_ATTRIBUTION_VALIDATION_VERSION,
+    TABLE_SEQUENCE_SOURCE_VERSION,
     SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
     SOURCE_TARGET_REVIEW_GAP_VERSION,
     SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
@@ -91,6 +92,7 @@ from app.agents.protocol_control_source_interpretation import (
     apply_source_scope_correction,
     apply_source_scope_question_recheck,
     source_question_context_identity,
+    source_scope_question_json_path,
     apply_source_quote_correction,
     validate_source_definition_consumers,
     validate_source_interpretation,
@@ -2096,6 +2098,7 @@ def _deep_component_identity(
                                        SOURCE_COVERAGE_VALIDATION_VERSION,
                                        SOURCE_UNIT_QUOTE_COMPLETION_VERSION,
                                        SOURCE_ATTRIBUTION_VALIDATION_VERSION,
+                                       TABLE_SEQUENCE_SOURCE_VERSION,
                                        SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
                                        SOURCE_TARGET_REVIEW_GAP_VERSION,
                                        SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
@@ -2652,7 +2655,8 @@ def _revalidated_source_seed_proof(
         unit = next(unit for unit in batch.owned_units
                     if unit.structure_unit_id == statement.structure_unit_id)
         if (detail.get("code") != ("SOURCE_HEADING_SCOPE_RECHECK" if heading_recheck else "SOURCE_SCOPE_QUESTION_RECHECK")
-                or detail.get("json_path") != f"statements[{index}].{'scope_quote' if heading_recheck else 'unresolved'}"
+                or detail.get("json_path") != (f"statements[{index}].scope_quote" if heading_recheck
+                    else source_scope_question_json_path(statement, batch, index))
                 or detail.get("source_refs") != list(unit.source_span_ids)
                 or (detail.get("guidance_version") != SOURCE_HEADING_SCOPE_RECHECK_VERSION if heading_recheck
                     else detail.get("source_context_sha256") != source_question_context_identity(statement, batch))
@@ -4477,6 +4481,7 @@ def _execute_deep(
             raise StepFailure(
                 retryable=False, error_code=proof["error_code"],
                 detail="原文对应关系仍未核清，本次保留原未决且不重复读取；其他独立来源可继续核查。",
+                retained_failure=True,
                 diagnostic_checkpoint={**diagnostic, "model_call_receipts": [],
                     "preserved_unresolved_from": {"job_id": deep_source_job_id,
                         "checkpoint_id": checkpoint_id, "proof": proof},

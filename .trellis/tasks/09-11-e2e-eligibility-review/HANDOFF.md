@@ -2,6 +2,12 @@
 
 ## 当前事实
 
+**当前包优先（2026-10-11）：** Goal active、claims_complete=false；当前包基础4ac85430。table-sequence-source-location/v1物理来源关系接入既有SourceInterpretation/source question/局部修订/新鲜目标核对与保存读回；SourceStatement和TargetReview新增可选位置证明，历史无字段不伪补。共用source_scope_question_json_path修复生产账本/Runner/服务种子恢复路径不一致。Runner仅忽略经当前生产者重验保存的旧失败对新独立读取止损的计数，旧失败仍失败且adopted=false；两项新失败仍停、最终采用不绕门。正式数值消费者未因此扩权，无病种/药物阈值特例。
+
+最终三相连104pass/1550deselected/41.20秒/exit0/5SWIG（v6），不是全库/临床。v5新种子夹具漏raw_output_text导致1fail，补实际保存结构后通过，生产验证未放宽。四相连C03源码只读续审均exit0/no fallback，同DeepSeek家族，不是模型独立或医学批准；末路径对齐及服务正反例由所有者检查。新实际预检47reusable/1preserve_unresolved/1resume_partial/41refresh_required，0模型/0写/全库hash保持；47不重读，45不再问，49原账5/8（余3）不重置。当前最后真实运行仍87/145380c2，新包尚未模型调用。下一从新受控合法入口接续49并推进独立未读范围；不用旧failed_final改成功。详见reviews/rv1006-table-sequence-owner-disposition-20261011.md、implement当前流程表及review_index。
+
+### 以下同日先前包记录为历史，不覆盖上方当前包
+
 当前用户已恢复，Goal实查active，claims_complete=false。本记录是里程碑，不是暂停。来源未决保护及负核对失败保存均已进入实际运行；不采用负核对，不清单元修订标记，原独立核查两次失败边界保持。完整共同发布/同包病例工作稿/有源更正新旧报告/Q3均未完成，不以检查数量或失败保存宣称完成。当前无健康模型作业待等；所有者继续核实际来源关系，不重启终态。
 
 实际产品源码145380c211e5614ca85647644107e45459551876已提交并push，基础4a7b85837a8009535d8c9c17c582ff40695dfbeb；七份继承dirty保留。175的连接失败后清单复查成功，零调用预检通过；合法Job87f0d800a013443a9b8194a61b314111已failed_final/SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，5调用383.150872秒/exit3，47完成、45与49失败、41未读，末49检查点08334c8ad6c44188abd5d4ad525d229e，exec95984已结束。旧Job/原件/保护库/来源库保持，无共同发布/启用/签发。三次修订实际针对不同表格行；剩余候选数值用途未核，不能称重复同一错误。冻结前文含资格确认后进入研究治疗的依据，但现有证明仅接受同单元前置句，且背景治疗与研究治疗不可统一套用。先核对象及真实跨单元关系，不先新增参数计算能力。

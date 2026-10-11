@@ -12,6 +12,157 @@ from app.domain.contracts.protocol_controls import ControlScopeCitation, Protoco
 from app.domain.contracts.enums import PhaseScope, StudyPhase
 
 
+TABLE_SEQUENCE_SOURCE_VERSION = "table-sequence-source-location/v1"
+
+
+def _same_source_scope(left: ProtocolStructureUnit, right: ProtocolStructureUnit) -> bool:
+    documents = [{ref.split("::", 1)[0] for ref in item.source_span_ids if "::" in ref}
+                 for item in (left, right)]
+    selected = {StudyPhase.PHASE_II: PhaseScope.PHASE_II,
+                StudyPhase.PHASE_III: PhaseScope.PHASE_III}.get(right.study_phase)
+    concrete = set(left.phase_scopes) & {PhaseScope.PHASE_II, PhaseScope.PHASE_III}
+    return (left.study_phase == right.study_phase
+            and len(documents[0]) == 1 and documents[0] == documents[1]
+            and not (selected is not None and concrete and selected not in concrete
+                     and not set(left.phase_scopes) & {PhaseScope.SHARED, PhaseScope.MIXED}))
+
+
+def _table_reference(unit: ProtocolStructureUnit) -> str | None:
+    # This is a physical caption identifier, never a clinical keyword classifier.
+    caption = _text(unit.heading_path[-1]) if unit.heading_path else ""
+    match = re.match(r"(?:表|Table)(\d+(?:[.\-]\d+)*)(?![\d.\-])", caption, re.I)
+    return match.group() if match else None
+
+
+def table_sequence_source_packet(
+    unit: ProtocolStructureUnit, quoted_text: str,
+    owned_units: Sequence[ProtocolStructureUnit], context_units: Sequence[ProtocolStructureUnit],
+) -> dict[str, object] | None:
+    """Locate action cells and object headers; never infer treatment chronology."""
+    from app.protocols.procedure_catalog import _schedule_cells_from_units
+
+    root, marker, row = unit.source_ref.rpartition(".r")
+    table = unit.table_context
+    if (not marker or not row.isdigit() or table is None or int(row) != table.row_index
+            or unit.unit_kind != "table_row" or not quoted_text.strip()):
+        return None
+    available = [*owned_units, *context_units]
+    cells = _schedule_cells_from_units(available, root)
+    quote = _text(quoted_text)
+    matches = [cell for cell in cells.values() if cell.row == table.row_index
+               and quote in _text(cell.text)]
+    if len(matches) != 1 or matches[0].col_span is None:
+        return None
+    action = matches[0]
+    action_refs = set(action.source_refs)
+    if not action_refs <= set(unit.member_source_refs):
+        return None
+    action_columns = set(range(action.col, action.col + action.col_span))
+    headers = []
+    for header in context_units:
+        if (header.unit_kind != "table_header" or header.table_context is None
+                or header.member_source_span_ids is None
+                or header.source_ref.rpartition(".r")[0] != root
+                or not _same_source_scope(header, unit)
+                or header.heading_path != unit.heading_path
+                or header.source_order >= unit.source_order
+                or header.table_context.row_index >= table.row_index):
+            continue
+        header_cells = _schedule_cells_from_units([header], root)
+        covered = set()
+        objects = []
+        for cell in sorted(header_cells.values(), key=lambda item: item.col):
+            if cell.col_span is None:
+                continue
+            columns = set(range(cell.col, cell.col + cell.col_span))
+            if not columns & action_columns:
+                continue
+            # A merged header spanning another object cannot identify this cell.
+            if not columns <= action_columns or columns & covered:
+                objects = []
+                break
+            refs = sorted(span for source, spans in zip(
+                header.member_source_refs, header.member_source_span_ids or [], strict=True,
+            ) if source in cell.source_refs for span in spans)
+            if not refs or not _text(cell.text):
+                objects = []
+                break
+            objects.append(ControlScopeCitation(
+                structure_unit_id=header.structure_unit_id, source_span_ids=refs,
+                source_excerpt=cell.text, source_unit_sha256=_unit_digest(header),
+            ))
+            covered.update(columns)
+        if objects and covered == action_columns:
+            headers.append(objects)
+    if len(headers) != 1:
+        return None
+    return {"version": TABLE_SEQUENCE_SOURCE_VERSION,
+            "action_source_refs": sorted(action_refs),
+            "action_columns": sorted(action_columns),
+            "object_citations": [item.model_dump(mode="json") for item in headers[0]]}
+
+
+def table_sequence_context_locations(
+    unit: ProtocolStructureUnit, owned_units: Sequence[ProtocolStructureUnit],
+    context_units: Sequence[ProtocolStructureUnit],
+) -> dict[str, object] | None:
+    """Offer frozen locations, not preselected eligibility or object relations."""
+    objects = []
+    for text in unit.member_texts or []:
+        packet = table_sequence_source_packet(unit, text, owned_units, context_units)
+        if packet is not None and packet not in objects:
+            objects.append(packet)
+    reference = _table_reference(unit)
+    if not objects or reference is None:
+        return None
+    contexts = [ControlScopeCitation(
+        structure_unit_id=item.structure_unit_id, source_span_ids=sorted(item.source_span_ids),
+        source_excerpt=item.excerpt, source_unit_sha256=_unit_digest(item),
+    ).model_dump(mode="json") for item in context_units
+        if item.unit_kind in {"paragraph", "list_item"} and item.table_context is None
+        and item.source_order < unit.source_order and _same_source_scope(item, unit)
+        and reference in {_text(match.group()) for match in re.finditer(
+            r"(?:表|Table)\s*\d+(?:[.\-]\d+)*(?![\d.\-])", item.excerpt, re.I)}
+        and item.heading_path == unit.heading_path[:len(item.heading_path)]]
+    return {"version": TABLE_SEQUENCE_SOURCE_VERSION, "context_locations": contexts,
+            "table_reference": reference, "action_cells": objects} if contexts else None
+
+
+def validate_table_sequence_context(
+    unit, quoted_text, boundary_quote, context_citation, table_reference,
+    object_citations, owned_units, context_units,
+):
+    """Check physical witnesses, leaving object/sequence meaning to fresh review."""
+    matches = [item for item in context_units
+               if item.structure_unit_id == context_citation.structure_unit_id]
+    available = [*owned_units, *context_units]
+    if (len(matches) != 1 or sum(item.structure_unit_id == context_citation.structure_unit_id
+                                for item in available) != 1):
+        raise ValueError("执行先后依据须来自唯一的冻结只读段落")
+    context = matches[0]
+    prefix = context.heading_path
+    reference = _text(table_reference)
+    boundary = _text(boundary_quote)
+    if (context.unit_kind not in {"paragraph", "list_item"} or context.table_context is not None
+            or context.source_order >= unit.source_order
+            or not _same_source_scope(context, unit)
+            or not prefix or prefix != unit.heading_path[:len(prefix)]
+            or context_citation.source_unit_sha256 != _unit_digest(context)
+            or context_citation.source_span_ids != sorted(context.source_span_ids)
+            or context_citation.source_excerpt != context.excerpt
+            or not boundary or boundary not in _text(context.excerpt)
+            or reference != _table_reference(unit)
+            or reference not in {_text(match.group()) for match in re.finditer(
+                r"(?:表|Table)\s*\d+(?:[.\-]\d+)*(?![\d.\-])", context.excerpt, re.I)}):
+        raise ValueError("执行先后依据、引用表格或冻结上下文身份不符")
+    packet = table_sequence_source_packet(unit, quoted_text, owned_units, context_units)
+    if packet is None or [item.model_dump(mode="json") for item in object_citations] != packet["object_citations"]:
+        raise ValueError("动作所属表格列对象缺少完整、可回溯的表头依据")
+    if any(_text(item.source_excerpt) not in boundary for item in object_citations):
+        raise ValueError("先后依据未包含动作所属的每个列对象，不能借用另一种治疗的关系")
+    return packet
+
+
 def immediate_cell_scope_label(
     unit: ProtocolStructureUnit, context_id: str, scope_quote: str,
     owned_units: Sequence[ProtocolStructureUnit], context_units: Sequence[ProtocolStructureUnit],

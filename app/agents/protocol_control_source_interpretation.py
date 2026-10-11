@@ -15,6 +15,7 @@ from pydantic import Field, model_validator
 from app.domain.contracts.common import ContractModel
 from app.domain.contracts.protocol_controls import (
     ControlObligationKind,
+    ControlScopeCitation,
     KnownOfficialRuleTarget,
     ProtocolControlDispositionBatch,
     ReviewNodeRole,
@@ -23,7 +24,10 @@ from app.domain.contracts.protocol_controls import (
 from app.protocols.protocol_control_gate import (
     _visit_scope_keys, locate_source_quote_offsets, source_statement_ranges_cover_unit,
 )
-from app.protocols.control_scope_sources import immediate_cell_scope_label
+from app.protocols.control_scope_sources import (
+    immediate_cell_scope_label, table_sequence_context_locations, validate_table_sequence_context,
+    TABLE_SEQUENCE_SOURCE_VERSION,
+)
 from app.protocols.procedure_catalog import (
     _without_display_footnotes,
     schedule_column_scope,
@@ -247,6 +251,13 @@ def _unreported_time_fragments(statement: "SourceStatement") -> list[str]:
     ))
 
 
+class SourceSequenceContext(ContractModel):
+    version: Literal[TABLE_SEQUENCE_SOURCE_VERSION] = TABLE_SEQUENCE_SOURCE_VERSION
+    context_citation: ControlScopeCitation
+    table_reference: str = Field(min_length=2)
+    object_citations: list[ControlScopeCitation] = Field(min_length=1)
+
+
 class SourceStatement(ContractModel):
     structure_unit_id: str = Field(min_length=1)
     quoted_text: str = Field(min_length=1)
@@ -263,6 +274,9 @@ class SourceStatement(ContractModel):
     unresolved: list[str] = Field(default_factory=list)
     eligibility_sequence: Literal["current_or_unknown", "after_eligibility_decision"] = "current_or_unknown"
     eligibility_sequence_quote: str | None = None
+    eligibility_sequence_context: SourceSequenceContext | None = Field(
+        default=None, exclude_if=lambda value: value is None,
+    )
     control_authority: Literal["study_or_unknown", "cited_external_rationale"] = "study_or_unknown"
     attribution_quote: str | None = None
 
@@ -628,7 +642,26 @@ def source_question_context_identity(
     statement: SourceStatement, batch: ProtocolControlDispositionBatch,
 ) -> str | None:
     context = source_question_official_context(statement, batch)
+    locations = _source_question_table_sequence_locations(statement, batch)
+    if locations is not None:
+        context = {"official_context": context, "table_sequence_locations": locations}
     return hashlib.sha256(json.dumps(context, ensure_ascii=False, sort_keys=True).encode()).hexdigest() if context else None
+
+
+def _source_question_table_sequence_locations(statement, batch):
+    unit = next((unit for unit in batch.owned_units
+                 if unit.structure_unit_id == statement.structure_unit_id), None)
+    if unit is None:
+        return None
+    return table_sequence_context_locations(unit, batch.owned_units, batch.context_units)
+
+
+def source_scope_question_json_path(statement, batch, index):
+    sequence = ("action" in statement.decision_functions
+                and (statement.eligibility_sequence == "current_or_unknown"
+                     or statement.eligibility_sequence_context is not None)
+                and _source_question_table_sequence_locations(statement, batch) is not None)
+    return f"statements[{index}].{'eligibility_sequence' if sequence else 'unresolved'}"
 
 
 def can_recheck_source_scope_question(
@@ -645,6 +678,11 @@ def can_recheck_source_scope_question(
                      if unit.structure_unit_id == statement.structure_unit_id), None)
         if unit is not None:
             columns = schedule_column_scope(unit, batch.context_units)
+        if (statement.eligibility_sequence == "current_or_unknown"
+                and statement.eligibility_sequence_context is None
+                and "action" in statement.decision_functions
+                and _source_question_table_sequence_locations(statement, batch) is not None):
+            return True
     local_context = False
     if batch is not None and unit is not None and statement.scope_context_unit_id is None:
         quote = locate_source_quote_offsets(unit.excerpt, statement.quoted_text)
@@ -671,6 +709,25 @@ def build_source_scope_question_prompt(
         raise ValueError("本条不属于可核来源疑问范围")
     unit = next(unit for unit in batch.owned_units
                 if unit.structure_unit_id == statement.structure_unit_id)
+    locations = _source_question_table_sequence_locations(statement, batch)
+    if (locations is not None and statement.eligibility_sequence == "current_or_unknown"
+            and statement.eligibility_sequence_context is None):
+        return (
+            "你是内置方案Agent的单条原文顺序核查步骤。下方是同文档同表的物理位置清单，"
+            "不是先后含义证明。只核本条动作所对应的完整对象，是否在原文明确的资格判定之后执行。"
+            "同时核限定、例外及同表不同对象，背景处理不得借研究处理的顺序被排除。"
+            "返回SourceInterpretation JSON：version原样，statements恰为指定一条，units_without_statement为空。"
+            "只可修改eligibility_sequence、eligibility_sequence_quote、eligibility_sequence_context；"
+            "其他字段包括原句、逻辑、时间词、例外及unresolved逐项原样保留。"
+            "明确after时引用原文完整先后句，并用清单中的context_citation、table_reference、"
+            "完整object_citations填写版本化eligibility_sequence_context；不得补造引用、缩减对象或猜顺序。"
+            "证据不足则保留current_or_unknown及两个空字段。不生成候选、不判断受试者，不据此采用。\n"
+            + json.dumps({"version": interpretation.version,
+                          "recheck_version": TABLE_SEQUENCE_SOURCE_VERSION,
+                          "frozen_statement": statement.model_dump(mode="json"),
+                          "source_unit": unit.model_dump(mode="json"),
+                          "table_sequence_locations": locations}, ensure_ascii=False)
+        )
     context_instruction = (
         "已保留的 scope_quote 与 quoted_text 连续覆盖本来源单元时，另核前置对象或范围是否"
         "足以回答本条 unresolved；只有原文确有两种解释才保留具体疑问。此普通原句仍仅能"
@@ -727,11 +784,18 @@ def apply_source_scope_question_recheck(
     revised = proposal.statements[0]
     unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == original.structure_unit_id)
     native = bool(schedule_column_scope(unit, batch.context_units))
-    allowed = {"unresolved", "scope_quote", "affected_stage", "time_words"} if native else {"unresolved"}
+    sequence = (original.eligibility_sequence == "current_or_unknown"
+                and original.eligibility_sequence_context is None
+                and _source_question_table_sequence_locations(original, batch) is not None)
+    allowed = ({"eligibility_sequence", "eligibility_sequence_quote", "eligibility_sequence_context"}
+               if sequence else {"unresolved", "scope_quote", "affected_stage", "time_words"}
+               if native else {"unresolved"})
     if (original.model_dump(mode="json", exclude=allowed)
             != revised.model_dump(mode="json", exclude=allowed)):
         raise ValueError("时间疑问核对不得改变原文、逻辑、范围、时间或其他来源字段")
-    if native:
+    if sequence and revised.eligibility_sequence == "after_eligibility_decision" and revised.eligibility_sequence_context is None:
+        raise ValueError("跨段顺序提案缺少完整位置与对象见证")
+    if native and not sequence:
         # Reuse the existing scope gate and preservation rules, not a new adoption policy.
         apply_source_scope_correction(batch, interpretation, index, SourceScopeCorrection(
             version="phase5/control-source-scope-correction/v1",
@@ -1152,6 +1216,9 @@ class SourceTargetReviewItem(ContractModel):
         default=None, exclude_if=lambda value: value is None,
     )
     non_control_basis_excerpt: str | None = None
+    non_control_sequence_context: SourceSequenceContext | None = Field(
+        default=None, exclude_if=lambda value: value is None,
+    )
     attribution_excerpt: str | None = None
 
 
@@ -1660,6 +1727,7 @@ def target_review_indexes(
         for entry in coverage
         if (interpretation.statements[entry.statement_index].control_authority
             == "cited_external_rationale"
+            or interpretation.statements[entry.statement_index].eligibility_sequence_context is not None
             or (entry.status != "expressed"
                 and entry.disposition in _ENROLLMENT_DISPOSITIONS
                 and not (
@@ -1816,6 +1884,8 @@ def build_source_target_review_prompt(
             "unresolved": interpretation.statements[index].unresolved,
             "eligibility_sequence": interpretation.statements[index].eligibility_sequence,
             "eligibility_sequence_quote": interpretation.statements[index].eligibility_sequence_quote,
+            **({"eligibility_sequence_context": interpretation.statements[index].eligibility_sequence_context.model_dump(mode="json")}
+               if interpretation.statements[index].eligibility_sequence_context is not None else {}),
             "control_authority": interpretation.statements[index].control_authority,
             "attribution_quote": interpretation.statements[index].attribution_quote,
         }
@@ -1922,6 +1992,16 @@ def build_source_target_review_prompt(
         "目标文字相同也不能消除已保存的来源疑问。本步骤无权改写或清空来源解释，"
         "须保留相关疑问及有源对照线索，不声称完整覆盖。"
         "未核清的原文也不得作为 not_current_control、potential_same_requirement 或 cited_external_rationale 关闭；"
+        + ("若有 eligibility_sequence_context，先从其冻结前文与表格列来源独立核查："
+        "资格确认是否确实在本条具体对象的动作之前，这条关系是否直接适用于该单元格；"
+        "还须核全部合并列、背景治疗、条件和例外，不能根据上一位作者的 after 标签关闭要求。"
+        "只有关系确证且本条不再含当前前置要求时选 not_current_control，"
+        "non_control_basis_excerpt 逐字摘先后依据，non_control_sequence_context 原样返回"
+        "实际核实的同一定位元组；此动作仍为候选时不能关闭。关系未核或反向时选 unresolved，"
+        "该元组填 null、写明具体差异，不把位置证据当作临床含义证明。"
+        if any(interpretation.statements[index].eligibility_sequence_context is not None
+               for index in indexes) else "")
+        +
         "只能在现有未完整覆盖路径中保留具体 unresolved_aspects，不将原文疑问改写成受试者缺件。"
         "unresolved 非空时只能保留 unresolved 决定及具体疑问，不得选择 additional_requirement；"
         "来源含义明确而已有目标未覆盖时才可选 additional_requirement，不据此新增研究者判断义务。"
@@ -1998,7 +2078,11 @@ def build_source_target_review_prompt(
         'additional_requirement|not_current_control|unresolved|potential_same_requirement|cited_external_rationale|background_context|definition_dependency","target_id":null,"source_action_excerpt":"逐字动作",'
         '"target_action_excerpt":null,"source_object_excerpt":null,"target_object_excerpt":null,'
         '"source_time_excerpt":null,"target_time_excerpt":null,"target_scope_excerpt":null,'
-        '"unresolved_aspects":[],"unresolved_cause":null,"non_control_basis_excerpt":null,"attribution_excerpt":null}]}。枚举值只选一个，未知目标填 null；'
+        '"unresolved_aspects":[],"unresolved_cause":null,"non_control_basis_excerpt":null,'
+        + ('"non_control_sequence_context":null,' if any(
+            interpretation.statements[index].eligibility_sequence_context is not None
+            for index in indexes) else "")
+        + '"attribution_excerpt":null}]}。枚举值只选一个，未知目标填 null；'
         '非跨章节关系的对象与另一来源时期字段一律填 null。'
         'unresolved_aspects 的 [] 仅适用于不需要记录差额的决定；'
         'decision=additional_requirement 或 unresolved 时必须填写至少一个具体差额或疑问，'
@@ -2137,6 +2221,11 @@ def validate_source_target_review(
 
     for item in review.items:
         statement = interpretation.statements[item.statement_index]
+        if item.non_control_sequence_context is not None and (
+            item.decision != "not_current_control" or statement.eligibility_sequence_context is None
+        ):
+            reject(item, "POST_ELIGIBILITY_CONTEXT_UNEXPECTED", "non_control_sequence_context",
+                   "只有有源的判定后执行核查可引用前文关系证明")
         if item.unresolved_cause is not None and item.decision != "unresolved":
             reject(item, "UNRESOLVED_CAUSE_INVALID", "unresolved_cause", "非未决条目不得携带未决原因")
         if item.unresolved_cause == "target_correspondence" and statement.unresolved:
@@ -2307,7 +2396,23 @@ def validate_source_target_review(
             source = normalize_source_excerpt(unit.excerpt)
             basis = normalize_source_excerpt(item.non_control_basis_excerpt or "")
             action_start = source.find(normalize_source_excerpt(statement.quoted_text))
-            if (not basis or action_start < 0 or basis not in source[:action_start]
+            context = statement.eligibility_sequence_context
+            if context is not None:
+                try:
+                    _validate_sequence_context(batch, statement)
+                except ValueError as exc:
+                    reject(item, "POST_ELIGIBILITY_CONTEXT_INVALID", "non_control_sequence_context", str(exc))
+                if item.non_control_sequence_context != context:
+                    reject(item, "POST_ELIGIBILITY_CONTEXT_UNCONFIRMED", "non_control_sequence_context",
+                           "核查须独立确认同一前文、表格和具体对象关系")
+                dimensions = [*statement.time_words]
+                if statement.exception_words:
+                    dimensions.append(statement.exception_words)
+                if (action != normalize_source_excerpt(statement.quoted_text)
+                        or any(normalize_source_excerpt(word) not in action for word in dimensions)):
+                    reject(item, "POST_ELIGIBILITY_DIMENSION_UNCONFIRMED", "source_action_excerpt",
+                           "跨段先后核查须保留本条完整动作、时间及例外，不能只核对象名称")
+            if (not basis or (context is None and (action_start < 0 or basis not in source[:action_start]))
                     or item.target_id or item.target_time_excerpt):
                 reject(item, "POST_ELIGIBILITY_BASIS_INVALID", "non_control_basis_excerpt",
                        "入排判定后的动作须有同一原文单元内位于动作之前的逐字先后依据")
@@ -3163,6 +3268,19 @@ def parse_product_source_interpretation(
     return SourceInterpretation.model_validate(payload)
 
 
+def _validate_sequence_context(batch, statement):
+    witness = statement.eligibility_sequence_context
+    if witness is None:
+        raise ValueError("缺少前文与具体表格对象的关系证明")
+    unit = next(item for item in batch.owned_units
+                if item.structure_unit_id == statement.structure_unit_id)
+    return validate_table_sequence_context(
+        unit, statement.quoted_text, statement.eligibility_sequence_quote or "",
+        witness.context_citation, witness.table_reference, witness.object_citations,
+        batch.owned_units, batch.context_units,
+    )
+
+
 def validate_source_interpretation(
     batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation
 ) -> None:
@@ -3283,11 +3401,17 @@ def validate_source_interpretation(
             source = normalize_source_excerpt(unit.excerpt)
             boundary = normalize_source_excerpt(item.eligibility_sequence_quote or "")
             action_start = source.find(normalized_quote)
-            if not boundary or action_start < 0 or boundary not in source[:action_start]:
+            if item.eligibility_sequence_context is not None:
+                try:
+                    _validate_sequence_context(batch, item)
+                except ValueError as exc:
+                    reject("POST_ELIGIBILITY_CONTEXT_INVALID", str(exc),
+                           "eligibility_sequence_context", "source_semantic_review")
+            elif not boundary or action_start < 0 or boundary not in source[:action_start]:
                 reject("POST_ELIGIBILITY_SEQUENCE_UNGROUNDED",
                        "入排判定后的动作须有同一来源单元中位于动作之前的逐字先后依据",
                        "eligibility_sequence_quote", "correct_source_scope")
-        elif item.eligibility_sequence_quote is not None:
+        elif item.eligibility_sequence_quote is not None or item.eligibility_sequence_context is not None:
             reject("POST_ELIGIBILITY_SEQUENCE_UNEXPECTED",
                    "未声明入排判定后执行时不得携带先后依据",
                    "eligibility_sequence_quote", "correct_source_scope")
@@ -3363,6 +3487,9 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
             "excerpt": unit.excerpt,
             "table_context": unit.table_context.model_dump(mode="json") if unit.table_context else None,
             "possible_cell_scope_labels": _cell_scope_label_packet(batch, unit),
+            **({"sequence_context_locations": locations}
+               if (locations := table_sequence_context_locations(
+                   unit, batch.owned_units, batch.context_units)) is not None else {}),
             **({"referenced_table_notes": batch.table_footnote_context_links[unit.structure_unit_id]}
                if unit.structure_unit_id in batch.table_footnote_context_links else {}),
         }
@@ -3420,6 +3547,18 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
         "eligibility_sequence 写 after_eligibility_decision，并在 eligibility_sequence_quote"
         " 逐字引用动作之前的资格先决原文；否则写 current_or_unknown、引用填 null。"
         "这只记录原文先后关系，不能把未知动作凭治疗期标题或相邻句推为判定之后。"
+        + ("若本条表格提供 sequence_context_locations，可核查其中前文是否明确说明"
+        "先确认资格、随后才执行本条所属列对象的动作。位置清单不是先后含义证明。"
+        "只有前文明确引用本表、先决原句含本条单元格所属的全部列对象且关系明确时，"
+        "可填写 eligibility_sequence_context：version 原样取位置清单，context_citation"
+        "原样复制所选完整前文定位，table_reference 逐字填前文与表题共同出现的表编号，"
+        "object_citations 原样复制本条所在单元格的完整表头引用；不得自行计算hash或漏掉合并列。"
+        "eligibility_sequence_quote 只摘前文中直接约束这些对象的连续先后原句；"
+        "不能借研究用药的先后关系排除背景治疗或给药前检查，不能仅凭同名药物或表题推断。"
+        "没有完整位置及明确关系时此字段填 null，保持 current_or_unknown 并保留具体疑问。"
+        "它只允许后续独立关系核查，不表示患者合格；context 仍只读，不产生其处置。"
+        if any("sequence_context_locations" in item for item in source) else "")
+        +
         "不要在来源摘录阶段预测某句相对筛选、基线或给药节点的判定归属；"
         "time_words 是逐段连续原文组成的数组；无明确时间措辞填空数组，"
         "同一动作有多段时间措辞时分别摘录，不能用分号拼成非原文字串；"
@@ -3445,7 +3584,10 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
         '"decision_functions":["definition","calculation_input"],'
         '"scope_quote":null,"scope_context_unit_id":null,"affected_stage":null,"time_words":[], '
         '"exception_words":null,"unresolved":[],"eligibility_sequence":"current_or_unknown|after_eligibility_decision",'
-        '"eligibility_sequence_quote":null,"control_authority":"study_or_unknown|cited_external_rationale",'
+        '"eligibility_sequence_quote":null,'
+        + ('"eligibility_sequence_context":null,' if any(
+            "sequence_context_locations" in item for item in source) else "")
+        + '"control_authority":"study_or_unknown|cited_external_rationale",'
         '"attribution_quote":null}],"units_without_statement":[]}。'
         "枚举字段只能取其中一个值；可空字段在原文未写时填 null，不得省略。\n"
         + ("相邻表格原文仅为有界只读片段，不证明清单完整；预算截断或位置边界不是清单结尾。"

@@ -132,6 +132,7 @@ from .protocol_control_source_interpretation import (
     SOURCE_TARGET_REVIEW_VERSION,
     SOURCE_TARGET_REVIEW_POLICY_VERSION,
     SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
+    TABLE_SEQUENCE_SOURCE_VERSION,
     SourceDefinitionConsumers,
     SourceInterpretation,
     SourceInterpretationValidationError,
@@ -154,6 +155,7 @@ from .protocol_control_source_interpretation import (
     build_source_scope_question_prompt,
     source_question_official_context,
     source_question_context_identity,
+    source_scope_question_json_path,
     build_source_definition_consumers_prompt,
     build_source_interpretation_prompt,
     build_source_quote_correction_prompt,
@@ -7344,6 +7346,8 @@ def _source_statement_reuse_identity(statement: SourceStatement) -> tuple[object
         tuple(statement.unresolved),
         statement.eligibility_sequence,
         statement.eligibility_sequence_quote,
+        (_stable_json(statement.eligibility_sequence_context.model_dump(mode="json"))
+         if statement.eligibility_sequence_context is not None else None),
         statement.control_authority,
         statement.attribution_quote,
     )
@@ -7760,7 +7764,9 @@ class ProtocolControlAgentRunner:
             statement = source_interpretation.statements[index]
             unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == statement.structure_unit_id)
             if (detail.get("source_refs") != list(unit.source_span_ids)
-                    or detail.get("json_path") != f"statements[{index}].{'quoted_text' if unit_completion else 'scope_quote' if context_completion or heading_recheck else 'unresolved'}"
+                    or detail.get("json_path") != (f"statements[{index}].quoted_text" if unit_completion
+                        else f"statements[{index}].scope_quote" if context_completion or heading_recheck
+                        else source_scope_question_json_path(statement, batch, index))
                     or not isinstance(detail.get("precondition_sha256"), str)
                     or len(detail["precondition_sha256"]) != 64
                     or (attempt.raw_output_text is not None and _sha256(attempt.raw_output_text) != attempt.raw_output_sha256)):
@@ -8389,7 +8395,7 @@ class ProtocolControlAgentRunner:
                 detail = {
                     "workflow_phase": "source_scope_question_recheck",
                     "code": "SOURCE_SCOPE_QUESTION_RECHECK",
-                    "statement_id": index, "json_path": f"statements[{index}].unresolved",
+                    "statement_id": index, "json_path": source_scope_question_json_path(statement, batch, index),
                     "source_refs": list(next(unit.source_span_ids for unit in batch.owned_units
                                              if unit.structure_unit_id == statement.structure_unit_id)),
                     "retry_class": "source_semantic_review", "affected_dependents": [index],
@@ -8398,9 +8404,11 @@ class ProtocolControlAgentRunner:
                     "native_guidance_version": NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
                 }
                 official_context = source_question_official_context(statement, batch)
-                if official_context is not None:
-                    detail["source_context_sha256"] = source_question_context_identity(statement, batch)
-                    detail["source_context_version"] = official_context["version"]
+                context_identity = source_question_context_identity(statement, batch)
+                if context_identity is not None:
+                    detail["source_context_sha256"] = context_identity
+                    detail["source_context_version"] = (official_context["version"]
+                        if official_context is not None else TABLE_SEQUENCE_SOURCE_VERSION)
                 try:
                     source_repairs += 1
                     repair_used = True
@@ -8882,6 +8890,9 @@ class ProtocolControlAgentRunner:
                 if post_decision_conflicts:
                     indexes = sorted({index for entry in post_decision_conflicts
                                       for index in entry.action_candidate_indexes})
+                    witnessed_sequence = all(source_interpretation.statements[
+                        entry.statement_index].eligibility_sequence_context is not None
+                        for entry in post_decision_conflicts)
                     raise ProtocolControlAgentWireValidationError(
                         "POST_ELIGIBILITY_ACTION_AS_CONTROL",
                         "原文明确在确定入排资格后执行的动作，不得作为本次资格前置条件："
@@ -8890,6 +8901,8 @@ class ProtocolControlAgentRunner:
                                                    for entry in post_decision_conflicts}),
                         candidate_ids=[output.candidates[index].control_candidate_id for index in indexes],
                         candidate_indexes=indexes,
+                        allow_source_closure_rewrite=witnessed_sequence,
+                        allow_post_enrollment_reclassification=witnessed_sequence,
                     )
                 attributed_conflicts = [
                     entry for entry in coverage

@@ -155,6 +155,70 @@ def test_second_opted_in_failure_stops_before_more_model_reads(session_factory, 
     }
 
 
+@pytest.mark.parametrize("new_failures", [0, 1, 2])
+def test_retained_failures_do_not_spend_new_read_limit_and_never_allow_publication(
+    session_factory, clock, new_failures,
+):
+    reads = [f"deep_{number:04d}" for number in range(1, 6)]
+    create_job_with_steps(session_factory, clock, job_id="retained-reads",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}}, steps=[*[{"step_id": step, "name": "read"} for step in reads],
+                   {"step_id": "gate", "name": "publish", "depends_on": tuple(reads)}])
+    calls = []
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        if ctx.step_id in reads[:2]:
+            raise StepFailure(retryable=False, error_code="INVALID_READ", retained_failure=True,
+                              diagnostic_checkpoint={"revalidated_history": True, "new_model_calls": 0})
+        if ctx.step_id in reads[2:2 + new_failures]:
+            raise StepFailure(retryable=False, error_code="INVALID_READ", diagnostic_checkpoint={
+                # A copied marker is not executor authority to exempt a new read.
+                "_runner_failure_origin": "revalidated-retained-failure/v1"})
+        return {"step": ctx.step_id}
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("retained-reads") is True
+    assert calls == (reads[:4] if new_failures == 2 else reads)
+    snap = _snapshot(session_factory, clock, "retained-reads")
+    assert snap.state == "failed_final" and "gate" not in calls
+    assert all(step.state == "failed_final" for step in snap.steps if step.step_id in reads[:2])
+    with _store(session_factory, clock) as store:
+        assert store.get_last_checkpoint("retained-reads", reads[0])[1]["_runner_failure_origin"] == "revalidated-retained-failure/v1"
+        if new_failures:
+            assert store.get_last_checkpoint("retained-reads", reads[2])[1]["_runner_failure_origin"] == "new-failure/v1"
+
+
+def test_retained_failure_origin_is_preserved_across_worker_stop(session_factory, clock):
+    create_job_with_steps(session_factory, clock, job_id="retained-stop",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}}, steps=[{"step_id": f"deep_{number:04d}", "name": "read"} for number in range(1, 4)])
+    calls = []
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        if ctx.step_id == "deep_0001":
+            first.request_stop()
+            raise StepFailure(retryable=False, error_code="INVALID_READ", retained_failure=True,
+                              diagnostic_checkpoint={"revalidated_history": True})
+        if ctx.step_id == "deep_0002":
+            raise StepFailure(retryable=False, error_code="INVALID_READ")
+        return {"step": ctx.step_id}
+    first = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    first.run_job("retained-stop")
+    assert _snapshot(session_factory, clock, "retained-stop").state == "queued"
+    second = JobRunner(session_factory, {"demo": executor}, worker_id="w2", now=clock.now)
+    second.run_job("retained-stop")
+    assert calls == ["deep_0001", "deep_0002", "deep_0003"]
+    assert _snapshot(session_factory, clock, "retained-stop").state == "failed_final"
+
+
+def test_retained_failure_cannot_be_retryable_or_missing_diagnostic():
+    with pytest.raises(ValueError):
+        StepFailure(retryable=True, error_code="INVALID_READ", retained_failure=True, diagnostic_checkpoint={})
+    with pytest.raises(ValueError):
+        StepFailure(retryable=False, error_code="INVALID_READ", retained_failure=True)
+
+
 def test_opted_in_failure_continues_from_checkpoint_after_worker_stop(session_factory, clock):
     create_job_with_steps(
         session_factory, clock, job_id="resume-independent",

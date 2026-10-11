@@ -74,12 +74,17 @@ class StepFailure(WorkflowError):
         error_code: str,
         detail: str | None = None,
         diagnostic_checkpoint: dict[str, Any] | None = None,
+        retained_failure: bool = False,
     ) -> None:
+        if type(retained_failure) is not bool or retained_failure and (
+                retryable or diagnostic_checkpoint is None):
+            raise ValueError("保留失败须来自已重核的终态诊断，不能用作重试")
         super().__init__(detail or error_code, retryable=retryable, error_code=error_code)
         self.retryable = retryable
         self.error_code = error_code
         self.detail = detail
         self.diagnostic_checkpoint = diagnostic_checkpoint
+        self.retained_failure = retained_failure
 
 
 class StepAwaitingUser(WorkflowError):

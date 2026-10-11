@@ -6188,6 +6188,7 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
     ("citation_aligned", None), ("citation_aligned", "changed_proof"),
     ("negative_alignment", None), ("negative_alignment", "changed_proof"),
     ("negative_alignment", "second_failure"),
+    ("negative_alignment", "second_new_failure"),
 ])
 def test_preserved_failure_revalidates_restricted_source_through_actual_job_checkpoint(
     data_paths, session_factory, monkeypatch, kind, failure,
@@ -6256,8 +6257,10 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
             StepSpec(step_id="deep_0002", name="独立来源核对"),
             StepSpec(step_id="gate", name="完整采用检查", depends_on=["deep_0001", "deep_0002"]),
         ])
-        if failure == "second_failure":
-            current_steps.insert(2, StepSpec(step_id="deep_0003", name="未发送的后续核对"))
+        if failure in {"second_failure", "second_new_failure"}:
+            current_steps.insert(2, StepSpec(step_id="deep_0003", name="另一独立核对"))
+        if failure == "second_new_failure":
+            current_steps.insert(3, StepSpec(step_id="deep_0004", name="新失败边界后的未发送核对"))
     current = JobService(session_factory, now=_now).create_job(
         idempotency_key="current-restricted-revalidation", job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
         payload={"deep_source_job_id": old.job_id, "deep_reuse_plan": plan,
@@ -6298,12 +6301,18 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
     config = SimpleNamespace(data_paths=data_paths, session_factory=session_factory, now=_now)
     def execute(context):
         if kind == "negative_alignment" and context.step_id == "deep_0002":
-            if failure == "second_failure":
+            if failure in {"second_failure", "second_new_failure"}:
                 raise StepFailure(retryable=False,
                     error_code="PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
                     detail="第二个独立来源仍有含义不一致")
             return {"independent_source_checked": True}
-        assert context.step_id != "deep_0003", "原有两次失败边界不得刷新"
+        if context.step_id == "deep_0003":
+            if failure == "second_new_failure":
+                raise StepFailure(retryable=False,
+                    error_code="PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+                    detail="本次第二个新读取的来源未核清")
+            return {"independent_source_checked": True}
+        assert context.step_id != "deep_0004", "本次两次新读取失败边界不得刷新"
         assert context.step_id != "gate", "失败要求不得进入完整采用"
         return module._execute_deep(context, config)
 
@@ -6317,7 +6326,7 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
         assert store.get_job(old.job_id).state == "failed_final"
         saved = store.get_last_checkpoint(current.job_id, "deep_0001")
     assert _job_checkpoint_fingerprint(session_factory, old.job_id) == history
-    if failure is not None and failure != "second_failure":
+    if failure is not None and failure not in {"second_failure", "second_new_failure"}:
         assert job.state == "failed_final"
         assert job.error_code == {
             "changed_proof": "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
@@ -6331,14 +6340,18 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
         assert saved[1]["new_model_calls"] == 0
         assert saved[1]["model_call_receipts"] == []
         assert saved[1]["adopted"] is False
+        assert saved[1]["_runner_failure_origin"] == "revalidated-retained-failure/v1"
         assert saved[1]["partial_wire"] == diagnostic["partial_wire"]
         assert saved[1]["source_candidate_alignment"] == diagnostic["source_candidate_alignment"]
         with session_factory() as session:
             steps = {step.step_id: step for step in JobStore(session, now=_now).list_steps(current.job_id)}
         assert steps["deep_0001"].state == "failed_final"
-        assert steps["deep_0002"].state == ("failed_final" if failure == "second_failure" else "completed")
+        assert steps["deep_0002"].state == ("failed_final" if failure in {"second_failure", "second_new_failure"} else "completed")
         if failure == "second_failure":
-            assert steps["deep_0003"].state != "completed"
+            assert steps["deep_0003"].state == "completed"
+        elif failure == "second_new_failure":
+            assert steps["deep_0003"].state == "failed_final"
+            assert steps["deep_0004"].state == "queued"
         assert steps["gate"].state == "failed_final"
         assert not declarations_called
         return

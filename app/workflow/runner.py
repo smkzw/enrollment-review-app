@@ -263,12 +263,16 @@ class JobRunner:
         if not eligible:
             return False
         with self.session_factory() as session:
-            prior_failed = sum(
-                step.state == "failed_final" and step.step_id.startswith(prefix)
-                and step.error_code in codes
-                for step in self._store(session).list_steps(context.job_id)
-            )
-        return prior_failed + 1 < max_failed
+            store = self._store(session)
+            prior_failed = 0
+            for step in store.list_steps(context.job_id):
+                if (step.state != "failed_final" or not step.step_id.startswith(prefix)
+                        or step.error_code not in codes):
+                    continue
+                saved = store.get_last_checkpoint(context.job_id, step.step_id)
+                if saved is None or saved[1].get("_runner_failure_origin") != "revalidated-retained-failure/v1":
+                    prior_failed += 1
+        return prior_failed + int(not failure.retained_failure) < max_failed
 
     def _effective_parallel_limit(
         self, payload: Mapping[str, Any] | None
@@ -754,6 +758,12 @@ class JobRunner:
         settle_job: bool = True,
     ) -> StepFailureOutcome:
         lease = self._renew_if_due(lease)
+        diagnostic = failure.diagnostic_checkpoint
+        if diagnostic is not None:
+            # The executor must explicitly revalidate retention; copying a
+            # historical diagnostic cannot change a fresh failure's accounting.
+            diagnostic = {**diagnostic, "_runner_failure_origin": (
+                "revalidated-retained-failure/v1" if failure.retained_failure else "new-failure/v1")}
         with self.session_factory() as session, session.begin():
             return self._store(session).fail_step(
                 lease,
@@ -761,7 +771,7 @@ class JobRunner:
                 error_code=failure.error_code,
                 retryable=failure.retryable,
                 detail=failure.detail,
-                diagnostic_checkpoint=failure.diagnostic_checkpoint,
+                diagnostic_checkpoint=diagnostic,
                 settle_job=settle_job,
             )
 
