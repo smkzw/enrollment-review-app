@@ -3,7 +3,7 @@
   "name": "e2e-eligibility-review",
   "title": "端到端入排审核：判断检索界面+入排工作台+真实全链验收",
   "description": "1006V1交付冻结窗口：同源完整要求下既有5份24页隔离当前节点工作稿，正式UI一次有源更正/补证、受影响重算、新旧结果。保留R1及1001V1，只有直接阻断/错误采用保护修复准入。",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,

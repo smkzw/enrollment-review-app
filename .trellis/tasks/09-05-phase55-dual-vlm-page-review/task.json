@@ -3,7 +3,7 @@
   "name": "phase55-dual-vlm-page-review",
   "title": "Phase 5.5 双模型逐页判读合同与评测",
   "description": "按 R3 设计建立 ClausePack 投影、页级判读与对账合同，并在 Phase 5 临床手写覆盖阻断保持开放的条件下准备产品自有双 VLM harness。",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,

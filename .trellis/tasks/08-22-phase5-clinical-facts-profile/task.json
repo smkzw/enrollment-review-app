@@ -3,7 +3,7 @@
   "name": "phase5-clinical-facts-profile",
   "title": "Phase 5 临床事实与 Patient Profile",
   "description": "从 Phase 4 活动证据处理修订生成可回源临床事实、事件、用药暴露、资料覆盖与 Patient Profile，不产生入排最终结论。",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": "backend, frontend, evidence-normalizer, clinical-fact-gate, patient-profile, clinical-regression",
   "package": null,
