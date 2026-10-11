@@ -115,6 +115,7 @@ from .protocol_control_candidate_alignment import (
     validate_candidate_alignment,
 )
 from .protocol_control_source_function import (
+    SOURCE_EXCEPTION_FIELD_REPAIR_VERSION,
     SOURCE_FUNCTION_RECHECK_VERSION,
     SourceFunctionRecheckUnresolved,
     apply_source_function_recheck,
@@ -122,6 +123,7 @@ from .protocol_control_source_function import (
     build_source_function_field_repair_prompt,
     build_source_function_recheck_prompt,
     can_recheck_source_function,
+    missing_source_exception_witness,
 )
 from .protocol_control_source_interpretation import (
     SOURCE_DEFINITION_CONSUMER_PROMPT_VERSION,
@@ -4742,7 +4744,8 @@ def source_statement_coverage(
                 )
             # Physical visit correspondence selects a semantic check; it is not
             # proof that the candidate's policies and other relations are faithful.
-            if expressed and not native_visit_scope and not statement.unresolved:
+            if (expressed and not native_visit_scope and not statement.unresolved
+                    and "exception" not in statement.decision_functions):
                 linked_candidates.append(candidate_index)
         disposition = dispositions[statement.structure_unit_id]
         quote = normalize_source_excerpt(statement.quoted_text)
@@ -7633,12 +7636,14 @@ class ProtocolControlAgentRunner:
                       "source_scope_question_recheck", "source_context_completion",
                       "source_unit_quote_completion",
                       "source_heading_scope_recheck",
+                      "source_exception_field_repair",
                   }],
             ])
             if any(attempt.error_detail and attempt.error_detail.get("workflow_phase") in {
                 "source_scope_question_recheck", "source_function_field_repair", "source_context_completion",
                 "source_unit_quote_completion",
                 "source_heading_scope_recheck",
+                "source_exception_field_repair",
             }
                    for attempt in attempts):
                 values.setdefault("repair_used", True)
@@ -7857,10 +7862,40 @@ class ProtocolControlAgentRunner:
         seen_context_attempts: set[int] = set()
         seen_heading_attempts: set[tuple[int, str]] = set()
         seen_unit_completions: set[tuple[str, str]] = set()
+        seen_exception_repairs: set[int] = set()
         for record in question_history:
             attempt = ProtocolControlAgentAttempt.model_validate(record)
             detail = attempt.error_detail or {}
             index = detail.get("statement_id")
+            if detail.get("workflow_phase") == "source_exception_field_repair":
+                if (source_interpretation is None or type(index) is not int
+                        or not 0 <= index < len(source_interpretation.statements)):
+                    raise ValueError("例外限定补正的历史目标无效，未发送请求")
+                statement = source_interpretation.statements[index]
+                unit = next(unit for unit in batch.owned_units
+                            if unit.structure_unit_id == statement.structure_unit_id)
+                frozen = statement.model_dump(mode="json", exclude={"exception_words", "unresolved"})
+                if (detail.get("code") != "SOURCE_EXCEPTION_WITNESS_MISSING"
+                        or detail.get("guidance_version") != SOURCE_EXCEPTION_FIELD_REPAIR_VERSION
+                        or detail.get("structure_unit_id") != unit.structure_unit_id
+                        or detail.get("source_refs") != list(unit.source_span_ids)
+                        or detail.get("json_path") != f"/statements/{index}/exception_words"
+                        or detail.get("frozen_statement_sha256") != _sha256(_stable_json(frozen))
+                        or detail.get("source_context_sha256") != _sha256(batch.model_dump_json())
+                        or (attempt.raw_output_text is not None
+                            and _sha256(attempt.raw_output_text) != attempt.raw_output_sha256)):
+                    raise ValueError("例外限定补正的历史见证损坏或来源已变，未发送请求")
+                if attempt.outcome == "parsed":
+                    if not attempt.raw_output_text:
+                        raise ValueError("例外限定补正缺少实际答复，未发送请求")
+                    proposal = SourceInterpretation.model_validate_json(attempt.raw_output_text)
+                    if (proposal.version != source_interpretation.version
+                            or len(proposal.statements) != 1 or proposal.units_without_statement
+                            or proposal.statements[0] != statement):
+                        raise ValueError("例外限定补正答复与保存来源不一致，未发送请求")
+                if detail.get("called") is True and attempt.outcome != "transport_failed":
+                    seen_exception_repairs.add(index)
+                continue
             context_completion = detail.get("workflow_phase") == "source_context_completion"
             unit_completion = detail.get("workflow_phase") == "source_unit_quote_completion"
             heading_recheck = detail.get("workflow_phase") == "source_heading_scope_recheck"
@@ -8443,6 +8478,60 @@ class ProtocolControlAgentRunner:
                         "逐字定位时填写 scope_quote；否则留空。仍须返回全部原文陈述，"
                         "不得改写原文、推断医学含义或遗漏其他单元。"
                     )
+        if source_interpretation is not None:
+            # Recover only the missing source field, before any candidate proof
+            # may be reused. An excerpt is still subject to semantic review.
+            while (issue := missing_source_exception_witness(batch, source_interpretation)) is not None:
+                statement = source_interpretation.statements[issue.statement_id]
+                source_text = source_interpretation.model_dump_json()
+                detail = {"workflow_phase": "source_exception_field_repair", "code": issue.code,
+                    "guidance_version": SOURCE_EXCEPTION_FIELD_REPAIR_VERSION,
+                    "statement_id": issue.statement_id, "structure_unit_id": issue.structure_unit_id,
+                    "json_path": issue.json_path, "source_refs": issue.source_refs,
+                    "precondition_sha256": _sha256(source_text),
+                    "frozen_statement_sha256": _sha256(_stable_json(statement.model_dump(
+                        mode="json", exclude={"exception_words", "unresolved"}))),
+                    "source_context_sha256": _sha256(batch.model_dump_json()), "called": False}
+                response = None
+                try:
+                    if issue.statement_id in seen_exception_repairs or source_repairs >= source_repair_limit:
+                        raise ValueError("该来源限定已尝试补正或共享额度已用完，未重复读取")
+                    if not callable(source_reader):
+                        raise ValueError("单条来源限定补正服务不可用")
+                    prompt = build_source_function_field_repair_prompt(batch, source_text, issue)
+                    detail["prompt_sha256"] = _sha256(prompt)
+                    source_repairs += 1
+                    detail["called"] = True
+                    seen_exception_repairs.add(issue.statement_id)
+                    response = source_reader(prompt=prompt)
+                    merged = apply_source_function_field_repair(batch, source_text, issue, response.text)
+                    source_interpretation = parse_product_source_interpretation(batch, merged)
+                    validate_source_interpretation(batch, source_interpretation)
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1, session_id=response.session_id,
+                        raw_output_sha256=_sha256(response.text), raw_output_chars=len(response.text),
+                        raw_output_text=response.text, outcome="parsed", error_detail=detail,
+                        issues=["只补存本条例外限定；来源、兄弟要求不变，仍待重新核对含义"],
+                    ))
+                    repair_used = True
+                except Exception as exc:
+                    code = protocol_control_call_failure_code(exc) or (
+                        "SOURCE_EXCEPTION_FIELD_REPAIR_TRANSPORT_FAILED" if detail["called"] and response is None
+                        else "SOURCE_EXCEPTION_FIELD_REPAIR_INVALID")
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1, session_id=response.session_id if response else session_id or "source-exception-failed",
+                        raw_output_sha256=_sha256(response.text if response else str(exc)),
+                        raw_output_chars=len(response.text) if response else None,
+                        raw_output_text=response.text if response else None,
+                        outcome="schema_invalid" if response else "transport_failed" if detail["called"] else "publication_invalid",
+                        error_classes=[code], error_detail=detail, issues=[str(exc)[:1200]],
+                    ))
+                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                        session_id=session_id or "source-exception-failed", attempts=attempts,
+                        source_interpretation=source_interpretation, partial_wire=partial_wire,
+                        source_target_review=resume_source_target_review,
+                        source_candidate_alignment=resume_source_candidate_alignment,
+                        source_statement_coverage=list(resume_source_statement_coverage))
         if source_interpretation is not None:
             for index, statement in enumerate(source_interpretation.statements):
                 if not heading_scope_requires_recheck(batch, statement):

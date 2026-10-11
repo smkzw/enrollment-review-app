@@ -127,6 +127,7 @@ from app.agents.protocol_control_source_function import (
     apply_source_function_recheck,
     build_source_function_recheck_prompt,
     can_recheck_source_function,
+    missing_source_exception_witness,
 )
 from app.agents.protocol_control_stage_compiler import (
     RELATIVE_STAGE_REQUIREMENT_VERSION,
@@ -3322,6 +3323,190 @@ def test_runner_source_function_field_repair_is_local_bounded_and_not_adoption(m
             assert result.attempts[-1].error_classes == ["SOURCE_FUNCTION_FIELD_REPAIR_TRANSPORT_FAILED"]
     assert any(attempt.raw_output_text == invalid.model_dump_json() and attempt.outcome == "schema_invalid"
                for attempt in result.attempts)
+
+
+def _exception_field_material(text="材料分发及回收，尚未同意者除外"):
+    from app.agents.protocol_control_candidate_alignment import SourceCandidateAlignment, SOURCE_CANDIDATE_ALIGNMENT_VERSION
+    batch = _batch()
+    unit = batch.owned_units[0]
+    unit.member_texts = [text]
+    unit.excerpt = text
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id=unit.structure_unit_id,
+            quoted_text=text, force="required", decision_functions=["action", "exception"], time_words=[])],
+        units_without_statement=["su-02"])
+    candidate = _candidate().model_copy(update={"applicability_expression": None, "exception_expression": None}, deep=True)
+    wire = _wire(candidate=candidate)
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    atom.kind = ControlObligationKind.COMPLETE_OR_VERIFY
+    atom.statement = text
+    atom.evaluation = type(atom.evaluation).model_validate(_evaluation(text, "span:01", text))
+    atom.source_excerpts = [text]
+    evidence = wire.candidate_drafts[0].minimum_evidence[0]
+    evidence.source_policy = type(evidence.source_policy).model_validate(_evidence_policy("span:01", text))
+    alignment = SourceCandidateAlignment(version=SOURCE_CANDIDATE_ALIGNMENT_VERSION, items=[{
+        "statement_index": 0, "candidate_index": 0, "decision": "fully_expressed",
+        "source_excerpt": text, "candidate_atom_quotes": [text], "unresolved_dimensions": []}])
+    return batch, inventory, wire, alignment
+
+
+@pytest.mark.parametrize("text,exception", [
+    ("材料分发及回收，尚未同意者除外", "尚未同意者除外"),
+    ("尚未同意者除外；材料分发及回收", "尚未同意者除外"),
+    ("符合既定条件时可以免于再次提交材料", "符合既定条件时可以免于再次提交材料"),
+])
+def test_source_exception_field_repair_freezes_source_and_requires_semantic_review(text, exception):
+    from app.agents.protocol_control_candidate_alignment import bind_candidate_alignment
+    batch, inventory, wire, alignment = _exception_field_material(text)
+    inventory.statements.append(SourceStatement(structure_unit_id="su-02",
+        quoted_text=batch.owned_units[1].excerpt, force="required",
+        decision_functions=["action"], time_words=["筛选"] ))
+    inventory.units_without_statement = []
+    before = inventory.model_dump_json()
+    issue = missing_source_exception_witness(batch, inventory)
+    assert issue and issue.statement_id == 0
+    proposal = inventory.model_copy(update={"statements": [inventory.statements[0].model_copy(deep=True)],
+                                             "units_without_statement": []}, deep=True)
+    proposal.statements[0].exception_words = exception
+    prompt = build_source_function_field_repair_prompt(batch, before, issue)
+    assert "只补正指定陈述" in prompt and text in prompt
+    revised = parse_product_source_interpretation(batch, apply_source_function_field_repair(
+        batch, before, issue, proposal.model_dump_json()))
+    assert inventory.model_dump_json() == before
+    assert revised.statements[0].model_dump(exclude={"exception_words"}) == inventory.statements[0].model_dump(exclude={"exception_words"})
+    assert revised.statements[1:] == inventory.statements[1:]
+    assert missing_source_exception_witness(batch, revised) is None
+    # The old positive reply cannot bind while the source field is missing.
+    with pytest.raises(ValueError):
+        bind_candidate_alignment(batch, inventory, source_statement_coverage(batch, inventory, wire),
+                                 wire, alignment, alignment.model_dump_json())
+    bind_candidate_alignment(batch, revised, source_statement_coverage(batch, revised, wire),
+                             wire, alignment, alignment.model_dump_json())
+    for field, value in [("exception_words", "已经同意者除外"), ("quoted_text", "改写的原文"),
+                         ("decision_functions", ["background"]), ("time_words", ["筛选期"])]:
+        changed = proposal.model_copy(deep=True)
+        setattr(changed.statements[0], field, value)
+        with pytest.raises(ValueError):
+            apply_source_function_field_repair(batch, before, issue, changed.model_dump_json())
+    unknown = proposal.model_copy(deep=True)
+    unknown.statements[0].exception_words = None
+    unknown.statements[0].unresolved = ["例外适用对象在原文中仍不清楚"]
+    revised_unknown = parse_product_source_interpretation(batch, apply_source_function_field_repair(
+        batch, before, issue, unknown.model_dump_json()))
+    assert revised_unknown.statements[0].unresolved == unknown.statements[0].unresolved
+    unknown.statements[0].unresolved = [" "]
+    with pytest.raises(ValueError, match="具体内容"):
+        apply_source_function_field_repair(batch, before, issue, unknown.model_dump_json())
+    # Copying the complete action is not a completed exception-semantics review.
+    exact_coverage = source_statement_coverage(batch, revised, wire)
+    assert exact_coverage[0].status == "candidate_linked"
+
+
+@pytest.mark.parametrize("mode", ["valid", "unknown", "bad_quote", "bad_json", "transport", "no_budget"])
+@pytest.mark.parametrize("resume", [False, True])
+def test_runner_source_exception_field_repair_preserves_history_and_affected_consumer(mode, resume):
+    batch, inventory, wire, alignment = _exception_field_material()
+    atom = wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    atom.statement = "尚未同意者除外，其余人员应分发并回收材料"
+    atom.evaluation = atom.evaluation.model_copy(update={"proposition": atom.statement})
+    alignment.items[0].candidate_atom_quotes = [atom.statement]
+    proposal = inventory.model_copy(update={"statements": [inventory.statements[0].model_copy(deep=True)],
+                                             "units_without_statement": []}, deep=True)
+    proposal.statements[0].exception_words = "尚未同意者除外"
+    if mode == "bad_quote":
+        proposal.statements[0].exception_words = "已经同意者除外"
+    if mode == "unknown":
+        proposal.statements[0].exception_words = None
+        proposal.statements[0].unresolved = ["例外适用对象在原文中仍不清楚"]
+
+    class Transport(_FakeTransport):
+        source_calls = 0
+        review_calls = 0
+
+        def start_source_interpretation(self, *, prompt):
+            self.source_calls += 1
+            if not resume and self.source_calls == 1:
+                return ProtocolControlAgentResponse(session_id="source-original", text=inventory.model_dump_json())
+            assert "只补正指定陈述" in prompt
+            if mode == "transport":
+                raise TimeoutError("读取暂不可用")
+            return ProtocolControlAgentResponse(session_id="exception-field", text="{" if mode == "bad_json" else proposal.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            self.review_calls += 1
+            return ProtocolControlAgentResponse(session_id="fresh-alignment", text=alignment.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target", text=SourceTargetReview(
+                version=SOURCE_TARGET_REVIEW_VERSION, items=[SourceTargetReviewItem(
+                    statement_index=0, decision="unresolved" if mode == "unknown" else "additional_requirement",
+                    source_action_excerpt=inventory.statements[0].quoted_text,
+                    unresolved_aspects=["例外适用对象尚未核清"] if mode == "unknown" else ["原有目录未覆盖"],
+                )]).model_dump_json())
+
+        def continue_session(self, **kwargs):
+            pytest.fail("限定字段补正不能重读整个候选组")
+
+    transport = Transport([ProtocolControlAgentResponse(session_id="wire", text=wire.model_dump_json())])
+    kwargs = {"resume_wire": wire, "resume_source_interpretation": inventory,
+              "resume_session_id": "saved-wire"} if resume else {}
+    result = ProtocolControlAgentRunner(max_schema_repairs=0 if mode == "no_budget" else 1).run(
+        batch, transport, output_validator=lambda _output: None, **kwargs)
+    history = result.source_scope_question_history
+    assert len(history) == 1
+    detail = history[0]["error_detail"]
+    assert detail["workflow_phase"] == "source_exception_field_repair"
+    assert detail["called"] is (mode != "no_budget")
+    assert transport.source_calls == (0 if resume else 1) + (mode != "no_budget")
+    assert len(transport.prompts) <= (0 if resume else 1)
+    assert inventory.statements[0].exception_words is None
+    from app.services.protocol_control_execution import _saved_source_scope_question_history, _validate_saved_source_review
+    saved = result.model_dump(mode="json")
+    saved["source_scope_question_history"] = history
+    assert _saved_source_scope_question_history(saved) == history
+    if mode == "valid":
+        assert result.final_output is not None
+        assert transport.review_calls > 0
+        assert result.source_interpretation.statements[0].exception_words == "尚未同意者除外"
+        _validate_saved_source_review(batch, result)
+    else:
+        assert result.final_output is None
+    if mode in {"bad_quote", "bad_json", "transport"}:
+        class Recovered(Transport):
+            def start_source_interpretation(self, *, prompt):
+                self.source_calls += 1
+                assert "只补正指定陈述" in prompt
+                recovered = proposal.model_copy(deep=True)
+                recovered.statements[0].exception_words = "尚未同意者除外"
+                return ProtocolControlAgentResponse(session_id="recovered", text=recovered.model_dump_json())
+        replay = Recovered([])
+        resumed = ProtocolControlAgentRunner(max_schema_repairs=3).run(
+            batch, replay, output_validator=lambda _output: None,
+            resume_wire=wire, resume_source_interpretation=inventory, resume_session_id="saved-wire",
+            resume_source_scope_question_history=history)
+        if mode == "transport":
+            assert replay.source_calls == 1 and resumed.final_output is not None
+            assert len(resumed.source_scope_question_history) == 2
+            assert sum(row["error_detail"]["called"] for row in resumed.source_scope_question_history) == 2
+            exhausted = Recovered([])
+            blocked = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+                batch, exhausted, output_validator=lambda _output: None,
+                resume_wire=wire, resume_source_interpretation=inventory, resume_session_id="saved-wire",
+                resume_source_scope_question_history=history)
+            assert not exhausted.source_calls and blocked.final_output is None
+        else:
+            assert not replay.source_calls and resumed.final_output is None
+    if mode == "valid":
+        for field, value in [("source_refs", ["wrong-span"]), ("frozen_statement_sha256", "0" * 64),
+                             ("source_context_sha256", "0" * 64), ("statement_id", 99)]:
+            corrupted = deepcopy(history)
+            corrupted[0]["error_detail"][field] = value
+            replay = Transport([])
+            with pytest.raises(ValueError):
+                ProtocolControlAgentRunner().run(batch, replay, output_validator=lambda _output: None,
+                    resume_wire=wire, resume_source_interpretation=result.source_interpretation,
+                    resume_session_id="saved-wire", resume_source_scope_question_history=corrupted)
+            assert not replay.source_calls
 
 
 def test_source_function_recheck_can_reaffirm_without_approving_background() -> None:

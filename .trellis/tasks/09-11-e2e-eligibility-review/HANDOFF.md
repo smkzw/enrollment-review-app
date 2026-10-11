@@ -2,11 +2,11 @@
 
 ## 当前事实
 
-**现行接续：** Goal active，claims_complete=false；最近真实产品源码5bb2d4e6、Job d5898e74c0f54c3ea6bc85ddb60324c6 failed_final/PROTOCOL_CONTROL_EVIDENCE_POLICY_UNJUSTIFIED，5调用287.742400167秒/exit3，44完成/45排队，45后置政策核对失败。0完整共同发布/启用/签发。此前168d/52完成为历史；预检可复用数不冒充实际执行。新后置政策恢复包详见reviews/rv1006-late-policy-owner-disposition-20261011.md：新有效负核对才进入既有局部修订，完整正向证明才保留无关修订，坏格式/来源/传输不降级。末相连56pass/8.25秒/exit0，C03同路线失败后恢复exit0，均非临床验收。只读新预检待接收，随后合法新建；本记录不是暂停。
+**现行接续：** Goal工具实查active，claims_complete=false；最近真实产品源码53cdd1bb、Job feecd04fa2d44b35a278b5b8a9ce75eb failed_final/PROTOCOL_CONTROL_EVIDENCE_POLICY_UNJUSTIFIED，5调用323.948658167秒/exit3，44完成/45排队。首因是来源用途已标例外但exception_words为空，后置答复无法绑定，不是临床资料缺失。0完整共同发布/启用/签发。新包复用现有单条字段补正，仅exception_words/unresolved可变，兄弟/原文冻结；摘录不能跳过例外语义核对。传输在原累计剩余额度续读，坏内容不重复；旧核对保留但变更身份后不作批准。相连末85pass/8.00秒/exit0；C03 Grok/high初审及同会话续审exit0/no fallback、源码只读，均非临床验收。详见reviews/rv1006-exception-field-owner-disposition-20261011.md；本记录不是暂停。
 
 **当前完成的软件与核对：** 54保留字面同源先决时间、动作与完整来源，保存消费者也核捕获；缺口以typed错误逐组失效，不把技术问题推给研究者。45原条件对应门不放宽；沿现有continue_atom仅修proposition，限冻结摘录内逐字判断句，其余字段/兄弟不变，完整门及新的含义核对仍必需。两项仅validator身份改变，不新建平台/读道/项目词表。C03 Grok/high新鲜初审及同会话续审exit0/no fallback，末保护所有者验证；非临床批准。原模块窗101pass/1.16秒、服务窗65pass/17.30秒，各exit0/5SWIG、不累加。
 
-**实际复用及下一运行：** 来源168d全部90组只读当前预检50reusable/1resume_partial/39refresh，0调用/0写/全库hash保持。45仅未采用草稿和不变兄弟证明；46/48旧来源捕获不足须刷新，54无合法成功种子；54实际旧拒答现0调用重验passed，保留旧schema_invalid，不造parsed或旧批准。现行无次数测试授权不等于null逻辑账为0；旧55/4及9物理回执保留。新运行从合法产品API创建并核全部90步，不复活旧Job或复制大库。完整同源要求→5PDF24页当前工作稿→正式UI更正→新旧报告仍未成。详见implement当前表、review_index及reviews/rv1006-sequence-condition-owner-disposition-20261011.md。原件/旧终态/七份继承dirty保留；本记录不是暂停。
+**实际复用及下一运行：** feecd全部90组当前预检50reusable/1resume_partial/39refresh，0调用/0写/全库hash保持，rv1006-exception-field-preflight-20261011-v1.json仅本机。45仍为未采用草稿；旧调用和终态保持。下一在同一已授权隔离数据目录从合法产品API创建，并核全部90步与计划一致；不重复已成功50组或复制大库。完整同源要求→5PDF24页当前工作稿→正式UI更正→新旧报告仍未成。新来源补正必须实际保存、读回、消费，不能只凭85测试宣称完成。七份继承dirty保持，Git不含原件/库/临床原答/env；本记录不是暂停。
 
 ### 以下许可/豁免包为历史，不覆盖当前事实
 

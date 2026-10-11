@@ -25,11 +25,29 @@ from .protocol_control_source_interpretation import (
 
 SOURCE_FUNCTION_RECHECK_VERSION = "phase5/source-function-recheck/v3"
 SOURCE_FUNCTION_FIELD_REPAIR_VERSION = "phase5/source-function-field-repair/v1"
+SOURCE_EXCEPTION_FIELD_REPAIR_VERSION = "phase5/source-exception-field-repair/v1"
+
+
+def missing_source_exception_witness(batch, interpretation):
+    """Locate incomplete source metadata; never infer the missing exception."""
+    for index, statement in enumerate(interpretation.statements):
+        if (not {"action", "exception"} <= set(statement.decision_functions)
+                or statement.exception_words or statement.unresolved):
+            continue
+        unit = next(unit for unit in batch.owned_units
+                    if unit.structure_unit_id == statement.structure_unit_id)
+        return SourceInterpretationValidationError(
+            "SOURCE_EXCEPTION_WITNESS_MISSING", "例外用途缺少原文限定摘录",
+            statement_id=index, structure_unit_id=statement.structure_unit_id,
+            json_path=f"/statements/{index}/exception_words",
+            source_refs=list(unit.source_span_ids), retry_class="source_interpretation")
+    return None
 
 
 def _function_field_repair_source(batch, text, issue):
     if (not isinstance(issue, SourceInterpretationValidationError)
-            or issue.code not in {"SOURCE_FUNCTION_UNSTATED", "SOURCE_FUNCTION_UNRESOLVED"}):
+            or issue.code not in {"SOURCE_FUNCTION_UNSTATED", "SOURCE_FUNCTION_UNRESOLVED",
+                                  "SOURCE_EXCEPTION_WITNESS_MISSING"}):
         raise ValueError("只可补正已定位的来源用途字段")
     payload = json.loads(text)
     # This object is only a repair input, never an accepted interpretation.
@@ -42,14 +60,21 @@ def _function_field_repair_source(batch, text, issue):
     unit = next(unit for unit in batch.owned_units
                 if unit.structure_unit_id == statement.structure_unit_id)
     raw = payload["statements"][index]
+    exception_issue = issue.code == "SOURCE_EXCEPTION_WITNESS_MISSING"
     missing = "decision_functions" not in raw
     unqualified = raw.get("decision_functions") == ["unclassified"] and not raw.get("unresolved")
+    field = "exception_words" if exception_issue else "decision_functions"
     if (issue.structure_unit_id != unit.structure_unit_id
             or issue.source_refs != list(unit.source_span_ids)
-            or issue.json_path != f"/statements/{index}/decision_functions"
-            or issue.code != ("SOURCE_FUNCTION_UNSTATED" if missing else "SOURCE_FUNCTION_UNRESOLVED")
-            or not (missing or unqualified)):
+            or issue.json_path != f"/statements/{index}/{field}"):
         raise ValueError("来源用途补正与原答或来源见证不一致")
+    if exception_issue:
+        if (not {"action", "exception"} <= set(statement.decision_functions)
+                or statement.exception_words or statement.unresolved):
+            raise ValueError("例外限定补正与原答不一致")
+    elif (issue.code != ("SOURCE_FUNCTION_UNSTATED" if missing else "SOURCE_FUNCTION_UNRESOLVED")
+          or not (missing or unqualified)):
+        raise ValueError("来源用途补正与原答不一致")
     context = [other for other in [*batch.owned_units, *batch.context_units]
                if other.structure_unit_id != unit.structure_unit_id]
     local = batch.model_copy(update={
@@ -68,6 +93,17 @@ def build_source_function_field_repair_prompt(
     issue: SourceInterpretationValidationError,
 ) -> str:
     _, statement, local = _function_field_repair_source(batch, text, issue)
+    if issue.code == "SOURCE_EXCEPTION_WITNESS_MISSING":
+        return (build_source_interpretation_prompt(local)
+            + "\n本次只补正指定陈述的 exception_words 和 unresolved。原答已标记 action+exception，"
+            "但没有保留例外限定的逐字原文；这不是研究者判断缺失。请从冻结的 quoted_text 中"
+            "逐字摘录该例外的完整限定，不新增或改写临床含义。不能确认时保留 null 并说明具体原文疑问。"
+            "只返回原 SourceInterpretation 格式、恰一条原陈述、units_without_statement 为空；"
+            "其他字段、原文、来源、用途分类、时间、语气及兄弟必须原样保留。提案不等于采用。\n"
+            + json.dumps({"repair_version": SOURCE_EXCEPTION_FIELD_REPAIR_VERSION,
+                          "statement_index": issue.statement_id,
+                          "frozen_statement": statement.model_dump(mode="json")},
+                         ensure_ascii=False, sort_keys=True))
     return (
         build_source_interpretation_prompt(local)
         + "\n本次只补正指定原陈述的 decision_functions 和 unresolved。"
@@ -94,18 +130,27 @@ def apply_source_function_field_repair(
     if len(proposal.statements) != 1 or proposal.units_without_statement:
         raise ValueError("来源用途补正只能返回指定的一条原陈述")
     revised = proposal.statements[0]
-    if original.model_dump(mode="json", exclude={"decision_functions", "unresolved"}) != revised.model_dump(
-        mode="json", exclude={"decision_functions", "unresolved"},
+    exception_issue = issue.code == "SOURCE_EXCEPTION_WITNESS_MISSING"
+    mutable = {"exception_words", "unresolved"} if exception_issue else {"decision_functions", "unresolved"}
+    if original.model_dump(mode="json", exclude=mutable) != revised.model_dump(
+        mode="json", exclude=mutable,
     ):
         raise ValueError("来源用途补正不得改动摘录、范围、时点、例外或兄弟陈述")
     if not set(original.unresolved) <= set(revised.unresolved):
         raise ValueError("来源用途补正不得删除或替换原有疑问")
+    if exception_issue:
+        quote = normalize_source_excerpt(revised.exception_words or "")
+        if (revised.exception_words is not None and (not quote
+                or quote not in normalize_source_excerpt(original.quoted_text))
+                or not quote and not revised.unresolved):
+            raise ValueError("例外限定必须逐字来自本条原文，未确认须保留具体疑问")
+        if any(not normalize_source_excerpt(question) for question in revised.unresolved):
+            raise ValueError("例外限定疑问必须有具体内容，不能只填空白")
     validate_source_interpretation(local, proposal)
     # Preserve every raw sibling, including its explicit/omitted fields. The
     # caller must parse and validate the complete merged answer again.
-    payload["statements"][issue.statement_id].update(
-        decision_functions=revised.decision_functions, unresolved=revised.unresolved,
-    )
+    payload["statements"][issue.statement_id].update({
+        field: getattr(revised, field) for field in mutable})
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 

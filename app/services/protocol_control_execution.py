@@ -112,6 +112,7 @@ from app.agents.protocol_control_source_interpretation import (
     validate_completed_quote_review,
 )
 from app.agents.protocol_control_source_function import (
+    SOURCE_EXCEPTION_FIELD_REPAIR_VERSION,
     SOURCE_FUNCTION_FIELD_REPAIR_VERSION,
     SOURCE_FUNCTION_RECHECK_VERSION,
 )
@@ -2126,6 +2127,7 @@ def _deep_component_identity(
                                        "reviewed-source-type-field-recovery/v1",
                                        "validated-snapshot-scoped-session/v1",
                                        SOURCE_FUNCTION_FIELD_REPAIR_VERSION,
+                                       SOURCE_EXCEPTION_FIELD_REPAIR_VERSION,
                                        "native-author-note-projection-and-procedure-row-gate/v1",
                                        "invalid-wire-scoped-post-enrollment-repair/v1",
                                        NATIVE_ROW_ACTION_COVERAGE_VERSION,
@@ -4304,6 +4306,7 @@ def _saved_source_scope_question_history(saved: Mapping[str, Any] | None) -> lis
                        "source_scope_question_recheck", "source_context_completion",
                        "source_unit_quote_completion",
                        "source_heading_scope_recheck",
+                       "source_exception_field_repair",
                    }]
         if nested and history:
             outputs = saved.get("attempt_raw_outputs", [])
@@ -4318,7 +4321,11 @@ def _saved_source_scope_question_history(saved: Mapping[str, Any] | None) -> lis
                 if len(matches) != 1:
                     raise ValueError("来源疑问的历史原答缺失或重复")
                 answer = matches[0].get("raw_output_text")
-                failed_without_answer = answer is None and attempt.get("outcome") == "transport_failed"
+                detail = attempt.get("error_detail") or {}
+                failed_without_answer = answer is None and (attempt.get("outcome") == "transport_failed"
+                    or (attempt.get("outcome") == "publication_invalid"
+                        and detail.get("workflow_phase") == "source_exception_field_repair"
+                        and detail.get("called") is False and attempt.get("raw_output_chars") is None))
                 if (not failed_without_answer and (not isinstance(answer, str)
                         or len(answer) != attempt.get("raw_output_chars")
                         or hashlib.sha256(answer.encode("utf-8")).hexdigest()
@@ -4330,7 +4337,11 @@ def _saved_source_scope_question_history(saved: Mapping[str, Any] | None) -> lis
         raise ValueError("来源疑问的历史核对账损坏")
     for item in history:
         answer = item.get("raw_output_text")
-        if answer is None and item.get("outcome") == "transport_failed":
+        detail = item.get("error_detail") or {}
+        if answer is None and (item.get("outcome") == "transport_failed"
+                or (item.get("outcome") == "publication_invalid"
+                    and detail.get("workflow_phase") == "source_exception_field_repair"
+                    and detail.get("called") is False and item.get("raw_output_chars") is None)):
             continue
         if (not isinstance(answer, str) or len(answer) != item.get("raw_output_chars")
                 or hashlib.sha256(answer.encode("utf-8")).hexdigest() != item.get("raw_output_sha256")):
@@ -4811,6 +4822,7 @@ def _execute_deep(
             "SOURCE_FUNCTION_RECHECK_INVALID",
             "SOURCE_FUNCTION_RECHECK_UNRESOLVED",
             "SOURCE_FUNCTION_FIELD_REPAIR_TRANSPORT_FAILED", "SOURCE_FUNCTION_FIELD_REPAIR_INVALID",
+            "SOURCE_EXCEPTION_FIELD_REPAIR_TRANSPORT_FAILED", "SOURCE_EXCEPTION_FIELD_REPAIR_INVALID",
             "SOURCE_TARGET_REVIEW_TRANSPORT_FAILED",
             "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED",
             "SOURCE_TARGET_FOCUSED_INVALID",
@@ -4840,6 +4852,7 @@ def _execute_deep(
                            "FLOW_TRANSPORT_FAILED",
                            "SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED",
                            "SOURCE_FUNCTION_FIELD_REPAIR_TRANSPORT_FAILED",
+                           "SOURCE_EXCEPTION_FIELD_REPAIR_TRANSPORT_FAILED",
                            "SOURCE_TARGET_REVIEW_TRANSPORT_FAILED",
                            "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED",
                            "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED",
@@ -4866,6 +4879,10 @@ def _execute_deep(
                          "指定原文的补读答复不符合范围要求；旧内容保留，不自动重读整组。",
                      "SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED":
                          "指定原文补读时连接中断；保留失败记录和已用额度，可在原范围续读。",
+                     "SOURCE_EXCEPTION_FIELD_REPAIR_TRANSPORT_FAILED":
+                         "核对本条例外限定时连接中断；原文和已用调用保留，可在剩余额度内续读。",
+                     "SOURCE_EXCEPTION_FIELD_REPAIR_INVALID":
+                         "本条例外限定尚未补齐；保留已核内容和具体失败原因，不重复读取整组。",
                      "SOURCE_TARGET_REVIEW_UNRESOLVED":
                          "原文已保存，但它与审核要求的对应关系仍需核清；尚不能作为完整采用依据。",
                      "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE":
