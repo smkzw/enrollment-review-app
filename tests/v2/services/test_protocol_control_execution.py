@@ -6746,6 +6746,8 @@ def test_independent_reads_preserve_actual_unresolved_failure_without_model_retr
     ("negative_alignment", None), ("negative_alignment", "changed_proof"),
     ("negative_alignment", "second_failure"),
     ("negative_alignment", "second_new_failure"),
+    ("static_alignment", None), ("static_alignment", "changed_proof"),
+    ("static_alignment", "second_new_failure"),
 ])
 def test_preserved_failure_revalidates_restricted_source_through_actual_job_checkpoint(
     data_paths, session_factory, monkeypatch, kind, failure,
@@ -6756,7 +6758,9 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
 
     module = protocol_control_execution_module
     declaration_text = None
-    if kind == "negative_alignment":
+    if kind == "static_alignment":
+        batch, result = _static_alignment_failure_fixture()
+    elif kind == "negative_alignment":
         batch, result = _exhausted_negative_alignment_fixture()
     elif kind == "nonexecuting":
         batch, result = _nonexecuting_scope_review(sibling=True)
@@ -6783,6 +6787,9 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
             "source_refs": ["span:02"], "json_path": "/items",
         }
     diagnostic = {**result.model_dump(mode="json"), "stage": "deep_failure_diagnostic"}
+    if kind == "static_alignment":
+        for index in (0, 1, 2):
+            diagnostic["attempts"][index]["raw_output_text"] = result.attempts[index].raw_output_text
     diagnostic.pop("status")
     proof = module._preserved_source_review_proof(batch, diagnostic)
     assert proof is not None
@@ -6815,7 +6822,7 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
     }
     ref = ArtifactStore(data_paths).put("evaluation_manifest", json.dumps(plan).encode()).storage_ref
     current_steps = [StepSpec(step_id="deep_0001", name="重新核对已保存来源")]
-    if kind == "negative_alignment":
+    if kind in {"negative_alignment", "static_alignment"}:
         current_steps.extend([
             StepSpec(step_id="deep_0002", name="独立来源核对"),
             StepSpec(step_id="gate", name="完整采用检查", depends_on=["deep_0001", "deep_0002"]),
@@ -6863,7 +6870,7 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
         monkeypatch.setattr(module, "restricted_batch_from_review", invalid_restriction)
     config = SimpleNamespace(data_paths=data_paths, session_factory=session_factory, now=_now)
     def execute(context):
-        if kind == "negative_alignment" and context.step_id == "deep_0002":
+        if kind in {"negative_alignment", "static_alignment"} and context.step_id == "deep_0002":
             if failure in {"second_failure", "second_new_failure"}:
                 raise StepFailure(retryable=False,
                     error_code="PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
@@ -6897,7 +6904,7 @@ def test_preserved_failure_revalidates_restricted_source_through_actual_job_chec
             "restriction_error": "PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID",
         }[failure]
         return
-    if kind == "negative_alignment":
+    if kind in {"negative_alignment", "static_alignment"}:
         assert job.state == "failed_final"
         assert job.error_code == "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"
         assert saved[1]["new_model_calls"] == 0
@@ -7584,7 +7591,7 @@ def test_deep_source_corrupt_completed_checkpoint_rejected_before_job_creation(
 
 
 @pytest.mark.parametrize("changed_gate", [True, False])
-@pytest.mark.parametrize("error_code", ["SOURCE_UNRESOLVED_STILL_EXCLUDED", "SOURCE_UNRESOLVED_STILL_ADDED", "SOURCE_SEQUENCE_CAPTURE_INCOMPLETE", "SOURCE_SCOPE_INVALID"])
+@pytest.mark.parametrize("error_code", ["SOURCE_UNRESOLVED_STILL_EXCLUDED", "SOURCE_UNRESOLVED_STILL_ADDED", "SOURCE_SEQUENCE_CAPTURE_INCOMPLETE", "STUDY_PHASE_NOT_VISIT_TIME", "STUDY_PHASE_NOT_VISIT_STAGE", "SOURCE_SCOPE_INVALID"])
 def test_pending_exclusion_invalidates_only_an_older_restricted_proof(
     data_paths, session_factory, monkeypatch, changed_gate, error_code,
 ):
@@ -7610,6 +7617,13 @@ def test_pending_exclusion_invalidates_only_an_older_restricted_proof(
         return checkpoint_id, saved
 
     def reject_pending(_batch, _result):
+        if error_code in {"SOURCE_SEQUENCE_CAPTURE_INCOMPLETE", "STUDY_PHASE_NOT_VISIT_TIME", "STUDY_PHASE_NOT_VISIT_STAGE"}:
+            raise protocol_control_execution_module.SourceInterpretationValidationError(
+                error_code, "来源范围尚未核清", statement_id=0,
+                structure_unit_id=_batch.owned_units[0].structure_unit_id,
+                source_refs=_batch.owned_units[0].source_span_ids,
+                json_path="/statements/0/time_words", retry_class="correct_source_scope",
+            )
         raise protocol_control_execution_module.SourceTargetReviewValidationError(
             "来源疑问未关闭", code=error_code,
             statement_index=0, json_path="/items/0/decision",
@@ -7635,6 +7649,104 @@ def test_pending_exclusion_invalidates_only_an_older_restricted_proof(
             )
         assert exc.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
     assert deep.start_calls == calls_before
+
+
+@pytest.mark.parametrize("changed_gate", [True, False])
+@pytest.mark.parametrize("error_code", ["STUDY_PHASE_NOT_VISIT_TIME", "STUDY_PHASE_NOT_VISIT_STAGE", "SOURCE_SCOPE_INVALID"])
+def test_failed_phase_source_requires_new_read_only_after_validator_change(
+    data_paths, session_factory, monkeypatch, changed_gate, error_code,
+):
+    module = protocol_control_execution_module
+    seed = _seed_frozen_source(data_paths, session_factory, key="failed-phase-proof")
+    service = _build_service(data_paths, session_factory, seed)
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="failed-phase-source",
+    )
+    deep = _DeepTransport(seed.source_span_excerpts, invalid=True)
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    assert runner.run_job(source.job_id)
+    history = _job_checkpoint_fingerprint(session_factory, source.job_id)
+    calls = deep.start_calls
+    original = JobStore.get_last_checkpoint
+
+    def prior_gate(self, job_id, step_id):
+        checkpoint = original(self, job_id, step_id)
+        if not changed_gate or job_id != source.job_id or step_id != "deep_0001" or checkpoint is None:
+            return checkpoint
+        checkpoint_id, saved = checkpoint
+        return checkpoint_id, dict(saved, component_identity=dict(saved["component_identity"],
+                                                                  validator_version="previous validator"))
+
+    def phase_failure(_store, _payload, _job_id, batch, _step_id, _prompt):
+        raise module.SourceInterpretationValidationError(
+            error_code, "来源阶段需要核对", statement_id=0,
+            structure_unit_id=batch.owned_units[0].structure_unit_id,
+            source_refs=batch.owned_units[0].source_span_ids,
+            json_path="/statements/0/time_words", retry_class="correct_source_scope",
+        )
+
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", prior_gate)
+    monkeypatch.setattr(module, "_validated_deep_partial_source", phase_failure)
+    if changed_gate and error_code != "SOURCE_SCOPE_INVALID":
+        planned = service.create_from_deconstruction(
+            source_job_id=seed.source_job_id, idempotency_key="failed-phase-current",
+            deep_source_job_id=source.job_id,
+        )
+        _, payload = _job_snapshot_and_payload(session_factory, planned.job_id)
+        entry = next(v for v in payload["deep_reuse_plan"]["decisions"].values() if v["step_id"] == "deep_0001")
+        assert entry["decision"] == "refresh_required"
+        assert entry["reason"] == "current_source_review_requires_refresh"
+    else:
+        with pytest.raises(module.ProtocolControlExecutionError) as raised:
+            service.create_from_deconstruction(
+                source_job_id=seed.source_job_id, idempotency_key="failed-phase-current",
+                deep_source_job_id=source.job_id,
+            )
+        assert raised.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+    assert deep.start_calls == calls
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", original)
+    assert _job_checkpoint_fingerprint(session_factory, source.job_id) == history
+
+
+@pytest.mark.parametrize("damage", ["absent", "missing_field", "bad_hash"])
+def test_failed_component_identity_corruption_is_not_a_cache_miss(
+    data_paths, session_factory, monkeypatch, damage,
+):
+    module = protocol_control_execution_module
+    seed = _seed_frozen_source(data_paths, session_factory, key="failed-identity-proof")
+    service = _build_service(data_paths, session_factory, seed)
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="failed-identity-source",
+    )
+    deep = _DeepTransport(seed.source_span_excerpts, invalid=True)
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    assert runner.run_job(source.job_id)
+    history = _job_checkpoint_fingerprint(session_factory, source.job_id)
+    calls = deep.start_calls
+    original = JobStore.get_last_checkpoint
+
+    def damaged(self, job_id, step_id):
+        checkpoint = original(self, job_id, step_id)
+        if job_id != source.job_id or step_id != "deep_0001" or checkpoint is None:
+            return checkpoint
+        checkpoint_id, saved = checkpoint
+        components = dict(saved["component_identity"])
+        if damage == "missing_field":
+            components.pop("wire_schema_sha256")
+        elif damage == "bad_hash":
+            components["wire_schema_sha256"] = "broken"
+        return checkpoint_id, dict(saved, component_identity=None if damage == "absent" else components)
+
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", damaged)
+    with pytest.raises(module.ProtocolControlExecutionError) as rejected:
+        service.create_from_deconstruction(
+            source_job_id=seed.source_job_id, idempotency_key="failed-identity-current",
+            deep_source_job_id=source.job_id,
+        )
+    assert rejected.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+    assert deep.start_calls == calls
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", original)
+    assert _job_checkpoint_fingerprint(session_factory, source.job_id) == history
 
 
 def test_gate_only_change_revalidates_reusable_batch_without_model_call(
@@ -7736,6 +7848,8 @@ def test_gate_only_change_revalidates_reusable_batch_without_model_call(
                   protocol_control_execution_module.SOURCE_STAGE_ECHO_VERSION,
                   protocol_control_execution_module.SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                   protocol_control_execution_module.SOURCE_SEQUENCE_PREAUTHOR_CAPTURE_VERSION,
+                  protocol_control_execution_module.SOURCE_STUDY_PHASE_ENUMERATION_VERSION,
+                  "static-rejected-alignment-replay/v1",
                   "scoped-exception-dnf/v1"))
     )
 
@@ -8022,6 +8136,133 @@ def _exhausted_negative_alignment_fixture():
         "affected_dependents": [1],
     }
     return batch, result
+
+
+def _static_alignment_failure_fixture():
+    from app.agents.protocol_control_candidate_alignment import (
+        SourceCandidateAlignment, bind_partial_candidate_alignment,
+    )
+    from app.agents.protocol_control_deconstructor import (
+        ProtocolControlAgentAttempt, ProtocolControlAgentRunResult,
+        source_statement_coverage,
+    )
+    from tests.v2.protocols.test_slice58c_control_deconstructor import (
+        _evaluation, _two_independent_candidate_linked_alignment_material,
+    )
+
+    batch, inventory, review, wire, payload = _two_independent_candidate_linked_alignment_material()
+    source, statement = "记录由18号仪器生成的14号检查结果", "记录仪器检查结果"
+    batch.owned_units[1].excerpt = source
+    inventory.statements[1].quoted_text = source
+    inventory.statements[1].time_words = []
+    inventory.statements[1].decision_functions = ["action"]
+    review.items[1].source_action_excerpt = source
+    review.items[1].source_time_excerpt = None
+    atom = wire.candidate_drafts[1].obligation_expression.groups[0].atoms[0]
+    atom.statement = statement
+    atom.source_excerpts = [source]
+    atom.evaluation = type(atom.evaluation).model_validate(_evaluation(statement, "span:02", source))
+    wire.candidate_drafts[1].minimum_evidence[0].description = statement
+    wire.candidate_drafts[1].minimum_evidence[0].source_policy.source_excerpts = [source]
+    payload["items"][1].update(
+        source_excerpt=source, candidate_atom_quotes=[statement],
+        decision="fully_expressed", unresolved_dimensions=[],
+    )
+    raw = json.dumps(payload, ensure_ascii=False)
+    author_raw = wire.model_dump_json()
+    coverage = source_statement_coverage(batch, inventory, wire)
+    alignment, failures = bind_partial_candidate_alignment(
+        batch, inventory, coverage, wire, SourceCandidateAlignment.model_validate(payload),
+        raw, [(0, 0), (1, 1)],
+    )
+    assert len(failures) == 1 and failures[0]["reason"] == "numeric_relation_unverified"
+    coverage[0] = coverage[0].model_copy(update={"status": "semantically_aligned", "candidate_indexes": [0]})
+    result = ProtocolControlAgentRunResult(
+        status="需要核对", batch_id=batch.batch_id, session_id="static-align",
+        source_interpretation=inventory, source_statement_coverage=coverage,
+        source_target_review=review, source_candidate_alignment=alignment, partial_wire=wire,
+        attempts=[
+            ProtocolControlAgentAttempt(
+                attempt=1, session_id="static-align", raw_output_text=author_raw,
+                raw_output_sha256=hashlib.sha256(author_raw.encode()).hexdigest(), outcome="parsed",
+            ),
+            ProtocolControlAgentAttempt(
+                attempt=2, session_id="static-align", raw_output_text=raw,
+                raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(),
+                outcome="publication_invalid", error_classes=[failures[0]["code"]],
+                error_detail=failures[0],
+            ),
+            ProtocolControlAgentAttempt(
+                attempt=3, session_id="static-align", raw_output_text=raw,
+                raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(), outcome="parsed",
+            ),
+            ProtocolControlAgentAttempt(
+                attempt=4, session_id="static-align", raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest(),
+                outcome="publication_invalid",
+                error_classes=["SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"],
+                error_detail={
+                    "code": "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED", "statement_ids": [1],
+                    "candidate_indexes": [1], "source_refs": ["span:02"], "json_path": "/items",
+                    "retry_class": "source_semantic_review", "affected_dependents": [1],
+                    "alignment_failures": failures,
+                },
+            ),
+        ],
+    )
+    return batch, result
+
+
+@pytest.mark.parametrize("fault", [
+    None, "changed_candidate", "changed_reply", "hash", "wrong_refs",
+    "wrong_dependents", "technical_failure", "source_ambiguity", "coverage_changed",
+    "different_failure", "no_actual_reply", "narrowed_reply",
+])
+def test_preserved_static_alignment_replays_rejection_without_adoption(fault):
+    from copy import deepcopy
+
+    batch, result = _static_alignment_failure_fixture()
+    saved = result.model_dump(mode="json")
+    for index in (0, 1, 2):
+        saved["attempts"][index]["raw_output_text"] = result.attempts[index].raw_output_text
+    before, bad = deepcopy(saved), deepcopy(saved)
+    detail = bad["attempts"][-1]["error_detail"]
+    if fault == "changed_candidate":
+        bad["partial_wire"]["candidate_drafts"][1]["applicable_population"] += "额外限定"
+    elif fault == "changed_reply":
+        bad["attempts"][1]["raw_output_text"] += " "
+    elif fault == "hash":
+        bad["attempts"][1]["raw_output_sha256"] = "0" * 64
+    elif fault == "wrong_refs":
+        detail["source_refs"] = ["foreign-source"]
+    elif fault == "wrong_dependents":
+        detail["affected_dependents"] = [0]
+    elif fault == "technical_failure":
+        bad["attempts"][-1]["error_classes"] = ["MODEL_IDENTITY_INVALID"]
+    elif fault == "source_ambiguity":
+        bad["source_interpretation"]["statements"][1]["unresolved"] = ["原文对象不明"]
+    elif fault == "coverage_changed":
+        bad["source_statement_coverage"] = []
+    elif fault == "different_failure":
+        detail["alignment_failures"][0]["reason"] = "source_condition_unrepresented"
+    elif fault == "no_actual_reply":
+        bad["attempts"][2]["raw_output_text"] = None
+    elif fault == "narrowed_reply":
+        answer = json.loads(bad["attempts"][2]["raw_output_text"])
+        answer["items"] = answer["items"][:1]
+        raw = json.dumps(answer, ensure_ascii=False)
+        bad["attempts"][2].update(raw_output_text=raw, raw_output_sha256=hashlib.sha256(raw.encode()).hexdigest())
+    try:
+        proof = protocol_control_execution_module._preserved_static_alignment_failure_proof(batch, bad)
+    except ValueError:
+        assert fault is not None
+    else:
+        if fault is None:
+            assert proof["adopted"] is False
+            assert proof["statement_ids"] == [1]
+            assert proof["schema_version"] == "phase5/preserved-static-alignment-failure-proof/v1"
+        else:
+            assert proof is None, fault
+    assert saved == before
 
 
 @pytest.mark.parametrize("fault", [

@@ -112,6 +112,7 @@ from app.agents.protocol_control_source_interpretation import (
     source_unit_quotes_cover_source,
     missing_sequence_source_units,
     SOURCE_SEQUENCE_PREAUTHOR_CAPTURE_VERSION,
+    SOURCE_STUDY_PHASE_ENUMERATION_VERSION,
     validate_completed_quote_review,
 )
 from app.agents.protocol_control_source_function import (
@@ -134,6 +135,7 @@ from app.agents.protocol_control_candidate_alignment import (
     SourceCandidateAlignmentItem,
     SourceCandidateAlignmentProof,
     alignment_with_items,
+    bind_partial_candidate_alignment,
     SourceCandidateAlignmentValidationError,
     reusable_proven_alignment_items,
     evidence_policy_alignment_pairs,
@@ -2167,6 +2169,8 @@ def _deep_component_identity(
                                        SOURCE_STAGE_ECHO_VERSION,
                                        SOURCE_CANDIDATE_QUOTE_SCOPE_VERSION,
                                        SOURCE_SEQUENCE_PREAUTHOR_CAPTURE_VERSION,
+                                       SOURCE_STUDY_PHASE_ENUMERATION_VERSION,
+                                       "static-rejected-alignment-replay/v1",
                                        "scoped-exception-dnf/v1")),
         "requested_route_sha256": (
             payload.get("frozen_model_routes") or {}
@@ -2992,6 +2996,13 @@ def _validated_deep_partial_source(
         raise ValueError("局部草稿的实际模型线路与当前任务不一致")
     saved_components = saved.get("component_identity")
     current_components = _deep_component_identity(current_payload, prompt_template)
+    if not isinstance(saved_components, Mapping) or set(saved_components) != set(current_components):
+        raise ValueError("失败批次的组成身份缺失或损坏")
+    for name, value in saved_components.items():
+        if name.endswith("sha256") and value is not None and (
+                not isinstance(value, str) or len(value) != 64
+                or any(char not in "0123456789abcdef" for char in value)):
+            raise ValueError("失败批次的组成摘要损坏")
     if (saved.get("prompt_template_sha256")
             != protocol_control_agent_prompt_template_sha256(prompt_template)
             or not isinstance(saved_components, Mapping)):
@@ -3350,6 +3361,7 @@ def _preserved_source_review_proof(
     batch: ProtocolControlDispositionBatch, saved: Mapping[str, Any],
 ) -> dict[str, Any] | None:
     return (_preserved_negative_alignment_proof(batch, saved)
+            or _preserved_static_alignment_failure_proof(batch, saved)
             or _preserved_unresolved_review_proof(batch, saved)
             or _preserved_temporal_restriction_proof(batch, saved))
 
@@ -3405,6 +3417,106 @@ def _preserved_negative_alignment_proof(
         "diagnostic_sha256": hashlib.sha256(json.dumps(
             saved, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
         ).encode("utf-8")).hexdigest(),
+        "statement_ids": ids, "source_refs": refs,
+        "error_code": "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+        "adopted": False,
+    }
+
+
+def _preserved_static_alignment_failure_proof(batch, saved):
+    """Replay a witnessed numeric rejection; never turn the reply into approval."""
+    attempts = saved.get("attempts")
+    if not isinstance(attempts, list) or not attempts:
+        return None
+    last = attempts[-1]
+    if not isinstance(last, Mapping):
+        return None
+    detail = last.get("error_detail")
+    if (last.get("outcome") != "publication_invalid"
+            or last.get("error_classes") != ["SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"]
+            or not isinstance(detail, Mapping)
+            or detail.get("code") != "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"
+            or detail.get("retry_class") != "source_semantic_review"):
+        return None
+    failures = detail.get("alignment_failures")
+    if (not isinstance(failures, list) or not failures
+            or any(not isinstance(item, Mapping)
+                   or item.get("code") != "SOURCE_CANDIDATE_ALIGNMENT_INVALID"
+                   or item.get("reason") != "numeric_relation_unverified" for item in failures)):
+        return None
+    result = _saved_failed_deep_run_result(batch, saved)
+    source, wire = result.source_interpretation, result.partial_wire
+    if source is None or wire is None or result.source_target_review is None:
+        return None
+    validate_source_interpretation(batch, source)
+    _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(wire, batch))
+    if not _coverage_matches_current_proofs(batch, result):
+        raise ValueError("保留数值失败的来源覆盖与当前证明不一致")
+    raw_coverage = source_statement_coverage(batch, source, wire)
+    validate_source_target_review(batch, source, raw_coverage, result.source_target_review)
+    reply = None
+    witnessed_wire = False
+    for attempt in attempts:
+        raw = attempt.get("raw_output_text") if isinstance(attempt, Mapping) else None
+        if raw is None:
+            continue
+        if not isinstance(raw, str) or hashlib.sha256(raw.encode()).hexdigest() != attempt.get("raw_output_sha256"):
+            raise ValueError("保留数值失败的实际原答摘要损坏")
+        try:
+            author_wire = ProtocolControlAgentWire.model_validate_json(raw)
+        except ValueError:
+            pass
+        else:
+            witnessed_wire = author_wire == wire and attempt.get("outcome") == "parsed"
+        try:
+            parsed = SourceCandidateAlignment.model_validate_json(raw)
+        except ValueError:
+            continue
+        if attempt.get("outcome") != "parsed" or attempt.get("error_classes"):
+            continue
+        reply = (raw, parsed, witnessed_wire)
+    if reply is None or not reply[2]:
+        return None
+    raw, parsed, _ = reply
+    additional = {item.statement_index for item in result.source_target_review.items
+                  if item.decision == "additional_requirement"}
+    prior_items = reusable_proven_alignment_items(
+        batch, source, raw_coverage, wire, result.source_candidate_alignment,
+    )
+    prior_pairs = {(item.statement_index, item.candidate_index) for item in prior_items
+                   if any(proof.statement_index == item.statement_index
+                          and proof.candidate_index == item.candidate_index
+                          and proof.response_sha256 != hashlib.sha256(raw.encode()).hexdigest()
+                          for proof in result.source_candidate_alignment.proofs)}
+    # Legacy diagnostics lack a request envelope. Require all current linked
+    # pairs except independently response-bound positive siblings, not self-scope.
+    pairs = [(entry.statement_index, entry.action_candidate_indexes[0])
+             for entry in raw_coverage
+             if entry.statement_index in additional and entry.status == "candidate_linked"
+             and len(entry.action_candidate_indexes) == 1
+             and (entry.statement_index, entry.action_candidate_indexes[0]) not in prior_pairs]
+    if set(pairs) != {(item.statement_index, item.candidate_index) for item in parsed.items}:
+        return None
+    _, current_failures = bind_partial_candidate_alignment(
+        batch, source, raw_coverage, wire, parsed, raw, pairs,
+    )
+    if current_failures != failures:
+        return None
+    ids = sorted({index for item in current_failures for index in item["statement_ids"]})
+    candidates = sorted({index for item in current_failures for index in item["candidate_indexes"]})
+    refs = sorted({ref for item in current_failures for ref in item["source_refs"]})
+    if (detail.get("statement_ids") != ids or detail.get("candidate_indexes") != candidates
+            or detail.get("affected_dependents") != candidates or detail.get("source_refs") != refs
+            or any(source.statements[index].unresolved for index in ids)):
+        return None
+    return {
+        "schema_version": "phase5/preserved-static-alignment-failure-proof/v1",
+        "diagnostic_sha256": hashlib.sha256(json.dumps(
+            saved, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest(),
+        "response_sha256": hashlib.sha256(raw.encode()).hexdigest(),
+        "source_sha256": hashlib.sha256(source.model_dump_json().encode()).hexdigest(),
+        "candidate_sha256": hashlib.sha256(wire.model_dump_json().encode()).hexdigest(),
         "statement_ids": ids, "source_refs": refs,
         "error_code": "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
         "adopted": False,
@@ -3666,7 +3778,8 @@ def _preflight_deep_source(
                         expected = restricted_batch_from_review(batch, result)
                     except (SourceInterpretationValidationError, SourceTargetReviewValidationError) as exc:
                         if (exc.code not in {"SOURCE_UNRESOLVED_STILL_EXCLUDED", "SOURCE_UNRESOLVED_STILL_ADDED",
-                                            "SOURCE_SEQUENCE_CAPTURE_INCOMPLETE"}
+                                            "SOURCE_SEQUENCE_CAPTURE_INCOMPLETE",
+                                            "STUDY_PHASE_NOT_VISIT_TIME", "STUDY_PHASE_NOT_VISIT_STAGE"}
                                 or saved_components["validator_version"] == current_components["validator_version"]):
                             raise
                         # A newly enforced pending-scope check invalidates this
@@ -3699,9 +3812,22 @@ def _preflight_deep_source(
                                 decision, reason = "reusable", "same_material_and_current_gate"
         elif step is not None and step.state == "failed_final":
             checkpoint = store.get_last_checkpoint(batch_source_id, step_id)
-            partial = _validated_deep_partial_source(
-                store, current_payload, batch_source_id, batch, step_id, prompt_template,
-            )
+            try:
+                partial = _validated_deep_partial_source(
+                    store, current_payload, batch_source_id, batch, step_id, prompt_template,
+                )
+            except SourceInterpretationValidationError as exc:
+                old_components = checkpoint[1].get("component_identity") if checkpoint is not None else None
+                if (exc.code not in {"STUDY_PHASE_NOT_VISIT_TIME", "STUDY_PHASE_NOT_VISIT_STAGE"}
+                        or not isinstance(old_components, Mapping)
+                        or old_components.get("validator_version") == current_components["validator_version"]):
+                    raise
+                # Classifying a study phase differently must not hide a later
+                # damaged quote, scope, time or sibling source in the batch.
+                old_source = SourceInterpretation.model_validate(checkpoint[1].get("source_interpretation"))
+                validate_source_interpretation(batch, old_source, study_phase_refresh_check=True)
+                partial = None
+                reason = "current_source_review_requires_refresh"
             if partial is not None:
                 decision = "resume_partial"
                 base_reason = (
@@ -3721,13 +3847,14 @@ def _preflight_deep_source(
                 control = current_payload.get("execution_control")
                 if (isinstance(control, Mapping)
                         and control.get("continue_after_final_failure") == _INDEPENDENT_DEEP_READ_POLICY
-                        and partial[2].source_seed_proof is None
-                        and partial[1]["component_identity"]["validator_version"]
-                        == current_components["validator_version"]):
+                        and partial[2].source_seed_proof is None):
                     # A changed validator may change the meaning of coverage.
                     # Recheck the retained draft; do not freeze its old failure
                     # or mistake ordinary revalidation for damaged history.
-                    preserved = _preserved_source_review_proof(batch, partial[1])
+                    same_gate = (partial[1]["component_identity"]["validator_version"]
+                                 == current_components["validator_version"])
+                    preserved = (_preserved_source_review_proof(batch, partial[1]) if same_gate
+                                 else _preserved_static_alignment_failure_proof(batch, partial[1]))
                     if preserved is not None:
                         decision, reason = "preserve_unresolved", "same_material_failed_review_no_new_inference"
         decisions[batch.batch_id] = {
@@ -4737,7 +4864,8 @@ def _execute_deep(
             try:
                 prior_result = _saved_failed_deep_run_result(batch, diagnostic)
                 restricted = (None if proof["schema_version"]
-                    == "phase5/preserved-negative-alignment-proof/v1"
+                    in {"phase5/preserved-negative-alignment-proof/v1",
+                        "phase5/preserved-static-alignment-failure-proof/v1"}
                     else restricted_batch_from_review(batch, prior_result))
             except ValueError as exc:
                 raise StepFailure(

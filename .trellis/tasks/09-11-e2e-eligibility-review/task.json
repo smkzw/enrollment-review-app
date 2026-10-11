@@ -15,7 +15,7 @@
   "branch": "codex/phase5-clinical-facts-profile",
   "base_branch": "codex/phase5-clinical-facts-profile",
   "worktree_path": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile",
-  "commit": "ea69c598c1e852649fd29be1e528ad96a10f3c78",
+  "commit": "5c63ba1f04fface7d47a6e45a3551de91469b938",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -40,17 +40,17 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "2026-10-11用户恢复，Goal active，claims_complete=false。实际源码145380c2的合法Job87f0d800a013443a9b8194a61b314111已failed_final/SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED，5调用383.15秒、47完成、45与49失败、41未读；exec95984结束，原件/旧终态保持。45负答未采用，49数值用途及跨单元先后/对象关系未核，逻辑账5/8。当前诊断包132相连通过，实际49原答0调用只读重验，不放宽门或保存新采用；C03参数边界续审为同模型家族源码只读。完整共同发布/当前节点工作稿/UI更正新旧报告/Q3未达，0启用/签发；先核来源对象/关系，不新增参数引擎、不重读47成功，任务不归档。",
+  "notes": "2026-10-11用户要求收口后无损暂停，Goal实际paused，claims_complete=false，任务不归档。最近真实62da9c6dba8a467ead7db361ad7554f7/5c63ba1f failed_final，17调用771.304秒、54完成/34未读、45/56失败。最终当前源码零调用预检52reuse/1preserve/37refresh、全库hash保持。末受影响82pass32.30秒；宽窗963pass2fail的原因和收口分别保留。完整共同发布、工作稿/UI关联更正新旧报告/Q3未达。恢复详见唯一HANDOFF/implement/index，原件/旧终态/七继承dirty保持，无健康任务待等。",
   "meta": {
-    "execution_paused_by_user": false,
+    "execution_paused_by_user": true,
     "current_checkpoint": "implement.md",
     "current_scope": "1006V1 frozen delivery window: complete same-source requirements, isolated current-node work draft, source navigation, one UI correction/supplement, affected recalculation and old/new history; R1/1001V1 retained.",
     "claims_complete": false,
-    "review_packet_status": "negative_alignment_failure_preserved_in_product_47_reused_connection_recovered_legal_continuation_running",
-    "runtime_goal_status_observed": "active",
+    "review_packet_status": "phase_and_static_failure_package_owner_verified_paused_no_new_product_run",
+    "runtime_goal_status_observed": "paused",
     "current_handoff": "HANDOFF.md",
     "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",
-    "last_verified_source_commit": "145380c2",
+    "last_verified_source_commit": "5c63ba1f04fface7d47a6e45a3551de91469b938",
     "current_review_index": "review_index_20261006_1006V1.json",
     "historical_notes_20261006": "1006V1连续实施，Goal active，claims_complete=false。资料14组/24页、30事实及实际UI更正/Profile4成立；完整要求/工作稿/新报告未达。关系字段修复7a613204/822检查、末尾句界修复3472fa28/845检查已普通push；两旧原答零调用重验通过但未采用。v5合法部分恢复7调用/212.4902s，总37；29来源/24核对保存，研究目的用途及期别定义对应两项未核清。原库/旧Job不改，不重复整批或另复制大库。前端最终34检查/Ego成立，原198/展示190，原件/7份继承dirty保留。"
   }

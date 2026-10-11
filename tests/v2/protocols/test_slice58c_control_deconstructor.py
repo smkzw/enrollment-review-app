@@ -5902,9 +5902,10 @@ def test_target_review_rejects_unreported_period_even_when_model_claims_coverage
     assert "W0~W4" in str(error.value)
 
 
-def test_missing_history_duration_is_reported_before_target_time_mismatch() -> None:
+@pytest.mark.parametrize("duration", ["2年", "6个月", "6 个月"])
+def test_missing_history_duration_is_reported_before_target_time_mismatch(duration) -> None:
     batch = _batch().model_copy(deep=True)
-    quote = "既往情况至少2年"
+    quote = f"既往情况至少{duration}"
     batch.owned_units[1].excerpt = quote
     batch.known_official_targets[0].source_excerpts = [quote]
     inventory = _source_inventory({
@@ -5922,14 +5923,14 @@ def test_missing_history_duration_is_reported_before_target_time_mismatch() -> N
         "items": [{"statement_index": 0, "decision": "covered_by_official",
                    "target_id": "EX-01", "source_action_excerpt": quote,
                    "target_action_excerpt": quote,
-                   "source_time_excerpt": "2年", "target_time_excerpt": "2年",
+                   "source_time_excerpt": duration, "target_time_excerpt": duration,
                    "unresolved_aspects": []}],
     })
     validate_source_interpretation(batch, inventory)
     with pytest.raises(SourceTargetReviewValidationError) as error:
         validate_source_target_review(batch, inventory, coverage, review)
     assert error.value.code == "SOURCE_TIME_INCOMPLETE"
-    assert "2年" in str(error.value)
+    assert duration.replace(" ", "") in str(error.value)
 
 
 @pytest.mark.parametrize("quote,target_excerpt", [
@@ -6451,9 +6452,9 @@ def test_grounded_stage_echo_is_literal_immutable_and_not_adoption(stage):
 def test_runner_echoes_sourced_stage_without_a_model_correction_and_keeps_raw_reply():
     batch = _batch().model_copy(deep=True)
     batch.owned_units[1].heading_path = ["评价期"]
-    batch.owned_units[1].excerpt = "核对受试者记录。"
+    batch.owned_units[1].excerpt = "评价期核对受试者记录。"
     source = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
-        statements=[SourceStatement(structure_unit_id="su-02", quoted_text="核对受试者记录。",
+        statements=[SourceStatement(structure_unit_id="su-02", quoted_text="评价期核对受试者记录。",
             affected_stage="评价期", force="required", decision_functions=["action"], time_words=[])],
         units_without_statement=["su-01"])
     raw = source.model_dump_json()
@@ -7841,19 +7842,20 @@ def test_single_source_id_copy_error_is_rebound_only_when_unambiguous() -> None:
         validate_protocol_control_agent_wire(with_candidate, batch)
 
 
-def test_trial_phase_heading_remains_scope_not_subject_time() -> None:
+@pytest.mark.parametrize("phase", ["Ⅲ期", "Ⅱ期和Ⅲ期", "II期/III期", "第Ⅱ期及第Ⅲ期", "二期或三期"])
+def test_trial_phase_heading_remains_scope_not_subject_time(phase) -> None:
     batch = _batch().model_copy(deep=True)
-    batch.owned_units[0].excerpt = "Ⅲ期：筛选/导入期开展检查评估"
+    batch.owned_units[0].excerpt = f"{phase}：筛选/导入期开展检查评估"
     inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-01", "quoted_text": "筛选/导入期开展检查评估",
-            "scope_quote": "Ⅲ期：", "affected_stage": "筛选/导入期",
-            "force": "required", "time_words": ["Ⅲ期", "筛选/导入期"],
+            "scope_quote": f"{phase}：", "affected_stage": "筛选/导入期",
+            "force": "required", "time_words": [phase, "筛选/导入期"],
         }],
         "units_without_statement": ["su-02"],
     })
-    assert is_study_phase_label("Ⅲ期")
+    assert is_study_phase_label(phase)
     assert not is_study_phase_label("治疗期")
     with pytest.raises(SourceInterpretationValidationError) as rejected:
         validate_source_interpretation(batch, inventory)
@@ -7861,11 +7863,36 @@ def test_trial_phase_heading_remains_scope_not_subject_time() -> None:
 
     corrected = apply_source_scope_correction(batch, inventory, 0, SourceScopeCorrection(
         version="phase5/control-source-scope-correction/v1",
-        structure_unit_id="su-01", scope_quote="Ⅲ期：", affected_stage="筛选/导入期",
+        structure_unit_id="su-01", scope_quote=f"{phase}：", affected_stage="筛选/导入期",
         time_words=["筛选/导入期"], unresolved=None,
     ))
-    assert corrected.statements[0].scope_quote == "Ⅲ期："
+    assert corrected.statements[0].scope_quote == f"{phase}："
     assert corrected.statements[0].time_words == ["筛选/导入期"]
+
+
+@pytest.mark.parametrize("label", ["筛选期和基线期", "Ⅲ期后6个月内", "Ⅱ期持续到Ⅲ期", "Ⅱ期和Ⅲ期在筛选阶段", "Ⅲ期治疗期", "Ⅳ期以后", "第一期", "第四期"])
+def test_study_phase_enumeration_cannot_remove_real_visit_or_window(label):
+    assert not is_study_phase_label(label)
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Ⅱ期和Ⅲ期在筛选期完成登记", False),
+    ("II期、III期在筛选期完成登记", False),
+    ("Ⅱ期和Ⅲ期在筛选期和基线期完成登记", True),
+    ("Ⅱ期和Ⅲ期在筛选前6个月内完成检查", True),
+    ("Ⅱ期持续到Ⅲ期进行观察", True),
+])
+def test_study_phase_enumeration_is_not_multiple_patient_visits(text, expected):
+    from app.agents.protocol_control_source_interpretation import source_requires_temporal_resolution
+
+    statement = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-01", "quoted_text": text,
+                        "scope_quote": None, "affected_stage": None, "force": "required",
+                        "time_words": []}],
+        "units_without_statement": ["su-02"],
+    }).statements[0]
+    assert source_requires_temporal_resolution(statement) is expected
 
 
 def test_trial_phase_in_quoted_population_is_not_a_visit_time_or_stage() -> None:
@@ -7900,6 +7927,42 @@ def test_trial_phase_in_quoted_population_is_not_a_visit_time_or_stage() -> None
             structure_unit_id="su-01", scope_quote="另一段的Ⅲ期", affected_stage=None,
             time_words=[], unresolved=None,
         ))
+
+@pytest.mark.parametrize("damage", [None, "sibling_quote", "later_time", "phase_not_in_source"])
+def test_phase_refresh_validates_all_other_source_dimensions(damage):
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[0].excerpt = "Ⅲ期计划纳入164例受试者"
+    batch.owned_units[1].excerpt = "筛选期完成检查"
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": "su-01", "quoted_text": batch.owned_units[0].excerpt,
+             "scope_quote": None, "affected_stage": "Ⅲ期", "force": "required", "time_words": ["Ⅲ期"]},
+            {"structure_unit_id": "su-02", "quoted_text": batch.owned_units[1].excerpt,
+             "scope_quote": None, "affected_stage": "筛选期", "force": "required", "time_words": ["筛选期"]},
+        ], "units_without_statement": [],
+    })
+    expected = None
+    if damage == "sibling_quote":
+        inventory.statements[1].quoted_text = "另一份不存在的原文"
+        expected = "SOURCE_QUOTE_UNGROUNDED"
+    elif damage == "later_time":
+        inventory.statements[0].time_words.append("治疗前7天")
+        expected = "SOURCE_TIME_UNGROUNDED"
+    elif damage == "phase_not_in_source":
+        inventory.statements[0].affected_stage = "Ⅱ期"
+        expected = "SOURCE_STAGE_UNGROUNDED"
+    before = inventory.model_dump_json()
+    with pytest.raises(SourceInterpretationValidationError, match="访视阶段"):
+        validate_source_interpretation(batch, inventory)
+    if expected is None:
+        validate_source_interpretation(batch, inventory, study_phase_refresh_check=True)
+    else:
+        with pytest.raises(SourceInterpretationValidationError) as rejected:
+            validate_source_interpretation(batch, inventory, study_phase_refresh_check=True)
+        assert rejected.value.code == expected
+    assert inventory.model_dump_json() == before
+
 
 def test_schedule_columns_close_only_existing_enrollment_visits() -> None:
     def row(row_index: int, values: list[tuple[int, str]]) -> ProtocolStructureUnit:
