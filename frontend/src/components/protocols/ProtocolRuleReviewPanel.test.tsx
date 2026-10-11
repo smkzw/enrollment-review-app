@@ -34,8 +34,9 @@ describe("逐条审定", () => {
 
   it("显示对应提示，明确验证身份，并用内容与修订核对保存", async () => {
     const onReady = vi.fn();
-    const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(initial)));
-    fetcher.mockImplementationOnce(async (_url, options) => {
+    const fetcher = vi.fn(async (url, options) => {
+      if (options.method === "GET") return new Response(JSON.stringify(String(url).endsWith("/variables")
+        ? { job_id: "job", draft_revision_id: "revision", variables: [], predicates: [] } : initial));
       const payload = JSON.parse(options.body);
       expect(payload.reviewer_kind).toBe("builder_verification");
       expect(payload.expected_revision_id).toBe("revision");
@@ -66,7 +67,7 @@ describe("逐条审定", () => {
     render(<ProtocolJobFlow jobId={PROTOCOL_DEMO_JOB_ID} componentParam={null} />);
     await screen.findByRole("heading", { name: "逐条审定" });
     await waitFor(() => expect(fetcher).toHaveBeenCalled());
-    expect(fetcher.mock.calls.every(([url, options]) => String(url).endsWith("/draft/reviews") && options.method === "GET")).toBe(true);
+    expect(fetcher.mock.calls.every(([url, options]) => /\/draft\/(reviews|variables)$/.test(String(url)) && options.method === "GET")).toBe(true);
     expect(screen.getByRole("button", { name: "发布" })).toBeDisabled();
   });
 });

@@ -3,6 +3,7 @@ import { requestRuleReviews, type RuleReviews, type ReviewerKind } from "../../a
 import type { IntegrityView, SourcesView } from "../../api/protocolWorkbenchTypes";
 import { mapProtocolSourceLocators } from "../../domain/protocolMappers";
 import { ProtocolDraftSourcePane } from "./ProtocolDraftSourcePane";
+import { decodeBindingView, variableRequest, type VariableDef } from "../../api/protocolVariables";
 
 interface Props {
   jobId: string;
@@ -17,6 +18,7 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
   const [kind, setKind] = useState<ReviewerKind>("medical_manager");
   const [excluded, setExcluded] = useState(false);
   const [variables, setVariables] = useState("");
+  const [dictionary, setDictionary] = useState<VariableDef[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
@@ -35,6 +37,14 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
     }).catch(error => { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "审定记录暂不能读取。"); });
     return () => controller.abort();
   }, [jobId, revisionId, reload, onReady]);
+
+  useEffect(() => {
+    const controller = new AbortController(); setDictionary([]);
+    variableRequest(jobId, "", undefined, controller.signal).then(value => {
+      if (!controller.signal.aborted) setDictionary(decodeBindingView(value, jobId, revisionId).variables);
+    }).catch(() => { /* The binding panel reports its own unavailable dictionary. */ });
+    return () => controller.abort();
+  }, [jobId, revisionId]);
 
   useEffect(() => {
     setExcluded(entry?.review?.note === "excluded");
@@ -73,7 +83,10 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
         {integrity.issues.filter(issue => issue.affectedRefs.some(ref => entry.issue_refs.includes(ref))).map(issue => <p key={issue.issueCode + issue.affectedRefs.join(",")} role="status">{issue.level}：{issue.problem}</p>)}
         {entry.kind === "procedure" && <fieldset><legend>入组前检查要求</legend>
           <label><input type="checkbox" checked={excluded} disabled={busy} onChange={event => setExcluded(event.target.checked)} /> 不作为入组前必需</label>
-          <label>必需结果变量 <input value={variables} disabled={busy || excluded} onChange={event => setVariables(event.target.value)} /></label>
+          <label>必需检查结果 <select multiple value={variables.split("、").filter(Boolean)} disabled={busy || excluded}
+            onChange={event => setVariables(Array.from(event.target.selectedOptions, option => option.value).join("、"))}>
+            {dictionary.filter(value => value.value_type !== "procedure").map(value => <option key={value.variable_id} value={value.variable_id}>{value.label_zh}</option>)}
+          </select></label>
         </fieldset>}
         {entry.review && <p>已由{entry.review.reviewed_by}于{new Date(entry.review.reviewed_at).toLocaleString("zh-CN")}审定{entry.review.note === "excluded" ? "，不参与入组前判定" : ""}。</p>}
         <div className="protocol-rule-reviews__actions">

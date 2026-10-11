@@ -1104,6 +1104,14 @@ class ProtocolDraftService:
         )
         return self.revisions.save(revision)
 
+    def apply_variable_bindings(self, *, draft_id, proposal, expected_revision_id, actor, created_at):
+        from app.services.protocol_variable_binding import apply_variable_bindings
+        head = self._require_head(draft_id, expected_revision_id)
+        draft = apply_variable_bindings(head.content, proposal)
+        return self._append_revision(draft, expected_revision_id=expected_revision_id,
+            reason=DraftRevisionReason.MANUAL_EDIT, feedback_kind=None, feedback_note=None,
+            actor=actor, created_at=created_at, variable_bindings=proposal)
+
     def apply_manual_edit(
         self,
         draft: ProtocolDeconstructionDraft,
@@ -1282,6 +1290,7 @@ class ProtocolDraftService:
         feedback_note: str | None,
         actor: str,
         created_at: datetime,
+        variable_bindings=None,
     ) -> ProtocolDraftRevision:
         head = self._require_head(draft.draft_id, expected_revision_id)
         if head.status == DraftRevisionStatus.CANCELLED:
@@ -1294,9 +1303,13 @@ class ProtocolDraftService:
                 "DRAFT_PUBLISHED",
                 "已发布的草稿 revision 不能继续编辑；请基于新草稿重新解构。",
             )
-        enforce_draft_edit_boundary(
-            head.content, draft, feedback_kind=feedback_kind
-        )
+        if variable_bindings is None:
+            enforce_draft_edit_boundary(head.content, draft, feedback_kind=feedback_kind)
+        else:
+            from app.services.protocol_variable_binding import apply_variable_bindings
+            expected = apply_variable_bindings(head.content, variable_bindings)
+            if draft != expected:
+                _fail_boundary("VARIABLE_BINDING_SCOPE_CHANGED", "数据对应关系不得改写原条件或来源")
         next_number = head.revision_number + 1
         # 规范化内层草稿链：content.draft_revision 与 previous_draft_id 必须
         # 与外层 ProtocolDraftRevision 链一致，杜绝「外层 revision=2、内层仍=1」

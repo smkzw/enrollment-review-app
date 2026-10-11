@@ -72,7 +72,8 @@ from app.protocols.deconstruction_gate import (
 )
 from app.storage.codecs import PersistedContractInvalid, utc_now
 from app.storage.idempotency import IdempotencyRepository, request_hash
-from app.storage.models import IdempotencyRecordRow, ProjectRecord, RuleSetRecord
+from app.storage.models import IdempotencyRecordRow, ProjectRecord, RuleSetRecord, RuleSetVariablesRecord
+from app.services.protocol_variable_binding import validate_publication_bindings
 from app.storage.repositories import (
     AppendRepository,
     AUTHORITY_CONFIRMATION_CONFIG,
@@ -391,6 +392,13 @@ class ProtocolPublicationService:
             )
         reviews = [entry["review"] for entry in entries]
         verification_only = any(record.reviewer_kind == "builder_verification" for record in reviews)
+        # Historical builder-only packets remain inspectable. A current bound
+        # packet or any formal publication must pass the complete data contract.
+        if draft.variable_definitions is not None or not verification_only:
+            try:
+                validate_publication_bindings(draft)
+            except ValueError as exc:
+                raise ProtocolPublicationError("variable_bindings_invalid", str(exc)) from exc
 
         # 2) 组装正式权威链对象（方案版本记录在最后一步按真实引用创建）。
         #    版本身份已被上方校验绑定到草稿/输入；此处直接取草稿版本 id。
@@ -647,6 +655,7 @@ class ProtocolPublicationService:
             protocol_version_id=version_id,
             study_phase=draft.selected_phase,
             rules=draft.proposed_rules,
+            variable_definitions=draft.variable_definitions,
             revision=revision,
         )
 
@@ -1027,6 +1036,12 @@ class ProtocolPublicationService:
             rule_set,
             procedure_requirements=procedure_requirements,
         )
+        if rule_set.variable_definitions is not None:
+            payload = [item.model_dump(mode="json") for item in rule_set.variable_definitions]
+            session.add(RuleSetVariablesRecord(
+                rule_set_id=rule_set.rule_set_id, revision=rule_set.revision,
+                payload_json=json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                payload_sha256=canonical_hash(payload), created_at=request.published_at or self.now()))
         stage_repo = AppendRepository(session, WORKFLOW_STAGE_CONFIG)
         for stage in workflow_stages:
             stage_repo.save(

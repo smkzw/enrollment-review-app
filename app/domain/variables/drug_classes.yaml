@@ -1,0 +1,5 @@
+{
+  "systemic_corticosteroids": ["泼尼松", "泼尼松龙", "甲泼尼龙", "地塞米松", "氢化可的松", "prednisone", "prednisolone", "methylprednisolone", "dexamethasone"],
+  "antihistamines": ["氯雷他定", "地氯雷他定", "西替利嗪", "左西替利嗪", "非索非那定", "loratadine", "cetirizine", "fexofenadine"],
+  "leukotriene_receptor_antagonists": ["孟鲁司特", "扎鲁司特", "montelukast", "zafirlukast"]
+}

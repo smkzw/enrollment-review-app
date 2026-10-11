@@ -26,7 +26,7 @@ def approve_draft(factory, source, draft, *, kind="builder_verification"):
                 official_code=entry["official_code"], rule_content_hash=entry["rule_content_hash"],
                 reviewer_kind=kind, reviewed_by="测试审定人", reviewed_at=NOW, action="approved",
                 note="excluded" if entry["kind"] == "procedure" else None,
-                result_variables=["blood_eos_count"] if entry["kind"] == "procedure" else [],
+                result_variables=["eos"] if entry["kind"] == "procedure" else [],
             )
             repository.save(record)
 
@@ -49,6 +49,10 @@ def test_unreviewed_draft_cannot_publish_and_writes_no_formal_chain(slice4_env):
 def test_review_records_survive_publication_and_idempotent_replay(slice4_env, kind, verification_only):
     factory, _ = slice4_env
     source, draft, spans = confirmed_fixture()
+    if kind == "medical_manager":
+        from tests.v2.protocols.test_variable_binding import fixture_bindings
+        from app.services.protocol_variable_binding import apply_variable_bindings
+        draft = apply_variable_bindings(draft, fixture_bindings(draft))
     revision = _save_revision(factory, draft)
     approve_draft(factory, source, draft, kind=kind)
     request = ProtocolPublicationRequest(idempotency_key="reviewed", draft_revision_id=revision.revision_id,
@@ -63,7 +67,7 @@ def test_review_records_survive_publication_and_idempotent_replay(slice4_env, ki
         assert stored.verification_only is verification_only
         assert len(stored.review_records) == len(review_entries(source, draft))
         procedure = next(record for record in stored.review_records if record.note == "excluded")
-        assert procedure.result_variables == ["blood_eos_count"]
+        assert procedure.result_variables == ["eos"]
 
 
 def test_changed_entry_invalidates_only_it_and_changed_source_invalidates_it(slice4_env):

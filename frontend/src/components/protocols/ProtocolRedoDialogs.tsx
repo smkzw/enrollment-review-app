@@ -535,12 +535,19 @@ export function ProtocolManualEditDialog({
                     <div className="protocol-edit-dialog__grid">
                       <label className="protocol-edit-dialog__field">
                         <span>判断对象</span>
-                        <input value={selectedPredicate.subject} onChange={(event) => updatePredicate({ subject: event.target.value })} />
+                        <input value={selectedPredicate.subject} readOnly />
                       </label>
                       <label className="protocol-edit-dialog__field">
                         <span>判断项目</span>
-                        <input value={selectedPredicate.attribute} onChange={(event) => updatePredicate({ attribute: event.target.value })} />
+                        <input value={selectedPredicate.attribute} readOnly />
                       </label>
+                      <label className="protocol-edit-dialog__field"><span>对应病例数据</span><select value={selectedPredicate.variableId ?? ""}
+                        onChange={event => updatePredicate({ variableId: event.target.value })}>
+                        <option value="">尚未选择</option>{(Array.isArray(candidateContent.variable_definitions) ? candidateContent.variable_definitions : []).map(value => {
+                          const item = value as { variable_id: string; label_zh: string };
+                          return <option key={item.variable_id} value={item.variable_id}>{item.label_zh}</option>;
+                        })}
+                      </select></label>
                       <label className="protocol-edit-dialog__field">
                         <span>比较关系</span>
                         <select value={selectedPredicate.comparator} onChange={(event) => updatePredicate({ comparator: event.target.value as EditablePredicate["comparator"] })}>

@@ -7,6 +7,7 @@ from pydantic import AliasChoices, Field, StrictInt, model_serializer, model_val
 
 from .common import ContractModel, RevisionedModel, ScalarValue, VersionedModel
 from .rule_reviews import RuleReviewRecord
+from app.domain.variables.dictionary import VariableDef
 from .control_evidence_origin import ControlEvidenceOrigin
 from .half_life_evidence import HalfLifeEvidence
 from .occurrence_scope import OccurrenceScope
@@ -506,6 +507,7 @@ def iter_atomic_predicates(expression: RuleExpression):
 
 
 class EvidenceRequirement(VersionedModel):
+    variable_id: str | None = Field(default=None, min_length=1)
     requirement_id: str = Field(min_length=1)
     rule_component_id: str | None = Field(default=None, min_length=1)
     procedure_catalog_item_id: str | None = Field(default=None, min_length=1)
@@ -526,6 +528,8 @@ class EvidenceRequirement(VersionedModel):
     @model_serializer(mode="wrap")
     def serialize_origin(self, handler):
         data = handler(self)
+        if self.variable_id is None:
+            data.pop("variable_id", None)
         if self.control_origin is None:
             data.pop("control_origin", None)
         for name in ("control_validity_status", "control_validity_constraint"):
@@ -735,11 +739,12 @@ class RuleSet(RevisionedModel):
     rules: list[Rule] = Field(min_length=1)
     verification_only: bool | None = None
     review_records: list["RuleReviewRecord"] | None = None
+    variable_definitions: list["VariableDef"] | None = None
 
     @model_serializer(mode="wrap")
     def preserve_historical_review_payload(self, handler):
         data = handler(self)
-        for key in ("verification_only", "review_records"):
+        for key in ("verification_only", "review_records", "variable_definitions"):
             if getattr(self, key) is None:
                 data.pop(key, None)
         return data

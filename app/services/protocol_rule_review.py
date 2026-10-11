@@ -38,6 +38,11 @@ def review_entries(source: ProtocolDeconstructionInput, draft: ProtocolDeconstru
             "source_materials": [item.model_dump(mode="json") for item in source.source_materials
                                  if item.source_span_id in refs],
         }
+        used_variables = {item.proposed_requirement.variable_id for item in draft.evidence_requirement_drafts
+                          if item.draft_component_id in ids}
+        if draft.variable_definitions is not None:
+            payload["variables"] = [item.model_dump(mode="json") for item in draft.variable_definitions
+                                    if item.variable_id in used_variables]
         entries.append({"official_code": rule.official_code, "kind": "rule", "label": rule.source_text,
                         "rule_content_hash": canonical_hash(payload),
                         "source_refs": refs, "issue_refs": [rule.rule_id, rule.official_code, *sorted(ids), *refs]})
@@ -56,6 +61,9 @@ def review_entries(source: ProtocolDeconstructionInput, draft: ProtocolDeconstru
             "source_materials": [value.model_dump(mode="json") for value in source.source_materials
                                  if value.source_span_id in item.source_span_ids],
         }
+        if draft.variable_definitions is not None:
+            payload["variables"] = [value.model_dump(mode="json") for value in draft.variable_definitions
+                                    if value.variable_id in {entry.proposed_requirement.variable_id for entry in requirements}]
         entries.append({"official_code": item.item_id, "kind": "procedure", "label": item.label,
                         "rule_content_hash": canonical_hash(payload), "source_refs": list(item.source_span_ids),
                         "issue_refs": [item.item_id, *item.source_span_ids]})

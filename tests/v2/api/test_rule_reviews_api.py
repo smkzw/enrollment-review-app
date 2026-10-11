@@ -22,7 +22,7 @@ def test_review_api_stale_revoke_settings_operator_and_publication(build_app, mo
         for entry in view["entries"]:
             request["rule_content_hash"] = entry["rule_content_hash"]
             request["note"] = "excluded" if entry["kind"] == "procedure" else None
-            request["result_variables"] = ["blood_eos_count"] if entry["kind"] == "procedure" else []
+            request["result_variables"] = ["eos"] if entry["kind"] == "procedure" else []
             response = client.post(url + f"/draft/rules/{entry['official_code']}/review", json=request)
             assert response.status_code == 200, response.text
         body = response.json()

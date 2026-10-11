@@ -371,6 +371,15 @@ class RuleSetRecord(AppendedRecordMixin, Base):
     __table_args__ = (Index("ix_rule_sets_protocol_version_id", "protocol_version_id"),)
 
 
+class RuleSetVariablesRecord(AppendedRecordMixin, Base):
+    """Immutable dictionary snapshot, a projection of the published RuleSet."""
+    __tablename__ = "rule_set_variables"
+    rule_set_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, primary_key=True)
+    __table_args__ = (ForeignKeyConstraint(
+        ["rule_set_id", "revision"], ["rule_sets.rule_set_id", "rule_sets.revision"]),)
+
+
 class RuleRecord(AppendedRecordMixin, Base):
     __tablename__ = "rules"
 

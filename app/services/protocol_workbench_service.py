@@ -59,6 +59,7 @@ from app.protocols.ingestion import (
 from app.protocols.metadata import MetadataExtractionError, confirm_protocol_identity
 from app.services.job_service import JOB_IDEMPOTENCY_SCOPE, JobService, StepSpec
 from app.services.protocol_draft_service import (
+    DraftEditBoundaryError,
     FormalBaselineError,
     ProtocolDraftService,
     compute_draft_diff,
@@ -1372,6 +1373,35 @@ class ProtocolWorkbenchService:
             "all_reviewed": bool(entries) and all(entry["review"] is not None for entry in entries),
         }
 
+    def get_variable_bindings(self, job_id: str) -> dict[str, Any]:
+        from app.services.protocol_variable_binding import binding_view
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        revision = self._load_draft_revision(merged)
+        return {"job_id": job_id, "draft_revision_id": revision.revision_id,
+                **binding_view(revision.content)}
+
+    def save_variable_bindings(self, job_id: str, *, expected_revision_id: str, proposal):
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        self._require_draft_session(merged)
+        revision = self._load_draft_revision(merged)
+        if revision.revision_id != expected_revision_id:
+            raise ProtocolWorkbenchError("DRAFT_REVISION_CONFLICT", title="草稿已更新",
+                detail="本次选择针对旧版草稿，没有保存。", recovery="请刷新后核对数据项目。")
+        try:
+            with self.session_factory() as session, session.begin():
+                saved = ProtocolDraftService(session).apply_variable_bindings(
+                    draft_id=revision.draft_id, proposal=proposal,
+                    expected_revision_id=expected_revision_id, actor=self.operator_name(), created_at=self.now())
+                self._update_draft_checkpoint(session, job_id, saved)
+        except DraftEditBoundaryError:
+            raise
+        except ValueError as exc:
+            raise ProtocolWorkbenchError("VARIABLE_BINDING_INVALID", title="数据项目不匹配",
+                detail=str(exc), recovery="请核对该条件的项目类型和单位后重试。") from exc
+        return self.get_draft_detail(job_id)
+
     def review_rule(self, job_id: str, official_code: str, *,
                     expected_revision_id: str, rule_content_hash: str,
                     reviewer_kind: ReviewerKind, action: Literal["approved", "revoked"],
@@ -1396,6 +1426,12 @@ class ProtocolWorkbenchService:
             if entry["kind"] != "procedure" and (note == "excluded" or result_variables):
                 raise ProtocolWorkbenchError("REVIEW_SETTINGS_INVALID", title="审定设置不适用",
                                              detail="只有检查项目可设置排除和必需结果变量。", recovery="请保留入排条款并核对原文。")
+            if result_variables:
+                from app.domain.variables.dictionary import load_dictionary
+                definitions = load_dictionary(revision.content.variable_definitions or ())
+                if any(value not in definitions for value in result_variables):
+                    raise ProtocolWorkbenchError("REVIEW_VARIABLE_UNKNOWN", title="检查结果项目不存在",
+                        detail="请选择已保存的数据项目。", recovery="请刷新数据项目清单后重试。")
             record = RuleReviewRecord(
                 record_id=f"rule-review:{uuid.uuid4().hex}", draft_id=revision.draft_id,
                 protocol_version_id=source.protocol_version_id, official_code=official_code,

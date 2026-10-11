@@ -55,9 +55,49 @@ from app.api.v2.vocabulary import (
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.protocol_metadata import ProtocolIdentityDecision
 from app.services.protocol_workbench_service import ProtocolWorkbenchService
+from pydantic import Field
+from app.domain.contracts.common import ContractModel
+from app.services.protocol_variable_binding import VariableBindingProposal
+
+
+class VariableBindingRequest(ContractModel):
+    expected_revision_id: str = Field(min_length=1)
+    proposal: VariableBindingProposal
+
+
+class VariableSuggestionRequest(ContractModel):
+    expected_revision_id: str = Field(min_length=1)
 
 router = APIRouter(prefix="/api/v2/protocol/deconstructions", tags=["v2-protocol"])
 projects_router = APIRouter(prefix="/api/v2/protocol", tags=["v2-protocol"])
+
+
+@router.get("/{job_id}/draft/variables")
+def get_variables(job_id: str, request: Request):
+    return _service(request).get_variable_bindings(job_id)
+
+
+@router.put("/{job_id}/draft/variables", response_model=DraftRevisionResponse)
+def save_variables(job_id: str, body: VariableBindingRequest, request: Request):
+    return _draft_dto(_service(request).save_variable_bindings(job_id,
+        expected_revision_id=body.expected_revision_id, proposal=body.proposal))
+
+
+@router.post("/{job_id}/draft/variables/suggest")
+async def suggest_variable_bindings(job_id: str, body: VariableSuggestionRequest, request: Request):
+    from app.agents.protocol_variable_binder import suggest_variables
+    service = _service(request)
+    view = service.get_draft_detail(job_id)
+    if view.revision.revision_id != body.expected_revision_id:
+        from app.services.protocol_workbench_service import ProtocolWorkbenchError
+        raise ProtocolWorkbenchError("DRAFT_REVISION_CONFLICT", title="草稿已更新",
+            detail="不会为旧版草稿生成建议。", recovery="请刷新草稿。")
+    if view.revision.status.value not in {"draft", "saved", "restored_from"}:
+        from app.services.protocol_workbench_service import ProtocolWorkbenchError
+        raise ProtocolWorkbenchError("DRAFT_NOT_EDITABLE", title="该版规则已发布",
+            detail="不会为不可编辑的历史版本生成建议。", recovery="请从已发布项目发起规则修订。")
+    return {"job_id": job_id, "draft_revision_id": body.expected_revision_id,
+            **await suggest_variables(view.revision.content, service.data_paths)}
 
 
 def _official_project_dto(view) -> OfficialProjectDTO:

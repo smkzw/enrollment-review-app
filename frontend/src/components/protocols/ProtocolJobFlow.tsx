@@ -38,6 +38,7 @@ import { ProtocolPublishedSummary } from "./ProtocolPublishedSummary";
 import { ProtocolRecoveryBanner } from "./ProtocolRecoveryBanner";
 import { patchComponentSemantics } from "../../domain/protocolManualEdit";
 import { ProtocolRuleReviewPanel } from "./ProtocolRuleReviewPanel";
+import { ProtocolVariableBindingPanel } from "./ProtocolVariableBindingPanel";
 
 interface ProtocolJobFlowProps {
   jobId: string;
@@ -139,6 +140,10 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         isRedo,
     },
   );
+
+  const onBindingsSaved = useCallback(() => {
+    session.retry(); draftBundle.retry(); comparison.retry(); redoReview.retry();
+  }, [session.retry, draftBundle.retry, comparison.retry, redoReview.retry]);
 
   useEffect(() => {
     if (
@@ -512,10 +517,11 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           sources={redoReview.state.data.sources}
           saving={saveBusy}
           publicationBlocked={publicationBlocked || publishBusy}
-          supplementaryRequirements={repo.kind === "http" ? <ProtocolRuleReviewPanel
+          supplementaryRequirements={repo.kind === "http" ? <><ProtocolVariableBindingPanel
+            jobId={jobId} revisionId={comparison.state.data.candidate.revisionId} onSaved={onBindingsSaved} /><ProtocolRuleReviewPanel
             jobId={jobId} revisionId={comparison.state.data.candidate.revisionId}
             integrity={redoReview.state.data.integrity} sources={redoReview.state.data.sources}
-            onReady={onReviewReady} /> : undefined}
+            onReady={onReviewReady} /></> : undefined}
           feedbackBusy={feedbackBusy}
           onSaveDraft={handleSaveDraft}
           onOpenFeedback={() => {
@@ -604,9 +610,10 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           }}
           saving={saveBusy}
           publicationBlocked={publicationBlocked}
-          supplementaryRequirements={repo.kind === "http" ? <ProtocolRuleReviewPanel
+          supplementaryRequirements={repo.kind === "http" ? <><ProtocolVariableBindingPanel
+            jobId={jobId} revisionId={draft.revisionId} onSaved={onBindingsSaved} /><ProtocolRuleReviewPanel
             jobId={jobId} revisionId={draft.revisionId} integrity={integrity}
-            sources={sources} onReady={onReviewReady} /> : undefined}
+            sources={sources} onReady={onReviewReady} /></> : undefined}
           publishing={publishBusy}
           saveError={saveError ?? publishError ?? undefined}
           uatDraftSaved={isStubDemo ? draftSaved : undefined}
