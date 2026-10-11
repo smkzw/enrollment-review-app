@@ -14,8 +14,8 @@
 
 - 事实只与其权威元组相同 ``(rule_set_id, rule_set_revision)`` 的已发布资料要求匹配，
   绝不跨规则集修订建链；
-- 仅当事实显式绑定资料要求 ID，且资料要求 ``fact_type`` 与事实 ``fact_type`` 完全相等时建立
-  ``evidence_requirement`` 链接；
+- 冻结变量身份相同时建立 ``evidence_requirement`` 链接；没有变量身份的历史
+  记录仍要求显式资料要求 ID 和精确 ``fact_type`` 相等；
 - 仅当该要求显式携带 ``rule_component_id`` 时才通过该显式身份追加
   ``rule_component`` 链接；流程必做项目录来源（无组件）不捏造组件链接；
 - 结果按 ``(fact_id, target_kind, target_id)`` 稳定排序，幂等可重建。
@@ -42,6 +42,7 @@ class PublishedRequirement(NamedTuple):
     requirement_id: str
     rule_component_id: str | None
     fact_type: str
+    variable_id: str | None = None
 
 
 class FactRuleLink(ContractModel):
@@ -150,14 +151,12 @@ def derive_fact_rule_links(
     rule_set_id: str,
     rule_set_revision: int,
 ) -> list[FactRuleLink]:
-    """纯确定性索引推导：只按显式身份 + 精确 ``fact_type`` 相等建立链接。
+    """纯确定性索引推导：按冻结变量身份或历史明确绑定建立链接。
 
     - 事实的权威元组必须与 ``(rule_set_id, rule_set_revision)`` 一致，跨规则集
       修订的事实不参与；
-    - 只有要求 ID 明确属于事实的 ``supported_requirement_ids``，且
-      ``PublishedRequirement.fact_type == fact.fact_type`` 时才建
-      ``evidence_requirement`` 链接；绝不使用 title/description/asserted_object
-      等自由文本相似度；
+    - 变量身份非空时，只与相同变量建立链接，不以类型或自由文本猜测；没有变量
+      身份的历史事实仍要求明确资料要求 ID 和精确 ``fact_type`` 相等；
     - 仅当要求显式 ``rule_component_id`` 非空时，经该显式身份追加
       ``rule_component`` 链接；流程必做项目录来源（无组件）不捏造组件；
     - 同一 ``(fact, target)`` 只产生一条链接（多条要求共享组件时去重）；
@@ -172,10 +171,14 @@ def derive_fact_rule_links(
         ):
             continue
         for requirement in requirements:
-            if (
-                requirement.requirement_id not in fact.supported_requirement_ids
-                or requirement.fact_type != fact.fact_type
-            ):
+            if fact.variable_id is not None:
+                matches = requirement.variable_id == fact.variable_id
+            else:
+                matches = (
+                    requirement.requirement_id in fact.supported_requirement_ids
+                    and requirement.fact_type == fact.fact_type
+                )
+            if not matches:
                 continue
             requirement_link = _make_link(
                 fact_id=fact.fact_id,

@@ -441,6 +441,26 @@ def test_exact_requirement_membership_excludes_same_type_sibling():
     }
 
 
+def test_frozen_variable_identity_does_not_fall_back_to_requirement_or_type():
+    fact = _fact(_min_ids()).model_copy(
+        update={"variable_id": "lab:eos", "supported_requirement_ids": ["req-other"]}
+    )
+    links = derive_fact_rule_links(
+        [fact],
+        [
+            PublishedRequirement("req-eos", "comp-eos", "laboratory", "lab:eos"),
+            PublishedRequirement("req-other", "comp-other", "vital_sign", "lab:alt"),
+            PublishedRequirement("req-legacy", None, "vital_sign"),
+        ],
+        rule_set_id="rs-a",
+        rule_set_revision=1,
+    )
+    assert {(link.target_kind, link.target_id) for link in links} == {
+        ("evidence_requirement", "req-eos"),
+        ("rule_component", "comp-eos"),
+    }
+
+
 # ------------------------------------------------------------- 模糊匹配禁令
 
 

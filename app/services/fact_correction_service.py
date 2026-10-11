@@ -781,6 +781,8 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         unit=unit,
         date_range=date_range,
         assertion_basis=assertion_basis,
+        variable_id=target.variable_id,
+        date_role=target.date_role,
     )
     existing = ClinicalFactV2Repository(session).list_for_authority(target.authority)
     revision = (
@@ -800,6 +802,9 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
     candidate_payload = {
         "candidate_id": candidate_id,
         "fact_type": fact_type,
+        **({"variable_id": target.variable_id} if target.variable_id is not None else {}),
+        **({"date_role": target.date_role} if target.date_role is not None else {}),
+        **({"risk_flags": [flag.value for flag in target.risk_flags]} if target.risk_flags else {}),
         "profile_lane": profile_lane.value,
         "supported_requirement_ids": supported_requirement_ids,
         "polarity": polarity.value,
@@ -834,6 +839,9 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         fact_type=fact_type,
         profile_lane=profile_lane,
         supported_requirement_ids=supported_requirement_ids,
+        variable_id=target.variable_id,
+        date_role=target.date_role,
+        risk_flags=list(target.risk_flags),
         polarity=polarity,
         asserted_object=asserted_object,
         value=value,

@@ -368,6 +368,12 @@ class DeepSeekEvidenceNormalizerTransport:
             and self._response_format.get("type") == "json_schema"
         )
 
+    def set_output_schema(self, schema: dict) -> None:
+        if self.enforces_output_json_schema:
+            self._response_format = {**self._response_format, "json_schema": {
+                **self._response_format["json_schema"], "schema": schema,
+            }}
+
     def _completion_kwargs(self, messages: list[dict[str, str]]) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": self._model,

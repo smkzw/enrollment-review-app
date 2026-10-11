@@ -364,7 +364,7 @@ class FactNormalizationExecutorConfig:
     # A page call is already a retryable persisted job step. Retrying again
     # inside the model runner hides failures and multiplies the per-page wait.
     max_transport_retries: int = 0
-    max_schema_repairs: int = 2
+    max_schema_repairs: int = 1
     artifact_store: ArtifactStore | None = None
     # Explicit owner-selected same-call failures; absent by default. No answer search.
     saved_response_recovery: dict[str, SavedResponseRecovery] | None = None

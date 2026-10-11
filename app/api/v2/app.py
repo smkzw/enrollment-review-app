@@ -280,7 +280,7 @@ def create_app(
             job_service=app.state.fact_normalization_job_service,
             registered_config=evidence_normalizer_runtime_config,
             require_page_review=False,
-            require_source_readiness=True,
+            require_source_readiness=False,
             page_reader_identity=lambda: app.state.page_review_runtime.main_reader_identity(),
             allow_candidate_partition=True,
             allow_question_classification_repair=True,

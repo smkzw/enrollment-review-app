@@ -682,21 +682,16 @@ def orchestrate_batch_gates(
     page_affected: list[str] = []
     overall = GateOutcome.ACCEPTED
     if revision is not None and calls is not None:
-        from app.domain.gates.fact_evidence_closure import validate_page_coverage
+        from app.domain.gates.fact_evidence_closure import validate_page_coverage, validate_page_coverage_per_candidate
 
         outcome, reasons, affected = validate_page_coverage(revision, calls, session=session)
         if outcome != GateOutcome.ACCEPTED:
             failure_reasons.extend(reasons)
             page_affected = list(affected)
             overall = GateOutcome.REJECTED
-            # 为每个候选生成 PAGE_COVERAGE 的 REJECTED 裁决
-            page_verdicts = _gate_verdicts_for_page_coverage_failure(
-                run_id=run_id,
-                call_id=call_id,
-                candidate_ids=all_cids,
-                reasons=reasons,
-                affected=affected,
-            )
+            page_verdicts = [validate_page_coverage_per_candidate(
+                revision, calls, candidate, session, coverage=(outcome, reasons, affected))
+                for candidate in [*fact_candidates, *event_candidates, *exposure_candidates]]
         else:
             # 页覆盖通过时，逐候选也生成 ACCEPTED 的页覆盖裁决以满足持久化审计
             for cid in sorted(set(all_cids)):

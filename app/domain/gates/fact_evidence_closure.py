@@ -152,6 +152,8 @@ def validate_page_coverage_per_candidate(
     calls: list[FactNormalizationCall],
     candidate,
     session: Session | None = None,
+    *,
+    coverage: tuple | None = None,
 ) -> GateVerdict:
     """为单个候选生成页覆盖门禁的 ``GateVerdict``。
 
@@ -160,7 +162,22 @@ def validate_page_coverage_per_candidate(
     若批次页覆盖失败，则该候选的此门禁为 REJECTED，
     affected_scope 为缺失/多余/重复页标识；否则 ACCEPTED。
     """
-    outcome, reasons, affected = validate_page_coverage(revision, calls, session=session)
+    outcome, reasons, affected = coverage or validate_page_coverage(revision, calls, session=session)
+    if outcome != GateOutcome.ACCEPTED and session is not None and affected:
+        from app.storage.evidence_models import EvidenceSnapshotMemberRecord
+        logical_by_version = {row.source_document_version_id: row.logical_document_id
+                              for row in session.execute(select(EvidenceSnapshotMemberRecord).where(
+                                  EvidenceSnapshotMemberRecord.snapshot_id == revision.evidence_snapshot_id)).scalars()}
+        pages = set()
+        for locator_id in candidate.locator_ids:
+            try:
+                locator = _fetch_locator(session, locator_id)
+            except (RepositoryError, ValueError):
+                break  # Locator validation will also retain the precise failure.
+            pages.add(f"{logical_by_version.get(locator.source_document_version_id, locator.source_document_version_id)}:{locator.page_number}")
+        else:
+            if pages and not pages.intersection(affected):
+                outcome, reasons, affected = GateOutcome.ACCEPTED, [], []
     # 若通过，affected_scope 按合同应为候选定位的有序集合或空；
     # 此处保持空以区分页标识与定位标识，批次聚合时可按需合并。
     if outcome == GateOutcome.ACCEPTED:
@@ -297,6 +314,12 @@ def _validate_assertion_text_closure(
     source = " ".join(localized.split())
     if basis.asserted_object not in assertion:
         return ["断言文本未包含被断言对象，不能借用邻近句"]
+    if candidate.variable_id is not None:
+        from app.domain.risk_flags import number_in_excerpt
+        if basis.assertion_text not in localized:
+            return ["断言摘录未逐字出现在当前定位有效原文内"]
+        if not number_in_excerpt(candidate.raw_value, basis.assertion_text):
+            return ["事实原始数值未出现在断言摘录中"]
     if candidate.polarity == FactPolarity.NEGATED:
         if assertion not in source:
             return ["否定断言文本不在当前定位有效原文内"]
@@ -584,21 +607,25 @@ def validate_blocking_ocr_for_candidate(
 
     blocked_locators: set[str] = set()
     reasons: list[str] = []
+    source_error = False
 
     for lid in locator_ids:
         try:
             locator = _fetch_cached(session, lid, locator_cache, visual_batch)
         except RepositoryError as exc:
+            source_error = True
             reasons.append(f"定位 {lid} 无法还原：{exc}")
             blocked_locators.add(lid)
             continue
         page_entry = next((entry for entry in revision.manifest if entry.page_artifact_id == locator.page_artifact_id), None)
         if page_entry is None:
+            source_error = True
             reasons.append(f"定位 {lid} 不属于当前资料页清单")
             blocked_locators.add(lid)
             continue
         ocr_pid = page_entry.ocr_page_id
         if getattr(locator, "ocr_page_id", None) not in (None, ocr_pid):
+            source_error = True
             reasons.append(f"定位 {lid} 的识别页与原件页不一致")
             blocked_locators.add(lid)
             continue
@@ -636,6 +663,10 @@ def validate_blocking_ocr_for_candidate(
                 )
                 blocked_locators.add(lid)
     if reasons:
+        if isinstance(candidate, ClinicalFactCandidateV2) and candidate.variable_id is not None:
+            # Source identity failures are never converted into OCR warnings.
+            if not source_error:
+                return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
         return GateOutcome.BLOCKED, reasons, sorted(blocked_locators)
     return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
 
@@ -997,24 +1028,8 @@ def gate_evidence_closure_for_candidate(
     verdicts: dict[FactGate, GateVerdict] = {}
     candidate_id = getattr(candidate, "candidate_id", "unknown")
 
-    # 页覆盖
-    outcome, reasons, affected = validate_page_coverage(revision, calls, session=session)
-    if outcome == GateOutcome.ACCEPTED:
-        verdicts[FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE] = GateVerdict(
-            candidate_id=candidate_id,
-            gate=FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE,
-            outcome=GateOutcome.ACCEPTED,
-            reasons=[],
-            affected_scope=[],
-        )
-    else:
-        verdicts[FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE] = GateVerdict(
-            candidate_id=candidate_id,
-            gate=FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE,
-            outcome=outcome,
-            reasons=reasons,
-            affected_scope=affected,
-        )
+    verdicts[FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE] = validate_page_coverage_per_candidate(
+        revision, calls, candidate, session)
 
     # 定位与哈希
     if visual_batch is None:
@@ -1105,23 +1120,8 @@ def batch_gate_evidence_closure(
         cid = getattr(cand, "candidate_id", "unknown")
         verdicts: dict[FactGate, GateVerdict] = {}
 
-        # 页覆盖门
-        if page_outcome == GateOutcome.ACCEPTED:
-            verdicts[FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE] = GateVerdict(
-                candidate_id=cid,
-                gate=FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE,
-                outcome=GateOutcome.ACCEPTED,
-                reasons=[],
-                affected_scope=[],
-            )
-        else:
-            verdicts[FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE] = GateVerdict(
-                candidate_id=cid,
-                gate=FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE,
-                outcome=page_outcome,
-                reasons=list(page_reasons),
-                affected_scope=list(page_affected),
-            )
+        verdicts[FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE] = validate_page_coverage_per_candidate(
+            revision, calls, cand, session, coverage=(page_outcome, page_reasons, page_affected))
 
         # 定位/哈希/阻断
         loc_outcome, loc_reasons, loc_affected = validate_locator_and_text_hash(

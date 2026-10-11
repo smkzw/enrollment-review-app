@@ -433,6 +433,12 @@ def build_fact_normalization_plan(
         doc_version_to_logical=doc_version_to_logical,
         logical_to_metadata_revision=logical_to_meta,
     )
+    from app.storage.repositories import get_rule_set
+    from app.domain.variables.extraction import build_extraction_targets
+    rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
+    stage = next(iter(contexts.values())).current_review_stage
+    targets = build_extraction_targets(rule_set, stage, list(related_requirements))
+    related_requirements = targets.requirements
     page_inputs = build_effective_text_map(
         session, revision, doc_version_to_logical=doc_version_to_logical,
         allow_image_only=allow_image_only,
@@ -454,6 +460,7 @@ def build_fact_normalization_plan(
         related_requirements=list(related_requirements),
         max_pages_per_call=max_pages_per_call,
         contract_version=contract_version,
+        variable_definitions=targets.variables,
     )
     return plan, adapter_result
 
@@ -558,6 +565,7 @@ def build_evidence_normalizer_input(
             logical_document_id=logical_document_id,
             context=planned.context,
             related_requirements=list(planned.related_requirements),
+            variable_definitions=planned.variable_definitions,
             manifest_sha256=source.revision.manifest_sha256,
             completion_manifest_sha256=source.revision.completion_manifest_sha256,
             page_numbers=page_numbers,
@@ -580,6 +588,7 @@ def build_evidence_normalizer_input(
         logical_document_id=logical_document_id,
         context=planned.context,
         related_requirements=list(planned.related_requirements),
+        variable_definitions=list(planned.variable_definitions),
         manifest_sha256=source.revision.manifest_sha256,
         completion_manifest_sha256=source.revision.completion_manifest_sha256,
         page_numbers=page_numbers,

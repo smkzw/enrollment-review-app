@@ -1002,6 +1002,7 @@ export function EvidencePage() {
         idempotency_key: idempotencyKeyFor(action),
         actor: "本地用户",
         selected_locator_ids: [],
+        source_qualification_mode: "scoped_text_v1",
       });
       completeAction(action);
       currentCandidateId.current = result.candidateId;

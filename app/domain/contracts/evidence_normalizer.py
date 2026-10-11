@@ -55,6 +55,7 @@ from .page_review import (
     PageReviewRecord,
 )
 from .rules import EvidenceRequirement
+from app.domain.variables.dictionary import VariableDef
 
 __all__ = [
     "EvidenceNormalizerInput",
@@ -283,6 +284,7 @@ class EvidenceNormalizerInput(ContractModel):
     logical_document_id: str = Field(min_length=1)
     context: EvidenceNormalizerContextInput
     related_requirements: list[EvidenceRequirement] = Field(default_factory=list)
+    variable_definitions: list[VariableDef] = Field(default_factory=list, exclude_if=lambda value: not value)
     manifest_sha256: str = Field(pattern=_SHA256)
     completion_manifest_sha256: str = Field(pattern=_SHA256)
     page_numbers: list[int] = Field(min_length=1)
@@ -339,6 +341,7 @@ class EvidenceNormalizerInput(ContractModel):
             logical_document_id=self.logical_document_id,
             context=self.context,
             related_requirements=self.related_requirements,
+            variable_definitions=self.variable_definitions,
             manifest_sha256=self.manifest_sha256,
             completion_manifest_sha256=self.completion_manifest_sha256,
             page_numbers=self.page_numbers,
@@ -365,6 +368,7 @@ def evidence_normalizer_input_scope_hash(
     page_review: EvidenceNormalizerPageReviewInput | None = None,
     available_locator_ids: list[str],
     available_locators: list[EvidenceNormalizerLocatorInput],
+    variable_definitions: list[VariableDef] | tuple[VariableDef, ...] = (),
 ) -> str:
     """计算输入范围的稳定哈希（用于幂等键与调用闭包校验）。"""
     payload = {
@@ -397,6 +401,8 @@ def evidence_normalizer_input_scope_hash(
     }
     if page_review is not None:
         payload["page_review_scope_sha256"] = page_review.scope_sha256
+    if variable_definitions:
+        payload["variable_definitions"] = [item.model_dump(mode="json") for item in sorted(variable_definitions, key=lambda item: item.variable_id)]
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 

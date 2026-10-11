@@ -463,11 +463,12 @@ def _execute(
             enqueue_selective_vision_postprocess_for_revision,
         )
 
-        enqueue_selective_vision_postprocess_for_revision(
-            config.session_factory,
-            revision_id,
-            trigger="evidence_processing_freeze",
-        )
+        if config.direct_vision_preparation:
+            enqueue_selective_vision_postprocess_for_revision(
+                config.session_factory,
+                revision_id,
+                trigger="evidence_processing_freeze",
+            )
     except Exception as exc:
         raise StepFailure(
             retryable=True,

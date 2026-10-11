@@ -15,6 +15,8 @@ DB 读取不可变有效文本与逻辑文档映射后，传入本模块进行�
 """
 from __future__ import annotations
 
+from app.domain.variables.dictionary import VariableDef
+
 from dataclasses import dataclass
 
 from app.domain.contracts.evidence_locator import CompleteEvidenceProcessingRevision
@@ -76,6 +78,7 @@ class PlannedCall:
     context: EvidenceNormalizerContextInput
     related_requirements: tuple[EvidenceRequirement, ...]
     input_sha256: str
+    variable_definitions: tuple[VariableDef, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.logical_document_id:
@@ -133,6 +136,7 @@ def compute_call_input_hash(
     page_numbers: list[int],
     page_inputs: list[PageInput],
     contract_version: str = _CONTRACT_VERSION,
+    variable_definitions: tuple[VariableDef, ...] = (),
 ) -> str:
     """使用规范化器输入合同计算唯一的调用输入哈希。"""
     sorted_inputs = sorted(page_inputs, key=lambda p: p.page_number)
@@ -165,6 +169,7 @@ def compute_call_input_hash(
         logical_document_id=logical_document_id,
         context=context,
         related_requirements=list(related_requirements),
+        variable_definitions=variable_definitions,
         manifest_sha256=revision.manifest_sha256,
         completion_manifest_sha256=revision.completion_manifest_sha256,
         page_numbers=sorted(set(page_numbers)),
@@ -311,6 +316,7 @@ def plan_fact_normalization_calls(
     related_requirements: list[EvidenceRequirement],
     max_pages_per_call: int = _DEFAULT_MAX_PAGES_PER_CALL,
     contract_version: str = _CONTRACT_VERSION,
+    variable_definitions: tuple[VariableDef, ...] = (),
 ) -> FactNormalizationPlan:
     """确定性规划：完整修订 + 有效文本 -> 逻辑文档调用与连续页组。
 
@@ -408,6 +414,7 @@ def plan_fact_normalization_calls(
                 page_numbers=chunk_page_numbers,
                 page_inputs=chunk_inputs,
                 contract_version=contract_version,
+                variable_definitions=variable_definitions,
             )
             call = PlannedCall(
                 logical_document_id=logical_document_id,
@@ -416,6 +423,7 @@ def plan_fact_normalization_calls(
                 context=context,
                 related_requirements=tuple(related_requirements),
                 input_sha256=input_sha,
+                variable_definitions=variable_definitions,
             )
             calls.append(call)
 
