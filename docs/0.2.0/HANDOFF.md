@@ -5,7 +5,7 @@
 ## 1. 五分钟接手
 
 - 工作树：`/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/build-0.2.0`，分支dev/0.2.0。
-- 本轮接手HEAD17ecbf58b4ef22adabd6230125462b5b68f08c71，clean；前序25ebd0f9/b0afe94c已推送。本轮WP3提交1ad63f94；审定及记录以包含本文件的随后WP1提交与现场HEAD为准，不reset/clean。
+- 本轮接手HEAD17ecbf58b4ef22adabd6230125462b5b68f08c71，clean；前序25ebd0f9/b0afe94c已推送。本轮WP3源码1ad63f94、审定源码41aea00c均已推送，随后仅同步交回记录；核现场HEAD，不reset/clean。
 - 用户要求：局部检验到工作稿；核IN-02；低把握原因、备选解释/有据推荐及手工调整；不重跑方案/变量建议；集中验证至M1。
 - 生化第8页新增1次真实产品调用，9事实保存并进入Profile及v11工作稿。局部run partial，累计24页成功证明继续使用，不叫整例完整。
 - IN-02外层修成ALL，内部观察ANY保持；只改该条组合/误导标题，不改原文、谓词、绑定、兄弟。本人审定稿rev2，4/64本人记录保留，未批准/发布。
@@ -19,7 +19,7 @@
 | 自有服务 | 61134，PID38329，exec session17708，v20；`./run.sh --data-dir <本树>/data_v2 --port 61134 --no-browser`；显式本树.env；output/wp3-wp4-product-server-v20.log |
 | 已停止服务 | v17–19自有服务已停止、终态已收回；v19 session68060 exit143；共享服务不动 |
 | 数据库 | 本树data_v2/enrollment-review-v2.sqlite3；只读核21completed/139failed_final/2cancelled/3waiting_user，0活动/租约；旧终态不改 |
-| 浏览器 | 原Ego空间23保留用户控制，不接管；本轮空间42“0.2.0 审定备选与检验衔接验收”，p1审定/p2工作稿；交回动作看实际SDK回执 |
+| 浏览器 | 原Ego23不接管；本轮42“0.2.0 审定备选与检验衔接验收”，p1审定/p2工作稿，宽屏检查后恢复自然视口；已成功调用SDK handOff交本人，不再操作直至明确交回 |
 | 审定入口 | http://127.0.0.1:61134/#/protocols?job=fb814eb3b657424aa4c4c340e710394b |
 
 恢复核实际进程/端口/数据归属；在运行则复用，不因宿主会话变化重启已终态模型作业。
