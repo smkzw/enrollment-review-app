@@ -59,6 +59,10 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
   const [manualEditBusy, setManualEditBusy] = useState(false);
   const [manualEditError, setManualEditError] = useState<string | null>(null);
   const [manualEditOpen, setManualEditOpen] = useState(false);
+  const [manualTarget, setManualTarget] = useState<{ componentId?: string; mainOperator?: "all" | "any" }>({});
+  const openRuleEdit = useCallback((componentId?: string, mainOperator?: "all" | "any") => {
+    setManualTarget({ componentId, mainOperator }); setManualEditError(null); setManualEditOpen(true);
+  }, []);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -306,16 +310,13 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
 
   const handleSubmitManualEdit = useCallback(
     async (values: ManualEditValues) => {
-      if (comparison.state.status !== "success") return;
+      const candidate = isRedo && comparison.state.status === "success" ? comparison.state.data.candidate
+        : draftBundle.state.status === "success" ? draftBundle.state.data.draft : null;
+      if (!candidate) return;
       setManualEditBusy(true);
       setManualEditError(null);
-      const candidate = comparison.state.data.candidate;
-      const patched = patchComponentSemantics(
-        candidate.content,
-        values.componentId,
-        values.patch,
-      );
       try {
+        const patched = patchComponentSemantics(candidate.content, values.componentId, values.patch);
         const next = await repo.editDraft(jobId, {
           expectedRevisionId: candidate.revisionId,
           draft: patched,
@@ -324,6 +325,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         session.retry();
         comparison.retry();
         redoReview.retry();
+        draftBundle.retry();
         if (isStubDemo && next.revisionNumber > 1) setDraftSaved(true);
       } catch (error) {
         if (error instanceof ProtocolWorkbenchApiError) {
@@ -337,7 +339,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         setManualEditBusy(false);
       }
     },
-    [comparison, isStubDemo, jobId, redoReview, repo, session.retry, setDraftSaved],
+    [comparison, draftBundle, isRedo, isStubDemo, jobId, redoReview, repo, session.retry, setDraftSaved],
   );
 
   const handleCancelDraft = useCallback(async () => {
@@ -523,7 +525,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
             jobId={jobId} revisionId={comparison.state.data.candidate.revisionId}
             content={comparison.state.data.candidate.content}
             integrity={redoReview.state.data.integrity} sources={redoReview.state.data.sources}
-            onReady={onReviewReady} /></> : undefined}
+            onReady={onReviewReady} onEdit={openRuleEdit} /></> : undefined}
           feedbackBusy={feedbackBusy}
           onSaveDraft={handleSaveDraft}
           onOpenFeedback={() => {
@@ -531,6 +533,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
             setFeedbackOpen(true);
           }}
           onOpenManualEdit={() => {
+            setManualTarget({});
             setManualEditError(null);
             setManualEditOpen(true);
           }}
@@ -557,6 +560,8 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           busy={manualEditBusy}
           errorMessage={manualEditError ?? undefined}
           candidateContent={comparison.state.data.candidate.content}
+          initialComponentId={manualTarget.componentId}
+          initialMainOperator={manualTarget.mainOperator}
           onClose={() => {
             if (manualEditBusy) return;
             setManualEditOpen(false);
@@ -616,12 +621,16 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
             jobId={jobId} revisionId={draft.revisionId} onSaved={onBindingsSaved} /><ProtocolRuleReviewPanel
             jobId={jobId} revisionId={draft.revisionId} integrity={integrity}
             content={draft.content}
-            sources={sources} onReady={onReviewReady} /></> : undefined}
+            sources={sources} onReady={onReviewReady} onEdit={openRuleEdit} /></> : undefined}
           publishing={publishBusy}
           saveError={saveError ?? publishError ?? undefined}
           uatDraftSaved={isStubDemo ? draftSaved : undefined}
           onUatReset={isStubDemo ? handleResetTrial : undefined}
         />
+        <ProtocolManualEditDialog open={manualEditOpen} busy={manualEditBusy}
+          errorMessage={manualEditError ?? undefined} candidateContent={draft.content}
+          initialComponentId={manualTarget.componentId} initialMainOperator={manualTarget.mainOperator}
+          onClose={() => { if (!manualEditBusy) setManualEditOpen(false); }} onSubmit={handleSubmitManualEdit} />
         <ProtocolConfirmCancelDialog
           open={cancelOpen}
           busy={cancelBusy}

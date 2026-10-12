@@ -4,7 +4,7 @@ import type { IntegrityView, SourcesView } from "../../api/protocolWorkbenchType
 import { mapProtocolSourceLocators } from "../../domain/protocolMappers";
 import { ProtocolDraftSourcePane } from "./ProtocolDraftSourcePane";
 import { decodeBindingView, variableRequest, type BindingView } from "../../api/protocolVariables";
-import { reviewCategories, ruleReviewIssueText, ruleReviewPresentations, type ReviewCategory } from "../../domain/protocolRuleReview";
+import { reviewCategories, ruleReviewAdvice, ruleReviewIssueText, ruleReviewPresentations, type ReviewCategory } from "../../domain/protocolRuleReview";
 import { ProtocolReviewLogic } from "./ProtocolReviewLogic";
 
 interface Props {
@@ -14,9 +14,10 @@ interface Props {
   sources: SourcesView;
   content?: Record<string, unknown>;
   onReady: (ready: boolean) => void;
+  onEdit?: (componentId?: string, mainOperator?: "all" | "any") => void;
 }
 const emptyContent = {};
-export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources, content = emptyContent, onReady }: Props) {
+export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources, content = emptyContent, onReady, onEdit }: Props) {
   const [data, setData] = useState<RuleReviews | null>(null);
   const [selection, setSelection] = useState<string | null>(null);
   const [kind, setKind] = useState<ReviewerKind>("medical_manager");
@@ -163,6 +164,22 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
             : <p>原文与条件、病例数据项目已有对应，当前未检出相关结构提示；仍须由医学经理核对含义。</p>}
           <small>这是解析核对提示，不是准确率，也不是受试者的审核结论。</small>
         </section>
+        {selectedItem.reasons.length > 0 && <section className="protocol-review-advice" aria-label="备选解释与处理">
+          <h4>备选解释与处理</h4>
+          {ruleReviewAdvice(selectedItem, content).map(advice => <div key={advice.componentId ?? advice.title}>
+            <strong>{advice.title}</strong><p>{advice.analysis}</p>
+            <ol>{advice.options.map(option => <li key={option.label}>
+              <strong>{option.label}{option.recommended ? " · 推荐核对方向" : ""}</strong>
+              <p>{option.explanation}</p>
+              {onEdit && advice.componentId && (option.operator || option.manual || option.label === "分组或手动调整") && <button className="button" disabled={busy}
+                onClick={() => onEdit(advice.componentId!, option.operator)}>
+                {option.operator ? "按此方向预览修订" : "打开手动调整"}</button>}
+            </li>)}</ol>
+          </div>)}
+          <p>推荐依据是原文及当前解析，不是准确率排名。选择只打开修订预览，保存后仍需重新审定；不会自动批准。</p>
+        </section>}
+        {onEdit && entry.kind === "rule" && selectedItem.rule?.components[0] && <button className="button" disabled={busy}
+          onClick={() => onEdit(selectedItem.rule?.components[0]?.componentId)}>手动修改本条解析</button>}
         <ProtocolReviewLogic item={selectedItem} content={content} bindings={bindings} />
         {integrity.issues.filter(issue => issue.affectedRefs.some(ref => entry.issue_refs.includes(ref))).map(issue => <p key={issue.issueCode + issue.affectedRefs.join(",")} role="status">{issue.level}：{ruleReviewIssueText(issue)}</p>)}
         {entry.kind === "procedure" && <fieldset><legend>入组前检查要求</legend>

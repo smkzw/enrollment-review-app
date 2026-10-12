@@ -73,7 +73,7 @@ CHECK_NAMES = (
 
 # 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
 # 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
-DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/0.2.0-structural"
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/0.2.0-structural-2"
 STRUCTURAL_CHECK_NAMES = frozenset({
     "identity", "parent_catalog", "tree_integrity", "boolean_logic", "diff_integrity",
 })
@@ -795,6 +795,7 @@ def _parenthetical_stack_at(source: str, position: int) -> tuple[int, ...]:
 
 def _source_separator_in_shared_scope(
     source: str, left: tuple[int, int, str], right: tuple[int, int, str],
+    observation_ranges: Sequence[tuple[int, int]] = (),
 ) -> str:
     """Only connectors at the scope shared by both branches authorize an OR."""
 
@@ -813,7 +814,7 @@ def _source_separator_in_shared_scope(
             stack.append(index)
         elif char in "）)" and stack:
             stack.pop()
-        elif stack == shared:
+        elif stack == shared and not any(start <= index < end for start, end in observation_ranges):
             visible.append(char)
     if (left[1] > 0
             and source[left[1] - 1] in "、，；;,"
@@ -921,6 +922,24 @@ def _branches_have_source_disjunction(expression, source: str) -> bool:
     ]
     if any(not anchors for anchors in branch_anchors):
         return False
+    # An observation's own alternatives cannot connect independent conditions.
+    # Only exclude a source-bound scope that contains no sibling source anchor.
+    observation_ranges = []
+    for owner, child in enumerate(expression.children):
+        for predicate in iter_atomic_predicates(child):
+            if predicate.observation_policy is None:
+                continue
+            for excerpt in predicate.observation_policy.source_excerpts:
+                clause = re.sub(r"\s+", "", excerpt)
+                start = compact_source.find(clause)
+                end = start + len(clause)
+                if start < 0 or not any(clause in re.sub(r"\s+", "", item)
+                                        for item in predicate.exact_source_clauses):
+                    continue
+                if not any(start <= anchor[0] and anchor[1] <= end
+                           for index, anchors in enumerate(branch_anchors) if index != owner
+                           for anchor in anchors):
+                    observation_ranges.append((start, end))
     for first in branch_anchors[0]:
         paths = [([first], [first[2]])]
         for anchors in branch_anchors[1:]:
@@ -939,7 +958,7 @@ def _branches_have_source_disjunction(expression, source: str) -> bool:
             if all(term in {"筛选", "筛选期", "基线", "基线期"} for term in terms):
                 continue
             separators = [
-                _source_separator_in_shared_scope(compact_source, left, right)
+                _source_separator_in_shared_scope(compact_source, left, right, observation_ranges)
                 for left, right in zip(path, path[1:])
             ]
             if any(

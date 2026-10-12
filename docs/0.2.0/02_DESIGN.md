@@ -172,6 +172,7 @@
 
 - 审定入口 `ProtocolRuleReviewPanel` 消费同一草稿的真实条件树、变量绑定、来源及检查提示；分类仅作显示，不更改条款身份、含义或作用范围。复用 `ExpressionView` 展示全部／任一／否定、比较条件、时间窗、例外；绑定字典提供中文项目名，原文另列。解析把握度是可解释的核对优先级，不是医学正确概率；适用人群、例外、计算、书面判断和来源／绑定缺口为重点。
 - `POST .../{job}/draft/reviews` 接受所选条目的内容哈希与设置，由 `review_rules` 与单条接口共享同一事务核验及追加事件路径。任一版本／内容／设置不符均全批拒绝；相同已审定内容、身份和设置的重试不重复记事件。筛选切换清除临时选择，确认框明确检查是否只核操作、所需结果和排除设置；不自动发布、不改变既有审定。
+- R-A12复用`protocolRuleReview.ruleReviewAdvice`与既有`ProtocolManualEditDialog`：原因／备选／影响同屏；有明确原文线索才推荐核对方向，无法比较时明确不推荐，不报虚构概率。针对选中子项预填关系但不保存；用户可改选。首次与重新解构均接既有editDraft入口，原文／定位只读；保存追加修订、按内容失效审定，不自动采用。局部观察任选和外层要求组合分开；弹层初始化必须同时切换子项与条件，不混入上条。
 
 - 后端：`POST /api/v2/protocol/deconstructions/{job}/draft/rules/{official_code}/review`（审定，请求体含 `reviewer_kind`）与 `DELETE`（撤销）；发布前检查全部 IN/EX／REQ／禁用药条目均有与当前内容哈希一致的 `RuleReviewRecord`。
 - **构建者不得以医学经理身份审定。** 构建者在验证副本上走流程时，`reviewer_kind=builder_verification`，`reviewed_by` 写"构建者（验证）"。0.2.0-M1 要求至少一次由用户本人完成的 `medical_manager` 审定与发布。

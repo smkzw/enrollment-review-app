@@ -180,10 +180,16 @@ function parseValue(text: string, original: unknown, comparator: EditableCompara
     });
   }
   if (typeof original === "number") {
+    if (!text.trim()) throw new Error("请填写有效数值；空白不能当作零。");
     const numeric = Number(text);
-    return Number.isFinite(numeric) ? numeric : original;
+    if (!Number.isFinite(numeric)) throw new Error("请填写有效数值，没有保存本次修订。");
+    return numeric;
   }
-  if (typeof original === "boolean") return text === "是" || text.toLowerCase() === "true";
+  if (typeof original === "boolean") {
+    const answer = text.trim().toLowerCase();
+    if (!["是", "否", "true", "false"].includes(answer)) throw new Error("请明确选择是或否，没有保存本次修订。");
+    return answer === "是" || answer === "true";
+  }
   return text;
 }
 

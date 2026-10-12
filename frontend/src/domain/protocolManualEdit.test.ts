@@ -5,6 +5,13 @@ import { draftComparisonFixture } from "../fixtures/protocol-deconstruction-work
 const candidateContent = draftComparisonFixture.candidate.content;
 
 describe("方案草稿手工修订", () => {
+  it("错误或空白数值不悄悄保留旧值，也不改成零", () => {
+    const age = getEditableProtocolComponents(candidateContent).find(item => item.componentId === "component-in")!;
+    for (const valueText of ["", "不是数字"]) expect(() => patchComponentSemantics(candidateContent, age.componentId, {
+      title: age.title, mainOperator: age.mainOperator, exceptionOperator: age.exceptionOperator,
+      predicate: { ...age.predicates[0]!, valueText }, requirements: age.requirements,
+    })).toThrow("有效数值");
+  });
   it("读取子项的条件、资料要求和只读来源", () => {
     const components = getEditableProtocolComponents(candidateContent);
     const age = components.find((item) => item.componentId === "component-in")!;

@@ -1,133 +1,112 @@
-# 0.2.0 当前交接与无损暂停
+# 0.2.0 当前交接
 
-更新时间：2026-10-12 17:11（北京时间）。**用户要求暂停，Goal paused；WP3／WP4进行中，M1未通过。**
-
-本文替换过时的当前交接，历史留Git，不改旧回执；不是新增PRD、执行包或授权。唯一规范仍为本目录01–06，唯一进度为05。等待明确恢复指令。
+更新时间：2026-10-12，本次恢复后的功能包收口。**Goal active，未暂停；WP3/WP4进行中，M1未通过。** 唯一计划03_PLAN，唯一进度05_PROGRESS；本文替换旧暂停现场，历史留Git，不覆盖旧回执，不是新执行包。
 
 ## 1. 五分钟接手
 
-- 唯一工作树：`/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/build-0.2.0`，分支`dev/0.2.0`。
-- 暂停前源码HEAD：`25ebd0f920a6d0f211d594b8abacd8bee586a62e`，与origin一致、clean；此后仅交接／进度暂停记录提交。恢复核实际HEAD和dirty，不reset／clean。
-- 31001已接入隔离副本，24页有处理账本、113累计事实，有真实验证工作稿；旧交接“未读取／无工作稿”已经过时。
-- 新ULN依赖和计算仅代码／离线验证完成，没有新增真实提取或v9工作稿。最新审定界面已交付，但IN-02旧组合关系仍需原文核对。
-- 本人审定4/64；验证规则不是正式本人批准。M1评审A、B各一次已完成，不重派；M1尚未通过。
-- 自有服务已停止，没有活动／可重试作业、租约或需要等待的模型。最后接续只是查看局部范围入口，没有实现新入口或入队。
+- 工作树：`/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/build-0.2.0`，分支dev/0.2.0。
+- 本轮接手HEAD17ecbf58b4ef22adabd6230125462b5b68f08c71，clean；前序25ebd0f9/b0afe94c已推送。本轮WP3提交1ad63f94；审定及记录以包含本文件的随后WP1提交与现场HEAD为准，不reset/clean。
+- 用户要求：局部检验到工作稿；核IN-02；低把握原因、备选解释/有据推荐及手工调整；不重跑方案/变量建议；集中验证至M1。
+- 生化第8页新增1次真实产品调用，9事实保存并进入Profile及v11工作稿。局部run partial，累计24页成功证明继续使用，不叫整例完整。
+- IN-02外层修成ALL，内部观察ANY保持；只改该条组合/误导标题，不改原文、谓词、绑定、兄弟。本人审定稿rev2，4/64本人记录保留，未批准/发布。
+- 审定页原因→分析→备选方向→目标手工预览已接通；无充分依据不推荐，不造准确率，预览不是保存/批准。
+- M1必须用户本人正式审定与验收；构建者不能代签。A/B前次已各一次，不重派或声称v11再次独立通过。
 
-## 2. 权威与权限
-
-按需读本树`AGENTS.md`及`docs/0.2.0/01_PRD.md`、`02_DESIGN.md`、`03_PLAN.md`、`04_ACCEPTANCE.md`、`05_PROGRESS.md`；评审要求06，历史索引07。不逐份重读archives，不恢复旧授权。
-
-单一构建者，复用Job／工件／事实／规则消费者，不新建框架、队列、真相库或阶段。不得重跑已完成方案解构、变量建议、验证发布和成功页。旧跨章、prepared-review、固定逐页双读及方法采用链不调用、不修补、不删除。
-
-构建者只用builder_verification验证，不能冒充本人；正式审定、采用、签发、里程碑验收分别保留权限。不改原方案、病例、人工IE、旧事实／报告；只在本树验证副本追加。不提交原件、库、环境或临床原答。人工IE不入提示，D001在M3前保持留出。暂停期间不新增收费调用。
-
-## 3. 代码、服务与数据现场
+## 2. 运行现场
 
 | 项目 | 当前事实 |
 |---|---|
-| 最新源码 | b0afe94c：原数值／同行参考范围与ULN确定性计算；25ebd0f9：分类、重点、实际逻辑与原子集中审定；均已推送 |
-| 前序源码 | 1020f6d3旧暂停；d5ea72bb接线；b429072f评审A后修订；59bbca86评审B后消费者修订；33e3a416进度 |
-| 自有产品服务 | PID89885／端口61134／会话70380，显式本树.env和data_v2；日志output/wp3-wp4-product-server-v17.log |
-| 停止证据 | 发TERM并收回exit143，随后61134无监听；不是exit0。共享服务没有停止或接管 |
-| 数据库 | 本树data_v2/enrollment-review-v2.sqlite3；17completed／139failed_final／2cancelled／3waiting_user；queued／running／failed_retryable与任何租约均为0 |
-| 暂停核查 | 本树虚拟环境sqlite3 URI mode=ro读取成功；系统sqlite3打开失败，未据此重建库；旧终态不变 |
-| 浏览器 | Ego空间23已handOff交给用户，不自动抢回；暂停没有操作用户页面 |
+| 自有服务 | 61134，PID38329，exec session17708，v20；`./run.sh --data-dir <本树>/data_v2 --port 61134 --no-browser`；显式本树.env；output/wp3-wp4-product-server-v20.log |
+| 已停止服务 | v17–19自有服务已停止、终态已收回；v19 session68060 exit143；共享服务不动 |
+| 数据库 | 本树data_v2/enrollment-review-v2.sqlite3；只读核21completed/139failed_final/2cancelled/3waiting_user，0活动/租约；旧终态不改 |
+| 浏览器 | 原Ego空间23保留用户控制，不接管；本轮空间42“0.2.0 审定备选与检验衔接验收”，p1审定/p2工作稿；交回动作看实际SDK回执 |
+| 审定入口 | http://127.0.0.1:61134/#/protocols?job=fb814eb3b657424aa4c4c340e710394b |
 
-恢复需要产品时，先核端口和归属，再用本树现有run.sh、显式环境和副本启动。现在URL不在线，不声称保存入口仍可访问。
+恢复核实际进程/端口/数据归属；在运行则复用，不因宿主会话变化重启已终态模型作业。
 
-## 4. 用户流程与进度
+## 3. 现行边界
 
-| 工作包 | 已实现及边界 | 未完成 |
+读本树AGENTS与docs/0.2.0/01–06相关章，archives仅按07索引找必要历史。单一构建者，不新建Trellis任务、框架、队列、模型榜单、规则真相库。旧跨章、prepared-review、全页固定双读及方法采用链不调用、不修补、不删除。
+
+原方案/病例/人工IE/旧事实/报告不覆盖；真实追加仅本树验证副本。不提交data_v2、.env、原件、临床模型原答；output是受控本机材料，外部审阅仅凭路径不可取得。人工IE不入提示，D001在M3前保持留出。
+
+不重跑完成的方案解构、变量建议、验证发布、24页成功证明、已终态生化局部调用。正式规则发布后先核输入/变量/来源相容，不能为换规则机械重读整24页。
+
+## 4. 用户流程与身份
+
+| 节点 | 已联通 | 未完成 |
 |---|---|---|
-| WP0 | 历史归档、单一入口、启动、基线 | 不以整理历史替代交付 |
-| WP1 | 构建者验证发布；新增分类／重点／条件树／多选集中审定 | 可疑旧关系需核，显示清楚不代表正确 |
-| WP2 | 197变量、141绑定、验证规则v3，同源本人审定入口 | 本人4/64，完整正式审定／正式发布未完成 |
-| WP3 | 5文件24页正式接入，52请求、5个终态读取运行，113累计事实 | FEV1、筛选ANC、生化原值／参考范围等仍有提取或关联缺口 |
-| WP4 | UI生成／保存／读回／原件导航的真实v8工作稿 | 完整医学结果及M1未通过，新计算v9未实跑 |
-| WP5–8 | 未完成、未擅自扩展 | 语义／用药／书面判断、工作台、更正闭环、IE与留出 |
+| 规则 | 64项分类/重点/条件树/原文/多选；备选分析与目标手工编辑；IN02rev2保存/读回/校验 | 本人4/64，完整正式审定及verification_only=false发布 |
+| 资料 | 5文件24页累计账本；9新事实/原值/单位/范围/采样日；Profile rev6 | 筛选ANC单位遮挡、FEV1用药前关系及部分操作事实 |
+| 工作稿 | v11保存，64父+88子=152行；17确定低置信、24未到期、53未定、58系统行/49独立问题 | M1未通过；17含父子重复，不是17独立要求；WP5能力未接 |
+| 原件 | 17确定行逐字同文档0失配；四原值/上限另看原图；正确第8页和三个宽屏截图 | 尚无准确区域坐标，不造红框；不是整例医学验收 |
+| 闭环 | 旧版/原件hash保留 | WP5–8、M2/M3、IE、更正补证及D001未执行 |
 
-本轮用户多了真实动作：按类别和节点筛规则，优先看把握不足理由，对照保存的条件树和原文，选多条后一次确认。批量操作逐条验身份／版本，整批失败不写、不自动发布。浏览器实际确认框只预览后取消，4本人记录与64内容hash前后不变。
+项目draft-project-1153e25b4eba；方案draft-version-1153e25b4eba；原草稿rev21保留。验证RuleSet revision3/verification_only=true：23 IN/EX、88组件、41REQ、141绑定、197变量、402资料要求。
 
-## 5. 当前实体与结果
+本人稿Job fb814eb3b657424aa4c4c340e710394b，revision2/waiting_user/无租约；4本人记录及历史保留。publishable=true只说明可审定，不是已批准；人群/节点等提醒仍显示。
 
-| 实体 | 当前身份／范围 |
-|---|---|
-| 项目／方案 | draft-project-1153e25b4eba／draft-version-1153e25b4eba，原草稿rev21和来源保留 |
-| 验证规则 | RuleSet revision3，64构建者验证，verification_only=true；23 IN/EX父项、88组件、41 REQ、141绑定、197变量、402资料要求 |
-| 本人审定任务 | fb814eb3b657424aa4c4c340e710394b，8/10保存、waiting_user、无租约，4/64本人审定，未发布 |
-| 审定入口 | 服务恢复后/#/protocols?job=fb814eb3b657424aa4c4c340e710394b；旧fd69失败页不再作为当前入口 |
-| 31001 | 中心31，58ff71df0cff4a2c9107be743d82584b |
-| 筛选节点 | b843b2c07d6d4318a6df741eb7902eb3，锚点2025-08-08、节点revision4 |
-| 基线节点 | e66f903e08cb4d02a50c9162cfb6c4b4，不把后续值当筛选值 |
-| 资料 | snapshot c69c297a3ea84c57a8fa953e07567b1d，complete-ad2f258d2aff46a98affc99dfac3ea78；病历9／筛选8／基线血常规1／DNA1／邮件5，共24页 |
-| 最新真实工作稿 | review-run:1692e8123c3146e2beda597f6f61e3a8；Job2147481a8d47403f9f5d31063fa2849b，completed4/4，method v8、规则3 |
+31001中心31，subject58ff71df0cff4a2c9107be743d82584b；筛选episode b843b2c07d6d4318a6df741eb7902eb3/anchor2025-08-08/节点rev4；基线e66f903e08cb4d02a50c9162cfb6c4b4，不拿后续值判筛选。snapshot c69c297a3ea84c57a8fa953e07567b1d；complete-ad2f258d2aff46a98affc99dfac3ea78。
 
-152行（64父＋88子），15确定行含父子重复、24未到期、55未定、58系统行／49去重系统问题。15确定行全部低置信，高置信0；不是高置信准确率100%。113累计事实不是113独立采集。
+## 5. 修改、首错与消费者
 
-15确定行逐字及同文档回源0失配，但并非整例零错漏。未接入书面判断、用药、语义时列系统问题，不谎称患者未记录。M1未通过；M2／M3、IE、更正完整闭环及D001留出未执行。
+### 审定及IN-02
 
-## 6. 改动、首错与剩余风险
+- 旧外层ANY将诊断/病史/检测一起放宽；沿ProtocolWorkbenchService.apply_manual_edit保存rev2，只改ALL与误导标题；3谓词、阈值、原文、绑定、内部观察ANY及兄弟hash保持。不调模型、不冒充批准。
+- 实际UI发现校验将观察内“当前季节或同期”误作独立条件连接。deconstruction_gate的分支核对现在排除逐字绑定、且不含兄弟锚点的局部观察范围；真外层OR仍拦错误ALL，错误ANY仍拒。现有gate结构-2重验旧缓存，不重读来源或改旧证明。
+- 原稿诊断/检测要求研究者判断，但原文未明确所有内容需额外书面意见；**未擅自删要求**。页面列研究者书面判断/已有诊断客观结果/暂保留待审；有明文才推荐，需本人审定变量和资料要求。
+- 前端protocolRuleReview.ts、ProtocolRuleReviewPanel.tsx、ProtocolJobFlow.tsx、ProtocolRedoDialogs.tsx、protocolManualEdit.ts；首稿和修订稿共用editDraft，不另调总结模型。
+- 实际手工预览曾目标IN02、状态却携带IN01条件；已一起初始化component/editor/predicate并拒错身份提交。空/非法数值及布尔文本明确报错，不变0/false、不吞异常。
+- 选项只打开预览；保存形成新稿，相关审定须重做；ID/来源只读。没有点击审定通过/发布。
 
-### 审定体验（25ebd0f9）
+### 生化到结果
 
-- 真实条件树显示同时／任一／否定、数值、时间、例外、适用对象、输入、缺失政策、证据及阶段；原文单独展开，不另调总结模型。
-- 入排、用药／治疗、检验、检查、评分及其他分类。用药筛选不证明全文S4完整。
-- 把握度是有原因的核对优先级，不是校准概率；42重点不等于42医学错误。泛化ANY／节点／判断理由保留。
-- 集中API复用单条review_rules，一事务先验revision／每条hash／设置，任一坏项不写；幂等；筛选变更清勾选，确认明确父子范围。
-- 落点：protocol_workbench_service.py、API protocols.py／protocol_schemas.py；前端protocolRuleReview.ts、ProtocolReviewLogic.tsx、ProtocolRuleReviewPanel.tsx及protocols.css。
-- 新暴露旧IN-02组合被存为ANY／任选其一；没有静默改、没有批准。下一步仅核该关系及真实依赖，不加条款特例或重读整方案。期别提醒也需有源核，不为降数量删除。
+- 现有build_fact_normalization_plan(max_pages_per_call=1)选择冻结第8页，沿FactNormalizationJobService.create_or_reuse_job新增任务，不伪装成功页失败、不造双读、不关覆盖校验。
+- logical文档03151c316a6a541298cec36b135d49ab47ab10f27582ad3bd902ace2ebc1fcc8；doc版本3d9c12403620d02aa7a1b31dfadc10cafb41826a9cec13a1bde8a909d43847c6/page8。Job76c5287947b34cbea235472efc02dce0/run280952b7882549eea437357576a2d3f5 completed；run partial、35拒/29未决保留。
+- 发布9事实，402期望/52链接/0冲突组；Profile rev6/profile:9e4f2680c4baae1a9d0bcd08cb3a1365累计不重置。局部另外23页未读，不等于累计24页未完成；消费者核旧call相容再复用。
+- 原值/范围保存后，reference_upper_bound误拒qualifier带单位和双连接号；泛化格式修复保留同行对象/值/唯一范围/单位/正上限核验，错行/错单位/倒置拒绝，不改阈值。
+- “阴性”和带数字阴性同义导致2假冲突；select_by_variable先复用comparison_reading再比较。真阳性/阴性仍CONFLICT，事实原文不改。
+- 最新v11：Jobaf80a06feaa04ca1885e8f62b07b6f12 completed4/4，run **review-run:784153c882304c588691302b62d9b212**，supersedes v10 review-run:5c2cc2a7856543a081c0af6a4485d76c；v9/v10/v11保留，API current。
+- EX09肝功能/肌酐子项未触发低置信；父项仍有研究者判断软件缺口，不写整条通过、也不称研究者没记录。未实现能力列系统问题。
 
-### 原值与ULN（b0afe94c）
+### 时间成本
 
-- 首错：抽取目标只有派生倍数，没有原值依赖；读到值却无法合法消费。不是患者没查，也不能让模型算倍数冒充逐字事实。
-- VariableDef.reference_ratio_of显式依赖；同字段断言保留reference_range原文；抽取提示v41要原值／单位／范围，主机计算v9。
-- 同行对象／唯一范围／单位／正数上限／数值位置严格核；拒跨行、错对象、零上限、倒置／含糊范围。保留原事实ID与值，派生是计算输入。
-- 单项坏范围成为系统问题，不吞合法兄弟；输入身份包含依赖和原事实；Profile中文显示范围。
-- 338检查只证明离线实现，未真实提取、发布参考范围或生成v9稿。最后接续仅检查范围入口，没有新功能或作业。
+单次模型127.278秒，11:55:54Z完成；finalize到12:07:55Z约721秒，CPU高不是模型还在思考。_latest_record每模板扫描期望历史且逐行查locator；仅用现有prefetch一次读取关联，再逐行完整解码，所有历史hash/镜像/缺链接保护保留。实际只读探针2次locator SELECT/0.0353秒；无同条件整流程复跑，不能报整例加速倍数。
 
-## 7. 核查证据与代码边界
+## 6. 验证及本机证据
 
-output和data_v2均为本机受控材料，外部审阅仅凭路径不可取得；未提交临床原答。源码与净化测试已提交。
-
-| 检查 | 实际结果／边界 | 本机证据 |
+| 验证 | 结果和边界 | 证据 |
 |---|---|---|
-| ULN相连 | 338通过，1.21秒，b0afe94c，离线 | output/wp3-reference-ratio-package-final.log |
-| 审定后端 | 20通过，5.52秒，exit0 | output/wp1-review-usability-backend-final.log |
-| 完整前端 | 826通过／98文件，10.83秒，exit0 | output/wp1-review-usability-all-frontend-closed.log |
-| 最后相连 | 89通过／18文件，2.29秒，exit0 | output/wp1-review-usability-consumers-closed.log |
-| 最后构建 | exit0，最后展示修订后 | output/wp1-review-usability-build-delivery.log |
-| UI与历史 | 真实预览取消，4本人记录及64hash不变 | output/wp2-review-usability-before.json／after.json、output/wp1/review-batch-visible.png |
-| 宽屏 | 实际1920×1080／2560×1440／3840×2160、DPR1、无横溢，截图已看 | output/wp1/review-viewports-delivery.json、review-delivery-1920.png／2560.png／3840.png |
-| 前次完整后端 | 59bbca86：10192通过／243失败／6errors／20skip／8xfail，2262.21秒exit1；249失败ID与WP0相同 | output/wp4-m1-reviewed-backend.log／.xml／-delta.json |
-| 工作稿回源 | 15确定行0失配；24页冻结；非整例完整医学证明 | output/wp4/m1-owner-final/ |
+| 结构/组合/保存/API消费者 | 544通过48.88秒exit0；局部观察、真正外层选项、错ALL/ANY、修订缓存和发布消费者 | output/wp1-observation-scope-consumers-final.log |
+| 生化/同义/计算/API | 89通过2.38秒exit0，前序136通过56.25秒 | output/wp3-reference-qualitative-consumers-closed.log及原日志 |
+| 完整前端 | 831通过98文件40.08秒exit0，workers2，未提高超时 | output/wp1-review-advice-source-directions-full.log |
+| 构建 | exit0，正式模式interface_trial=false/protocol_stub=false | output/wp1-review-advice-build-source-directions.log |
+| 原件/历史 | 17确定行逐字同文档0失配；四原值/上限看原图；旧2报告hash不变 | output/wp4/reference-v11-source-check.json、m1-medical-input/images/3d9c12403620-p8.png |
+| UI | 目标手工预览取消未写；三方向/分析可见；当前正确第8页；1920×1080/2560×1440/3840×2160、DPR1，截图已看 | output/wp1/review-advice-delivery-*；output/wp4/reference-v11-workbench-*及-viewports.json |
+| 草稿 | 最新publishable=true，IN02误拦关闭；原人群/节点提醒保留，非批准 | output/wp1/in02-scope-integrity.json、in02-local-source-revision.json |
+| 前次完整后端 | **旧59bbca86**：10192通过/243失败/6errors，249失败ID与WP0相同；**本轮未重跑全库**，不能归到新源码 | output/wp4-m1-reviewed-backend-delta.json及原XML/日志 |
 
-暂停不重跑全库。此前截屏因空间隐藏超时，回既有空间后成功；一次后续点击分支两次同错停止，不拿估算视口作证据。当前空间已交用户，不自动接管。
+所有output/data_v2是本机受控材料，外部审阅仅凭路径不可获得，未提交临床原答。失败保留：最初测试路径不存在exit4；一次未改文件250项列表5秒超时，单独/限制workers全量通过，未放宽；数据库忙503未入队，终态后成功；首次IN02锁失败未改rev，随后仅成功一次。截屏空间隐藏超时，打开**原空间42缩略图**后成功，不另建空间、不接管23。
 
-## 8. 模型与评审账本
+## 7. 模型及历史账本
 
-- 产品方案／变量：OmniRouter cms-router／glm-5.3-flash high；资料：ollama-cloud／deepseek-v4.1-flash high、65536。OCR沿共享门禁，未换路由。
-- 5个读取终态：dbb41608b5c04e2ba14d88bbf0a2d02f、efe57586549046f4b45a381add27b44d、7af5176b1652498092c63d03d1ee7a25、f53f8e08b199446582e89e9c0a0a6503、59954da980c4499395221a7904f9a6b4；partial／失败保留。
-- 52请求（37＋9＋2＋2＋2），已报3563.660秒、输入1791555／输出1259683，3次usage未知；output/wp3/m1-model-receipts-complete.json。UI／ULN／暂停无新调用。
-- A：codebuddy／codebuddy-cli／hy4-preview high，一次1029.544秒，无fallback；diff工具拒绝，仅读文件，限制保留。
-- B：grok／grok-build／grok-4.7 high，一次933.824秒、20内部调用；看决定性原页，评审v7。owner修到v8，不称v8另获独立通过。
-- output/m1-review/completed/保留工件，失败初始包也保留；各一次已完成，不重派。会商不等于本人批准。
+- 产品路由未换：方案/变量OmniRouter cms-router/glm-5.3-flash high；资料ollama-cloud/deepseek-v4.1-flash high，65536；产品harness直连，不用个人CLI读病例。
+- 本轮生化1实际请求，127.278秒stop；input37793/completion46160/total83953/cache0。receipt在raw_response，非evaluation_manifest；实际汇总output/wp3/reference-model-receipts.json。
+- 52旧+1=53，已报3563.660+127.278=3690.938秒；3次历史usage未知保持未知。job数不是模型请求数。
+- A codebuddy/hy4-preview/high，B grok-4.7/high前次各一次完成；只读/独立性限制保留，B审v7、owner修v8；不是本轮v11独立验收。output/m1-review/completed/不覆盖、不重派。
+- 旧报告review-run:cba4a3598df742a9b4d1404f0d7ce324 hash17dec1cc14dc4ee109a8997b51aadb982e91db7d907768ca2ec6916817605844；review-run:88a8316e131041198e9a4ade3dff1144 hash47d76d3329eaa75c33c27e5cf54593857daaf1327fc992d04713b849b939c06d，本轮再次核不变。读取ID须保留review-run前缀。
 
-## 9. 历史与下一安全动作
+## 8. 接续
 
-旧报告不改：cba4a3598df742a9b4d1404f0d7ce324，hash17dec1cc14dc4ee109a8997b51aadb982e91db7d907768ca2ec6916817605844；88a8316e131041198e9a4ade3dff1144，hash47d76d3329eaa75c33c27e5cf54593857daaf1327fc992d04713b849b939c06d。
+1. 请用户在当前rev2核IN02是否需额外研究者判断及其他重点项，完成64项并正式发布。不能代签、把publishable当RuleSet或改写4条本人历史。
+2. ANC筛选p3原图3.01行单位被便签遮挡、OCR误作%；不能由其他行猜单位或拿基线后值充筛选。FEV1 p5有表格数值，但未明示舒张剂前；不能由“肺功能正常”推pre-BD。保留精确原因，后续有源更正/补证/合法局部取证，不重读整例。
+3. 当前工作稿仍用验证v3，不等于本人rev2修订稿；本人发布后核变量/来源/节点相容，复用合法资料生成新稿，旧版保留。
+4. M1正式审定、完整确定性自查及新源码全量回归未通过；不能用通过总数代替。语义/用药/判断按WP5顺序，不因软件未接入断言患者缺材料。
 
-收到恢复指令后：
+## 9. 复盘
 
-1. 只读核实际源码、资料／规则／节点与终态，确认成功页、原事实及依赖仍相容；不重跑终态。
-2. WP3／WP4核所需原值和同行参考范围，沿现有build_fact_normalization_plan及FactNormalizationJobService合法建立局部新证明。先查累计Profile、事实和覆盖消费者如何合并；不伪装成功页失败，不关覆盖校验，不整24页重读。
-3. 原值／范围保存、读回、消费后，从正式入口生成新稿并核受影响结论；v8和历史保留。未真实运行前不称收口。
-4. IN-02关系及期别走既有同源修订／审定，保留4本人记录；不自动批准旧错误，不全方案重读。
-5. 按04补M1实际缺口，使用已完成A/B处置；随后按03推进。本人正式审定和用户验收仍待完成。
+进步是数据到可解释结果和用户可修改，不是新增调用次数。首错集中在表示/作用域/消费者：单位格式误拒、同义假冲突、局部“或”泄漏、对话框错目标；应先离线修相连链，不能每次整方案长读。
 
-## 10. 复盘
+低把握可能是复杂逻辑、尚未实现、来源不足或真正医学裁量。应解释并提供有据方向，不为凑三个选项编造临床规则、虚报概率或强推推荐。当前备选来自已存原文和结构，不是新模型医学金标。
 
-真实读取→事实→验证稿→原件已连通；界面让用户能分类、看逻辑和集中处理。仍未完整临床交付。反复的核心是结构／显示通过掩盖真实数值和依赖没到消费者，以及未实现能力容易被称为资料不足。
-
-今后查第一处因果错误，补同一生产／保存／消费链，集中验证；不靠整例重读、增加读道或特定病例例外。界面展示使旧错义显露，不代替原文核实。下一步仅补首份真实工作稿需要的数据依赖和关系，不扩框架。
-
-本次暂停是保全而非完成：代码、数据、旧失败、本人记录和历史保留，自有服务停止、无活动任务；未清理、正式采用或签发。
+下一步仍是本人审定后同源工作稿和精确缺口，不扩框架/读道、不写病例特例。Goal active；记录保全不构成暂停或交付完成。

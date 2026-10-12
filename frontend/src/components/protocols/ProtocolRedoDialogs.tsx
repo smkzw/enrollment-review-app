@@ -383,6 +383,8 @@ interface ProtocolManualEditDialogProps {
   candidateContent: Record<string, unknown>;
   onClose: () => void;
   onSubmit: (values: ManualEditValues) => void;
+  initialComponentId?: string;
+  initialMainOperator?: "all" | "any";
 }
 
 /** 手工修订草稿：来源只读，只修订已有子项的结构化临床语义。 */
@@ -393,14 +395,14 @@ export function ProtocolManualEditDialog({
   candidateContent,
   onClose,
   onSubmit,
+  initialComponentId,
+  initialMainOperator,
 }: ProtocolManualEditDialogProps) {
   const allComponents = useMemo(
     () => getEditableProtocolComponents(candidateContent),
     [candidateContent],
   );
-  const [componentId, setComponentId] = useState<string>(
-    allComponents[0]?.componentId ?? "",
-  );
+  const [componentId, setComponentId] = useState<string>(initialComponentId ?? allComponents[0]?.componentId ?? "");
   const [editor, setEditor] = useState<EditableProtocolComponent | null>(null);
   const [predicateId, setPredicateId] = useState("");
   const titleId = useId();
@@ -408,10 +410,18 @@ export function ProtocolManualEditDialog({
 
   useEffect(() => {
     if (!open) return;
-    const component = allComponents.find((item) => item.componentId === componentId);
-    setEditor(component ?? null);
+    const targetId = initialComponentId ?? allComponents[0]?.componentId ?? "";
+    const component = allComponents.find((item) => item.componentId === targetId);
+    setComponentId(targetId);
+    setEditor(component ? { ...component, mainOperator: component.componentId === initialComponentId
+      && component.mainOperator !== null && component.mainOperator !== "not"
+      ? initialMainOperator ?? component.mainOperator : component.mainOperator } : null);
     setPredicateId(component?.predicates[0]?.predicateId ?? "");
     requestAnimationFrame(() => titleRef.current?.focus());
+  }, [open, allComponents, initialComponentId, initialMainOperator]);
+
+  useEffect(() => {
+    if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -420,13 +430,13 @@ export function ProtocolManualEditDialog({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, busy, componentId, onClose, allComponents]);
+  }, [open, busy, onClose]);
 
   if (!open) return null;
 
   const selected = allComponents.find((item) => item.componentId === componentId);
   const selectedPredicate = editor?.predicates.find((item) => item.predicateId === predicateId) ?? null;
-  const canSubmit = editor !== null && editor.title.trim().length > 0 &&
+  const canSubmit = editor !== null && editor.componentId === componentId && editor.title.trim().length > 0 &&
     (selectedPredicate === null || (
       selectedPredicate.subject.trim().length > 0 &&
       selectedPredicate.attribute.trim().length > 0 &&
@@ -466,6 +476,7 @@ export function ProtocolManualEditDialog({
         <p className="confirmation-dialog__note">
           选择子项后修订已有逻辑、条件、时间窗和资料要求。方案原文及定位保持只读；需要新增或重组条件时，请使用“基于反馈修订”。
         </p>
+        {initialMainOperator && <p role="status">已预选备选方向，尚未保存。请核对标题、每个条件及原文，确认后再提交；不是审定或发布。</p>}
         <label className="protocol-edit-dialog__field">
           <span>修订子项</span>
           <select

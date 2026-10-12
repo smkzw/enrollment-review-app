@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ruleReviewPresentations } from "./protocolRuleReview";
+import { ruleReviewAdvice, ruleReviewPresentations } from "./protocolRuleReview";
 import type { RuleReviewEntry } from "../api/protocolRuleReviews";
 import type { BindingView } from "../api/protocolVariables";
 import type { IntegrityView, SourcesView } from "../api/protocolWorkbenchTypes";
@@ -18,6 +18,36 @@ const integrity: IntegrityView = { jobId: "j", publishable: true, blockingCount:
 const sources: SourcesView = { jobId: "j", snapshotId: "s", selectedPhase: "phase_iii", selectedPhaseLabel: "III期", sourceMaterials: {}, sourceSpans: { s: { excerpt: "年龄要求", precision: "block" } } };
 
 describe("审定重点投影", () => {
+  it("书面判断方向只有对应原文明确要求时才推荐，不能仅凭旧判断标记", () => {
+    const sourceClause = "研究者认为该情况影响评价";
+    const raw = { ...content.proposed_rules[0]!.components[0]!, expression: { ...expression,
+      predicate: { ...expression.predicate, requires_professional_judgment: true, source_clause: sourceClause } } };
+    const sample = { proposed_rules: [{ ...content.proposed_rules[0]!, components: [raw] }],
+      component_drafts: [{ proposed_component: raw, source_excerpts: [sourceClause] }] };
+    const item = ruleReviewPresentations([entry], sample, bindings, integrity, sources)[0]!;
+    expect(ruleReviewAdvice(item, sample)[0]?.options.find(option => option.recommended)?.label).toBe("按研究者书面判断核对");
+    expect(ruleReviewAdvice(item, { ...sample, component_drafts: [] })[0]?.options.some(option => option.recommended)).toBe(false);
+    expect(ruleReviewAdvice(item, sample)[0]?.options[1]?.manual).toBe(true);
+  });
+  it("局部任选不放宽整组；只有有源线索才推荐，未知关系保留人工调整", () => {
+    const clause = "诊断明确，病史符合，至少一种相关检测阳性";
+    const raw = { rule_component_id: "c", parent_rule_id: "r", display_code: "IN-01", title: "联合要求", exception_expression: null, expression: { kind: "logical", operator: "any", children: [
+      { kind: "predicate", predicate: { ...expression.predicate, source_clause: "诊断明确" } },
+      { kind: "predicate", predicate: { ...expression.predicate, predicate_id: "p2", source_clause: "病史符合" } },
+      { kind: "predicate", predicate: { ...expression.predicate, predicate_id: "p3", source_clause: "至少一种相关检测阳性", observation_policy: { mode: "any" } } },
+    ] } };
+    const sample = { proposed_rules: [{ ...content.proposed_rules[0], components: [raw] }],
+      component_drafts: [{ proposed_component: raw, source_excerpts: [clause] }] };
+    const item = ruleReviewPresentations([entry], sample, bindings, integrity, sources)[0]!;
+    const advice = ruleReviewAdvice(item, sample)[0]!;
+    expect(advice.options.find(value => value.recommended)?.operator).toBe("all");
+    expect(advice.analysis).toContain("项目内部可任选");
+    const noSource = { ...sample, component_drafts: [] };
+    expect(ruleReviewAdvice(item, noSource)[0]?.options.some(value => value.recommended)).toBe(false);
+    const alternative = { ...sample, component_drafts: [{ proposed_component: raw, source_excerpts: [`符合下列任一条件：${clause}`] }] };
+    expect(ruleReviewAdvice(item, alternative)[0]?.options.find(value => value.recommended)?.operator).toBe("any");
+    expect(raw.expression.operator).toBe("any");
+  });
   it("年龄按岁显示、病史时长按年显示，存在性条件不虚构阈值", () => {
     const predicate = { subject: "history", attribute: "duration", comparator: "gte", comparatorLabel: "大于等于", value: 2, unit: "year" };
     expect(formatPredicateStatement(predicate, "病史时长")).toBe("病史时长 大于等于 2 年");

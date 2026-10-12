@@ -1699,6 +1699,33 @@ def _exists_predicate(pid: str, attribute: str, text: str) -> AtomicExpression:
     )
 
 
+@pytest.mark.parametrize("operator", [LogicalOperator.ALL, LogicalOperator.ANY])
+@pytest.mark.parametrize("connector", ["或", "和/或"])
+@pytest.mark.parametrize("outer_alternative", [False, True])
+def test_observation_alternatives_do_not_connect_independent_requirements(operator, connector, outer_alternative):
+    source_input, draft, spans = _fixture()
+    diagnosis = "符合所规定疾病的诊断"
+    history = "既往明确病史≥3年"
+    observation = f"筛选期至少一种与当前季节{connector}同期发病相关的检测结果阳性"
+    separator = "或" if outer_alternative else "，"
+    text = separator.join([diagnosis, history, observation])
+    reading = _exists_predicate("test-result", "检测结果", observation)
+    reading.predicate.observation_policy = ObservationPolicy(
+        mode="any", scope="与当前季节或同期发病相关的检测结果",
+        source_span_ids=["span-in"], source_excerpts=[observation],
+    )
+    expression = LogicalExpression(operator=operator, children=[
+        _exists_predicate("diagnosis", diagnosis, diagnosis),
+        _predicate("history", "既往明确病史", 3, "year", source_clause=history),
+        reading,
+    ])
+    _replace_inclusion_source_and_expression(source_input, draft, text, expression)
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    codes = {issue.issue_code for issue in _issues(result, "boolean_logic")}
+    assert ("DISJUNCTION_CHANGED_TO_CONJUNCTION" in codes) is (outer_alternative and operator == LogicalOperator.ALL)
+    assert ("DISJUNCTION_NOT_BOUND_TO_SOURCE" in codes) is (not outer_alternative and operator == LogicalOperator.ANY)
+
+
 def test_fabricated_any_from_conjunction_is_blocked_after_wire_hydration():
     source_input, draft, spans = _fixture()
     text = "已签署知情同意书，并且能够理解和遵守研究要求"

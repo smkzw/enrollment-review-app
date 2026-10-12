@@ -1954,6 +1954,11 @@
 .protocol-review-confidence--high { color: #2c6960; }
 .protocol-review-focus { border-left: 3px solid #ce8b39; padding: 10px 14px; background: #fff9ee; margin-bottom: 16px; }
 .protocol-review-focus small { color: #626c76; }
+.protocol-review-advice { border-top: 1px solid #dde3e8; padding: 12px 0; margin-bottom: 12px; }
+.protocol-review-advice h4 { margin: 0 0 10px; }
+.protocol-review-advice ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px 24px; padding-left: 24px; }
+.protocol-review-advice li { min-width: 0; }
+.protocol-review-advice p { white-space: pre-line; overflow-wrap: anywhere; }
 .protocol-review-logic h4 { margin-block: 16px 8px; font-size: 16px; }
 .protocol-review-logic h5 { margin-block: 12px 6px; font-size: 14px; }
 .protocol-review-logic__component { border-bottom: 1px solid #d5dce3; padding-bottom: 12px; }
