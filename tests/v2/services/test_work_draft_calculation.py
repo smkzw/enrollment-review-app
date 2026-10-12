@@ -10,7 +10,8 @@ from app.domain.contracts.enums import (AnchorType, Comparator, ComponentDecisio
     TimeDirection)
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.facts import AssertionBasis, ClinicalFactV2, FactAuthority, PartialDateRange, clinical_fact_stable_identity
-from app.domain.contracts.rules import AtomicExpression, AtomicPredicate, EvidenceRequirement, Rule, RuleComponent, RuleSet, TimeConstraint
+from app.domain.contracts.rules import AtomicExpression, AtomicPredicate, EvidenceRequirement, LogicalExpression, Rule, RuleComponent, RuleSet, TimeConstraint
+from app.domain.contracts.enums import LogicalOperator
 from app.domain.contracts.work_draft import SystemIssue, WorkDraftItem
 from app.domain.variables.dictionary import load_dictionary
 from app.graph.subject_graph import SUBJECT_GRAPH, work_draft_steps
@@ -69,6 +70,25 @@ def test_variable_identity_not_display_type_selects_and_computes():
     assert result.decision == D.INCLUSION_MET and result.confidence == "high"
 
 
+def test_outer_all_does_not_become_any_because_one_inner_group_is_any():
+    rules, _, component = clause()
+    a = component.expression
+    b = AtomicExpression(predicate=a.predicate.model_copy(update={"predicate_id": "upper", "comparator": Comparator.LTE, "value": 40}))
+    c = AtomicExpression(predicate=a.predicate.model_copy(update={"predicate_id": "alternative", "comparator": Comparator.LTE, "value": 60}))
+    component.expression = LogicalExpression(operator=LogicalOperator.ALL, children=[a,
+        LogicalExpression(operator=LogicalOperator.ANY, children=[b, c])])
+    for predicate in (b.predicate, c.predicate):
+        component.evidence_requirements.append(component.evidence_requirements[0].model_copy(update={
+            "requirement_id": predicate.predicate_id + "-record", "predicate_ids": [predicate.predicate_id]}))
+    fact = material(value=52)
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([fact]), rules, evidence_refs={})
+    assert result.decision == D.INCLUSION_MET
+    older = material(value=17)
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([older]), rules, evidence_refs={})
+    assert result.decision == D.INCLUSION_NOT_MET
+    assert component.expression.children[1].operator == LogicalOperator.ANY
+
+
 def test_original_source_requirement_is_consumed_through_exact_wp2_binding_ancestry():
     from hashlib import sha256
     rules, _, component = clause()
@@ -92,6 +112,25 @@ def test_unbound_same_display_type_never_matches():
     fact = material(variable_id="alt", unit="U/L")
     assert not select_by_variable(component, [fact], {}, authority=fact.authority,
                                   definitions=load_dictionary())["age-limit"].fact_ids
+
+
+@pytest.mark.parametrize("other_value,expected", [("0.06阴性(-)", D.EXCLUSION_NOT_TRIGGERED),
+    ("阳性(+)", D.CONFLICT)])
+def test_same_day_qualitative_labels_use_the_same_comparison_for_conflicts(other_value, expected):
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    component.expression.predicate.attribute = "抗体结果"
+    component.expression.predicate.comparator = Comparator.EQ
+    component.expression.predicate.value = "阳性"
+    component.expression.predicate.unit = "unitless"
+    component.evidence_requirements[0].variable_id = "hiv_antibody"
+    rules.variable_definitions = [load_dictionary()["hiv_antibody"]]
+    first = material(variable_id="hiv_antibody", value="阴性", unit="unitless", day=date(2026, 10, 12))
+    second = material(variable_id="hiv_antibody", value=other_value, unit="unitless", day=date(2026, 10, 12), snapshot="second")
+    before = [first.model_dump_json(), second.model_dump_json()]
+    frame = frozen([first, second], {AnchorType.SCREENING_DATE: DateValue(value=date(2026, 10, 12), precision=DatePrecision.DAY)})
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules, evidence_refs={})
+    assert result.decision == expected
+    assert [first.model_dump_json(), second.model_dump_json()] == before
 
 
 @pytest.mark.parametrize("age,expected", [(17, D.EXCLUSION_NOT_TRIGGERED), (52, D.INDETERMINATE)])
@@ -130,7 +169,8 @@ def test_single_low_confidence_child_does_not_claim_unknown_siblings():
 
 @pytest.mark.parametrize("value,expected", [(150, D.EXCLUSION_NOT_TRIGGERED), (250, D.EXCLUSION_TRIGGERED),
     (199, D.EXCLUSION_NOT_TRIGGERED)])
-def test_reference_ratio_uses_raw_published_fact_without_rewriting_it(value, expected):
+@pytest.mark.parametrize("range_text", ["10-100", "10--100 U/L"])
+def test_reference_ratio_uses_raw_published_fact_without_rewriting_it(value, expected, range_text):
     from app.domain.contracts.fact_context import FactContextQualifier
     rules, _, component = clause(kind=RuleKind.EXCLUSION)
     atom = component.expression.predicate
@@ -139,8 +179,8 @@ def test_reference_ratio_uses_raw_published_fact_without_rewriting_it(value, exp
     rules.variable_definitions = [load_dictionary()["ast_uln_ratio"]]
     fact = material(value=value, variable_id="ast", unit="U/L", day=date(2026, 10, 12))
     basis = fact.assertion_basis.model_copy(update={"asserted_object": "AST",
-        "assertion_text": f"AST {value} 10-100 U/L",
-        "contextual_qualifiers": [FactContextQualifier(kind="reference_range", label="10-100")]})
+        "assertion_text": f"AST {value} 10--100 U/L" if "--" in range_text else f"AST {value} 10-100 U/L",
+        "contextual_qualifiers": [FactContextQualifier(kind="reference_range", label=range_text)]})
     fact = fact.model_copy(update={"asserted_object": "AST", "assertion_basis": basis})
     frame = frozen([fact], {AnchorType.SCREENING_DATE: DateValue(value=date(2026, 10, 12), precision=DatePrecision.DAY)})
     before = fact.model_dump_json()

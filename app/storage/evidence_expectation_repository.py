@@ -317,7 +317,8 @@ class EvidenceExpectationV2Repository:
         self, review_episode_id: str, template_id: str
     ) -> EvidenceExpectationV2Record | None:
         rows = self.session.execute(select(EvidenceExpectationV2Record)).scalars().all()
-        contracts = [self._decode_record(row) for row in rows]
+        locators = prefetch_locator_link_ids(self.session, "expectation", [row.expectation_id for row in rows])
+        contracts = [self._decode_record(row, locator_ids=locators[row.expectation_id]) for row in rows]
         matching = [
             contract
             for contract in contracts

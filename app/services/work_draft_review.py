@@ -21,7 +21,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v9"
+CALCULATION_VERSION = "work-draft/0.2.0-v11"
 
 
 def enqueue_normalized_work_draft(session, *, authority, run_id):

@@ -79,6 +79,10 @@ def test_reference_ratio_expands_only_its_declared_raw_input():
 @pytest.mark.parametrize("row,range_text,value,accepted", [
     ("ALT 180 10-100 U/L", "10-100", 180, True),
     ("ALT 180 U/L ≤100", "≤100", 180, True),
+    ("ALT 180 10--100 U/L", "10--100 U/L", 180, True),
+    ("ALT 180 ↑≤100 U/L", "≤100 U/L", 180, True),
+    ("ALT 180 10--100 mg/dL", "10--100 mg/dL", 180, False),
+    ("ALT 180 10--100 U/L AST 25", "10--100 U/L", 180, False),
     ("ALT 1.8 10-100 U/L", "10-100", 100, False),
     ("ALT 180\nAST 10-100 U/L", "10-100", 180, False),
     ("ALT 180 10-100 AST 35 U/L", "10-100", 180, False),

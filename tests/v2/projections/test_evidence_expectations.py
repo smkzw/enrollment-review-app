@@ -1408,7 +1408,7 @@ def test_revision_chain_distinct_per_template(chain, session):
 # ---------------------------------------------------------------------------
 
 
-def test_locator_link_mirror_and_payload_hash(chain, session):
+def test_locator_link_mirror_and_payload_hash(chain, session, monkeypatch):
     """定位链接与 payload 双向镜像；删链接/改哈希即拒绝还原合同。"""
     t = _template(session, chain, requirement_id="req-mirror",
                   fact_type="vital_sign", due_stage=ReviewStage.SCREENING)
@@ -1421,6 +1421,16 @@ def test_locator_link_mirror_and_payload_hash(chain, session):
     repository = EvidenceExpectationV2Repository(session)
     expectation = _project(chain, t, observations=(fact,))
     repository.project(expectation)
+
+    import app.storage.evidence_expectation_repository as repository_module
+    original_prefetch = repository_module.prefetch_locator_link_ids
+    prefetch_calls = []
+    def observe_prefetch(session, kind, ids):
+        prefetch_calls.append((kind, tuple(ids)))
+        return original_prefetch(session, kind, ids)
+    monkeypatch.setattr(repository_module, "prefetch_locator_link_ids", observe_prefetch)
+    assert repository.latest_by_template(chain["review_episode_id"], t.template_id) == expectation
+    assert prefetch_calls and prefetch_calls[-1][0] == "expectation"
 
     restored = repository.get(expectation.expectation_id)
     assert restored.locator_ids == [chain["locator_id"]]
@@ -1438,6 +1448,8 @@ def test_locator_link_mirror_and_payload_hash(chain, session):
     session.flush()
     with pytest.raises(PersistedContractInvalid, match="定位链接"):
         repository.get(expectation.expectation_id)
+    with pytest.raises(PersistedContractInvalid, match="定位链接"):
+        repository.latest_by_template(chain["review_episode_id"], t.template_id)
 
     # 篡改 payload 哈希 → 拒绝还原（哈希校验先于镜像校验）。
     row = session.get(EvidenceExpectationV2Record, expectation.expectation_id)

@@ -22,7 +22,7 @@ class RiskFlag(StrEnum):
 
 
 _NUMBER = re.compile(r"(?<![\d.])(?:(?<!\d)[-+])?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\d.])")
-_REFERENCE_RANGE = re.compile(r"\d+(?:\.\d+)?\s*[-–~～]\s*\d+(?:\.\d+)?")
+_REFERENCE_RANGE = re.compile(r"\d+(?:\.\d+)?\s*(?:--?|[–~～])\s*\d+(?:\.\d+)?")
 
 
 def number_in_excerpt(value, excerpt: str) -> bool:
@@ -71,11 +71,14 @@ def reference_upper_bound(fact) -> Decimal:
     middle = normalize(field[value_match.end():range_start]).strip("↑↓")
     suffix = normalize(field[range_start + len(original):]).strip("↑↓")
     unit = normalize(getattr(fact, "unit", None) or "")
-    if not unit or middle not in {"", unit} or suffix not in {"", unit} or unit not in {middle, suffix}:
+    text = normalize(original)
+    range_has_unit = bool(unit and text.endswith(unit))
+    if not unit or middle not in {"", unit} or suffix not in {"", unit} or not (range_has_unit or unit in {middle, suffix}):
         raise ValueError("同一行的结果、参考范围和单位关系不明确")
-    text = unicodedata.normalize("NFKC", original).replace(" ", "")
+    if range_has_unit:
+        text = text[:-len(unit)]
     number = r"\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
-    match = re.fullmatch(rf"({number})[-–~～]({number})|[<≤]({number})", text)
+    match = re.fullmatch(rf"({number})(?:--?|[–~～])({number})|[<≤]({number})", text)
     if match is None:
         raise ValueError("参考范围未明确提供可计算的上限")
     upper = Decimal(match[2] or match[3])

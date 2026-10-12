@@ -118,6 +118,9 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                 if definition is not None and definition.value_type == "number" and isinstance(fact.value, (int, float)) and not isinstance(fact.value, bool):
                     value, _ = comparison_reading(fact, definition, atom.predicate, definitions=definitions)
                     return fact.polarity.value + ":" + str(value)
+                if definition is not None and definition.domain == "lab" and definition.value_type == "category":
+                    value, unit = comparison_reading(fact, definition, atom.predicate, definitions=definitions)
+                    return canonical_hash({"value": value, "unit": unit, "polarity": fact.polarity.value})
                 return canonical_hash({"value": fact.value, "unit": fact.unit, "polarity": fact.polarity.value})
             conflict = False
             for index, fact in enumerate(eligible):
