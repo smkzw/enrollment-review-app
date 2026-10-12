@@ -1,11 +1,12 @@
 # 0.2.0 当前交接
 
-更新时间：2026-10-12，本次恢复及用户正式审定后。**Goal active，未暂停；WP2完成、WP3/WP4收口，M1待验收。** 唯一计划03_PLAN，唯一进度05_PROGRESS；历史留Git，不覆盖旧回执，不是新执行包。
+更新时间：2026-10-13，M1功能包集中验证交回。**Goal active，未暂停；WP2完成、WP3/WP4已形成正式规则下的首份工作稿，等待用户M1验收。** 唯一计划03_PLAN，唯一进度05_PROGRESS；历史留Git，不覆盖旧回执，不是新执行包。
 
 ## 1. 五分钟接手
 
 - 工作树：`/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/build-0.2.0`，分支dev/0.2.0。
 - 本轮从HEAD12f4352e1db5ff6ea727406ba152fb9cba1751f5接续，clean；前序1ad63f94/41aea00c已推送。当前节点汇总、同源发布版本接线及覆盖复用作为一个功能包；核实际HEAD，不reset/clean。
+- 验证源码固定5ac146005c4a36f9c3a17ca7d3cd49ffbe7fb71a，已推送origin/dev/0.2.0；后续仅更新记录，不把记录提交当成新源码测试。全量后端10250通过、243失败/6errors均为WP0同一249项，新增0；不是全库绿。前端tree44159f8与已验证41aea00c相同，831及构建结果有效。
 - 用户要求：局部检验到工作稿；核IN-02；低把握原因、备选解释/有据推荐及手工调整；不重跑方案/变量建议；集中验证至M1。
 - 生化第8页新增1次真实产品调用，9事实保存并进入Profile及v11工作稿。局部run partial，累计24页成功证明继续使用，不叫整例完整。
 - IN-02外层ALL、内部观察ANY保持。本人已64/64审定rev2并发布正式规则v4；工作稿实际消费v4，verification_only=false，不再等待审定，也不重跑方案或建议。
@@ -17,10 +18,10 @@
 
 | 项目 | 当前事实 |
 |---|---|
-| 自有服务 | 61134，PID58758，exec session47536，v21；`./run.sh --data-dir <本树>/data_v2 --port 61134 --no-browser`；显式本树.env；output/wp3-wp4-product-server-v21.log；最后保护性源码变更后需核实际服务版本 |
-| 已停止服务 | v17–20自有服务已停止、终态已收回；v20 session17708 exit143；共享服务不动 |
-| 数据库 | 本树data_v2/enrollment-review-v2.sqlite3；只读核21completed/139failed_final/2cancelled/3waiting_user，0活动/租约；旧终态不改 |
-| 浏览器 | 原Ego23不接管；本轮42“0.2.0 审定备选与检验衔接验收”，p1审定/p2工作稿，宽屏检查后恢复自然视口；已成功调用SDK handOff交本人，不再操作直至明确交回 |
+| 自有服务 | 61134，PID62876，exec session71137，v22，运行5ac14600；`./run.sh --data-dir <本树>/data_v2 --port 61134 --no-browser`；显式本树.env；output/wp3-wp4-product-server-v22.log；保留供用户M1验收 |
+| 已停止服务 | v17–21自有服务已停止、终态已收回；v20 session17708／v21 session47536均exit143；共享服务不动 |
+| 数据库 | 本树data_v2/enrollment-review-v2.sqlite3；最终只读核23completed/139failed_final/2cancelled/2waiting_user，0活动；旧终态不改 |
+| 浏览器 | 原Ego23不接管；本任务42，p1已发布方案、p2正式v4／v12工作稿及IN04第6页；三宽屏已看、自然视口恢复，SDK handOff已交用户。不重新接管／不新建空间作恢复 |
 | 审定入口 | http://127.0.0.1:61134/#/protocols?job=fb814eb3b657424aa4c4c340e710394b |
 
 恢复核实际进程/端口/数据归属；在运行则复用，不因宿主会话变化重启已终态模型作业。
@@ -89,7 +90,7 @@ EpisodeRepository.adopt_published_rule_set核同源文件哈希／期别／规�
 | 原件/历史 | 17确定行逐字同文档0失配；四原值/上限看原图；旧2报告hash不变 | output/wp4/reference-v11-source-check.json、m1-medical-input/images/3d9c12403620-p8.png |
 | UI | 目标手工预览取消未写；三方向/分析可见；当前正确第8页；1920×1080/2560×1440/3840×2160、DPR1，截图已看 | output/wp1/review-advice-delivery-*；output/wp4/reference-v11-workbench-*及-viewports.json |
 | 草稿 | 最新publishable=true，IN02误拦关闭；原人群/节点提醒保留，非批准 | output/wp1/in02-scope-integrity.json、in02-local-source-revision.json |
-| 完整后端 | **12f4352e**：10225通过/243失败/6errors，2388.37秒exit1，249失败ID与WP0一致，新增0；当前305相连通过，最终源码全量待收口 | output/wp4-m1-v11-backend-delta.json、wp4-published-rule-consumers-closed.xml |
+| 完整后端 | **5ac14600**：10250通过/243失败/6errors、20skip/8xfail，3262.69秒exit1；249失败ID与WP0相同、新增0、关闭0；最终305相连通过。前序12f窗口单列，不混代码 | output/wp4-m1-user-rules-backend-delta.json、原XML/日志；wp4-published-rule-consumers-closed.xml |
 | 正式新版工作稿 | 18确定行逐字/同文档0失配，24页累计证明、122事实；IN04当前满足、2基线子项未到期；旧2报告与v11哈希不变，0新模型调用 | output/wp4/user-rules-v12-summary.json、-source-check.json、-workbench.json |
 
 所有output/data_v2是本机受控材料，外部审阅仅凭路径不可获得，未提交临床原答。失败保留：最初测试路径不存在exit4；一次未改文件250项列表5秒超时，单独/限制workers全量通过，未放宽；数据库忙503未入队，终态后成功；首次IN02锁失败未改rev，随后仅成功一次。截屏空间隐藏超时，打开**原空间42缩略图**后成功，不另建空间、不接管23。
@@ -109,6 +110,7 @@ EpisodeRepository.adopt_published_rule_set核同源文件哈希／期别／规�
 2. ANC筛选p3原图3.01行单位被便签遮挡、OCR误作%；不能由其他行猜单位或拿基线后值充筛选。FEV1 p5有表格数值，但未明示舒张剂前；不能由“肺功能正常”推pre-BD。保留精确原因，后续有源更正/补证/合法局部取证，不重读整例。
 3. 当前工作稿用正式v4，原件、事实及24页相容证明已沿用。v42操作读取指导已实现／合同验证，但未新增真实模型复测，不宣称所有REQ已补齐；不要为提示微调重读成功数值。
 4. M1之后，WP5按D14从对应筛选／基线原始病历寻找判断证据，不额外要求另写意见；完成检索无记载才证据不足，当前尚未接入仍系统问题。旧Profile完整投影仍保留，规则／节点更新使其标陈旧；不覆盖原Profile或将其冒称当前，重算留后续能力。
+5. 集中窗口已结束，exec82399及functions cell3229均终态exit1（旧249项，新增0），不要继续轮询或重跑。M1验收前不进入WP5新模型任务。日历窗旧失败最小诊断为窗外观察返回unknown（below_time_window），不是把三个月按90天算；WP5消费时核状态政策，不笼统称旧失败均无关。
 
 ## 9. 复盘
 
