@@ -35,4 +35,6 @@ def build_extraction_targets(rule_set: RuleSet, stage: ReviewStage,
     missing = variable_ids - definitions.keys()
     if missing:
         raise ValueError("已发布资料要求引用了未保存的数据项目")
+    variable_ids.update(definitions[key].reference_ratio_of for key in tuple(variable_ids)
+                        if definitions[key].reference_ratio_of is not None)
     return ExtractionTargets(tuple(selected), tuple(definitions[key] for key in sorted(variable_ids)))

@@ -20,7 +20,7 @@ class FactContextSource(FactContextSourceDraft):
 
 
 class FactContextQualifierDraft(ContractModel):
-    kind: Literal["assessment", "specimen", "method", "body_site", "laterality", "other"]
+    kind: Literal["assessment", "specimen", "method", "body_site", "laterality", "reference_range", "other"]
     label: str = Field(min_length=1)
     source: FactContextSourceDraft | None = Field(default=None, exclude_if=lambda value: value is None)
 

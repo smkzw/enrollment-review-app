@@ -443,7 +443,7 @@ DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE = (
     "请从本次资料页组中逐页提取临床事实候选，并严格按指定结构返回。"
 )
 
-_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v40"
+_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v41"
 _MAX_PROMPT_CHARS = 100_000
 
 
@@ -523,6 +523,10 @@ _SYSTEM_CONTRACT = (
     "必须返回空列表。绑定 ID 必须来自本次冻结输入。variable_definitions 是本节点需求清单；"
     "事实的 variable_id 只能选清单中明确对应原文的数据项目，不能猜映射。清单外重要病史"
     "保留供个例档案使用，variable_id 填 null。fact_type 保留原有临床展示分类。"
+    "若数据项目有reference_ratio_of，优先抽取它指向的原始项目及原单位，不自行计算倍数。"
+    "原始项目的assertion_basis须保留项目、结果、参考范围和单位所在的完整原句或表格行；"
+    "参考范围以kind=reference_range、label=该行参考范围原文放入contextual_qualifiers。"
+    "参考范围不能借用别的项目、页、标本或日期；看不清则保留疑问，不补默认上限。"
     "date_role 按原文明确的日期含义选择 sampling、report、visit；无法确定时填 unknown，"
     "无日期填 null。数值使用原件实际结果，不取邻行数字或参考范围；raw_value、canonical_value"
     "均填原始数值，unit填原文单位，单位换算交给程序。"
@@ -907,6 +911,7 @@ def _model_input_payload(evidence_input: EvidenceNormalizerInput, *, pending_det
         # plausible ranges and conversions remain frozen and enforced by the host.
         payload["variable_definitions"] = [{key: item.model_dump(mode="json")[key]
             for key in ("variable_id", "label_zh", "value_type", "canonical_unit", "aliases_zh")}
+            | ({"reference_ratio_of": item.reference_ratio_of} if item.reference_ratio_of is not None else {})
             for item in evidence_input.variable_definitions]
         contexts = []
         compact = []

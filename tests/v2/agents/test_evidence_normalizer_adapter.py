@@ -695,10 +695,10 @@ def test_prompt_can_omit_embedded_schema_for_schema_enforcing_transports():
     assert "不得自创 locator" in prompt
 
 
-def test_prompt_layout_version_is_v40():
+def test_prompt_layout_version_is_v41():
     from app.agents.evidence_normalizer import _PROMPT_LAYOUT_VERSION
 
-    assert _PROMPT_LAYOUT_VERSION == "phase5/evidence-normalizer-prompt/v40"
+    assert _PROMPT_LAYOUT_VERSION == "phase5/evidence-normalizer-prompt/v41"
 
 
 def test_observation_modality_boundary_reaches_both_prompts_and_repairs():

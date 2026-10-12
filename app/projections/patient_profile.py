@@ -105,7 +105,7 @@ _WEAK_HISTORY_HIGHLIGHT_DETAIL = "覆盖证据为较弱来源，需加强溯源�
 
 
 def _fact_title(fact: ClinicalFactV2) -> str:
-    labels = list(dict.fromkeys(item.label for item in
+    labels = list(dict.fromkeys(("参考范围" + item.label if item.kind == "reference_range" else item.label) for item in
         (fact.assertion_basis.contextual_qualifiers if fact.assertion_basis else [])))
     return f"{'、'.join(labels)}：{fact.asserted_object}" if labels else fact.asserted_object
 

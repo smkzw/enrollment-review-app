@@ -38,6 +38,7 @@ class VariableSelection:
     considered_fact_ids: tuple[str, ...] = ()
     conflict: bool = False
     date_uncertain: bool = False
+    calculation_unverified_ids: tuple[str, ...] = ()
 
 
 def source_record_date(fact, evidence_refs, source_pages):
@@ -74,12 +75,17 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
             continue
         for atom in atomic_expressions(expression):
             variable_id = bindings.get(atom.predicate.predicate_id)
+            definition = definitions.get(variable_id)
+            accepted_variables = {variable_id}
+            if definition is not None and definition.reference_ratio_of is not None:
+                accepted_variables.add(definition.reference_ratio_of)
             eligible = []
+            invalid_calculations = []
             for fact in facts:
                 if (fact.authority.project_id, fact.authority.subject_id, fact.authority.review_episode_id) != (
                         authority.project_id, authority.subject_id, authority.review_episode_id):
                     raise ValueError("事实属于其他项目、受试者或审核节点")
-                if variable_id is None or fact.variable_id != variable_id:
+                if variable_id is None or fact.variable_id not in accepted_variables:
                     continue
                 from app.domain.contracts.enums import FactPolarity
                 if fact.polarity == FactPolarity.UNKNOWN or fact.value is None:
@@ -101,11 +107,17 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                 recorded = source_record_date(fact, evidence_refs, source_pages)
                 if fact.date_range is None and recorded is not None and anchor is not None and anchor.value is not None and recorded > anchor.value:
                     continue
+                if definition is not None and definition.reference_ratio_of is not None:
+                    try:
+                        comparison_reading(fact, definition, atom.predicate, definitions=definitions)
+                    except (ValueError, TypeError):
+                        invalid_calculations.append(fact.fact_id)
+                        continue
                 eligible.append(fact)
-            definition = definitions.get(variable_id)
             def value_key(fact):
                 if definition is not None and definition.value_type == "number" and isinstance(fact.value, (int, float)) and not isinstance(fact.value, bool):
-                    return fact.polarity.value + ":" + str(definition.convert(fact.value, fact.unit or ""))
+                    value, _ = comparison_reading(fact, definition, atom.predicate, definitions=definitions)
+                    return fact.polarity.value + ":" + str(value)
                 return canonical_hash({"value": fact.value, "unit": fact.unit, "polarity": fact.polarity.value})
             conflict = False
             for index, fact in enumerate(eligible):
@@ -140,7 +152,8 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                  or any(fact.date_range is None or fact.date_range.precision.value != "day"
                     or fact.date_role not in {"sampling", "visit"} for fact in chosen)
                  )
-                if atom.time_constraint or definition is not None and definition.domain in {"lab", "vital", "score", "procedure"} else False)
+                if atom.time_constraint or definition is not None and definition.domain in {"lab", "vital", "score", "procedure"} else False,
+                tuple(sorted(invalid_calculations)))
     return result
 
 
@@ -149,10 +162,19 @@ def _issue(code, detail):
         detail=detail, alternative="请对照本条方案原文和已有资料核对；其余独立要求仍可查看。")
 
 
-def comparison_reading(fact, definition, predicate):
+def comparison_reading(fact, definition, predicate, *, definitions=None):
     """Use an explicit qualitative lab label, never derive it from a numeric threshold."""
     value, unit = fact.value, fact.unit
     if definition.value_type == "number":
+        if definition.reference_ratio_of is not None and fact.variable_id == definition.reference_ratio_of:
+            from decimal import Decimal
+            from app.domain.risk_flags import reference_upper_bound
+            base = (definitions or {}).get(definition.reference_ratio_of)
+            if base is None or fact.assertion_basis is None or not any(
+                    label.casefold() in fact.asserted_object.casefold() for label in [base.label_zh, *base.aliases_zh]):
+                raise ValueError("原始项目与倍数计算要求没有明确对应")
+            base.convert(value, unit or "")
+            return float(Decimal(str(value)) / reference_upper_bound(fact)), definition.canonical_unit
         return float(definition.convert(value, unit or "")), definition.canonical_unit
     expected = predicate.value if isinstance(predicate.value, list) else [predicate.value]
     if definition.domain == "lab" and definition.value_type == "category" and any(
@@ -218,9 +240,14 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
         display_code=clause.display_code, title=clause.title, expression=clause.expression,
         exception_expression=clause.exception_expression, repeat_trigger_conditions=clause.repeat_trigger_conditions,
         evidence_requirements=clause.evidence_requirements)
+    definitions = load_dictionary(rule_set.variable_definitions or ())
+    bound_variables = {req.variable_id for req in component.evidence_requirements if req.variable_id}
+    bound_variables.update(definitions[key].reference_ratio_of for key in tuple(bound_variables)
+        if key in definitions and definitions[key].reference_ratio_of is not None)
     input_hash = canonical_hash({"clause": clause.model_dump(mode="json"),
         "facts": [fact.model_dump(mode="json") for fact in frozen.facts
-                  if fact.variable_id in {req.variable_id for req in component.evidence_requirements}],
+                  if fact.variable_id in bound_variables],
+        "calculations": [definitions[key].model_dump(mode="json") for key in sorted(bound_variables) if key in definitions],
         "anchors": frozen.review_episode.model_dump(mode="json")["anchor_dates"]})
     input_hash = canonical_hash({"calculation_input": input_hash,
         "source_pages": [(page.source_document_version_id, page.page_artifact_id, page.effective_text_sha256)
@@ -230,7 +257,6 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
         review_run_id=frozen.review_run_id, official_code=clause.official_code,
         rule_component_id=clause.rule_component_id, rule_kind=clause.kind,
         title=clause.title, source_text=clause.source_text, input_hash=input_hash)
-    bound_variables = {req.variable_id for req in component.evidence_requirements if req.variable_id}
     available = [fact for fact in frozen.facts if fact.variable_id in bound_variables]
     available_refs = [ref for fact in available for ref in evidence_refs.get(fact.fact_id, ())]
     due = [req for req in component.evidence_requirements
@@ -239,7 +265,6 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
         return WorkDraftItem(**common, decision=D.NOT_DUE, reason_text="本条要求属于后续审核节点。")
     predicates = [predicate for expression in (component.expression, component.exception_expression)
                   if expression is not None for predicate in iter_atomic_predicates(expression)]
-    definitions = load_dictionary(rule_set.variable_definitions or ())
     policy = absence_policy(clause, frozen, definitions)
     if policy == "mentioned":
         return WorkDraftItem(**common, decision=D.INDETERMINATE,
@@ -271,16 +296,20 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
             evidence_refs=evidence_refs, source_pages=getattr(frozen, "source_pages", ()))
         selected_ids = {fact_id for value in selection.values() for fact_id in value.fact_ids}
         selected = [fact for fact in frozen.facts if fact.fact_id in selected_ids]
+        if any(value.calculation_unverified_ids and not value.fact_ids for value in selection.values()):
+            issue = _issue(clause.official_code, "已找到原始检验结果，但参考范围或同排单位关系尚未核实，暂不能计算本条所需倍数。")
+            return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
         if any(value.conflict for value in selection.values()):
             return WorkDraftItem(**common, decision=D.CONFLICT, reason_text="同一采样日或同一来源位置的记录不一致，未自动择优。",
                 evidence_refs=[ref for fact in selected for ref in evidence_refs.get(fact.fact_id, ())])
         adapted = []
+        predicate_variables = {pid: req.variable_id for req in due for pid in req.predicate_ids}
         for fact in selected:
             item = adapt_clinical_fact_v2(fact)
-            definition = definitions[fact.variable_id]
             bound_predicates = [predicate for predicate in predicates
-                if any(req.variable_id == fact.variable_id and predicate.predicate_id in req.predicate_ids for req in due)]
-            readings = {comparison_reading(fact, definition, predicate) for predicate in bound_predicates}
+                if fact.fact_id in selection.get(predicate.predicate_id, VariableSelection(())).fact_ids]
+            readings = {comparison_reading(fact, definitions[predicate_variables[predicate.predicate_id]], predicate,
+                definitions=definitions) for predicate in bound_predicates}
             if len(readings) > 1:
                 raise ValueError("同一结果对应不同定量与定性比较，须分别核对")
             if readings:
@@ -289,7 +318,6 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
             # Membership was proven by the snapshot chain; the calculation frame is current.
             adapted.append(item.model_copy(update={"evidence_snapshot_id": frozen.authority.evidence_snapshot_v2_id}))
         calculation_component = component.model_copy(deep=True)
-        predicate_variables = {pid: req.variable_id for req in due for pid in req.predicate_ids}
         for expression in (calculation_component.expression, calculation_component.exception_expression):
             if expression is None:
                 continue
@@ -358,6 +386,8 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
             used_ids.update(outcome.evaluation.exception.used_fact_ids)
         used = [fact for fact in selected if fact.fact_id in used_ids]
         low_reason = next(("所用记录有需要核对的识别或归属标记。" for fact in used if fact.risk_flags), None)
+        if low_reason is None and any(value.calculation_unverified_ids for value in selection.values()):
+            low_reason = "另有相关检验记录的参考范围未核实，本结论仅依据已有完整读数。"
         if low_reason is None and any(value.date_uncertain for value in selection.values()):
             low_reason = "时间依据只记到部分日期，或采样与报告日期尚未明确区分。"
         if low_reason is None:
@@ -372,11 +402,19 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
                     definition = definitions[predicate_variables[predicate.predicate_id]]
                     def truth(fact_id):
                         fact = facts_by_id[fact_id]
-                        value, _ = comparison_reading(fact, definition, predicate)
+                        value, _ = comparison_reading(fact, definition, predicate, definitions=definitions)
                         return _compare(predicate, value)
                     if any(truth(key) != truth(selected_for_predicate.fact_ids[0]) for key in selected_for_predicate.considered_fact_ids):
                         low_reason = "时间窗内其他次结果会导致不同判断，已保留最近一次结果及其余依据。"
                         break
+                    if definition.value_type == "number":
+                        value, _ = comparison_reading(facts_by_id[selected_for_predicate.fact_ids[0]], definition,
+                            predicate, definitions=definitions)
+                        thresholds = predicate.value if isinstance(predicate.value, list) else [predicate.value]
+                        if any(isinstance(threshold, (int, float)) and not isinstance(threshold, bool) and threshold
+                                and abs(value - threshold) / abs(threshold) <= 0.05 for threshold in thresholds):
+                            low_reason = "采用数值接近方案阈值，需核对原始读数与参考范围。"
+                            break
         if low_reason is None and any(not page.extraction_complete for page in getattr(frozen, "source_pages", ())):
             low_reason = "本次部分资料尚未完成读取，结果仅依据已核对的记录。"
         if low_reason is None and any(clause.official_code in issue.affected_codes for issue in getattr(frozen, "system_issues", ())):
@@ -390,6 +428,15 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
                 return "明确否认" if fact.polarity == FactPolarity.NEGATED else "是" if fact.value else "否"
             return f"{fact.value}{fact.unit or ''}"
         summaries = list(dict.fromkeys(f"{definitions[fact.variable_id].label_zh}：{displayed_value(fact)}" for fact in used))
+        for predicate in predicates:
+            definition = definitions.get(predicate_variables.get(predicate.predicate_id))
+            if definition is None or definition.reference_ratio_of is None:
+                continue
+            from app.domain.risk_flags import reference_upper_bound
+            for fact in used:
+                if fact.variable_id == definition.reference_ratio_of:
+                    value, unit = comparison_reading(fact, definition, predicate, definitions=definitions)
+                    summaries.append(f"{definition.label_zh}：{value:.6g}{unit}（原值{fact.value}{fact.unit}，本行参考上限{reference_upper_bound(fact)}{fact.unit}）")
         missing_labels = list(dict.fromkeys(definitions[variable_id].label_zh
             for predicate_id, variable_id in predicate_variables.items()
             if variable_id in definitions and (predicate_id not in selection or not selection[predicate_id].fact_ids)))

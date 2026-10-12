@@ -61,6 +61,45 @@ def test_targets_respect_due_stage_excluded_procedures_and_required_results():
     assert [item.variable_id for item in targets.variables] == ["age", "alt"]
 
 
+def test_reference_ratio_expands_only_its_declared_raw_input():
+    requirement = SimpleNamespace(requirement_id="ratio", due_stage=ReviewStage.SCREENING,
+        variable_id="ast_uln_ratio", procedure_catalog_item_id=None)
+    original = load_dictionary()["ast_uln_ratio"].model_dump(exclude={"reference_ratio_of"})
+    from app.domain.variables.dictionary import VariableDef
+    saved = VariableDef.model_validate(original)
+    targets = build_extraction_targets(SimpleNamespace(variable_definitions=[saved], review_records=[]),
+        ReviewStage.SCREENING, [requirement])
+    assert [x.variable_id for x in targets.variables] == ["ast", "ast_uln_ratio"]
+    assert targets.variables[1].reference_ratio_of == "ast"
+    assert saved.model_dump() == original
+    with pytest.raises(ValueError, match="不同定义"):
+        load_dictionary([saved.model_copy(update={"canonical_unit": "different"})])
+
+
+@pytest.mark.parametrize("row,range_text,value,accepted", [
+    ("ALT 180 10-100 U/L", "10-100", 180, True),
+    ("ALT 180 U/L ≤100", "≤100", 180, True),
+    ("ALT 1.8 10-100 U/L", "10-100", 100, False),
+    ("ALT 180\nAST 10-100 U/L", "10-100", 180, False),
+    ("ALT 180 10-100 AST 35 U/L", "10-100", 180, False),
+    ("ALT 180 100-10 U/L", "100-10", 180, False),
+    ("ALT 180 <0 U/L", "<0", 180, False),
+    ("ALT 180 10-100", "10-100", 180, False),
+    ("ALT 180 2025-08-08 U/L", "2025-08-08", 180, False),
+])
+def test_reference_upper_requires_same_field_not_same_page(row, range_text, value, accepted):
+    from app.domain.risk_flags import reference_upper_bound
+    from app.domain.contracts.fact_context import FactContextQualifier
+    basis = SimpleNamespace(asserted_object="ALT", assertion_text=row,
+        contextual_qualifiers=[FactContextQualifier(kind="reference_range", label=range_text)])
+    fact = SimpleNamespace(assertion_basis=basis, value=value, unit="U/L")
+    if accepted:
+        assert reference_upper_bound(fact) == 100
+    else:
+        with pytest.raises(ValueError):
+            reference_upper_bound(fact)
+
+
 def test_frozen_input_identity_includes_target_dictionary():
     original = _input()
     material = {key: getattr(original, key) for key in (

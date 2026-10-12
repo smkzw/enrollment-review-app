@@ -128,6 +128,48 @@ def test_single_low_confidence_child_does_not_claim_unknown_siblings():
     assert result.confidence_reason == "日期待核实"
 
 
+@pytest.mark.parametrize("value,expected", [(150, D.EXCLUSION_NOT_TRIGGERED), (250, D.EXCLUSION_TRIGGERED),
+    (199, D.EXCLUSION_NOT_TRIGGERED)])
+def test_reference_ratio_uses_raw_published_fact_without_rewriting_it(value, expected):
+    from app.domain.contracts.fact_context import FactContextQualifier
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    atom = component.expression.predicate
+    atom.attribute, atom.comparator, atom.value, atom.unit = "AST相对上限倍数", Comparator.GT, 2, "×ULN"
+    component.evidence_requirements[0].variable_id = "ast_uln_ratio"
+    rules.variable_definitions = [load_dictionary()["ast_uln_ratio"]]
+    fact = material(value=value, variable_id="ast", unit="U/L", day=date(2026, 10, 12))
+    basis = fact.assertion_basis.model_copy(update={"asserted_object": "AST",
+        "assertion_text": f"AST {value} 10-100 U/L",
+        "contextual_qualifiers": [FactContextQualifier(kind="reference_range", label="10-100")]})
+    fact = fact.model_copy(update={"asserted_object": "AST", "assertion_basis": basis})
+    frame = frozen([fact], {AnchorType.SCREENING_DATE: DateValue(value=date(2026, 10, 12), precision=DatePrecision.DAY)})
+    before = fact.model_dump_json()
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules, evidence_refs={})
+    assert result.decision == expected
+    assert "本行参考上限100U/L" in result.reason_text
+    assert fact.model_dump_json() == before
+    unclear = material(value=150, variable_id="ast", unit="U/L", snapshot="unclear", day=date(2026, 10, 12))
+    partial = calculate_work_component(project_clause_pack(rules).clauses[0],
+        frozen([fact, unclear], frame.review_episode.anchor_dates), rules, evidence_refs={})
+    assert partial.decision == expected and partial.confidence == "low"
+    if value == 199:
+        assert result.confidence == "low" and "接近方案阈值" in result.confidence_reason
+    changed = fact.model_copy(update={"assertion_basis": basis.model_copy(update={
+        "assertion_text": f"AST {value} 10-150 U/L", "contextual_qualifiers": [FactContextQualifier(kind="reference_range", label="10-150")]})})
+    second = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([changed], frame.review_episode.anchor_dates), rules, evidence_refs={})
+    assert second.input_hash != result.input_hash
+
+
+def test_missing_reference_cannot_become_an_assumed_ratio():
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    component.expression.predicate.unit = "×ULN"
+    component.evidence_requirements[0].variable_id = "alt_uln_ratio"
+    rules.variable_definitions = [load_dictionary()["alt_uln_ratio"]]
+    fact = material(value=150, variable_id="alt", unit="U/L")
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([fact]), rules, evidence_refs={})
+    assert result.decision is None and result.system_issue is not None
+
+
 @pytest.mark.parametrize("reading, expected", [("阳性", D.EXCLUSION_TRIGGERED),
     (">4.00阳性(＋)", D.EXCLUSION_TRIGGERED), ("0.04阴性(-)", D.EXCLUSION_NOT_TRIGGERED),
     ("＜0.05 阴性（－）", D.EXCLUSION_NOT_TRIGGERED)])
