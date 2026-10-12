@@ -134,6 +134,8 @@
 0.2.0 的做法：
 1. **工作稿路径不使用 `fact_rule_index`／`evidence_expectations` 的修订一致性过滤**。`select_by_variable` 只要求事实属于同一项目、受试者、审核节点，且其 `evidence_snapshot_v2_id` 是当前快照或其祖先快照（快照是不可变全量＋去重增量，祖先关系可查）。规则包修订号与事实无关，匹配靠跨修订稳定的 `variable_id`。
 2. **规则包重新发布后**：已有事实直接被新规则包使用；只有新增的 `variable_id`（新条款需要的变量）才触发一次补充抽取，抽取范围是全部页但需求清单只含新增变量。
+   - 当前工作稿入口先将节点对应到项目现行已发布规则：核同项目／规则谱系／期别、原方案文件哈希及唯一一致的访视结构，再用既有乐观锁更新节点的当前规则与访视指向；旧冻结上下文、事实和报告不改写。在本节点有活动整理／计算作业时不切换；原件或访视不相容时明确停止该更新，不回退旧规则冒充当前。
+   - 原文字覆盖证明只在同项目／受试者／节点／快照／处理修订、同方案文件及相同变量字典时复用；仍按成功call及原逐页账本核对，不按页数相等放行。覆盖复用不代表新条款满足，新增变量或改变字典仍需补充核实；旧失败和未决保留。
 3. **补传资料后**：只对新增或变更的文件做抽取（抽取缓存键＝文件版本哈希＋需求清单哈希＋提示版本），未变文件的事实沿用。
 4. 现有 Profile 投影与 `evidence_expectations` 保持原逻辑（它们服务 Profile 页），不在 0.2.0 改造；REQ 判定在工作稿路径中按 `variable_id = procedure:<id>` 直接计算（§5.5），不依赖 `evidence_expectations` 的修订检查。
 
@@ -196,6 +198,8 @@
 
 `PENDING_CONTROL_APPLICABILITY` 来自已移出主路径的跨章链，工作稿路径中不应出现；出现则记 `SystemIssue`。
 
+定向抽取中，`procedure` 类型输出有源布尔完成事实，与各项读数分开。原文明示完成或实际报告已填写结果且归属明确时，可以形成完成记录；医嘱、预约、次数及空白印刷项不证明完成。完成不证明正常或必需结果齐全；日期不从打印日、上传日或节点锚点补造。
+
 ## 6. 资料侧实现要点
 
 ### 6.1 定向抽取（S3）
@@ -237,7 +241,7 @@
 2. `select_by_variable(clause_pack, facts, anchor_dates) -> {predicate_id: [fact_ids]}`：纯函数，按 `EvidenceRequirement.predicate_ids` × `fact.variable_id` 连接，再按 PRD R-B7 的时间窗与选取规则确定判定值；
 3. 对每个组件调用 `calculate_component_review`（`app/services/component_review.py:27-66`），传入上一步的 `predicate_fact_ids`，`unverified_predicate_ids` 只包含**确无可用事实**的谓词；锚点日期取 `ReviewEpisode.anchor_dates`；
 4. 语义条款与研究者判断条款并入 S6 结果；
-5. `review_conclusions.compose(...)` 按 PRD R-C8 组合父规则，生成六结论、置信、原因、问题卡片、系统问题；`restricted_components` 记 `SystemIssue(component_unstructured)`；
+5. `compose_parent(...)` 按 PRD R-C8 只汇总已到期子项，生成六结论、置信、原因、问题卡片、系统问题；后续子项完整保留为未到期，并在父项原因中说明届时重新审核。全部未到期才汇总为未到期；当前未知及 `restricted_components` 的系统问题仍参与组合，不能被未来子项掩盖；
 6. 写 `ReviewRun(run_kind="work_draft", supersedes_review_run_id=上一版)`、`work_draft_items`、`system_issues`（§4.4），不写 `FinalAssessment`。
 
 Job 幂等键：`(review_episode_id, 资料快照哈希, rule_set_id, rule_set_revision, 已核记录集合哈希, 代码中的计算版本号)`。
@@ -255,7 +259,7 @@ Job 幂等键：`(review_episode_id, 资料快照哈希, rule_set_id, rule_set_r
 ### 7.4 语义条款（S6）
 
 - 语义命题（`AtomicPredicate.semantic_proposition`）：一次 LLM 调用，输入命题＋相关页有效文字，输出 `supports`｜`refutes`｜`not_found`＋逐字引用；程序核对引用，未通过视为 `not_found`。结论恒为低置信，直到 MM 已核。相关页＝资料类型为病历／门诊记录／出院小结的全部页＋命题关键词确定性命中的页；每次调用不超过 20 页，超出分批，任一批 `supports`／`refutes` 即采用并保留全部批次结果。
-- 研究者判断：沿用 judgment_search 检索。注意它只选取 `required_source_types` 含 `investigator_assessment` 的资料要求（`select_judgment_search_requirements`，`app/services/judgment_search_job_service.py:81-103`），而不是按 `requires_professional_judgment` 选组件。因此 P4／发布校验须保证：凡含 `requires_professional_judgment` 谓词的组件，都有一条 `required_source_types` 含 `investigator_assessment` 的 `EvidenceRequirement`。新增对找到的摘录做逐字核对（复用 `fact_evidence_closure.py:296-310` 的包含判断）。核对通过→按记录内容给结论并引用；否则"需研究者判断"。
+- 研究者判断：WP5沿用 judgment_search 的保存与核验能力，但按 `requires_professional_judgment` 与当前节点检索对应筛选／基线原始病历，不把 `investigator_assessment` 误读为必须另交一份判断文件。已存资料要求的该用途保留；适配器需让对应病历的相关摘录进入核验，并保留真实文件类型、作者与节点，不伪装元数据。逐字摘录、判断对象及时间关系核清后按实际记载给结论；不存在额外签名门槛。已完成相关病历范围检索而未见记载时为证据不足；未读完、输出非法或能力未接入为系统问题。不能从检验异常标记、病历标题或医师姓名推断判断内容。当前WP4尚未接入该检索，仍如实显示系统问题，不提前将其改成证据不足。
 
 ## 8. 更正、补证与重算
 

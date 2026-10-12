@@ -21,7 +21,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v11"
+CALCULATION_VERSION = "work-draft/0.2.0-v12"
 
 
 def enqueue_normalized_work_draft(session, *, authority, run_id):
@@ -80,6 +80,23 @@ class WorkDraftReviewService:
             with self.session_factory() as session, session.begin():
                 return self.start(subject_id=subject_id, review_episode_id=review_episode_id, session=session)
         with session.begin_nested():
+            from app.storage.repositories import EpisodeRepository, get_project_row
+            episode = EpisodeRepository(session).get(review_episode_id)
+            if episode.subject_id != subject_id:
+                raise ScopeViolationError("审核节点不属于所选受试者")
+            from app.storage.models import JobRecord
+            from app.storage.codecs import verify_payload_sha256
+            project, revision = get_project_row(session, episode.project_id)
+            if (episode.protocol_version_id, episode.rule_set_id, episode.rule_set_revision) != (
+                    project.protocol_version.protocol_version_id, project.rule_set_id, revision):
+                for job in session.scalars(select(JobRecord).where(
+                        JobRecord.job_type.in_({"fact_normalization", JOB_TYPE}),
+                        JobRecord.state.in_({"queued", "running", "failed_retryable"}))):
+                    data = verify_payload_sha256(job.payload_json, job.payload_sha256)
+                    owner = data.get("review_episode_id") or (data.get("authority") or {}).get("review_episode_id")
+                    if owner == review_episode_id:
+                        raise ScopeViolationError("当前资料或工作稿正在整理，请完成后更新；已有结果会保留。")
+            EpisodeRepository(session).adopt_published_rule_set(review_episode_id, episode.revision)
             authority = authority_from_active_episode(session, review_episode_id)
             if authority.subject_id != subject_id:
                 raise ScopeViolationError("审核节点不属于所选受试者")

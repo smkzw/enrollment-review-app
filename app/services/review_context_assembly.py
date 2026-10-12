@@ -33,6 +33,17 @@ def _source_reading_identity(item):
         "locator_id": basis.locator_id, "source_hash": basis.source_text_sha256, "excerpt": basis.assertion_text})
 
 
+def normalization_source_is_reusable(run, authority, old_rules, current_rules, old_protocol, current_protocol):
+    """Coverage of immutable text is not approval of a new rule's interpretation."""
+    identity_fields = {"episode_revision", "protocol_version_id", "rule_set_revision"}
+    return (run.status.value in {"succeeded", "partial"}
+        and run.authority.model_dump(exclude=identity_fields) == authority.model_dump(exclude=identity_fields)
+        and old_protocol.sha256 == current_protocol.sha256
+        and old_rules.study_phase == current_rules.study_phase
+        and {item.variable_id: item.model_dump(mode="json") for item in old_rules.variable_definitions or ()}
+            == {item.variable_id: item.model_dump(mode="json") for item in current_rules.variable_definitions or ()})
+
+
 def review_method_is_current(context: ReviewContextSnapshotV2) -> bool:
     from app.services.frozen_review_calculation import EVALUATOR_VERSION
 
@@ -219,9 +230,19 @@ def assemble_review_context(
         revision = validator.validate_and_get_revision(authority)
         _, source = build_fact_normalization_plan(session, authority=authority, revision=revision)
         read_pages = set()
-        runs = [run for run in FactNormalizationRunRepository(session).list_by_episode(review_episode_id)
-                if run.authority.model_dump(exclude={"episode_revision"}) == authority.model_dump(exclude={"episode_revision"})
-                and run.status.value in {"succeeded", "partial"}]
+        from app.storage.repositories import get_rule_set, AppendRepository, PROTOCOL_DOC_CONFIG
+        runs = []
+        for run in FactNormalizationRunRepository(session).list_by_episode(review_episode_id):
+            if (run.authority.project_id, run.authority.subject_id, run.authority.review_episode_id,
+                    run.authority.evidence_snapshot_v2_id, run.authority.complete_processing_revision_id) != (
+                    authority.project_id, authority.subject_id, authority.review_episode_id,
+                    authority.evidence_snapshot_v2_id, authority.complete_processing_revision_id):
+                continue
+            old_rules = get_rule_set(session, run.authority.rule_set_id, run.authority.rule_set_revision)
+            old_protocol = AppendRepository(session, PROTOCOL_DOC_CONFIG).get(run.authority.protocol_version_id)
+            if normalization_source_is_reusable(run, authority, old_rules, protocol.rule_set,
+                    old_protocol, project.protocol_version):
+                runs.append(run)
         logical_to_version = {value: key for key, value in source.doc_version_to_logical.items()}
         adopted_readings = {_source_reading_identity(fact) for fact in facts if fact.assertion_basis is not None}
         for run in runs:

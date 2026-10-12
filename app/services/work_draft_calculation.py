@@ -460,14 +460,16 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
 
 
 def compose_parent(rule, children, review_run_id):
-    """R-C8: ALL for inclusion; ANY for exclusions, retaining unresolved siblings."""
+    """R-C8: aggregate due children; retain future requirements without judging them."""
     if not children:
         issue = _issue(rule.official_code, "本条没有可核对的子项结果，系统暂不能生成结论。")
         return WorkDraftItem(item_id=f"{review_run_id}:parent:{rule.rule_id}", review_run_id=review_run_id,
             official_code=rule.official_code, rule_kind=rule.kind, title=rule.source_text,
             source_text=rule.source_text, system_issue=issue, reason_text=issue.detail,
             input_hash=canonical_hash({"rule": rule.model_dump(mode="json"), "children": []}))
-    decisions = {item.decision for item in children}
+    due_children = [item for item in children if item.decision != D.NOT_DUE]
+    current = due_children or children
+    decisions = {item.decision for item in current}
     if rule.kind == RuleKind.EXCLUSION:
         positive, negative = D.EXCLUSION_TRIGGERED, D.EXCLUSION_NOT_TRIGGERED
         decision = positive if positive in decisions else negative if decisions <= {negative, D.NOT_APPLICABLE} else None
@@ -480,21 +482,24 @@ def compose_parent(rule, children, review_run_id):
         decision = D.NOT_APPLICABLE
     issue = None
     if decision is None:
-        issue = next((item.system_issue for item in children if item.system_issue), None)
+        issue = next((item.system_issue for item in current if item.system_issue), None)
         if issue is None:
             decision = next((value for value in (D.CONFLICT, D.PROFESSIONAL_JUDGMENT, D.INDETERMINATE, D.NOT_DUE)
                              if value in decisions), D.INDETERMINATE)
     low = any(item.confidence == "low" or item.system_issue or item.decision not in DETERMINATE | {D.NOT_APPLICABLE}
-              for item in children)
-    refs = {ref.locator_id + ":" + ref.fact_id: ref for item in children for ref in item.evidence_refs}
+              for item in current)
+    refs = {ref.locator_id + ":" + ref.fact_id: ref for item in current for ref in item.evidence_refs}
+    reason = issue.detail if issue else "；".join(f"{item.title}：{item.reason_text}" for item in children)
+    if due_children and len(due_children) != len(children):
+        reason = "本次节点结论仅依据已到期要求；后续要求未到期，届时须重新审核。" + reason
     return WorkDraftItem(item_id=f"{review_run_id}:parent:{rule.rule_id}", review_run_id=review_run_id,
         official_code=rule.official_code, rule_kind=rule.kind, title=rule.source_text,
         source_text=rule.source_text, decision=decision, system_issue=issue,
         confidence=("low" if low else "high") if decision in DETERMINATE else None,
-        confidence_reason=("；".join(dict.fromkeys(item.confidence_reason for item in children if item.confidence_reason))
+        confidence_reason=("；".join(dict.fromkeys(item.confidence_reason for item in current if item.confidence_reason))
             or "部分子项仍未核实，本结论只由已有独立依据决定。") if low and decision in DETERMINATE else None,
-        reason_text=issue.detail if issue else "；".join(f"{item.title}：{item.reason_text}" for item in children),
-        policy_group="not_seen_in_supplied_records" if any(item.policy_group == "not_seen_in_supplied_records" for item in children) else None,
+        reason_text=reason,
+        policy_group="not_seen_in_supplied_records" if any(item.policy_group == "not_seen_in_supplied_records" for item in current) else None,
         evidence_refs=list(refs.values()), input_hash=canonical_hash([item.input_hash for item in children]))
 
 

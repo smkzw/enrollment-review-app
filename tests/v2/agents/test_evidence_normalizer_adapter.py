@@ -695,10 +695,21 @@ def test_prompt_can_omit_embedded_schema_for_schema_enforcing_transports():
     assert "不得自创 locator" in prompt
 
 
-def test_prompt_layout_version_is_v41():
+def test_prompt_layout_version_is_v42():
     from app.agents.evidence_normalizer import _PROMPT_LAYOUT_VERSION
 
-    assert _PROMPT_LAYOUT_VERSION == "phase5/evidence-normalizer-prompt/v41"
+    assert _PROMPT_LAYOUT_VERSION == "phase5/evidence-normalizer-prompt/v42"
+
+
+def test_targeted_procedure_prompt_distinguishes_completion_from_results_and_orders():
+    prompt = build_evidence_normalizer_prompt(_input(), prompt_template="按原文抽取。")
+    for boundary in (
+        "value_type=procedure", "已有填写的检查结果且归属明确", "completed_action",
+        "完成记录与各项实际读数分别保存", "不能据此认定结果正常",
+        "医嘱、预约、计划、次数、印刷空项", "明确记载未做时以negated表达",
+        "没有记录不等于未做", "报告打印日补为检查日",
+    ):
+        assert boundary in prompt
 
 
 def test_observation_modality_boundary_reaches_both_prompts_and_repairs():
@@ -1550,6 +1561,40 @@ def test_current_assertion_scope_keeps_supported_actual_facts(scope):
     assert output.fact_candidates[0].canonical_value is True
     assert output.fact_candidates[0].polarity.value == ("affirmed" if scope == "completed_action" else "negated")
     assert output.exposure_candidates == []
+
+
+@pytest.mark.parametrize("value,accepted", [(True, True), ("已完成", False), (1, False)])
+def test_targeted_procedure_requires_boolean_and_retains_literal_completion(value, accepted):
+    from app.domain.variables.dictionary import VariableDef
+    inp = _input()
+    text = "已完成检查甲，结果待核。"
+    page = _page(1, text, ["loc-1"])
+    locator = inp.available_locators[0].model_copy(update={
+        "source_text_sha256": page.effective_text_sha256, "localized_text": text})
+    definition = VariableDef(variable_id="procedure:synthetic", label_zh="检查甲",
+        value_type="procedure", domain="procedure")
+    inp = inp.model_copy(update={"pages": [page, inp.pages[1]],
+        "available_locators": [locator, inp.available_locators[1]], "variable_definitions": [definition]})
+    scope = {name: getattr(inp, name) for name in (
+        "authority", "logical_document_id", "context", "related_requirements", "manifest_sha256",
+        "completion_manifest_sha256", "page_numbers", "pages", "page_review", "available_locator_ids",
+        "available_locators", "variable_definitions")}
+    inp = inp.model_copy(update={"input_scope_sha256": evidence_normalizer_input_scope_hash(**scope)})
+    payload = _bound_draft_payload("unused")
+    payload["schema_version"] = "phase5/normalizer-draft/v5"
+    payload["fact_candidates"][0].update(assertion_scope="completed_action", variable_id=definition.variable_id,
+        fact_type="检查完成", profile_lane="test_exam_score", polarity="affirmed", supported_requirement_ids=[],
+        asserted_object="检查甲", raw_value=value, canonical_value=value,
+        assertion_basis={"asserted_object": "检查甲", "assertion_text": text,
+            "locator_id": "loc-1", "contextual_qualifiers": []})
+    if not accepted:
+        with pytest.raises(ValueError):
+            validate_evidence_normalizer_output(_parse_assertion_scope_payload(payload), inp)
+        return
+    candidate = validate_evidence_normalizer_output(_parse_assertion_scope_payload(payload), inp).fact_candidates[0]
+    assert candidate.canonical_value is True and candidate.unit is None
+    assert candidate.variable_id == definition.variable_id
+    assert candidate.assertion_basis.assertion_text == text
 
 
 @pytest.mark.parametrize("scope", ["declared_intention", "prospective_or_conditional", "uncertain"])

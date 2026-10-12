@@ -277,6 +277,63 @@ def _revised_fixture(
     return source_input, draft, spans
 
 
+@pytest.mark.parametrize("change", [None, "source", "visit", "ambiguous"])
+def test_current_node_adopts_published_same_source_rules_without_rewriting_prior_rules(slice4_env, change, monkeypatch):
+    from app.domain.contracts.review import Subject, ReviewEpisode
+    from app.storage.repositories import EpisodeRepository, SubjectRepository, get_rule_set, list_workflow_stages_for_rule_set, ScopeViolationError
+    from app.domain.publication import canonical_hash
+    factory, _ = slice4_env
+    source, draft, spans = confirmed_fixture()
+    first = _publish_first(factory, source, draft, spans, key="adopt-first")
+    with factory() as session, session.begin():
+        stages = list_workflow_stages_for_rule_set(session, first.rule_set_id, first.rule_set_revision)
+        stage = stages[0]
+        subject = Subject(subject_id="adopt-subject", subject_code="synthetic", project_id=first.project_id)
+        SubjectRepository(session).save(subject)
+        episode = ReviewEpisode(review_episode_id="adopt-episode", subject_id=subject.subject_id,
+            project_id=first.project_id, rule_set_id=first.rule_set_id, rule_set_revision=first.rule_set_revision,
+            protocol_version_id=first.protocol_version_id, study_phase=draft.selected_phase,
+            stage=stage.stage, workflow_stage_id=stage.workflow_stage_id, evidence_snapshot_id=None)
+        EpisodeRepository(session).save(episode)
+        old_hash = canonical_hash(get_rule_set(session, first.rule_set_id, first.rule_set_revision).model_dump(mode="json"))
+    updated_source, updated_draft, updated_spans = _revised_fixture("adopt-version")
+    if change == "source":
+        updated_source = updated_source.model_copy(update={"protocol_file_sha256": "f" * 64})
+    with factory() as session, session.begin():
+        revision = ProtocolDraftService(session).save_initial_draft(updated_draft,
+            actor="测试", created_at=NAIVE_NOW, baseline=draft)
+    from tests.v2.protocols.slice4_helpers import approve_fixture_entries
+    approve_fixture_entries(factory, updated_source, updated_draft)
+    second = ProtocolPublicationService(factory, now=lambda: NAIVE_NOW).publish(ProtocolPublicationRequest(
+        idempotency_key="adopt-second", draft_revision_id=revision.revision_id, source_input=updated_source,
+        source_spans=updated_spans, project_id=first.project_id, expected_rule_set_revision=first.rule_set_revision))
+    if change in {"visit", "ambiguous"}:
+        import app.storage.repositories as repositories
+        original = repositories.list_workflow_stages_for_rule_set
+        def changed_stages(session, rule_set_id, revision):
+            items = original(session, rule_set_id, revision)
+            if revision == second.rule_set_revision:
+                if change == "visit":
+                    return [item.model_copy(update={"visit_instance": "其他访视"}) for item in items]
+                return [*items, *(item.model_copy(update={"workflow_stage_id": item.workflow_stage_id + ":other"}) for item in items)]
+            return items
+        monkeypatch.setattr(repositories, "list_workflow_stages_for_rule_set", changed_stages)
+    with factory() as session, session.begin():
+        repo = EpisodeRepository(session)
+        before = repo.get(episode.review_episode_id)
+        if change:
+            with pytest.raises(ScopeViolationError, match="方案原件|审核节点不能唯一对应"):
+                repo.adopt_published_rule_set(episode.review_episode_id, before.revision)
+            assert repo.get(episode.review_episode_id) == before
+        else:
+            after = repo.adopt_published_rule_set(episode.review_episode_id, before.revision)
+            assert after.rule_set_revision == second.rule_set_revision
+            assert after.protocol_version_id == second.protocol_version_id
+            assert after.revision == before.revision + 1
+            assert repo.adopt_published_rule_set(after.review_episode_id, after.revision) == after
+        assert canonical_hash(get_rule_set(session, first.rule_set_id, first.rule_set_revision).model_dump(mode="json")) == old_hash
+
+
 def _start_redeconstruction(
     service: ProtocolWorkbenchService,
     project_id: str,

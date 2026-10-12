@@ -2105,6 +2105,35 @@ class EpisodeRepository:
         )
         return cast(ReviewEpisode, new_contract)
 
+    def adopt_published_rule_set(self, review_episode_id: str, expected_revision: int) -> ReviewEpisode:
+        """Move the current node only; frozen contexts and prior reports stay immutable."""
+        episode = self.get(review_episode_id)
+        project, revision = get_project_row(self.session, episode.project_id)
+        if (episode.rule_set_id, episode.rule_set_revision, episode.protocol_version_id) == (
+                project.rule_set_id, revision, project.protocol_version.protocol_version_id):
+            return episode
+        old_protocol = AppendRepository(self.session, PROTOCOL_DOC_CONFIG).get(episode.protocol_version_id)
+        if (old_protocol.sha256 != project.protocol_version.sha256
+                or episode.study_phase != project.study_phase or episode.rule_set_id != project.rule_set_id):
+            raise ScopeViolationError("方案原件或研究期别已变化，不能自动沿用原节点资料；请核对新的适用范围。")
+        old_stages = list_workflow_stages_for_rule_set(self.session, episode.rule_set_id, episode.rule_set_revision)
+        old_stage = next((item for item in old_stages if item.workflow_stage_id == episode.workflow_stage_id), None)
+        if old_stage is None:
+            raise ScopeViolationError("原节点缺少已发布的访视来源，暂不能更新规则。")
+        scope = old_stage.model_dump(exclude={"workflow_stage_id", "due_requirement_ids"})
+        matches = [item for item in list_workflow_stages_for_rule_set(self.session, project.rule_set_id, revision)
+            if item.model_dump(exclude={"workflow_stage_id", "due_requirement_ids"}) == scope]
+        if len(matches) != 1:
+            raise ScopeViolationError("新旧规则的审核节点不能唯一对应，请核对访视和时间范围；旧结果保留。")
+        changes = dict(rule_set_id=project.rule_set_id, rule_set_revision=revision,
+            protocol_version_id=project.protocol_version.protocol_version_id,
+            workflow_stage_id=matches[0].workflow_stage_id)
+        _check_episode_scope(self.session, episode.model_copy(update=changes))
+        new_contract, _ = apply_revisioned_update(self.session, ReviewEpisodeRecord, ReviewEpisode,
+            review_episode_id, expected_revision, changes, column_builder=_episode_columns,
+            mutable_fields=set(changes), entity_type="ReviewEpisode")
+        return cast(ReviewEpisode, new_contract)
+
     def list_by_subject(
         self, subject_id: str, *, project_id: str | None = None
     ) -> list[ReviewEpisode]:

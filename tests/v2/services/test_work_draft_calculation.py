@@ -379,6 +379,46 @@ def test_decisive_parent_keeps_unknown_sibling_low(kind, decisive):
     assert result.decision == decisive and result.confidence == "low" and result.system_issue is None
 
 
+@pytest.mark.parametrize("kind, current_decision", [
+    (RuleKind.INCLUSION, D.INCLUSION_MET),
+    (RuleKind.INCLUSION, D.INCLUSION_NOT_MET),
+    (RuleKind.EXCLUSION, D.EXCLUSION_NOT_TRIGGERED),
+    (RuleKind.EXCLUSION, D.EXCLUSION_TRIGGERED),
+    (RuleKind.INCLUSION, D.INDETERMINATE),
+    (RuleKind.INCLUSION, D.CONFLICT),
+    (RuleKind.INCLUSION, D.PROFESSIONAL_JUDGMENT),
+])
+def test_parent_judges_current_node_without_approving_future_requirements(kind, current_decision):
+    rule = clause(kind=kind)[0].rules[0]
+    common = dict(review_run_id="run", official_code=rule.official_code, rule_kind=kind,
+        title="当前要求", source_text="有源要求", reason_text="已核对当前要求", input_hash="f" * 64)
+    due = WorkDraftItem(**common, item_id="due", decision=current_decision,
+        confidence="high" if current_decision in {D.INCLUSION_MET, D.INCLUSION_NOT_MET,
+            D.EXCLUSION_NOT_TRIGGERED, D.EXCLUSION_TRIGGERED} else None)
+    future = WorkDraftItem(**{**common, "title": "后续要求", "reason_text": "未到期"},
+        item_id="future", decision=D.NOT_DUE)
+    result = compose_parent(rule, [due, future], "run")
+    assert result.decision == current_decision
+    assert result.confidence == due.confidence
+    assert "仅依据已到期要求" in result.reason_text
+    assert "后续要求未到期，届时须重新审核" in result.reason_text
+    assert future.decision == D.NOT_DUE and future.confidence is None
+
+
+def test_future_requirement_does_not_hide_current_system_issue_or_create_completion():
+    rule = clause()[0].rules[0]
+    common = dict(review_run_id="run", official_code=rule.official_code, rule_kind=rule.kind,
+        title="要求", source_text="原文", reason_text="原因", input_hash="f" * 64)
+    future = WorkDraftItem(**common, item_id="future", decision=D.NOT_DUE)
+    issue = SystemIssue(kind="method_unsupported", affected_codes=[rule.official_code],
+        detail="计算未接入", alternative="核查原件")
+    current = WorkDraftItem(**common, item_id="current", system_issue=issue)
+    result = compose_parent(rule, [current, future], "run")
+    assert result.decision is None and result.system_issue == issue
+    assert issue.detail in result.reason_text
+    assert compose_parent(rule, [future], "run").decision == D.NOT_DUE
+
+
 def test_graph_reuses_existing_owners_and_declares_placeholder():
     assert set(SUBJECT_GRAPH) == {f"S{index}" for index in range(1, 9)}
     assert list(work_draft_steps()) == [("calculate", ()), ("semantic", ("calculate",)),
@@ -431,6 +471,33 @@ def test_unknown_value_does_not_shadow_a_literal_valid_reading():
     unknown = material(snapshot="unknown").model_copy(update={"value": None, "polarity": FactPolarity.UNKNOWN})
     result = calculate_work_component(projected, frozen([fact, unknown]), rules, evidence_refs={})
     assert result.decision == D.INCLUSION_MET
+
+
+@pytest.mark.parametrize("change,expected", [(None, True), ("source", False), ("subject", False),
+    ("snapshot", False), ("processing", False), ("dictionary", False), ("running", False),
+    ("rules", False), ("phase", False)])
+def test_saved_page_coverage_reuse_checks_source_and_dictionary_not_rule_revision(change, expected):
+    from app.services.review_context_assembly import normalization_source_is_reusable
+    current = material().authority
+    prior = current.model_copy(update={"protocol_version_id": "old-protocol", "rule_set_revision": 0,
+        "episode_revision": 0})
+    run = SimpleNamespace(authority=prior, status=SimpleNamespace(value="partial"))
+    old_rules, _, _ = clause()
+    new_rules = old_rules.model_copy(deep=True)
+    old_protocol, new_protocol = SimpleNamespace(sha256="a" * 64), SimpleNamespace(sha256="a" * 64)
+    if change == "source":
+        new_protocol.sha256 = "b" * 64
+    elif change in {"subject", "snapshot", "processing", "rules"}:
+        key = {"subject": "subject_id", "snapshot": "evidence_snapshot_v2_id",
+            "processing": "complete_processing_revision_id", "rules": "rule_set_id"}[change]
+        run.authority = prior.model_copy(update={key: "other"})
+    elif change == "dictionary":
+        new_rules.variable_definitions = []
+    elif change == "running":
+        run.status.value = "running"
+    elif change == "phase":
+        new_rules.study_phase = StudyPhase.PHASE_II
+    assert normalization_source_is_reusable(run, current, old_rules, new_rules, old_protocol, new_protocol) == expected
 
 
 def test_counterfactual_value_changes_result_without_changing_rule():

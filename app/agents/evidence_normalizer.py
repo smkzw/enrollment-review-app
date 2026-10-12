@@ -443,7 +443,7 @@ DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE = (
     "请从本次资料页组中逐页提取临床事实候选，并严格按指定结构返回。"
 )
 
-_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v41"
+_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v42"
 _MAX_PROMPT_CHARS = 100_000
 
 
@@ -523,6 +523,13 @@ _SYSTEM_CONTRACT = (
     "必须返回空列表。绑定 ID 必须来自本次冻结输入。variable_definitions 是本节点需求清单；"
     "事实的 variable_id 只能选清单中明确对应原文的数据项目，不能猜映射。清单外重要病史"
     "保留供个例档案使用，variable_id 填 null。fact_type 保留原有临床展示分类。"
+    "清单中value_type=procedure表示该项检查或操作是否已完成，不是它的检验数值或正常结论。"
+    "原文明示完成，或该项真实报告已有填写的检查结果且归属明确时，按原文形成completed_action"
+    "候选，raw_value与canonical_value均为true、unit为null；保留原文检查名称、真实摘录及日期。"
+    "完成记录与各项实际读数分别保存，不能以完成记录替代必需结果，也不能据此认定结果正常。"
+    "医嘱、预约、计划、次数、印刷空项或未确认归属的结果不证明完成；只保留计划或unknown。"
+    "明确记载未做时以negated表达，值仍为true，不用false重复否定；没有记录不等于未做。"
+    "不得为得到完成记录拼造原句、借用另一项检查结果或把报告打印日补为检查日。"
     "若数据项目有reference_ratio_of，优先抽取它指向的原始项目及原单位，不自行计算倍数。"
     "原始项目的assertion_basis须保留项目、结果、参考范围和单位所在的完整原句或表格行；"
     "参考范围以kind=reference_range、label=该行参考范围原文放入contextual_qualifiers。"
