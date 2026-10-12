@@ -443,7 +443,7 @@ DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE = (
     "请从本次资料页组中逐页提取临床事实候选，并严格按指定结构返回。"
 )
 
-_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v39"
+_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v40"
 _MAX_PROMPT_CHARS = 100_000
 
 

@@ -174,6 +174,75 @@ def test_nearest_date_and_same_day_conflict():
     assert select_by_variable(component, [b, c], {}, authority=b.authority, definitions=load_dictionary())["age-limit"].conflict
 
 
+def test_shared_locator_does_not_merge_distinct_dated_collections():
+    _, _, component = clause()
+    a = material(value=52, day=date(2025, 8, 1), snapshot="first")
+    b = material(value=53, day=date(2025, 8, 8), snapshot="second")
+    b = b.model_copy(update={"locator_ids": a.locator_ids})
+    result = select_by_variable(component, [a, b], {}, authority=a.authority, definitions=load_dictionary())["age-limit"]
+    assert not result.conflict and result.fact_ids == (b.fact_id,)
+
+
+def test_calculation_cannot_downgrade_wrong_patient_to_a_system_issue():
+    from app.storage.repositories import ScopeViolationError
+    rules, projected, _ = clause()
+    fact = material()
+    frame = frozen([fact])
+    frame.facts = [fact.model_copy(update={"authority": fact.authority.model_copy(update={"subject_id": "other"})})]
+    with pytest.raises(ScopeViolationError):
+        calculate_work_component(projected, frame, rules, evidence_refs={})
+
+
+def test_present_but_unknown_anchor_cannot_grant_high_confidence():
+    rules, _, component = clause()
+    predicate = component.expression.predicate
+    predicate.unit = "U/L"
+    component.evidence_requirements[0].variable_id = "alt"
+    rules.variable_definitions = [load_dictionary()["alt"]]
+    anchors = {AnchorType.SCREENING_DATE: DateValue(precision=DatePrecision.UNKNOWN)}
+    result = calculate_work_component(project_clause_pack(rules).clauses[0],
+        frozen([material(variable_id="alt", unit="U/L", day=date(2025, 8, 8))], anchors), rules, evidence_refs={})
+    assert result.decision == D.INCLUSION_MET and result.confidence == "low"
+
+
+def test_recovery_identity_requires_the_same_reading_not_merely_the_same_page():
+    from app.services.review_context_assembly import _source_reading_identity
+    fact = material()
+    candidate = SimpleNamespace(**{name: getattr(fact, name) for name in (
+        "assertion_basis", "variable_id", "asserted_object", "unit", "polarity", "date_role", "date_range")},
+        canonical_value=fact.value)
+    assert _source_reading_identity(candidate) == _source_reading_identity(fact)
+    candidate.canonical_value = 53
+    assert _source_reading_identity(candidate) != _source_reading_identity(fact)
+    candidate.canonical_value = fact.value
+    candidate.assertion_basis = fact.assertion_basis.model_copy(update={"locator_id": "another-field-on-the-same-page"})
+    assert _source_reading_identity(candidate) != _source_reading_identity(fact)
+
+
+def test_bad_primary_quote_is_omitted_without_losing_other_fact_refs(monkeypatch):
+    from app.services import work_draft_review as service
+    import app.domain.gates.fact_evidence_closure as closure
+    from app.storage.fact_authority import FactAuthorityValidator
+    a, b = material(snapshot="good"), material(snapshot="bad")
+    texts = {a.locator_ids[0]: a.assertion_basis.assertion_text, b.locator_ids[0]: "另一条原文"}
+    monkeypatch.setattr(FactAuthorityValidator, "validate_frozen_source", lambda *_: object())
+    monkeypatch.setattr(closure, "_localized_locator_text", lambda _session, loc, _revision: texts[loc.locator_id])
+    monkeypatch.setattr(service.EvidenceLocatorRepository, "get", lambda _self, key: SimpleNamespace(
+        locator_id=key, source_document_version_id="document", page_artifact_id="page", page_number=1))
+    refs = service._fact_refs(object(), frozen([a, b]))
+    assert set(refs) == {a.fact_id}
+    assert refs[a.fact_id][0].excerpt == a.assertion_basis.assertion_text
+
+
+def test_unimplemented_written_judgment_search_is_not_reported_as_missing_record():
+    rules, _, component = clause()
+    component.expression.predicate.requires_professional_judgment = True
+    result = calculate_work_component(project_clause_pack(rules).clauses[0],
+        frozen([material()]), rules, evidence_refs={})
+    assert result.system_issue is not None and result.decision is None
+    assert "尚未接入" in result.reason_text
+
+
 def test_wrong_subject_is_hard_rejection():
     _, _, component = clause()
     a = material()

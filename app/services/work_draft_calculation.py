@@ -116,7 +116,11 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                         and fact.date_range.lower_bound == other.date_range.lower_bound)
                     # A PDF can bundle several reports. Only a shared actual
                     # source position proves that these readings refer to one field.
-                    same_report = bool(set(fact.locator_ids) & set(other.locator_ids))
+                    distinct_samples = (fact.date_range is not None and other.date_range is not None
+                        and fact.date_role == other.date_role == "sampling"
+                        and fact.date_range.precision.value == other.date_range.precision.value == "day"
+                        and fact.date_range.lower_bound != other.date_range.lower_bound)
+                    same_report = bool(set(fact.locator_ids) & set(other.locator_ids)) and not distinct_samples
                     if (same_day or same_report) and value_key(fact) != value_key(other):
                         conflict = True
             dated = [fact for fact in eligible if fact.date_range is not None and fact.date_range.lower_bound is not None]
@@ -132,6 +136,7 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                 tuple(sorted(fact.fact_id for fact in (eligible if conflict else chosen))),
                 tuple(sorted(fact.fact_id for fact in eligible)), conflict,
                 undated_choice_unclear or (not base.anchor_dates.get(AnchorType.BASELINE_DATE if stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE)
+                 or base.anchor_dates[AnchorType.BASELINE_DATE if stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE].value is None
                  or any(fact.date_range is None or fact.date_range.precision.value != "day"
                     or fact.date_role not in {"sampling", "visit"} for fact in chosen)
                  )
@@ -205,6 +210,10 @@ def absence_policy(clause, frozen, definitions):
 
 
 def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
+    from app.storage.repositories import ScopeViolationError
+    if any((fact.authority.project_id, fact.authority.subject_id, fact.authority.review_episode_id) != (
+            frozen.authority.project_id, frozen.authority.subject_id, frozen.authority.review_episode_id) for fact in frozen.facts):
+        raise ScopeViolationError("事实属于其他项目、受试者或审核节点")
     component = RuleComponent(rule_component_id=clause.rule_component_id, parent_rule_id=clause.rule_id,
         display_code=clause.display_code, title=clause.title, expression=clause.expression,
         exception_expression=clause.exception_expression, repeat_trigger_conditions=clause.repeat_trigger_conditions,
@@ -251,8 +260,8 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
         issue = _issue(clause.official_code, "本条需要核对用药记录的性质及对应时间，当前工作稿尚未接入这部分判断。")
         return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)
     if any(predicate.requires_professional_judgment for predicate in predicates):
-        return WorkDraftItem(**common, decision=D.PROFESSIONAL_JUDGMENT,
-            reason_text="本条需要研究者书面判断，当前工作稿尚未取得可核实的对应判断。")
+        issue = _issue(clause.official_code, "本条需要核对研究者书面判断，当前工作稿尚未接入这部分核查。")
+        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)
     try:
         selection = select_by_variable(component, frozen.facts, frozen.review_episode.anchor_dates,
             authority=frozen.authority, definitions=definitions, stage=frozen.review_episode.stage,
@@ -332,15 +341,15 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
                 if expression is None:
                     continue
                 for predicate in iter_atomic_predicates(expression):
-                    selected = selection.get(predicate.predicate_id)
-                    if selected is None or not selected.fact_ids:
+                    selected_for_predicate = selection.get(predicate.predicate_id)
+                    if selected_for_predicate is None or not selected_for_predicate.fact_ids:
                         continue
                     definition = definitions[predicate_variables[predicate.predicate_id]]
                     def truth(fact_id):
                         fact = facts_by_id[fact_id]
                         value, _ = comparison_reading(fact, definition, predicate)
                         return _compare(predicate, value)
-                    if any(truth(key) != truth(selected.fact_ids[0]) for key in selected.considered_fact_ids):
+                    if any(truth(key) != truth(selected_for_predicate.fact_ids[0]) for key in selected_for_predicate.considered_fact_ids):
                         low_reason = "时间窗内其他次结果会导致不同判断，已保留最近一次结果及其余依据。"
                         break
         if low_reason is None and any(not page.extraction_complete for page in getattr(frozen, "source_pages", ())):
@@ -458,7 +467,7 @@ def calculate_procedures(frozen, rule_set, *, evidence_refs):
             result.append(WorkDraftItem(**common, decision=D.CONFLICT, reason_text="同一核对项目同时有已完成和未完成记录，需核对时间和来源。", evidence_refs=refs))
             continue
         if not_completed:
-            low = anchor is None or any(fact.risk_flags or fact.date_range is None
+            low = anchor is None or anchor.value is None or any(fact.risk_flags or fact.date_range is None
                 or fact.date_range.precision.value != "day" or fact.date_role not in {"sampling", "visit"}
                 for fact in not_completed)
             result.append(WorkDraftItem(**common, decision=D.REQUIREMENT_NOT_MET,
@@ -478,7 +487,7 @@ def calculate_procedures(frozen, rule_set, *, evidence_refs):
             continue
         values = completed + [fact for fact in scoped if fact.variable_id in requested]
         low = any(fact.risk_flags or fact.date_range is None or fact.date_range.precision.value != "day"
-                  or fact.date_role not in {"sampling", "visit"} for fact in values) or anchor is None
+                  or fact.date_role not in {"sampling", "visit"} for fact in values) or anchor is None or anchor.value is None
         result.append(WorkDraftItem(**common, decision=D.REQUIREMENT_MET, confidence="low" if low else "high",
             confidence_reason="所用记录仍有识别、归属或节点时间需核对。" if low else None,
             reason_text="已找到本项完成记录，审定时要求的结果字段已提供；结果是否符合入排阈值由对应条款另行判断。",

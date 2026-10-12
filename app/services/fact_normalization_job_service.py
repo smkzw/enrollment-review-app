@@ -82,6 +82,12 @@ def pending_normalization_pages(session: Session, run_id: str) -> set[tuple[str,
             raise InvalidJobDefinitionError("续读历史不属于同一资料范围")
         calls = FactNormalizationCallRepository(session).list_by_run(run_id)
         pending = {call.call_id for call in calls if call.status.value == "failed"}
+        record = session.get(FactNormalizationRunRecord, run_id)
+        job = session.get(JobRecord, record.job_id) if record and record.job_id else None
+        if job is not None:
+            checkpoint = JobStore(session).get_last_checkpoint(job.job_id, "finalize")
+            if checkpoint:
+                pending.update(checkpoint[1].get("accounting_issue_call_ids", ()))
         gates = FactGateResultRepository(session).list_by_run(run_id)
         for candidate in FactNormalizationCandidateRepository(session).list_by_run(run_id):
             if not isinstance(candidate, ClinicalFactCandidateV2) or not has_standalone_measurement(candidate):
@@ -97,8 +103,6 @@ def pending_normalization_pages(session: Session, run_id: str) -> set[tuple[str,
                 pending_pages.update(pages - seen_pages)
             if call.status.value in {"failed", "succeeded"}:
                 seen_pages.update(pages)
-        record = session.get(FactNormalizationRunRecord, run_id)
-        job = session.get(JobRecord, record.job_id) if record and record.job_id else None
         payload = verify_payload_sha256(job.payload_json, job.payload_sha256) if job else {}
         parent = payload.get("retry_failed_from_run_id")
         if parent and job.state != "completed":

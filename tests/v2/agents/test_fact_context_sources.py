@@ -119,8 +119,21 @@ def test_standalone_measurement_does_not_borrow_a_header_to_supply_a_value():
     assert not has_standalone_measurement(fact)
 
 
+@pytest.mark.parametrize("reading", ["参考范围1-2", "2024-2-1", "2/1", "第2次检查", "2 缺少单位"])
+def test_header_detachment_requires_the_primary_reading_not_a_date_or_reference(reading):
+    from app.domain.contracts.fact_context import has_standalone_measurement
+    fact = _parse(_payload()).fact_candidates[0]
+    fact.variable_id, fact.profile_lane = "age", ProfileLane.TEST_EXAM_SCORE
+    fact.unit = "U/L"
+    fact.assertion_basis.contextual_qualifiers[0].kind = "specimen"
+    fact.assertion_basis.assertion_text = "项目乙" + reading
+    assert not has_standalone_measurement(fact)
+
+
 def test_pending_pages_keep_ancestor_header_questions_without_rereading_completed_siblings(monkeypatch):
     from app.services.fact_normalization_job_service import pending_normalization_pages
+    from app.workflow.jobstore import JobStore
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", lambda *_: None)
     from app.storage import fact_repositories as repos
     from app.storage.codecs import encode_value
     from app.storage.facts_models import FactNormalizationRunRecord
@@ -146,7 +159,7 @@ def test_pending_pages_keep_ancestor_header_questions_without_rereading_complete
             if model is FactNormalizationRunRecord:
                 return SimpleNamespace(job_id=key)
             if key == "child":
-                return SimpleNamespace(payload_json=payload, payload_sha256=digest, state="completed")
+                return SimpleNamespace(job_id="child", payload_json=payload, payload_sha256=digest, state="completed")
             return None
     session = ReadSession()
     assert pending_normalization_pages(session, "child") == {("doc", 2)}

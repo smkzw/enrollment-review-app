@@ -21,7 +21,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v5"
+CALCULATION_VERSION = "work-draft/0.2.0-v7"
 
 
 def enqueue_normalized_work_draft(session, *, authority, run_id):
@@ -43,14 +43,15 @@ def enqueue_normalized_work_draft(session, *, authority, run_id):
     return {"job_id": receipt.result_id}
 
 
-def _fact_refs(session, frozen):
+def _fact_refs(session, frozen, artifact_store=None):
     repo = EvidenceLocatorRepository(session)
     from app.domain.gates.fact_evidence_closure import _localized_locator_text
     from app.storage.fact_authority import FactAuthorityValidator
-    revision = FactAuthorityValidator(session).validate_frozen_source(frozen.authority)
+    revision = FactAuthorityValidator(session, artifact_store).validate_frozen_source(frozen.authority)
     result = {}
     for fact in frozen.facts:
         refs = []
+        primary_failed = False
         for locator_id in fact.locator_ids:
             locator = repo.get(locator_id)
             localized = _localized_locator_text(session, locator, revision)
@@ -59,11 +60,14 @@ def _fact_refs(session, frozen):
             if localized is None and (fact.assertion_basis is None or fact.assertion_basis.locator_id != locator_id):
                 continue
             if not excerpt or localized is None or excerpt not in localized:
-                raise ScopeViolationError("病例记录与原件摘录不一致，不能生成工作稿依据")
+                if fact.assertion_basis is not None and fact.assertion_basis.locator_id == locator_id:
+                    primary_failed = True
+                continue
             refs.append(WorkDraftEvidenceRef(fact_id=fact.fact_id, locator_id=locator_id,
                 source_document_version_id=locator.source_document_version_id,
                 page_artifact_id=locator.page_artifact_id, page_number=locator.page_number, excerpt=excerpt))
-        result[fact.fact_id] = refs
+        if refs and not primary_failed:
+            result[fact.fact_id] = refs
     return result
 
 
@@ -177,10 +181,18 @@ class WorkDraftReviewService:
                 raise ScopeViolationError("本次方案内容指纹不一致")
             store = JobStore(session)
             if context.step_id == "calculate":
-                refs = _fact_refs(session, frozen)
-                items = [calculate_work_component(clause, frozen, rule_set, evidence_refs=refs)
+                refs = _fact_refs(session, frozen, self.artifact_store)
+                missing_refs = [fact for fact in frozen.facts if fact.fact_id not in refs]
+                source_issues = [SystemIssue(kind="fact_closure_failed", affected_codes=sorted({clause.official_code
+                    for clause in frozen.clause_pack.clauses if any(req.variable_id == fact.variable_id
+                        and fact.variable_id is not None for req in clause.evidence_requirements)}),
+                    detail="这条记录的摘录尚不能逐字对应原件，未用于本次判断。",
+                    alternative="请对照原件核对；其余已有独立依据的结果继续保留。") for fact in missing_refs]
+                calculation_frame = frozen.model_copy(update={"facts": tuple(fact for fact in frozen.facts if fact.fact_id in refs),
+                    "system_issues": (*frozen.system_issues, *source_issues)})
+                items = [calculate_work_component(clause, calculation_frame, rule_set, evidence_refs=refs)
                          for clause in frozen.clause_pack.clauses]
-                items.extend(calculate_procedures(frozen, rule_set, evidence_refs=refs))
+                items.extend(calculate_procedures(calculation_frame, rule_set, evidence_refs=refs))
                 for clause in frozen.clause_pack.restricted_clauses:
                     issue = SystemIssue(kind="component_unstructured", affected_codes=[clause.official_code],
                         detail="本条部分要求尚不能由系统完整核对。", alternative="请对照所列方案原文核对该子项。")
@@ -189,7 +201,8 @@ class WorkDraftReviewService:
                         rule_component_id=clause.clause_id, rule_kind=clause.kind, title=clause.title,
                         source_text=clause.source_text, reason_text=issue.detail, system_issue=issue,
                         input_hash=canonical_hash(clause.model_dump(mode="json"))))
-                return {"items": [item.model_dump(mode="json") for item in items]}
+                return {"items": [item.model_dump(mode="json") for item in items],
+                    "source_issues": [issue.model_dump(mode="json") for issue in source_issues]}
             if context.step_id == "semantic":
                 return {"semantic_results": [], "implementation": "WP5_pending"}
             calculated = store.get_last_checkpoint(context.job_id, "calculate")
@@ -209,7 +222,8 @@ class WorkDraftReviewService:
             if composed is None:
                 raise ScopeViolationError("缺少完整条款结果")
             items = [WorkDraftItem.model_validate(value) for value in composed[1]["items"]]
-            issues = list(frozen.system_issues)
+            issues = list(frozen.system_issues) + [SystemIssue.model_validate(value)
+                for value in calculated[1].get("source_issues", ())]
             for item in items:
                 if item.system_issue is not None and item.system_issue not in issues:
                     issues.append(item.system_issue)

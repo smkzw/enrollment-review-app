@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { WorkDraftPanel } from "./WorkDraftPanel";
 import type { CatalogEpisodeView } from "../../api/catalog/catalogTypes";
@@ -14,7 +14,7 @@ const episode: CatalogEpisodeView = {
 };
 
 beforeEach(() => localStorage.clear());
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it("重新打开已完成工作稿不会触发反复加载", async () => {
   localStorage.setItem("work-draft-job:episode", "finished");
@@ -52,5 +52,41 @@ it("失败回执保留旧结果，不调用完成通知", async () => {
   render(<WorkDraftPanel episode={episode} onCompleted={completed} />);
   await screen.findByRole("alert");
   expect(screen.getByRole("alert")).toHaveTextContent("旧结果未改变");
+  expect(completed).not.toHaveBeenCalled();
+});
+
+
+it("连续保存日期使用回执修订，外部新修订也同步", async () => {
+  const fetched = vi.fn().mockResolvedValue({ok: true, json: async () => ({revision: 2})});
+  vi.stubGlobal("fetch", fetched);
+  const dated = {...episode, anchorDates: {screening_date: {value: "2025-08-08", precision: "day"}}};
+  const view = render(<WorkDraftPanel episode={dated} />);
+  fireEvent.click(screen.getByRole("button", {name: "保存日期"}));
+  await screen.findByText("日期已保存，请按此日期更新工作稿。");
+  fireEvent.click(screen.getByRole("button", {name: "保存日期"}));
+  await waitFor(() => expect(fetched).toHaveBeenCalledTimes(2));
+  expect(JSON.parse(fetched.mock.calls[1][1].body).expected_revision).toBe(2);
+  view.rerender(<WorkDraftPanel episode={{...dated, revision: 3}} />);
+  await waitFor(() => expect(screen.getByRole("button", {name: "保存日期"})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", {name: "保存日期"}));
+  await waitFor(() => expect(fetched).toHaveBeenCalledTimes(3));
+  expect(JSON.parse(fetched.mock.calls[2][1].body).expected_revision).toBe(3);
+});
+
+
+it("等待人工核对不是持续生成，也不报告完成", async () => {
+  vi.useFakeTimers();
+  localStorage.setItem("work-draft-job:episode", "waiting-job");
+  const fetched = vi.fn().mockResolvedValue({ok: true, json: async () => ({
+    job_id: "waiting-job", state: "waiting_user", review_run_id: null,
+  })});
+  vi.stubGlobal("fetch", fetched);
+  const completed = vi.fn();
+  render(<WorkDraftPanel episode={episode} onCompleted={completed} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  expect(screen.getByText("本次处理需要人工核对，请查看任务详情。")).toBeInTheDocument();
+  const initialReads = fetched.mock.calls.length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+  expect(fetched).toHaveBeenCalledTimes(initialReads);
   expect(completed).not.toHaveBeenCalled();
 });

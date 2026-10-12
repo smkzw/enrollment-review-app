@@ -69,10 +69,23 @@ def has_standalone_measurement(candidate) -> bool:
     if candidate.profile_lane.value != "test_exam_score":
         return False
     value = candidate.canonical_value
-    from app.domain.risk_flags import number_in_excerpt
-    return any(candidate.asserted_object in line and (
-        number_in_excerpt(value, line) if isinstance(value, (int, float)) else
-        isinstance(value, str) and value in line) for line in basis.assertion_text.splitlines())
+    from decimal import Decimal
+    from app.domain.risk_flags import _NUMBER, _REFERENCE_RANGE
+    for line in basis.assertion_text.splitlines():
+        if candidate.asserted_object not in line:
+            continue
+        reading = line.split(candidate.asserted_object, 1)[1].lstrip(" \t:：=")
+        if isinstance(value, str) and reading.startswith(value):
+            return True
+        if isinstance(value, (int, float)) and not _REFERENCE_RANGE.match(reading):
+            match = _NUMBER.match(reading)
+            if match and Decimal(match.group()) == Decimal(str(value)):
+                suffix = reading[match.end():].lstrip()
+                if suffix.startswith(("/", "-")):
+                    continue
+                if candidate.unit in (None, "unitless") or suffix.startswith(candidate.unit):
+                    return True
+    return False
 
 
 def validate_context_source_excerpt(excerpt: str, localized_text: str | None) -> None:

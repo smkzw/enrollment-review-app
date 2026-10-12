@@ -22,6 +22,17 @@ from app.storage.repositories import (
 )
 
 
+def _source_reading_identity(item):
+    basis = item.assertion_basis
+    if basis is None:
+        return None
+    return canonical_hash({"variable_id": item.variable_id, "object": item.asserted_object,
+        "value": getattr(item, "canonical_value", getattr(item, "value", None)), "unit": item.unit,
+        "polarity": item.polarity.value, "date_role": item.date_role,
+        "date_range": item.date_range.model_dump(mode="json") if item.date_range is not None else None,
+        "locator_id": basis.locator_id, "source_hash": basis.source_text_sha256, "excerpt": basis.assertion_text})
+
+
 def review_method_is_current(context: ReviewContextSnapshotV2) -> bool:
     from app.services.frozen_review_calculation import EVALUATOR_VERSION
 
@@ -212,6 +223,7 @@ def assemble_review_context(
                 if run.authority.model_dump(exclude={"episode_revision"}) == authority.model_dump(exclude={"episode_revision"})
                 and run.status.value in {"succeeded", "partial"}]
         logical_to_version = {value: key for key, value in source.doc_version_to_logical.items()}
+        adopted_readings = {_source_reading_identity(fact) for fact in facts if fact.assertion_basis is not None}
         for run in runs:
             from app.storage.facts_models import FactNormalizationRunRecord
             from app.workflow.jobstore import JobStore
@@ -223,6 +235,15 @@ def assemble_review_context(
                 if gate.outcome.value == "accepted":
                     continue
                 candidate = candidates.get(gate.candidate_id)
+                from app.domain.contracts.fact_context import has_standalone_measurement
+                from app.domain.contracts.facts import ClinicalFactCandidateV2
+                if (isinstance(candidate, ClinicalFactCandidateV2)
+                        and gate.gate.value in {"polarity_and_asserted_object", "transactional_publish"}
+                        and has_standalone_measurement(candidate)
+                        and _source_reading_identity(candidate) in adopted_readings):
+                    # Only this exact base reading was adopted. Its separate
+                    # context question remains; another result on the page proves nothing.
+                    continue
                 variable_id = getattr(candidate, "variable_id", None)
                 codes = sorted({clause.official_code for clause in pack.clauses
                     if variable_id is not None and any(req.variable_id == variable_id for req in clause.evidence_requirements)})
@@ -234,7 +255,7 @@ def assemble_review_context(
                 if locator is not None and (locator.source_document_version_id, locator.page_number) not in source.page_inputs:
                     locator = None
                 issues.append(SystemIssue(kind="excerpt_unverified", affected_codes=codes,
-                    detail="一项识别记录未通过原文或归属核对，未用于本次判断。",
+                    detail="相关识别记录仍有内容未通过原文或归属核对，未用于本次判断。",
                     alternative="请查看相关原件或补充资料；已经核实的其他记录仍可使用。",
                     source_document_version_id=locator.source_document_version_id if locator else None,
                     page_artifact_id=locator.page_artifact_id if locator else None,
@@ -270,6 +291,7 @@ def assemble_review_context(
         links_by_fact = FactRuleLinkV2Repository(session).list_for_facts(
             [item.fact_id for item in facts], facts=facts,
         )
+    issues = list({canonical_hash(issue.model_dump(mode="json")): issue for issue in issues}.values())
     events = profile._published_events(session, authority)
     exposures = profile._published_exposures(session, authority)
     conflicts = profile._published_conflicts(session, authority)
