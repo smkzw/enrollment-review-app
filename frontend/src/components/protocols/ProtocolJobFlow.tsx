@@ -521,6 +521,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           supplementaryRequirements={repo.kind === "http" ? <><ProtocolWorkflowStagePanel jobId={jobId} draft={comparison.state.data.candidate} onSaved={onBindingsSaved} /><ProtocolVariableBindingPanel
             jobId={jobId} revisionId={comparison.state.data.candidate.revisionId} onSaved={onBindingsSaved} /><ProtocolRuleReviewPanel
             jobId={jobId} revisionId={comparison.state.data.candidate.revisionId}
+            content={comparison.state.data.candidate.content}
             integrity={redoReview.state.data.integrity} sources={redoReview.state.data.sources}
             onReady={onReviewReady} /></> : undefined}
           feedbackBusy={feedbackBusy}
@@ -614,6 +615,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           supplementaryRequirements={repo.kind === "http" ? <><ProtocolWorkflowStagePanel jobId={jobId} draft={draft} onSaved={onBindingsSaved} /><ProtocolVariableBindingPanel
             jobId={jobId} revisionId={draft.revisionId} onSaved={onBindingsSaved} /><ProtocolRuleReviewPanel
             jobId={jobId} revisionId={draft.revisionId} integrity={integrity}
+            content={draft.content}
             sources={sources} onReady={onReviewReady} /></> : undefined}
           publishing={publishBusy}
           saveError={saveError ?? publishError ?? undefined}

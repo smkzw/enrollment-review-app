@@ -73,16 +73,19 @@ export async function requestRuleReviews(jobId: string, options: {
   revoke?: boolean;
   excluded?: boolean;
   resultVariables?: string[];
+  entries?: { official_code: string; rule_content_hash: string; note: string | null; result_variables: string[] }[];
 } = {}): Promise<RuleReviews> {
   const path = options.entry
     ? `/draft/rules/${encodeURIComponent(options.entry.official_code)}/review` : "/draft/reviews";
   const response = await fetch(protocolDeconstructionsUrl(`/${encodeURIComponent(jobId)}${path}`), {
-    method: options.entry ? options.revoke ? "DELETE" : "POST" : "GET", signal: options.signal,
-    ...(options.entry ? {
+    method: options.entry ? options.revoke ? "DELETE" : "POST" : options.entries ? "POST" : "GET", signal: options.signal,
+    ...(options.entry || options.entries ? {
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expected_revision_id: options.draftRevisionId,
-        rule_content_hash: options.entry.rule_content_hash, reviewer_kind: options.reviewerKind,
-        note: options.excluded ? "excluded" : null, result_variables: options.resultVariables ?? [] }),
+      body: JSON.stringify({ expected_revision_id: options.draftRevisionId, reviewer_kind: options.reviewerKind,
+        ...(options.entries ? { entries: options.entries } : {
+          rule_content_hash: options.entry?.rule_content_hash,
+          note: options.excluded ? "excluded" : null, result_variables: options.resultVariables ?? [],
+        }) }),
     } : {}),
   });
   const value: unknown = await response.json();

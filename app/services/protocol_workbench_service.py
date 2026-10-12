@@ -1418,10 +1418,24 @@ class ProtocolWorkbenchService:
                     expected_revision_id: str, rule_content_hash: str,
                     reviewer_kind: ReviewerKind, action: Literal["approved", "revoked"],
                     note: str | None = None, result_variables: list[str] | None = None) -> dict[str, Any]:
+        return self.review_rules(job_id, expected_revision_id=expected_revision_id,
+            reviewer_kind=reviewer_kind, action=action,
+            entries=[{"official_code": official_code, "rule_content_hash": rule_content_hash,
+                      "note": note, "result_variables": result_variables or []}])
+
+    def review_rules(self, job_id: str, *, expected_revision_id: str,
+                     reviewer_kind: ReviewerKind, action: Literal["approved", "revoked"],
+                     entries: list[dict[str, Any]]) -> dict[str, Any]:
+        if not entries or len({item["official_code"] for item in entries}) != len(entries):
+            raise ProtocolWorkbenchError("REVIEW_SELECTION_INVALID", title="审定选择不完整",
+                detail="请选择不重复的当前条目。", recovery="请刷新后重新选择。")
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
         source = self._load_source_input(merged)
         with self.session_factory() as session, session.begin():
+            if expected_revision_id != merged.get("draft_revision_id"):
+                raise ProtocolWorkbenchError("REVIEW_DRAFT_CHANGED", title="草稿已改变",
+                    detail="当前审定页面不是最新可编辑草稿。", recovery="请刷新后重新核对所选条目。")
             revision = ProtocolDraftRevisionRepository(session).get(expected_revision_id)
             head = ProtocolDraftRevisionRepository(session).get_head(revision.draft_id)
             if (revision.revision_id != merged.get("draft_revision_id") or head is None
@@ -1430,28 +1444,39 @@ class ProtocolWorkbenchService:
                     or revision.status.value not in {"draft", "saved", "restored_from"}):
                 raise ProtocolWorkbenchError("REVIEW_DRAFT_CHANGED", title="草稿已改变",
                                              detail="当前审定页面不是最新可编辑草稿。", recovery="请刷新后重新核对该条。")
-            entries, _ = current_reviews(session, source, revision.content)
-            entry = next((entry for entry in entries if entry["official_code"] == official_code), None)
-            if entry is None or entry["rule_content_hash"] != rule_content_hash:
-                raise ProtocolWorkbenchError("REVIEW_CONTENT_CHANGED", title="条目已改变",
-                                             detail="该条内容与正在审阅的版本不一致。", recovery="请刷新后重新核对该条。")
-            if entry["kind"] != "procedure" and (note == "excluded" or result_variables):
-                raise ProtocolWorkbenchError("REVIEW_SETTINGS_INVALID", title="审定设置不适用",
-                                             detail="只有检查项目可设置排除和必需结果变量。", recovery="请保留入排条款并核对原文。")
-            if result_variables:
-                from app.domain.variables.dictionary import load_dictionary
-                definitions = load_dictionary(revision.content.variable_definitions or ())
+            current, _ = current_reviews(session, source, revision.content)
+            by_code = {entry["official_code"]: entry for entry in current}
+            from app.domain.variables.dictionary import load_dictionary
+            definitions = load_dictionary(revision.content.variable_definitions or ())
+            records = []
+            for item in entries:
+                entry = by_code.get(item["official_code"])
+                if entry is None or entry["rule_content_hash"] != item["rule_content_hash"]:
+                    raise ProtocolWorkbenchError("REVIEW_CONTENT_CHANGED", title="条目已改变",
+                        detail="所选内容与当前版本不一致，本次审定未保存。", recovery="请刷新后重新核对所选条目。")
+                note, result_variables = item.get("note"), item.get("result_variables") or []
+                if entry["kind"] != "procedure" and (note == "excluded" or result_variables):
+                    raise ProtocolWorkbenchError("REVIEW_SETTINGS_INVALID", title="审定设置不适用",
+                        detail="只有检查项目可设置排除和必需结果变量。", recovery="请保留入排条款并核对原文。")
                 if any(value not in definitions for value in result_variables):
                     raise ProtocolWorkbenchError("REVIEW_VARIABLE_UNKNOWN", title="检查结果项目不存在",
                         detail="请选择已保存的数据项目。", recovery="请刷新数据项目清单后重试。")
-            record = RuleReviewRecord(
-                record_id=f"rule-review:{uuid.uuid4().hex}", draft_id=revision.draft_id,
-                protocol_version_id=source.protocol_version_id, official_code=official_code,
-                rule_content_hash=rule_content_hash, reviewer_kind=reviewer_kind,
-                reviewed_by="构建者（验证）" if reviewer_kind == "builder_verification" else self.operator_name(),
-                reviewed_at=self.now(), action=action, note=note, result_variables=result_variables or [],
-            )
-            AppendRepository(session, REVIEW_CONFIG).save(record)
+                previous = entry["review"]
+                if (action == "approved" and previous is not None
+                        and previous.reviewer_kind == reviewer_kind and previous.note == note
+                        and previous.result_variables == result_variables):
+                    continue
+                records.append(RuleReviewRecord(
+                    record_id=f"rule-review:{uuid.uuid4().hex}", draft_id=revision.draft_id,
+                    protocol_version_id=source.protocol_version_id, official_code=item["official_code"],
+                    rule_content_hash=item["rule_content_hash"], reviewer_kind=reviewer_kind,
+                    reviewed_by="构建者（验证）" if reviewer_kind == "builder_verification" else self.operator_name(),
+                    reviewed_at=self.now(), action=action, note=note, result_variables=result_variables,
+                ))
+            # Validate the entire selection before appending any event; retries preserve history.
+            repository = AppendRepository(session, REVIEW_CONFIG)
+            for record in records:
+                repository.save(record)
         return self.get_rule_reviews(job_id)
 
     def get_generation_preview(self, job_id: str) -> dict[str, Any]:

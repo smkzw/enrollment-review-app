@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { decodeRuleReviews } from "../../api/protocolRuleReviews";
 import { ProtocolRuleReviewPanel } from "./ProtocolRuleReviewPanel";
 import { ProtocolJobFlow } from "./ProtocolJobFlow";
@@ -20,6 +20,10 @@ const sources = { jobId: "job", snapshotId: "snapshot", selectedPhase: "phase_ii
   selectedPhaseLabel: "III期", sourceSpans: {}, sourceMaterials: {} };
 
 afterEach(() => { vi.unstubAllGlobals(); setProtocolWorkbenchRepository(createProtocolWorkbenchStub()); });
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
+});
 describe("逐条审定", () => {
   it("拒绝错任务、过期内容、重复条目与虚假的全部已审定状态", () => {
     expect(decodeRuleReviews(initial, "job").all_reviewed).toBe(false);
@@ -54,7 +58,37 @@ describe("逐条审定", () => {
     expect(screen.getByText(/不能代替医学经理正式审定/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "审定通过" }));
     await waitFor(() => expect(onReady).toHaveBeenLastCalledWith(true));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "审定范围" }), "approved");
     expect(screen.getByRole("button", { name: "撤销审定" })).toBeEnabled();
+  });
+
+  it("分类、筛选、多选确认不会自动批准，批量保存明确绑定内容和身份", async () => {
+    const second = { ...entry, official_code: "EX-01", label: "已知过敏", rule_content_hash: "b".repeat(64) };
+    const full = { ...initial, entries: [entry, second] };
+    const fetcher = vi.fn(async (_url, options) => {
+      if (options.method === "GET") return new Response(JSON.stringify(String(_url).endsWith("/variables")
+        ? { job_id: "job", draft_revision_id: "revision", variables: [], predicates: [] } : full));
+      const payload = JSON.parse(options.body);
+      expect(payload.entries.map((item: { official_code: string }) => item.official_code)).toEqual(["IN-01", "EX-01"]);
+      expect(payload.expected_revision_id).toBe("revision");
+      expect(payload.reviewer_kind).toBe("builder_verification");
+      return new Response(JSON.stringify(full));
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity} sources={sources} onReady={vi.fn()} />);
+    await screen.findByRole("checkbox", { name: "选择IN-01" });
+    await userEvent.click(screen.getByRole("checkbox", { name: "选择IN-01" }));
+    await userEvent.click(screen.getByRole("button", { name: "排除标准 1" }));
+    expect(screen.getByRole("button", { name: "批准所选 0 项" })).toBeDisabled();
+    expect(screen.queryByRole("checkbox", { name: "选择IN-01" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "全部 2" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "选择当前列表" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "审定身份" }), "builder_verification");
+    await userEvent.click(screen.getByRole("button", { name: "批准所选 2 项" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("构建者验证（仅供验证）");
+    expect(fetcher.mock.calls.every(([, options]) => options.method === "GET")).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "确认批准所选" }));
+    await screen.findByText("已保存2项审定。没有发布规则包。");
   });
 
   it("真实主入口只读取审定记录，不自动新建跨章作业", async () => {
@@ -69,5 +103,23 @@ describe("逐条审定", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalled());
     expect(fetcher.mock.calls.every(([url, options]) => /\/draft\/(reviews|variables)$/.test(String(url)) && options.method === "GET")).toBe(true);
     expect(screen.getByRole("button", { name: "发布" })).toBeDisabled();
+  });
+  it("实际条件树与原文分开展示，保留组合方向和中文项目名", async () => {
+    const atom = (id: string, value: number) => ({ kind: "predicate", predicate: { predicate_id: id,
+      subject: "受试者", attribute: "年龄", comparator: "gte", value, unit: "岁" } });
+    const content = { proposed_rules: [{ rule_id: "r", official_code: "IN-01", kind: "inclusion", source_text: entry.label,
+      components: [{ rule_component_id: "c", parent_rule_id: "r", display_code: "IN-01", title: "年龄范围", expression: {
+        kind: "logical", operator: "all", children: [atom("p1", 18), { kind: "logical", operator: "any", children: [atom("p2", 30), atom("p3", 40)] }],
+      }, exception_expression: null }] }] };
+    vi.stubGlobal("fetch", vi.fn(async url => new Response(JSON.stringify(String(url).endsWith("/variables")
+      ? { job_id: "job", draft_revision_id: "revision", variables: [], predicates: [] } : initial))));
+    render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity} sources={sources} content={content} onReady={vi.fn()} />);
+    await screen.findByRole("region", { name: "逻辑解析" });
+    expect(screen.getByText("全部满足")).toBeInTheDocument();
+    expect(screen.getByText("任一满足")).toBeInTheDocument();
+    expect(screen.getByText("年龄 大于等于 18 岁")).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("searchbox", { name: "查找条目" }), "没有的条目");
+    expect(screen.queryByRole("region", { name: "逻辑解析" })).not.toBeInTheDocument();
+    expect(screen.getByText("当前范围没有条目。")).toBeInTheDocument();
   });
 });

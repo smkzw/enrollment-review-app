@@ -45,3 +45,13 @@
 ### Clinical Profile Display
 
 Profile正文用于入排要求、检验检查、病史时序及方案控制点，不是OCR字段转储。普通报告医师/申请医生姓名、打印信息、页码只留原件和原始记录；展示过滤不得删除事实、来源索引或历史。仅精确识别的行政字段可以省略，不能靠包含“医生”等字样隐藏研究者书面判断、CS/NCS、临床日期或未知含义。关联规则、事件、冲突、高亮或来源待核的条目保留。显示计数按实际可见条目，原始记录数不改。
+
+### 规则审定（0.2.0）
+
+1. 范围：`ProtocolRuleReviewPanel` 的显示分类／重点只来自当前草稿、绑定、来源和检查提示，不改变规则或医学语义。表格整体 `page_only` 可无单独摘录；具体来源缺失仍提示。
+2. 接口：`POST /api/v2/protocol/deconstructions/{job}/draft/reviews`；单条 POST/DELETE 共享 `review_rules` 事务路径。
+3. 输入／输出：请求 `expected_revision_id, reviewer_kind, entries[{official_code,rule_content_hash,note,result_variables}]`；返回当前审定清单与追加历史。前端不得把多选变成无条件全选，不自动发布。
+4. 错误：空集合422；重复、旧修订、错条目／哈希、未知变量409；任一失败全批不写。相同已审定身份／内容／设置重试不追加事件。
+5. 正／常／反例：合法勾选一次保存各条记录；有疑点条目列出理由由本人核对；任一过期条目拒绝整批。原文高度相似不证明组合逻辑正确，结构清楚不等于医学正确率。
+6. 验证：`test_rule_reviews_api.py` 核原子失败、幂等、验证身份；`ProtocolRuleReviewPanel.test.tsx` 核分类／筛选／明确确认／空详情；`protocolRuleReview.test.ts` 核来源、绑定、101项和显示单位。实际 Ego 核宽屏、条件树与确认取消，不能替本人正式批准。
+7. 错／对：错误是只展示摘录并标“AI准确率高”；正确是展示真实全部／任一／否定、时间、例外、计算及具体疑点，完整原文按需展开，审定始终绑定当前内容。

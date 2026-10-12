@@ -37,6 +37,7 @@ from app.api.v2.protocol_schemas import (
     PublishRequest,
     PublishResponse,
     RuleReviewRequest,
+    RuleBatchReviewRequest,
     RuleReviewResponse,
     RegisterInterpretationSourcesRequest,
     SourcesResponse,
@@ -676,6 +677,11 @@ def get_rule_reviews(job_id: str, request: Request):
 @router.post("/{job_id}/draft/rules/{official_code}/review", response_model=RuleReviewResponse)
 def review_rule(job_id: str, official_code: str, body: RuleReviewRequest, request: Request):
     return _service(request).review_rule(job_id, official_code, action="approved", **body.model_dump())
+
+
+@router.post("/{job_id}/draft/reviews", response_model=RuleReviewResponse)
+def review_selected_rules(job_id: str, body: RuleBatchReviewRequest, request: Request):
+    return _service(request).review_rules(job_id, action="approved", **body.model_dump())
 
 
 @router.delete("/{job_id}/draft/rules/{official_code}/review", response_model=RuleReviewResponse)

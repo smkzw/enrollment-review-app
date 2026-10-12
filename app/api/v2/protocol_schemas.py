@@ -376,3 +376,16 @@ class RuleReviewRequest(_StrictModel):
     reviewer_kind: ReviewerKind
     note: str | None = None
     result_variables: list[str] = Field(default_factory=list)
+
+
+class RuleBatchReviewItem(_StrictModel):
+    official_code: str = Field(min_length=1)
+    rule_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    note: str | None = None
+    result_variables: list[str] = Field(default_factory=list)
+
+
+class RuleBatchReviewRequest(_StrictModel):
+    expected_revision_id: str = Field(min_length=1)
+    reviewer_kind: ReviewerKind
+    entries: list[RuleBatchReviewItem] = Field(min_length=1, max_length=1000)

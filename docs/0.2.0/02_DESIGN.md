@@ -170,6 +170,9 @@
 
 ### 5.4 逐条审定（H1）
 
+- 审定入口 `ProtocolRuleReviewPanel` 消费同一草稿的真实条件树、变量绑定、来源及检查提示；分类仅作显示，不更改条款身份、含义或作用范围。复用 `ExpressionView` 展示全部／任一／否定、比较条件、时间窗、例外；绑定字典提供中文项目名，原文另列。解析把握度是可解释的核对优先级，不是医学正确概率；适用人群、例外、计算、书面判断和来源／绑定缺口为重点。
+- `POST .../{job}/draft/reviews` 接受所选条目的内容哈希与设置，由 `review_rules` 与单条接口共享同一事务核验及追加事件路径。任一版本／内容／设置不符均全批拒绝；相同已审定内容、身份和设置的重试不重复记事件。筛选切换清除临时选择，确认框明确检查是否只核操作、所需结果和排除设置；不自动发布、不改变既有审定。
+
 - 后端：`POST /api/v2/protocol/deconstructions/{job}/draft/rules/{official_code}/review`（审定，请求体含 `reviewer_kind`）与 `DELETE`（撤销）；发布前检查全部 IN/EX／REQ／禁用药条目均有与当前内容哈希一致的 `RuleReviewRecord`。
 - **构建者不得以医学经理身份审定。** 构建者在验证副本上走流程时，`reviewer_kind=builder_verification`，`reviewed_by` 写"构建者（验证）"。0.2.0-M1 要求至少一次由用户本人完成的 `medical_manager` 审定与发布。
 - 前端：在现有 `ProtocolDraftWorkbench` 每条规则上加"审定通过"按钮与状态；`ProtocolManualEditDialog`（`frontend/src/components/protocols/ProtocolRedoDialogs.tsx:389-628`）中 subject/attribute 自由输入改为"变量"下拉（来自字典＋项目变量，可新增）。

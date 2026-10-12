@@ -1,47 +1,67 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { requestRuleReviews, type RuleReviews, type ReviewerKind } from "../../api/protocolRuleReviews";
 import type { IntegrityView, SourcesView } from "../../api/protocolWorkbenchTypes";
 import { mapProtocolSourceLocators } from "../../domain/protocolMappers";
 import { ProtocolDraftSourcePane } from "./ProtocolDraftSourcePane";
-import { decodeBindingView, variableRequest, type VariableDef } from "../../api/protocolVariables";
+import { decodeBindingView, variableRequest, type BindingView } from "../../api/protocolVariables";
+import { reviewCategories, ruleReviewIssueText, ruleReviewPresentations, type ReviewCategory } from "../../domain/protocolRuleReview";
+import { ProtocolReviewLogic } from "./ProtocolReviewLogic";
 
 interface Props {
   jobId: string;
   revisionId: string;
   integrity: IntegrityView;
   sources: SourcesView;
+  content?: Record<string, unknown>;
   onReady: (ready: boolean) => void;
 }
-export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources, onReady }: Props) {
+const emptyContent = {};
+export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources, content = emptyContent, onReady }: Props) {
   const [data, setData] = useState<RuleReviews | null>(null);
   const [selection, setSelection] = useState<string | null>(null);
   const [kind, setKind] = useState<ReviewerKind>("medical_manager");
   const [excluded, setExcluded] = useState(false);
   const [variables, setVariables] = useState("");
-  const [dictionary, setDictionary] = useState<VariableDef[]>([]);
+  const [bindings, setBindings] = useState<BindingView | null>(null);
+  const dictionary = bindings?.variables ?? [];
+  const [category, setCategory] = useState<ReviewCategory | "all">("all");
+  const [filter, setFilter] = useState("pending");
+  const [search, setSearch] = useState("");
+  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const scope = `${jobId}:${revisionId}`;
   const currentScope = useRef(scope);
   currentScope.current = scope;
-  const entry = data?.entries.find(entry => entry.official_code === selection) ?? null;
+  const items = useMemo(() => ruleReviewPresentations(data?.entries ?? [], content, bindings, integrity, sources),
+    [data, content, bindings, integrity, sources]);
+  const visible = useMemo(() => items.filter(item => (category === "all" || item.category === category || category === "medication" && item.medicationRelated)
+    && (filter === "all" || filter === "pending" && !item.entry.review || filter === "focus" && item.reasons.length > 0 || filter === "approved" && item.entry.review)
+    && `${item.entry.official_code} ${item.entry.label}`.includes(search.trim()))
+    .sort((a, b) => Number(!!b.reasons.length) - Number(!!a.reasons.length)), [items, category, filter, search]);
+  const selectedItem = visible.find(item => item.entry.official_code === selection) ?? visible[0] ?? null;
+  const entry = selectedItem?.entry ?? null;
+  const selectedBatch = visible.filter(item => checked.has(item.entry.official_code));
 
   useEffect(() => {
     const controller = new AbortController();
-    setData(null); setSelection(null); setError(null); setBusy(false); onReady(false);
+    setData(null); setSelection(null); setChecked(new Set()); setBatchOpen(false); setError(null); setBusy(false); onReady(false);
     requestRuleReviews(jobId, { signal: controller.signal }).then(value => {
       if (controller.signal.aborted) return;
       if (value.draft_revision_id !== revisionId) throw new Error("草稿已更新，请刷新工作区。");
-      setData(value); setSelection(value.entries[0]?.official_code ?? null); onReady(value.all_reviewed);
+      setData(value); onReady(value.all_reviewed);
     }).catch(error => { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "审定记录暂不能读取。"); });
     return () => controller.abort();
   }, [jobId, revisionId, reload, onReady]);
 
   useEffect(() => {
-    const controller = new AbortController(); setDictionary([]);
+    const controller = new AbortController(); setBindings(null);
     variableRequest(jobId, "", undefined, controller.signal).then(value => {
-      if (!controller.signal.aborted) setDictionary(decodeBindingView(value, jobId, revisionId).variables);
+      if (!controller.signal.aborted) setBindings(decodeBindingView(value, jobId, revisionId));
     }).catch(() => { /* The binding panel reports its own unavailable dictionary. */ });
     return () => controller.abort();
   }, [jobId, revisionId]);
@@ -50,6 +70,12 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
     setExcluded(entry?.review?.note === "excluded");
     setVariables(entry?.review?.result_variables.join("、") ?? "");
   }, [entry]);
+
+  useEffect(() => { setChecked(new Set()); setBatchOpen(false); }, [category, filter, search]);
+  useEffect(() => {
+    if (batchOpen) dialog.current?.showModal();
+    else dialog.current?.close();
+  }, [batchOpen]);
 
   async function submit(revoke: boolean) {
     if (!entry || !data) return;
@@ -60,7 +86,27 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
       if (currentScope.current !== scope) return;
       if (value.draft_revision_id !== revisionId) throw new Error("草稿已更新，请刷新工作区。");
       setData(value); onReady(value.all_reviewed);
+      setSavedNotice(revoke ? "已撤销该条审定。" : "该条审定已保存。没有发布规则包。");
     } catch (error) { if (currentScope.current === scope) setError(error instanceof Error ? error.message : "审定未能保存，请重试。"); }
+    finally { if (currentScope.current === scope) setBusy(false); }
+  }
+  function batchSettings(item: typeof items[number]) {
+    const current = item.entry.official_code === entry?.official_code;
+    return { official_code: item.entry.official_code, rule_content_hash: item.entry.rule_content_hash,
+      note: current ? excluded ? "excluded" : null : item.entry.review?.note ?? null,
+      result_variables: current ? variables.split(/[、,，\s]+/).filter(Boolean) : item.entry.review?.result_variables ?? [] };
+  }
+  async function submitBatch() {
+    if (!selectedBatch.length) return;
+    setBusy(true); setError(null);
+    try {
+      const value = await requestRuleReviews(jobId, { draftRevisionId: revisionId, reviewerKind: kind,
+        entries: selectedBatch.map(batchSettings) });
+      if (currentScope.current !== scope) return;
+      if (value.draft_revision_id !== revisionId) throw new Error("草稿已更新，请刷新工作区。");
+      setData(value); onReady(value.all_reviewed); setChecked(new Set()); setBatchOpen(false);
+      setSavedNotice(`已保存${selectedBatch.length}项审定。没有发布规则包。`);
+    } catch (error) { if (currentScope.current === scope) setError(error instanceof Error ? error.message : "集中审定未能保存。"); }
     finally { if (currentScope.current === scope) setBusy(false); }
   }
   return <section className="protocol-rule-reviews" aria-label="逐条审定">
@@ -70,17 +116,55 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
       </select></label>
     </header>
     {kind === "builder_verification" && <p role="status">此身份的审定仅供验证，不能代替医学经理正式审定。</p>}
+    {savedNotice && <p role="status">{savedNotice}</p>}
     {error && <p role="alert">{error} <button className="button" onClick={() => setReload(value => value + 1)}>重新读取</button></p>}
-    {data && <div className="protocol-rule-reviews__layout">
-      <ul aria-label="审定条目">{data.entries.map(item => <li key={item.official_code}>
-        <button aria-pressed={selection === item.official_code} disabled={busy} onClick={() => setSelection(item.official_code)}>
-          <span>{item.kind === "rule" ? item.official_code : "检查项目"} · {item.label}</span>
-          <strong>{item.review ? "已审定" : "待审定"}</strong>
+    {data && <>
+      <div className="protocol-review-categories" aria-label="要求分类">
+        <button type="button" aria-pressed={category === "all"} onClick={() => setCategory("all")} disabled={busy}>全部 {items.length}</button>
+        {Object.entries(reviewCategories).map(([key, label]) => <button key={key} type="button" aria-pressed={category === key}
+          onClick={() => setCategory(key as ReviewCategory)} disabled={busy}>{label} {items.filter(item => item.category === key || key === "medication" && item.medicationRelated).length}</button>)}
+      </div>
+      {category === "medication" && <p>官方入排标准中的用药条件仍按原编号审定；此视图不新增条目，不代表其他用药章节已完整纳入。</p>}
+      <div className="protocol-review-filters">
+        <label>审定范围 <select value={filter} disabled={busy} onChange={event => setFilter(event.target.value)}>
+          <option value="pending">待审定</option><option value="focus">重点核对</option><option value="all">全部条目</option><option value="approved">已审定</option>
+        </select></label>
+        <label>查找条目 <input type="search" value={search} disabled={busy} onChange={event => setSearch(event.target.value)} placeholder="编号或内容" /></label>
+        <span>重点核对 {items.filter(item => item.reasons.length).length} 项 · 当前 {visible.length} 项</span>
+      </div>
+      <div className="protocol-rule-reviews__layout">
+      <div className="protocol-review-queue">
+        <div className="protocol-review-batch-actions">
+          <label><input type="checkbox" checked={visible.length > 0 && visible.every(item => checked.has(item.entry.official_code))}
+            disabled={busy || !visible.length} onChange={event => setChecked(event.target.checked ? new Set(visible.map(item => item.entry.official_code)) : new Set())} /> 选择当前列表</label>
+          <button className="button button--primary" disabled={busy || !selectedBatch.length || !integrity.publishable}
+            onClick={() => setBatchOpen(true)}>批准所选 {selectedBatch.length} 项</button>
+        </div>
+        <ul aria-label="审定条目">{visible.map(item => <li key={item.entry.official_code}>
+        <input type="checkbox" aria-label={`选择${item.entry.kind === "rule" ? item.entry.official_code : `${item.entry.label}（${[...new Set(item.requirements.map(value => value.stage))].join("、")}）`}`} checked={checked.has(item.entry.official_code)} disabled={busy}
+          onChange={event => setChecked(previous => { const next = new Set(previous); if (event.target.checked) next.add(item.entry.official_code); else next.delete(item.entry.official_code); return next; })} />
+        <button aria-pressed={entry?.official_code === item.entry.official_code} disabled={busy} onClick={() => setSelection(item.entry.official_code)}>
+          <span className="protocol-review-queue__title">{item.entry.kind === "rule" ? item.entry.official_code : reviewCategories[item.category]} · {item.title}</span>
+          <span className="protocol-review-queue__meta"><strong>{item.entry.review ? "已审定" : "待审定"}</strong>
+            {item.rule && <span>{item.rule.components.length + item.rule.restrictedComponents.length} 个子项</span>}
+            <span>{[...new Set(item.requirements.map(value => value.stage))].join("、")}</span>
+            <span className={item.reasons.length ? "protocol-review-confidence--low" : "protocol-review-confidence--high"}>
+              {item.reasons.length ? "把握度不足 · 重点核对" : "把握度较高 · 结构清楚"}</span></span>
         </button>
       </li>)}</ul>
-      {entry && <div className="protocol-rule-reviews__detail">
-        <h3>{entry.kind === "rule" ? entry.official_code : "检查项目"}</h3><p>{entry.label}</p>
-        {integrity.issues.filter(issue => issue.affectedRefs.some(ref => entry.issue_refs.includes(ref))).map(issue => <p key={issue.issueCode + issue.affectedRefs.join(",")} role="status">{issue.level}：{issue.problem}</p>)}
+        {!visible.length && <p role="status">{category === "medication" ? "此类尚无独立审定条目；官方入排标准内已有的用药条件仍在原编号下查看，不能据此认为方案没有用药限制。" : "当前范围没有条目。"}</p>}
+      </div>
+      {entry && selectedItem && <div className="protocol-rule-reviews__detail">
+        <h3>{entry.kind === "rule" ? entry.official_code : entry.label}</h3>
+        <details className="protocol-review-original"><summary>条款原文</summary><p>{entry.label}</p></details>
+        <section className="protocol-review-focus" aria-label="解析把握度">
+          <strong>{selectedItem.reasons.length ? "把握度不足，建议重点核对" : "把握度较高，结构与资料对应清楚"}</strong>
+          {selectedItem.reasons.length ? <ul>{selectedItem.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
+            : <p>原文与条件、病例数据项目已有对应，当前未检出相关结构提示；仍须由医学经理核对含义。</p>}
+          <small>这是解析核对提示，不是准确率，也不是受试者的审核结论。</small>
+        </section>
+        <ProtocolReviewLogic item={selectedItem} content={content} bindings={bindings} />
+        {integrity.issues.filter(issue => issue.affectedRefs.some(ref => entry.issue_refs.includes(ref))).map(issue => <p key={issue.issueCode + issue.affectedRefs.join(",")} role="status">{issue.level}：{ruleReviewIssueText(issue)}</p>)}
         {entry.kind === "procedure" && <fieldset><legend>入组前检查要求</legend>
           <label><input type="checkbox" checked={excluded} disabled={busy} onChange={event => setExcluded(event.target.checked)} /> 不作为入组前必需</label>
           <label>必需检查结果 <select multiple value={variables.split("、").filter(Boolean)} disabled={busy || excluded}
@@ -98,6 +182,22 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
           locators={mapProtocolSourceLocators(sources.sourceSpans, entry.source_refs)} /></details>
         <details><summary>审定历史</summary><ul>{data.history.filter(record => record.official_code === entry.official_code).map(record => <li key={record.record_id}>{new Date(record.reviewed_at).toLocaleString("zh-CN")} · {record.reviewed_by} · {record.action === "approved" ? "审定通过" : "撤销审定"}</li>)}</ul></details>
       </div>}
-    </div>}
+    </div></>}
+    <dialog ref={dialog} className="protocol-review-batch-dialog" onCancel={event => { if (busy) event.preventDefault(); else setBatchOpen(false); }} onClose={() => setBatchOpen(false)} aria-labelledby="review-batch-title">
+      <h3 id="review-batch-title">确认批准所选 {selectedBatch.length} 项</h3>
+      <p>审定身份：{kind === "medical_manager" ? "医学经理本人" : "构建者验证（仅供验证）"}。本次只保存所选条目的审定，不发布规则包。</p>
+      {!!selectedBatch.filter(item => item.reasons.length).length && <p>其中 {selectedBatch.filter(item => item.reasons.length).length} 项标为重点核对；请确认已对照原文与解析。</p>}
+      <ul>{selectedBatch.map(item => {
+        const settings = batchSettings(item);
+        return <li key={item.entry.official_code}>{item.entry.kind === "rule" ? item.entry.official_code : "检查项目"} · {item.entry.label} · {[...new Set(item.requirements.map(value => value.stage))].join("、")}
+          {item.rule && <p>本次审定包含此条的 {item.rule.components.length + item.rule.restrictedComponents.length} 个子项。</p>}
+          {item.entry.kind === "procedure" && <p>{settings.note === "excluded" ? "不作为入组前必需" : settings.result_variables.length
+            ? `必需结果：${settings.result_variables.map(id => dictionary.find(value => value.variable_id === id)?.label_zh ?? "项目名称待核对").join("、")}`
+            : "只核查操作完成，不额外指定必需结果字段"}</p>}</li>;
+      })}</ul>
+      {error && <p role="alert">{error}</p>}
+      <div className="protocol-rule-reviews__actions"><button className="button" disabled={busy} onClick={() => setBatchOpen(false)}>返回核对</button>
+        <button className="button button--primary" disabled={busy || !selectedBatch.length || !integrity.publishable} onClick={() => void submitBatch()}>{busy ? "正在保存…" : "确认批准所选"}</button></div>
+    </dialog>
   </section>;
 }

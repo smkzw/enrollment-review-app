@@ -13,7 +13,7 @@
 
 | ID | 检查 | 通过标准 |
 |---|---|---|
-| M1-1 | 规则包发布 | SAR 规则包（IN/EX＋REQ）由**用户本人**在界面中逐条审定（`reviewer_kind=medical_manager`）后发布，`verification_only=false`；读回 `RuleSet` 修订号、`rule_review_records` 条数＝条目数 |
+| M1-1 | 规则包发布 | SAR 规则包（IN/EX＋REQ）由**用户本人**在界面中审定（逐条或勾选后集中确认，`reviewer_kind=medical_manager`）后发布，`verification_only=false`；读回 `RuleSet` 修订号、有效 `rule_review_records` 条数＝条目数；R-A10/11分类、把握度理由、真实逻辑、原文、筛选多选可用，任一失配全批拒绝，不自动发布 |
 | M1-2 | 无跨章依赖 | 发布过程中未排队任何 `protocol_control_execution` Job（查 Job 表） |
 | M1-3 | 变量绑定 | 全部确定性谓词有 `variable_id`；随机抽 5 条人工核对绑定正确 |
 | M1-4 | 取证 | 31001 的 24 页全部有处理状态；已采用事实中含年龄及至少 3 个检验变量，每个事实带页码与逐字摘录；被拒候选有原因分布 |

@@ -52,7 +52,8 @@ export function ProtocolDraftSourcePane({
                 )}
                 <PrecisionBadge precision={locator.precision} />
               </div>
-              <blockquote className="protocol-source-card__excerpt">{locator.excerpt}</blockquote>
+              {locator.excerpt ? <blockquote className="protocol-source-card__excerpt">{locator.excerpt}</blockquote>
+                : <p>此位置为整体页或表格定位，没有单独的文字摘录。</p>}
               {locator.degradationReason !== null && (
                 <p className="protocol-source-card__degraded">
                   {UI_PHRASES.degradationPrefix}：{locator.degradationReason}
