@@ -230,6 +230,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
         review_run_id=frozen.review_run_id, official_code=clause.official_code,
         rule_component_id=clause.rule_component_id, rule_kind=clause.kind,
         title=clause.title, source_text=clause.source_text, input_hash=input_hash)
+    bound_variables = {req.variable_id for req in component.evidence_requirements if req.variable_id}
+    available = [fact for fact in frozen.facts if fact.variable_id in bound_variables]
+    available_refs = [ref for fact in available for ref in evidence_refs.get(fact.fact_id, ())]
     due = [req for req in component.evidence_requirements
            if STAGE_RANK[req.due_stage] <= STAGE_RANK[frozen.review_episode.stage]]
     if component.evidence_requirements and not due:
@@ -252,16 +255,16 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
             or predicate.occurrence_window is not None or predicate.prospective_period is not None
             or predicate.prospective_window is not None for predicate in predicates):
         issue = _issue(clause.official_code, "系统暂不能完成本条特殊计算或多次记录关系的核对。")
-        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)
+        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
     if any(predicate.semantic_proposition or predicate.applicable_population for predicate in predicates):
         issue = _issue(clause.official_code, "本条还需要核对语义或适用人群，当前工作稿尚未接入这部分判断。")
-        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)
+        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
     if any(definitions[req.variable_id].value_type == "exposure" for req in due if req.variable_id in definitions):
         issue = _issue(clause.official_code, "本条需要核对用药记录的性质及对应时间，当前工作稿尚未接入这部分判断。")
-        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)
+        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
     if any(predicate.requires_professional_judgment for predicate in predicates):
         issue = _issue(clause.official_code, "本条需要核对研究者书面判断，当前工作稿尚未接入这部分核查。")
-        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)
+        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
     try:
         selection = select_by_variable(component, frozen.facts, frozen.review_episode.anchor_dates,
             authority=frozen.authority, definitions=definitions, stage=frozen.review_episode.stage,
@@ -301,6 +304,28 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
             review_episode_id=frozen.authority.review_episode_id, evidence_snapshot_id=frozen.authority.evidence_snapshot_v2_id,
             accepted_fact_ids=[fact.fact_id for fact in adapted], facts=adapted,
             anchor_dates=frozen.review_episode.anchor_dates)
+        if calculation_component.exception_expression is not None:
+            from app.domain.expression import evaluate_component
+            evaluation = evaluate_component(calculation_component, context,
+                predicate_fact_ids={key: value.fact_ids for key, value in selection.items()},
+                unverified_predicate_ids=frozenset(key for key, value in selection.items() if not value.fact_ids))
+            if evaluation.trigger.truth == TruthValue.FALSE:
+                trigger_ids = {p.predicate_id for p in iter_atomic_predicates(calculation_component.expression)}
+                exception_ids = {p.predicate_id for p in iter_atomic_predicates(calculation_component.exception_expression)} - trigger_ids
+                inactive = {req.requirement_id for req in due if req.predicate_ids
+                    and set(req.predicate_ids) <= exception_ids}
+                # A source requirement may have WP2-derived bindings. Remove it
+                # only when all of its actual bindings concern the inactive exception.
+                for original in due:
+                    if original.variable_id is not None:
+                        continue
+                    derived = [req for req in due if len(req.predicate_ids) == 1
+                        and req.requirement_id == "variable_requirement:" + sha256(":".join((
+                            component.rule_component_id, req.predicate_ids[0], original.requirement_id)).encode()).hexdigest()[:32]]
+                    if derived and all(req.requirement_id in inactive for req in derived):
+                        inactive.add(original.requirement_id)
+                calculation_component.evidence_requirements = [req for req in calculation_component.evidence_requirements
+                    if req.requirement_id not in inactive]
         from app.domain.contracts.enums import ExpectationStatus, GapType
         from app.domain.gates.assessment import RequirementGapState
         observed = {req.requirement_id for req in due if req.predicate_ids
@@ -329,7 +354,7 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
             issue = _issue(clause.official_code, "系统暂不支持本条所需的计算方式。")
             return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)
         used_ids = set(outcome.evaluation.trigger.used_fact_ids)
-        if outcome.evaluation.exception is not None:
+        if outcome.evaluation.exception is not None and outcome.evaluation.trigger.truth == TruthValue.TRUE:
             used_ids.update(outcome.evaluation.exception.used_fact_ids)
         used = [fact for fact in selected if fact.fact_id in used_ids]
         low_reason = next(("所用记录有需要核对的识别或归属标记。" for fact in used if fact.risk_flags), None)
@@ -368,16 +393,20 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
         missing_labels = list(dict.fromkeys(definitions[variable_id].label_zh
             for predicate_id, variable_id in predicate_variables.items()
             if variable_id in definitions and (predicate_id not in selection or not selection[predicate_id].fact_ids)))
+        unavailable = [label for variable_id, label in ((key, definitions[key].label_zh) for key in bound_variables if key in definitions)
+            if label in missing_labels and any(fact.variable_id == variable_id for fact in available)]
         reason = (("；".join(summaries) + "。已按本条方案条件核对。") if outcome.decision in DETERMINATE else
-            "尚缺少可用于本条的" + "、".join(missing_labels) + "记录或对应时间依据。" if missing_labels else
+            "已找到相关记录，但" + "、".join(unavailable) + "的内容、归属或适用时间尚未核实，暂不能据此完成判断。" if unavailable else
+            "尚未形成可用于本条的" + "、".join(missing_labels) + "已核实记录；请查看原件及尚未采用的内容，不代表原件没有记载。" if missing_labels else
             "现有记录尚不能核对本条全部条件，请查看所列依据与具体子项。")
         return WorkDraftItem(**common, decision=outcome.decision,
             confidence=("low" if low_reason else "high") if outcome.decision in DETERMINATE else None,
             confidence_reason=low_reason, reason_text=reason,
-            evidence_refs=[ref for fact in used for ref in evidence_refs.get(fact.fact_id, ())])
+            evidence_refs=[ref for fact in used for ref in evidence_refs.get(fact.fact_id, ())]
+                if outcome.decision in DETERMINATE else available_refs)
     except (ValueError, TypeError) as exc:
         issue = _issue(clause.official_code, "系统暂不能按已保存的数据项目、单位或条件结构核对本条。")
-        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)
+        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
 
 
 def compose_parent(rule, children, review_run_id):
@@ -412,7 +441,8 @@ def compose_parent(rule, children, review_run_id):
         official_code=rule.official_code, rule_kind=rule.kind, title=rule.source_text,
         source_text=rule.source_text, decision=decision, system_issue=issue,
         confidence=("low" if low else "high") if decision in DETERMINATE else None,
-        confidence_reason="部分子项仍需核对；已按原有父子逻辑组合。" if low and decision in DETERMINATE else None,
+        confidence_reason=("；".join(dict.fromkeys(item.confidence_reason for item in children if item.confidence_reason))
+            or "部分子项仍未核实，本结论只由已有独立依据决定。") if low and decision in DETERMINATE else None,
         reason_text=issue.detail if issue else "；".join(f"{item.title}：{item.reason_text}" for item in children),
         policy_group="not_seen_in_supplied_records" if any(item.policy_group == "not_seen_in_supplied_records" for item in children) else None,
         evidence_refs=list(refs.values()), input_hash=canonical_hash([item.input_hash for item in children]))
@@ -457,7 +487,7 @@ def calculate_procedures(frozen, rule_set, *, evidence_refs):
         facts = [fact for fact in scoped if fact.variable_id in required_ids]
         if not facts:
             result.append(WorkDraftItem(**common, decision=D.INDETERMINATE,
-                reason_text=f"本次资料尚未找到{item.label}已完成的报告或记录。"))
+                reason_text=f"本次资料尚未形成与{item.label}对应的已核实完成记录；请核对原件及尚未采用的内容，不代表检查未做。"))
             continue
         from app.domain.contracts.enums import FactPolarity
         completed = [fact for fact in facts if fact.polarity == FactPolarity.AFFIRMED and fact.value is not False]
@@ -490,6 +520,8 @@ def calculate_procedures(frozen, rule_set, *, evidence_refs):
                   or fact.date_role not in {"sampling", "visit"} for fact in values) or anchor is None or anchor.value is None
         result.append(WorkDraftItem(**common, decision=D.REQUIREMENT_MET, confidence="low" if low else "high",
             confidence_reason="所用记录仍有识别、归属或节点时间需核对。" if low else None,
-            reason_text="已找到本项完成记录，审定时要求的结果字段已提供；结果是否符合入排阈值由对应条款另行判断。",
+            reason_text=("已找到本项完成记录，审定时指定的结果字段已提供。" if requested else
+                "已找到本项完成记录；本次审定未指定必需结果字段，未据此确认报告内所有结果齐全。")
+                + "结果是否符合入排阈值由对应条款另行判断。",
             evidence_refs=[ref for fact in values for ref in evidence_refs.get(fact.fact_id, ())]))
     return result

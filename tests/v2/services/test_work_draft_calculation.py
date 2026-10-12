@@ -94,6 +94,40 @@ def test_unbound_same_display_type_never_matches():
                                   definitions=load_dictionary())["age-limit"].fact_ids
 
 
+@pytest.mark.parametrize("age,expected", [(17, D.EXCLUSION_NOT_TRIGGERED), (52, D.INDETERMINATE)])
+def test_exception_only_evidence_is_needed_only_when_trigger_is_true(age, expected):
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    condition = AtomicPredicate(predicate_id="exception", subject="受试者", attribute="ANC",
+        comparator=Comparator.GT, value=1.2, unit="10^9/L")
+    component.exception_expression = AtomicExpression(predicate=condition)
+    component.evidence_requirements.append(component.evidence_requirements[0].model_copy(update={
+        "requirement_id": "exception-record", "variable_id": "anc", "predicate_ids": [condition.predicate_id]}))
+    rules.variable_definitions.append(load_dictionary()["anc"])
+    fact = material(value=age)
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([fact]), rules, evidence_refs={})
+    assert result.decision == expected
+    assert len(component.evidence_requirements) == 2
+
+
+def test_existing_out_of_window_record_is_not_described_as_no_record():
+    rules, projected, _ = clause()
+    fact = material(day=date(2026, 10, 13))
+    frame = frozen([fact], {AnchorType.SCREENING_DATE: DateValue(value=date(2026, 10, 12), precision=DatePrecision.DAY)})
+    result = calculate_work_component(projected, frame, rules, evidence_refs={})
+    assert result.decision == D.INDETERMINATE
+    assert "已找到相关记录" in result.reason_text
+    assert "适用时间尚未核实" in result.reason_text
+
+
+def test_single_low_confidence_child_does_not_claim_unknown_siblings():
+    rule = clause()[0].rules[0]
+    item = WorkDraftItem(item_id="child", review_run_id="run", official_code="IN-01",
+        rule_kind=RuleKind.INCLUSION, title="年龄", source_text="年龄至少18岁", reason_text="已有依据",
+        input_hash="f" * 64, decision=D.INCLUSION_MET, confidence="low", confidence_reason="日期待核实")
+    result = compose_parent(rule, [item], "run")
+    assert result.confidence_reason == "日期待核实"
+
+
 @pytest.mark.parametrize("reading, expected", [("阳性", D.EXCLUSION_TRIGGERED),
     (">4.00阳性(＋)", D.EXCLUSION_TRIGGERED), ("0.04阴性(-)", D.EXCLUSION_NOT_TRIGGERED),
     ("＜0.05 阴性（－）", D.EXCLUSION_NOT_TRIGGERED)])
@@ -348,14 +382,19 @@ def test_numeric_threshold_is_converted_with_the_fact_not_just_displayed():
     assert result.decision == D.INCLUSION_MET and result.confidence == "low"
 
 
-def test_procedure_cannot_use_a_future_report_as_screening_completion():
+@pytest.mark.parametrize("sampling,expected", [(date(2025, 8, 15), D.INDETERMINATE), (date(2025, 8, 8), D.REQUIREMENT_MET)])
+def test_procedure_completion_respects_date_and_does_not_assert_unspecified_fields(sampling, expected):
     from app.services.work_draft_calculation import calculate_procedures
     rules, _, component = clause()
-    fact = material(day=date(2025, 8, 15))
+    fact = material(day=sampling)
     frame = frozen([fact], {AnchorType.SCREENING_DATE: DateValue(value=date(2025, 8, 8), precision=DatePrecision.DAY)})
     requirement = component.evidence_requirements[0].model_copy(update={"procedure_catalog_item_id": "procedure"})
     frame.procedure_catalog = SimpleNamespace(items=[SimpleNamespace(item_id="procedure", official_code=None,
         position=0, source_excerpts=["完成检查"], label="检查", model_dump=lambda **_: {"label": "检查"})])
     frame.procedure_requirements = [requirement]
     result = calculate_procedures(frame, rules, evidence_refs={})
-    assert result[0].decision == D.INDETERMINATE and result[0].confidence is None
+    assert result[0].decision == expected
+    if expected == D.INDETERMINATE:
+        assert result[0].confidence is None
+    else:
+        assert "未据此确认报告内所有结果齐全" in result[0].reason_text
