@@ -11,7 +11,7 @@ from app.agents.evidence_normalizer import (
 )
 from app.domain.contracts.evidence_normalizer import EvidenceNormalizerInput, EvidenceNormalizerOutput, evidence_normalizer_input_scope_hash
 from app.domain.contracts.facts import AssertionBasis, ClinicalFactCandidateV2, ClinicalFactV2
-from app.domain.contracts.enums import GateOutcome, FactGate, LocatorAuthenticity, LocatorPrecision, LocatorSourceLayer
+from app.domain.contracts.enums import GateOutcome, FactGate, LocatorAuthenticity, LocatorPrecision, LocatorSourceLayer, ProfileLane
 from app.domain.gates.fact_candidate_gates import gate_fact_candidate
 from app.domain.gates import fact_evidence_closure as closure
 from app.evidence.artifacts import ArtifactStore
@@ -84,6 +84,78 @@ def test_structured_revalidation_uses_frozen_context_sources(change):
     revalidated = validate_evidence_normalizer_output(output, inp)
     assert revalidated == output
     assert gate_fact_candidate(revalidated.fact_candidates[0])[FactGate.POLARITY_AND_ASSERTED_OBJECT].outcome == GateOutcome.BLOCKED
+
+
+@pytest.mark.parametrize("kind, standalone", [("specimen", True), ("method", True),
+    ("assessment", False), ("body_site", False), ("laterality", False)])
+def test_bound_field_reading_does_not_adopt_an_unverified_header(kind, standalone):
+    payload = _payload()
+    candidate = payload["fact_candidates"][0]
+    candidate.update(variable_id="age", profile_lane="test_exam_score")
+    candidate["assertion_basis"]["contextual_qualifiers"][0]["kind"] = kind
+    before = json.dumps(payload, ensure_ascii=False)
+    parsed = _parse(payload)
+    fact = parsed.fact_candidates[0]
+    assert bool(fact.assertion_basis.contextual_qualifiers) is not standalone
+    assert bool(fact.risk_flags) is standalone
+    assert fact.canonical_value == 2 and fact.assertion_basis.assertion_text == "项目乙2"
+    assert fact.locator_ids == ["loc-1", "loc-2"]
+    assert parsed.unresolved_items[0].code == "context_relation_unverified"
+    assert json.dumps(payload, ensure_ascii=False) == before
+    verdict = gate_fact_candidate(fact)[FactGate.POLARITY_AND_ASSERTED_OBJECT]
+    assert verdict.outcome == (GateOutcome.ACCEPTED if standalone else GateOutcome.BLOCKED)
+
+
+def test_standalone_measurement_does_not_borrow_a_header_to_supply_a_value():
+    from app.domain.contracts.fact_context import has_standalone_measurement
+    fact = _parse(_payload()).fact_candidates[0]
+    fact.variable_id = "age"
+    fact.profile_lane = ProfileLane.TEST_EXAM_SCORE
+    fact.assertion_basis.contextual_qualifiers[0].kind = "specimen"
+    assert has_standalone_measurement(fact)
+    fact.canonical_value = 3
+    assert not has_standalone_measurement(fact)
+    fact.canonical_value = True
+    assert not has_standalone_measurement(fact)
+
+
+def test_pending_pages_keep_ancestor_header_questions_without_rereading_completed_siblings(monkeypatch):
+    from app.services.fact_normalization_job_service import pending_normalization_pages
+    from app.storage import fact_repositories as repos
+    from app.storage.codecs import encode_value
+    from app.storage.facts_models import FactNormalizationRunRecord
+    candidate = _parse(_payload()).fact_candidates[0]
+    candidate.variable_id, candidate.profile_lane = "age", ProfileLane.TEST_EXAM_SCORE
+    candidate.assertion_basis.contextual_qualifiers[0].kind = "specimen"
+    candidate.call_id = "header"
+    authority = SimpleNamespace(model_dump=lambda **_: {"subject_id": "same"})
+    runs = {key: SimpleNamespace(authority=authority, run_id=key) for key in ("child", "parent")}
+    calls = {"child": [SimpleNamespace(call_id="completed", status=SimpleNamespace(value="succeeded"),
+        logical_document_id="doc", page_numbers=[1])], "parent": [
+        SimpleNamespace(call_id="old-failure", status=SimpleNamespace(value="failed"), logical_document_id="doc", page_numbers=[1]),
+        SimpleNamespace(call_id="header", status=SimpleNamespace(value="succeeded"), logical_document_id="doc", page_numbers=[2])]}
+    outcomes = [SimpleNamespace(candidate_id=candidate.candidate_id, gate=gate, outcome=GateOutcome.BLOCKED)
+        for gate in (FactGate.POLARITY_AND_ASSERTED_OBJECT, FactGate.TRANSACTIONAL_PUBLISH)]
+    monkeypatch.setattr(repos.FactNormalizationRunRepository, "get", lambda _self, key: runs[key])
+    monkeypatch.setattr(repos.FactNormalizationCallRepository, "list_by_run", lambda _self, key: calls[key])
+    monkeypatch.setattr(repos.FactNormalizationCandidateRepository, "list_by_run", lambda _self, key: [candidate] if key == "parent" else [])
+    monkeypatch.setattr(repos.FactGateResultRepository, "list_by_run", lambda _self, key: outcomes if key == "parent" else [])
+    payload, digest = encode_value({"retry_failed_from_run_id": "parent"})
+    class ReadSession:
+        def get(self, model, key):
+            if model is FactNormalizationRunRecord:
+                return SimpleNamespace(job_id=key)
+            if key == "child":
+                return SimpleNamespace(payload_json=payload, payload_sha256=digest, state="completed")
+            return None
+    session = ReadSession()
+    assert pending_normalization_pages(session, "child") == {("doc", 2)}
+    outcomes.append(SimpleNamespace(candidate_id=candidate.candidate_id,
+        gate=FactGate.LOCATOR_AND_TEXT_HASH, outcome=GateOutcome.REJECTED))
+    assert pending_normalization_pages(session, "child") == set()
+    outcomes.pop()
+    candidate.assertion_basis.contextual_qualifiers[0].kind = "assessment"
+    assert pending_normalization_pages(session, "child") == set()
 
 
 @pytest.mark.parametrize("compact", [False, True])

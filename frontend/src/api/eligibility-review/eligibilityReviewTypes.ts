@@ -16,7 +16,8 @@ export type EligibilityDecisionWire =
   | "indeterminate"
   | "conflict"
   | "not_due"
-  | "not_applicable";
+  | "not_applicable"
+  | "system_issue";
 
 export type EligibilityDeterminationModeWire =
   | "deterministic"
@@ -51,6 +52,8 @@ export interface EligibilityClauseWire {
   source_text?: string | null;
   parent_rule_code: string | null;
   decision: EligibilityDecisionWire;
+  confidence?: "high" | "low" | null;
+  confidence_reason?: string | null;
   decision_label: string;
   reason: string;
   fact_refs: EligibilityFactRefWire[];
@@ -92,6 +95,10 @@ export interface EligibilityControlWire {
 }
 
 export interface EligibilityReviewWire {
+  verification_only?: boolean;
+  component_clauses?: EligibilityClauseWire[];
+  review_run_id?: string | null;
+  system_issues?: { kind: string; affected_codes: string[]; detail: string; alternative: string; page_artifact_id?: string | null; page_number?: number | null }[];
   work_draft_state?: "not_started" | "current" | "source_changed" | "method_changed";
   unassigned_conflicts?: { conflict_group_id: string; member_kind: "event" | "exposure"; member_ids: string[] }[];
   subject_id: string;

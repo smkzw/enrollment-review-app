@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 from typing import Literal
+from datetime import date
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.services.evidence_app_errors import AppReviewSourceIncompleteError, translate_storage_error
+from app.domain.contracts.work_draft import SystemIssue
 from app.services.eligibility_review_projection import (
     EligibilityReviewProjection,
     EligibilityReviewProjectionService,
@@ -62,6 +64,7 @@ class EligibilityClauseDTO(BaseModel):
         "conflict",
         "not_due",
         "not_applicable",
+        "system_issue",
     ]
     decision_label: str = Field(min_length=1)
     reason: str = Field(min_length=1)
@@ -77,6 +80,8 @@ class EligibilityClauseDTO(BaseModel):
     action_detail: str | None = None
     action_evidence: str | None = None
     limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"] | None = None
+    confidence: Literal["high", "low"] | None = None
+    confidence_reason: str | None = None
 
 
 class EligibilityUnassignedConflictDTO(BaseModel):
@@ -137,12 +142,16 @@ class EligibilityReviewResponse(BaseModel):
     controls: list[EligibilityControlDTO] = Field(default_factory=list)
     unassigned_conflicts: list[EligibilityUnassignedConflictDTO] = Field(default_factory=list)
     work_draft_state: Literal["not_started", "current", "source_changed", "method_changed"] = "not_started"
+    review_run_id: str | None = None
+    system_issues: list[SystemIssue] = Field(default_factory=list)
+    verification_only: bool = False
+    component_clauses: list[EligibilityClauseDTO] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_component_identity(self) -> "EligibilityReviewResponse":
         if not self.clauses and not self.controls:
             raise ValueError("当前方案没有可审核的官方条款或补充要求")
-        identities = [clause.rule_component_id for clause in self.clauses]
+        identities = [clause.rule_component_id for clause in (*self.clauses, *self.component_clauses)]
         if len(identities) != len(set(identities)):
             raise ValueError("审核结果包含重复的审核要点身份")
         groups = [item.conflict_group_id for item in self.unassigned_conflicts]
@@ -189,6 +198,44 @@ def get_eligibility_review(
             _raise_translated(exc)
             raise
     return EligibilityReviewResponse.model_validate(projection.to_dict())
+
+
+@router.post("/subjects/{subject_id}/review-episodes/{review_episode_id}/work-draft-jobs")
+def start_work_draft(subject_id: str, review_episode_id: str, request: Request):
+    _read(request).require_subject_episode(subject_id, review_episode_id)
+    try:
+        return request.app.state.work_draft_review_service.start(
+            subject_id=subject_id, review_episode_id=review_episode_id)
+    except Exception as exc:
+        _raise_translated(exc)
+
+
+class NodeDateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    node_date: date
+    expected_revision: int = Field(ge=1)
+
+
+@router.put("/subjects/{subject_id}/review-episodes/{review_episode_id}/node-date")
+def update_node_date(subject_id: str, review_episode_id: str, body: NodeDateRequest, request: Request):
+    _read(request).require_subject_episode(subject_id, review_episode_id)
+    try:
+        revision = request.app.state.work_draft_review_service.update_anchor(
+            subject_id=subject_id, review_episode_id=review_episode_id,
+            value=body.node_date, expected_revision=body.expected_revision)
+        return {"revision": revision}
+    except Exception as exc:
+        _raise_translated(exc)
+
+
+@router.get("/subjects/{subject_id}/review-episodes/{review_episode_id}/work-draft-jobs/{job_id}")
+def read_work_draft(subject_id: str, review_episode_id: str, job_id: str, request: Request):
+    _read(request).require_subject_episode(subject_id, review_episode_id)
+    try:
+        return request.app.state.work_draft_review_service.status(
+            subject_id=subject_id, review_episode_id=review_episode_id, job_id=job_id)
+    except Exception as exc:
+        _raise_translated(exc)
 
 
 __all__ = [

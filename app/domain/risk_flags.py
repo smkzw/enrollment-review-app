@@ -21,7 +21,7 @@ class RiskFlag(StrEnum):
     ATTRIBUTION_UNCERTAIN = "ATTRIBUTION_UNCERTAIN"
 
 
-_NUMBER = re.compile(r"(?<![\d.])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\d.])")
+_NUMBER = re.compile(r"(?<![\d.])(?:(?<!\d)[-+])?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\d.])")
 _REFERENCE_RANGE = re.compile(r"\d+(?:\.\d+)?\s*[-–~～]\s*\d+(?:\.\d+)?")
 
 
@@ -29,6 +29,15 @@ def number_in_excerpt(value, excerpt: str) -> bool:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return True
     return any(Decimal(match.group()) == Decimal(str(value)) for match in _NUMBER.finditer(excerpt))
+
+
+def same_numeric_reading(raw, normalized) -> bool:
+    """A literal number string and JSON number may agree; no unit/value inference."""
+    import unicodedata
+    if isinstance(raw, bool) or isinstance(normalized, bool) or not isinstance(normalized, (int, float)):
+        return False
+    literal = unicodedata.normalize("NFKC", str(raw)).strip()
+    return bool(_NUMBER.fullmatch(literal)) and Decimal(literal) == Decimal(str(normalized))
 
 
 def fact_risk_flags(candidate, definition: VariableDef | None, *, text: str,
@@ -46,7 +55,7 @@ def fact_risk_flags(candidate, definition: VariableDef | None, *, text: str,
             flags.add(RiskFlag.PARTIAL_DATE)
         if date_sensitive and candidate.date_role in (None, "unknown"):
             flags.add(RiskFlag.DATE_ROLE_UNCLEAR)
-    value = candidate.raw_value
+    value = candidate.canonical_value
     if definition is not None and definition.value_type == "number" and isinstance(value, (int, float)) and not isinstance(value, bool):
         try:
             converted = definition.convert(value, candidate.unit or "")
@@ -56,7 +65,7 @@ def fact_risk_flags(candidate, definition: VariableDef | None, *, text: str,
             if not Decimal(str(definition.plausible_range[0])) <= converted <= Decimal(str(definition.plausible_range[1])):
                 flags.add(RiskFlag.IMPLAUSIBLE_VALUE)
             for threshold in thresholds:
-                if isinstance(threshold, (int, float)) and not isinstance(threshold, bool) and threshold:
+                if isinstance(threshold, (int, float, Decimal)) and not isinstance(threshold, bool) and threshold:
                     if abs(converted - Decimal(str(threshold))) / abs(Decimal(str(threshold))) <= Decimal("0.05"):
                         flags.add(RiskFlag.NEAR_THRESHOLD)
         aliases = [definition.label_zh, *definition.aliases_zh]

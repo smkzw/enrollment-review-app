@@ -458,6 +458,10 @@ def _save_revision(factory, draft, *, baseline=None):
 
 
 def _publish(factory, source_input, draft, spans, revision_id, key, **kwargs):
+    from tests.v2.protocols.slice4_helpers import approve_fixture_entries
+    with factory() as session:
+        saved = ProtocolDraftRevisionRepository(session).get(revision_id).content
+    approve_fixture_entries(factory, source_input, saved)
     service = ProtocolPublicationService(factory, now=lambda: NOW)
     return service.publish(
         ProtocolPublicationRequest(

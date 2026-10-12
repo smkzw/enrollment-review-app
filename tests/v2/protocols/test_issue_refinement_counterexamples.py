@@ -403,7 +403,7 @@ def test_refined_unresolved_anchor_saves_but_stays_unpublishable(
 ) -> None:
     """合法精化：同一父规则、同一来源片段的覆盖缺失收紧为未解析锚点。
 
-    修订可以保存为新草稿修订，但新锚点仍是阻断问题，草稿依旧不可发布。
+    修订可保存；0.2.0将语义锚点提示交给逐条审定，不表示它已经自动核清。
     """
     _factory, _now = slice4_env
     source_input, draft, spans = _gap_scenario()
@@ -416,7 +416,8 @@ def test_refined_unresolved_anchor_saves_but_stays_unpublishable(
         for issue in check.issues
     }
     assert "PARENT_SOURCE_SEMANTIC_COVERAGE_MISSING" in baseline_codes
-    assert baseline.publishable is False
+    from tests.v2.protocols.gate_assertions import assert_diagnostic_requires_review
+    assert_diagnostic_requires_review(baseline)
 
     def revise(_source_input, current_draft, _target_rule_code, _feedback_note):
         return _draft_with_note_component(current_draft, refs=[NOTE_SPAN])
@@ -449,8 +450,8 @@ def test_refined_unresolved_anchor_saves_but_stays_unpublishable(
     codes = {issue["issue_code"] for issue in integrity.issues}
     assert "PARENT_SOURCE_SEMANTIC_COVERAGE_MISSING" not in codes
     assert "TIME_ANCHOR_UNRESOLVED" in codes
-    assert integrity.publishable is False
-    assert integrity.blocking_count >= 1
+    assert integrity.publishable and integrity.blocking_count == 0
+    assert integrity.reminder_count >= 1
 
 
 def test_refinement_carrying_extra_new_problem_still_rejected(

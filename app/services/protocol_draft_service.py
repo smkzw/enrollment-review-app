@@ -1119,6 +1119,7 @@ class ProtocolDraftService:
         expected_revision_id: str,
         actor: str,
         created_at: datetime,
+        reviewed_stage_assignment: bool = False,
     ) -> ProtocolDraftRevision:
         return self._append_revision(
             draft,
@@ -1128,6 +1129,7 @@ class ProtocolDraftService:
             feedback_note=None,
             actor=actor,
             created_at=created_at,
+            reviewed_stage_assignment=reviewed_stage_assignment,
         )
 
     def apply_feedback(
@@ -1291,6 +1293,7 @@ class ProtocolDraftService:
         actor: str,
         created_at: datetime,
         variable_bindings=None,
+        reviewed_stage_assignment: bool = False,
     ) -> ProtocolDraftRevision:
         head = self._require_head(draft.draft_id, expected_revision_id)
         if head.status == DraftRevisionStatus.CANCELLED:
@@ -1303,7 +1306,32 @@ class ProtocolDraftService:
                 "DRAFT_PUBLISHED",
                 "已发布的草稿 revision 不能继续编辑；请基于新草稿重新解构。",
             )
-        if variable_bindings is None:
+        if reviewed_stage_assignment:
+            expected = head.content.model_copy(deep=True)
+            new_stages = {stage.workflow_stage_id: stage for stage in draft.proposed_workflow_stages}
+            assignments = {}
+            for stage in expected.proposed_workflow_stages:
+                submitted = new_stages.get(stage.workflow_stage_id)
+                if submitted is None:
+                    _fail_boundary("WORKFLOW_VISIT_REWRITTEN", "节点核对不能删除原访视。")
+                if submitted.stage != stage.stage:
+                    for requirement_id in stage.due_requirement_ids:
+                        assignments[requirement_id] = submitted.stage
+                    stage.stage = submitted.stage
+            for stage in expected.proposed_workflow_stages:
+                if any(requirement_id in assignments and assignments[requirement_id] != stage.stage
+                       for requirement_id in stage.due_requirement_ids):
+                    _fail_boundary("WORKFLOW_VISIT_REWRITTEN", "同一要求关联多个不同阶段，请先核对原文范围。")
+            components = [component for rule in expected.proposed_rules for component in rule.components]
+            components.extend(item.proposed_component for item in expected.component_drafts)
+            requirements = [requirement for component in components for requirement in component.evidence_requirements]
+            requirements.extend(item.proposed_requirement for item in expected.evidence_requirement_drafts)
+            for requirement in requirements:
+                if requirement.requirement_id in assignments:
+                    requirement.due_stage = assignments[requirement.requirement_id]
+            if draft != expected or feedback_kind is not None or variable_bindings is not None:
+                _fail_boundary("WORKFLOW_VISIT_REWRITTEN", "节点核对仅允许调整阶段与其明确关联要求，不得改写原文、时间窗或其他条件。")
+        elif variable_bindings is None:
             enforce_draft_edit_boundary(head.content, draft, feedback_kind=feedback_kind)
         else:
             from app.services.protocol_variable_binding import apply_variable_bindings

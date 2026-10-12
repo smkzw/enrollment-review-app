@@ -15,9 +15,19 @@ from app.domain.contracts.evidence_normalizer import evidence_normalizer_input_s
     (5.6, "ALT 5.6 U/L", True), (5.6, "ALT 55.6 U/L", False),
     (5.6, "ALT 5.60 U/L", True), (0.5, "EOS 0.50", True),
     (6, "第16页", False), (True, "已完成", True),
+    (9.5, "ALT 3.5-9.5 U/L", True), (-9.5, "ALT 3.5-9.5 U/L", False),
+    (-9.5, "结果 -9.5", True),
 ])
 def test_numeric_excerpt_exact_value(value, text, expected):
     assert number_in_excerpt(value, text) is expected
+
+
+@pytest.mark.parametrize("raw,value,expected", [("51", 51, True), ("51.0", 51, True),
+    ("５１", 51, True), ("5.1e1", 51, True), ("51岁", 51, False), ("<51", 51, False),
+    ("51", 52, False), ("510", 51, False), (True, 1, False), ("nan", float("nan"), False)])
+def test_numeric_representation_never_changes_the_reading(raw, value, expected):
+    from app.domain.risk_flags import same_numeric_reading
+    assert same_numeric_reading(raw, value) is expected
 
 
 def candidate(value=5.6, unit="U/L"):
@@ -64,3 +74,31 @@ def test_frozen_input_identity_includes_target_dictionary():
     schema = evidence_normalizer_json_schema(["age", "alt"])
     assert schema["$defs"]["EvidenceFactDraft"]["properties"]["variable_id"]["anyOf"][0]["enum"] == ["age", "alt"]
     assert "risk_flags" not in schema["$defs"]["EvidenceFactDraft"]["properties"]
+
+
+def test_compact_requirement_pool_and_locator_rows_preserve_every_identity_and_text():
+    import json
+    from app.agents.evidence_normalizer import evidence_normalizer_reference_aliases, build_evidence_normalizer_prompt
+    original = _input()
+    # Frozen source identity is computed from the full input, not the projection.
+    material = {key: getattr(original, key) for key in (
+        "authority", "logical_document_id", "context", "related_requirements", "manifest_sha256",
+        "completion_manifest_sha256", "page_numbers", "pages", "page_review", "available_locator_ids", "available_locators")}
+    definitions = [load_dictionary()["age"]]
+    identity = evidence_normalizer_input_scope_hash(**material, variable_definitions=definitions)
+    source = EvidenceNormalizerInput.model_validate({**original.model_dump(), "variable_definitions": definitions,
+        "input_scope_sha256": identity})
+    prompt = build_evidence_normalizer_prompt(source, prompt_template="冻结模板", include_output_schema=False)
+    projection, _ = json.JSONDecoder().raw_decode(prompt.split("本次输入：", 1)[1].lstrip())
+    contexts = projection["requirement_contexts"]
+    assert len(projection["related_requirements"]) == len(source.related_requirements)
+    for original_req, projected in zip(source.related_requirements, projection["related_requirements"]):
+        assert projected["requirement_id"] == original_req.requirement_id
+        assert contexts[projected["context_ref"]]["description"] == original_req.description
+    assert projection["locator_columns"] == ["locator_id", "page_number", "precision", "localized_text"]
+    decoded = [dict(zip(projection["locator_columns"], row)) for row in projection["locators"]]
+    assert [(item["locator_id"], item["localized_text"]) for item in decoded] == [
+        (item.locator_id, item.localized_text) for item in source.available_locators]
+    aliases = evidence_normalizer_reference_aliases(source)
+    assert aliases.transform(aliases.transform(projection), expand=True) == projection
+    assert source.input_scope_sha256 == identity

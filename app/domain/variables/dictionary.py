@@ -7,12 +7,12 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
-
-from app.domain.contracts.common import ContractModel
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class VariableDef(ContractModel):
+class VariableDef(BaseModel):
+    # Keep the small dictionary independent of the contracts package's eager exports.
+    model_config = ConfigDict(extra="forbid")
     variable_id: str = Field(pattern=r"^(?:[a-z][a-z0-9_]*|procedure:[A-Za-z0-9_.:-]+|drug_class:[a-z][a-z0-9_]*)$")
     label_zh: str = Field(min_length=1)
     value_type: Literal["number", "category", "boolean", "date", "exposure", "procedure"]

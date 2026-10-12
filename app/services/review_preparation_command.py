@@ -16,6 +16,8 @@ from app.storage.review_context_repository import ReviewContextV2Repository
 def prepare_review(
     session, artifact_store, *, subject_id: str, review_episode_id: str,
     expected_authority: FactAuthority, idempotency_key: str,
+    work_draft: bool = False,
+    evaluator_version: str = EVALUATOR_VERSION,
 ) -> ReviewContextSnapshotV2:
     """Caller owns commit. Repeated requests retrieve the original frozen input.
 
@@ -27,10 +29,11 @@ def prepare_review(
             or authority.review_episode_id != review_episode_id
             or not idempotency_key.strip()):
         raise ScopeViolationError("请重新确认本次受试者、审核节点及所选资料")
-    scope = f"review-preparation:{review_episode_id}"
+    scope = f"review-preparation:{review_episode_id}" + (":work-draft" if work_draft else "")
     request_hash = canonical_hash({
         "version": "review-preparation/v1", "authority": authority.model_dump(mode="json"),
-        "evaluator_version": EVALUATOR_VERSION,
+        "evaluator_version": evaluator_version,
+        **({"work_draft": True} if work_draft else {}),
     })
     contexts = ReviewContextV2Repository(session)
     with session.begin_nested():
@@ -43,14 +46,16 @@ def prepare_review(
             raise ScopeViolationError("原审核准备记录不完整，未创建重复记录")
         if not created:
             context = contexts.get(receipt.result_id)
-            if context.authority != authority or context.evaluator_version != EVALUATOR_VERSION:
+            if (context.authority != authority or context.evaluator_version != evaluator_version
+                    or context.work_draft != work_draft):
                 raise ScopeViolationError("原审核准备记录与本次选择不一致，未替换原资料")
             return context
         FactAuthorityValidator(session).validate(authority)
         context = assemble_review_context(
             session, artifact_store, review_episode_id=review_episode_id,
-            review_run_id=f"review-run:{uuid4().hex}", evaluator_version=EVALUATOR_VERSION,
+            review_run_id=f"review-run:{uuid4().hex}", evaluator_version=evaluator_version,
             created_at=datetime.now(UTC), context_id=receipt.result_id,
+            work_draft=work_draft,
         )
         if context.authority != authority:
             raise ScopeViolationError("所选资料版本已变化，请重新确认后开始审核")

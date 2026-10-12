@@ -553,6 +553,7 @@ class FactNormalizationCommandService:
         review_episode_id: str,
         idempotency_intent: str | None = None,
         created_by: str | None = None,
+        retry_failed_from_run_id: str | None = None,
     ) -> CreateNormalizationJobResult:
         """从当前活动证据派生权威并创建/复用持久任务。
 
@@ -649,6 +650,7 @@ class FactNormalizationCommandService:
                 **({"verified_scope_prompt": True} if self.verified_scope_prompt else {}),
                 **({"compact_text_references": True} if self.compact_text_references else {}),
                 account_source_text=coverage_id is None,
+                **({"retry_failed_from_run_id": retry_failed_from_run_id} if retry_failed_from_run_id else {}),
                 **({"allow_candidate_partition": True} if self.allow_candidate_partition else {}),
                 **({"allow_question_classification_repair": True} if self.allow_question_classification_repair else {}),
             )

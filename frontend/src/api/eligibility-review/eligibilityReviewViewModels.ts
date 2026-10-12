@@ -38,6 +38,8 @@ export interface EligibilityClauseView {
   sourceText?: string | null;
   parentRuleCode: string | null;
   decision: EligibilityDecision;
+  confidence?: "high" | "low" | null;
+  confidenceReason?: string | null;
   decisionLabel: string;
   reason: string;
   factRefs: EligibilityFactRefView[];
@@ -84,6 +86,10 @@ export type EligibilityActionTarget =
   | "sponsor_medical_or_project";
 
 export interface EligibilityReviewView {
+  verificationOnly?: boolean;
+  componentClauses?: EligibilityClauseView[];
+  reviewRunId?: string | null;
+  systemIssues?: { kind: string; affectedCodes: string[]; detail: string; alternative: string; pageArtifactId?: string | null; pageNumber?: number | null }[];
   workDraftState?: "not_started" | "current" | "source_changed" | "method_changed";
   unassignedConflicts?: { conflictGroupId: string; memberKind: "event" | "exposure"; memberIds: string[] }[];
   subjectId: string;
@@ -216,6 +222,7 @@ const DECISIONS: readonly EligibilityDecision[] = [
   "conflict",
   "not_due",
   "not_applicable",
+  "system_issue",
 ];
 const DETERMINATION_MODES: readonly EligibilityDeterminationMode[] = [
   "deterministic",
@@ -299,6 +306,8 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
       ? nullableString(row.source_text, `${path}.source_text`) : null,
     parentRuleCode,
     decision: enumValue(field(row, "decision", path), DECISIONS, `${path}.decision`),
+    confidence: optionalEnumValue(row.confidence, ["high", "low"] as const, `${path}.confidence`),
+    confidenceReason: row.confidence_reason == null ? null : requiredString(row.confidence_reason, `${path}.confidence_reason`),
     decisionLabel: requiredString(
       field(row, "decision_label", path),
       `${path}.decision_label`,
@@ -377,7 +386,9 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
   const row = objectValue(value, "eligibility_review");
   const clauses = arrayValue(field(row, "clauses", "eligibility_review"), "clauses");
   const decodedClauses = clauses.map(decodeClause);
-  if (new Set(decodedClauses.map((clause) => clause.ruleComponentId)).size !== decodedClauses.length) {
+  const componentClauses = row.component_clauses == null ? [] : arrayValue(row.component_clauses, "eligibility_review.component_clauses").map(decodeClause);
+  const allIdentities = [...decodedClauses, ...componentClauses].map(clause => clause.ruleComponentId);
+  if (new Set(allIdentities).size !== allIdentities.length) {
     throw new EligibilityReviewDecodeError("审核要点重复，请重新读取审核结果。");
   }
   const unassignedConflicts = ("unassigned_conflicts" in row
@@ -430,7 +441,18 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
       "complete_processing_revision_id",
     ),
     clauses: decodedClauses,
+    componentClauses,
     controls,
+    reviewRunId: row.review_run_id == null ? null : requiredString(row.review_run_id, "eligibility_review.review_run_id"),
+    verificationOnly: row.verification_only === true,
+    systemIssues: row.system_issues == null ? [] : arrayValue(row.system_issues, "eligibility_review.system_issues").map((value, index) => {
+      const issue = objectValue(value, `system_issues[${index}]`);
+      return { kind: requiredString(issue.kind, "system_issue.kind"),
+        affectedCodes: arrayValue(issue.affected_codes, "system_issue.affected_codes").map(value => requiredString(value, "system_issue.code")),
+        pageArtifactId: issue.page_artifact_id == null ? null : requiredString(issue.page_artifact_id, "system_issue.page_artifact_id"),
+        pageNumber: issue.page_number == null ? null : positiveInteger(issue.page_number, "system_issue.page_number"),
+        detail: requiredString(issue.detail, "system_issue.detail"), alternative: requiredString(issue.alternative, "system_issue.alternative") };
+    }),
   };
 }
 

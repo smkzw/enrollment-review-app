@@ -150,6 +150,8 @@ def test_seed_supports_joint_publication_and_rejects_broken_checkpoint_lineage(
     )
 
     service = ProtocolPublicationService(session_factory, now=_now)
+    from tests.v2.protocols.slice4_helpers import approve_fixture_entries
+    approve_fixture_entries(session_factory, source_input, draft)
     request = ProtocolPublicationRequest(
         idempotency_key="joint-helpers-publish",
         draft_revision_id=revision_id,

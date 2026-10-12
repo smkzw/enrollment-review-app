@@ -45,6 +45,7 @@ from .rules import (
     ServiceCommandEvent,
     WorkflowStage,
 )
+from .work_draft import SystemIssue
 
 
 def _require_utc(value: datetime, field_name: str) -> None:
@@ -154,6 +155,8 @@ class ReviewEpisode(RevisionedModel):
 
 
 class ReviewRun(ReviewEvidenceScope):
+    run_kind: Literal["work_draft", "formal"] | None = Field(default=None, exclude_if=lambda value: value is None)
+    system_issues: list[SystemIssue] = Field(default_factory=list, exclude_if=lambda value: not value)
     review_run_id: str = Field(min_length=1)
     review_episode_id: str = Field(min_length=1)
     protocol_version_id: str = Field(min_length=1)
@@ -166,6 +169,8 @@ class ReviewRun(ReviewEvidenceScope):
 
     @model_validator(mode="after")
     def validate_episode_revision(self) -> "ReviewRun":
+        if self.run_kind == "work_draft" and self.schema_version != "review/v2":
+            raise ValueError("工作稿必须绑定新版冻结资料和上下文")
         if (self.schema_version == "review/v2") != (self.episode_revision is not None):
             raise ValueError("新版审核必须冻结审核节点修订；旧版审核不得补造该修订")
         if (self.schema_version == "review/v2") != (self.context_id is not None):

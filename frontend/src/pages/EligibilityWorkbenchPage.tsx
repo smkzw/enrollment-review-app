@@ -16,6 +16,7 @@ import {
 import { updateParams, useHashRoute, RouteLink } from "../app/router";
 import { useLoad } from "../app/useLoad";
 import { OriginalEvidenceViewer } from "../components/evidence-workspace/OriginalEvidenceViewer";
+import { WorkDraftPanel } from "../components/review/WorkDraftPanel";
 import { ErrorState, EmptyState, LoadingState } from "../components/shell/Feedback";
 import { BarrierIcon, AttentionIcon, CheckIcon, ConflictIcon, JudgmentIcon } from "../components/shell/icons";
 import { StatusBadge, type Tone } from "../components/shell/StatusBadge";
@@ -94,7 +95,7 @@ function workItemKindLabel(item: EligibilityWorkItem): string {
 }
 
 export function isUndeterminedDecision(decision: EligibilityDecision): boolean {
-  return decision === "professional_judgment" || decision === "indeterminate" || decision === "conflict";
+  return decision === "professional_judgment" || decision === "indeterminate" || decision === "conflict" || decision === "system_issue";
 }
 
 function decisionMatchesFilter(
@@ -138,6 +139,7 @@ function decisionTone(decision: EligibilityDecision): Tone {
       return "danger";
     case "professional_judgment":
     case "indeterminate":
+    case "system_issue":
       return "info";
     case "not_due":
     case "not_applicable":
@@ -157,6 +159,7 @@ function decisionIcon(decision: EligibilityDecision): ReactNode {
       return <BarrierIcon size={13} />;
     case "professional_judgment":
     case "indeterminate":
+    case "system_issue":
       return <JudgmentIcon size={13} />;
     case "conflict":
       return <ConflictIcon size={13} />;
@@ -310,6 +313,7 @@ function EligibilityClauseList({
                         hint={clause.reason}
                         icon={decisionIcon(clause.decision)}
                       />
+                      {clause.confidence === "low" && <span title={clause.confidenceReason ?? undefined}>低置信</span>}
                     </button>
                   </li>
                 );
@@ -351,7 +355,7 @@ const FALLBACK_ISSUE_LABELS: Record<string, string> = {
 /** 队列成员：风险（已触发/未满足）、冲突、未决；已满足/未触发/未到期不算问题。 */
 function clauseIsIssue(clause: EligibilityClauseView): boolean {
   const tone = decisionTone(clause.decision);
-  return tone === "danger" || tone === "info";
+  return tone === "danger" || tone === "info" || clause.confidence === "low";
 }
 
 /** 根因键：优先投影缺口类型；未归类时按判定回退，绝不静默丢失。 */
@@ -359,6 +363,9 @@ function clauseIssueKey(clause: EligibilityClauseView): {
   key: string;
   severity: IssueSeverity;
 } {
+  if (clause.confidence === "low" && decisionTone(clause.decision) === "ok") {
+    return { key: "low_confidence", severity: "attention" };
+  }
   if (clause.determinationMode === "restricted") {
     return {
       key: clause.limitationKind === "consumer_unavailable" ? "review_method_unavailable"
@@ -381,6 +388,7 @@ function clauseIssueKey(clause: EligibilityClauseView): {
 }
 
 function issueGroupLabel(key: string): string {
+  if (key === "low_confidence") return "依据仍需核对";
   const labels = gapTypeLabel as Record<string, string>;
   return labels[key] ?? FALLBACK_ISSUE_LABELS[key] ?? key;
 }
@@ -504,6 +512,7 @@ function EligibilityIssueQueue({
                         hint={clause.reason}
                         icon={decisionIcon(clause.decision)}
                       />
+                      {clause.confidence === "low" && <span title={clause.confidenceReason ?? undefined}>低置信</span>}
                     </button>
                   </li>
                 );
@@ -538,6 +547,10 @@ function EligibilityClauseDetail({
         />
       </div>
       <ul className="eligibility-clause-detail__bullets" aria-label="条款详情">
+        {clause.confidence && <li className="eligibility-detail-bullet">
+          <strong>{clause.confidence === "low" ? "低置信" : "高置信"}</strong>
+          <span>{clause.confidenceReason ?? "已有对应原文记录，并按方案条件完成核对。"}</span>
+        </li>}
         <li className="eligibility-detail-bullet">
           <strong>判定依据</strong>
           <span>{clause.reason}</span>
@@ -933,7 +946,7 @@ export function EligibilityWorkbenchPage() {
     ...reviewData.clauses, ...controlWorkItems(reviewData.controls),
   ];
   const requestedClause = componentParam === null
-    ? null : allClauses.find((clause) => clause.ruleComponentId === componentParam);
+    ? null : [...allClauses, ...(reviewData.componentClauses ?? [])].find((clause) => clause.ruleComponentId === componentParam);
   if (componentParam !== null && requestedClause === undefined) {
     return <ErrorState message="链接中的审核要点不存在，请重新选择。" onRetry={() => updateParams({ component: null })} />;
   }
@@ -1002,6 +1015,7 @@ export function EligibilityWorkbenchPage() {
         onEpisodeChange={setEpisode}
       />
       <div className="eligibility-context-bar">
+        <span>{reviewData.verificationOnly ? "规则包为构建者验证用；工作稿未签发。" : "工作稿未签发。"}</span>
         <span
           className="eligibility-undetermined"
           role="status"
@@ -1026,6 +1040,18 @@ export function EligibilityWorkbenchPage() {
           打开报告
         </RouteLink>
       </div>
+      <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode} onCompleted={() => review.retry()} />
+      {!!reviewData.systemIssues?.length && <details aria-label="系统问题" className="eligibility-context-bar">
+        <summary>系统问题（{reviewData.systemIssues.length}）</summary>
+        <ul>{reviewData.systemIssues.map((issue, index) => <li key={index}>
+          {issue.affectedCodes.join("、")} {issue.detail} {issue.alternative}
+          {issue.pageArtifactId && <RouteLink to={`/subjects/${encodeURIComponent(selectedSubject.subjectId)}/evidence`}
+            params={{ episode: selectedEpisode.reviewEpisodeId, sourcePage: issue.pageArtifactId }}
+            className="button button--quiet" ariaLabel={`查看相关原件第${issue.pageNumber ?? "对应"}页`}>
+            查看相关原件{issue.pageNumber ? `第${issue.pageNumber}页` : ""}
+          </RouteLink>}
+        </li>)}</ul>
+      </details>}
       {(reviewData.workDraftState === "source_changed" || reviewData.workDraftState === "method_changed") && (
         <section className="eligibility-context-bar" role="status"
           aria-label={reviewData.workDraftState === "method_changed" ? "审核方式已更新" : "审核资料已变化"}>
@@ -1120,6 +1146,17 @@ export function EligibilityWorkbenchPage() {
               selectedFactIndex={selectedFactIndex}
               onSelectFact={setSelectedFactIndex}
             /> : <p className="eligibility-muted">当前筛选没有符合条件的审核要点。</p>}
+            {selectedClause && !!reviewData.componentClauses?.some(item => item.ruleCode === selectedClause.ruleCode) &&
+              <details className="eligibility-clause-detail">
+                <summary>逐项条件与依据</summary>
+                <ul>{reviewData.componentClauses.filter(item => item.ruleCode === selectedClause.ruleCode).map(item =>
+                  <li key={item.ruleComponentId}>
+                    <button type="button" className="button button--quiet" onClick={() => selectClause(item.ruleComponentId)}>
+                      {item.textSummary} · {item.decisionLabel}{item.confidence === "low" ? " · 低置信" : ""}
+                    </button>
+                    <p>{item.reason}</p>
+                  </li>)}</ul>
+              </details>}
           </div>
         </section>
         <section className="workbench-col eligibility-workbench__evidence">
@@ -1133,7 +1170,7 @@ export function EligibilityWorkbenchPage() {
       </div>
       <footer className="eligibility-workbench__footnote">
         规则修订：{formatSnapshotVersion(reviewData.ruleSetRevision, null)} · 节点修订：{formatSnapshotVersion(selectedEpisode.revision, null)}
-        {` · 资料快照：${reviewData.evidenceSnapshotV2Id.slice(0, 8)}`}
+        {" · 原件及旧版结果保留"}
       </footer>
     </div>
   );

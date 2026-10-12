@@ -10,7 +10,7 @@ import { updateParams, useHashRoute } from "../app/router";
 import { useLoad } from "../app/useLoad";
 import { ErrorState, EmptyState, LoadingState } from "../components/shell/Feedback";
 import { ArrowLeft } from "lucide-react";
-import { PreparedReviewPanel } from "../components/review/PreparedReviewPanel";
+import { WorkDraftPanel } from "../components/review/WorkDraftPanel";
 import { useApplicationMode } from "../app/applicationMode";
 const historyRepository = createReviewHistoryHttp();
 
@@ -236,15 +236,8 @@ export function ReportsPage() {
           </section>
         )}
       </div>
-      {canModify && <PreparedReviewPanel key={`${selectedEpisode.reviewEpisodeId}:${params.get("workflow") ?? "new"}`}
-        episode={selectedEpisode} workflowId={params.get("workflow")} requestKey={params.get("review_request")}
-        onRequestKey={(key) => updateParams({ project: selectedProject.projectId,
-          subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId, review_request: key })}
-        onStarted={(workflow) => updateParams({ project: selectedProject.projectId,
-          subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId, workflow })}
-        onPublished={(run) => { updateParams({ project: selectedProject.projectId,
-          subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId, run }); history.retry(); }}
-        onNewReview={() => { updateParams({ workflow: null, review_request: null }); episodes.retry(); }} />}
+      {canModify && <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode}
+        onCompleted={() => history.retry()} />}
       {history.state.status === "loading" ? <LoadingState />
         : history.state.status === "error" ? <ErrorState message={history.state.message} onRetry={history.retry} />
         : runs.length === 0 ? <EmptyState message="该节点尚无正式审核记录。" hint="审核完成后，报告会保留当时的资料与结论。" />

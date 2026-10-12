@@ -443,7 +443,7 @@ DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE = (
     "请从本次资料页组中逐页提取临床事实候选，并严格按指定结构返回。"
 )
 
-_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v37"
+_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v39"
 _MAX_PROMPT_CHARS = 100_000
 
 
@@ -903,7 +903,21 @@ def _model_input_payload(evidence_input: EvidenceNormalizerInput, *, pending_det
         ],
     }
     if evidence_input.variable_definitions:
-        payload["variable_definitions"] = [item.model_dump(mode="json") for item in evidence_input.variable_definitions]
+        # Extraction needs identities, labels and literal units; clinical source policy,
+        # plausible ranges and conversions remain frozen and enforced by the host.
+        payload["variable_definitions"] = [{key: item.model_dump(mode="json")[key]
+            for key in ("variable_id", "label_zh", "value_type", "canonical_unit", "aliases_zh")}
+            for item in evidence_input.variable_definitions]
+        contexts = []
+        compact = []
+        for item in payload["related_requirements"]:
+            context = {key: item[key] for key in ("fact_type", "description")}
+            if context not in contexts:
+                contexts.append(context)
+            compact.append({"requirement_id": item["requirement_id"], "variable_id": item["variable_id"],
+                            "context_ref": contexts.index(context)})
+        payload["requirement_contexts"] = contexts
+        payload["related_requirements"] = compact
     if evidence_input.page_review is None:
         # 文字主读及历史冻结任务不要求附加双模型判读。
         payload["pages"] = payload.pop("ocr_sidecar_pages")
@@ -1008,6 +1022,10 @@ def build_evidence_normalizer_prompt(
     payload = _model_input_payload(evidence_input, pending_details_retained=pending_details_retained)
     if reference_aliases is not None:
         payload = reference_aliases.transform(payload)
+    if evidence_input.variable_definitions:
+        columns = ["locator_id", "page_number", "precision", "localized_text"]
+        payload["locator_columns"] = columns
+        payload["locators"] = [[item.get(key) for key in columns] for item in payload["locators"]]
     system_contract = _SYSTEM_CONTRACT
     if verified_scope_prompt:
         if not pending_details_retained or evidence_input.page_review is None:
@@ -1015,6 +1033,9 @@ def build_evidence_normalizer_prompt(
         from app.agents.verified_evidence_prompt import VERIFIED_EVIDENCE_SYSTEM_CONTRACT
         system_contract = VERIFIED_EVIDENCE_SYSTEM_CONTRACT
     head = f"{prompt_template.strip()}\n\n{system_contract}\n\n"
+    if evidence_input.variable_definitions:
+        head += ("related_requirements 的 context_ref 是 requirement_contexts 中从0开始的索引；共同说明只保存一次，所有要求编号和数据项目仍分别保留。"
+                 "locators 是按 locator_columns 列顺序保存的定位行，每行仍独立保留真实编号、页和逐字原文，不得合并不同位置。\n")
     if reference_aliases is not None:
         from app.agents.verified_evidence_prompt import SHORT_REFERENCE_INSTRUCTION
         head += SHORT_REFERENCE_INSTRUCTION
@@ -1508,6 +1529,8 @@ def _hydrate_draft_output(
     context_questions = []
     for candidate in draft.fact_candidates:
         basis = None
+        from app.domain.contracts.fact_context import has_standalone_measurement
+        standalone = has_standalone_measurement(candidate)
         if candidate.assertion_basis is not None:
             source_text_sha256 = locator_source_hashes.get(
                 candidate.assertion_basis.locator_id
@@ -1527,7 +1550,8 @@ def _hydrate_draft_output(
                     validate_context_source_excerpt(qualifier.source.excerpt, locator_source_texts.get(lid))
                     source = FactContextSource(**qualifier.source.model_dump(),
                         source_text_sha256=locator_source_hashes[lid])
-                qualifiers.append(FactContextQualifier(kind=qualifier.kind, label=qualifier.label, source=source))
+                if source is None or not standalone:
+                    qualifiers.append(FactContextQualifier(kind=qualifier.kind, label=qualifier.label, source=source))
                 if source is not None:
                     context_questions.append(EvidenceNormalizerUnresolvedItem(
                         code="context_relation_unverified",
@@ -1567,6 +1591,7 @@ def _hydrate_draft_output(
                 candidate_source_semantics=candidate.candidate_source_semantics,
                 assertion_basis=basis,
                 model_uncertainty=candidate.model_uncertainty,
+                risk_flags=(["ATTRIBUTION_UNCERTAIN"] if standalone else []),
                 created_at=created_at,
             )
         except ValidationError as exc:
@@ -1858,13 +1883,19 @@ def _validate_normalizer_semantics(
             if definition is not None and candidate.polarity != FactPolarity.UNKNOWN:
                 value = candidate.canonical_value
                 if definition.value_type == "number":
-                    definition.convert(value, candidate.unit or "")
-                    if candidate.raw_value != candidate.canonical_value:
-                        raise ValueError("数值规范化不能由模型改写原始读数")
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
+                        raise EvidenceNormalizedValueError("数值项目尚无可核对的数值", candidate.candidate_id)
+                    try:
+                        definition.convert(value, candidate.unit or "")
+                    except ValueError as exc:
+                        raise EvidenceNumericUnitError(str(exc), candidate.candidate_id) from exc
+                    from app.domain.risk_flags import same_numeric_reading
+                    if not same_numeric_reading(candidate.raw_value, candidate.canonical_value):
+                        raise EvidenceNormalizedValueError("数值规范化不能由模型改写原始读数", candidate.candidate_id)
                 elif definition.value_type in {"boolean", "procedure"} and not isinstance(value, bool):
-                    raise ValueError("是否项目不能填分类或数值")
+                    raise EvidenceNormalizedValueError("是否项目不能填分类或数值", candidate.candidate_id)
                 elif definition.value_type in {"category", "date"} and not isinstance(value, str):
-                    raise ValueError("分类或日期项目必须保留文字值")
+                    raise EvidenceNormalizedValueError("分类或日期项目必须保留文字值", candidate.candidate_id)
     validated = _filter_supported_requirement_bindings(validated, evidence_input)
     from app.projections.page_review_sources import validate_accepted_candidate_sources
     validate_accepted_candidate_sources(validated, evidence_input.page_review,

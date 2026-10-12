@@ -167,6 +167,8 @@ class EligibilityClauseProjection:
     action_evidence: str | None = None
     limitation_kind: str | None = None
     source_read_refs: tuple[EligibilitySourceReadRef, ...] = ()
+    confidence: str | None = None
+    confidence_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -215,6 +217,10 @@ class EligibilityReviewProjection:
     controls: tuple[EligibilityControlProjection, ...] = ()
     unassigned_conflicts: tuple[EligibilityUnassignedConflict, ...] = ()
     work_draft_state: Literal["not_started", "current", "source_changed", "method_changed"] = "not_started"
+    review_run_id: str | None = None
+    system_issues: tuple = ()
+    verification_only: bool = False
+    component_clauses: tuple[EligibilityClauseProjection, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -878,6 +884,10 @@ class EligibilityReviewProjectionService:
         episode = EpisodeRepository(session).get(review_episode_id)
         rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
         clause_pack = project_published_clause_pack(session, rule_set)
+        if rule_set.variable_definitions is not None:
+            from app.services.work_draft_projection import project_work_draft
+            return project_work_draft(session, authority=authority, rule_set=rule_set, clause_pack=clause_pack,
+                                      artifact_store=self.artifact_store)
         if not clause_pack.clauses and not clause_pack.restricted_clauses and (
             clause_pack.control_publication is None
             or not (

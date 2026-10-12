@@ -19,9 +19,11 @@ def test_normalizer_budget_preserved(budget):
 
 
 @pytest.mark.parametrize("budget,changed", [(65536, False), (12000, False), (65536, True)])
-def test_frozen_readers_match_explicit_configuration(budget, changed):
+def test_frozen_readers_match_explicit_configuration(budget, changed, monkeypatch):
     from app.llm.page_review_harness import require_page_reader_routes
     from app.services.page_review_job_service import route_identity
+    monkeypatch.setattr("app.llm.mtplx_model_lifecycle.configured_mtplx_owner", lambda: None)
+    monkeypatch.setattr("app.llm.mtplx_model_lifecycle._external_shared_mtplx_available", lambda *_: True)
     routes = require_page_reader_routes({"INDEPENDENT_VLM_API_KEY": "test",
                                         "PAGE_REVIEW_MAIN_B_PROVIDER": "mtplx",
                                         "PAGE_REVIEW_MAIN_B_MODEL": "mtplx-flash-next-optimized-speed",

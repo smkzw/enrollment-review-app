@@ -528,4 +528,5 @@ export interface ManualEditInput {
   expectedRevisionId: string;
   draft: Record<string, unknown>;
   actor?: string;
+  reviewedStageAssignment?: boolean;
 }

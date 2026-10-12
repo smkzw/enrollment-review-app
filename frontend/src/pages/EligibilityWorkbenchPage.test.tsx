@@ -444,6 +444,16 @@ describe("入排审核工作台", () => {
       ...overrides,
     });
 
+    it("低置信确定结果留在待处理，高置信正常结果不增加卡片", () => {
+      const groups = buildEligibilityIssueGroups([
+        clause({ ruleComponentId: "low", decision: "inclusion_met", confidence: "low", confidenceReason: "日期需核对" }),
+        clause({ ruleComponentId: "high", decision: "inclusion_met", confidence: "high" }),
+      ]);
+      expect(groups).toHaveLength(1);
+      expect(groups[0]!.label).toBe("依据仍需核对");
+      expect(groups[0]!.clauses.map(item => item.ruleComponentId)).toEqual(["low"]);
+    });
+
     it("按根因聚合、按严重度排序且全量保留", () => {
       const groups = buildEligibilityIssueGroups([
         clause({ ruleComponentId: "a", ruleCode: "IN-10", gapType: "observation_unverified" }),

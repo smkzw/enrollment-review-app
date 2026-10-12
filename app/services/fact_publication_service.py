@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import TypeVar
 
 from sqlalchemy.orm import Session
@@ -465,8 +466,13 @@ class FactPublicationService:
                     for predicate in component_predicates(component):
                         for requirement in component.evidence_requirements:
                             if predicate.predicate_id in requirement.predicate_ids and requirement.variable_id:
+                                definition = definitions[requirement.variable_id]
+                                values = predicate.value if isinstance(predicate.value, list) else [predicate.value]
                                 thresholds.setdefault(requirement.variable_id, []).extend(
-                                    predicate.value if isinstance(predicate.value, list) else [predicate.value])
+                                    definition.convert(value, predicate.unit or definition.canonical_unit)
+                                    for value in values
+                                    if definition.value_type == "number" and isinstance(value, (int, float, Decimal))
+                                    and not isinstance(value, bool))
                                 if requirement.source_validity_window is not None or requirement.control_validity_constraint is not None:
                                     date_sensitive.add(requirement.variable_id)
         for stable_identity, group in groups.items():
@@ -494,7 +500,17 @@ class FactPublicationService:
                     continue
                 if item.variable_id not in definitions:
                     raise FactPublicationError("事实引用了已发布字典外的数据项目")
-                locator = _fetch_locator(session, item.assertion_basis.locator_id)
+                definition = definitions[item.variable_id]
+                if item.assertion_basis is not None and definition.value_type == "number":
+                    try:
+                        definition.convert(item.canonical_value, item.unit or "")
+                    except ValueError as exc:
+                        raise FactPublicationError("事实的数值或单位与已发布数据项目不符") from exc
+                    from app.domain.risk_flags import same_numeric_reading
+                    if not same_numeric_reading(item.raw_value, item.canonical_value):
+                        raise FactPublicationError("事实不得使用由模型改写的原始读数")
+                locator = _fetch_locator(session, item.assertion_basis.locator_id
+                                         if item.assertion_basis is not None else item.locator_ids[0])
                 text = _localized_locator_text(session, locator, revision, ocr_context[3]) or ""
                 risks.update(fact_risk_flags(item, definitions[item.variable_id], text=text,
                     low_ocr=bool(ocr_context[1].get(locator.ocr_page_id)),

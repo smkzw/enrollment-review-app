@@ -1101,5 +1101,6 @@ export function encodeManualEdit(input: ManualEditInput): Record<string, unknown
     expected_revision_id: input.expectedRevisionId,
     draft: input.draft,
     actor: input.actor ?? "用户",
+    ...(input.reviewedStageAssignment ? { reviewed_stage_assignment: true } : {}),
   };
 }

@@ -40,6 +40,18 @@ function reviewBody() {
 }
 
 describe("eligibility review HTTP repository", () => {
+  it("保留工作稿子条件及验证身份，不把低置信当成未决或签发", async () => {
+    const body = { ...reviewBody(), verification_only: true, review_run_id: "working-run",
+      component_clauses: [{ ...reviewBody().clauses[0], rule_component_id: "child-1", parent_rule_code: "IN-01",
+        decision: "inclusion_met", decision_label: "满足", confidence: "low", confidence_reason: "日期需核对" }] };
+    const repository = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
+    const view = await repository.getEligibilityReview("subject", "episode");
+    expect(view.verificationOnly).toBe(true);
+    expect(view.componentClauses?.[0]?.confidence).toBe("low");
+    expect(view.reviewRunId).toBe("working-run");
+    body.component_clauses[0]!.rule_component_id = body.clauses[0]!.rule_component_id;
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+  });
   it("将检索原文与采用事实分开，并拒绝无法回源的页码", async () => {
     const body = { ...reviewBody(), clauses: [{ ...reviewBody().clauses[0], source_read_refs: [{
       source_document_version_id: "document", page_artifact_id: "page", page_number: 2,

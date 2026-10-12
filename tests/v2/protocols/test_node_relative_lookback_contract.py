@@ -17,6 +17,7 @@ import json
 from datetime import date, datetime, timezone
 
 import pytest
+from tests.v2.protocols.gate_assertions import assert_diagnostic_requires_review
 from pydantic import ValidationError
 
 from app.domain.contracts.agent_io import (
@@ -724,7 +725,7 @@ def test_no_interpretation_still_reports_time_anchor_unresolved():
         issue.issue_code == "TIME_ANCHOR_UNRESOLVED"
         for issue in _issues(result, "temporal_semantics")
     )
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
 
 
 def test_review_node_anchor_without_interpretation_is_rejected():
@@ -739,7 +740,7 @@ def test_review_node_anchor_without_interpretation_is_rejected():
         issue.issue_code == "TIME_ANCHOR_UNRESOLVED"
         for issue in _issues(result, "temporal_semantics")
     )
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
 
 
 # ---------------------------------------------------------------------------
@@ -775,7 +776,7 @@ def test_resolution_without_constraint_keeps_unresolved_state():
         issue.issue_code == "TIME_ANCHOR_UNRESOLVED"
         for issue in _issues(result, "temporal_semantics")
     )
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
 
 
 def test_review_node_anchor_after_direction_is_rejected():
@@ -838,7 +839,7 @@ def test_open_conflict_fails_closed_and_rejects_anchor_resolution():
         if issue.issue_code == "INTERPRETATION_ANCHOR_REJECTED"
     ]
     assert rejected
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
 
 
 def test_resolution_claiming_rule_without_gap_is_overreach():
@@ -863,7 +864,7 @@ def test_resolution_claiming_rule_without_gap_is_overreach():
         "没有未命名回溯缺口" in issue.problem
         for issue in _issues(result, "temporal_semantics")
     )
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
 
 
 def test_resolution_targeting_missing_review_node_is_rejected():
@@ -931,7 +932,7 @@ def test_missing_due_stage_coverage_for_declared_targets_is_blocked():
         issue.issue_code == "INTERPRETATION_ANCHOR_REQUIREMENT_MISSING"
         for issue in _issues(result, "temporal_semantics")
     )
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
 
 
 def test_named_anchor_still_authoritative_over_interpretation():
@@ -957,7 +958,7 @@ def test_named_anchor_still_authoritative_over_interpretation():
     )
     codes = {issue.issue_code for issue in _issues(result, "temporal_semantics")}
     assert "INTERPRETATION_ANCHOR_REJECTED" in codes
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
 
 
 # ---------------------------------------------------------------------------

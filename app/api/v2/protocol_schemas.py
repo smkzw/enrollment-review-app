@@ -254,6 +254,7 @@ class ManualEditRequest(_StrictModel):
     expected_revision_id: str = Field(min_length=1, max_length=128)
     draft: ProtocolDeconstructionDraft
     actor: str = Field(default="用户", min_length=1, max_length=128)
+    reviewed_stage_assignment: bool = False
 
 
 class GenerationPreviewResponse(_StrictModel):

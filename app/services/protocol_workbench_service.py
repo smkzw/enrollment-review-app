@@ -1226,6 +1226,18 @@ class ProtocolWorkbenchService:
                         detail="系统未能继续准备正式草稿副本。",
                         recovery="请返回工作台后重试；若仍失败，请联系维护人员。",
                     )
+                # The copied, source-checked formal input is already frozen.
+                # Leaving this step queued would rerun extraction after publication.
+                store.start_step(lease, STEP_FREEZE)
+                store.complete_step(
+                    lease, STEP_FREEZE,
+                    checkpoint_payload={
+                        "source_input": source_input_payload,
+                        "source_spans": source_context["source_spans"],
+                        "snapshot_id": source_context.get("snapshot_id"),
+                        "formal_baseline_revision_id": baseline.revision_id,
+                    },
+                )
                 store.start_step(lease, STEP_GENERATE)
                 store.complete_step(
                     lease,
@@ -2113,6 +2125,7 @@ class ProtocolWorkbenchService:
         draft: ProtocolDeconstructionDraft,
         expected_revision_id: str,
         actor: str,
+        reviewed_stage_assignment: bool = False,
     ) -> DraftDetailView:
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
@@ -2125,6 +2138,7 @@ class ProtocolWorkbenchService:
                     expected_revision_id=expected_revision_id,
                     actor=actor,
                     created_at=self.now(),
+                    reviewed_stage_assignment=reviewed_stage_assignment,
                 )
                 self._update_draft_checkpoint(session, job_id, revision)
         return self.get_draft_detail(job_id)

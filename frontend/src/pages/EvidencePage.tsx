@@ -1684,10 +1684,16 @@ export function EvidencePage() {
           window.location.hash = `#/subjects?subject=${encodeURIComponent(subjectId)}&episode=${encodeURIComponent(reviewEpisodeId)}`;
         }}
       />
+      {episode?.activeEvidenceSnapshotId && factNormalization.state.status === "idle" && (
+        <button className="button" type="button" onClick={() => void factNormalization.start()}>
+          整理个例档案
+        </button>
+      )}
       {subjectId && reviewEpisodeId && factNormalization.state.status === "active" &&
         (factNormalization.state.phase === "succeeded" || factNormalization.state.phase === "failed") &&
         <NormalizationUnresolvedPanel key={`${subjectId}:${reviewEpisodeId}:${factNormalization.state.jobId}`}
-          subjectId={subjectId} episodeId={reviewEpisodeId} jobId={factNormalization.state.jobId} />}
+          subjectId={subjectId} episodeId={reviewEpisodeId} jobId={factNormalization.state.jobId}
+          onContinue={runId => factNormalization.retryFailedPages(runId)} />}
       {factNormalization.completedReview && <RouteLink className="button" to="/tasks" params={{
         job: factNormalization.completedReview.jobId, subject: factNormalization.completedReview.subjectId,
         episode: factNormalization.completedReview.reviewEpisodeId,

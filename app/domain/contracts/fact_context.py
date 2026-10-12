@@ -58,6 +58,23 @@ def context_source_ids(qualifiers: Sequence[FactContextQualifierDraft]) -> set[s
     return {item.source.locator_id for item in qualifiers if item.source is not None}
 
 
+def has_standalone_measurement(candidate) -> bool:
+    """A literal field reading can stand alone; separate headers remain unadopted."""
+    basis = candidate.assertion_basis
+    if not candidate.variable_id or basis is None or isinstance(candidate.canonical_value, bool):
+        return False
+    external = [item for item in basis.contextual_qualifiers if item.source is not None]
+    if not external or any(item.kind not in {"specimen", "method"} for item in external):
+        return False
+    if candidate.profile_lane.value != "test_exam_score":
+        return False
+    value = candidate.canonical_value
+    from app.domain.risk_flags import number_in_excerpt
+    return any(candidate.asserted_object in line and (
+        number_in_excerpt(value, line) if isinstance(value, (int, float)) else
+        isinstance(value, str) and value in line) for line in basis.assertion_text.splitlines())
+
+
 def validate_context_source_excerpt(excerpt: str, localized_text: str | None) -> None:
     """Require one identifiable literal citation in the frozen localized source."""
     quote = " ".join(excerpt.split())

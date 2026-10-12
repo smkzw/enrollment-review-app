@@ -26,6 +26,18 @@ function page(total: number, offset = 0) {
 }
 
 describe("NormalizationUnresolvedPanel", () => {
+  it("仅继续失败页，保留当前任务来源；历史版本不提供续读", async () => {
+    read.mockResolvedValue({ ...page(1), runId: "old-run", failedPageCount: 6 });
+    const onContinue = vi.fn().mockResolvedValue("new-job");
+    const view = render(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="j" onContinue={onContinue} />);
+    fireEvent.click(await screen.findByRole("button", {name: "继续整理未完成的6页"}));
+    await waitFor(() => expect(onContinue).toHaveBeenCalledOnce());
+    expect(onContinue).toHaveBeenCalledWith("old-run");
+    read.mockResolvedValue({ ...page(1), jobId: "historical", runId: "old-run", failedPageCount: 6, isCurrent: false });
+    view.rerender(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="historical" onContinue={onContinue} />);
+    await screen.findByText(/这是历史资料版本/);
+    expect(screen.queryByRole("button", {name: "继续整理未完成的6页"})).not.toBeInTheDocument();
+  });
   it.each([0, 1, 101, 250])("%s项均可访问，不做前100项截断", async (total) => {
     read.mockImplementation(async (_subject, _episode, _job, offset) => page(total, offset));
     render(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="j" />);

@@ -7,7 +7,7 @@ from app.domain.contracts.agents import GateResult
 from app.domain.contracts.enums import GateOutcome
 from app.domain.contracts.evidence import EvidenceExpectationTemplate
 from app.domain.contracts.facts import FactAuthority
-from app.domain.contracts.rules import RuleSet, WorkflowStage
+from app.domain.contracts.rules import EvidenceRequirement, RuleSet, WorkflowStage
 from app.domain.contracts.review import ProtocolDocumentVersion
 from app.domain.gates.integrity import assert_protocol_integrity
 from app.domain.publication import canonical_hash
@@ -31,6 +31,7 @@ class ReviewProtocolSource:
     integrity_gate: GateResult
     expectation_templates: tuple[EvidenceExpectationTemplate, ...]
     protocol_document: ProtocolDocumentVersion
+    procedure_requirements: tuple[EvidenceRequirement, ...] = ()
 
 
 def load_review_protocol_source(session: Session, authority: FactAuthority) -> ReviewProtocolSource:
@@ -111,4 +112,5 @@ def load_review_protocol_source(session: Session, authority: FactAuthority) -> R
         (item.template_id, item.projection_sha256) for item in projected
     ):
         raise InvalidReferenceError("已保存的资料要求不完整或与发布方案不一致")
-    return ReviewProtocolSource(rule_set, tuple(stages), gate, tuple(templates), protocol)
+    return ReviewProtocolSource(rule_set, tuple(stages), gate, tuple(templates), protocol,
+                                tuple(record.procedure_evidence_requirements))

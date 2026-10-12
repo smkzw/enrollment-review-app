@@ -359,6 +359,9 @@ def create_app(
             ),
         )
         app.state.job_executors = merged_executors
+        from app.services.work_draft_review import WorkDraftReviewService, JOB_TYPE as WORK_DRAFT_JOB_TYPE
+        app.state.work_draft_review_service = WorkDraftReviewService(session_factory, artifact_store)
+        merged_executors[WORK_DRAFT_JOB_TYPE] = app.state.work_draft_review_service.execute
         app.state.job_cancelled_callback = project_cancelled_evidence_job
         app.state.job_failed_callback = project_failed_job
         from app.services.batch_review_workflow import BATCH_JOB_TYPE, BatchReviewRetryService

@@ -37,6 +37,7 @@ from app.services.fact_normalization_response_recovery import (
 )
 from app.domain.contracts.agents import ModelConfigContract, PromptVersion
 from app.domain.contracts.evidence_normalizer import (
+    EvidenceNormalizerUnresolvedItem,
     PersistedEvidenceNormalizerUnresolvedItem,
 )
 from app.domain.contracts.evidence_expectations_v2 import CoverageGapSignal
@@ -410,10 +411,25 @@ def _load_frozen_agent_config(
 ) -> ModelConfigContract:
     """确保审计记录中的冻结配置就是本次实际执行配置。"""
     run = FactNormalizationRunRepository(session).get(run_id)
+    chain_scope = run.input_scope_sha256
+    if payload.get("retry_failed_from_run_id") is not None:
+        precondition = payload.get("retry_failed_precondition_sha256")
+        if (not isinstance(precondition, str) or canonical_hash({"input_scope_sha256": precondition,
+                "retry_failed_from_run_id": payload["retry_failed_from_run_id"]}) != chain_scope):
+            raise StepFailure(retryable=False, error_code="INVALID_AUTHORITY", detail="失败页续读来源与冻结身份不一致。")
+        chain_scope = precondition
+    if payload.get("targeted_extraction"):
+        precondition = payload.get("targeted_extraction_precondition_sha256")
+        if (not isinstance(precondition, str)
+                or canonical_hash({"input_scope_sha256": precondition,
+                                   "targeted_extraction": True}) != chain_scope):
+            raise StepFailure(retryable=False, error_code="INVALID_AUTHORITY",
+                              detail="定向抽取方式与冻结运行身份不一致。")
+        chain_scope = precondition
     if payload.get("question_classification_repair_policy") is not None:
         from app.agents.evidence_question_repair import QUESTION_REPAIR_POLICY
         precondition = payload.get("question_classification_precondition_scope_sha256")
-        next_scope = payload.get("candidate_partition_precondition_scope_sha256", run.input_scope_sha256)
+        next_scope = payload.get("candidate_partition_precondition_scope_sha256", chain_scope)
         if (payload["question_classification_repair_policy"] != QUESTION_REPAIR_POLICY
                 or not isinstance(precondition, str) or len(precondition) != 64
                 or canonical_hash({"input_scope_sha256": precondition,
@@ -426,7 +442,7 @@ def _load_frozen_agent_config(
         if (payload["candidate_partition_policy"] != CANDIDATE_PARTITION_POLICY
                 or not isinstance(precondition, str) or len(precondition) != 64
                 or canonical_hash({"input_scope_sha256": precondition,
-                    "candidate_partition_policy": CANDIDATE_PARTITION_POLICY}) != run.input_scope_sha256):
+                    "candidate_partition_policy": CANDIDATE_PARTITION_POLICY}) != chain_scope):
             raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
                               detail="局部保留方式未进入本次冻结身份，不能将旧作业改作新读取。")
     if run.authority != authority:
@@ -813,6 +829,14 @@ def _validate_call_checkpoint_replay(
             error_code=PARTIAL_OUTPUT_CODE,
             detail="任务检查点中的未解决项清单与持久记录不一致。",
         )
+    if persisted_call.status == FactCallStatus.FAILED:
+        if not payload.get("targeted_extraction") or persisted_candidate_ids:
+            raise StepFailure(retryable=False, error_code="CALL_IDENTITY_CONFLICT",
+                              detail="失败读取不能复用为已核实候选。")
+        _build_input(session, authority, run_id, call,
+                     max_pages_per_call=int(payload.get("max_pages_per_call", 20)),
+                     created_at=run.created_at)
+        return
     from app.services.fact_normalization_replay_sources import validate_replayed_sources
     try:
         validate_replayed_sources(session, payload=payload, authority=authority, run=run,
@@ -986,13 +1010,16 @@ def _validate_partition_replay(session, payload, authority, run, call, artifact_
 
 def _validate_saved_text_accounting(session, payload, authority, run_id, calls):
     if payload.get("text_accounting_policy") is None:
-        return
+        return []
     from app.projections.normalizer_text_accounting import (
         UNACCOUNTED_TEXT_CODE, unaccounted_source_text, validate_text_accounting_items,
     )
     candidates = FactNormalizationCandidateRepository(session).list_by_run(run_id)
     unresolved = FactNormalizationUnresolvedItemRepository(session).list_by_run(run_id)
+    diagnostics = []
     for call in calls:
+        if call.status == FactCallStatus.FAILED and payload.get("targeted_extraction"):
+            continue  # A failed reading retains its scope, not a claim to have accounted for its text.
         evidence_input = _build_input(
             session, authority, run_id, {
                 "call_id": call.call_id, "logical_document_id": call.logical_document_id,
@@ -1014,10 +1041,14 @@ def _validate_saved_text_accounting(session, payload, authority, run_id, calls):
             actual = [item for item in items if item.code == UNACCOUNTED_TEXT_CODE]
             if canonical_hash([item.model_dump(mode="json") for item in actual]) != canonical_hash(
                     [item.model_dump(mode="json") for item in expected]):
-                raise ValueError("已保存的来源文字核对范围不完整或与当前方法不一致")
+                if payload.get("targeted_extraction"):
+                    diagnostics.append(call)
+                else:
+                    raise ValueError("已保存的来源文字核对范围不完整或与当前方法不一致")
         except ValueError as exc:
             raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
                               detail=f"已保存来源文字核对未通过复验：{exc}") from exc
+    return diagnostics
 
 
 
@@ -1026,6 +1057,7 @@ def _rebuild_call_checkpoint_from_persisted(
     *,
     run_id: str,
     call: dict[str, Any],
+    allow_failed: bool = False,
 ) -> dict[str, Any] | None:
     """步骤检查点缺失但成功调用结果已持久化时，从持久记录重建检查点。
 
@@ -1061,7 +1093,9 @@ def _rebuild_call_checkpoint_from_persisted(
             error_code="CALL_IDENTITY_CONFLICT",
             detail="已持久化的规范化调用与任务步骤身份不一致，拒绝复用或重放。",
         )
-    if persisted_call.status != FactCallStatus.SUCCEEDED:
+    if persisted_call.status != FactCallStatus.SUCCEEDED and not (
+        allow_failed and persisted_call.status == FactCallStatus.FAILED
+    ):
         raise StepFailure(
             retryable=False,
             error_code=PARTIAL_OUTPUT_CODE,
@@ -1114,6 +1148,11 @@ def _rebuild_call_checkpoint_from_persisted(
         checkpoint["model_called"] = False
     if persisted_call.question_classification_sha256 is not None:
         checkpoint["question_classification_sha256"] = persisted_call.question_classification_sha256
+    if persisted_call.status == FactCallStatus.FAILED:
+        if candidate_ids or not unresolved_rows:
+            raise StepFailure(retryable=False, error_code="CALL_IDENTITY_CONFLICT",
+                              detail="失败读取的候选或失败范围记录不一致。")
+        checkpoint["call_status"] = "failed"
     return checkpoint
 
 
@@ -1250,7 +1289,8 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
         recovered_checkpoint = None
         with config.session_factory() as session:
             recovered_checkpoint = _rebuild_call_checkpoint_from_persisted(
-                session, run_id=run_id, call=call
+                session, run_id=run_id, call=call,
+                allow_failed=bool(payload.get("targeted_extraction")),
             )
             if recovered_checkpoint is not None:
                 _load_frozen_agent_config(
@@ -1397,7 +1437,9 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             except StepFailure:
                 raise
             except (ValueError, TypeError) as exc:
-                raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail=f"模型输出未通过完整性校验：{exc}") from exc
+                raise StepFailure(retryable=False,
+                                  error_code="NORMALIZER_OUTPUT_INVALID" if payload.get("targeted_extraction") else PARTIAL_OUTPUT_CODE,
+                                  detail=f"模型输出未通过完整性校验：{exc}") from exc
             except Exception as exc:
                 raise StepFailure(retryable=True, error_code="TRANSPORT_FAILED", detail=f"模型调用失败：{exc}") from exc
         else:
@@ -1456,7 +1498,8 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 )
                 raise StepFailure(
                     retryable=error_code == "TRANSPORT_FAILED",
-                    error_code=error_code,
+                    error_code=("NORMALIZER_OUTPUT_INVALID" if payload.get("targeted_extraction")
+                                and error_code != "TRANSPORT_FAILED" else error_code),
                     detail="；".join(issues),
                 )
             output = result.final_output
@@ -1488,12 +1531,14 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             raise StepFailure(retryable=False, error_code=EMPTY_OUTPUT_CODE, detail="模型未返回候选，也未逐页说明无可提取内容。")
         if accounting_policy is not None:
             try:
+                # Source normalization may narrow a candidate. Compute the text
+                # ledger from that final representation, never before another pass.
+                output = validate_evidence_normalizer_output(output, evidence_input)
                 remainders = unaccounted_source_text(evidence_input, output)
                 output = output.model_copy(update={
                     "unresolved_items": [*output.unresolved_items, *remainders],
                 })
                 validate_text_accounting_items(evidence_input, output.unresolved_items)
-                output = validate_evidence_normalizer_output(output, evidence_input)
             except ValueError as exc:
                 raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
                                   detail=f"来源文字核对未通过：{exc}") from exc
@@ -1643,9 +1688,12 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 elif saved_call.candidate_partition_sha256 is not None:
                     _validate_partition_replay(session, payload, authority,
                         FactNormalizationRunRepository(session).get(run_id), saved_call, config.artifact_store)
-            outcome, reasons, _ = validate_page_coverage(revision, calls, session=session)
-            if outcome.value != "accepted":
+            readable_calls = [call for call in calls if call.status == FactCallStatus.SUCCEEDED]
+            coverage_calls = readable_calls if payload.get("targeted_extraction") else calls
+            outcome, reasons, affected_pages = validate_page_coverage(revision, coverage_calls, session=session)
+            if outcome.value != "accepted" and not payload.get("targeted_extraction"):
                 raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail="；".join(reasons))
+            checkpoint["unread_page_refs"] = affected_pages
             facts, events, exposures = _load_run_candidates(session, run_id)
             unresolved_items = FactNormalizationUnresolvedItemRepository(
                 session
@@ -1657,12 +1705,13 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 candidates=all_candidates,
                 unresolved_items=unresolved_items,
             )
-            _validate_saved_text_accounting(session, payload, authority, run_id, calls)
+            accounting_issues = _validate_saved_text_accounting(session, payload, authority, run_id, calls)
+            checkpoint["accounting_issue_call_ids"] = [call.call_id for call in accounting_issues]
             final_status = FactNormalizationRunStatus.SUCCEEDED
             has_partitioned_calls = any(call.candidate_partition_sha256 is not None for call in calls)
             if facts or events or exposures:
                 run_result = orchestrate_run_gates(
-                    authority=authority, run_id=run_id, calls=calls,
+                    authority=authority, run_id=run_id, calls=coverage_calls,
                     fact_candidates=facts, event_candidates=events,
                     exposure_candidates=exposures, revision=revision, session=session,
                 )
@@ -1783,8 +1832,16 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 final_status = FactNormalizationRunStatus.PARTIAL
             if payload.get("text_accounting_policy") is not None and unresolved_items:
                 final_status = FactNormalizationRunStatus.PARTIAL
+            if affected_pages:
+                final_status = FactNormalizationRunStatus.PARTIAL
+            if accounting_issues:
+                final_status = FactNormalizationRunStatus.PARTIAL
             checkpoint["status"] = final_status.value
             FactNormalizationRunRepository(session).set_status(run_id, final_status)
+            if payload.get("targeted_extraction") and config.artifact_store is not None:
+                from app.services.work_draft_review import enqueue_normalized_work_draft
+                working = enqueue_normalized_work_draft(session, authority=authority, run_id=run_id)
+                checkpoint["work_draft_job_id"] = working["job_id"]
 
         return PreparedStepResult(checkpoint=checkpoint, apply=apply)
 
@@ -1814,6 +1871,52 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 or payload.get("visual_source_policy") != VISUAL_SOURCE_POLICY):
                 raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
                                   detail="本次整理提示与冻结版本不一致，请保留已有记录。")
-        return execute_finalize(context) if context.step_id == FACT_NORMALIZATION_FINALIZE_STEP_ID else execute_call(context)
+        if context.step_id == FACT_NORMALIZATION_FINALIZE_STEP_ID:
+            return execute_finalize(context)
+        try:
+            return execute_call(context)
+        except StepFailure as exc:
+            if not payload.get("targeted_extraction") or exc.error_code not in {
+                "TRANSPORT_FAILED", "NORMALIZER_OUTPUT_INVALID", EMPTY_OUTPUT_CODE,
+            }:
+                raise
+            if exc.error_code in {"TRANSPORT_FAILED", EMPTY_OUTPUT_CODE} and context.attempt < 2:
+                raise StepFailure(retryable=True, error_code=exc.error_code, detail=exc.detail) from exc
+            authority = _load_authority(payload)
+            call = _get_call_for_step(payload, context.step_id)
+            run_id = str(payload["run_id"])
+            with config.session_factory() as session:
+                _validate_authority(session, authority)
+                created_at = FactNormalizationRunRepository(session).get(run_id).created_at
+            output = EvidenceNormalizerOutput(
+                run_id=run_id, call_id=call["call_id"],
+                logical_document_id=call["logical_document_id"], page_numbers=call["page_numbers"],
+                unresolved_items=[EvidenceNormalizerUnresolvedItem(
+                    code="extraction_failed", message="系统暂未能整理这些页面，其余资料继续处理。",
+                    affected_pages=call["page_numbers"],
+                    reason=f"{exc.error_code}：{exc.detail}",
+                )],
+            )
+            unresolved = _persisted_unresolved_items(output, created_at=created_at)
+            items, items_sha = _unresolved_payload(output)
+            checkpoint = {**call, "call_status": "failed", "candidate_ids": [],
+                          "unresolved_items": items, "unresolved_items_sha256": items_sha,
+                          "unresolved_item_ids": [item.unresolved_item_id for item in unresolved],
+                          "completed_at": created_at.isoformat()}
+
+            def apply(session):
+                _validate_authority(session, authority)
+                _load_frozen_agent_config(session, payload=payload, run_id=run_id,
+                                          authority=authority, prompt_template=config.prompt_template)
+                FactNormalizationCallRepository(session).create(FactNormalizationCall(
+                    call_id=call["call_id"], run_id=run_id,
+                    logical_document_id=call["logical_document_id"],
+                    page_numbers=call["page_numbers"], input_sha256=call["input_sha256"],
+                    status=FactCallStatus.FAILED, created_at=created_at,
+                ))
+                for item in unresolved:
+                    FactNormalizationUnresolvedItemRepository(session).create(item)
+
+            return PreparedStepResult(checkpoint=checkpoint, apply=apply)
 
     return execute

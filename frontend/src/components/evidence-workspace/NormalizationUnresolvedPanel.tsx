@@ -4,19 +4,20 @@ import { RouteLink } from "../../app/router";
 import { getFactNormalizationRepository } from "../../api/fact-normalization";
 import type { NormalizationUnresolvedPageView } from "../../api/fact-normalization/factNormalizationViewModels";
 
-interface Props { subjectId: string; episodeId: string; jobId: string }
+interface Props { subjectId: string; episodeId: string; jobId: string; onContinue?: (runId: string) => Promise<unknown> }
 
-export function NormalizationUnresolvedPanel({ subjectId, episodeId, jobId }: Props) {
+export function NormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onContinue }: Props) {
   return <ScopedNormalizationUnresolvedPanel key={`${subjectId}:${episodeId}:${jobId}`}
-    subjectId={subjectId} episodeId={episodeId} jobId={jobId} />;
+    subjectId={subjectId} episodeId={episodeId} jobId={jobId} onContinue={onContinue} />;
 }
 
-function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId }: Props) {
+function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onContinue }: Props) {
   const [data, setData] = useState<NormalizationUnresolvedPageView | null>(null);
   const [offset, setOffset] = useState(0);
   const [retry, setRetry] = useState(0);
   const [busy, setBusy] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [continuing, setContinuing] = useState(false);
   const contentSha256 = useRef<string | undefined>(undefined);
   useEffect(() => {
     let active = true;
@@ -53,6 +54,11 @@ function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId }: Pro
       {!data.isCurrent && <p>这是历史资料版本，不能代替当前审核结果。</p>}
       {!data.textAccountingApplied && <p>这次记录未逐段检查是否漏项。</p>}
       <p>这些记录不代表患者缺少检查，也不能证明图片、手写和每项临床含义已核清。</p>
+      {data.isCurrent && data.runId && (data.failedPageCount ?? 0) > 0 && onContinue &&
+        <button className="button" type="button" disabled={continuing} onClick={async () => {
+          setContinuing(true);
+          try { await onContinue(data.runId!); } finally { setContinuing(false); }
+        }}><RefreshCw size={16} />{continuing ? "正在提交" : `继续整理未完成的${data.failedPageCount}页`}</button>}
       {data.total === 0 && <p>暂无待核对记录。入排结论仍以审核结果为准。</p>}
       <ul>{data.items.map((item) => <li key={item.itemId}>
         <div><span>{item.kind === "unquoted_text" ? "尚未整理的文字" : "读取时留下的疑问"}</span>

@@ -588,6 +588,7 @@ def edit_draft(
         draft=body.draft,
         expected_revision_id=body.expected_revision_id,
         actor=_service(request).operator_name(),
+        reviewed_stage_assignment=body.reviewed_stage_assignment,
     )
     return _draft_dto(view)
 

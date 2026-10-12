@@ -464,6 +464,8 @@ def _check_run_scope(session: Session, run: ReviewRun) -> None:
         )
         FactAuthorityValidator(session).validate(authority)
         context = ReviewContextV2Repository(session).get(run.context_id)
+        if (run.run_kind == "work_draft") != context.work_draft:
+            raise ScopeViolationError("工作稿与正式审核上下文不能互相替代")
         if context.requirements_scope_version != "review-requirements-scope/v1":
             raise ScopeViolationError("新审核须先核实方案要求是否齐全，不能沿用未完成该核实的历史输入")
         if (
@@ -503,6 +505,8 @@ def _check_assessment_scope(session: Session, assessment: FinalAssessment) -> No
             f"FinalAssessment {assessment.assessment_id} 的 rule_set_revision 与 episode 不一致"
         )
     run = AppendRepository(session, REVIEW_RUN_CONFIG).get(assessment.review_run_id)
+    if run.run_kind == "work_draft":
+        raise ScopeViolationError("工作稿不能写入正式签发结论")
     if run.review_episode_id != assessment.review_episode_id:
         raise ScopeViolationError(
             f"FinalAssessment {assessment.assessment_id} 的 run 超出其 episode"
@@ -1238,6 +1242,8 @@ REVIEW_RUN_CONFIG = _config(
         **_REVIEW_V2_COLUMNS,
         "context_id": "context_id",
         "review_run_id": "review_run_id",
+        "run_kind": "run_kind",
+        "system_issues": "system_issues",
         "review_episode_id": "review_episode_id",
         "protocol_version_id": "protocol_version_id",
         "rule_set_revision": "rule_set_revision",
@@ -1250,6 +1256,8 @@ REVIEW_RUN_CONFIG = _config(
     scope_check=lambda session, contract, payload: _check_run_scope(session, contract),
     mirrors={
         **_REVIEW_V2_COLUMNS,
+        "run_kind": "run_kind",
+        "system_issues": "system_issues",
         "context_id": "context_id",
         "review_episode_id": "review_episode_id",
         "protocol_version_id": "protocol_version_id",

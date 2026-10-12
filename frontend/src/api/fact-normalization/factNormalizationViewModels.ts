@@ -81,6 +81,8 @@ export interface NormalizationSourceView {
 
 export interface NormalizationUnresolvedPageView {
   jobId: string;
+  runId?: string;
+  failedPageCount?: number;
   contentSha256: string;
   total: number;
   offset: number;
@@ -178,6 +180,8 @@ export function decodeNormalizationUnresolved(payload: unknown): NormalizationUn
   if (!Array.isArray(row.items)) throw new FactNormalizationDecodeError("待核对内容应为列表。");
   const result = {
     jobId: requiredString(row.job_id, "job_id"),
+    runId: row.run_id === undefined ? undefined : requiredString(row.run_id, "run_id"),
+    failedPageCount: row.failed_page_count === undefined ? 0 : nonNegativeInteger(row.failed_page_count, "failed_page_count"),
     contentSha256: requiredString(row.content_sha256, "content_sha256"),
     total: nonNegativeInteger(row.total, "total"), offset: nonNegativeInteger(row.offset, "offset"),
     hasMore: requiredBoolean(row.has_more, "has_more"), isCurrent: requiredBoolean(row.is_current, "is_current"),

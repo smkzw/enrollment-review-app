@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from tests.v2.protocols.gate_assertions import assert_diagnostic_requires_review
 
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.enums import (
@@ -594,7 +595,7 @@ def test_gate_blocks_ninety_days_for_a_three_month_source_window() -> None:
     )
 
     temporal = next(item for item in result.checks if item.check_name == "temporal_semantics")
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
     assert not temporal.passed
     assert any(item.issue_code == "TIME_BOUND_UNIT_CHANGED" for item in temporal.issues)
 

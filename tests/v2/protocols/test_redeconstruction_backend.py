@@ -182,6 +182,8 @@ def _publish_first(factory, source_input, draft, spans, key="redo-first"):
                 draft, actor="医学监查员", created_at=NAIVE_NOW
             )
     service = ProtocolPublicationService(factory, now=lambda: NAIVE_NOW)
+    from tests.v2.protocols.slice4_helpers import approve_fixture_entries
+    approve_fixture_entries(factory, source_input, draft)
     return service.publish(
         ProtocolPublicationRequest(
             idempotency_key=key,
@@ -306,6 +308,8 @@ def _control_refs(service, data_paths, job_id):
     """Complete same-revision synthetic controls, including publication replays."""
     merged = service._merged_payload(job_id)
     revision = service._load_draft_revision(merged)
+    from tests.v2.protocols.slice4_helpers import approve_fixture_entries
+    approve_fixture_entries(service.session_factory, service._load_source_input(merged), revision.content)
     key = (job_id, revision.revision_id)
     cache = service.__dict__.setdefault("_test_control_publication_refs", {})
     if key not in cache:
@@ -477,6 +481,8 @@ def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
         source_spans=spans,
         wait_at="publish",
     )
+    from tests.v2.protocols.test_rule_reviews import approve_draft
+    approve_draft(factory, source_input, draft)
     published = service.publish_first_project(
         started.job_id,
         idempotency_key="publish-with-source-context",
@@ -514,6 +520,12 @@ def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
     session_view = service.get_session(result.job_id)
     assert session_view.state == "waiting_user"
     assert session_view.awaiting_user == "review"
+    with factory() as session:
+        from app.services.protocol_workbench_service import STEP_FREEZE
+        freeze = JobStore(session).get_last_checkpoint(result.job_id, STEP_FREEZE)
+        assert freeze is not None
+        assert freeze[1]["formal_baseline_revision_id"]
+        assert freeze[1]["source_input"]["protocol_version_id"] != published.protocol_version_id
     assert session_view.target_project_id == published.project_id
     comparison = service.get_draft_comparison(result.job_id)
     assert comparison.baseline.revision_id != comparison.candidate.revision_id
@@ -541,6 +553,12 @@ def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
     assert replay.created is False
     assert replay.job_id == result.job_id
 
+    reviews = service.get_rule_reviews(result.job_id)
+    for entry in reviews["entries"]:
+        service.review_rule(result.job_id, entry["official_code"],
+            expected_revision_id=reviews["draft_revision_id"], rule_content_hash=entry["rule_content_hash"],
+            reviewer_kind="builder_verification", action="approved",
+            note="excluded" if entry["kind"] == "procedure" else None)
     republished = service.publish_re_deconstruction(
         result.job_id,
         idempotency_key="feedback-from-formal-publish",

@@ -23,6 +23,27 @@ def _draft():
     return original
 
 
+def test_target_dictionary_unit_failure_quarantines_only_its_unchanged_candidate():
+    from app.domain.variables.dictionary import load_dictionary
+    from app.domain.contracts.evidence_normalizer import EvidenceNormalizerInput, evidence_normalizer_input_scope_hash
+    source = _source_input()
+    definitions = [load_dictionary()["anc"]]
+    material = {key: getattr(source, key) for key in ("authority", "logical_document_id", "context",
+        "related_requirements", "manifest_sha256", "completion_manifest_sha256", "page_numbers", "pages",
+        "page_review", "available_locator_ids", "available_locators")}
+    source = EvidenceNormalizerInput.model_validate(source.model_dump() | {"variable_definitions": definitions,
+        "input_scope_sha256": evidence_normalizer_input_scope_hash(**material, variable_definitions=definitions)})
+    raw = _draft()
+    invalid = raw["fact_candidates"][0]
+    invalid["assertion_basis"]["asserted_object"] = invalid["asserted_object"]
+    invalid.update(variable_id="anc", unit="%")
+    result = recover_source_local_candidates(json.dumps(raw, ensure_ascii=False), source)
+    assert [fact.candidate_id for fact in result.output.fact_candidates] == ["good"]
+    assert result.receipt["retained_draft"]["fact_candidates"] == [raw["fact_candidates"][1]]
+    assert result.receipt["quarantined_candidate_refs"] == [invalid["candidate_ref"]]
+    assert invalid["unit"] == "%"  # No inferred unit or repaired value enters the retained result.
+
+
 @pytest.mark.parametrize("compact", [False, True])
 @pytest.mark.parametrize("kind", ["object", "context", "prospective"])
 def test_valid_sibling_retained_without_any_repair_or_semantic_rewrite(kind, compact):
