@@ -137,6 +137,58 @@ def test_source_identical_formal_copy_reuses_actual_reviews_without_new_approval
     assert count == len(original["history"]) + (mutation == "revoke")
 
 
+@pytest.mark.parametrize("scope", ["target", "all", "unknown", "amendment"])
+def test_formal_copy_clarification_invalidates_its_actual_scope_only(slice4_env, data_paths, scope):
+    from app.domain.contracts.agent_io import ProtocolDeconstructionInput
+    from app.domain.contracts.enums import InterpretationSourceType
+    from app.domain.contracts.protocol_metadata import InterpretationSource
+    from tests.v2.protocols.test_redeconstruction_backend import (
+        _make_service, _write_minimal_docx, AlwaysPublishableGate, _control_refs,
+    )
+    factory, _ = slice4_env
+    service = _make_service(factory, data_paths, gate=AlwaysPublishableGate())
+    source, draft, spans = confirmed_fixture()
+    initial = service.start_first_deconstruction(upload_path=_write_minimal_docx(data_paths, "clarification.docx"),
+        original_name="clarification.docx", idempotency_key="clarification-first", actor="测试")
+    service.seed_review_session(initial.job_id, source_input=source, draft=draft, source_spans=spans, wait_at="publish")
+    approve_draft(factory, source, draft)
+    published = service.publish_first_project(initial.job_id, idempotency_key="clarification-publish",
+        actor="测试", **_control_refs(service, data_paths, initial.job_id))
+    before = service.get_rule_reviews(initial.job_id)
+    selected_code = draft.proposed_rules[0].official_code
+    explanation = InterpretationSource(interpretation_source_id="scoped-clarification",
+        protocol_version_id=source.protocol_version_id,
+        source_type=InterpretationSourceType.AMENDMENT if scope == "amendment" else InterpretationSourceType.MEDICAL_INTERPRETATION,
+        is_current_amendment=scope == "amendment",
+        file_sha256="a" * 64, source_ref="synthetic-user-direction", excerpt="原文歧义说明",
+        explanation="只澄清所声明的要求，未改方案原文。", clarifies_ambiguity=True,
+        applies_to_rule_refs=[selected_code] if scope in {"target", "amendment"} else [] if scope == "all" else ["unknown-rule"])
+    copied = service.start_feedback_re_deconstruction(project_id=published.project_id,
+        idempotency_key="clarification-copy", actor="测试", interpretation_sources=[explanation])
+    merged = service._merged_payload(copied.job_id)
+    current = service._load_draft_revision(merged).content
+    current_source = ProtocolDeconstructionInput.model_validate(merged["source_input"])
+    with factory() as session:
+        hashes = {row.record_id: row.payload_sha256 for row in session.scalars(select(RuleReviewRecordRow))}
+        entries, history = current_reviews(session, current_source, current)
+        missing = {entry["official_code"] for entry in entries if entry["review"] is None}
+        assert missing == ({selected_code} if scope == "target" else {entry["official_code"] for entry in entries})
+        assert len(history) == len(before["history"])
+        assert session.scalar(select(func.count()).select_from(RuleReviewRecordRow)) == len(before["history"])
+        assert all(session.scalar(select(RuleReviewRecordRow.payload_sha256).where(
+            RuleReviewRecordRow.record_id == key)) == value for key, value in hashes.items())
+    rebound = current_source.model_copy(deep=True)
+    rebound.interpretation_sources[0].interpretation_source_id = "rebound-same-material"
+    rebound.interpretation_sources[0].protocol_version_id = "next-candidate-identity"
+    assert review_entries(rebound, current) == review_entries(current_source, current)
+    changed = current_source.model_copy(deep=True)
+    changed.interpretation_sources[0].explanation += "含义已变化"
+    before_hashes = {entry["official_code"]: entry["rule_content_hash"] for entry in review_entries(current_source, current)}
+    changed_codes = {entry["official_code"] for entry in review_entries(changed, current)
+                     if entry["rule_content_hash"] != before_hashes[entry["official_code"]]}
+    assert changed_codes == missing
+
+
 def test_revocation_wins_at_same_timestamp_without_rewriting_history(slice4_env):
     factory, _ = slice4_env
     source, draft, _ = confirmed_fixture()

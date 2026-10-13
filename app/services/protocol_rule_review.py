@@ -21,6 +21,17 @@ REVIEW_CONFIG = AppendConfig(
 )
 
 
+def _interpretation_payload(source, draft, refs):
+    # Copy identities may change; the actual clarification and affected scope may not.
+    known_refs = {ref for rule in draft.proposed_rules for ref in (rule.rule_id, rule.official_code)}
+    known_refs.update(item.item_id for item in source.required_procedure_catalog.items)
+    return [item.model_dump(mode="json", exclude={"interpretation_source_id", "protocol_version_id"})
+            for item in source.interpretation_sources
+            if item.authority.value == "formal_requirement" or not item.applies_to_rule_refs
+            or not set(item.applies_to_rule_refs) <= known_refs
+            or set(item.applies_to_rule_refs) & refs]
+
+
 def review_entries(source: ProtocolDeconstructionInput, draft: ProtocolDeconstructionDraft,
                    *, scoped_stages: bool = False) -> list[dict]:
     entries = []
@@ -44,6 +55,9 @@ def review_entries(source: ProtocolDeconstructionInput, draft: ProtocolDeconstru
         if draft.variable_definitions is not None:
             payload["variables"] = [item.model_dump(mode="json") for item in draft.variable_definitions
                                     if item.variable_id in used_variables]
+        interpretations = _interpretation_payload(source, draft, {rule.rule_id, rule.official_code})
+        if interpretations:
+            payload["interpretations"] = interpretations
         entries.append({"official_code": rule.official_code, "kind": "rule", "label": rule.source_text,
                         "rule_content_hash": canonical_hash(payload),
                         "source_refs": refs, "issue_refs": [rule.rule_id, rule.official_code, *sorted(ids), *refs]})
@@ -68,6 +82,9 @@ def review_entries(source: ProtocolDeconstructionInput, draft: ProtocolDeconstru
         if draft.variable_definitions is not None:
             payload["variables"] = [value.model_dump(mode="json") for value in draft.variable_definitions
                                     if value.variable_id in {entry.proposed_requirement.variable_id for entry in requirements}]
+        interpretations = _interpretation_payload(source, draft, {item.item_id})
+        if interpretations:
+            payload["interpretations"] = interpretations
         entries.append({"official_code": item.item_id, "kind": "procedure", "label": item.label,
                         "rule_content_hash": canonical_hash(payload), "source_refs": list(item.source_span_ids),
                         "issue_refs": [item.item_id, *item.source_span_ids]})
@@ -82,8 +99,6 @@ def _formal_review_history(session, source, draft, seen_drafts):
     from app.storage.codecs import verify_payload_sha256
     from app.workflow.jobstore import JobStore
     from app.services.protocol_workbench_service import STEP_AWAIT_IDENTITY, STEP_FREEZE, STEP_GENERATE
-    if source.interpretation_sources:
-        return [], {}
     store = JobStore(session)
     jobs = session.scalars(select(JobRecord).where(
         JobRecord.job_type == "protocol_deconstruction",
@@ -113,8 +128,8 @@ def _formal_review_history(session, source, draft, seen_drafts):
                 baseline_source = ProtocolDeconstructionInput.model_validate(frozen_parent[1]["source_input"])
                 break
         if (baseline_source is None or baseline_source.protocol_version_id != baseline.protocol_version_id
-                or source.model_dump(exclude={"protocol_version_id"})
-                   != baseline_source.model_dump(exclude={"protocol_version_id"})):
+                or source.model_dump(exclude={"protocol_version_id", "interpretation_sources", "interpretation_source_ids"})
+                   != baseline_source.model_dump(exclude={"protocol_version_id", "interpretation_sources", "interpretation_source_ids"})):
             continue
         baseline_entries, history = current_reviews(session, baseline_source, baseline.content,
                                                     _seen_drafts=seen_drafts)

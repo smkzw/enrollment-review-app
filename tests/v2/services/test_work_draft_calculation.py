@@ -169,8 +169,9 @@ def test_binding_source_type_refinement_is_not_a_change_to_other_source_policies
     (False, "sampling", True, "false", D.INDETERMINATE),
     (True, "sampling", True, "false", D.INCLUSION_NOT_MET),
 ])
-def test_source_relation_cannot_bypass_deterministic_time_proof(anchor, role, exact, truth, expected):
-    window = TimeConstraint(anchor_type=AnchorType.SCREENING_DATE, direction=TimeDirection.BEFORE,
+@pytest.mark.parametrize("anchor_type", [AnchorType.SCREENING_DATE, AnchorType.REVIEW_NODE_DATE])
+def test_source_relation_cannot_bypass_deterministic_time_proof(anchor, role, exact, truth, expected, anchor_type):
+    window = TimeConstraint(anchor_type=anchor_type, direction=TimeDirection.BEFORE,
         upper_bound_days=7)
     rules, _, component = clause(time=window)
     component.expression.predicate.requires_professional_judgment = True
@@ -188,6 +189,38 @@ def test_source_relation_cannot_bypass_deterministic_time_proof(anchor, role, ex
     assert result.decision == expected and result.system_issue is None
     if expected == D.INDETERMINATE:
         assert "不能直接认作落入规定期间" in result.reason_text
+
+
+@pytest.mark.parametrize("stage,expected_ids,expected_decision", [
+    (ReviewStage.SCREENING, ("fact-snapshot",), D.INCLUSION_MET),
+    (ReviewStage.BASELINE, (), D.INDETERMINATE),
+])
+def test_node_relative_calendar_window_rechecks_this_stage_not_prior_stage(stage, expected_ids, expected_decision):
+    window = TimeConstraint(anchor_type=AnchorType.REVIEW_NODE_DATE, direction=TimeDirection.BEFORE,
+        upper_bound=TimeQuantity(value=3, unit="month"))
+    rules, projected, component = clause(time=window)
+    fact = material(day=date(2024, 12, 31))
+    anchors = {AnchorType.SCREENING_DATE: DateValue(value=date(2025, 3, 31), precision=DatePrecision.DAY),
+               AnchorType.BASELINE_DATE: DateValue(value=date(2025, 4, 1), precision=DatePrecision.DAY)}
+    frame = frozen([fact], anchors)
+    frame.review_episode.stage = stage
+    assert select_by_variable(component, frame.facts, anchors, authority=frame.authority,
+        definitions=load_dictionary(), stage=stage)["age-limit"].fact_ids == expected_ids
+    result = calculate_work_component(projected, frame, rules, evidence_refs={})
+    assert result.decision == expected_decision and result.system_issue is None
+    assert AnchorType.REVIEW_NODE_DATE not in anchors
+
+
+@pytest.mark.parametrize("stage", [ReviewStage.BASELINE, ReviewStage.PRE_SCREENING, ReviewStage.RUN_IN])
+def test_node_relative_window_never_borrows_screening_or_stale_node_date(stage):
+    window = TimeConstraint(anchor_type=AnchorType.REVIEW_NODE_DATE, direction=TimeDirection.BEFORE,
+        upper_bound_days=7)
+    _, _, component = clause(time=window)
+    fact = material(day=date(2026, 10, 10))
+    anchors = {AnchorType.SCREENING_DATE: DateValue(value=date(2026, 10, 12), precision=DatePrecision.DAY),
+               AnchorType.REVIEW_NODE_DATE: DateValue(value=date(2026, 10, 12), precision=DatePrecision.DAY)}
+    assert not select_by_variable(component, [fact], anchors, authority=fact.authority,
+        definitions=load_dictionary(), stage=stage)["age-limit"].fact_ids
 
 
 @pytest.mark.parametrize("kind", [RuleKind.INCLUSION, RuleKind.EXCLUSION])

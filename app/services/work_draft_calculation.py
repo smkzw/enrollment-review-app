@@ -96,6 +96,17 @@ def source_record_date(fact, evidence_refs, source_pages):
     return next(iter(values)) if len(values) == 1 else None
 
 
+def review_anchor_dates(anchor_dates, stage):
+    """Only an explicit date of this stage can bind an approved node-relative window."""
+    result = dict(anchor_dates)
+    result.pop(AnchorType.REVIEW_NODE_DATE, None)
+    stage_anchor = {ReviewStage.SCREENING: AnchorType.SCREENING_DATE,
+                    ReviewStage.BASELINE: AnchorType.BASELINE_DATE}.get(stage)
+    if stage_anchor in result:
+        result[AnchorType.REVIEW_NODE_DATE] = result[stage_anchor]
+    return result
+
+
 def select_by_variable(component, facts, anchor_dates, *, authority, definitions, stage=ReviewStage.SCREENING, evidence_refs=None, source_pages=()):
     """Variable identity is explicit; display labels never select clinical evidence."""
     bindings = {}
@@ -107,7 +118,7 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                     raise ValueError("同一条件对应不同数据项目，暂不能计算")
     base = EvaluationContext(project_id=authority.project_id, subject_id=authority.subject_id,
         review_episode_id=authority.review_episode_id, evidence_snapshot_id=authority.evidence_snapshot_v2_id,
-        anchor_dates=anchor_dates)
+        anchor_dates=review_anchor_dates(anchor_dates, stage))
     result = {}
     for expression in (component.expression, component.exception_expression):
         if expression is None:
@@ -381,7 +392,7 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
         context = EvaluationContext(project_id=frozen.authority.project_id, subject_id=frozen.authority.subject_id,
             review_episode_id=frozen.authority.review_episode_id, evidence_snapshot_id=frozen.authority.evidence_snapshot_v2_id,
             accepted_fact_ids=[fact.fact_id for fact in adapted], facts=adapted,
-            anchor_dates=frozen.review_episode.anchor_dates)
+            anchor_dates=review_anchor_dates(frozen.review_episode.anchor_dates, frozen.review_episode.stage))
         if calculation_component.exception_expression is not None:
             from app.domain.expression import evaluate_component
             evaluation = evaluate_component(calculation_component, context,
