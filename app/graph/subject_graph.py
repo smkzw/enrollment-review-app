@@ -11,9 +11,11 @@ SUBJECT_GRAPH = {
 }
 
 
-def work_draft_steps():
+def work_draft_steps(semantic_batch_count=1):
     previous = ()
     for owner, step in SUBJECT_GRAPH.values():
         if owner == "work_draft_review":
-            yield step, previous
-            previous = (step,)
+            for name in ([f"semantic:{index:04d}" for index in range(semantic_batch_count)]
+                         if step == "semantic" and semantic_batch_count > 1 else [step]):
+                yield name, previous
+                previous = (name,)

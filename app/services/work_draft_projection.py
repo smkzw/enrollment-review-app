@@ -11,7 +11,7 @@ from app.services.work_draft_calculation import LABELS
 
 def project_work_draft(session, *, authority, rule_set, clause_pack, artifact_store=None):
     from app.services.eligibility_review_projection import (
-        EligibilityClauseProjection, EligibilityFactRef, EligibilityReviewProjection,
+        EligibilityClauseProjection, EligibilityFactRef, EligibilitySourceReadRef, EligibilityReviewProjection,
     )
     from app.services.work_draft_review import CALCULATION_VERSION
     ids = session.scalars(select(ReviewRunRecord.review_run_id).where(
@@ -43,7 +43,8 @@ def project_work_draft(session, *, authority, rule_set, clause_pack, artifact_st
                 rule_kind=item.rule_kind.value, text_summary=item.title, source_text=item.source_text,
                 parent_rule_code=item.official_code if item.rule_component_id is not None else None, decision=item.decision.value if item.decision else "system_issue",
                 decision_label=LABELS[item.decision] if item.decision else "系统问题", reason=item.reason_text,
-                fact_refs=refs, gap_type=None, determination_mode="restricted" if item.system_issue else "deterministic",
+                fact_refs=refs, source_read_refs=tuple(EligibilitySourceReadRef(**ref.model_dump(mode="json")) for ref in item.source_read_refs),
+                gap_type=None, determination_mode="restricted" if item.system_issue else "semantic" if item.source_read_refs else "deterministic",
                 confidence=item.confidence, confidence_reason=item.confidence_reason)
             (components if item.rule_component_id is not None else clauses).append(projection)
     else:

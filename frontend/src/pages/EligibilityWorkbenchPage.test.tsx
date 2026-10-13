@@ -143,6 +143,22 @@ function installSourcePages() {
 }
 
 describe("入排审核工作台", () => {
+  it("已核病历依据可回源但不伪装成已发布事实", async () => {
+    installSourcePages();
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, decision: "exclusion_not_triggered", decisionLabel: "未触发",
+        confidence: "low", determinationMode: "semantic", factRefs: [], sourceReadRefs: [{
+          sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
+          excerpt: "病历明确否认相关事件", disposition: "mentioned",
+        }] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const button = await screen.findByRole("button", { name: /本次判断的病历依据/ });
+    await userEvent.click(button);
+    expect(screen.queryByText("当前条款没有已采用事实，可浏览全部原件页核实。")).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("原始资料查看区"))
+      .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+  });
   it("检索发现可打开正确原件但不会显示成已采用事实", async () => {
     installSourcePages();
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,

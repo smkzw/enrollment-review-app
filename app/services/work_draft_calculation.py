@@ -234,7 +234,7 @@ def absence_policy(clause, frozen, definitions):
     return count, has_history
 
 
-def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
+def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_results=None):
     from app.storage.repositories import ScopeViolationError
     if any((fact.authority.project_id, fact.authority.subject_id, fact.authority.review_episode_id) != (
             frozen.authority.project_id, frozen.authority.subject_id, frozen.authority.review_episode_id) for fact in frozen.facts):
@@ -268,7 +268,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
         return WorkDraftItem(**common, decision=D.NOT_DUE, reason_text="本条要求属于后续审核节点。")
     predicates = [predicate for expression in (component.expression, component.exception_expression)
                   if expression is not None for predicate in iter_atomic_predicates(expression)]
-    policy = absence_policy(clause, frozen, definitions)
+    has_source_relations = bool(source_results and any(
+        f"{clause.rule_component_id}:{p.predicate_id}" in source_results for p in predicates))
+    policy = None if has_source_relations else absence_policy(clause, frozen, definitions)
     if policy == "mentioned":
         return WorkDraftItem(**common, decision=D.INDETERMINATE,
             reason_text="本次资料中有相关字样，但尚未形成可用于本条的记录，请核对具体原文。")
@@ -279,24 +281,26 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
             confidence_reason=None if history else "本次资料范围内没有病历或既往史类资料。",
             reason_text=f"本次资料（{count}份）未见相关记录；仅限已提供且已读取的范围。",
             policy_group="not_seen_in_supplied_records")
-    if component.repeat_trigger_conditions or any(predicate.source_computation is not None or predicate.repeat_scheme is not None
-            or predicate.occurrence_window is not None or predicate.prospective_period is not None
-            or predicate.prospective_window is not None for predicate in predicates):
-        issue = _issue(clause.official_code, "系统暂不能完成本条特殊计算或多次记录关系的核对。")
-        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
-    if any(predicate.semantic_proposition or predicate.applicable_population for predicate in predicates):
-        issue = _issue(clause.official_code, "本条还需要核对语义或适用人群，当前工作稿尚未接入这部分判断。")
-        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
-    if any(definitions[req.variable_id].value_type == "exposure" for req in due if req.variable_id in definitions):
-        issue = _issue(clause.official_code, "本条需要核对用药记录的性质及对应时间，当前工作稿尚未接入这部分判断。")
-        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
-    if any(predicate.requires_professional_judgment for predicate in predicates):
-        issue = _issue(clause.official_code, "本条需要核对研究者书面判断，当前工作稿尚未接入这部分核查。")
-        return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
+    relations = {p.predicate_id: source_results[f"{clause.rule_component_id}:{p.predicate_id}"]
+                 for p in predicates if source_results and f"{clause.rule_component_id}:{p.predicate_id}" in source_results}
+    from app.domain.contracts.work_draft import WorkDraftSourceRef
+    source_refs = [WorkDraftSourceRef.model_validate(ref) for row in relations.values()
+                   for ref in row.get("source_read_refs", ())]
+    common["source_read_refs"] = source_refs
+    common["input_hash"] = canonical_hash({"calculation_input": input_hash, "source_relations": relations})
     try:
         selection = select_by_variable(component, frozen.facts, frozen.review_episode.anchor_dates,
             authority=frozen.authority, definitions=definitions, stage=frozen.review_episode.stage,
             evidence_refs=evidence_refs, source_pages=getattr(frozen, "source_pages", ()))
+        needs_source = {p.predicate_id for p in predicates if p.requires_professional_judgment
+            or p.semantic_proposition or p.applicable_population or p.prospective_period or p.prospective_window}
+        needs_source.update(pid for req in due if req.variable_id in definitions
+            and definitions[req.variable_id].value_type == "exposure" for pid in req.predicate_ids)
+        # A normalizer's generic value/EXISTS result is not proof of a written
+        # judgment, a future intention or an actual medication-use relationship.
+        for pid in needs_source:
+            selection[pid] = VariableSelection((), selection[pid].considered_fact_ids,
+                date_uncertain=selection[pid].date_uncertain)
         selected_ids = {fact_id for value in selection.values() for fact_id in value.fact_ids}
         selected = [fact for fact in frozen.facts if fact.fact_id in selected_ids]
         if any(value.calculation_unverified_ids and not value.fact_ids for value in selection.values()):
@@ -360,7 +364,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
         from app.domain.contracts.enums import ExpectationStatus, GapType
         from app.domain.gates.assessment import RequirementGapState
         observed = {req.requirement_id for req in due if req.predicate_ids
-            and all(selection.get(pid) and selection[pid].fact_ids for pid in req.predicate_ids)}
+            and all(selection.get(pid) and selection[pid].fact_ids
+                    or pid in relations and relations[pid]["truth"] != TruthValue.UNKNOWN.value
+                    for pid in req.predicate_ids)}
         observed.update(req.requirement_id for req in due
             if any(req.requirement_id in fact.supported_requirement_ids for fact in selected))
         # WP2 retained the source requirement and appended derived bindings. Its
@@ -381,14 +387,66 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
             context=context, episode_stage=frozen.review_episode.stage, expectations=expectations,
             conflicts=[], predicate_fact_ids={key: value.fact_ids for key, value in selection.items()},
             unverified_predicate_ids=frozenset(key for key, value in selection.items() if not value.fact_ids))
+        if relations:
+            from app.domain.expression import ComponentEvaluation, EvaluationResult, _combine_bound_expression
+            from app.domain.gates.assessment import derive_component_decision, derive_gate_gap_types
+            values = dict(outcome.evaluation.predicate_evaluations)
+            for pid, row in relations.items():
+                truth = TruthValue(row["truth"])
+                if truth != TruthValue.UNKNOWN and not row.get("source_read_refs"):
+                    raise ValueError("原文关系缺少逐字来源或已查范围")
+                values[pid] = EvaluationResult(truth=truth,
+                    reason_codes=["source_conflict"] if row["conflict"] else [] if truth != TruthValue.UNKNOWN else ["observation_unverified"])
+            evaluation = ComponentEvaluation(applicable=TruthValue.FALSE if any(
+                p.applicable_population is not None and relations.get(p.predicate_id, {}).get("applicable") == "no"
+                for p in predicates) else TruthValue.TRUE,
+                trigger=_combine_bound_expression(calculation_component.expression, values),
+                exception=_combine_bound_expression(calculation_component.exception_expression, values)
+                    if calculation_component.exception_expression is not None else None,
+                predicate_evaluations=values)
+            # An absent sibling cannot block a result that stays identical under
+            # both counterfactual values. Keep source requirements unrelated to it.
+            inactive_predicates = set()
+            for pid, value in values.items():
+                if value.truth != TruthValue.UNKNOWN:
+                    continue
+                signatures = set()
+                for possible in (TruthValue.TRUE, TruthValue.FALSE):
+                    variant = {**values, pid: EvaluationResult(truth=possible)}
+                    t = _combine_bound_expression(calculation_component.expression, variant).truth
+                    e = _combine_bound_expression(calculation_component.exception_expression, variant).truth if calculation_component.exception_expression else None
+                    signatures.add((t, e if t == TruthValue.TRUE else None))
+                if signatures == {(evaluation.trigger.truth,
+                        evaluation.exception.truth if evaluation.exception and evaluation.trigger.truth == TruthValue.TRUE else None)}:
+                    inactive_predicates.add(pid)
+            inactive_requirements = {req.requirement_id for req in due if req.predicate_ids
+                and set(req.predicate_ids) <= inactive_predicates}
+            for original in due:
+                derived = [req for req in due if req.variable_id is not None and len(req.predicate_ids) == 1
+                    and req.requirement_id == "variable_requirement:" + sha256(":".join((
+                        component.rule_component_id, req.predicate_ids[0], original.requirement_id)).encode()).hexdigest()[:32]]
+                if original.variable_id is None and derived and all(req.requirement_id in inactive_requirements for req in derived):
+                    inactive_requirements.add(original.requirement_id)
+            gap_component = calculation_component.model_copy(update={"evidence_requirements": [
+                req for req in calculation_component.evidence_requirements if req.requirement_id not in inactive_requirements]})
+            gaps = derive_gate_gap_types(component=gap_component, evaluation=evaluation,
+                episode_stage=frozen.review_episode.stage, expectations=expectations, conflict_groups=[])
+            from dataclasses import replace
+            outcome = replace(outcome, evaluation=evaluation, gaps=frozenset(gaps),
+                decision=derive_component_decision(rule_kind=clause.kind, evaluation=evaluation, gaps=gaps))
         if GapType.CALCULATION_CAPABILITY_UNAVAILABLE in outcome.gaps:
             issue = _issue(clause.official_code, "系统暂不支持本条所需的计算方式。")
             return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)
+        if needs_source - set(relations) and outcome.decision not in DETERMINATE | {D.NOT_DUE, D.NOT_APPLICABLE}:
+            issue = _issue(clause.official_code, "本条病历及用药记录的原文核对尚未完成，已有读取内容和其他独立结果保留。")
+            return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
         used_ids = set(outcome.evaluation.trigger.used_fact_ids)
         if outcome.evaluation.exception is not None and outcome.evaluation.trigger.truth == TruthValue.TRUE:
             used_ids.update(outcome.evaluation.exception.used_fact_ids)
         used = [fact for fact in selected if fact.fact_id in used_ids]
         low_reason = next(("所用记录有需要核对的识别或归属标记。" for fact in used if fact.risk_flags), None)
+        if low_reason is None and relations:
+            low_reason = "依据病历原文关系核对；请重点查看所列摘录及资料范围。"
         if low_reason is None and any(value.calculation_unverified_ids for value in selection.values()):
             low_reason = "另有相关检验记录的参考范围未核实，本结论仅依据已有完整读数。"
         if low_reason is None and any(value.date_uncertain for value in selection.values()):
@@ -449,9 +507,17 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs):
             "已找到相关记录，但" + "、".join(unavailable) + "的内容、归属或适用时间尚未核实，暂不能据此完成判断。" if unavailable else
             "尚未形成可用于本条的" + "、".join(missing_labels) + "已核实记录；请查看原件及尚未采用的内容，不代表原件没有记载。" if missing_labels else
             "现有记录尚不能核对本条全部条件，请查看所列依据与具体子项。")
+        if relations:
+            notes = list(dict.fromkeys(row["reason"] for row in relations.values()))
+            reason = "；".join([*summaries, *notes])
+            if any(row["policy"] for row in relations.values()):
+                reason += "。按本次已提供且已核对资料未见排除依据，不表示原件明确否认或研究者另行签字。"
+        if any(row["conflict"] for row in relations.values()) and outcome.decision not in DETERMINATE:
+            outcome = replace(outcome, decision=D.CONFLICT)
         return WorkDraftItem(**common, decision=outcome.decision,
             confidence=("low" if low_reason else "high") if outcome.decision in DETERMINATE else None,
             confidence_reason=low_reason, reason_text=reason,
+            policy_group="not_seen_in_supplied_records" if any(row["policy"] for row in relations.values()) else None,
             evidence_refs=[ref for fact in used for ref in evidence_refs.get(fact.fact_id, ())]
                 if outcome.decision in DETERMINATE else available_refs)
     except (ValueError, TypeError) as exc:
@@ -489,6 +555,7 @@ def compose_parent(rule, children, review_run_id):
     low = any(item.confidence == "low" or item.system_issue or item.decision not in DETERMINATE | {D.NOT_APPLICABLE}
               for item in current)
     refs = {ref.locator_id + ":" + ref.fact_id: ref for item in current for ref in item.evidence_refs}
+    source_refs = {canonical_hash(ref.model_dump(mode="json")): ref for item in current for ref in item.source_read_refs}
     reason = issue.detail if issue else "；".join(f"{item.title}：{item.reason_text}" for item in children)
     if due_children and len(due_children) != len(children):
         reason = "本次节点结论仅依据已到期要求；后续要求未到期，届时须重新审核。" + reason
@@ -500,10 +567,11 @@ def compose_parent(rule, children, review_run_id):
             or "部分子项仍未核实，本结论只由已有独立依据决定。") if low and decision in DETERMINATE else None,
         reason_text=reason,
         policy_group="not_seen_in_supplied_records" if any(item.policy_group == "not_seen_in_supplied_records" for item in current) else None,
-        evidence_refs=list(refs.values()), input_hash=canonical_hash([item.input_hash for item in children]))
+        evidence_refs=list(refs.values()), source_read_refs=list(source_refs.values()),
+        input_hash=canonical_hash([item.input_hash for item in children]))
 
 
-def calculate_procedures(frozen, rule_set, *, evidence_refs):
+def calculate_procedures(frozen, rule_set, *, evidence_refs, source_results=None):
     """REQs come from the frozen published catalog, not inferred IN/EX numbers."""
     if frozen.procedure_catalog is None:
         raise ValueError("工作稿没有完整流程项目录")
@@ -540,6 +608,28 @@ def calculate_procedures(frozen, rule_set, *, evidence_refs):
             result.append(WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail))
             continue
         facts = [fact for fact in scoped if fact.variable_id in required_ids]
+        relation = (source_results or {}).get(f"procedure:{item.item_id}")
+        if relation and relation["conflict"]:
+            from app.domain.contracts.work_draft import WorkDraftSourceRef
+            result.append(WorkDraftItem(**common, decision=D.CONFLICT, reason_text=relation["reason"],
+                source_read_refs=[WorkDraftSourceRef.model_validate(ref) for ref in relation["source_read_refs"]]))
+            continue
+        if relation and relation["truth"] != TruthValue.UNKNOWN.value:
+            from app.domain.contracts.work_draft import WorkDraftSourceRef
+            source_refs = [WorkDraftSourceRef.model_validate(ref) for ref in relation["source_read_refs"]]
+            requested = set(review.result_variables if review else ())
+            found = {fact.variable_id for fact in scoped if fact.value is not None and fact.polarity.value == "affirmed"}
+            missing = requested - found
+            decision = D.REQUIREMENT_MET if relation["truth"] == TruthValue.TRUE.value else D.REQUIREMENT_NOT_MET
+            if decision == D.REQUIREMENT_MET and missing:
+                definitions = load_dictionary(rule_set.variable_definitions or ())
+                reason = "病历或报告证实操作已完成，但审定指定的结果尚未全部核实：" + "、".join(definitions[key].label_zh for key in sorted(missing))
+                result.append(WorkDraftItem(**common, decision=D.INDETERMINATE, reason_text=reason, source_read_refs=source_refs))
+            else:
+                result.append(WorkDraftItem(**common, decision=decision, confidence="low",
+                    confidence_reason="依据病历或报告的完成记录核对，结果合格性由各自条款独立判断。",
+                    reason_text=relation["reason"], source_read_refs=source_refs))
+            continue
         if not facts:
             result.append(WorkDraftItem(**common, decision=D.INDETERMINATE,
                 reason_text=f"本次资料尚未形成与{item.label}对应的已核实完成记录；请核对原件及尚未采用的内容，不代表检查未做。"))

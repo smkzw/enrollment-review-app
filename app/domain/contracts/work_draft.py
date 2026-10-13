@@ -26,7 +26,7 @@ class WorkDraftSourcePage(ContractModel):
 
 class SystemIssue(ContractModel):
     kind: Literal["method_unsupported", "page_unreadable", "model_output_invalid", "excerpt_unverified",
-                  "extraction_failed", "component_unstructured", "fact_closure_failed"]
+                  "extraction_failed", "component_unstructured", "fact_closure_failed", "model_unavailable"]
     affected_codes: list[str]
     detail: str = Field(min_length=1)
     alternative: str = Field(min_length=1)
@@ -44,6 +44,14 @@ class WorkDraftEvidenceRef(ContractModel):
     excerpt: str = Field(min_length=1)
 
 
+class WorkDraftSourceRef(ContractModel):
+    source_document_version_id: str
+    page_artifact_id: str
+    page_number: int = Field(ge=1)
+    excerpt: str | None
+    disposition: Literal["mentioned", "not_seen", "unresolved"]
+
+
 class WorkDraftItem(ContractModel):
     item_id: str
     review_run_id: str
@@ -57,6 +65,7 @@ class WorkDraftItem(ContractModel):
     confidence_reason: str | None = None
     reason_text: str
     evidence_refs: list[WorkDraftEvidenceRef] = Field(default_factory=list)
+    source_read_refs: list[WorkDraftSourceRef] = Field(default_factory=list, exclude_if=lambda value: not value)
     input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     policy_group: str | None = None
     system_issue: SystemIssue | None = None

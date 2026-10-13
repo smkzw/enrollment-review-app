@@ -22,6 +22,54 @@ from app.domain.contracts.work_draft import WorkDraftEvidenceRef
 NOW = datetime(2026, 10, 12, tzinfo=UTC)
 
 
+@pytest.mark.parametrize("kind,truth,expected", [
+    (RuleKind.INCLUSION, "true", D.INCLUSION_MET),
+    (RuleKind.INCLUSION, "unknown", D.INDETERMINATE),
+    (RuleKind.EXCLUSION, "false", D.EXCLUSION_NOT_TRIGGERED),
+    (RuleKind.EXCLUSION, "true", D.EXCLUSION_TRIGGERED),
+])
+def test_chart_judgment_relations_enter_saved_rule_consumer(kind, truth, expected):
+    from app.domain.variables.dictionary import VariableDef
+    rules, _, component = clause(kind=kind)
+    predicate = component.expression.predicate
+    predicate.comparator, predicate.value, predicate.unit = Comparator.EXISTS, None, None
+    predicate.requires_professional_judgment = True
+    component.evidence_requirements[0].variable_id = "clinical_judgment"
+    rules.variable_definitions = [VariableDef(variable_id="clinical_judgment", label_zh="病历判断",
+        value_type="boolean", domain="history")]
+    frame = frozen([material()])
+    frame.facts, frame.source_pages = [], []
+    relation = {"truth": truth, "applicable": "yes", "conflict": False, "policy": False,
+        "relation": "supports" if truth == "true" else "refutes" if truth == "false" else "not_found",
+        "reason": "本节点病历有明确记载。" if truth != "unknown" else "本节点病历未见相关判断。",
+        "source_read_refs": [{"source_document_version_id": "document", "page_artifact_id": "page",
+            "page_number": 1, "excerpt": "本节点病历有明确记载", "disposition": "mentioned"}] if truth != "unknown" else []}
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules, evidence_refs={},
+        source_results={f"{component.rule_component_id}:{predicate.predicate_id}": relation})
+    assert result.decision == expected and result.system_issue is None
+    if truth != "unknown":
+        assert result.confidence == "low" and result.source_read_refs and not result.evidence_refs
+
+
+def test_false_base_condition_does_not_require_unrelated_positive_judgment():
+    from app.domain.variables.dictionary import VariableDef
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    first = component.expression
+    second = AtomicExpression(predicate=AtomicPredicate(predicate_id="judgment", subject="研究者",
+        attribute="病情可能影响评价", comparator=Comparator.EXISTS, requires_professional_judgment=True))
+    component.expression = LogicalExpression(operator=LogicalOperator.ALL, children=[first, second])
+    component.evidence_requirements.append(component.evidence_requirements[0].model_copy(update={
+        "requirement_id": "judgment-source", "variable_id": "clinical_judgment", "predicate_ids": ["judgment"]}))
+    rules.variable_definitions.append(VariableDef(variable_id="clinical_judgment", label_zh="病历判断",
+        value_type="boolean", domain="history"))
+    fact = material(value=17)
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([fact]), rules, evidence_refs={},
+        source_results={f"{component.rule_component_id}:judgment": {"truth": "unknown", "applicable": "yes",
+            "conflict": False, "policy": False, "relation": "not_found", "reason": "未见针对性判断", "source_read_refs": []}})
+    assert result.decision == D.EXCLUSION_NOT_TRIGGERED
+    assert result.system_issue is None
+
+
 def material(*, value=52, variable_id="age", unit="岁", day=None, snapshot="snapshot", polarity=FactPolarity.AFFIRMED):
     authority = FactAuthority(project_id="project", subject_id="subject", review_episode_id="episode",
         episode_revision=1, protocol_version_id="protocol", rule_set_id="rules", rule_set_revision=1,
@@ -350,13 +398,14 @@ def test_bad_primary_quote_is_omitted_without_losing_other_fact_refs(monkeypatch
     assert refs[a.fact_id][0].excerpt == a.assertion_basis.assertion_text
 
 
-def test_unimplemented_written_judgment_search_is_not_reported_as_missing_record():
+def test_unfinished_written_judgment_search_is_not_reported_as_missing_record():
     rules, _, component = clause()
     component.expression.predicate.requires_professional_judgment = True
     result = calculate_work_component(project_clause_pack(rules).clauses[0],
         frozen([material()]), rules, evidence_refs={})
     assert result.system_issue is not None and result.decision is None
-    assert "尚未接入" in result.reason_text
+    assert "核对尚未完成" in result.reason_text
+    assert "没有记载" not in result.reason_text
 
 
 def test_wrong_subject_is_hard_rejection():

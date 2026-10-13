@@ -589,7 +589,9 @@ function EligibilityClauseDetail({
       <section className="eligibility-detail-section" aria-labelledby="eligibility-facts-title">
         <h3 id="eligibility-facts-title">关联事实的原件位置</h3>
         {clause.factRefs.length === 0 ? (
-          <p className="eligibility-muted">{clause.determinationMode === "restricted"
+          <p className="eligibility-muted">{clause.confidence && (clause.sourceReadRefs ?? []).some((ref) => ref.excerpt)
+            ? "本次判断依据病历原文，具体摘录与页码见右侧。"
+            : clause.determinationMode === "restricted"
             ? "方案要求尚待核清，暂不据此判定病历事实。"
             : "当前条款没有关联事实。"}</p>
         ) : (
@@ -681,8 +683,11 @@ function EligibilityEvidencePanel({
     );
   }, [snapshot.state]);
   const selectedFact = clause.factRefs[selectedFactIndex] ?? clause.factRefs[0] ?? null;
+  const selectedSource = (clause.sourceReadRefs ?? []).find((ref) => ref.excerpt) ?? null;
   const referencePage = selectedFact === null
-    ? null
+    ? selectedSource === null ? null : pages.find((page) => page.pageNumber === selectedSource.pageNumber
+        && page.sourceDocumentVersionId === selectedSource.sourceDocumentVersionId
+        && page.pageArtifactId === selectedSource.pageArtifactId) ?? null
     : selectedFact.pageNumber === null
       ? null
       : pages.find((page) => page.pageNumber === selectedFact.pageNumber
@@ -692,6 +697,7 @@ function EligibilityEvidencePanel({
     review.completeProcessingRevisionId, clause.ruleComponentId,
     selectedFact?.factId, selectedFact?.locatorId, selectedFact?.sourceDocumentVersionId,
     selectedFact?.pageArtifactId, selectedFact?.pageNumber,
+    selectedSource?.pageArtifactId, selectedSource?.excerpt,
   ]);
   const selectedPage = browsedPage?.context === sourceContext
     ? pages.find((page) => page.entryId === browsedPage.entryId) ?? referencePage
@@ -725,14 +731,14 @@ function EligibilityEvidencePanel({
       </header>
       {selectedPage !== null && (
         <div className="eligibility-evidence__state" role="status">
-          <strong>{isReferencePage ? "事实来源页" : "浏览原件"}</strong>
+          <strong>{isReferencePage ? selectedFact === null ? "病历依据页" : "事实来源页" : "浏览原件"}</strong>
           <span>
             {documentNames.get(selectedPage.sourceDocumentVersionId) ?? "原始资料"}
             {` · 第 ${selectedPage.pageNumber} 页`}
           </span>
         </div>
       )}
-      {clause.factRefs.length === 0 && (
+      {clause.factRefs.length === 0 && !(clause.confidence && (clause.sourceReadRefs ?? []).some((ref) => ref.excerpt)) && (
         <p className="eligibility-muted">当前条款没有已采用事实，可浏览全部原件页核实。</p>
       )}
       {(clause.sourceReadRefs ?? []).length > 0 && (
@@ -743,7 +749,7 @@ function EligibilityEvidencePanel({
             return <li key={`${ref.pageArtifactId}-${index}`}>
               <button type="button" className="eligibility-evidence__ref" disabled={!page}
                 onClick={() => page && setBrowsedPage({ context: sourceContext, entryId: page.entryId })}>
-                <strong>{ref.disposition === "mentioned" ? "已找到相关原文，待核清" : ref.disposition === "not_seen" ? "本页未见相关记录" : "本页尚未核清"}</strong>
+                <strong>{ref.disposition === "mentioned" ? clause.confidence ? "本次判断的病历依据" : "已找到相关原文，待核清" : ref.disposition === "not_seen" ? "本页未见相关记录" : "本页尚未核清"}</strong>
                 {ref.excerpt && <span>{ref.excerpt}</span>}
                 <span>{documentNames.get(ref.sourceDocumentVersionId) ?? "原始资料"} · 第 {ref.pageNumber} 页</span>
               </button>

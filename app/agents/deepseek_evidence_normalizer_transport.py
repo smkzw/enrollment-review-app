@@ -217,6 +217,7 @@ class DeepSeekEvidenceNormalizerTransport:
         max_tokens: int | None = None,
         temperature: float | None = None,
         response_format: Mapping[str, Any] | None = None,
+        stream_response: bool = False,
         client: Any | None = None,
         receipt_callback: Callable[[dict[str, Any]], None] | None = None,
         request_callback: Callable[[dict[str, Any]], str] | None = None,
@@ -272,6 +273,7 @@ class DeepSeekEvidenceNormalizerTransport:
             temperature if temperature is not None else EVIDENCE_NORMALIZER_TEMPERATURE
         )
         self._response_format = dict(response_format) if response_format is not None else None
+        self._stream_response = stream_response
         if client is not None:
             self._client = client
         else:
@@ -401,7 +403,7 @@ class DeepSeekEvidenceNormalizerTransport:
     def initial_request_body(self, *, prompt: str) -> dict[str, Any]:
         """Describe the initial request without invoking or loading any model."""
         body = self._completion_kwargs([{"role": "user", "content": prompt}])
-        if self._backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS or self._backend in {"deepseek", "deepseek-api"}:
+        if self._stream_response or self._backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS or self._backend in {"deepseek", "deepseek-api"}:
             body.update(stream=True, stream_options={"include_usage": True})
         return body
 
@@ -512,12 +514,12 @@ class DeepSeekEvidenceNormalizerTransport:
         if self._request_callback is not None:
             receipt["request_artifact_sha256"] = self._request_callback(json.loads(encoded))
 
-    def _streaming_completion(self, kwargs):
+    def _streaming_completion(self, kwargs, *, strict_model_check=True):
         """GLM 流式补全：length 重试一次并抬升预算（上限 131072）；仅接受 stop。"""
         stream_kwargs = dict(kwargs)
         stream_kwargs["stream"] = True
         stream_kwargs["stream_options"] = {"include_usage": True}
-        completion = self._request_stream(stream_kwargs)
+        completion = self._request_stream(stream_kwargs, strict_model_check=strict_model_check)
         if completion.choices and completion.choices[0].finish_reason == "length":
             retry_kwargs = dict(stream_kwargs)
             retry_kwargs["max_tokens"] = min(
@@ -525,8 +527,10 @@ class DeepSeekEvidenceNormalizerTransport:
                 EVIDENCE_NORMALIZER_LENGTH_RETRY_MAX_TOKENS,
             )
             if retry_kwargs["max_tokens"] > kwargs["max_tokens"]:
-                completion = self._request_stream(retry_kwargs)
+                completion = self._request_stream(retry_kwargs, strict_model_check=strict_model_check)
         finish = completion.choices[0].finish_reason if completion.choices else None
+        if not completion.model:
+            raise RuntimeError("流式响应未报告实际模型身份，拒绝采信结果")
         if finish != "stop":
             raise RuntimeError(
                 f"GLM 流式响应未完整结束（finish_reason={finish!r}），拒绝采信部分结果"
@@ -540,8 +544,9 @@ class DeepSeekEvidenceNormalizerTransport:
             kwargs["response_format"] = {"type": "json_schema", "json_schema": {
                 "name": "question_classification_proposal", "strict": True, "schema": output_schema}}
         try:
-            if self._backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS:
-                completion = self._streaming_completion(kwargs)
+            if self._backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS or self._stream_response:
+                completion = self._streaming_completion(kwargs,
+                    strict_model_check=self._backend != "cms-router")
             elif self._backend in {"deepseek", "deepseek-api"}:
                 # 云端网关（cms-router）对长生成有短超时，非流式会在首字前被
                 # 504 截断；与 GLM 道一致统一流式累积（2026-09-19 用户指令）。
@@ -742,6 +747,7 @@ def evidence_normalizer_transport_from_model_config(
             reasoning_effort=model_config.reasoning_effort,
             max_tokens=max_tokens,
             temperature=temperature,
+            stream_response=parameters.get("stream_response", False) is True,
             response_format=(
                 None if provider == "ollama-cloud" else {"type": "json_object"}
             ),

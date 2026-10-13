@@ -162,6 +162,26 @@ def _glm_stream_client(create):
     )
 
 
+def test_cms_chart_role_opts_into_streaming_without_rerouting_other_roles():
+    requests, receipts = [], []
+    def create(**kwargs):
+        requests.append(kwargs)
+        return _FakeStream([_stream_chunk(content='{"results":[]}', model="glm-5.3-flash", finish="stop"),
+            _stream_chunk(model="glm-5.3-flash", usage={"prompt_tokens": 12, "completion_tokens": 5, "total_tokens": 17})])
+    model = ModelConfigContract(model_config_id="chart-role", provider="cms-router", model="glm-5.3-flash",
+        reasoning_effort="high", parameters={"max_tokens": 65536, "stream_response": True})
+    transport = transport_module.evidence_normalizer_transport_from_model_config(model,
+        client=_glm_stream_client(create), receipt_callback=receipts.append)
+    result = transport.propose_question_classifications(prompt="合成资料", output_schema={"type": "object"})
+    assert result.text == '{"results":[]}'
+    assert requests[0]["stream"] is True and requests[0]["max_tokens"] == 65536
+    assert requests[0]["reasoning_effort"] == "high" and "temperature" not in requests[0]
+    assert receipts[0]["usage"]["total_tokens"] == 17 and receipts[0]["response_model"] == "glm-5.3-flash"
+    other = transport_module.evidence_normalizer_transport_from_model_config(
+        model.model_copy(update={"parameters": {"max_tokens": 65536}}), client=_glm_stream_client(create))
+    assert "stream" not in other.initial_request_body(prompt="合成资料")
+
+
 @pytest.mark.parametrize("second_fails", [False, True])
 def test_completion_receipts_preserve_length_retry_and_failure(second_fails):
     receipts, budgets, requests = [], [], []

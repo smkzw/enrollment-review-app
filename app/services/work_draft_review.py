@@ -5,6 +5,7 @@ from uuid import uuid4
 from sqlalchemy import select
 
 from app.domain.contracts.review import ReviewRun
+from app.domain.contracts.enums import ComponentDecision
 from app.domain.contracts.work_draft import SystemIssue, WorkDraftEvidenceRef, WorkDraftItem
 from app.domain.publication import canonical_hash
 from app.graph.subject_graph import work_draft_steps
@@ -21,13 +22,15 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v12"
+CALCULATION_VERSION = "work-draft/0.2.0-v15"
 
 
 def enqueue_normalized_work_draft(session, *, authority, run_id):
     """Queue only: an unavailable review consumer cannot undo successful fact publication."""
+    from app.services.work_draft_semantics import runtime_model
+    model = runtime_model()
     key = canonical_hash({"normalization_run_id": run_id, "authority": authority.model_dump(mode="json"),
-                          "calculation_version": CALCULATION_VERSION})
+                          "calculation_version": CALCULATION_VERSION, "semantic_model": model.model_dump(mode="json")})
     receipt, created = IdempotencyRepository(session).resolve(scope="automatic-work-draft",
         idempotency_key=key, submitted_hash=key, result_type="work_draft_job", result_id=uuid4().hex)
     if created:
@@ -35,10 +38,10 @@ def enqueue_normalized_work_draft(session, *, authority, run_id):
         store.create_job(job_id=receipt.result_id, job_type=JOB_TYPE, progress_total=4,
             payload={"normalization_run_id": run_id, "authority": authority.model_dump(mode="json"),
                      "subject_id": authority.subject_id, "review_episode_id": authority.review_episode_id,
-                     "calculation_version": CALCULATION_VERSION})
+                     "calculation_version": CALCULATION_VERSION, "semantic_model": model.model_dump(mode="json")})
         for step, depends_on in work_draft_steps():
             store.create_step(job_id=receipt.result_id, step_id=step,
-                name={"calculate": "核对确定性条件", "semantic": "登记待核实判断",
+                name={"calculate": "核对确定性条件", "semantic": "核对病历原文与条件关系",
                       "compose": "合并条款结果", "save": "保存工作稿"}[step], depends_on=depends_on)
     return {"job_id": receipt.result_id}
 
@@ -109,12 +112,19 @@ class WorkDraftReviewService:
             preview = assemble_review_context(session, self.artifact_store, review_episode_id=review_episode_id,
                 review_run_id="pending", evaluator_version=CALCULATION_VERSION,
                 created_at=datetime.now(UTC), work_draft=True)
+            from app.services.work_draft_semantics import BATCH_SIZE, runtime_model, targets_for_review
+            rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
+            targets = targets_for_review(preview, rule_set)
+            model = runtime_model() if targets else None
+            batches = [targets[index:index + BATCH_SIZE] for index in range(0, len(targets), BATCH_SIZE)] or [[]]
             identity = canonical_hash({"authority": authority.model_dump(mode="json"),
                 "rule_set_sha256": preview.rule_set_sha256,
                 "clinical_facts": [item.model_dump(mode="json") for item in preview.facts],
                 "system_issues": [item.model_dump(mode="json") for item in preview.system_issues],
                 "source_pages": [item.model_dump(mode="json") for item in preview.source_pages],
-                "calculation_version": CALCULATION_VERSION})
+                "calculation_version": CALCULATION_VERSION,
+                "semantic_model": model.model_dump(mode="json") if model else None,
+                "semantic_batches": batches})
             receipt, created = IdempotencyRepository(session).resolve(scope=f"work-draft:{review_episode_id}",
                 idempotency_key=identity, submitted_hash=identity, result_type="work_draft_job", result_id=uuid4().hex)
             store = JobStore(session)
@@ -125,11 +135,14 @@ class WorkDraftReviewService:
                 store.create_job(job_id=receipt.result_id, job_type=JOB_TYPE,
                     payload={"context_id": frozen.context_id, "review_run_id": frozen.review_run_id,
                              "review_episode_id": review_episode_id, "subject_id": subject_id,
-                             "calculation_version": CALCULATION_VERSION, "input_hash": identity}, progress_total=4)
-                for step, depends_on in work_draft_steps():
+                             "calculation_version": CALCULATION_VERSION, "input_hash": identity,
+                             "semantic_model": model.model_dump(mode="json") if model else None,
+                             "semantic_batches": batches}, progress_total=3 + len(batches))
+                for step, depends_on in work_draft_steps(len(batches)):
                     store.create_step(job_id=receipt.result_id, step_id=step,
-                        name={"calculate": "核对确定性条件", "semantic": "登记待核实判断",
-                              "compose": "合并条款结果", "save": "保存工作稿"}[step], depends_on=depends_on)
+                        name="核对病历原文与条件关系" if step.startswith("semantic") else
+                            {"calculate": "核对确定性条件", "compose": "合并条款结果", "save": "保存工作稿"}[step],
+                        depends_on=depends_on)
             return self.status(subject_id=subject_id, review_episode_id=review_episode_id,
                                job_id=receipt.result_id, session=session)
 
@@ -220,13 +233,67 @@ class WorkDraftReviewService:
                         input_hash=canonical_hash(clause.model_dump(mode="json"))))
                 return {"items": [item.model_dump(mode="json") for item in items],
                     "source_issues": [issue.model_dump(mode="json") for issue in source_issues]}
-            if context.step_id == "semantic":
-                return {"semantic_results": [], "implementation": "WP5_pending"}
+            if context.step_id.startswith("semantic"):
+                from app.domain.contracts.agents import ModelConfigContract
+                from app.services.work_draft_semantics import read_source_relations, runtime_model, targets_for_review
+                batches = payload.get("semantic_batches") or [targets_for_review(frozen, rule_set)]
+                for prior in store.list_steps(context.job_id):
+                    if prior.step_id == context.step_id or not prior.step_id.startswith("semantic"):
+                        continue
+                    checkpoint = store.get_last_checkpoint(context.job_id, prior.step_id)
+                    if checkpoint and checkpoint[1].get("provider_blocked"):
+                        return {"results": {}, "calls": [], "provider_blocked": True,
+                            "blocked_by_step": prior.step_id, "error": "病例核对模型访问受限，本批未重复请求。"}
+                index = int(context.step_id.split(":")[1]) if ":" in context.step_id else 0
+                model = ModelConfigContract.model_validate(payload["semantic_model"]) if payload.get("semantic_model") else runtime_model()
+                # No database transaction is held while the product model reads sources.
+                session.close()
+                return read_source_relations(frozen, batches[index], model, self.artifact_store)
             calculated = store.get_last_checkpoint(context.job_id, "calculate")
             if calculated is None:
                 raise ScopeViolationError("缺少已保存的组件计算结果")
             items = [WorkDraftItem.model_validate(value) for value in calculated[1]["items"]]
             if context.step_id == "compose":
+                from app.services.work_draft_semantics import targets_for_review
+                source_results, failed_components, provider_blocked_components = {}, {}, set()
+                for step in store.list_steps(context.job_id):
+                    if not step.step_id.startswith("semantic"):
+                        continue
+                    checkpoint = store.get_last_checkpoint(context.job_id, step.step_id)
+                    if checkpoint is None:
+                        raise ScopeViolationError("缺少本批次已保存的原文核对结果")
+                    source_results.update(checkpoint[1].get("results", {}))
+                    if checkpoint[1].get("error"):
+                        batches = payload.get("semantic_batches") or [targets_for_review(frozen, rule_set)]
+                        index = int(step.step_id.split(":")[1]) if ":" in step.step_id else 0
+                        failed_ids = set(checkpoint[1].get("error_target_ids", [target["target_id"] for target in batches[index]]))
+                        failed_components.update({target["component_id"]: checkpoint[1]["error"]
+                            for target in batches[index] if target["target_id"] in failed_ids})
+                        if checkpoint[1].get("provider_blocked"):
+                            provider_blocked_components.update(target["component_id"] for target in batches[index]
+                                if target["target_id"] in failed_ids)
+                refs = _fact_refs(session, frozen, self.artifact_store)
+                frame = frozen.model_copy(update={"facts": tuple(fact for fact in frozen.facts if fact.fact_id in refs)})
+                items = [calculate_work_component(clause, frame, rule_set, evidence_refs=refs,
+                    source_results=source_results) for clause in frozen.clause_pack.clauses]
+                items.extend(calculate_procedures(frame, rule_set, evidence_refs=refs, source_results=source_results))
+                for item in items:
+                    if item.rule_component_id in failed_components and item.decision not in {
+                            ComponentDecision.NOT_DUE, ComponentDecision.NOT_APPLICABLE}:
+                        from app.services.work_draft_calculation import DETERMINATE
+                        if item.decision not in DETERMINATE:
+                            item.decision = None
+                            item.confidence = None
+                            item.confidence_reason = None
+                            blocked = item.rule_component_id in provider_blocked_components
+                            item.system_issue = SystemIssue(kind="model_unavailable" if blocked else "model_output_invalid",
+                                affected_codes=[item.official_code],
+                                detail="病例核对模型访问受限，尚未完成本条病历核对。" if blocked else
+                                    "本条原文核对未完成；已有其他独立结论和原件均保留。",
+                                alternative="模型恢复或启用已批准连接后只核未完成范围；原件和已核结果保留。")
+                            item.reason_text = item.system_issue.detail
+                items.extend(WorkDraftItem.model_validate(value) for value in calculated[1]["items"]
+                    if (value.get("system_issue") or {}).get("kind") == "component_unstructured")
                 for rule in rule_set.rules:
                     if rule.kind.value == "required_procedure":
                         continue

@@ -87,7 +87,7 @@
   background: var(--color-brand-bg);
   color: var(--color-brand-dark);
   font-weight: 500;
-  box-shadow: inset 3px 0 0 var(--color-brand);
+  box-shadow: var(--shadow-control-hover);
 }
 
 .side-nav__icon {
