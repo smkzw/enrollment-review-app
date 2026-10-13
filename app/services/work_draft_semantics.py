@@ -62,6 +62,18 @@ def decode_source_aliases(payload, aliases):
     return payload
 
 
+def source_result_envelope(payload, material):
+    """Accept only exact input-identity echoes; never ignore arbitrary result fields."""
+    if not isinstance(payload, dict) or "results" not in payload:
+        raise ValueError("原文核对结果缺少条目")
+    extra = set(payload) - {"results"}
+    if not extra <= {"version", "stage", "anchor_dates"}:
+        raise ValueError("原文核对返回了未授权的结果字段")
+    if any(payload[key] != material[key] for key in extra):
+        raise ValueError("原文核对回执的版本、节点或日期与本次输入不一致")
+    return {"results": payload["results"]}
+
+
 def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_store):
     """Recheck actual frozen requests/answers, not a reconstructed historical prompt.
 
@@ -90,7 +102,10 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
         request = json.loads(artifact_store.read_by_sha("raw_request", call["request_artifact_sha256"]))
         if not request["messages"][0]["content"].startswith(SEMANTIC_INSTRUCTIONS + "每个target_id"):
             continue
-        actual = json.loads(request["messages"][0]["content"].split("\n", 1)[1])
+        body = request["messages"][0]["content"].split("\n", 1)[1]
+        actual, offset = json.JSONDecoder().raw_decode(body)
+        if body[offset:].strip() and not body[offset:].strip().startswith("上一回答未通过确定性核对："):
+            continue
         schema = json.loads(json.dumps(actual["output_schema"]))
         for definition, field in (("SourceRelation", "target_id"), ("SourceQuote", "page_artifact_id")):
             schema["$defs"][definition]["properties"][field].pop("enum", None)
@@ -113,6 +128,8 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
             continue
         try:
             raw = _extract_single_json_object(saved["text"])
+            echoed_identity = bool(set(raw) - {"results"})
+            raw = source_result_envelope(raw, actual)
             if aliases:
                 raw = decode_source_aliases(raw, aliases)
             valid, _ = split_valid_relations(raw, selected, pages)
@@ -127,7 +144,7 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
                         continue
                 elif any(value.get(field) != prior.get(field) for field in fields):
                     continue
-            elif value["truth"] != TruthValue.UNKNOWN.value:
+            elif value["truth"] != TruthValue.UNKNOWN.value and not echoed_identity:
                 # Revalidation may retain uncertainty, not newly qualify a
                 # direction that the original read failed to establish.
                 continue
@@ -421,6 +438,7 @@ def read_source_relations(frozen, targets, model, artifact_store, *, transport_f
                 raw = _extract_single_json_object(response.text)
             except JudgmentSearchReaderError as exc:
                 raise ValueError(str(exc)) from exc
+            raw = source_result_envelope(raw, material)
             raw = decode_source_aliases(raw, aliases)
             valid, errors = split_valid_relations(raw, pending, pages)
             accepted.update(valid)

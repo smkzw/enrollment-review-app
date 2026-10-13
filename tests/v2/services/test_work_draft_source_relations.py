@@ -186,6 +186,16 @@ def test_compact_input_preserves_clinical_dependencies_and_only_maps_declared_al
     assert decoded["results"][0]["quotes"][0]["page_artifact_id"] == "page"
 
 
+def test_exact_scope_echo_is_not_a_missing_target_but_other_fields_still_rejected():
+    from app.services.work_draft_semantics import source_result_envelope
+    material = {"version": "scope", "stage": "screening", "anchor_dates": {"screening_date": "2026-01-01"}}
+    payload = {**material, "results": []}
+    assert source_result_envelope(payload, material) == {"results": []}
+    for change in ({"stage": "baseline"}, {"version": "different"}, {"exclusion_triggered": False}):
+        with pytest.raises(ValueError):
+            source_result_envelope({**payload, **change}, material)
+
+
 @pytest.mark.parametrize("mutation", [None, "source", "target", "policy", "model", "truncated"])
 def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutation):
     import json
