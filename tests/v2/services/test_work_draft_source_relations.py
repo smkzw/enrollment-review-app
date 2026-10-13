@@ -39,11 +39,20 @@ def test_verified_chart_relation_uses_original_page_not_fake_fact():
 @pytest.mark.parametrize("change", [
     {"quotes": [{"page_artifact_id": "other-patient", "excerpt": "否认近期感染"}]},
     {"quotes": [{"page_artifact_id": "page", "excerpt": "未感染"}]},
-    {"quotes": []}, {"time_matches": False}, {"object_matches": False},
+    {"quotes": []},
 ])
 def test_unverified_positive_or_negative_relation_is_rejected(change):
     with pytest.raises(ValueError):
         validate_relations({"results": [row(**change).model_dump()]}, [target()], [page()])
+
+
+@pytest.mark.parametrize("change", [{"time_matches": False}, {"object_matches": False},
+    {"relation": "not_found"}])
+def test_valid_quote_with_uncertain_dimensions_is_retained_but_never_determinate(change):
+    validated = validate_relations({"results": [row(**change).model_dump()]}, [target()], [page()])[0]
+    result = relation_inputs(validated, target(), [page()])
+    assert result["truth"] == "unknown" and not result["policy"]
+    assert result["source_read_refs"][0]["excerpt"] == "否认近期感染"
 
 
 @pytest.mark.parametrize("kind,complete,category,expected", [
@@ -128,9 +137,10 @@ def test_source_reader_retries_only_bad_target_and_preserves_first_answer():
     class Transport:
         def propose_question_classifications(self, *, prompt, output_schema):
             prompts.append(prompt)
-            values = [row().model_dump(), row(target_id="component:other",
-                quotes=[{"page_artifact_id": "page", "excerpt": "伪造摘录"}]).model_dump()] if len(prompts) == 1 else [
-                row(target_id="component:other").model_dump()]
+            wire = json.loads(prompt.split("\n", 1)[1])
+            values = [row(target_id=t["target_id"], quotes=[{"page_artifact_id": "P01",
+                "excerpt": "伪造摘录" if len(prompts) == 1 and t["target_id"] == "T02" else "否认近期感染"}]).model_dump()
+                for t in wire["targets"]]
             return SimpleNamespace(text=json.dumps({"results": values}, ensure_ascii=False))
     class Artifacts:
         def put(self, kind, body):
@@ -138,7 +148,7 @@ def test_source_reader_retries_only_bad_target_and_preserves_first_answer():
     result = read_source_relations(frame, [target(), other], model, Artifacts(), transport_factory=lambda _: Transport())
     assert len(prompts) == 2 and set(result["results"]) == {"component:infection", "component:other"}
     second = json.loads(prompts[1].split("\n", 1)[1])
-    assert [t["target_id"] for t in second["targets"]] == ["component:other"]
+    assert [t["target_id"] for t in second["targets"]] == ["T02"]
     assert "error" not in result and len(result["raw_refs"]) == 2
 
 
@@ -158,6 +168,54 @@ def test_numeric_source_relation_must_use_literal_operands_and_code_comparison(v
     relation_row = row(relation=relation, quotes=[{"page_artifact_id": "page", "excerpt": source.effective_text}]).model_copy(
         update={"observed_value": value, "observed_unit": unit})
     assert relation_inputs(relation_row, numeric_target, [source])["truth"] == expected
+
+
+def test_compact_input_preserves_clinical_dependencies_and_only_maps_declared_aliases():
+    from app.services.work_draft_semantics import wire_target, decode_source_aliases
+    original = {**target(), "component_id": "host-only", "atom": {"predicate": {
+        "predicate_id": "host-predicate", "comparator": "gte", "value": 4, "unit": "day",
+        "dependency": {"component_id": "source-relation-must-remain"}, "not_known": None}}}
+    compact = wire_target(original)
+    assert "component_id" not in compact and "predicate_id" not in compact["atom"]["predicate"]
+    assert compact["atom"]["predicate"]["dependency"]["component_id"] == "source-relation-must-remain"
+    assert compact["atom"]["predicate"]["value"] == 4 and original["component_id"] == "host-only"
+    decoded = decode_source_aliases({"results": [row(target_id="T01", quotes=[{
+        "page_artifact_id": "P01", "excerpt": "否认近期感染"}]).model_dump()]},
+        {"targets": {"T01": "component:infection"}, "pages": {"P01": "page"}})
+    assert decoded["results"][0]["target_id"] == "component:infection"
+    assert decoded["results"][0]["quotes"][0]["page_artifact_id"] == "page"
+
+
+@pytest.mark.parametrize("mutation", [None, "source", "target", "policy", "model", "truncated"])
+def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutation):
+    import json
+    from app.domain.contracts.agents import ModelConfigContract
+    from app.domain.contracts.enums import ReviewStage
+    from app.services.work_draft_semantics import revalidate_saved_source_read, SEMANTIC_INSTRUCTIONS, SourceRelations
+    model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture",
+        reasoning_effort="high", parameters={"max_tokens": 65536, "prompt_version": "new-format"})
+    frame = SimpleNamespace(source_pages=[page()], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+        anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
+    material = {"stage": "screening", "anchor_dates": {}, "targets": [target()], "pages": [{
+        "page_artifact_id": "page", "page_number": 1, "category": "study_chart", "text": page().effective_text}],
+        "output_schema": SourceRelations.model_json_schema()}
+    if mutation == "source": material["pages"][0]["text"] = "另一份资料"
+    if mutation == "target": material["targets"][0] = target("inclusion")
+    request = {"messages": [{"role": "user", "content":
+        ("不同语义要求" if mutation == "policy" else SEMANTIC_INSTRUCTIONS) + "每个target_id恰好返回一次。\n" + json.dumps(material,ensure_ascii=False)}]}
+    old_model = model.model_copy(update={"parameters": {"max_tokens": 65536, "prompt_version": "old-format"}}).model_dump(mode="json")
+    if mutation == "model": old_model["model"] = "different-model"
+    saved = {"model": old_model, "text": json.dumps({"results": [row().model_dump()]},ensure_ascii=False),
+        "calls": [{"finish_reason": "length" if mutation == "truncated" else "stop", "response_model": "fixture", "request_artifact_sha256": "request"}]}
+    class Artifacts:
+        def read(self, ref): return json.dumps(saved,ensure_ascii=False).encode()
+        def read_by_sha(self, kind, digest): return json.dumps(request,ensure_ascii=False).encode()
+    original_result = relation_inputs(row(), target(), [page()])
+    values, proofs = revalidate_saved_source_read({"raw_refs": ["response"], "results": {
+        "component:infection": original_result}}, frame, [target()], model, Artifacts())
+    assert bool(values) == (mutation is None)
+    if values:
+        assert values["component:infection"]["truth"] == "false" and proofs["component:infection"]["request_sha256"] == "request"
 
 
 def test_chart_role_override_does_not_change_normalizer_role(monkeypatch):

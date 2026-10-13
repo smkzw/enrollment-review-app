@@ -2,7 +2,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.domain.contracts.review import ReviewRun
 from app.domain.contracts.enums import ComponentDecision
@@ -22,7 +22,38 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v15"
+CALCULATION_VERSION = "work-draft/0.2.0-v16"
+
+
+def _reusable_source_reads(session, store, frozen, targets, model, artifact_store):
+    from app.storage.models import JobRecord
+    from app.storage.codecs import verify_payload_sha256
+    from app.services.work_draft_semantics import revalidate_saved_source_read
+    accepted, proofs = {}, {}
+    prior_jobs = session.scalars(select(JobRecord).where(JobRecord.job_type == JOB_TYPE,
+        JobRecord.state.in_({"completed", "cancelled"}),
+        func.json_extract(JobRecord.payload_json, "$.review_episode_id") == frozen.authority.review_episode_id
+        ).order_by(JobRecord.created_at.desc())).all()
+    for job in prior_jobs:
+        payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+        if not payload.get("context_id"):
+            continue
+        previous = ReviewContextV2Repository(session).get(payload["context_id"])
+        if previous.authority != frozen.authority or previous.source_pages != frozen.source_pages:
+            continue
+        for step in store.list_steps(job.job_id):
+            if not step.step_id.startswith("semantic"):
+                continue
+            checkpoint = store.get_last_checkpoint(job.job_id, step.step_id)
+            if checkpoint is None:
+                continue
+            rows, origins = revalidate_saved_source_read(checkpoint[1], frozen, targets, model, artifact_store)
+            for key, row in rows.items():
+                if key not in accepted:
+                    accepted[key] = row
+                    proofs[key] = {**origins[key], "job_id": job.job_id, "step_id": step.step_id,
+                        "checkpoint_sha256": canonical_hash(checkpoint[1])}
+    return accepted, proofs
 
 
 def enqueue_normalized_work_draft(session, *, authority, run_id):
@@ -246,9 +277,11 @@ class WorkDraftReviewService:
                             "blocked_by_step": prior.step_id, "error": "病例核对模型访问受限，本批未重复请求。"}
                 index = int(context.step_id.split(":")[1]) if ":" in context.step_id else 0
                 model = ModelConfigContract.model_validate(payload["semantic_model"]) if payload.get("semantic_model") else runtime_model()
+                reused, proofs = _reusable_source_reads(session, store, frozen, batches[index], model, self.artifact_store)
                 # No database transaction is held while the product model reads sources.
                 session.close()
-                return read_source_relations(frozen, batches[index], model, self.artifact_store)
+                return read_source_relations(frozen, batches[index], model, self.artifact_store,
+                    reused=reused, reuse_proofs=proofs)
             calculated = store.get_last_checkpoint(context.job_id, "calculate")
             if calculated is None:
                 raise ScopeViolationError("缺少已保存的组件计算结果")

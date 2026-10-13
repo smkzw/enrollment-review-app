@@ -514,6 +514,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                 reason += "。按本次已提供且已核对资料未见排除依据，不表示原件明确否认或研究者另行签字。"
         if any(row["conflict"] for row in relations.values()) and outcome.decision not in DETERMINATE:
             outcome = replace(outcome, decision=D.CONFLICT)
+        elif outcome.decision == D.PROFESSIONAL_JUDGMENT and relations:
+            outcome = replace(outcome, decision=D.INDETERMINATE)
+            reason = "对应节点病历尚无足以支持本条判断的记录，现为证据不足；不要求另外重复签名。" + reason
         return WorkDraftItem(**common, decision=outcome.decision,
             confidence=("low" if low_reason else "high") if outcome.decision in DETERMINATE else None,
             confidence_reason=low_reason, reason_text=reason,
