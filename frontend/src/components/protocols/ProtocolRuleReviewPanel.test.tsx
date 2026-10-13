@@ -129,6 +129,27 @@ describe("逐条审定", () => {
     expect(screen.queryByRole("region", { name: "逻辑解析" })).not.toBeInTheDocument();
     expect(screen.getByText("当前范围没有条目。")).toBeInTheDocument();
   });
+  it.each([
+    ["本节点已有治疗及其相对应疗效", "本节点已有治疗及其相对应疗效"],
+    ["对相对应治疗的疗效已明确否认", "对相对应治疗的疗效已明确否认"],
+    ["treatment_response", "疗效记录"],
+  ])("数据项目名不能覆盖完整条件或否定：%s", async (attribute, visible) => {
+    const content = { proposed_rules: [{ rule_id: "r", official_code: "IN-01", kind: "inclusion", source_text: entry.label,
+      components: [{ rule_component_id: "c", parent_rule_id: "r", display_code: "IN-01", title: "治疗及疗效核对",
+        expression: { kind: "predicate", predicate: { predicate_id: "response", subject: "受试者", attribute,
+          comparator: "exists", value: null, unit: null, requires_professional_judgment: true } }, exception_expression: null }] }] };
+    vi.stubGlobal("fetch", vi.fn(async url => new Response(JSON.stringify(String(url).endsWith("/variables")
+      ? { job_id: "job", draft_revision_id: "revision", variables: [{ variable_id: "response", label_zh: "疗效记录",
+            value_type: "boolean", domain: "history", canonical_unit: null, unit_conversions: {}, plausible_range: null, aliases_zh: [] }],
+          predicates: [{ component_id: "c", predicate_id: "response", label: "疗效记录", official_code: "IN-01",
+            variable_id: "response", requirements: [] }] } : initial))));
+    render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity} sources={sources}
+      content={content} onReady={vi.fn()} />);
+    const region = await screen.findByRole("region", { name: "逻辑解析" });
+    await waitFor(() => expect(region).toHaveTextContent(`${visible}：需有相应记录`));
+    expect(region).toHaveTextContent("需要研究者判断");
+    expect(region).not.toHaveTextContent("treatment_response");
+  });
   it("多子项备选默认只展开第一组，其他组可独立打开且预览不保存审定", async () => {
     const atom = (id: string) => ({ kind: "predicate", predicate: { predicate_id: id,
       subject: "受试者", attribute: "年龄", comparator: "gte", value: 18, unit: "岁" } });

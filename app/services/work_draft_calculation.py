@@ -47,6 +47,15 @@ def applicable_expression(expression, excluded_predicates):
     return expression.model_copy(update={"children": children})
 
 
+def binding_preserves_source_requirement(original, bound):
+    excluded = {"requirement_id", "variable_id", "predicate_ids"}
+    # An original without a source-type restriction permits a stricter binding,
+    # not the reverse; every other source policy must still match exactly.
+    if not original.required_source_types:
+        excluded.add("required_source_types")
+    return original.model_dump(exclude=excluded) == bound.model_dump(exclude=excluded)
+
+
 @dataclass(frozen=True)
 class VariableSelection:
     fact_ids: tuple[str, ...]
@@ -393,10 +402,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                 continue
             derived = [req for req in due if req.variable_id is not None and len(req.predicate_ids) == 1
                 and req.requirement_id == "variable_requirement:" + sha256(":".join((
-                    component.rule_component_id, req.predicate_ids[0], original.requirement_id)).encode()).hexdigest()[:32]
-                and req.model_dump(exclude={"requirement_id", "variable_id", "predicate_ids"})
-                    == original.model_dump(exclude={"requirement_id", "variable_id", "predicate_ids"})]
-            if derived and all(req.requirement_id in observed for req in derived):
+                    component.rule_component_id, req.predicate_ids[0], original.requirement_id)).encode()).hexdigest()[:32]]
+            if derived and all(req.requirement_id in observed
+                    and binding_preserves_source_requirement(original, req) for req in derived):
                 observed.add(original.requirement_id)
         expectations = [RequirementGapState(req.requirement_id, ExpectationStatus.OBSERVED, None)
                         for req in due if req.requirement_id in observed]
@@ -469,10 +477,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                         component.rule_component_id, req.predicate_ids[0], original.requirement_id)).encode()).hexdigest()[:32]]
                 if original.variable_id is None and derived and all(req.requirement_id in inactive_requirements for req in derived):
                     inactive_requirements.add(original.requirement_id)
-                elif (original.variable_id is None and derived
+                elif (original.variable_id is None and original.requirement_id not in observed and derived
                         and all(req.requirement_id in observed | inactive_requirements for req in derived)
-                        and all(req.model_dump(exclude={"requirement_id", "variable_id", "predicate_ids"})
-                            == original.model_dump(exclude={"requirement_id", "variable_id", "predicate_ids"}) for req in derived)):
+                        and all(binding_preserves_source_requirement(original, req) for req in derived)):
                     expectations.append(RequirementGapState(original.requirement_id, ExpectationStatus.OBSERVED, None))
             gap_component = calculation_component.model_copy(update={"evidence_requirements": [
                 req for req in calculation_component.evidence_requirements if req.requirement_id not in inactive_requirements]})

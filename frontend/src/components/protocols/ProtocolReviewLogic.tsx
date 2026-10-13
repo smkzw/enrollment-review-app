@@ -19,8 +19,9 @@ export function ProtocolReviewLogic({ item, content, bindings }: {
         <ExpressionView expression={component.expression} exception={component.exceptionExpression}
           predicateLabel={predicate => {
             const binding = bindings?.predicates.find(value => value.component_id === component.componentId && value.predicate_id === predicate.predicateId);
-            return bindings?.variables.find(value => value.variable_id === binding?.variable_id)?.label_zh
-              ?? (/[\u3400-\u9fff]/.test(predicate.attribute) ? predicate.attribute : undefined);
+            // A variable name must not erase the condition's scope or relationship.
+            return /[\u3400-\u9fff]/.test(predicate.attribute) ? predicate.attribute
+              : bindings?.variables.find(value => value.variable_id === binding?.variable_id)?.label_zh;
           }} />
         {reviewObjects(raw?.components).filter(value => value.rule_component_id === component.componentId).map(value => {
           const notes: string[] = [];

@@ -154,6 +154,91 @@ def test_revocation_wins_at_same_timestamp_without_rewriting_history(slice4_env)
         assert len(after) == len(history) + 1
 
 
+@pytest.mark.parametrize("mutation", [None, "rule", "parent_source", "revoke", "cycle"])
+def test_successive_formal_copies_preserve_actual_review_lineage(slice4_env, data_paths, mutation):
+    from app.domain.contracts.agent_io import ProtocolDeconstructionInput
+    from app.domain.contracts.protocol_drafts import DraftFeedbackKind
+    from app.services.protocol_draft_service import ProtocolDraftService
+    from app.services.protocol_workbench_service import STEP_FREEZE
+    from app.storage.repositories import JobRepository
+    from app.workflow.jobstore import JobStore
+    from tests.v2.protocols.test_redeconstruction_backend import (
+        _make_service, _write_minimal_docx, AlwaysPublishableGate, _control_refs,
+    )
+    factory, _ = slice4_env
+    service = _make_service(factory, data_paths, gate=AlwaysPublishableGate())
+    source, draft, spans = confirmed_fixture()
+    path = _write_minimal_docx(data_paths, "successive-reviews.docx")
+    initial = service.start_first_deconstruction(upload_path=path, original_name=path.name,
+        idempotency_key="successive-first", actor="测试")
+    service.seed_review_session(initial.job_id, source_input=source, draft=draft, source_spans=spans, wait_at="publish")
+    approve_draft(factory, source, draft)
+    published = service.publish_first_project(initial.job_id, idempotency_key="successive-publish-first",
+        actor="测试", **_control_refs(service, data_paths, initial.job_id))
+    copied = service.start_feedback_re_deconstruction(project_id=published.project_id,
+        idempotency_key="successive-feedback-first", actor="测试")
+    head = service._load_draft_revision(service._merged_payload(copied.job_id))
+    revised = head.content.model_copy(deep=True)
+    changed_code = revised.proposed_rules[0].official_code
+    revised.proposed_rules[0].components[0].title += "（核对说明）"
+    component_id = revised.proposed_rules[0].components[0].rule_component_id
+    for binding in revised.component_drafts:
+        if binding.proposed_component.rule_component_id == component_id:
+            binding.proposed_component = revised.proposed_rules[0].components[0].model_copy(deep=True)
+    with factory() as session, session.begin():
+        revision = ProtocolDraftService(session).apply_feedback(revised, expected_revision_id=head.revision_id,
+            feedback_kind=DraftFeedbackKind.SOURCE_ERROR, feedback_note="仅核对一条要求的说明", actor="测试", created_at=NOW)
+        service._update_draft_checkpoint(session, copied.job_id, revision)
+    view = service.get_rule_reviews(copied.job_id)
+    assert [entry["official_code"] for entry in view["entries"] if entry["review"] is None] == [changed_code]
+    target = next(entry for entry in view["entries"] if entry["official_code"] == changed_code)
+    service.review_rule(copied.job_id, changed_code, expected_revision_id=view["draft_revision_id"],
+        rule_content_hash=target["rule_content_hash"], reviewer_kind="builder_verification", action="approved")
+    second_publication = service.publish_re_deconstruction(copied.job_id,
+        idempotency_key="successive-publish-second", actor="测试")
+    with factory() as session:
+        stored = get_rule_set(session, second_publication.rule_set_id, second_publication.rule_set_revision)
+        assert len(stored.review_records) == len(view["entries"])
+        hashes_before = {row.record_id: row.payload_sha256 for row in session.scalars(select(RuleReviewRecordRow))}
+    next_copy = service.start_feedback_re_deconstruction(project_id=published.project_id,
+        idempotency_key="successive-feedback-second", actor="测试")
+    merged = service._merged_payload(next_copy.job_id)
+    current = service._load_draft_revision(merged).content.model_copy(deep=True)
+    current_source = ProtocolDeconstructionInput.model_validate(merged["source_input"])
+    if mutation == "rule":
+        current.proposed_rules[1].components[0].title += "内容改变"
+    if mutation in {"parent_source", "cycle"}:
+        with factory() as session, session.begin():
+            payload = deepcopy(JobStore(session).get_last_checkpoint(copied.job_id, STEP_FREEZE)[1])
+            if mutation == "parent_source":
+                payload["source_input"]["source_materials"][0]["text"] += "来源改变"
+            else:
+                payload["formal_baseline_revision_id"] = revision.revision_id
+            JobRepository(session).create_checkpoint(checkpoint_id="altered-parent-receipt", job_id=copied.job_id,
+                step_id=STEP_FREEZE, payload=payload)
+    if mutation == "revoke":
+        with factory() as session, session.begin():
+            original = next(record for record in stored.review_records if record.official_code == changed_code)
+            AppendRepository(session, REVIEW_CONFIG).save(original.model_copy(update={
+                "record_id": "intermediate-revocation", "action": "revoked"}))
+    with factory() as session:
+        if mutation == "cycle":
+            with pytest.raises(ValueError, match="来源链出现循环"):
+                current_reviews(session, current_source, current)
+        else:
+            entries, history = current_reviews(session, current_source, current)
+            missing = {entry["official_code"] for entry in entries if entry["review"] is None}
+            expected_missing = ({entry["official_code"] for entry in entries} if mutation == "parent_source"
+                else {current.proposed_rules[1].official_code} if mutation == "rule"
+                else {changed_code} if mutation == "revoke" else set())
+            assert missing == expected_missing
+            if mutation is None:
+                assert {record.record_id for record in history} == {*hashes_before}
+                assert all(entry["review"].reviewer_kind == "builder_verification" for entry in entries)
+        assert all(session.scalar(select(RuleReviewRecordRow.payload_sha256).where(
+            RuleReviewRecordRow.record_id == record_id)) == value for record_id, value in hashes_before.items())
+
+
 def test_procedure_denominator_is_frozen_catalog_not_mapping():
     source, draft, _ = confirmed_fixture()
     draft.procedure_catalog_mappings = []

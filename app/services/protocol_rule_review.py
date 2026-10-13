@@ -76,12 +76,12 @@ def review_entries(source: ProtocolDeconstructionInput, draft: ProtocolDeconstru
     return entries
 
 
-def _formal_review_history(session, source, draft):
+def _formal_review_history(session, source, draft, seen_drafts):
     """Use actual source-copy receipts, not a caller's claimed approval lineage."""
     from app.domain.contracts.protocol_drafts import DraftRevisionStatus
     from app.storage.codecs import verify_payload_sha256
     from app.workflow.jobstore import JobStore
-    from app.services.protocol_workbench_service import STEP_FREEZE, STEP_GENERATE
+    from app.services.protocol_workbench_service import STEP_AWAIT_IDENTITY, STEP_FREEZE, STEP_GENERATE
     if source.interpretation_sources:
         return [], {}
     store = JobStore(session)
@@ -100,26 +100,41 @@ def _formal_review_history(session, source, draft):
         if (baseline.status != DraftRevisionStatus.PUBLISHED or baseline.project_id != draft.project_id
                 or baseline.study_phase != draft.selected_phase or payload.get("target_project_id") != draft.project_id):
             continue
-        repository = AppendRepository(session, REVIEW_CONFIG)
-        rows = session.scalars(select(RuleReviewRecordRow).where(
-            RuleReviewRecordRow.draft_id == baseline.draft_id,
-            RuleReviewRecordRow.protocol_version_id == baseline.protocol_version_id,
-        ).order_by(RuleReviewRecordRow.sequence))
-        history = [repository.get(row.sequence) for row in rows]
-        approved = {record.official_code: record for record in history}
-        before = {entry["official_code"]: entry for entry in review_entries(source, baseline.content)}
-        before_scoped = {entry["official_code"]: entry for entry in review_entries(source, baseline.content, scoped_stages=True)}
+        # Each publication may itself inherit unchanged reviews. Recover its
+        # actual frozen input; never manufacture one by rebinding the new input.
+        baseline_source = None
+        for parent in session.scalars(select(JobRecord).where(JobRecord.job_type == "protocol_deconstruction")):
+            generated_parent = store.get_last_checkpoint(parent.job_id, STEP_GENERATE)
+            if not generated_parent or generated_parent[1].get("draft_id") != baseline.draft_id:
+                continue
+            frozen_parent = (store.get_last_checkpoint(parent.job_id, STEP_FREEZE)
+                             or store.get_last_checkpoint(parent.job_id, STEP_AWAIT_IDENTITY))
+            if frozen_parent and isinstance(frozen_parent[1].get("source_input"), dict):
+                baseline_source = ProtocolDeconstructionInput.model_validate(frozen_parent[1]["source_input"])
+                break
+        if (baseline_source is None or baseline_source.protocol_version_id != baseline.protocol_version_id
+                or source.model_dump(exclude={"protocol_version_id"})
+                   != baseline_source.model_dump(exclude={"protocol_version_id"})):
+            continue
+        baseline_entries, history = current_reviews(session, baseline_source, baseline.content,
+                                                    _seen_drafts=seen_drafts)
+        before = {entry["official_code"]: entry for entry in baseline_entries}
+        before_scoped = {entry["official_code"]: entry for entry in review_entries(baseline_source, baseline.content, scoped_stages=True)}
         after_scoped = {entry["official_code"]: entry for entry in review_entries(source, draft, scoped_stages=True)}
         equivalent = {entry["official_code"]: entry["rule_content_hash"] for entry in review_entries(source, draft)
-            if entry["official_code"] in approved and approved[entry["official_code"]].action == "approved"
-            and approved[entry["official_code"]].rule_content_hash == before[entry["official_code"]]["rule_content_hash"]
+            if entry["official_code"] in before and before[entry["official_code"]]["review"] is not None
+            and before[entry["official_code"]]["reviewed_content_hash"] == before[entry["official_code"]]["rule_content_hash"]
             and before_scoped[entry["official_code"]]["rule_content_hash"] == after_scoped[entry["official_code"]]["rule_content_hash"]}
         return history, equivalent
     return [], {}
 
 
 def current_reviews(session: Session, source: ProtocolDeconstructionInput,
-                    draft: ProtocolDeconstructionDraft) -> tuple[list[dict], list[RuleReviewRecord]]:
+                    draft: ProtocolDeconstructionDraft, *,
+                    _seen_drafts: frozenset[str] = frozenset()) -> tuple[list[dict], list[RuleReviewRecord]]:
+    if draft.draft_id in _seen_drafts:
+        raise ValueError("审定来源链出现循环，不能继承历史审定")
+    seen_drafts = _seen_drafts | {draft.draft_id}
     repository = AppendRepository(session, REVIEW_CONFIG)
     rows = session.scalars(select(RuleReviewRecordRow).where(
         RuleReviewRecordRow.protocol_version_id == draft.protocol_version_id,
@@ -127,7 +142,7 @@ def current_reviews(session: Session, source: ProtocolDeconstructionInput,
     ).order_by(RuleReviewRecordRow.sequence)).all()
     history = [repository.get(row.sequence) for row in rows]
     latest = {record.official_code: record for record in history}
-    inherited_history, equivalent = _formal_review_history(session, source, draft)
+    inherited_history, equivalent = _formal_review_history(session, source, draft, seen_drafts)
     inherited = {record.official_code: record for record in inherited_history}
     entries = review_entries(source, draft)
     for entry in entries:

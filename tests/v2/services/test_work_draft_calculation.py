@@ -10,7 +10,7 @@ from app.domain.contracts.enums import (AnchorType, Comparator, ComponentDecisio
     TimeDirection)
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.facts import AssertionBasis, ClinicalFactV2, FactAuthority, PartialDateRange, clinical_fact_stable_identity
-from app.domain.contracts.rules import AtomicExpression, AtomicPredicate, EvidenceRequirement, LogicalExpression, Rule, RuleComponent, RuleSet, TimeConstraint
+from app.domain.contracts.rules import AtomicExpression, AtomicPredicate, EvidenceRequirement, LogicalExpression, Rule, RuleComponent, RuleSet, TimeConstraint, TimeQuantity
 from app.domain.contracts.enums import LogicalOperator
 from app.domain.contracts.work_draft import SystemIssue, WorkDraftItem
 from app.domain.variables.dictionary import load_dictionary
@@ -70,13 +70,17 @@ def test_false_base_condition_does_not_require_unrelated_positive_judgment():
     assert result.system_issue is None
 
 
-@pytest.mark.parametrize("operator,first_truth,expected", [
-    (LogicalOperator.ALL, "false", D.EXCLUSION_NOT_TRIGGERED),
-    (LogicalOperator.ALL, "true", D.INDETERMINATE),
-    (LogicalOperator.ANY, "true", D.EXCLUSION_TRIGGERED),
-    (LogicalOperator.ANY, "false", D.INDETERMINATE),
+@pytest.mark.parametrize("operator,first_truth,second_truth,expected", [
+    (LogicalOperator.ALL, "false", "unknown", D.EXCLUSION_NOT_TRIGGERED),
+    (LogicalOperator.ALL, "true", "unknown", D.INDETERMINATE),
+    (LogicalOperator.ANY, "true", "unknown", D.EXCLUSION_TRIGGERED),
+    (LogicalOperator.ANY, "false", "unknown", D.INDETERMINATE),
+    (LogicalOperator.ALL, "true", "true", D.EXCLUSION_TRIGGERED),
+    (LogicalOperator.ALL, "false", "false", D.EXCLUSION_NOT_TRIGGERED),
+    (LogicalOperator.ANY, "false", "false", D.EXCLUSION_NOT_TRIGGERED),
+    (LogicalOperator.ANY, "false", "true", D.EXCLUSION_TRIGGERED),
 ])
-def test_joint_source_requirement_follows_only_its_relevant_bound_conditions(operator, first_truth, expected):
+def test_joint_source_requirement_follows_only_its_relevant_bound_conditions(operator, first_truth, second_truth, expected):
     from app.domain.publication import canonical_hash
     from app.domain.variables.dictionary import VariableDef
     rules, _, component = clause(kind=RuleKind.EXCLUSION)
@@ -98,8 +102,10 @@ def test_joint_source_requirement_follows_only_its_relevant_bound_conditions(ope
         "source_read_refs": [{"source_document_version_id": "document", "page_artifact_id": "page",
             "page_number": 1, "excerpt": "病历明确记载该条件", "disposition": "mentioned"}]}
     relations = {f"{component.rule_component_id}:base": relation,
-        f"{component.rule_component_id}:judgment": {**relation, "truth": "unknown", "relation": "not_found",
-            "reason": "未见另一项判断", "source_read_refs": []}}
+        f"{component.rule_component_id}:judgment": {**relation, "truth": second_truth,
+            "relation": {"unknown": "not_found", "true": "supports", "false": "refutes"}[second_truth],
+            "reason": "未见另一项判断" if second_truth == "unknown" else "另一项有明确记载",
+            "source_read_refs": [] if second_truth == "unknown" else relation["source_read_refs"]}}
     before = canonical_hash(rules.model_dump(mode="json"))
     result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules,
         evidence_refs={}, source_results=relations)
@@ -135,6 +141,24 @@ def test_source_notes_do_not_hide_a_missing_numeric_operand():
         evidence_refs={}, source_results={f"{component.rule_component_id}:judgment": relation})
     assert result.decision == D.INDETERMINATE
     assert "另一条件明确否认" in result.reason_text and "年龄已核实记录" in result.reason_text
+
+
+@pytest.mark.parametrize("original_types,bound_types,compatible", [
+    ([], ["investigator_assessment"], True),
+    (["investigator_assessment"], [], False),
+    (["investigator_assessment"], ["prescription"], False),
+])
+def test_binding_source_type_refinement_is_not_a_change_to_other_source_policies(original_types, bound_types, compatible):
+    from app.services.work_draft_calculation import binding_preserves_source_requirement
+    _, _, component = clause()
+    original = component.evidence_requirements[0].model_copy(update={"required_source_types": original_types})
+    bound = original.model_copy(update={"required_source_types": bound_types})
+    assert binding_preserves_source_requirement(original, bound) is compatible
+    bound.description = "不同要求，不能按相同标签采信"
+    assert not binding_preserves_source_requirement(original, bound)
+    bound.description = original.description
+    bound.source_validity_window = TimeQuantity(value=3, unit="day")
+    assert not binding_preserves_source_requirement(original, bound)
 
 
 @pytest.mark.parametrize("anchor,role,exact,truth,expected", [

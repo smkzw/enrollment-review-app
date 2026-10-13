@@ -22,7 +22,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v21"
+CALCULATION_VERSION = "work-draft/0.2.0-v23"
 
 
 def _reusable_source_reads(session, store, frozen, targets, model, artifact_store):
