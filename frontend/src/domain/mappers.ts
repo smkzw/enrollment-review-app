@@ -228,25 +228,27 @@ const anchorLabel: Record<TimeConstraintWire["anchor_type"], string> = {
   review_node_date: "当前审核节点日期",
 };
 
-function formatDayRange(
+function formatTimeRange(
   direction: Exclude<TimeConstraintWire["direction"], "on">,
-  lower: number | null,
-  upper: number | null,
+  lower: TimeConstraintWire["lower_bound"],
+  upper: TimeConstraintWire["upper_bound"],
   lowerInclusive: boolean,
   upperInclusive: boolean,
 ): string | null {
   const side = direction === "before" ? "前" : "后";
+  const units = { day: "天", week: "周", month: "个月", year: "年" } as const;
+  const text = (quantity: NonNullable<typeof lower>) => `${quantity.value} ${units[quantity.unit]}`;
   if (lower === null && upper === null) return null;
   if (lower !== null && upper !== null) {
-    if (lower === upper && lowerInclusive && upperInclusive) {
-      return `${side}第 ${lower} 天`;
+    if (lower.value === upper.value && lower.unit === upper.unit && lowerInclusive && upperInclusive) {
+      return `${side}第 ${text(lower)}`;
     }
-    return `${side}${lowerInclusive ? "至少" : "超过"} ${lower} 天且${upperInclusive ? "不超过" : "少于"} ${upper} 天`;
+    return `${side}${lowerInclusive ? "至少" : "超过"} ${text(lower)}且${upperInclusive ? "不超过" : "少于"} ${text(upper)}`;
   }
   if (upper !== null) {
-    return upperInclusive ? `${side} ${upper} 天内` : `${side}少于 ${upper} 天`;
+    return upperInclusive ? `${side} ${text(upper)}内` : `${side}少于 ${text(upper)}`;
   }
-  return `${side}${lowerInclusive ? "至少" : "超过"} ${lower} 天`;
+  return `${side}${lowerInclusive ? "至少" : "超过"} ${text(lower!)}`;
 }
 
 export function formatTimeConstraint(
@@ -256,15 +258,15 @@ export function formatTimeConstraint(
   if (constraint.direction === "on") return `${anchor}当天`;
 
   const parts: string[] = [];
-  const dayRange = formatDayRange(
+  const timeRange = formatTimeRange(
     constraint.direction,
-    constraint.lower_bound_days,
-    constraint.upper_bound_days,
+    constraint.lower_bound ?? (constraint.lower_bound_days == null ? null : { value: constraint.lower_bound_days, unit: "day" }),
+    constraint.upper_bound ?? (constraint.upper_bound_days == null ? null : { value: constraint.upper_bound_days, unit: "day" }),
     constraint.lower_bound_inclusive !== false,
     constraint.upper_bound_inclusive !== false,
   );
-  if (dayRange !== null) parts.push(`${anchor}${dayRange}`);
-  if (constraint.half_life_multiplier !== null) {
+  if (timeRange !== null) parts.push(`${anchor}${timeRange}`);
+  if (constraint.half_life_multiplier != null) {
     const side = constraint.direction === "before" ? "前" : "后";
     parts.push(
       `${anchor}${side}至少 ${constraint.half_life_multiplier} 个半衰期`,

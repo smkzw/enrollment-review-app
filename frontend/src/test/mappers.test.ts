@@ -65,6 +65,20 @@ describe("时间窗中文显示", () => {
       upper_bound_inclusive: false,
     })).toBe("首次给药前少于 7 天");
   });
+
+  it.each([ ["month", "个月"], ["week", "周"], ["year", "年"] ] as const)("保留日历%s单位与包含边界，不转成天数", (unit, label) => {
+    expect(formatTimeConstraint({ ...base, anchor_type: "review_node_date",
+      upper_bound: { value: 6, unit } })).toBe(`当前审核节点日期前 6 ${label}内`);
+    expect(formatTimeConstraint({ ...base, upper_bound: { value: 6, unit }, upper_bound_inclusive: false }))
+      .toBe(`首次给药前少于 6 ${label}`);
+  });
+
+  it("分别显示不同单位的上下界和零日边界", () => {
+    expect(formatTimeConstraint({ ...base, lower_bound: { value: 2, unit: "week" },
+      upper_bound: { value: 1, unit: "month" } })).toBe("首次给药前至少 2 周且不超过 1 个月");
+    expect(formatTimeConstraint({ ...base, lower_bound_days: 0, upper_bound_days: 0 }))
+      .toBe("首次给药前第 0 天");
+  });
 });
 
 describe("看板映射", () => {
