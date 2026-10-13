@@ -621,10 +621,23 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             reason = "对应节点病历尚无足以支持本条判断的记录，现为证据不足；不要求另外重复签名。" + reason
         reason_parts = []
         if relations:
+            # Trace unresolved branches together: changing one leaf alone can
+            # hide uncertainty shared by nested alternatives.
+            attention_predicates = set()
+            pending_expressions = [active_trigger]
+            if evaluation.trigger.truth != TruthValue.FALSE:
+                pending_expressions.append(active_exception)
+            while pending_expressions:
+                expression = pending_expressions.pop()
+                if expression is None or _combine_bound_expression(expression, values).truth != TruthValue.UNKNOWN:
+                    continue
+                if isinstance(expression, AtomicExpression):
+                    attention_predicates.add(expression.predicate.predicate_id)
+                else:
+                    pending_expressions.extend(expression.children)
             for predicate in predicates:
                 pid = predicate.predicate_id
-                attention = (outcome.evaluation.predicate_evaluations[pid].truth == TruthValue.UNKNOWN
-                    and pid not in inactive_predicates and outcome.decision != D.NOT_APPLICABLE)
+                attention = pid in attention_predicates and outcome.decision != D.NOT_APPLICABLE
                 row = relations.get(pid)
                 if row is None and not attention:
                     continue

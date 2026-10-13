@@ -182,6 +182,38 @@ def test_source_notes_do_not_hide_a_missing_numeric_operand():
     assert any("另一条件明确否认" in part.reason_text and not part.requires_attention for part in result.reason_parts)
 
 
+@pytest.mark.parametrize("first,second,last,expected_ids", [
+    ("unknown", "unknown", "unknown", {"a", "b", "c"}),
+    ("true", "unknown", "unknown", {"c"}),
+    ("false", "false", "unknown", set()),
+    ("unknown", "unknown", "false", set()),
+    ("unknown", "false", "true", {"a"}),
+])
+def test_nested_reason_attention_preserves_joint_unknowns_but_hides_proven_irrelevant_branches(first, second, last, expected_ids):
+    from app.domain.variables.dictionary import VariableDef
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    atoms = [AtomicExpression(predicate=AtomicPredicate(predicate_id=key, subject="受试者",
+        attribute=key, comparator=Comparator.EXISTS, requires_professional_judgment=True)) for key in ("a", "b", "c")]
+    component.expression = LogicalExpression(operator=LogicalOperator.ALL, children=[
+        LogicalExpression(operator=LogicalOperator.ANY, children=atoms[:2]), atoms[2]])
+    original = component.evidence_requirements[0]
+    component.evidence_requirements = [original.model_copy(update={"requirement_id": key,
+        "variable_id": key, "predicate_ids": [key]}) for key in ("a", "b", "c")]
+    rules.variable_definitions.extend(VariableDef(variable_id=key, label_zh=key,
+        value_type="boolean", domain="history") for key in ("a", "b", "c"))
+    relations = {f"{component.rule_component_id}:{key}": {"truth": truth, "applicable": "yes",
+        "conflict": False, "policy": False, "relation": {"unknown": "unclear", "true": "supports", "false": "refutes"}[truth],
+        "reason": "关系待核" if truth == "unknown" else "明确记录",
+        "source_read_refs": [{"source_document_version_id": "document", "page_artifact_id": "page",
+            "page_number": 1, "excerpt": "明确记录", "disposition": "mentioned"}]} for key, truth in zip(("a", "b", "c"), (first, second, last))}
+    frame = frozen([material()])
+    frame.facts = []
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules,
+        evidence_refs={}, source_results=relations)
+    assert result.system_issue is None
+    assert {part.condition_id.rsplit(":", 1)[-1] for part in result.reason_parts if part.requires_attention} == expected_ids
+
+
 @pytest.mark.parametrize("original_types,bound_types,compatible", [
     ([], ["investigator_assessment"], True),
     (["investigator_assessment"], [], False),
