@@ -531,7 +531,22 @@ function normalizeEvidence(value: unknown, field: string): ProtocolEvidencePaylo
 function normalizePayload(value: unknown, category: DiffChangeField, field: string): ProtocolDiffPayload | null {
   if (value === null) return null;
   if (category === "original_text_changes") return normalizeOriginalText(value, field);
-  if (category === "logic_changes" || category === "exception_changes") return normalizeLogicPayload(value, field);
+  if (category === "logic_changes" || category === "exception_changes") {
+    const row = requireRecord(value, field);
+    if (category === "logic_changes" && row.kind === "restricted") {
+      if (["predicate", "operator", "children"].some(key => key in row)) {
+        invalidDiff(field, "未解析的子项不能同时携带可执行条件");
+      }
+      const limitation_kind = requireOneOf(row.limitation_kind,
+        ["interpretation_unresolved", "consumer_unavailable"] as const, `${field}.limitation_kind`);
+      const unresolved_dimensions = requireStringList(row.unresolved_dimensions, `${field}.unresolved_dimensions`);
+      if (!unresolved_dimensions.length || unresolved_dimensions.some(text => !text.trim())) {
+        invalidDiff(field, "未解析的子项须说明具体待核内容");
+      }
+      return { kind: "restricted", limitation_kind, unresolved_dimensions };
+    }
+    return normalizeLogicPayload(value, field);
+  }
   if (category === "time_window_changes") {
     return requireArray<unknown>(value, field).map((item, index) => normalizeTimeEntry(item, `${field}[${index}]`));
   }

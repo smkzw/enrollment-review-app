@@ -6,6 +6,17 @@ import { describe, expect, it } from "vitest";
 import { ProtocolCategoryChangeRow } from "./ProtocolDiffChangeRow";
 
 describe("ProtocolCategoryChangeRow", () => {
+  it.each(["interpretation_unresolved", "consumer_unavailable"] as const)("显示%s的具体原因，不称研究者判断", limitation => {
+    const { container } = render(<ProtocolCategoryChangeRow change={{ category: "logic", categoryLabel: "判断条件",
+      stableRef: "EX-01a", kind: "component",
+      previous: { kind: "restricted", limitation_kind: limitation, unresolved_dimensions: ["回溯起点尚未明确"] },
+      current: { kind: "predicate", predicate: { subject: "受试者", attribute: "目标既往事件", comparator: "exists" } },
+    }} />);
+    expect(screen.getByText("回溯起点尚未明确")).toBeInTheDocument();
+    expect(screen.getByText("尚未解析为可执行条件")).toBeInTheDocument();
+    expect(screen.getByText(limitation === "consumer_unavailable" ? "系统尚不能完成该项判断" : "原文解读尚待核对")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/restricted|interpretation_unresolved|consumer_unavailable|研究者判断/);
+  });
   it("既往事件和必需记录分开呈现，不把用途说明当患者已核实", () => {
     const { container } = render(<ProtocolCategoryChangeRow change={{ category: "logic", categoryLabel: "判断条件",
       stableRef: "EX-01a", kind: "component", previous: null,

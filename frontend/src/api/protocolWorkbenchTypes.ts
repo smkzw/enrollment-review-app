@@ -355,6 +355,8 @@ export interface ProtocolDueStagePayload {
 
 export type ProtocolDiffPayload =
   | ProtocolLogicPayload
+  | { kind: "restricted"; limitation_kind: "interpretation_unresolved" | "consumer_unavailable";
+      unresolved_dimensions: string[] }
   | ProtocolTimeEntryPayload[]
   | ProtocolOriginalTextPayload
   | ProtocolEvidencePayload
