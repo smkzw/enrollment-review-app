@@ -279,6 +279,31 @@ def test_inapplicability_requires_rule_scope_and_keeps_a_verified_quote_not_a_de
     assert result["source_read_refs"][0]["excerpt"] == "否认近期感染"
 
 
+@pytest.mark.parametrize("scope", ["仅适用于接受该项治疗的受试者。", "本检查仅用于指定适用人群。"])
+def test_native_protocol_scope_is_quoted_separately_from_subject_evidence(scope):
+    scoped = {**target(), "source_text": scope}
+    read = row(applicable="no", relation="unclear").model_copy(update={"population_scope_excerpt": scope})
+    valid = validate_relations({"results": [read.model_dump()]}, [scoped], [page()])[0]
+    inputs = relation_inputs(valid, scoped, [page()])
+    assert inputs["population_scope_excerpt"] == scope
+    assert inputs["applicable"] == "no" and inputs["truth"] == "unknown" and not inputs["policy"]
+    assert inputs["source_read_refs"][0]["disposition"] == "mentioned"
+
+
+@pytest.mark.parametrize("scope", ["其他项目的人群。", " "])
+def test_unpublished_or_blank_population_scope_cannot_remove_a_requirement(scope):
+    scoped = {**target(), "source_text": "仅适用于接受该项治疗的受试者。"}
+    read = row(applicable="no").model_copy(update={"population_scope_excerpt": scope})
+    with pytest.raises(ValueError):
+        validate_relations({"results": [read.model_dump()]}, [scoped], [page()])
+
+
+def test_scope_only_reader_does_not_compute_or_deny_an_existing_lab_result():
+    scoped = {**target(), "scope_only": True}
+    inputs = relation_inputs(row(relation="refutes"), scoped, [page()])
+    assert inputs["truth"] == "unknown" and inputs["scope_only"] and not inputs["policy"]
+
+
 def test_missing_duplicate_or_extra_targets_are_rejected():
     for rows in ([], [row(), row()], [row(target_id="unknown")]):
         with pytest.raises(ValueError):
@@ -401,7 +426,7 @@ def test_exact_scope_echo_is_not_a_missing_target_but_other_fields_still_rejecte
             source_result_envelope({**payload, **change}, material)
 
 
-@pytest.mark.parametrize("mutation", [None, "wrap", "disagreement", "source", "target", "policy", "model", "truncated"])
+@pytest.mark.parametrize("mutation", [None, "wrap", "disagreement", "old_scope_schema", "source", "target", "policy", "model", "truncated"])
 def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutation):
     import json
     from app.domain.contracts.agents import ModelConfigContract
@@ -416,6 +441,8 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
     material = {"version": "input-v3", "stage": "screening", "anchor_dates": {}, "targets": [target()], "pages": [{
         "page_artifact_id": "page", "page_number": 1, "category": "study_chart", "text": source.effective_text}],
         "output_schema": SourceRelations.model_json_schema()}
+    if mutation == "old_scope_schema":
+        material["output_schema"]["$defs"]["SourceRelation"]["properties"].pop("population_scope_excerpt")
     if mutation == "source": material["pages"][0]["text"] = "另一份资料"
     if mutation == "target": material["targets"][0] = target("inclusion")
     request = {"messages": [{"role": "user", "content":
@@ -424,6 +451,9 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
     if mutation == "model": old_model["model"] = "different-model"
     saved = {"model": old_model, "text": json.dumps({"results": [row().model_dump()]},ensure_ascii=False),
         "calls": [{"finish_reason": "length" if mutation == "truncated" else "stop", "response_model": "fixture", "request_artifact_sha256": "request"}]}
+    if mutation == "old_scope_schema":
+        old_row = row().model_dump(exclude={"population_scope_excerpt"})
+        saved["text"] = json.dumps({"results": [old_row]}, ensure_ascii=False)
     if mutation == "disagreement":
         saved["text"] = json.dumps({"version": "input-v3", "results": [row().model_dump()]}, ensure_ascii=False)
     class Artifacts:
@@ -438,7 +468,7 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
     refs = ["response", "conflicting"] if mutation == "disagreement" else ["response"]
     values, proofs = revalidate_saved_source_read({"raw_refs": refs, "results": {} if mutation in {"wrap", "disagreement"} else {
         "component:infection": original_result}}, frame, [target()], model, Artifacts())
-    assert bool(values) == (mutation in {None, "wrap", "disagreement"})
+    assert bool(values) == (mutation in {None, "wrap", "disagreement", "old_scope_schema"})
     if values:
         assert values["component:infection"]["truth"] == ("unknown" if mutation == "disagreement" else "false")
         assert proofs["component:infection"]["request_sha256"] == "request"

@@ -15,8 +15,8 @@ from app.domain.publication import canonical_hash
 from app.domain.variables.dictionary import load_dictionary
 from app.services.work_draft_calculation import atomic_expressions, is_numeric_history_condition
 
-PROMPT_VERSION = "work-draft-source-relations/v4"
-VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v26"
+PROMPT_VERSION = "work-draft-source-relations/v5"
+VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v27"
 BATCH_SIZE = 16
 SEMANTIC_INSTRUCTIONS = (
     "你是入排审核产品的原文关系核对员。逐项查找本次提供的病历与报告中，对原子条件的支持或否定；"
@@ -35,10 +35,14 @@ SEMANTIC_INSTRUCTIONS = (
 RELATION_SCOPE_INSTRUCTIONS = (
     "object_matches只核摘录是否属于本受试者和本判断对象，不等同于受试者属于适用人群；"
     "time_matches只核所引记录是否可用于本节点和所需期间。"
-    "applicable=no仅用于原子条件已明确给出applicable_population，且有对应原文证明受试者不属于该人群。"
+    "applicable=no须有方案明确限定的人群和病历中证明本人不属于该人群的逐字记录。"
+    "人群限制可来自applicable_population、条件的subject或本项方案原文（含流程表脚注）；"
+    "没有applicable_population时必须在population_scope_excerpt逐字引用方案中限定本项人群的完整原句。"
+    "不能只引用检查名称或借用无关兄弟条件的人群；未能确定限制究竟作用于哪项时unclear。"
     "即使不属于适用人群，本人的有效原文仍应object_matches=true、time_matches=true；"
     "若身份或时间真未核清，applicable只能unclear，不能据此跳过要求。"
-    "没有明确applicable_population时applicable=yes，不自行增补人群限制；"
+    "没有有源人群限制时applicable=yes，不凭检查名称、性别常识或没有报告说不适用；"
+    "scope_only目标只核适用范围，不核数值是否达标，数值及分类检验仍交现有事实计算；"
     "直接核原文与完整条件的支持或否定关系，这不表示条件成立。")
 
 
@@ -121,7 +125,10 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
         schema = json.loads(json.dumps(actual["output_schema"]))
         for definition, field in (("SourceRelation", "target_id"), ("SourceQuote", "page_artifact_id")):
             schema["$defs"][definition]["properties"][field].pop("enum", None)
-        if schema != SourceRelations.model_json_schema():
+        expected_schema = SourceRelations.model_json_schema()
+        if "population_scope_excerpt" not in schema["$defs"]["SourceRelation"]["properties"]:
+            expected_schema["$defs"]["SourceRelation"]["properties"].pop("population_scope_excerpt")
+        if schema != expected_schema:
             continue
         aliases = saved.get("reference_aliases")
         actual_pages = [{**p, "page_artifact_id": aliases["pages"].get(p["page_artifact_id"], "unknown-page")}
@@ -138,7 +145,7 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
                 # Verify the actual historical atom, then invalidate only the
                 # targets that now require context the old reader never saw.
                 known = {key: value for key, value in known.items()
-                         if key not in {"source_context", "correspondence_check"} or key in target}
+                         if key not in {"source_context", "correspondence_check", "scope_only"} or key in target}
             if known is not None and wire_target(target) == wire_target(known):
                 selected.append(known)
         if len(selected) != len(actual["targets"]):
@@ -156,6 +163,14 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
         for key, value in valid.items():
             current = expected.get(key)
             if current is None or wire_target(current) != wire_target(validated_targets[key]):
+                continue
+            if ((current["kind"] == RuleKind.REQUIRED_PROCEDURE.value
+                    or current["atom"]["predicate"].get("subject", "受试者") != "受试者"
+                        and not current["atom"]["predicate"].get("applicable_population"))
+                    and value["truth"] == TruthValue.UNKNOWN.value and value["applicable"] != "no"
+                    and "population_scope_excerpt" not in schema["$defs"]["SourceRelation"]["properties"]):
+                # The older reader was forbidden to inspect native footnote scope.
+                # Its completed operations remain useful, not its unresolved scope.
                 continue
             prior = checkpoint.get("results", {}).get(key)
             if prior is not None:
@@ -205,6 +220,7 @@ class SourceRelation(ContractModel):
     reason: str = Field(min_length=1)
     observed_value: StrictFloat | StrictInt | str | None = None
     observed_unit: str | None = None
+    population_scope_excerpt: str | None = Field(default=None, min_length=1)
 
 
 class SourceRelations(ContractModel):
@@ -238,6 +254,11 @@ def targets_for_review(frozen, rule_set):
     from app.domain.policies import STAGE_RANK
     definitions = load_dictionary(rule_set.variable_definitions or ())
     targets = []
+    subjects_by_rule = {}
+    for clause in frozen.clause_pack.clauses:
+        subjects_by_rule.setdefault(clause.rule_id, set()).update(part.predicate.subject
+            for branch in (clause.expression, clause.exception_expression) if branch is not None
+            for part in atomic_expressions(branch))
     for clause in frozen.clause_pack.clauses:
         if clause.evidence_requirements and not any(
                 STAGE_RANK[req.due_stage] <= STAGE_RANK[frozen.review_episode.stage]
@@ -246,6 +267,10 @@ def targets_for_review(frozen, rule_set):
         bindings = {pid: definitions.get(req.variable_id) for req in clause.evidence_requirements
                     for pid in req.predicate_ids if req.variable_id}
         context = None
+        # This only schedules a scope read; it never infers membership or
+        # inherits a sibling's restriction. The reader must cite this item's source.
+        scoped_subject = any(subject != "受试者" and subject.endswith("受试者")
+            for subject in subjects_by_rule[clause.rule_id])
         if (isinstance(clause.expression, LogicalExpression) and any(
                 atom.predicate.requires_professional_judgment for atom in atomic_expressions(clause.expression))):
             context = {"purpose": "同组逻辑和已审定资料要求共同限定本项；分别核对对象、期间及对应关系，不把不同事件拼成满足，不以本节点后开始的治疗反推本节点已有治疗失败。",
@@ -259,23 +284,28 @@ def targets_for_review(frozen, rule_set):
             for atom in atomic_expressions(expression):
                 p = atom.predicate
                 definition = bindings.get(p.predicate_id)
+                scope_only = bool(scoped_subject and definition is not None and definition.domain == "lab"
+                    and not p.requires_professional_judgment and not p.semantic_proposition)
                 # Arithmetic stays deterministic. Ordinary number/category lab values
                 # use already-published observations, not a semantic model's verdict.
                 if p.source_computation or p.repeat_scheme:
                     continue
                 if (definition is not None and definition.value_type == "number"
-                        and not p.requires_professional_judgment and not is_numeric_history_condition(p, definition)):
+                        and not p.requires_professional_judgment and not is_numeric_history_condition(p, definition)
+                        and not scope_only):
                     continue
                 if not (p.requires_professional_judgment or p.semantic_proposition
                         or p.applicable_population or p.prospective_period or p.prospective_window
                         or definition is not None and definition.domain in {"history", "medication"}
-                        or definition is not None and definition.value_type in {"boolean", "exposure", "procedure"}):
+                        or definition is not None and definition.value_type in {"boolean", "exposure", "procedure"}
+                        or scoped_subject and p.subject != "受试者" or scope_only):
                     continue
                 targets.append({"target_id": f"{clause.rule_component_id}:{p.predicate_id}",
                     "component_id": clause.rule_component_id, "official_code": clause.official_code,
                     "kind": clause.kind.value, "source_text": clause.source_text,
                     "title": clause.title, "atom": atom.model_dump(mode="json"),
                     "variable": definition.model_dump(mode="json") if definition is not None else None,
+                    **({"scope_only": True} if scope_only else {}),
                     **({"source_context": context} if context else {}),
                     **({"correspondence_check": (
                         "先从原文区分各次事件或治疗、其适用期间和相对应结果，再核本条件。"
@@ -372,10 +402,15 @@ def validate_relations(payload, targets, pages):
         if row.relation == "conflict" and len(row.quotes) < 2:
             raise ValueError("资料矛盾须保留至少两处实际依据")
         if row.applicable == "no":
-            if not by_target[row.target_id]["atom"]["predicate"].get("applicable_population"):
+            target = by_target[row.target_id]
+            if not (target["atom"]["predicate"].get("applicable_population")
+                    or row.population_scope_excerpt and row.population_scope_excerpt.strip()
+                        and row.population_scope_excerpt in target.get("source_text", "")):
                 raise ValueError("该条件未声明适用人群，不能自行补设不适用；请核对完整条件与原文的关系")
             if not row.object_matches or not row.time_matches or row.relation == "conflict":
                 raise ValueError("来源对象、时间或相反记录尚未核清，不能同时确认该要求不适用")
+        if row.population_scope_excerpt is not None and row.population_scope_excerpt not in by_target[row.target_id].get("source_text", ""):
+            raise ValueError("适用人群限定必须逐字来自本项已发布方案依据，不能猜测或借用其他条目")
         if not row.object_matches or not row.time_matches:
             row.relation, row.applicable = "unclear", "unclear"
             row.reason = "已有相关记录，但对象或适用时间尚未核清，不能给出确定判断。" + row.reason
@@ -429,12 +464,13 @@ def relation_inputs(row, target, pages):
         page_artifact_id=page.page_artifact_id, page_number=page.page_number,
         excerpt=quote.excerpt, disposition="mentioned" if row.relation in {"supports", "refutes"}
             or row.applicable == "no" and row.object_matches and row.time_matches
-                and target["atom"]["predicate"].get("applicable_population") else "unresolved")
+                and (target["atom"]["predicate"].get("applicable_population")
+                    or row.population_scope_excerpt) else "unresolved")
         for quote in row.quotes for page in pages if page.page_artifact_id == quote.page_artifact_id]
     truth = TruthValue.TRUE if row.relation == "supports" else TruthValue.FALSE if row.relation == "refutes" else TruthValue.UNKNOWN
     policy = False
     predicate = target["atom"]["predicate"]
-    if (predicate.get("comparator") in {"gt", "gte", "lt", "lte", "between"}
+    if (not target.get("scope_only") and predicate.get("comparator") in {"gt", "gte", "lt", "lte", "between"}
             and (row.relation == "supports" or row.relation == "refutes" and row.observed_value is not None)):
         # Numeric assertions are operands, not model-computed truth values.
         from app.domain.contracts.rules import AtomicPredicate
@@ -479,8 +515,12 @@ def relation_inputs(row, target, pages):
             excerpt=None, disposition="not_seen") for page in pages]
     if not row.object_matches or not row.time_matches or row.applicable == "unclear":
         truth = TruthValue.UNKNOWN
+    if target.get("scope_only") or row.applicable == "no":
+        truth, policy = TruthValue.UNKNOWN, False
     return {"truth": truth.value, "applicable": row.applicable, "conflict": row.relation == "conflict",
             "policy": policy, "reason": row.reason, "relation": row.relation,
+            **({"population_scope_excerpt": row.population_scope_excerpt} if row.population_scope_excerpt else {}),
+            **({"scope_only": True} if target.get("scope_only") else {}),
             "source_read_refs": [ref.model_dump(mode="json") for ref in refs]}
 
 

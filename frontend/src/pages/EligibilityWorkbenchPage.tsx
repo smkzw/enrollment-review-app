@@ -533,12 +533,14 @@ function EligibilityIssueQueue({
 
 interface EligibilityClauseDetailProps {
   clause: EligibilityWorkItem;
+  unresolvedConditions?: ReadonlyArray<EligibilityClauseView>;
   selectedFactIndex: number;
   onSelectFact: (index: number) => void;
 }
 
 function EligibilityClauseDetail({
   clause,
+  unresolvedConditions = [],
   selectedFactIndex,
   onSelectFact,
 }: EligibilityClauseDetailProps) {
@@ -556,8 +558,13 @@ function EligibilityClauseDetail({
       </div>
       <ul className="eligibility-clause-detail__bullets" aria-label="条款详情">
         <li className="eligibility-detail-bullet">
-          <strong>判定依据</strong>
-          <ReasonText text={clause.reason} />
+          <strong>{unresolvedConditions.length ? "尚缺的依据" : "判定依据"}</strong>
+          <ReasonText text={unresolvedConditions.length
+            ? unresolvedConditions.map(item => item.reason).join("\n") : clause.reason} />
+          {unresolvedConditions.length > 0 && <details>
+            <summary>完整汇总说明</summary>
+            <ReasonText text={clause.reason} />
+          </details>}
         </li>
         {clause.continuingNote && <li className="eligibility-detail-bullet">
           <strong>后续持续要求</strong>
@@ -987,6 +994,10 @@ export function EligibilityWorkbenchPage() {
   }
 
   const reviewData = review.state.data;
+  const issueGroups = [
+    { label: "系统问题", issues: (reviewData.systemIssues ?? []).filter(issue => issue.kind !== "excerpt_unverified") },
+    { label: "尚未用于判断的原件记录", issues: (reviewData.systemIssues ?? []).filter(issue => issue.kind === "excerpt_unverified") },
+  ];
   const allClauses: EligibilityWorkItem[] = [
     ...reviewData.clauses, ...controlWorkItems(reviewData.controls),
   ];
@@ -1093,9 +1104,10 @@ export function EligibilityWorkbenchPage() {
       <details className="eligibility-work-draft-tools"><summary>工作稿操作与节点日期</summary>
         <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode} onCompleted={refreshWorkDraft} />
       </details>
-      {!!reviewData.systemIssues?.length && <details aria-label="系统问题" className="eligibility-context-bar">
-        <summary>系统问题（{reviewData.systemIssues.length}）</summary>
-        <ul>{reviewData.systemIssues.map((issue, index) => <li key={index}>
+      {issueGroups.filter(group => group.issues.length).map(group => <details key={group.label}
+        aria-label={group.label} className="eligibility-context-bar">
+        <summary>{group.label}（{group.issues.length}）</summary>
+        <ul>{group.issues.map((issue, index) => <li key={index}>
           {issue.affectedCodes.join("、")} {issue.detail} {issue.alternative}
           {issue.pageArtifactId && <RouteLink to={`/subjects/${encodeURIComponent(selectedSubject.subjectId)}/evidence`}
             params={{ episode: selectedEpisode.reviewEpisodeId, sourcePage: issue.pageArtifactId }}
@@ -1103,7 +1115,7 @@ export function EligibilityWorkbenchPage() {
             查看相关原件{issue.pageNumber ? `第${issue.pageNumber}页` : ""}
           </RouteLink>}
         </li>)}</ul>
-      </details>}
+      </details>)}
       {(reviewData.workDraftState === "source_changed" || reviewData.workDraftState === "method_changed") && (
         <section className="eligibility-context-bar" role="status"
           aria-label={reviewData.workDraftState === "method_changed" ? "审核方式已更新" : "审核资料已变化"}>
@@ -1194,6 +1206,9 @@ export function EligibilityWorkbenchPage() {
             </header>
             {selectedClause ? <EligibilityClauseDetail
               clause={selectedClause}
+              unresolvedConditions={selectedClause.parentRuleCode === null && isUndeterminedDecision(selectedClause.decision)
+                ? reviewData.componentClauses?.filter(item => item.ruleCode === selectedClause.ruleCode
+                  && item.ruleComponentId !== selectedClause.ruleComponentId && isUndeterminedDecision(item.decision)) : []}
               selectedFactIndex={selectedFactIndex}
               onSelectFact={setSelectedFactIndex}
             /> : <p className="eligibility-muted">当前筛选没有符合条件的审核要点。</p>}

@@ -32,6 +32,15 @@ def atomic_expressions(expression):
             yield from atomic_expressions(operand)
 
 
+def verified_population_scope(row, predicate, source_text):
+    """A reader's applicability needs both the rule scope and subject evidence."""
+    excerpt = row.get("population_scope_excerpt")
+    return bool(row.get("applicable") == "no" and not row.get("conflict")
+        and any(ref.get("excerpt") for ref in row.get("source_read_refs", ()))
+        and (predicate.get("applicable_population")
+            or isinstance(excerpt, str) and excerpt.strip() and excerpt in source_text))
+
+
 def is_numeric_history_condition(predicate, definition):
     return (definition is not None and definition.value_type == "number"
         and definition.domain in {"history", "medication"}
@@ -430,6 +439,8 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                 calculation_component.expression, calculation_component.exception_expression)
                 if expression is not None for atom in atomic_expressions(expression)}
             for pid, row in relations.items():
+                if row.get("scope_only"):
+                    continue
                 truth = TruthValue(row["truth"])
                 if truth != TruthValue.UNKNOWN and not row.get("source_read_refs"):
                     raise ValueError("原文关系缺少逐字来源或已查范围")
@@ -461,10 +472,8 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                     continue
                 values[pid] = EvaluationResult(truth=truth,
                     reason_codes=["source_conflict"] if row["conflict"] else [] if truth != TruthValue.UNKNOWN else ["observation_unverified"])
-            excluded = {p.predicate_id for p in predicates if p.applicable_population
-                and relations.get(p.predicate_id, {}).get("applicable") == "no"
-                and not relations[p.predicate_id]["conflict"]
-                and any(ref.get("excerpt") for ref in relations[p.predicate_id].get("source_read_refs", ()))}
+            excluded = {p.predicate_id for p in predicates if verified_population_scope(
+                relations.get(p.predicate_id, {}), p.model_dump(mode="json"), clause.source_text)}
             active_trigger = applicable_expression(calculation_component.expression, excluded)
             active_exception = applicable_expression(calculation_component.exception_expression, excluded)
             evaluation = ComponentEvaluation(applicable=TruthValue.FALSE if active_trigger is None else TruthValue.TRUE,
@@ -688,12 +697,20 @@ def calculate_procedures(frozen, rule_set, *, evidence_refs, source_results=None
             return not (anchor is not None and anchor.value is not None and fact.date_range is not None
                 and fact.date_range.lower_bound is not None and fact.date_range.lower_bound > anchor.value)
         scoped = [fact for fact in frozen.facts if in_node_scope(fact)]
+        relation = (source_results or {}).get(f"procedure:{item.item_id}")
+        if relation:
+            common["input_hash"] = canonical_hash({"calculation_input": common["input_hash"],
+                "source_relation": relation})
+        if relation and verified_population_scope(relation, {}, source_text):
+            from app.domain.contracts.work_draft import WorkDraftSourceRef
+            result.append(WorkDraftItem(**common, decision=D.NOT_APPLICABLE, reason_text=relation["reason"],
+                source_read_refs=[WorkDraftSourceRef.model_validate(ref) for ref in relation["source_read_refs"]]))
+            continue
         if any(req.source_validity_window is not None or req.control_validity_status is not None for req in due):
             issue = _issue(code, "本项还需要核对方案规定的资料有效期，当前操作完成记录不足以替代有效期核查。")
             result.append(WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail))
             continue
         facts = [fact for fact in scoped if fact.variable_id in required_ids]
-        relation = (source_results or {}).get(f"procedure:{item.item_id}")
         if relation and relation["conflict"]:
             from app.domain.contracts.work_draft import WorkDraftSourceRef
             result.append(WorkDraftItem(**common, decision=D.CONFLICT, reason_text=relation["reason"],

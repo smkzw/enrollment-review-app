@@ -145,6 +145,26 @@ function installSourcePages() {
 }
 
 describe("入排审核工作台", () => {
+  it("未决汇总先显示具体缺口，完整理由可展开，选择子项时不带兄弟理由", async () => {
+    const first = review.clauses[0]!;
+    const missing = { ...first, ruleComponentId: "missing", parentRuleCode: first.ruleCode,
+      decision: "indeterminate" as const, decisionLabel: "证据不足", reason: "同次治疗的疗效尚无对应依据。" };
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...first, decision: "indeterminate", reason: "已核对治疗史。还需核对应疗效。" }],
+      componentClauses: [missing, { ...missing, ruleComponentId: "met", decision: "inclusion_met",
+        decisionLabel: "满足", reason: "已有记录支持治疗史。" }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByText("尚缺的依据");
+    const summary = screen.getByText("完整汇总说明");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    await userEvent.click(summary);
+    expect(summary.closest("details")).toHaveAttribute("open");
+    await userEvent.click(screen.getByText("逐项条件与依据"));
+    await userEvent.click(screen.getByRole("button", { name: /目标人群符合方案要求 · 证据不足/ }));
+    expect(screen.queryByText("尚缺的依据")).not.toBeInTheDocument();
+    expect(screen.queryByText("完整汇总说明")).not.toBeInTheDocument();
+  });
   it("规则更新导致读取拒绝时，可由用户更新工作稿，不自动调用或沿用旧结果链接", async () => {
     localStorage.clear();
     const catalog = getCatalogRepository();
@@ -205,6 +225,29 @@ describe("入排审核工作台", () => {
     await userEvent.click(reference);
     expect(within(screen.getByLabelText("原始资料查看区"))
       .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+  });
+  it("未采用原件记录与系统故障分别计数，均保留内容及回源入口", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      systemIssues: [
+        { kind: "excerpt_unverified", affectedCodes: [], detail: "这处记录尚未核实。", alternative: "原件保留。",
+          pageArtifactId: "original-page", pageNumber: 4 },
+        { kind: "component_unstructured", affectedCodes: ["EX-01"], detail: "当前条件暂不能完整核对。", alternative: "请查看方案原文。" },
+        { kind: "model_output_invalid", affectedCodes: ["IN-02"], detail: "本条病历核对未完成。", alternative: "保留其他结果。" },
+      ],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const technical = await screen.findByLabelText("系统问题");
+    const records = screen.getByLabelText("尚未用于判断的原件记录");
+    expect(within(technical).getByText("系统问题（2）")).toBeInTheDocument();
+    expect(within(records).getByText("尚未用于判断的原件记录（1）")).toBeInTheDocument();
+    expect(technical).not.toHaveAttribute("open");
+    expect(records).not.toHaveAttribute("open");
+    await userEvent.click(within(records).getByText("尚未用于判断的原件记录（1）"));
+    expect(within(records).getByText(/这处记录尚未核实/)).toBeVisible();
+    expect(within(records).getByRole("link", { name: "查看相关原件第4页" })).toHaveAttribute("href", expect.stringContaining("sourcePage=original-page"));
+    await userEvent.click(within(technical).getByText("系统问题（2）"));
+    expect(within(technical).getByText(/当前条件暂不能完整核对/)).toBeVisible();
+    expect(within(technical).getByText(/本条病历核对未完成/)).toBeVisible();
   });
   it("已核病历依据可回源但不伪装成已发布事实", async () => {
     installSourcePages();

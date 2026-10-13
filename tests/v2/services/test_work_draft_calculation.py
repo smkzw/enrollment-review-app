@@ -234,6 +234,47 @@ def test_entirely_inapplicable_tree_is_not_applicable_not_met_or_refuted(operato
     assert result.decision == D.NOT_APPLICABLE and result.confidence is None and result.system_issue is None
 
 
+@pytest.mark.parametrize("scope,expected", [("仅适用于接受该项治疗的受试者。", D.NOT_APPLICABLE),
+    ("另一条目的范围。", D.INCLUSION_MET), (None, D.INCLUSION_MET)])
+def test_native_scope_reaches_calculation_without_editing_the_published_predicate(scope, expected):
+    from app.domain.publication import canonical_hash
+    rules, _, component = clause()
+    rules.rules[0].source_text = "仅适用于接受该项治疗的受试者。"
+    before = canonical_hash(rules.model_dump(mode="json"))
+    relation = {"truth": "unknown", "scope_only": True, "applicable": "no" if scope else "yes",
+        "population_scope_excerpt": scope, "conflict": False, "policy": False,
+        "relation": "unclear", "reason": "病历证明不属于方案限定的人群。", "source_read_refs": [{
+            "source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
+            "excerpt": "未接受该项治疗", "disposition": "mentioned"}]}
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([material()]), rules,
+        evidence_refs={}, source_results={f"{component.rule_component_id}:age-limit": relation})
+    assert result.decision == expected and canonical_hash(rules.model_dump(mode="json")) == before
+
+
+@pytest.mark.parametrize("scope,conflict,quoted,expected", [
+    ("该操作只适用于指定人群。", False, True, D.NOT_APPLICABLE),
+    ("其他检查的范围。", False, True, D.INDETERMINATE),
+    ("该操作只适用于指定人群。", False, False, D.INDETERMINATE),
+    ("该操作只适用于指定人群。", True, True, D.CONFLICT)])
+def test_procedure_footnote_scope_is_consumed_only_with_subject_provenance(scope, conflict, quoted, expected):
+    from app.services.work_draft_calculation import calculate_procedures
+    rules, _, component = clause()
+    frame = frozen([material()])
+    frame.facts = []
+    frame.procedure_catalog = SimpleNamespace(items=[SimpleNamespace(item_id="procedure", official_code=None,
+        position=0, source_excerpts=["执行操作", "该操作只适用于指定人群。"], label="操作",
+        model_dump=lambda **_: {"label": "操作"})])
+    frame.procedure_requirements = [component.evidence_requirements[0].model_copy(update={"procedure_catalog_item_id": "procedure"})]
+    relation = {"truth": "unknown", "applicable": "no", "conflict": conflict,
+        "population_scope_excerpt": scope, "reason": "本人不属于该操作限定的人群。", "source_read_refs": [{
+            "source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
+            "excerpt": "不属于指定人群", "disposition": "mentioned"}] if quoted else []}
+    result = calculate_procedures(frame, rules, evidence_refs={}, source_results={"procedure:procedure": relation})
+    assert result[0].decision == expected
+    if expected == D.NOT_APPLICABLE:
+        assert result[0].source_read_refs[0].excerpt == "不属于指定人群"
+
+
 @pytest.mark.parametrize("population,quotes,conflict", [(None, True, False), ("指定人群", False, False),
     ("指定人群", True, True)])
 def test_inapplicability_never_comes_from_unscoped_unquoted_or_conflicting_claim(population, quotes, conflict):
@@ -356,6 +397,21 @@ def test_numeric_history_routing_is_domain_based_not_a_clinical_keyword(domain, 
     from app.services.work_draft_semantics import targets_for_review
     rules, frame, _ = numeric_history_case(domain=domain)
     assert len(targets_for_review(frame, rules)) == expected
+
+
+@pytest.mark.parametrize("subject,expected", [("指定亚组受试者", True), ("接受该项治疗的受试者", True),
+    ("受试者", False), ("研究者", False)])
+def test_scope_read_routing_does_not_replace_numeric_evaluation_or_borrow_a_subject(subject, expected):
+    from app.services.work_draft_semantics import targets_for_review
+    rules, frame, _ = numeric_history_case(domain="lab")
+    rules.rules[0].components[0].expression.predicate.subject = subject
+    frame.clause_pack = project_clause_pack(rules)
+    before = rules.model_dump(mode="json")
+    targets = targets_for_review(frame, rules)
+    assert bool(targets) == expected
+    if expected:
+        assert targets[0]["scope_only"]
+    assert rules.model_dump(mode="json") == before
 
 
 def test_compound_judgment_reads_receive_approved_policy_and_full_sibling_logic():
