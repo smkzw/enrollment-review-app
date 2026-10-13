@@ -90,3 +90,23 @@ it("等待人工核对不是持续生成，也不报告完成", async () => {
   expect(fetched).toHaveBeenCalledTimes(initialReads);
   expect(completed).not.toHaveBeenCalled();
 });
+
+it("停止请求继续等安全终态，不当作坏回执或完成", async () => {
+  vi.useFakeTimers();
+  localStorage.setItem("work-draft-job:episode", "stopping-job");
+  let cancelled = false;
+  vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => ({ok: true, json: async () => ({
+    job_id: "stopping-job", state: cancelled ? "cancelled" : "cancel_requested", review_run_id: null,
+  })})));
+  const completed = vi.fn();
+  render(<WorkDraftPanel episode={episode} onCompleted={completed} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+  expect(screen.getByText("正在停止本次处理，原件与已有结果保留。")).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", {name: "开始审核"})).toBeDisabled();
+  cancelled = true;
+  await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+  expect(screen.getByText("本次处理已停止，原件与已有结果保留。")).toBeInTheDocument();
+  expect(screen.getByRole("button", {name: "开始审核"})).toBeEnabled();
+  expect(completed).not.toHaveBeenCalled();
+});

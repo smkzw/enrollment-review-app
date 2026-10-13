@@ -6,7 +6,7 @@
 
 - 工作树：`/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/build-0.2.0`，分支dev/0.2.0。
 - 本轮从HEAD12f4352e1db5ff6ea727406ba152fb9cba1751f5接续，clean；前序1ad63f94/41aea00c已推送。当前节点汇总、同源发布版本接线及覆盖复用作为一个功能包；核实际HEAD，不reset/clean。
-- 前轮验证源码5ac146005c4a36f9c3a17ca7d3cd49ffbe7fb71a已推送；前轮全量10250通过、同WP0的249失败／错误仍保留，不能冒充本轮补丁验证。本轮基于b2a9e34d，源码及测试清单／哈希在本机output/wp5-source-relations-source-manifest.json；尚未提交的相连修改按现场git status确认。
+- 前轮验证源码5ac14600已推送；前轮全量10250通过、同WP0的249失败／错误保留，不能冒充本轮验证。本轮核心源码4b06d370已推送，v15源码清单本机output/wp5-source-relations-v15-source-manifest.json。之后仅有停止状态前端补丁（WorkDraftPanel及测试）与记录；核实际HEAD／dirty，不归错测试版本。
 - 用户要求：局部检验到工作稿；核IN-02；低把握原因、备选解释/有据推荐及手工调整；不重跑方案/变量建议；集中验证至M1。
 - 生化第8页新增1次真实产品调用，9事实保存并进入Profile及v11工作稿。局部run partial，累计24页成功证明继续使用，不叫整例完整。
 - IN-02外层ALL、内部观察ANY保持。本人已64/64审定rev2并发布正式规则v4；工作稿实际消费v4，verification_only=false，不再等待审定，也不重跑方案或建议。
@@ -18,9 +18,9 @@
 
 | 项目 | 当前事实 |
 |---|---|
-| 自有服务 | 61134，PID58417，exec session64848，运行本轮v14补丁；`./run.sh --data-dir <本树>/data_v2 --port 61134 --no-browser`；显式本树.env，不接管其他服务 |
-| 已停止服务 | 前轮PID62876已退出；本轮42174与50788停止并收回终态exit143；共享服务不动 |
-| 数据库 | 本树data_v2/enrollment-review-v2.sqlite3；原件与旧终态不改。Job0c5250548175493ba44635b541f124c5为cancel_requested：第一批600.146秒超时无正文，第二批已在途，等待安全边界保存并取消，不强杀回执 |
+| 自有服务 | 61134，PID64840，exec session25036，运行4b06d370核心v15；`./run.sh --data-dir <本树>/data_v2 --port 61134 --no-browser`；显式本树.env，不接管其他服务 |
+| 已停止服务 | 本轮42174、50788、58417停止并收回exit143；旧任务边界取消后才停58417，共享不动 |
+| 数据库 | 本树data_v2/enrollment-review-v2.sqlite3；旧0c5250548175493ba44635b541f124c5两批超时后cancelled，余6批未发。新001a04995ab2439e8cbe707a23d43f37由UI开始审核，v15流式，待结果核实 |
 | 浏览器 | 原Ego23不接管；本任务42，本轮为用户修复已takeOver，p1已发布规则，p2从正式按钮启动新核对；未新建空间。方法变更后旧component深链不存在，已用不带component的同节点URL恢复 |
 | 审定入口 | http://127.0.0.1:61134/#/protocols?job=fb814eb3b657424aa4c4c340e710394b |
 
@@ -118,8 +118,9 @@ EpisodeRepository.adopt_published_rule_set核同源文件哈希／期别／规�
 - `work_draft_semantics.py`每批16条件，当前122目标／8批；22当前节点页，2明确后续页不借用。逐字引用、目标完整／唯一、对象／时间关系核对；合法兄弟结果冻结，仅重试坏项一次。数值原操作数须逐字存在、单位合法后由程序比较；复杂计算不由模型算。
 - 复用现有Job、ArtifactStore、传输和表达式；source_read_refs与正式事实分开。真实冲突保留所有反证；“未见记录”保存已查范围，不伪造否认／NCS。未知子项只有经true/false反事实均不影响既有结果时才不阻断独立结论。
 - v13 Job3cc7da81c88943d2a98899e9fd706d36 completed11/11，但8次Ollama均429月额度，0成功病历结果；run92b8d772…保持49问题，不宣称新消费成功。失败原答／账本保留。已补共同401/403/429阻止后续重复请求，技术未完成不能变not_found。
-- 用户已授权本次核病历改用cms-router/glm-5.3-flash high。仅新增独立WORK_DRAFT_SEMANTIC配置，其他角色不变。v14 Job0c525054…首批600.146秒超时、无身份／正文／usage，不补造用量；已请求边界取消。v15冻结本角色流式接收，复用既有传输；底层length与局部格式恢复共享最多两次请求。取消终态后从正式入口新建，不改旧失败。
-- 相连后端最终225通过49.36秒exit0。加入流式后曾219通过／2失败：误放宽直连身份，已修并保留反例，不能叫旧夹具。前端完整832通过98文件32.84秒、最后相连40通过3.80秒；构建exit0。新补丁全库窗口session32253运行中，未出结果，不把前轮10250通过归到新代码。
+- 用户已授权本次核病历改用cms-router/glm-5.3-flash high。仅覆盖WORK_DRAFT_SEMANTIC，其他角色不变。v14两批600.146／600.004秒超时无正文及usage，余6批未发；cancelled保持原hash。v15共用两次请求预算，冻结流式模型参数；最小非病例连接预检9.971秒stop、实际GLM身份、上游322总token，但用量细分口径有重复／缺报字段，保留原值，不算病例结果。新001a04995…真实运行中。
+- 相连后端最终225通过49.36秒exit0。加入流式后曾219通过／2失败：误放宽直连身份，已修并保留反例，不能叫旧夹具。前端最终完整833通过98文件35.92秒exit0（含停止状态反例）；构建exit0。新核心全库session32253运行中，未出结果，不把前轮10250通过归到新代码。
+- 实际停止流程发现cancel_requested不在前端回执枚举、轮询中断后按钮一直停用；已加合法停止状态及边界轮询，用真实同空间reload恢复后从UI新开v15，不改localStorage为假完成，也不新建浏览器空间。
 - 真实Ego去彩条截图output/wp5-card-bars-removed.png，1908×917已看；最新病历引用导航已构建，但新结果／三宽屏未看完。没有造坐标；Kangzhe按功能优先局部应用，不称全站设计认证。
 - 原报告cba4a…、88a831…及v12的payload hash再次核不变；SQLite backup output/wp5-before-source-relations.sqlite3保存。本轮全部模型原答／回执／截图受控本机，不提交临床全文、数据或.env。
 
