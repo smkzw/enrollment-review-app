@@ -1,4 +1,6 @@
 """Read saved working results; never rerun inference while rendering."""
+import re
+
 from sqlalchemy import select
 
 from app.domain.publication import canonical_hash
@@ -7,6 +9,17 @@ from app.storage.repositories import AppendRepository, REVIEW_RUN_CONFIG
 from app.storage.review_context_repository import ReviewContextV2Repository
 from app.storage.work_draft_repository import WorkDraftRepository
 from app.services.work_draft_calculation import LABELS
+
+
+def display_source_reason(text):
+    """Clean transport vocabulary in explanations, never source excerpts."""
+    labels = {"supports": "原文支持", "refutes": "原文明示不符合该条件",
+              "not_found": "本次资料未见记录", "unclear": "尚未核清", "conflict": "资料矛盾",
+              "relation": "原文关系", "applicable": "适用范围", "site": "研究中心"}
+    text = re.sub(r"(?<![A-Za-z0-9_])(?:relation\s*=\s*)?(supports|refutes|not_found|unclear|conflict)(?![A-Za-z0-9_])",
+                  lambda match: labels[match[1]], text)
+    text = re.sub(r"(?<![A-Za-z0-9_])(?:relation|applicable|site)(?![A-Za-z0-9_])", lambda match: labels[match[0]], text)
+    return re.sub(r"(?<![A-Za-z0-9_])[PT]\d{2}(?![A-Za-z0-9_])", "所列原文", text)
 
 
 def project_work_draft(session, *, authority, rule_set, clause_pack, artifact_store=None):
@@ -42,7 +55,8 @@ def project_work_draft(session, *, authority, rule_set, clause_pack, artifact_st
             projection = EligibilityClauseProjection(rule_component_id=item.item_id, rule_code=item.official_code,
                 rule_kind=item.rule_kind.value, text_summary=item.title, source_text=item.source_text,
                 parent_rule_code=item.official_code if item.rule_component_id is not None else None, decision=item.decision.value if item.decision else "system_issue",
-                decision_label=LABELS[item.decision] if item.decision else "系统问题", reason=item.reason_text,
+                decision_label=LABELS[item.decision] if item.decision else "系统问题",
+                reason=display_source_reason(item.reason_text) if item.source_read_refs else item.reason_text,
                 fact_refs=refs, source_read_refs=tuple(EligibilitySourceReadRef(**ref.model_dump(mode="json")) for ref in item.source_read_refs),
                 gap_type=None, determination_mode="restricted" if item.system_issue else "semantic" if item.source_read_refs else "deterministic",
                 confidence=item.confidence, confidence_reason=item.confidence_reason)

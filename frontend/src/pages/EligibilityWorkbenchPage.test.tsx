@@ -143,6 +143,23 @@ function installSourcePages() {
 }
 
 describe("入排审核工作台", () => {
+  it("未见记录的检索范围默认收起，仍可展开回到每页原件", async () => {
+    installSourcePages();
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, sourceReadRefs: [{
+        sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
+        excerpt: null, disposition: "not_seen",
+      }] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const summary = await screen.findByText("已核对 1 页，未见相关记录 · 查看范围");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    await userEvent.click(summary);
+    const reference = screen.getByRole("button", { name: /本页未见相关记录/ });
+    await userEvent.click(reference);
+    expect(within(screen.getByLabelText("原始资料查看区"))
+      .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+  });
   it("已核病历依据可回源但不伪装成已发布事实", async () => {
     installSourcePages();
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,

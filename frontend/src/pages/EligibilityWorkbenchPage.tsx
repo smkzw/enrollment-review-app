@@ -742,6 +742,10 @@ function EligibilityEvidencePanel({
         <p className="eligibility-muted">当前条款没有已采用事实，可浏览全部原件页核实。</p>
       )}
       {(clause.sourceReadRefs ?? []).length > 0 && (
+        <details open={(clause.sourceReadRefs ?? []).some((ref) => ref.excerpt)}>
+          <summary>{(clause.sourceReadRefs ?? []).some((ref) => ref.excerpt)
+            ? "病历依据与核对范围"
+            : `已核对 ${(clause.sourceReadRefs ?? []).length} 页，未见相关记录 · 查看范围`}</summary>
         <ul className="eligibility-evidence__refs" aria-label="检索范围与待核原文">
           {(clause.sourceReadRefs ?? []).map((ref, index) => {
             const page = pages.find((item) => item.sourceDocumentVersionId === ref.sourceDocumentVersionId
@@ -756,6 +760,7 @@ function EligibilityEvidencePanel({
             </li>;
           })}
         </ul>
+        </details>
       )}
       {(
         <>

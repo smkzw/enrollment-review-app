@@ -144,12 +144,25 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
                         continue
                 elif any(value.get(field) != prior.get(field) for field in fields):
                     continue
-            elif value["truth"] != TruthValue.UNKNOWN.value and not echoed_identity:
+            elif (value["truth"] != TruthValue.UNKNOWN.value and not echoed_identity
+                  and not value.get("source_format_restored")):
                 # Revalidation may retain uncertainty, not newly qualify a
                 # direction that the original read failed to establish.
                 continue
+            # Newly recoverable old answers cannot be cherry-picked by direction.
+            if (prior is None and key in accepted
+                    and any(accepted[key].get(field) != value.get(field)
+                            for field in ("truth", "applicable", "conflict", "policy"))):
+                previous = accepted[key]
+                refs = {canonical_hash(item): item for item in
+                        [*previous["source_read_refs"], *value["source_read_refs"]]}
+                accepted[key] = {**previous, "truth": "unknown", "applicable": "unclear",
+                    "conflict": True, "policy": False, "relation": "conflict",
+                    "reason": "本次复验的原答与修订答方向不一致，均已保留，未选择有利回答。",
+                    "source_read_refs": list(refs.values())}
+                proofs[key].setdefault("conflicting_raw_response_refs", []).append(ref)
             # A later malformed repair cannot rewrite a previously valid sibling.
-            if key not in accepted:
+            elif key not in accepted:
                 accepted[key] = value
                 proofs[key] = {"raw_response_ref": ref, "request_sha256": call["request_artifact_sha256"],
                                "revalidation_version": PROMPT_VERSION}
@@ -271,6 +284,18 @@ def source_pages_for_review(frozen):
     return result
 
 
+def source_excerpt(text, excerpt):
+    """Restore only unique same-page line wrapping; never rewrite clinical text."""
+    if excerpt in text:
+        return excerpt
+    from app.evidence.locator import find_all_whitespace_insensitive
+    joined = lambda value: value.replace("\r", "").replace("\n", "")
+    matches = [text[start:end] for start, end in find_all_whitespace_insensitive(text, excerpt)
+               if joined(text[start:end]) == joined(excerpt)
+               and not re.search(r"(?<=[\d.+−-])[\r\n]+(?=[\d.])", text[start:end])]
+    return matches[0] if len(matches) == 1 else None
+
+
 def validate_relations(payload, targets, pages):
     rows = SourceRelations.model_validate(payload).results
     expected = {target["target_id"] for target in targets}
@@ -282,8 +307,10 @@ def validate_relations(payload, targets, pages):
             raise ValueError("确定的原文关系须有逐字依据")
         for quote in row.quotes:
             page = by_page.get(quote.page_artifact_id)
-            if page is None or quote.excerpt not in page.effective_text:
+            exact = source_excerpt(page.effective_text, quote.excerpt) if page is not None else None
+            if exact is None:
                 raise ValueError("摘录或来源页不属于本次冻结资料")
+            quote.excerpt = exact
         if row.relation == "conflict" and len(row.quotes) < 2:
             raise ValueError("资料矛盾须保留至少两处实际依据")
         if not row.object_matches or not row.time_matches:
@@ -310,6 +337,8 @@ def split_valid_relations(payload, targets, pages):
         try:
             row = validate_relations({"results": [raw]}, [target], pages)[0]
             accepted[row.target_id] = relation_inputs(row, target, pages)
+            if [q.excerpt for q in row.quotes] != [q["excerpt"] for q in raw["quotes"]]:
+                accepted[row.target_id]["source_format_restored"] = True
         except ValueError as exc:
             failed[target["target_id"]] = str(exc)[:400]
     return accepted, failed

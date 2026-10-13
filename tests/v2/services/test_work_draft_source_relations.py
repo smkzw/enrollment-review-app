@@ -10,6 +10,15 @@ from app.domain.contracts.work_draft import WorkDraftSourcePage
 from app.services.work_draft_semantics import SourceRelation, relation_inputs, validate_relations
 
 
+def test_source_reason_display_keeps_clinical_values_but_not_wire_vocabulary():
+    from app.services.work_draft_projection import display_source_reason
+    reason = "P16明确否认，T01故relation=refutes；site记录CS，2025-08-08 ALT 57.8 U/L。"
+    shown = display_source_reason(reason)
+    assert "P16" not in shown and "T01" not in shown and "refutes" not in shown
+    assert "原文明示不符合该条件" in shown and "研究中心" in shown
+    assert "CS，2025-08-08 ALT 57.8 U/L" in shown
+
+
 def page(text="病历记载：否认近期感染。", *, complete=True, category="study_chart", key="page"):
     return WorkDraftSourcePage(source_document_version_id="document", page_artifact_id=key,
         page_number=1, effective_text=text, effective_text_sha256=sha256(text.encode()).hexdigest(),
@@ -34,6 +43,27 @@ def test_verified_chart_relation_uses_original_page_not_fake_fact():
     assert inputs["truth"] == TruthValue.FALSE.value
     assert inputs["source_read_refs"][0]["excerpt"] == "否认近期感染"
     assert "fact_id" not in inputs["source_read_refs"][0]
+
+
+def test_unique_line_wrap_restores_exact_original_quote_without_a_new_model_answer():
+    from app.services.work_draft_semantics import split_valid_relations
+    original = page("病历记载：否认近期\n感染。")
+    accepted, failed = split_valid_relations({"results": [row().model_dump()]}, [target()], [original])
+    assert not failed and accepted["component:infection"]["truth"] == "false"
+    assert accepted["component:infection"]["source_format_restored"]
+    assert accepted["component:infection"]["source_read_refs"][0]["excerpt"] == "否认近期\n感染"
+
+
+@pytest.mark.parametrize("original,quote", [
+    ("否认近期\n感染；否认近期\n感染", "否认近期感染"),
+    ("读数1\n2mg", "读数12mg"),
+    ("病历记录，否认感染", "病历记录,否认感染"),
+    ("读数1 2mg", "读数12mg"),
+    ("否认近期感染", "没有近期感染"),
+])
+def test_line_wrap_mapping_rejects_ambiguity_numeric_merging_and_changed_words(original, quote):
+    from app.services.work_draft_semantics import source_excerpt
+    assert source_excerpt(original, quote) is None
 
 
 @pytest.mark.parametrize("change", [
@@ -196,7 +226,7 @@ def test_exact_scope_echo_is_not_a_missing_target_but_other_fields_still_rejecte
             source_result_envelope({**payload, **change}, material)
 
 
-@pytest.mark.parametrize("mutation", [None, "source", "target", "policy", "model", "truncated"])
+@pytest.mark.parametrize("mutation", [None, "wrap", "disagreement", "source", "target", "policy", "model", "truncated"])
 def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutation):
     import json
     from app.domain.contracts.agents import ModelConfigContract
@@ -204,10 +234,12 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
     from app.services.work_draft_semantics import revalidate_saved_source_read, SEMANTIC_INSTRUCTIONS, SourceRelations
     model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture",
         reasoning_effort="high", parameters={"max_tokens": 65536, "prompt_version": "new-format"})
-    frame = SimpleNamespace(source_pages=[page()], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+    source = page("病历记载：否认近期\n感染。") if mutation == "wrap" else page()
+    if mutation == "disagreement": source = page("近期感染。否认近期感染。")
+    frame = SimpleNamespace(source_pages=[source], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
         anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
-    material = {"stage": "screening", "anchor_dates": {}, "targets": [target()], "pages": [{
-        "page_artifact_id": "page", "page_number": 1, "category": "study_chart", "text": page().effective_text}],
+    material = {"version": "input-v3", "stage": "screening", "anchor_dates": {}, "targets": [target()], "pages": [{
+        "page_artifact_id": "page", "page_number": 1, "category": "study_chart", "text": source.effective_text}],
         "output_schema": SourceRelations.model_json_schema()}
     if mutation == "source": material["pages"][0]["text"] = "另一份资料"
     if mutation == "target": material["targets"][0] = target("inclusion")
@@ -217,15 +249,26 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
     if mutation == "model": old_model["model"] = "different-model"
     saved = {"model": old_model, "text": json.dumps({"results": [row().model_dump()]},ensure_ascii=False),
         "calls": [{"finish_reason": "length" if mutation == "truncated" else "stop", "response_model": "fixture", "request_artifact_sha256": "request"}]}
+    if mutation == "disagreement":
+        saved["text"] = json.dumps({"version": "input-v3", "results": [row().model_dump()]}, ensure_ascii=False)
     class Artifacts:
-        def read(self, ref): return json.dumps(saved,ensure_ascii=False).encode()
+        def read(self, ref):
+            value = saved
+            if ref == "conflicting":
+                value = {**saved, "text": json.dumps({"version": "input-v3", "results": [row(relation="supports",
+                    quotes=[{"page_artifact_id": "page", "excerpt": "近期感染。"}]).model_dump()]}, ensure_ascii=False)}
+            return json.dumps(value,ensure_ascii=False).encode()
         def read_by_sha(self, kind, digest): return json.dumps(request,ensure_ascii=False).encode()
     original_result = relation_inputs(row(), target(), [page()])
-    values, proofs = revalidate_saved_source_read({"raw_refs": ["response"], "results": {
+    refs = ["response", "conflicting"] if mutation == "disagreement" else ["response"]
+    values, proofs = revalidate_saved_source_read({"raw_refs": refs, "results": {} if mutation in {"wrap", "disagreement"} else {
         "component:infection": original_result}}, frame, [target()], model, Artifacts())
-    assert bool(values) == (mutation is None)
+    assert bool(values) == (mutation in {None, "wrap", "disagreement"})
     if values:
-        assert values["component:infection"]["truth"] == "false" and proofs["component:infection"]["request_sha256"] == "request"
+        assert values["component:infection"]["truth"] == ("unknown" if mutation == "disagreement" else "false")
+        assert proofs["component:infection"]["request_sha256"] == "request"
+        if mutation == "disagreement":
+            assert values["component:infection"]["conflict"] and len(values["component:infection"]["source_read_refs"]) == 2
 
 
 def test_chart_role_override_does_not_change_normalizer_role(monkeypatch):
