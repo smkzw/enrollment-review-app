@@ -316,6 +316,136 @@ def frozen(facts, anchors=None):
             model_dump=lambda **_: {"anchor_dates": {key.value: val.model_dump(mode="json") for key, val in (anchors or {}).items()}}))
 
 
+def numeric_history_case(*, value=None, domain="history", time=None):
+    from app.domain.variables.dictionary import VariableDef
+    rules, _, component = clause(kind=RuleKind.EXCLUSION, time=time)
+    definition = VariableDef(variable_id="historical_quantity", label_zh="既往记录用量",
+        value_type="number", canonical_unit="mg", plausible_range=(0, 1000), domain=domain)
+    rules.variable_definitions = [definition]
+    predicate = component.expression.predicate
+    predicate.attribute, predicate.value, predicate.unit = "既往记录用量", 20, "mg"
+    component.evidence_requirements[0].variable_id = definition.variable_id
+    seed = material(value=25 if value is None else value)
+    frame = frozen([seed])
+    text = "否认既往有达到所述用量的记录。"
+    from app.domain.contracts.work_draft import WorkDraftSourcePage
+    frame.source_pages = [WorkDraftSourcePage(source_document_version_id="document", page_artifact_id="page",
+        page_number=1, document_category="study_chart", effective_text=text,
+        effective_text_sha256=sha256(text.encode()).hexdigest(), extraction_complete=True)]
+    refs = {}
+    frame.facts = []
+    if value is not None:
+        basis = seed.assertion_basis.model_copy(update={"asserted_object": definition.label_zh,
+            "assertion_text": f"既往记录用量 {value} mg"})
+        values = {key: getattr(seed, key) for key in ("authority", "fact_type", "polarity", "date_range", "profile_lane", "date_role")}
+        values.update(asserted_object=definition.label_zh, assertion_basis=basis,
+            variable_id=definition.variable_id, value=value, unit="mg")
+        fact = seed.model_copy(update={**values, "stable_identity": clinical_fact_stable_identity(**values)})
+        frame.facts = [fact]
+        refs[fact.fact_id] = [WorkDraftEvidenceRef(fact_id=fact.fact_id, locator_id=basis.locator_id,
+            source_document_version_id="document", page_artifact_id="page", page_number=1,
+            excerpt=basis.assertion_text)]
+    frame.clause_pack = project_clause_pack(rules)
+    frame.procedure_catalog = None
+    return rules, frame, refs
+
+
+@pytest.mark.parametrize("domain,expected", [("history", 1), ("medication", 1), ("lab", 0),
+    ("vital", 0), ("score", 0), ("demographic", 0)])
+def test_numeric_history_routing_is_domain_based_not_a_clinical_keyword(domain, expected):
+    from app.services.work_draft_semantics import targets_for_review
+    rules, frame, _ = numeric_history_case(domain=domain)
+    assert len(targets_for_review(frame, rules)) == expected
+
+
+def test_compound_judgment_reads_receive_approved_policy_and_full_sibling_logic():
+    from app.domain.variables.dictionary import VariableDef
+    from app.domain.publication import canonical_hash
+    from app.services.work_draft_semantics import targets_for_review, wire_target
+    rules, frame, _ = numeric_history_case()
+    component = rules.rules[0].components[0]
+    judgment = AtomicExpression(predicate=AtomicPredicate(predicate_id="paired-response",
+        subject="受试者", attribute="与该次既往治疗相对应的疗效", comparator=Comparator.EXISTS,
+        requires_professional_judgment=True))
+    component.expression = LogicalExpression(operator=LogicalOperator.ALL, children=[component.expression, judgment])
+    component.evidence_requirements.append(component.evidence_requirements[0].model_copy(update={
+        "requirement_id": "paired-response-record", "variable_id": "paired_response", "predicate_ids": ["paired-response"],
+        "description": "须核同一次治疗与疗效，不将随后开始的治疗用于当前节点。"}))
+    rules.variable_definitions.append(VariableDef(variable_id="paired_response", label_zh="对应治疗的疗效",
+        value_type="boolean", domain="history"))
+    before = canonical_hash(rules.model_dump(mode="json"))
+    frame.clause_pack = project_clause_pack(rules)
+    targets = targets_for_review(frame, rules)
+    assert len(targets) == 2
+    context = targets[0]["source_context"]
+    assert all(t["source_context"] == context for t in targets)
+    assert context["expression"]["operator"] == "all"
+    assert {x["predicate"]["predicate_id"] for x in context["expression"]["children"]} == {"age-limit", "paired-response"}
+    assert context["evidence_requirements"][1]["description"] == component.evidence_requirements[1].description
+    assert canonical_hash(rules.model_dump(mode="json")) == before
+    # An old atom-only request cannot qualify an answer under an unseen policy.
+    old = {k: v for k, v in targets[0].items() if k != "source_context"}
+    assert wire_target(old) != wire_target(targets[0])
+    component.evidence_requirements[1].description += " 且期间必须相同。"
+    frame.clause_pack = project_clause_pack(rules)
+    assert wire_target(targets_for_review(frame, rules)[0]) != wire_target(targets[0])
+
+
+def test_numeric_history_explicit_denial_enters_consumer_without_fabricating_a_zero_fact():
+    from app.services.work_draft_semantics import targets_for_review, SourceRelation, validate_relations, relation_inputs
+    rules, frame, refs = numeric_history_case()
+    target = targets_for_review(frame, rules)[0]
+    row = SourceRelation(target_id=target["target_id"], relation="refutes", applicable="yes",
+        object_matches=True, time_matches=True, reason="原件明确否认该完整条件。",
+        quotes=[{"page_artifact_id": "page", "excerpt": frame.source_pages[0].effective_text}])
+    valid = validate_relations({"results": [row.model_dump()]}, [target], frame.source_pages)[0]
+    result = calculate_work_component(frame.clause_pack.clauses[0], frame, rules, evidence_refs=refs,
+        source_results={target["target_id"]: relation_inputs(valid, target, frame.source_pages)})
+    assert result.decision == D.EXCLUSION_NOT_TRIGGERED and result.confidence == "low"
+    assert result.source_read_refs[0].excerpt == frame.source_pages[0].effective_text
+    assert not result.evidence_refs and not frame.facts
+    assert "0mg" not in result.reason_text
+
+
+@pytest.mark.parametrize("value,truth,conflict,expected", [
+    (25, "unknown", False, D.EXCLUSION_TRIGGERED),
+    (5, "unknown", False, D.EXCLUSION_NOT_TRIGGERED),
+    (25, "true", False, D.EXCLUSION_TRIGGERED),
+    (5, "false", False, D.EXCLUSION_NOT_TRIGGERED),
+    (25, "false", False, D.CONFLICT),
+    (5, "true", False, D.CONFLICT),
+    (25, "unknown", True, D.CONFLICT),
+    (None, "unknown", False, D.INDETERMINATE),
+])
+def test_numeric_history_keeps_proven_arithmetic_and_opposing_source(value, truth, conflict, expected):
+    rules, frame, refs = numeric_history_case(value=value)
+    target_id = "age-component:age-limit"
+    source = {"truth": truth, "applicable": "yes", "conflict": conflict, "policy": False,
+        "relation": "conflict" if conflict else "unclear" if truth == "unknown" else "refutes" if truth == "false" else "supports",
+        "reason": "本次病历原文关系。", "source_read_refs": [{"source_document_version_id": "document",
+            "page_artifact_id": "page", "page_number": 1, "excerpt": frame.source_pages[0].effective_text,
+            "disposition": "unresolved" if truth == "unknown" else "mentioned"}]}
+    result = calculate_work_component(frame.clause_pack.clauses[0], frame, rules, evidence_refs=refs,
+        source_results={target_id: source})
+    assert result.decision == expected and result.system_issue is None
+    if value is not None:
+        assert result.evidence_refs[0].fact_id == frame.facts[0].fact_id
+        assert f"{value}mg" in result.reason_text
+    if expected == D.CONFLICT:
+        assert "未选择有利结果" in result.reason_text and result.source_read_refs
+
+
+def test_unperformed_numeric_history_read_is_technical_not_patient_missing_data():
+    rules, frame, refs = numeric_history_case()
+    result = calculate_work_component(frame.clause_pack.clauses[0], frame, rules, evidence_refs=refs)
+    assert result.decision is None and result.system_issue is not None
+    assert "原文核对尚未完成" in result.reason_text
+    # A valid quantity remains usable even if the semantic read did not complete.
+    rules, frame, refs = numeric_history_case(value=25)
+    result = calculate_work_component(frame.clause_pack.clauses[0], frame, rules, evidence_refs=refs)
+    assert result.decision == D.EXCLUSION_TRIGGERED and result.system_issue is None
+
+
 def test_variable_identity_not_display_type_selects_and_computes():
     rules, projected, component = clause()
     fact = material()

@@ -32,6 +32,12 @@ def atomic_expressions(expression):
             yield from atomic_expressions(operand)
 
 
+def is_numeric_history_condition(predicate, definition):
+    return (definition is not None and definition.value_type == "number"
+        and definition.domain in {"history", "medication"}
+        and not predicate.source_computation and not predicate.repeat_scheme)
+
+
 def applicable_expression(expression, excluded_predicates):
     """Build a calculation-only tree; inapplicable atoms are not TRUE or FALSE."""
     if expression is None:
@@ -322,6 +328,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             or p.semantic_proposition or p.applicable_population or p.prospective_period or p.prospective_window}
         needs_source.update(pid for req in due if req.variable_id in definitions
             and definitions[req.variable_id].value_type == "exposure" for pid in req.predicate_ids)
+        predicate_variables = {pid: req.variable_id for req in due for pid in req.predicate_ids}
+        numeric_history = {p.predicate_id for p in predicates if is_numeric_history_condition(
+            p, definitions.get(predicate_variables.get(p.predicate_id)))}
         # A normalizer's generic value/EXISTS result is not proof of a written
         # judgment, a future intention or an actual medication-use relationship.
         for pid in needs_source:
@@ -336,7 +345,6 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             return WorkDraftItem(**common, decision=D.CONFLICT, reason_text="同一采样日或同一来源位置的记录不一致，未自动择优。",
                 evidence_refs=[ref for fact in selected for ref in evidence_refs.get(fact.fact_id, ())])
         adapted = []
-        predicate_variables = {pid: req.variable_id for req in due for pid in req.predicate_ids}
         for fact in selected:
             item = adapt_clinical_fact_v2(fact)
             bound_predicates = [predicate for predicate in predicates
@@ -417,6 +425,7 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             from app.domain.gates.assessment import derive_component_decision, derive_gate_gap_types
             values = dict(outcome.evaluation.predicate_evaluations)
             unverified_source_times = set()
+            numeric_source_conflicts = set()
             atoms = {atom.predicate.predicate_id: atom for expression in (
                 calculation_component.expression, calculation_component.exception_expression)
                 if expression is not None for atom in atomic_expressions(expression)}
@@ -441,6 +450,15 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                     if not dated:
                         truth = TruthValue.UNKNOWN
                         unverified_source_times.add(pid)
+                computed = values[pid]
+                if pid in numeric_history and computed.truth != TruthValue.UNKNOWN:
+                    # A chart denial is not a replacement quantity. Keep proven
+                    # arithmetic and its fact references; retain opposing evidence.
+                    if row["conflict"] or truth not in {TruthValue.UNKNOWN, computed.truth}:
+                        numeric_source_conflicts.add(pid)
+                        values[pid] = computed.model_copy(update={"truth": TruthValue.UNKNOWN,
+                            "reason_codes": [*computed.reason_codes, "source_conflict"]})
+                    continue
                 values[pid] = EvaluationResult(truth=truth,
                     reason_codes=["source_conflict"] if row["conflict"] else [] if truth != TruthValue.UNKNOWN else ["observation_unverified"])
             excluded = {p.predicate_id for p in predicates if p.applicable_population
@@ -491,7 +509,7 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
         if GapType.CALCULATION_CAPABILITY_UNAVAILABLE in outcome.gaps:
             issue = _issue(clause.official_code, "系统暂不支持本条所需的计算方式。")
             return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)
-        if needs_source - set(relations) and outcome.decision not in DETERMINATE | {D.NOT_DUE, D.NOT_APPLICABLE}:
+        if (needs_source | numeric_history) - set(relations) and outcome.decision not in DETERMINATE | {D.NOT_DUE, D.NOT_APPLICABLE, D.CONFLICT}:
             issue = _issue(clause.official_code, "本条病历及用药记录的原文核对尚未完成，已有读取内容和其他独立结果保留。")
             return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
         used_ids = set(outcome.evaluation.trigger.used_fact_ids)
@@ -572,6 +590,8 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                 reason += "。尚未形成可用于本条的" + "、".join(missing_calculations) + "已核实记录；不代表原件没有记载。"
             if unverified_source_times:
                 reason += "。已找到相关记录，但方案要求的日期锚点或同一记录的发生时间尚未核实，不能直接认作落入规定期间。"
+            if numeric_source_conflicts:
+                reason += "。已采用的数量记录与病历原文关系不一致，两者均已保留，未选择有利结果。"
             if any(row["policy"] for row in relations.values()):
                 reason += "。按本次已提供且已核对资料未见排除依据，不表示原件明确否认或研究者另行签字。"
         if any(row["conflict"] for row in relations.values()) and outcome.decision not in DETERMINATE:

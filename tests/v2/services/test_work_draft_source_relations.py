@@ -411,14 +411,19 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
 
 
 @pytest.mark.parametrize("change,expected", [(None, {"component:infection", "component:other"}),
-    ("removed", {"component:infection"}), ("meaning", {"component:other"}), ("tampered", set())])
+    ("removed", {"component:infection"}), ("meaning", {"component:other"}), ("tampered", set()),
+    ("context_missing", {"component:other"}), ("context_changed", {"component:other"})])
 def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request_verification(change, expected):
     import json
     from app.domain.contracts.agents import ModelConfigContract
     from app.domain.contracts.enums import ReviewStage
     from app.services.work_draft_semantics import revalidate_saved_source_read, SEMANTIC_INSTRUCTIONS, SourceRelations
     previous = [target(), {**target(), "target_id": "component:other"}]
+    if change == "context_changed":
+        previous[0] = {**previous[0], "source_context": {"purpose": "旧限定"}}
     current = previous[:1] if change == "removed" else [target("inclusion"), previous[1]] if change == "meaning" else previous
+    if change in {"context_missing", "context_changed"}:
+        current = [{**previous[0], "source_context": {"purpose": "新增限定"}}, previous[1]]
     model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
     source = page()
     frame = SimpleNamespace(source_pages=[source], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
@@ -437,7 +442,8 @@ def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request
         def read_by_sha(self, *_): return json.dumps(request).encode()
     checkpoint = {"raw_refs": ["response"], "results": {
         t["target_id"]: relation_inputs(r, t, [source]) for r, t in zip(rows, previous)}}
-    accepted, proofs = revalidate_saved_source_read(checkpoint, frame, current, model, Artifacts(), previous_targets=previous)
+    accepted, proofs = revalidate_saved_source_read(checkpoint, frame, current, model, Artifacts(),
+        previous_targets=current if change == "context_missing" else previous)
     assert set(accepted) == set(proofs) == expected
     assert all(value["truth"] == "false" for value in accepted.values())
 

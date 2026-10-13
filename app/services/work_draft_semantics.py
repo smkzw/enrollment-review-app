@@ -9,10 +9,11 @@ from pydantic import Field, StrictBool, StrictFloat, StrictInt
 
 from app.domain.contracts.common import ContractModel
 from app.domain.contracts.enums import AnchorType, ReviewStage, RuleKind, TruthValue
+from app.domain.contracts.rules import LogicalExpression
 from app.domain.contracts.work_draft import WorkDraftSourceRef
 from app.domain.publication import canonical_hash
 from app.domain.variables.dictionary import load_dictionary
-from app.services.work_draft_calculation import atomic_expressions
+from app.services.work_draft_calculation import atomic_expressions, is_numeric_history_condition
 
 PROMPT_VERSION = "work-draft-source-relations/v4"
 BATCH_SIZE = 16
@@ -132,6 +133,10 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
         for target in actual["targets"]:
             target = {**target, "target_id": aliases["targets"].get(target["target_id"], "unknown-target")} if aliases else target
             known = previous_expected.get(target["target_id"])
+            if known is not None and "source_context" not in target:
+                # Verify the actual historical atom, then invalidate only the
+                # targets that now require context the old reader never saw.
+                known = {key: value for key, value in known.items() if key != "source_context"}
             if known is not None and wire_target(target) == wire_target(known):
                 selected.append(known)
         if len(selected) != len(actual["targets"]):
@@ -145,9 +150,10 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
             valid, _ = split_valid_relations(raw, selected, pages)
         except (ValueError, JudgmentSearchReaderError):
             continue
+        validated_targets = {target["target_id"]: target for target in selected}
         for key, value in valid.items():
             current = expected.get(key)
-            if current is None or wire_target(current) != wire_target(previous_expected[key]):
+            if current is None or wire_target(current) != wire_target(validated_targets[key]):
                 continue
             prior = checkpoint.get("results", {}).get(key)
             if prior is not None:
@@ -237,6 +243,14 @@ def targets_for_review(frozen, rule_set):
             continue
         bindings = {pid: definitions.get(req.variable_id) for req in clause.evidence_requirements
                     for pid in req.predicate_ids if req.variable_id}
+        context = None
+        if (isinstance(clause.expression, LogicalExpression) and any(
+                atom.predicate.requires_professional_judgment for atom in atomic_expressions(clause.expression))):
+            context = {"purpose": "同组逻辑和已审定资料要求共同限定本项；分别核对对象、期间及对应关系，不把不同事件拼成满足，不以本节点后开始的治疗反推本节点已有治疗失败。",
+                "expression": clause.expression.model_dump(mode="json"),
+                "exception_expression": clause.exception_expression.model_dump(mode="json") if clause.exception_expression else None,
+                "evidence_requirements": [req.model_dump(mode="json") for req in clause.evidence_requirements
+                    if STAGE_RANK[req.due_stage] <= STAGE_RANK[frozen.review_episode.stage]]}
         for expression in (clause.expression, clause.exception_expression):
             if expression is None:
                 continue
@@ -247,7 +261,8 @@ def targets_for_review(frozen, rule_set):
                 # use already-published observations, not a semantic model's verdict.
                 if p.source_computation or p.repeat_scheme:
                     continue
-                if definition is not None and definition.value_type == "number" and not p.requires_professional_judgment:
+                if (definition is not None and definition.value_type == "number"
+                        and not p.requires_professional_judgment and not is_numeric_history_condition(p, definition)):
                     continue
                 if not (p.requires_professional_judgment or p.semantic_proposition
                         or p.applicable_population or p.prospective_period or p.prospective_window
@@ -258,7 +273,8 @@ def targets_for_review(frozen, rule_set):
                     "component_id": clause.rule_component_id, "official_code": clause.official_code,
                     "kind": clause.kind.value, "source_text": clause.source_text,
                     "title": clause.title, "atom": atom.model_dump(mode="json"),
-                    "variable": definition.model_dump(mode="json") if definition is not None else None})
+                    "variable": definition.model_dump(mode="json") if definition is not None else None,
+                    **({"source_context": context} if context else {})})
     reviews = {item.official_code: item for item in rule_set.review_records or ()}
     if frozen.procedure_catalog is not None:
         for item in sorted(frozen.procedure_catalog.items, key=lambda value: value.position):
