@@ -16,6 +16,7 @@ from app.domain.variables.dictionary import load_dictionary
 from app.services.work_draft_calculation import atomic_expressions, is_numeric_history_condition
 
 PROMPT_VERSION = "work-draft-source-relations/v4"
+VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v26"
 BATCH_SIZE = 16
 SEMANTIC_INSTRUCTIONS = (
     "你是入排审核产品的原文关系核对员。逐项查找本次提供的病历与报告中，对原子条件的支持或否定；"
@@ -133,10 +134,11 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
         for target in actual["targets"]:
             target = {**target, "target_id": aliases["targets"].get(target["target_id"], "unknown-target")} if aliases else target
             known = previous_expected.get(target["target_id"])
-            if known is not None and "source_context" not in target:
+            if known is not None:
                 # Verify the actual historical atom, then invalidate only the
                 # targets that now require context the old reader never saw.
-                known = {key: value for key, value in known.items() if key != "source_context"}
+                known = {key: value for key, value in known.items()
+                         if key not in {"source_context", "correspondence_check"} or key in target}
             if known is not None and wire_target(target) == wire_target(known):
                 selected.append(known)
         if len(selected) != len(actual["targets"]):
@@ -184,7 +186,7 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
             elif key not in accepted:
                 accepted[key] = value
                 proofs[key] = {"raw_response_ref": ref, "request_sha256": call["request_artifact_sha256"],
-                               "revalidation_version": PROMPT_VERSION}
+                               "revalidation_version": VALIDATION_VERSION}
     return accepted, proofs
 
 
@@ -274,7 +276,17 @@ def targets_for_review(frozen, rule_set):
                     "kind": clause.kind.value, "source_text": clause.source_text,
                     "title": clause.title, "atom": atom.model_dump(mode="json"),
                     "variable": definition.model_dump(mode="json") if definition is not None else None,
-                    **({"source_context": context} if context else {})})
+                    **({"source_context": context} if context else {}),
+                    **({"correspondence_check": (
+                        "先从原文区分各次事件或治疗、其适用期间和相对应结果，再核本条件。"
+                        "对象一致不只是同一受试者，还须符合条件要求的同一事件、治疗或采集；"
+                        "时间一致不只是发生于本节点之前，还须符合条件明确限定的期间。"
+                        "一次治疗的效果不能移给另一次治疗，其他期间的结果不能移给所要求的期间；"
+                        "症状存在不等于对应治疗效果不佳，后续才开始的动作不能证明节点当时已完成。"
+                        "只有原文能建立所要求的对应关系才supports；已有相关记录却无法对应时unclear，"
+                        "保留相关摘录，并在reason说明哪一个对象或期间的关联尚无依据。"
+                        "不凭药物常识、季节常识或总体符合入排的说法补齐关系。"
+                    )} if context is not None and p.requires_professional_judgment else {})})
     reviews = {item.official_code: item for item in rule_set.review_records or ()}
     if frozen.procedure_catalog is not None:
         for item in sorted(frozen.procedure_catalog.items, key=lambda value: value.position):
@@ -344,6 +356,16 @@ def validate_relations(payload, targets, pages):
         for quote in row.quotes:
             page = by_page.get(quote.page_artifact_id)
             exact = source_excerpt(page.effective_text, quote.excerpt) if page is not None else None
+            if page is not None and exact is None:
+                # A known document with one exact match can prove a page-number
+                # error. Never guess unknown aliases or search another document.
+                matches = [candidate for candidate in pages
+                    if candidate.source_document_version_id == page.source_document_version_id
+                    and candidate.effective_text.count(quote.excerpt) == 1]
+                occurrences = sum(candidate.effective_text.count(quote.excerpt) for candidate in pages
+                    if candidate.source_document_version_id == page.source_document_version_id)
+                if occurrences == 1 and len(matches) == 1:
+                    quote.page_artifact_id, exact = matches[0].page_artifact_id, quote.excerpt
             if exact is None:
                 raise ValueError("摘录或来源页不属于本次冻结资料")
             quote.excerpt = exact
@@ -381,6 +403,13 @@ def split_valid_relations(payload, targets, pages):
             accepted[row.target_id] = relation_inputs(row, target, pages)
             if [q.excerpt for q in row.quotes] != [q["excerpt"] for q in raw["quotes"]]:
                 accepted[row.target_id]["source_format_restored"] = True
+            position_changes = [{"declared_page_artifact_id": original["page_artifact_id"],
+                "verified_page_artifact_id": verified.page_artifact_id, "excerpt": verified.excerpt}
+                for original, verified in zip(raw["quotes"], row.quotes)
+                if original["page_artifact_id"] != verified.page_artifact_id]
+            if position_changes:
+                accepted[row.target_id]["source_format_restored"] = True
+                accepted[row.target_id]["source_position_restorations"] = position_changes
         except ValueError as exc:
             failed[target["target_id"]] = str(exc)[:400]
     return accepted, failed

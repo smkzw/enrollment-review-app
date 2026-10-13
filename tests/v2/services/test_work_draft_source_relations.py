@@ -184,6 +184,42 @@ def test_line_wrap_mapping_rejects_ambiguity_numeric_merging_and_changed_words(o
     assert source_excerpt(original, quote) is None
 
 
+def test_known_document_unique_literal_can_restore_page_position_and_preserve_original_answer():
+    from app.services.work_draft_semantics import split_valid_relations
+    declared = page("继续记录后续随访。", key="wrong-page")
+    actual = page("病历记载：否认近期感染。", key="actual-page").model_copy(update={"page_number": 2})
+    payload = {"results": [row(quotes=[{"page_artifact_id": "wrong-page", "excerpt": "否认近期感染"}]).model_dump()]}
+    accepted, failed = split_valid_relations(payload, [target()], [declared, actual])
+    result = accepted["component:infection"]
+    assert not failed and result["truth"] == "false"
+    assert result["source_read_refs"][0]["page_artifact_id"] == "actual-page"
+    assert result["source_read_refs"][0]["page_number"] == 2
+    assert result["source_position_restorations"] == [{"declared_page_artifact_id": "wrong-page",
+        "verified_page_artifact_id": "actual-page", "excerpt": "否认近期感染"}]
+    assert payload["results"][0]["quotes"][0]["page_artifact_id"] == "wrong-page"
+
+
+@pytest.mark.parametrize("variant", ["unknown_alias", "other_document", "multiple_pages", "twice_same_page", "changed_text", "line_wrap"])
+def test_page_position_restoration_rejects_unknown_cross_document_ambiguous_or_changed_quote(variant):
+    declared = page("继续记录后续随访。", key="wrong-page")
+    actual = page("病历记载：否认近期感染。", key="actual-page")
+    pages = [declared, actual]
+    quote = "否认近期感染"
+    key = "unknown-page" if variant == "unknown_alias" else "wrong-page"
+    if variant == "other_document":
+        pages[-1] = actual.model_copy(update={"source_document_version_id": "other-document"})
+    elif variant == "multiple_pages":
+        pages.append(page(actual.effective_text, key="another-page"))
+    elif variant == "twice_same_page":
+        pages[-1] = page("否认近期感染；否认近期感染", key="actual-page")
+    elif variant == "changed_text":
+        quote = "没有近期感染"
+    elif variant == "line_wrap":
+        pages[-1] = page("否认近期\n感染", key="actual-page")
+    with pytest.raises(ValueError, match="来源页"):
+        validate_relations({"results": [row(quotes=[{"page_artifact_id": key, "excerpt": quote}]).model_dump()]}, [target()], pages)
+
+
 @pytest.mark.parametrize("change", [
     {"quotes": [{"page_artifact_id": "other-patient", "excerpt": "否认近期感染"}]},
     {"quotes": [{"page_artifact_id": "page", "excerpt": "未感染"}]},
@@ -412,7 +448,8 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
 
 @pytest.mark.parametrize("change,expected", [(None, {"component:infection", "component:other"}),
     ("removed", {"component:infection"}), ("meaning", {"component:other"}), ("tampered", set()),
-    ("context_missing", {"component:other"}), ("context_changed", {"component:other"})])
+    ("context_missing", {"component:other"}), ("context_changed", {"component:other"}),
+    ("correspondence_missing", {"component:other"}), ("correspondence_changed", {"component:other"})])
 def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request_verification(change, expected):
     import json
     from app.domain.contracts.agents import ModelConfigContract
@@ -421,9 +458,13 @@ def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request
     previous = [target(), {**target(), "target_id": "component:other"}]
     if change == "context_changed":
         previous[0] = {**previous[0], "source_context": {"purpose": "旧限定"}}
+    if change == "correspondence_changed":
+        previous[0] = {**previous[0], "correspondence_check": "旧对应要求"}
     current = previous[:1] if change == "removed" else [target("inclusion"), previous[1]] if change == "meaning" else previous
     if change in {"context_missing", "context_changed"}:
         current = [{**previous[0], "source_context": {"purpose": "新增限定"}}, previous[1]]
+    if change in {"correspondence_missing", "correspondence_changed"}:
+        current = [{**previous[0], "correspondence_check": "按原文核对事件、期间与结果关系"}, previous[1]]
     model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
     source = page()
     frame = SimpleNamespace(source_pages=[source], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
@@ -443,7 +484,7 @@ def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request
     checkpoint = {"raw_refs": ["response"], "results": {
         t["target_id"]: relation_inputs(r, t, [source]) for r, t in zip(rows, previous)}}
     accepted, proofs = revalidate_saved_source_read(checkpoint, frame, current, model, Artifacts(),
-        previous_targets=current if change == "context_missing" else previous)
+        previous_targets=current if change in {"context_missing", "correspondence_missing"} else previous)
     assert set(accepted) == set(proofs) == expected
     assert all(value["truth"] == "false" for value in accepted.values())
 

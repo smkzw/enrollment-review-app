@@ -379,6 +379,9 @@ def test_compound_judgment_reads_receive_approved_policy_and_full_sibling_logic(
     assert len(targets) == 2
     context = targets[0]["source_context"]
     assert all(t["source_context"] == context for t in targets)
+    assert "correspondence_check" not in targets[0]
+    assert "同一事件、治疗或采集" in targets[1]["correspondence_check"]
+    assert "其他期间的结果不能移给所要求的期间" in targets[1]["correspondence_check"]
     assert context["expression"]["operator"] == "all"
     assert {x["predicate"]["predicate_id"] for x in context["expression"]["children"]} == {"age-limit", "paired-response"}
     assert context["evidence_requirements"][1]["description"] == component.evidence_requirements[1].description
