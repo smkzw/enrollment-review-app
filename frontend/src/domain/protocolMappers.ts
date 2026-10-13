@@ -168,3 +168,20 @@ export function mapProtocolSourceLocators(
     ];
   });
 }
+
+/** Display-only coalescing: equal text on different pages or source units stays separate. */
+export function displayProtocolSourceLocators(sourceSpans: Record<string, unknown>, refs: ReadonlyArray<string>): ProtocolSourceLocatorView[] {
+  const seen = new Set<string>();
+  return mapProtocolSourceLocators(sourceSpans, refs.filter(ref => {
+    const raw = sourceSpans[ref];
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return true;
+    const span = raw as Record<string, unknown>;
+    const key = typeof span.snapshot_id === "string" && typeof span.source_ref === "string"
+      ? JSON.stringify([span.snapshot_id, span.source_ref, span.render_artifact_id, span.render_page,
+          span.page_number, span.table_path, span.table_row, span.table_col, span.text_start, span.text_end,
+          span.bbox, span.precision, span.excerpt, span.degradation_reason]) : ref;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }));
+}

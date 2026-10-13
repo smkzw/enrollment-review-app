@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { DraftRevisionView, IntegrityView, ProtocolSessionView, SourcesView } from "../../api/protocolWorkbenchTypes";
 import { updateParams } from "../../app/router";
-import { mapProtocolDraftRules, mapProtocolSourceLocators } from "../../domain/protocolMappers";
+import { mapProtocolDraftRules, displayProtocolSourceLocators } from "../../domain/protocolMappers";
 import type { RuleComponentId } from "../../domain/ids";
 import { ProtocolDeconstructionRuleTree } from "./ProtocolDeconstructionRuleTree";
 import { ProtocolDraftEditPane } from "./ProtocolDraftEditPane";
@@ -79,7 +79,7 @@ export function ProtocolDraftWorkbench({
 
   const locators = useMemo(() => {
     if (selectedComponent === null) return [];
-    return mapProtocolSourceLocators(sources.sourceSpans, selectedComponent.sourceRefs);
+    return displayProtocolSourceLocators(sources.sourceSpans, selectedComponent.sourceRefs);
   }, [selectedComponent, sources.sourceSpans]);
 
   const revisionLabel = `草稿第 ${draft.revisionNumber} 稿 · ${draft.statusLabel}`;

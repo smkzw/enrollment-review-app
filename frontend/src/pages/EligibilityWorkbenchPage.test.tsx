@@ -170,6 +170,7 @@ describe("入排审核工作台", () => {
         }] }],
     }) });
     render(<EligibilityWorkbenchPage />);
+    await userEvent.click(await screen.findByText("病历依据与核对范围（1）"));
     const button = await screen.findByRole("button", { name: /本次判断的病历依据/ });
     await userEvent.click(button);
     expect(screen.queryByText("当前条款没有已采用事实，可浏览全部原件页核实。")).not.toBeInTheDocument();
@@ -185,11 +186,31 @@ describe("入排审核工作台", () => {
       }] }],
     }) });
     render(<EligibilityWorkbenchPage />);
+    await userEvent.click(await screen.findByText("病历依据与核对范围（1）"));
     const button = await screen.findByRole("button", { name: /已找到相关原文，待核清/ });
     await userEvent.click(button);
     expect(await screen.findByText("当前条款没有已采用事实，可浏览全部原件页核实。")).toBeInTheDocument();
     expect(within(screen.getByLabelText("原始资料查看区"))
       .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+  });
+  it("低置信只留标记，理由分点但不改数值否定；收起列表后保留当前对象和原件", async () => {
+    const reason = "检验结果：1.2 mmol/L，未超过界值；研究者判断：尚无明确记载。";
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, confidence: "low", confidenceReason: "重复的低置信长说明", reason }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const detail = await screen.findByLabelText("审核要点详情");
+    expect(within(detail).getByText("低置信")).toHaveAttribute("title", "重复的低置信长说明");
+    expect(within(detail).queryByText("重复的低置信长说明")).not.toBeInTheDocument();
+    const reasons = detail.querySelector(".eligibility-reason-lines");
+    expect(reasons?.children).toHaveLength(2);
+    expect(reasons?.textContent).toBe(reason);
+    await userEvent.click(screen.getByRole("button", { name: "收起条款列表" }));
+    expect(screen.queryByLabelText("审核要点列表")).not.toBeInTheDocument();
+    expect(detail).toBeInTheDocument();
+    expect(screen.getByLabelText("原件面板")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "显示条款列表" }));
+    expect(screen.getByLabelText("审核要点列表")).toBeInTheDocument();
   });
   it("核对方法未支持时显示处理方向，不要求研究者替软件作判断", async () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
@@ -266,9 +287,11 @@ describe("入排审核工作台", () => {
     expect(reference).not.toHaveAttribute("aria-current");
     expect(screen.queryByLabelText(/^重点标注/)).not.toBeInTheDocument();
     const panel = screen.getByRole("complementary", { name: "原件面板" });
+    expect(panel.querySelector(".eligibility-evidence__excerpt")).toBeNull();
     await user.click(within(panel).getByRole("button", { name: "返回事实来源页" }));
     expect(reference).toHaveAttribute("aria-current", "page");
     expect(adjacent).not.toHaveAttribute("aria-current");
+    expect(panel.querySelector(".eligibility-evidence__excerpt")).toHaveTextContent("检查结果见原件");
   });
   it("同一官方编号的两个要点可独立选择并生成各自链接", async () => {
     const first = { ...review.clauses[0]!, ruleComponentId: "component-a", parentRuleCode: "IN-01", textSummary: "第一个审核要点" };

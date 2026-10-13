@@ -611,10 +611,11 @@ export function ProtocolManualEditDialog({
                 ))}
               </fieldset>
             )}
-            <div className="protocol-edit-dialog__source">
-              <strong>方案原文（只读）</strong>
-              {(editor?.sourceExcerpts.length ?? 0) === 0 ? <p>当前子项没有可显示的原文摘录。</p> : editor?.sourceExcerpts.map((excerpt, index) => <q key={`${index}-${excerpt}`}>{excerpt}</q>)}
-            </div>
+            <details className="protocol-edit-dialog__source" key={componentId}>
+              <summary>方案原文（只读）</summary>
+              {(editor?.sourceExcerpts.length ?? 0) === 0 ? <p>当前子项没有可显示的原文摘录。</p>
+                : [...new Set(editor?.sourceExcerpts)].map((excerpt, index) => <blockquote key={`${index}-${excerpt}`}>{excerpt}</blockquote>)}
+            </details>
           </>
         )}
         {errorMessage !== undefined && errorMessage.length > 0 && (

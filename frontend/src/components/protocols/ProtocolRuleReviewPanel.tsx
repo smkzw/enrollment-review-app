@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, Check, SlidersHorizontal, GitBranch } from "lucide-react";
 import { requestRuleReviews, type RuleReviews, type ReviewerKind } from "../../api/protocolRuleReviews";
 import type { IntegrityView, SourcesView } from "../../api/protocolWorkbenchTypes";
-import { mapProtocolSourceLocators } from "../../domain/protocolMappers";
+import { displayProtocolSourceLocators } from "../../domain/protocolMappers";
 import { ProtocolDraftSourcePane } from "./ProtocolDraftSourcePane";
 import { decodeBindingView, variableRequest, type BindingView } from "../../api/protocolVariables";
 import { reviewCategories, ruleReviewAdvice, ruleReviewIssueText, ruleReviewPresentations, type ReviewCategory } from "../../domain/protocolRuleReview";
@@ -156,32 +157,37 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
         {!visible.length && <p role="status">{category === "medication" ? "此类尚无独立审定条目；官方入排标准内已有的用药条件仍在原编号下查看，不能据此认为方案没有用药限制。" : "当前范围没有条目。"}</p>}
       </div>
       {entry && selectedItem && <div className="protocol-rule-reviews__detail">
-        <h3>{entry.kind === "rule" ? entry.official_code : entry.label}</h3>
+        <header className="protocol-review-detail-head"><h3>{entry.kind === "rule" ? entry.official_code : entry.label}</h3>
+          <span className={selectedItem.reasons.length ? "protocol-review-confidence--low" : "protocol-review-confidence--high"}>
+            {selectedItem.reasons.length ? <AlertCircle size={15} aria-hidden="true" /> : <Check size={15} aria-hidden="true" />}
+            {selectedItem.reasons.length ? "重点核对" : "结构清楚"}</span>
+        </header>
         <details className="protocol-review-original"><summary>条款原文</summary><p>{entry.label}</p></details>
-        <section className="protocol-review-focus" aria-label="解析把握度">
-          <strong>{selectedItem.reasons.length ? "把握度不足，建议重点核对" : "把握度较高，结构与资料对应清楚"}</strong>
-          {selectedItem.reasons.length ? <ul>{selectedItem.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
-            : <p>原文与条件、病例数据项目已有对应，当前未检出相关结构提示；仍须由医学经理核对含义。</p>}
-          <small>这是解析核对提示，不是准确率，也不是受试者的审核结论。</small>
-        </section>
-        {selectedItem.reasons.length > 0 && <section className="protocol-review-advice" aria-label="备选解释与处理">
-          <h4>备选解释与处理</h4>
-          {ruleReviewAdvice(selectedItem, content).map(advice => <div key={advice.componentId ?? advice.title}>
-            <strong>{advice.title}</strong><p>{advice.analysis}</p>
-            <ol>{advice.options.map(option => <li key={option.label}>
-              <strong>{option.label}{option.recommended ? " · 推荐核对方向" : ""}</strong>
-              <p>{option.explanation}</p>
+        {selectedItem.reasons.length > 0 && <details className="protocol-review-focus" aria-label="解析把握度">
+          <summary><AlertCircle size={15} aria-hidden="true" /> {selectedItem.reasons.length} 项核对提示</summary>
+          <ul>{selectedItem.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
+        </details>}
+        <ProtocolReviewLogic item={selectedItem} content={content} bindings={bindings} />
+        {selectedItem.reasons.length > 0 && <details className="protocol-review-advice" aria-label="备选解释与处理" key={entry.official_code}>
+          <summary><SlidersHorizontal size={16} aria-hidden="true" /> 比较备选解释与手动调整</summary>
+          {ruleReviewAdvice(selectedItem, content).map(advice => <section className="protocol-review-advice__group" key={advice.componentId ?? advice.title}>
+            <h4><GitBranch size={16} aria-hidden="true" />{advice.title}</h4><p className="protocol-review-advice__analysis">{advice.analysis}</p>
+            <ol>{advice.options.map((option, index) => <li key={option.label} className={option.recommended ? "is-recommended" : ""}>
+              <div className="protocol-review-option__head"><span className="protocol-review-option__letter">{String.fromCharCode(65 + index)}</span>
+                <strong>{option.label}</strong></div>
+              <div className="protocol-review-option__tags">
+                {option.current && <span>当前解释</span>}{option.recommended && <span><Check size={13} aria-hidden="true" />推荐核对方向</span>}
+              </div>
+              <p><b>判断变化</b>{option.explanation}</p>
               {onEdit && advice.componentId && (option.operator || option.manual || option.label === "分组或手动调整") && <button className="button" disabled={busy}
                 onClick={() => onEdit(advice.componentId!, option.operator)}>
                 {option.operator ? "按此方向预览修订" : "打开手动调整"}</button>}
             </li>)}</ol>
-          </div>)}
-          <p>推荐依据是原文及当前解析，不是准确率排名。选择只打开修订预览，保存后仍需重新审定；不会自动批准。</p>
-        </section>}
+          </section>)}
+        </details>}
         {onEdit && entry.kind === "rule" && selectedItem.rule?.components[0] && <button className="button" disabled={busy}
           onClick={() => onEdit(selectedItem.rule?.components[0]?.componentId)}>手动修改本条解析</button>}
-        <ProtocolReviewLogic item={selectedItem} content={content} bindings={bindings} />
-        {integrity.issues.filter(issue => issue.affectedRefs.some(ref => entry.issue_refs.includes(ref))).map(issue => <p key={issue.issueCode + issue.affectedRefs.join(",")} role="status">{issue.level}：{ruleReviewIssueText(issue)}</p>)}
+        {integrity.issues.filter(issue => issue.level === "阻止发布" && issue.affectedRefs.some(ref => entry.issue_refs.includes(ref))).map(issue => <p key={issue.issueCode + issue.affectedRefs.join(",")} role="status">{issue.level}：{ruleReviewIssueText(issue)}</p>)}
         {entry.kind === "procedure" && <fieldset><legend>入组前检查要求</legend>
           <label><input type="checkbox" checked={excluded} disabled={busy} onChange={event => setExcluded(event.target.checked)} /> 不作为入组前必需</label>
           <label>必需检查结果 <select multiple value={variables.split("、").filter(Boolean)} disabled={busy || excluded}
@@ -194,9 +200,9 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
           <button className="button button--primary" disabled={busy || !integrity.publishable} onClick={() => void submit(false)}>{busy ? "正在保存…" : "审定通过"}</button>
           <button className="button" disabled={busy || !entry.review} onClick={() => void submit(true)}>撤销审定</button>
         </div>
-        <details><summary>原文依据</summary><ProtocolDraftSourcePane component={null} fileName={null}
+        <details><summary>原文依据与位置</summary><ProtocolDraftSourcePane component={null} fileName={null}
           selectionLabel={entry.kind === "rule" ? entry.official_code : entry.label}
-          locators={mapProtocolSourceLocators(sources.sourceSpans, entry.source_refs)} /></details>
+          locators={displayProtocolSourceLocators(sources.sourceSpans, entry.source_refs)} /></details>
         <details><summary>审定历史</summary><ul>{data.history.filter(record => record.official_code === entry.official_code).map(record => <li key={record.record_id}>{new Date(record.reviewed_at).toLocaleString("zh-CN")} · {record.reviewed_by} · {record.action === "approved" ? "审定通过" : "撤销审定"}</li>)}</ul></details>
       </div>}
     </div></>}

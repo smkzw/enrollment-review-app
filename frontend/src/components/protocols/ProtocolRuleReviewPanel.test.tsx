@@ -57,7 +57,10 @@ describe("逐条审定", () => {
     });
     vi.stubGlobal("fetch", fetcher);
     render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity} sources={sources} onReady={onReady} />);
-    await screen.findByText("提醒：请核对年龄依据");
+    const hint = await screen.findByText("请核对年龄依据", { exact: true });
+    expect(hint.closest("details")).not.toHaveAttribute("open");
+    await userEvent.click(hint.closest("details")!.querySelector("summary")!);
+    expect(hint.closest("details")).toHaveAttribute("open");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "审定身份" }), "builder_verification");
     expect(screen.getByText(/不能代替医学经理正式审定/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "审定通过" }));
@@ -119,8 +122,8 @@ describe("逐条审定", () => {
       ? { job_id: "job", draft_revision_id: "revision", variables: [], predicates: [] } : initial))));
     render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity} sources={sources} content={content} onReady={vi.fn()} />);
     await screen.findByRole("region", { name: "逻辑解析" });
-    expect(screen.getByText("全部满足")).toBeInTheDocument();
-    expect(screen.getByText("任一满足")).toBeInTheDocument();
+    expect([...screen.getByLabelText("逻辑解析").querySelectorAll(".expr-node__operator")]
+      .map(node => node.textContent)).toEqual(["全部满足", "任一满足"]);
     expect(screen.getByText("年龄 大于等于 18 岁")).toBeInTheDocument();
     await userEvent.type(screen.getByRole("searchbox", { name: "查找条目" }), "没有的条目");
     expect(screen.queryByRole("region", { name: "逻辑解析" })).not.toBeInTheDocument();

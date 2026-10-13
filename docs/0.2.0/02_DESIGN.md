@@ -282,11 +282,17 @@ Job 幂等键：`(review_episode_id, 资料快照哈希, rule_set_id, rule_set_r
 |---|---|
 | `EligibilityWorkbenchPage.tsx` | 默认显示"问题卡片"视图（新组件 `IssueCardList`），点卡片进入现有三栏；保留"全部条款"切换 |
 | 文案 | `frontend/src/domain/labels.ts:64-76` 与后端 `_DECISION_LABELS`（`eligibility_review_projection.py:114-126`）统一为 PRD §7；修正后端把 `professional_judgment` 标为"无法判定"的不一致（`:121`） |
-| 置信 | `eligibilityReviewTypes.ts`、`eligibilityReviewViewModels.ts` 增加 `confidence`、`confidenceReasons`；高置信不显示标记，低置信显示"⚠ 低置信"与原因 |
+| 置信 | `eligibilityReviewTypes.ts`、`eligibilityReviewViewModels.ts` 保留 `confidence`、`confidenceReasons`；结果页低置信只留简短标记，具体原因不占正文（可悬停查看）；不是删除原回执或改置信等级 |
 | 系统问题栏 | 工作台右上角"系统问题（n）"抽屉，列出受影响条款与替代路径 |
 | 方案页 | 每条规则"审定通过"；范围清单确认步骤；去掉跨章步骤；发布按钮条件改为 R-A8 |
 | 更正对话框 | `ProfileFactCorrectionDialog.tsx` 增加"所属变量"选择；操作完成后提示"已开始重算" |
 | 截图 | Playwright 在 1920×1080、2560×1440、3840×2160 三个视口截图，文件名含视口，测试断言三张截图哈希不同 |
+
+### 9.1 阅读层级（D18）
+
+`ProtocolRuleReviewPanel`以条款／重点标识→实际逻辑→可展开备选比较／资料要求→原文位置／历史组织。A/B/C使用当前解释、仅有源推荐和调整影响，不为每个常规OR宣称歧义；多子项默认列可展开的组合摘要。`displayProtocolSourceLocators`只折叠完整来源身份相同的重复显示；原始mapper、ID、来源资格和审定哈希不变，位置未知或不同不能按文字合并。手工弹层的精确重复摘录只展示一次。
+
+`EligibilityWorkbenchPage`去完整研究名称，以项目代号、节点和版本识别；中栏权重增大，提供列表收起／恢复。判定理由按中文句界与已有项目标签排版，不生成新医学摘要；原件区保留当前摘录，其他依据及核对范围按需展开，冲突仍显式保留。工作稿操作和次要方法说明下钻，已有更正及取证入口不改。实际浏览器采用现有Ego空间，控制权由用户交回后再核宽屏、展开／返回与原图；构建通过不等于视觉验收。
 
 ## 10. 评测工具
 

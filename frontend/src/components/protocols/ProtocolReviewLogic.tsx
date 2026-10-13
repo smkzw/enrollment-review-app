@@ -2,6 +2,7 @@ import type { BindingView } from "../../api/protocolVariables";
 import type { RuleReviewPresentation } from "../../domain/protocolRuleReview";
 import { reviewObjects } from "../../domain/protocolRuleReview";
 import { ExpressionView } from "../review/ExpressionView";
+import { GitBranch, CalendarDays } from "lucide-react";
 
 export function ProtocolReviewLogic({ item, content, bindings }: {
   item: RuleReviewPresentation; content: Record<string, unknown>; bindings: BindingView | null;
@@ -10,9 +11,11 @@ export function ProtocolReviewLogic({ item, content, bindings }: {
   return <section className="protocol-review-logic" aria-label="逻辑解析">
     <h4>逻辑解析</h4>
     {item.rule ? <>
-      <p>{item.rule.kind === "exclusion" ? "核对是否出现以下排除情形。" : "核对以下入选条件是否满足。"}</p>
-      {item.rule.components.map(component => <div className="protocol-review-logic__component" key={component.componentId}>
-        <h5>{component.displayCode} · {component.title}</h5>
+      {item.rule.components.map(component => <details className="protocol-review-logic__component" key={component.componentId}
+        open={item.rule?.components.length === 1}>
+        <summary><strong>{component.displayCode}</strong><span>{component.title}</span>
+          <small><GitBranch size={13} aria-hidden="true" />{component.expression.kind === "logic" ? component.expression.operatorLabel : "单项条件"}</small>
+          {component.exceptionExpression && <small>含例外</small>}</summary>
         <ExpressionView expression={component.expression} exception={component.exceptionExpression}
           predicateLabel={predicate => {
             const binding = bindings?.predicates.find(value => value.component_id === component.componentId && value.predicate_id === predicate.predicateId);
@@ -43,10 +46,11 @@ export function ProtocolReviewLogic({ item, content, bindings }: {
           inspect(value.expression); inspect(value.exception_expression);
           return notes.length ? <ul key={component.componentId}>{[...new Set(notes)].map(note => <li key={note}>{note}</li>)}</ul> : null;
         })}
-      </div>)}
+      </details>)}
       {item.rule.restrictedComponents.map(component => <p key={component.componentId}>{component.displayCode} · {component.title}：{component.limitationKind === "consumer_unavailable" ? "审核方法待补齐" : "方案含义待核清"}。{component.unresolvedDimensions.join("；")}</p>)}
     </> : item.entry.kind === "procedure" ? <p>核对操作是否完成、是否在所列节点内；必需结果仅按本次审定明确选择的项目核查，不等同于检验结果正常。</p>
       : <p>尚无可展示的判断条件，不能将原文标题当作逻辑解析。</p>}
-    {!!item.requirements.length && <><h5>节点与所需资料</h5><ul>{item.requirements.map(value => <li key={value.description}>{value.stage} · {value.description}</li>)}</ul></>}
+    {!!item.requirements.length && <details className="protocol-review-requirements"><summary><CalendarDays size={15} aria-hidden="true" /> 节点与所需资料（{item.requirements.length}）</summary>
+      <dl>{item.requirements.map(value => <div key={`${value.stage}:${value.description}`}><dt>{value.stage}</dt><dd>{value.description}</dd></div>)}</dl></details>}
   </section>;
 }

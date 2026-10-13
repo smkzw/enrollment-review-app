@@ -41,6 +41,7 @@ describe("审定重点投影", () => {
     const item = ruleReviewPresentations([entry], sample, bindings, integrity, sources)[0]!;
     const advice = ruleReviewAdvice(item, sample)[0]!;
     expect(advice.options.find(value => value.recommended)?.operator).toBe("all");
+    expect(advice.options.find(value => value.current)?.operator).toBe("any");
     expect(advice.analysis).toContain("项目内部可任选");
     const noSource = { ...sample, component_drafts: [] };
     expect(ruleReviewAdvice(item, noSource)[0]?.options.some(value => value.recommended)).toBe(false);
@@ -54,6 +55,8 @@ describe("审定重点投影", () => {
     expect(formatPredicateStatement(predicate, "年龄")).toBe("年龄 大于等于 2 岁");
     expect(formatPredicateStatement({ ...predicate, comparator: "exists", value: null }, "研究者诊断判断"))
       .toBe("研究者诊断判断：需有相应记录");
+    expect(formatPredicateStatement({ ...predicate, unit: "unitless", value: "阴性" }, "检验结果"))
+      .not.toContain("unitless");
   });
   it("从真实条件与绑定给出结构清楚，不用原文重述冒充解析", () => {
     const item = ruleReviewPresentations([entry], content, bindings, integrity, sources)[0]!;
@@ -61,6 +64,14 @@ describe("审定重点投影", () => {
     expect(item.reasons).toEqual([]);
     expect(item.rule?.components[0]?.expression).toMatchObject({ kind: "predicate", value: 18 });
     expect(item.requirements).toEqual([{ description: "人口学记录", stage: "筛选" }]);
+  });
+  it("相同资料说明在不同节点分别保留，不能只按文字去重", () => {
+    const sample = { ...content, evidence_requirement_drafts: [
+      ...content.evidence_requirement_drafts,
+      { draft_component_id: "cd", proposed_requirement: { variable_id: "age", description: "人口学记录", due_stage: "baseline" } },
+    ] };
+    expect(ruleReviewPresentations([entry], sample, bindings, integrity, sources)[0]?.requirements)
+      .toEqual([{ description: "人口学记录", stage: "筛选" }, { description: "人口学记录", stage: "基线" }]);
   });
   it("缺来源、缺绑定、例外和书面判断显式降低把握度，不制造新规则", () => {
     const changed = { ...content, proposed_rules: content.proposed_rules.map(rule => ({ ...rule,

@@ -63,7 +63,7 @@ function formatValue(
   attribute: string | null,
 ): string {
   const localizedUnit =
-    unit === null || unit === undefined ? null : unit === "year" && attribute?.includes("年龄") ? "岁" : (UNIT_LABELS[unit] ?? unit);
+    unit === null || unit === undefined || unit === "unitless" ? null : unit === "year" && attribute?.includes("年龄") ? "岁" : (UNIT_LABELS[unit] ?? unit);
   const unitAlreadyInAttribute =
     localizedUnit !== null &&
     attribute?.includes(`（${localizedUnit}）`) === true;

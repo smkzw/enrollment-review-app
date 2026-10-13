@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import {
   getCatalogRepository,
   getEvidenceRepository,
@@ -181,7 +182,7 @@ function episodeLabel(episode: CatalogEpisodeView): string {
 }
 
 function projectOption(project: CatalogProjectView): string {
-  return `${project.projectName} · ${project.studyPhaseLabel} · 方案 ${project.officialVersion}`;
+  return `${project.projectCode} · ${project.studyPhaseLabel} · 方案 ${project.officialVersion}`;
 }
 
 interface EligibilitySelectionProps {
@@ -545,15 +546,13 @@ function EligibilityClauseDetail({
           hint={clause.reason}
           icon={decisionIcon(clause.decision)}
         />
+        {clause.confidence && <span className="eligibility-confidence" title={clause.confidenceReason ?? undefined}>
+          {clause.confidence === "low" ? "低置信" : "高置信"}</span>}
       </div>
       <ul className="eligibility-clause-detail__bullets" aria-label="条款详情">
-        {clause.confidence && <li className="eligibility-detail-bullet">
-          <strong>{clause.confidence === "low" ? "低置信" : "高置信"}</strong>
-          <span>{clause.confidenceReason ?? "已有对应原文记录，并按方案条件完成核对。"}</span>
-        </li>}
         <li className="eligibility-detail-bullet">
           <strong>判定依据</strong>
-          <span>{clause.reason}</span>
+          <ReasonText text={clause.reason} />
         </li>
         {clause.continuingNote && <li className="eligibility-detail-bullet">
           <strong>后续持续要求</strong>
@@ -586,8 +585,8 @@ function EligibilityClauseDetail({
           方案原文定位待补齐，请核对方案版本及条款来源。
         </p>
       )}
-      <section className="eligibility-detail-section" aria-labelledby="eligibility-facts-title">
-        <h3 id="eligibility-facts-title">关联事实的原件位置</h3>
+      <details className="eligibility-detail-section">
+        <summary>关联事实的原件位置（{clause.factRefs.length}）</summary>
         {clause.factRefs.length === 0 ? (
           <p className="eligibility-muted">{clause.confidence && (clause.sourceReadRefs ?? []).some((ref) => ref.excerpt)
             ? "本次判断依据病历原文，具体摘录与页码见右侧。"
@@ -615,12 +614,21 @@ function EligibilityClauseDetail({
             ))}
           </ul>
         )}
-      </section>
-      {!clause.controlId && <p className="eligibility-clause-detail__mode">
-        {determinationModeLabel(clause)}
-      </p>}
+      </details>
+      {!clause.controlId && <details className="eligibility-clause-detail__mode"><summary>核对方式</summary>
+        <p>{determinationModeLabel(clause)}</p>
+      </details>}
     </div>
   );
+}
+
+/** Typography only: keep every qualifier, number and original sentence. */
+function ReasonText({ text }: { text: string }) {
+  return <ul className="eligibility-reason-lines">{text.split(/(?<=；)|(?<=。)|\n+/u).filter(part => part.trim() && part.trim() !== "；").map((part, index) => {
+    const colon = part.indexOf("：");
+    return <li key={index}>{colon > 0 && colon < 64
+      ? <><strong>{part.slice(0, colon + 1)}</strong>{part.slice(colon + 1)}</> : part}</li>;
+  })}</ul>;
 }
 
 function determinationModeLabel(clause: EligibilityClauseView): string {
@@ -741,10 +749,12 @@ function EligibilityEvidencePanel({
       {clause.factRefs.length === 0 && !(clause.confidence && (clause.sourceReadRefs ?? []).some((ref) => ref.excerpt)) && (
         <p className="eligibility-muted">当前条款没有已采用事实，可浏览全部原件页核实。</p>
       )}
+      {isReferencePage && selectedFact === null && selectedSource?.excerpt
+        && <blockquote className="eligibility-evidence__excerpt">{selectedSource.excerpt}</blockquote>}
       {(clause.sourceReadRefs ?? []).length > 0 && (
-        <details open={(clause.sourceReadRefs ?? []).some((ref) => ref.excerpt)}>
+        <details className="eligibility-evidence__sources" key={`sources:${clause.ruleComponentId}`} open={clause.decision === "conflict"}>
           <summary>{(clause.sourceReadRefs ?? []).some((ref) => ref.excerpt)
-            ? "病历依据与核对范围"
+            ? `病历依据与核对范围（${(clause.sourceReadRefs ?? []).length}）`
             : `已核对 ${(clause.sourceReadRefs ?? []).length} 页，未见相关记录 · 查看范围`}</summary>
         <ul className="eligibility-evidence__refs" aria-label="检索范围与待核原文">
           {(clause.sourceReadRefs ?? []).map((ref, index) => {
@@ -764,8 +774,11 @@ function EligibilityEvidencePanel({
       )}
       {(
         <>
+          {isReferencePage && selectedFact?.excerpt && <blockquote className="eligibility-evidence__excerpt">{selectedFact.excerpt}</blockquote>}
+          {clause.factRefs.length > 1 && <details className="eligibility-evidence__sources" key={`facts:${clause.ruleComponentId}`}>
+          <summary>选择其他依据（{clause.factRefs.length - 1}）</summary>
           <ul className="eligibility-evidence__refs" aria-label="关联事实的原件位置">
-            {clause.factRefs.map((fact, index) => (
+            {clause.factRefs.map((fact, index) => index === selectedFactIndex ? null : (
               <li key={`${fact.factId}-${fact.locatorId ?? "no-locator"}-${index}`}>
                 {fact.pageNumber === null ? (
                   <span className="eligibility-evidence__ref eligibility-evidence__ref--unavailable">
@@ -786,6 +799,7 @@ function EligibilityEvidencePanel({
               </li>
             ))}
           </ul>
+          </details>}
           {selectedFact?.pageNumber === null && (
             <p className="eligibility-evidence__empty" role="status">
               该事实未附页码定位，暂时无法打开对应原件页。
@@ -857,6 +871,7 @@ export function EligibilityWorkbenchPage() {
   const requestedPage = Number.isSafeInteger(requestedPageValue) && requestedPageValue >= 0
     ? requestedPageValue : 0;
   const [selectedFactIndex, setSelectedFactIndex] = useState(0);
+  const [queueVisible, setQueueVisible] = useState(true);
 
   const projects = useLoad((signal) => getCatalogRepository().listProjects(signal), []);
   const projectList = projects.state.status === "success" ? projects.state.data : [];
@@ -1007,11 +1022,11 @@ export function EligibilityWorkbenchPage() {
   });
 
   return (
-    <div className="eligibility-workbench workbench">
+    <div className={`eligibility-workbench workbench${queueVisible ? "" : " eligibility-workbench--reading"}`}>
       <header className="page-head">
         <h1 className="page-head__title">入排审核工作台</h1>
         <p className="page-head__note">
-          {subjectLabel} · {selectedProject.projectName} · {episodeLabel(selectedEpisode)} · 方案 {selectedProject.officialVersion}
+          {subjectLabel} · {selectedProject.projectCode} · {episodeLabel(selectedEpisode)} · 方案 {selectedProject.officialVersion}
         </p>
       </header>
       <EligibilitySelection
@@ -1026,6 +1041,11 @@ export function EligibilityWorkbenchPage() {
         onEpisodeChange={setEpisode}
       />
       <div className="eligibility-context-bar">
+        <button type="button" className="icon-button" aria-label={queueVisible ? "收起条款列表" : "显示条款列表"}
+          title={queueVisible ? "收起条款列表，扩大依据与原件" : "显示条款列表"} aria-expanded={queueVisible}
+          onClick={() => setQueueVisible(value => !value)}>
+          {queueVisible ? <PanelLeftClose size={17} aria-hidden="true" /> : <PanelLeftOpen size={17} aria-hidden="true" />}
+        </button>
         <span>{reviewData.verificationOnly ? "规则包为构建者验证用；工作稿未签发。" : "工作稿未签发。"}</span>
         <span
           className="eligibility-undetermined"
@@ -1051,7 +1071,9 @@ export function EligibilityWorkbenchPage() {
           打开报告
         </RouteLink>
       </div>
-      <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode} onCompleted={() => review.retry()} />
+      <details className="eligibility-work-draft-tools"><summary>工作稿操作与节点日期</summary>
+        <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode} onCompleted={() => review.retry()} />
+      </details>
       {!!reviewData.systemIssues?.length && <details aria-label="系统问题" className="eligibility-context-bar">
         <summary>系统问题（{reviewData.systemIssues.length}）</summary>
         <ul>{reviewData.systemIssues.map((issue, index) => <li key={index}>
@@ -1087,7 +1109,7 @@ export function EligibilityWorkbenchPage() {
         </section>
       )}
       <div className="workbench-panes">
-        <aside className="workbench-col eligibility-workbench__clauses" aria-label="审核要点列表">
+        {queueVisible && <aside className="workbench-col eligibility-workbench__clauses" aria-label="审核要点列表">
           <div className="workbench-pane">
             <header className="workbench-pane__head">
               <div>
@@ -1140,7 +1162,7 @@ export function EligibilityWorkbenchPage() {
               </nav>
             )}
           </div>
-        </aside>
+        </aside>}
         <section className="workbench-col eligibility-workbench__detail" aria-label="审核要点详情">
           <div className="workbench-pane">
             <header className="workbench-pane__head">
@@ -1149,7 +1171,6 @@ export function EligibilityWorkbenchPage() {
                   <span className="workbench-pane__code">{selectedClause?.ruleCode ?? "审核要点"}</span>
                   <span>{selectedClause ? workItemKindLabel(selectedClause) : ""}</span>
                 </h2>
-                <p className="workbench-pane__subtitle">审核要点详情</p>
               </div>
             </header>
             {selectedClause ? <EligibilityClauseDetail
@@ -1165,7 +1186,7 @@ export function EligibilityWorkbenchPage() {
                     <button type="button" className="button button--quiet" onClick={() => selectClause(item.ruleComponentId)}>
                       {item.textSummary} · {item.decisionLabel}{item.confidence === "low" ? " · 低置信" : ""}
                     </button>
-                    <p>{item.reason}</p>
+                    <ReasonText text={item.reason} />
                   </li>)}</ul>
               </details>}
           </div>

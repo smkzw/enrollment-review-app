@@ -23,12 +23,13 @@ import type {
 } from "../../domain/protocolDiffViewModels";
 import {
   mapProtocolDraftRules,
-  mapProtocolSourceLocators,
+  displayProtocolSourceLocators,
 } from "../../domain/protocolMappers";
 import { EmptyState } from "../shell/Feedback";
 import { ProtocolFileIcon } from "../shell/icons";
 import { ProtocolRedoDiffPane } from "./ProtocolRedoDiffPane";
 import { ProtocolRedoRuleColumn } from "./ProtocolRedoRuleColumn";
+import { ProtocolDraftSourcePane } from "./ProtocolDraftSourcePane";
 
 interface ProtocolComparisonWorkbenchProps {
   session: ProtocolSessionView;
@@ -105,7 +106,7 @@ export function ProtocolComparisonWorkbench({
     (rule) => rule.officialCode === selectedRuleCode,
   );
   const selectedSources = useMemo(
-    () => mapProtocolSourceLocators(
+    () => displayProtocolSourceLocators(
       sources.sourceSpans,
       selectedCandidateRule?.sourceRefs ?? [],
     ),
@@ -131,7 +132,7 @@ export function ProtocolComparisonWorkbench({
           重新解构：并列比较差异
         </h1>
         <p className="page-head__note">
-          {session.targetProjectName}（{session.targetProjectCode}）· {session.targetProtocolCode} ·{" "}
+          {session.targetProjectCode ?? session.targetProtocolCode} ·{" "}
           {session.targetStudyPhaseLabel}
           ，当前正式版本 {session.targetOfficialVersion}，新草稿版本 {comparison.candidate.officialVersion ?? "—"}。
           逐条核对差异后再保存或发布。
@@ -141,7 +142,7 @@ export function ProtocolComparisonWorkbench({
       <section className="protocol-comparison__meta" aria-label="重新解构摘要">
         <div className="protocol-comparison__meta-item">
           <span className="protocol-comparison__meta-label">目标正式项目</span>
-          <strong>{session.targetProjectName ?? "—"}</strong>
+          <strong title={session.targetProjectName ?? undefined}>{session.targetProjectCode ?? session.targetProtocolCode ?? "—"}</strong>
         </div>
         <div className="protocol-comparison__meta-item">
           <span className="protocol-comparison__meta-label">当前正式版本</span>
@@ -262,21 +263,14 @@ export function ProtocolComparisonWorkbench({
             </ul>
           )}
         </div>
-        <div className="protocol-comparison__source-summary">
-          <strong>{selectedRuleCode || "尚未选择规则"} 的方案依据</strong>
+        <details className="protocol-comparison__source-summary" key={selectedRuleCode}>
+          <summary>{selectedRuleCode || "尚未选择规则"} 的方案依据 · {selectedSources.length} 处</summary>
           {selectedSources.length === 0 ? (
             <span>当前所选规则没有可展示的原文定位，请在发布前核对来源完整性。</span>
           ) : (
-            <ul>
-              {selectedSources.slice(0, 3).map((source) => (
-                <li key={source.sourceSpanId}>
-                  <span>{source.pageLabel ?? "方案结构位置"} · {source.precisionLabel}</span>
-                  <q>{source.excerpt}</q>
-                </li>
-              ))}
-            </ul>
+            <ProtocolDraftSourcePane component={null} selectionLabel={selectedRuleCode} fileName={null} locators={selectedSources} />
           )}
-        </div>
+        </details>
       </section>
 
       {diff.ruleDiffs.length === 0 ? (

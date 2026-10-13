@@ -9,7 +9,7 @@ export interface RuleReviewAdvice {
   componentId: string | null;
   title: string;
   analysis: string;
-  options: { label: string; explanation: string; operator?: "all" | "any"; recommended?: boolean; manual?: boolean }[];
+  options: { label: string; explanation: string; operator?: "all" | "any"; recommended?: boolean; current?: boolean; manual?: boolean }[];
 }
 
 /** Suggestions are review directions, never edits or model-calibrated probabilities. */
@@ -36,11 +36,11 @@ export function ruleReviewAdvice(item: RuleReviewPresentation, content: Record<s
       analysis: localChoice
         ? "原文中有只针对一个检测或观察项目的“至少一种”选择。这说明该项目内部可任选，不足以证明诊断、病史或其他并列要求也可任选。建议把外层独立要求与项目内部选择分开核对。"
         : explicitWholeChoice ? "原文明确列出可选条件，但仍需核对这段选择究竟涵盖哪些子项；不能把例外或另一层的条件一起放宽。"
-          : "目前没有足够依据仅凭标点或某个“或”字确定整组关系。全部满足、任一满足、分组后组合会改变判断范围，应对照每个条件的原文决定；暂不推荐某一项。",
+          : "当前采用“任一条件成立”的组合。改成“全部成立”会缩小这个子项命中的范围；混合关系应逐层分组。下列选项用于比较调整影响，不表示当前解释有误；没有充分原文依据时不推荐改选。",
       options: [
-        { label: "各项必须同时满足", explanation: "每个独立条件都需要证据；检测项目内部的任选关系保留。", operator: "all", recommended: localChoice },
-        { label: "任一项满足即可", explanation: "仅在原文明示整组可任选时采用；其他条件即使不满足也不阻止本组满足。", operator: "any", recommended: explicitWholeChoice },
-        { label: "分组或手动调整", explanation: "若部分同时满足、部分任选，先逐层调整；当前仍无法确认时保留待审，不强选。" },
+        { label: "各项必须同时满足", explanation: `只有所有独立条件都成立才${item.rule?.kind === "exclusion" ? "触发这一排除子项" : "满足这一入选子项"}；项目内部的任选关系保留。`, operator: "all", recommended: localChoice },
+        { label: "任一项满足即可", explanation: `任一独立条件成立即可${item.rule?.kind === "exclusion" ? "触发这一排除子项" : "满足这一入选子项"}，不要求其他条件同时成立。`, operator: "any", recommended: explicitWholeChoice, current: true },
+        { label: "分组或手动调整", explanation: "部分条件须同时成立、部分可任选时，逐层指定关系，不把整组统一改成全部或任一。" },
       ],
     });
   }
@@ -158,7 +158,7 @@ export function ruleReviewPresentations(entries: RuleReviewEntry[], content: Rec
       ? rule?.kind === "inclusion" || entry.official_code.startsWith("IN-") ? "inclusion" : "exclusion"
       : procedureCategory,
       medicationRelated: domains.has("medication"), title: rule?.components[0]?.title ?? entry.label,
-      reasons: [...new Set(reasons)], requirements: [...new Map(needed.map(item => [String(item.description), {
+      reasons: [...new Set(reasons)], requirements: [...new Map(needed.map(item => [JSON.stringify([item.due_stage, item.description]), {
         description: String(item.description ?? ""), stage: stageLabels[String(item.due_stage)] ?? "节点尚未明确",
       }])).values()] };
   });

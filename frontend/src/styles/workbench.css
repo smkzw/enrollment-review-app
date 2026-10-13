@@ -949,15 +949,13 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-3);
-  margin-bottom: var(--space-3);
-  padding: var(--space-3);
-  background: var(--color-surface);
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-l);
+  margin-bottom: var(--space-2);
+  padding-block: var(--space-2);
 }
 
 .eligibility-selection label {
-  display: grid;
+  display: flex;
+  align-items: center;
   gap: var(--space-1);
   min-width: 0;
   font-size: var(--font-size-small);
@@ -973,6 +971,12 @@
   border-radius: var(--radius-m);
   background: var(--color-surface);
 }
+.eligibility-selection label > span { flex: none; }
+.eligibility-workbench .page-head { margin-bottom: var(--space-2); }
+.eligibility-workbench .page-head__note { margin-bottom: 0; }
+.eligibility-work-draft-tools { margin-block: var(--space-2); }
+.eligibility-work-draft-tools > summary { cursor: pointer; color: var(--color-muted); font-size: var(--font-size-small); }
+.eligibility-work-draft-tools[open] .eligibility-context-bar { margin-top: var(--space-2); }
 
 .eligibility-context-bar {
   display: flex;
@@ -1010,8 +1014,16 @@
 }
 
 .eligibility-workbench .workbench-panes {
-  grid-template-columns: minmax(16rem, 0.82fr) minmax(18rem, 1fr) minmax(30rem, 1.7fr);
+  grid-template-columns: minmax(0, 0.65fr) minmax(0, 1.6fr) minmax(0, 1.75fr);
+  gap: var(--space-3);
 }
+.eligibility-workbench--reading .workbench-panes { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+.eligibility-workbench .workbench-pane { max-height: max(24rem, calc(100dvh - var(--topbar-height) - 13rem)); }
+.eligibility-workbench .workbench-pane__head { margin-bottom: var(--space-2); padding-bottom: var(--space-2); }
+.eligibility-workbench .workbench-pane__subtitle { font-size: var(--font-size-small); font-weight: 400; margin-block: var(--space-1); }
+.eligibility-workbench .eligibility-clause { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: var(--space-2); }
+.eligibility-workbench .eligibility-clause__identity { grid-column: 1 / -1; }
+.eligibility-workbench .eligibility-clause .status-badge { max-width: none; }
 
 .eligibility-workbench__clauses,
 .eligibility-workbench__detail,
@@ -1201,11 +1213,16 @@
 }
 
 .eligibility-clause-detail__decision {
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-m);
-  background: var(--color-muted-bg);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-block: var(--space-2);
 }
+.eligibility-confidence { font-size: var(--font-size-small); color: var(--color-muted); }
+.eligibility-reason-lines { margin: 0; padding-left: 1.2em; display: grid; gap: var(--space-2); line-height: 1.8; }
+.eligibility-reason-lines li { overflow-wrap: anywhere; }
+.eligibility-reason-lines strong { font-weight: 600; }
 
 .eligibility-clause-detail__decision p {
   margin-top: var(--space-2);
@@ -1319,7 +1336,7 @@
   gap: var(--space-3);
   min-width: 0;
   /* 为节点选择和审核上下文预留空间，原件在区域内连续滚动。 */
-  height: max(26rem, calc(100dvh - var(--topbar-height) - 16rem));
+  height: max(26rem, calc(100dvh - var(--topbar-height) - 13rem));
   padding: var(--space-3);
   overflow: hidden;
   border: 1px solid var(--color-line);
@@ -1359,10 +1376,13 @@
   display: grid;
   gap: var(--space-2);
   min-height: 0;
-  max-height: 22%;
+  max-height: 14rem;
   flex: 0 0 auto;
   overflow-y: auto;
 }
+.eligibility-evidence__sources { font-size: var(--font-size-small); }
+.eligibility-evidence__sources > summary { cursor: pointer; }
+.eligibility-evidence__excerpt { margin: 0; padding: 0; font-weight: 400; font-size: var(--font-size-small); line-height: 1.6; max-height: 5.2em; overflow-y: auto; white-space: pre-wrap; }
 
 .eligibility-evidence > .original-evidence-viewer {
   flex: 1 1 0;
@@ -1510,10 +1530,8 @@
 .eligibility-detail-bullet {
   display: grid;
   gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-m);
-  background: var(--color-surface);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--color-line);
 }
 
 .eligibility-detail-bullet > strong {
