@@ -4,7 +4,9 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEvidenceRepository, type ProcessingRevisionPageView } from "../api/evidence";
+import { getCatalogRepository } from "../api/catalog";
 import {
+  EligibilityReviewApiError,
   setEligibilityReviewRepository,
   type EligibilityClauseView,
   type EligibilityReviewView,
@@ -143,6 +145,50 @@ function installSourcePages() {
 }
 
 describe("入排审核工作台", () => {
+  it("规则更新导致读取拒绝时，可由用户更新工作稿，不自动调用或沿用旧结果链接", async () => {
+    localStorage.clear();
+    const catalog = getCatalogRepository();
+    const projects = await catalog.listProjects();
+    const subjects = await catalog.listSubjects(projects[0]!.projectId);
+    const episodes = await catalog.listEpisodes(subjects[0]!.subjectId);
+    const episode = { ...episodes[0]!, activeEvidenceProcessingRevisionId: "processing-1" };
+    vi.spyOn(catalog, "listProjects").mockResolvedValue([{ ...projects[0]!, ruleSetRevision: 2 }]);
+    vi.spyOn(catalog, "listEpisodes").mockResolvedValue([episode]);
+    window.location.hash = `#/workbench?component=old-result&episode=${episode.reviewEpisodeId}`;
+    let updated = false;
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => {
+      if (!updated) throw new EligibilityReviewApiError("SCOPE_VIOLATION", "读取失败",
+        "本节点的方案版本与现行已发布规则不同", "请核对方案。", 409);
+      return review;
+    } });
+    const fetched = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      if (options?.method === "POST") updated = true;
+      return new Response(JSON.stringify({ job_id: "new-job", state: "completed", review_run_id: "new-result" }));
+    });
+    render(<EligibilityWorkbenchPage />);
+    const action = await screen.findByRole("button", { name: "开始审核" });
+    expect(fetched).not.toHaveBeenCalled();
+    expect(screen.getByText("本节点尚未使用最新规则包，旧版工作稿保留。")).toBeInTheDocument();
+    await userEvent.click(action);
+    await screen.findByLabelText("审核要点列表");
+    expect(window.location.hash).not.toContain("old-result");
+    expect(fetched.mock.calls[0]![0]).toBe(`/api/v2/subjects/${episode.subjectId}/review-episodes/${episode.reviewEpisodeId}/work-draft-jobs`);
+    expect(fetched.mock.calls[0]![1]?.method).toBe("POST");
+    localStorage.clear();
+  });
+
+  it("同版规则下的来源错误不显示规则更新入口", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => {
+      throw new EligibilityReviewApiError("SCOPE_VIOLATION", "读取失败", "文件哈希不符", "请核对原件。", 409);
+    } });
+    const fetched = vi.spyOn(globalThis, "fetch");
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByText("文件哈希不符");
+    expect(screen.queryByLabelText("采用已发布的新规则")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "开始审核" })).not.toBeInTheDocument();
+    expect(fetched).not.toHaveBeenCalled();
+  });
+
   it("未见记录的检索范围默认收起，仍可展开回到每页原件", async () => {
     installSourcePages();
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,

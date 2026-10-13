@@ -469,6 +469,11 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                         component.rule_component_id, req.predicate_ids[0], original.requirement_id)).encode()).hexdigest()[:32]]
                 if original.variable_id is None and derived and all(req.requirement_id in inactive_requirements for req in derived):
                     inactive_requirements.add(original.requirement_id)
+                elif (original.variable_id is None and derived
+                        and all(req.requirement_id in observed | inactive_requirements for req in derived)
+                        and all(req.model_dump(exclude={"requirement_id", "variable_id", "predicate_ids"})
+                            == original.model_dump(exclude={"requirement_id", "variable_id", "predicate_ids"}) for req in derived)):
+                    expectations.append(RequirementGapState(original.requirement_id, ExpectationStatus.OBSERVED, None))
             gap_component = calculation_component.model_copy(update={"evidence_requirements": [
                 req for req in calculation_component.evidence_requirements if req.requirement_id not in inactive_requirements]})
             gaps = derive_gate_gap_types(component=gap_component, evaluation=evaluation,
@@ -552,6 +557,12 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
         if relations:
             notes = list(dict.fromkeys(row["reason"] for row in relations.values()))
             reason = "；".join([*summaries, *notes])
+            missing_calculations = list(dict.fromkeys(definitions[variable_id].label_zh
+                for predicate_id, variable_id in predicate_variables.items()
+                if variable_id in definitions and predicate_id not in relations
+                and predicate_id not in inactive_predicates and not selection[predicate_id].fact_ids))
+            if outcome.decision not in DETERMINATE and missing_calculations:
+                reason += "。尚未形成可用于本条的" + "、".join(missing_calculations) + "已核实记录；不代表原件没有记载。"
             if unverified_source_times:
                 reason += "。已找到相关记录，但方案要求的日期锚点或同一记录的发生时间尚未核实，不能直接认作落入规定期间。"
             if any(row["policy"] for row in relations.values()):

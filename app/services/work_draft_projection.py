@@ -65,8 +65,7 @@ def project_work_draft(session, *, authority, rule_set, clause_pack, artifact_st
                 rule_kind=item.rule_kind.value, text_summary=item.title, source_text=item.source_text,
                 parent_rule_code=item.official_code if item.rule_component_id is not None else None, decision=item.decision.value if item.decision else "system_issue",
                 decision_label=LABELS[item.decision] if item.decision else "系统问题",
-                reason=display_source_reason(item.reason_text, decision=item.decision.value if item.decision else None)
-                    if item.source_read_refs else item.reason_text,
+                reason=display_source_reason(item.reason_text, decision=item.decision.value if item.decision else None),
                 fact_refs=refs, source_read_refs=tuple(EligibilitySourceReadRef(**ref.model_dump(mode="json")) for ref in item.source_read_refs),
                 gap_type=None, determination_mode="restricted" if item.system_issue else "semantic" if item.source_read_refs else "deterministic",
                 confidence=item.confidence, confidence_reason=item.confidence_reason)

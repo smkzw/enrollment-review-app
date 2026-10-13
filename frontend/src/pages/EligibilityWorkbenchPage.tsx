@@ -936,6 +936,11 @@ export function EligibilityWorkbenchPage() {
     updateParams({ subject: subjectId, episode: null, component: null });
   const setEpisode = (episodeId: string) =>
     updateParams({ episode: episodeId, component: null });
+  const refreshWorkDraft = () => {
+    updateParams({ component: null, page: null });
+    episodes.retry();
+    review.retry();
+  };
 
   if (projects.state.status === "loading") return <LoadingState />;
   if (projects.state.status === "error") {
@@ -969,7 +974,16 @@ export function EligibilityWorkbenchPage() {
   }
   if (review.state.status === "loading") return <LoadingState />;
   if (review.state.status === "error") {
-    return <ErrorState message={review.state.message} onRetry={review.retry} />;
+    const newerRules = selectedEpisode.ruleSetId === selectedProject.ruleSetId
+      && selectedEpisode.ruleSetRevision < selectedProject.ruleSetRevision;
+    return <div className="eligibility-workbench workbench">
+      <ErrorState message={review.state.message} onRetry={review.retry} />
+      {newerRules && <section aria-label="采用已发布的新规则">
+        <h2>{selectedSubject.subjectCode} · {episodeLabel(selectedEpisode)}</h2>
+        <p>本节点尚未使用最新规则包，旧版工作稿保留。</p>
+        <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode} onCompleted={refreshWorkDraft} />
+      </section>}
+    </div>;
   }
 
   const reviewData = review.state.data;
@@ -1077,7 +1091,7 @@ export function EligibilityWorkbenchPage() {
         </RouteLink>
       </div>
       <details className="eligibility-work-draft-tools"><summary>工作稿操作与节点日期</summary>
-        <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode} onCompleted={() => review.retry()} />
+        <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode} onCompleted={refreshWorkDraft} />
       </details>
       {!!reviewData.systemIssues?.length && <details aria-label="系统问题" className="eligibility-context-bar">
         <summary>系统问题（{reviewData.systemIssues.length}）</summary>

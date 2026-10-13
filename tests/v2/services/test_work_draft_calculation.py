@@ -70,6 +70,73 @@ def test_false_base_condition_does_not_require_unrelated_positive_judgment():
     assert result.system_issue is None
 
 
+@pytest.mark.parametrize("operator,first_truth,expected", [
+    (LogicalOperator.ALL, "false", D.EXCLUSION_NOT_TRIGGERED),
+    (LogicalOperator.ALL, "true", D.INDETERMINATE),
+    (LogicalOperator.ANY, "true", D.EXCLUSION_TRIGGERED),
+    (LogicalOperator.ANY, "false", D.INDETERMINATE),
+])
+def test_joint_source_requirement_follows_only_its_relevant_bound_conditions(operator, first_truth, expected):
+    from app.domain.publication import canonical_hash
+    from app.domain.variables.dictionary import VariableDef
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    atoms = [AtomicExpression(predicate=AtomicPredicate(predicate_id=key, subject="研究者",
+        attribute=key, comparator=Comparator.EXISTS, requires_professional_judgment=True)) for key in ("base", "judgment")]
+    component.expression = LogicalExpression(operator=operator, children=atoms)
+    original = component.evidence_requirements[0].model_copy(update={"requirement_id": "joint-source",
+        "variable_id": None, "predicate_ids": [], "fact_type": "病历判断", "description": "核对两项条件"})
+    bound = [original.model_copy(update={"requirement_id": "variable_requirement:" + sha256(
+        ":".join((component.rule_component_id, atom.predicate.predicate_id, original.requirement_id)).encode()).hexdigest()[:32],
+        "variable_id": atom.predicate.predicate_id, "predicate_ids": [atom.predicate.predicate_id]}) for atom in atoms]
+    component.evidence_requirements = [original, *bound]
+    rules.variable_definitions.extend(VariableDef(variable_id=key, label_zh=key,
+        value_type="boolean", domain="history") for key in ("base", "judgment"))
+    frame = frozen([material()])
+    frame.facts, frame.source_pages = [], []
+    relation = {"truth": first_truth, "applicable": "yes", "conflict": False, "policy": False,
+        "relation": "refutes" if first_truth == "false" else "supports", "reason": "病历明确记载该条件。",
+        "source_read_refs": [{"source_document_version_id": "document", "page_artifact_id": "page",
+            "page_number": 1, "excerpt": "病历明确记载该条件", "disposition": "mentioned"}]}
+    relations = {f"{component.rule_component_id}:base": relation,
+        f"{component.rule_component_id}:judgment": {**relation, "truth": "unknown", "relation": "not_found",
+            "reason": "未见另一项判断", "source_read_refs": []}}
+    before = canonical_hash(rules.model_dump(mode="json"))
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules,
+        evidence_refs={}, source_results=relations)
+    assert result.decision == expected and result.system_issue is None
+    assert canonical_hash(rules.model_dump(mode="json")) == before
+    if expected in {D.EXCLUSION_NOT_TRIGGERED, D.EXCLUSION_TRIGGERED}:
+        assert result.confidence == "low"
+        # A changed child is not proof that the original joint source requirement was fulfilled.
+        bound[0].description = "另需收集的独立资料"
+        blocked = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules,
+            evidence_refs={}, source_results=relations)
+        assert blocked.decision == D.INDETERMINATE
+
+
+def test_source_notes_do_not_hide_a_missing_numeric_operand():
+    from app.domain.variables.dictionary import VariableDef
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    numeric = component.expression
+    source = AtomicExpression(predicate=AtomicPredicate(predicate_id="judgment", subject="研究者",
+        attribute="另一条件", comparator=Comparator.EXISTS, requires_professional_judgment=True))
+    component.expression = LogicalExpression(operator=LogicalOperator.ANY, children=[numeric, source])
+    component.evidence_requirements.append(component.evidence_requirements[0].model_copy(update={
+        "requirement_id": "other-source", "variable_id": "clinical_judgment", "predicate_ids": ["judgment"]}))
+    rules.variable_definitions.append(VariableDef(variable_id="clinical_judgment", label_zh="病历判断",
+        value_type="boolean", domain="history"))
+    frame = frozen([material()])
+    frame.facts, frame.source_pages = [], []
+    relation = {"truth": "false", "applicable": "yes", "conflict": False, "policy": False,
+        "relation": "refutes", "reason": "另一条件明确否认。", "source_read_refs": [{
+            "source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
+            "excerpt": "另一条件明确否认", "disposition": "mentioned"}]}
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules,
+        evidence_refs={}, source_results={f"{component.rule_component_id}:judgment": relation})
+    assert result.decision == D.INDETERMINATE
+    assert "另一条件明确否认" in result.reason_text and "年龄已核实记录" in result.reason_text
+
+
 @pytest.mark.parametrize("anchor,role,exact,truth,expected", [
     (True, "sampling", True, "true", D.INCLUSION_MET),
     (False, "sampling", True, "true", D.INDETERMINATE),
