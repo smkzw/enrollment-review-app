@@ -35,9 +35,14 @@ def _source_reading_identity(item):
 
 def normalization_source_is_reusable(run, authority, old_rules, current_rules, old_protocol, current_protocol):
     """Coverage of immutable text is not approval of a new rule's interpretation."""
+    return run.status.value in {"succeeded", "partial"} and clinical_source_scope_is_compatible(
+        run.authority, authority, old_rules, current_rules, old_protocol, current_protocol)
+
+
+def clinical_source_scope_is_compatible(previous, authority, old_rules, current_rules, old_protocol, current_protocol):
+    """Same clinical material across a rule-only revision, not result adoption."""
     identity_fields = {"episode_revision", "protocol_version_id", "rule_set_revision"}
-    return (run.status.value in {"succeeded", "partial"}
-        and run.authority.model_dump(exclude=identity_fields) == authority.model_dump(exclude=identity_fields)
+    return (previous.model_dump(exclude=identity_fields) == authority.model_dump(exclude=identity_fields)
         and old_protocol.sha256 == current_protocol.sha256
         and old_rules.study_phase == current_rules.study_phase
         and {item.variable_id: item.model_dump(mode="json") for item in old_rules.variable_definitions or ()}

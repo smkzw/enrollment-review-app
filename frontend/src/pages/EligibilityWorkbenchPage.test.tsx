@@ -177,6 +177,24 @@ describe("入排审核工作台", () => {
     expect(within(screen.getByLabelText("原始资料查看区"))
       .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
   });
+  it("不适用无需置信等级，已核人群依据仍可回源且不显示成待核", async () => {
+    installSourcePages();
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, decision: "not_applicable", decisionLabel: "不适用",
+        confidence: null, determinationMode: "semantic", factRefs: [], sourceReadRefs: [{
+          sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
+          excerpt: "本节点病历明确记录适用人群", disposition: "mentioned",
+        }] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "全部条款" }));
+    await userEvent.click(await screen.findByText("病历依据与核对范围（1）"));
+    await userEvent.click(await screen.findByRole("button", { name: /本次判断的病历依据/ }));
+    expect(screen.queryByText("当前条款没有已采用事实，可浏览全部原件页核实。")).not.toBeInTheDocument();
+    expect(screen.queryByText("已找到相关原文，待核清")).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("原始资料查看区"))
+      .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+  });
   it("检索发现可打开正确原件但不会显示成已采用事实", async () => {
     installSourcePages();
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,

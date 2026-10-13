@@ -19,6 +19,23 @@ def test_source_reason_display_keeps_clinical_values_but_not_wire_vocabulary():
     assert "CS，2025-08-08 ALT 57.8 U/L" in shown
 
 
+def test_source_reason_display_translates_scope_fields_not_clinical_excerpt_values():
+    from app.services.work_draft_projection import display_source_reason
+    reason = "本条件requires_professional_judgment=false；applicable_population未声明；observed_value/observed_unit未填；ALT 57.8 U/L。"
+    shown = display_source_reason(reason)
+    assert "本条件不额外要求研究者判断" in shown
+    assert "条款限定的适用人群未声明" in shown and "原始读数/原始单位未填" in shown
+    assert "ALT 57.8 U/L" in shown
+
+
+def test_qualified_inapplicability_does_not_display_missing_applicable_patient_evidence():
+    from app.services.work_draft_projection import display_source_reason
+    prefix = "已找到相关原文，但尚不足以证明本条件，不能当作未见记录。"
+    reason = prefix + "原件证明applicable=no；本条的人群要求不适用。"
+    assert display_source_reason(reason, decision="not_applicable") == "原件证明有据不适用；本条的人群要求不适用。"
+    assert display_source_reason(reason, decision="indeterminate").startswith(prefix)
+
+
 def page(text="病历记载：否认近期感染。", *, complete=True, category="study_chart", key="page"):
     return WorkDraftSourcePage(source_document_version_id="document", page_artifact_id=key,
         page_number=1, effective_text=text, effective_text_sha256=sha256(text.encode()).hexdigest(),
@@ -43,6 +60,107 @@ def test_verified_chart_relation_uses_original_page_not_fake_fact():
     assert inputs["truth"] == TruthValue.FALSE.value
     assert inputs["source_read_refs"][0]["excerpt"] == "否认近期感染"
     assert "fact_id" not in inputs["source_read_refs"][0]
+
+
+def test_pending_targets_share_short_batch_without_dropping_reused_targets_or_changing_inputs():
+    from app.services.work_draft_semantics import source_batches, BATCH_SIZE
+    targets = [{"target_id": str(index), "payload": {"value": index}} for index in range(122)]
+    pending = {"0", "18", "35", "50", "68", "78", "91", "104", "119"}
+    reusable = {target["target_id"]: {} for target in targets if target["target_id"] not in pending}
+    batches = source_batches(targets, reusable)
+    assert len(batches) == 8 and all(len(batch) <= BATCH_SIZE for batch in batches)
+    assert {target["target_id"] for target in batches[0] if target["target_id"] not in reusable} == pending
+    assert all(target["target_id"] in reusable for batch in batches[1:] for target in batch)
+    assert {id(target) for batch in batches for target in batch} == {id(target) for target in targets}
+    assert [target["target_id"] for target in targets] == [str(index) for index in range(122)]
+    assert source_batches([], {}) == [[]]
+
+
+def test_product_batch_execution_revalidates_whole_frozen_target_scope_then_filters(monkeypatch):
+    from app.domain.contracts.agents import ModelConfigContract
+    from app.domain.publication import canonical_hash
+    from app.services import work_draft_review as service, work_draft_semantics as semantics
+    targets = [{"target_id": str(index)} for index in range(122)]
+    pending = {"0", "18", "35", "50", "68", "78", "91", "104", "119"}
+    reused = {target["target_id"]: {"truth": "unknown"} for target in targets if target["target_id"] not in pending}
+    proofs = {key: {"raw_response_ref": f"response:{key}"} for key in reused}
+    batches = semantics.source_batches(targets, reused)
+    model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
+    rules = SimpleNamespace(model_dump=lambda **_: {"rules": "frozen"})
+    authority = SimpleNamespace(review_episode_id="episode", rule_set_id="rules", rule_set_revision=1)
+    frame = SimpleNamespace(work_draft=True, review_run_id="run", authority=authority,
+        rule_set_sha256=canonical_hash(rules.model_dump()))
+    closed = []
+    class Session:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def close(self): closed.append(True)
+    monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: frame))
+    monkeypatch.setattr(service, "authority_from_active_episode", lambda *_: authority)
+    monkeypatch.setattr(service, "get_rule_set", lambda *_: rules)
+    monkeypatch.setattr(service, "JobStore", lambda _: SimpleNamespace(list_steps=lambda _: []))
+    monkeypatch.setattr(semantics, "targets_for_review", lambda *_: targets)
+    checked = []
+    def reuse(session, store, frozen, current_targets, current_model, artifacts):
+        assert current_targets is targets  # A subset would discard old full-group proof.
+        checked.append(True)
+        return reused, proofs
+    def read(frozen, batch, current_model, artifacts, *, reused, reuse_proofs):
+        assert closed and current_model == model
+        assert batch is batches[0]
+        expected = {t["target_id"] for t in batch} - pending
+        assert set(reused) == expected == set(reuse_proofs)
+        assert len(expected) == 7
+        return {"results": reused, "reuse_proofs": reuse_proofs, "pending": 9}
+    monkeypatch.setattr(service, "_reusable_source_reads", reuse)
+    monkeypatch.setattr(semantics, "read_source_relations", read)
+    context = SimpleNamespace(job_type=service.JOB_TYPE, job_id="job", step_id="semantic:0000",
+        job_payload={"context_id": "context", "review_run_id": "run", "calculation_version": service.CALCULATION_VERSION,
+            "semantic_model": model.model_dump(mode="json"), "semantic_batches": batches})
+    result = service.WorkDraftReviewService(Session, object()).execute(context)
+    assert checked and result["pending"] == 9
+
+
+@pytest.mark.parametrize("change,expected", [(None, True), ("subject", False), ("file", False),
+    ("visit", False), ("variable", False)])
+def test_product_reuse_across_rule_revision_requires_same_patient_source_visit_and_variables(monkeypatch, change, expected):
+    import json
+    from app.domain.contracts.facts import FactAuthority
+    from app.services import work_draft_review as service, work_draft_semantics as semantics
+    authority = FactAuthority(project_id="project", subject_id="subject", review_episode_id="episode", episode_revision=2,
+        protocol_version_id="new", rule_set_id="rules", rule_set_revision=2, evidence_snapshot_v2_id="snapshot",
+        complete_processing_revision_id="processing")
+    old_authority = authority.model_copy(update={"episode_revision": 1, "protocol_version_id": "old", "rule_set_revision": 1,
+        **({"subject_id": "other-patient"} if change == "subject" else {})})
+    old = SimpleNamespace(authority=old_authority, source_pages=[page()], review_episode=SimpleNamespace(workflow_stage_id="old-stage"))
+    current = SimpleNamespace(authority=authority, source_pages=[page()], review_episode=SimpleNamespace(workflow_stage_id="new-stage"))
+    variable = SimpleNamespace(variable_id="observation", model_dump=lambda **_: {"unit": "different"})
+    old_rules = SimpleNamespace(rule_set_id="rules", revision=1, study_phase="same", variable_definitions=[])
+    new_rules = SimpleNamespace(rule_set_id="rules", revision=2, study_phase="same",
+        variable_definitions=[variable] if change == "variable" else [])
+    payload = json.dumps({"context_id": "previous"})
+    job = SimpleNamespace(job_id="old-job", payload_json=payload, payload_sha256=sha256(payload.encode()).hexdigest())
+    session = SimpleNamespace(scalars=lambda _: SimpleNamespace(all=lambda: [job]))
+    monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: old))
+    monkeypatch.setattr(service, "get_rule_set", lambda _, key, rev: old_rules if rev == 1 else new_rules)
+    monkeypatch.setattr(service, "AppendRepository", lambda *_: SimpleNamespace(get=lambda key:
+        SimpleNamespace(sha256="different" if change == "file" and key == "new" else "same-file")))
+    import app.storage.repositories as repositories
+    monkeypatch.setattr(repositories, "list_workflow_stages_for_rule_set", lambda _, key, rev: [SimpleNamespace(
+        workflow_stage_id="old-stage" if rev == 1 else "new-stage",
+        model_dump=lambda **_: {"visit": "other" if change == "visit" and rev == 2 else "same"})])
+    previous_targets = [target()]
+    monkeypatch.setattr(semantics, "targets_for_review", lambda frame, rules: previous_targets)
+    seen = []
+    def revalidate(checkpoint, frame, targets, model, store, *, previous_targets=None):
+        assert frame is current and previous_targets == [target()]
+        seen.append(True)
+        return {"component:infection": {"truth": "false"}}, {"component:infection": {"raw_response_ref": "response"}}
+    monkeypatch.setattr(semantics, "revalidate_saved_source_read", revalidate)
+    store = SimpleNamespace(list_steps=lambda _: [SimpleNamespace(step_id="semantic:0000")],
+        get_last_checkpoint=lambda *_: ("checkpoint", {"raw_refs": ["response"]}))
+    accepted, proofs = service._reusable_source_reads(session, store, current, [target()], object(), object())
+    assert bool(accepted) == bool(proofs) == bool(seen) == expected
 
 
 def test_unique_line_wrap_restores_exact_original_quote_without_a_new_model_answer():
@@ -102,6 +220,27 @@ def test_missing_chart_judgment_is_scoped_policy_not_invented_denial(kind, compl
 def test_uncertain_record_does_not_become_not_seen_policy():
     inputs = relation_inputs(row(relation="unclear", object_matches=False), target(), [page()])
     assert inputs["truth"] == TruthValue.UNKNOWN.value and not inputs["policy"]
+
+
+@pytest.mark.parametrize("change", [{"object_matches": False}, {"time_matches": False},
+    {"relation": "conflict", "quotes": [{"page_artifact_id": "page", "excerpt": "否认近期感染"}] * 2}])
+def test_inapplicability_cannot_hide_unverified_identity_time_or_conflict(change):
+    scoped = target()
+    scoped["atom"]["predicate"]["applicable_population"] = "指定人群"
+    with pytest.raises(ValueError, match="不能同时确认"):
+        validate_relations({"results": [row(applicable="no", **change).model_dump()]}, [scoped], [page()])
+
+
+def test_inapplicability_requires_rule_scope_and_keeps_a_verified_quote_not_a_denial():
+    read = row(applicable="no", relation="unclear")
+    with pytest.raises(ValueError, match="未声明适用人群"):
+        validate_relations({"results": [read.model_dump()]}, [target()], [page()])
+    scoped = target()
+    scoped["atom"]["predicate"]["applicable_population"] = "指定人群"
+    valid = validate_relations({"results": [read.model_dump()]}, [scoped], [page()])[0]
+    result = relation_inputs(valid, scoped, [page()])
+    assert result["applicable"] == "no" and result["truth"] == "unknown" and not result["policy"]
+    assert result["source_read_refs"][0]["excerpt"] == "否认近期感染"
 
 
 def test_missing_duplicate_or_extra_targets_are_rejected():
@@ -269,6 +408,38 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
         assert proofs["component:infection"]["request_sha256"] == "request"
         if mutation == "disagreement":
             assert values["component:infection"]["conflict"] and len(values["component:infection"]["source_read_refs"]) == 2
+
+
+@pytest.mark.parametrize("change,expected", [(None, {"component:infection", "component:other"}),
+    ("removed", {"component:infection"}), ("meaning", {"component:other"}), ("tampered", set())])
+def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request_verification(change, expected):
+    import json
+    from app.domain.contracts.agents import ModelConfigContract
+    from app.domain.contracts.enums import ReviewStage
+    from app.services.work_draft_semantics import revalidate_saved_source_read, SEMANTIC_INSTRUCTIONS, SourceRelations
+    previous = [target(), {**target(), "target_id": "component:other"}]
+    current = previous[:1] if change == "removed" else [target("inclusion"), previous[1]] if change == "meaning" else previous
+    model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
+    source = page()
+    frame = SimpleNamespace(source_pages=[source], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+        anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
+    material = {"version": "old", "stage": "screening", "anchor_dates": {}, "targets": previous,
+        "pages": [{"page_artifact_id": "page", "page_number": 1, "category": "study_chart", "text": source.effective_text}],
+        "output_schema": SourceRelations.model_json_schema()}
+    if change == "tampered":
+        material = {**material, "targets": [target("inclusion"), previous[1]]}
+    request = {"messages": [{"role": "user", "content": SEMANTIC_INSTRUCTIONS + "每个target_id恰好一次。\n" + json.dumps(material)}]}
+    rows = [row(target_id=t["target_id"]) for t in previous]
+    saved = {"model": model.model_dump(mode="json"), "text": json.dumps({"results": [r.model_dump() for r in rows]}),
+        "calls": [{"finish_reason": "stop", "response_model": "fixture", "request_artifact_sha256": "request"}]}
+    class Artifacts:
+        def read(self, _): return json.dumps(saved).encode()
+        def read_by_sha(self, *_): return json.dumps(request).encode()
+    checkpoint = {"raw_refs": ["response"], "results": {
+        t["target_id"]: relation_inputs(r, t, [source]) for r, t in zip(rows, previous)}}
+    accepted, proofs = revalidate_saved_source_read(checkpoint, frame, current, model, Artifacts(), previous_targets=previous)
+    assert set(accepted) == set(proofs) == expected
+    assert all(value["truth"] == "false" for value in accepted.values())
 
 
 def test_chart_role_override_does_not_change_normalizer_role(monkeypatch):

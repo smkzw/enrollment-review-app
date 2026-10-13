@@ -70,6 +70,122 @@ def test_false_base_condition_does_not_require_unrelated_positive_judgment():
     assert result.system_issue is None
 
 
+@pytest.mark.parametrize("anchor,role,exact,truth,expected", [
+    (True, "sampling", True, "true", D.INCLUSION_MET),
+    (False, "sampling", True, "true", D.INDETERMINATE),
+    (True, "report", True, "true", D.INDETERMINATE),
+    (True, "sampling", False, "true", D.INDETERMINATE),
+    (False, "sampling", True, "false", D.INDETERMINATE),
+    (True, "sampling", True, "false", D.INCLUSION_NOT_MET),
+])
+def test_source_relation_cannot_bypass_deterministic_time_proof(anchor, role, exact, truth, expected):
+    window = TimeConstraint(anchor_type=AnchorType.SCREENING_DATE, direction=TimeDirection.BEFORE,
+        upper_bound_days=7)
+    rules, _, component = clause(time=window)
+    component.expression.predicate.requires_professional_judgment = True
+    fact = material(day=date(2026, 10, 10)).model_copy(update={"date_role": role})
+    frame = frozen([fact], {AnchorType.SCREENING_DATE: DateValue(value=date(2026, 10, 12), precision=DatePrecision.DAY)} if anchor else {})
+    ref = WorkDraftEvidenceRef(fact_id=fact.fact_id, locator_id=fact.locator_ids[0], source_document_version_id="document",
+        page_artifact_id="page", page_number=1, excerpt=fact.assertion_basis.assertion_text)
+    relation = {"truth": truth, "applicable": "yes", "conflict": False, "policy": False,
+        "relation": "supports" if truth == "true" else "refutes",
+        "reason": "原文有相关记录，时间由程序核对。", "source_read_refs": [{
+            "source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
+            "excerpt": ref.excerpt if exact else "另一个位置的记录", "disposition": "mentioned"}]}
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules,
+        evidence_refs={fact.fact_id: [ref]}, source_results={f"{component.rule_component_id}:age-limit": relation})
+    assert result.decision == expected and result.system_issue is None
+    if expected == D.INDETERMINATE:
+        assert "不能直接认作落入规定期间" in result.reason_text
+
+
+@pytest.mark.parametrize("kind", [RuleKind.INCLUSION, RuleKind.EXCLUSION])
+@pytest.mark.parametrize("operator", [LogicalOperator.ALL, LogicalOperator.ANY])
+@pytest.mark.parametrize("value", [17, 52])
+def test_inapplicable_atom_does_not_erase_an_independent_active_condition(kind, operator, value):
+    from app.domain.publication import canonical_hash
+    rules, _, component = clause(kind=kind)
+    active = component.expression
+    scoped = AtomicExpression(predicate=active.predicate.model_copy(update={"predicate_id": "scoped",
+        "applicable_population": "另一适用人群"}))
+    component.expression = LogicalExpression(operator=operator, children=[scoped, active])
+    component.evidence_requirements.append(component.evidence_requirements[0].model_copy(update={
+        "requirement_id": "scope-record", "predicate_ids": ["scoped"]}))
+    before = canonical_hash(rules.model_dump(mode="json"))
+    relation = {"truth": "unknown", "applicable": "no", "conflict": False, "policy": False,
+        "relation": "unclear", "reason": "原件证明不属于该原子条件的适用人群。", "source_read_refs": [{
+            "source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
+            "excerpt": "不属于该人群", "disposition": "unresolved"}]}
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([material(value=value)]), rules,
+        evidence_refs={}, source_results={f"{component.rule_component_id}:scoped": relation})
+    expected = (D.INCLUSION_MET if value >= 18 else D.INCLUSION_NOT_MET) if kind == RuleKind.INCLUSION else (
+        D.EXCLUSION_TRIGGERED if value >= 18 else D.EXCLUSION_NOT_TRIGGERED)
+    assert result.decision == expected and result.system_issue is None
+    assert result.source_read_refs[0].excerpt == "不属于该人群"
+    assert canonical_hash(rules.model_dump(mode="json")) == before
+
+
+@pytest.mark.parametrize("operator", [LogicalOperator.ALL, LogicalOperator.ANY, LogicalOperator.NOT])
+def test_entirely_inapplicable_tree_is_not_applicable_not_met_or_refuted(operator):
+    rules, _, component = clause()
+    first = component.expression
+    first.predicate.applicable_population = "指定人群"
+    atoms = [first] if operator == LogicalOperator.NOT else [first, AtomicExpression(
+        predicate=first.predicate.model_copy(update={"predicate_id": "second"}))]
+    component.expression = LogicalExpression(operator=operator, children=atoms)
+    relations = {f"{component.rule_component_id}:{atom.predicate.predicate_id}": {
+        "truth": "unknown", "applicable": "no", "conflict": False, "policy": False,
+        "relation": "unclear", "reason": "原件证明该人群要求不适用。", "source_read_refs": [{
+            "source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
+            "excerpt": "不属于该人群", "disposition": "unresolved"}]} for atom in atoms}
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([material()]), rules,
+        evidence_refs={}, source_results=relations)
+    assert result.decision == D.NOT_APPLICABLE and result.confidence is None and result.system_issue is None
+
+
+@pytest.mark.parametrize("population,quotes,conflict", [(None, True, False), ("指定人群", False, False),
+    ("指定人群", True, True)])
+def test_inapplicability_never_comes_from_unscoped_unquoted_or_conflicting_claim(population, quotes, conflict):
+    rules, _, component = clause()
+    component.expression.predicate.applicable_population = population
+    relation = {"truth": "unknown", "applicable": "no", "conflict": conflict, "policy": False,
+        "relation": "unclear", "reason": "尚未核清", "source_read_refs": [{
+            "source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
+            "excerpt": "相关记录", "disposition": "unresolved"}] if quotes else []}
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([material()]), rules,
+        evidence_refs={}, source_results={f"{component.rule_component_id}:age-limit": relation})
+    assert result.decision != D.NOT_APPLICABLE
+
+
+def test_evaluator_change_invalidates_prior_acknowledgement_identity():
+    rules, projected, _ = clause()
+    frame = frozen([material()])
+    frame.evaluator_version = "previous"
+    old = calculate_work_component(projected, frame, rules, evidence_refs={})
+    frame.evaluator_version = "current"
+    new = calculate_work_component(projected, frame, rules, evidence_refs={})
+    assert old.decision == new.decision and old.input_hash != new.input_hash
+
+
+@pytest.mark.parametrize("value,expected", [(17, D.EXCLUSION_NOT_TRIGGERED), (52, D.EXCLUSION_TRIGGERED)])
+def test_inapplicable_exception_does_not_erase_active_trigger(value, expected):
+    from app.domain.publication import canonical_hash
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    component.exception_expression = AtomicExpression(predicate=component.expression.predicate.model_copy(update={
+        "predicate_id": "exception", "applicable_population": "另一适用人群"}))
+    component.evidence_requirements.append(component.evidence_requirements[0].model_copy(update={
+        "requirement_id": "exception-source", "predicate_ids": ["exception"]}))
+    relation = {"truth": "unknown", "applicable": "no", "conflict": False, "policy": False,
+        "relation": "unclear", "reason": "不属于例外所限定的人群。", "source_read_refs": [{
+            "source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
+            "excerpt": "不属于例外人群", "disposition": "mentioned"}]}
+    before = canonical_hash(rules.model_dump(mode="json"))
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([material(value=value)]), rules,
+        evidence_refs={}, source_results={f"{component.rule_component_id}:exception": relation})
+    assert result.decision == expected and result.system_issue is None
+    assert canonical_hash(rules.model_dump(mode="json")) == before
+
+
 def material(*, value=52, variable_id="age", unit="岁", day=None, snapshot="snapshot", polarity=FactPolarity.AFFIRMED):
     authority = FactAuthority(project_id="project", subject_id="subject", review_episode_id="episode",
         episode_revision=1, protocol_version_id="protocol", rule_set_id="rules", rule_set_revision=1,

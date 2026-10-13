@@ -22,13 +22,15 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v18"
+CALCULATION_VERSION = "work-draft/0.2.0-v20"
 
 
 def _reusable_source_reads(session, store, frozen, targets, model, artifact_store):
     from app.storage.models import JobRecord
     from app.storage.codecs import verify_payload_sha256
-    from app.services.work_draft_semantics import revalidate_saved_source_read
+    from app.services.work_draft_semantics import revalidate_saved_source_read, targets_for_review
+    from app.services.review_context_assembly import clinical_source_scope_is_compatible
+    from app.storage.repositories import PROTOCOL_DOC_CONFIG, list_workflow_stages_for_rule_set
     accepted, proofs = {}, {}
     prior_jobs = session.scalars(select(JobRecord).where(JobRecord.job_type == JOB_TYPE,
         JobRecord.state.in_({"completed", "cancelled"}),
@@ -39,15 +41,33 @@ def _reusable_source_reads(session, store, frozen, targets, model, artifact_stor
         if not payload.get("context_id"):
             continue
         previous = ReviewContextV2Repository(session).get(payload["context_id"])
-        if previous.authority != frozen.authority or previous.source_pages != frozen.source_pages:
+        if previous.source_pages != frozen.source_pages:
             continue
+        previous_targets = None
+        if previous.authority != frozen.authority:
+            old_rules = get_rule_set(session, previous.authority.rule_set_id, previous.authority.rule_set_revision)
+            current_rules = get_rule_set(session, frozen.authority.rule_set_id, frozen.authority.rule_set_revision)
+            protocols = AppendRepository(session, PROTOCOL_DOC_CONFIG)
+            if not clinical_source_scope_is_compatible(previous.authority, frozen.authority, old_rules, current_rules,
+                    protocols.get(previous.authority.protocol_version_id), protocols.get(frozen.authority.protocol_version_id)):
+                continue
+            old_stages = list_workflow_stages_for_rule_set(session, old_rules.rule_set_id, old_rules.revision)
+            current_stages = list_workflow_stages_for_rule_set(session, current_rules.rule_set_id, current_rules.revision)
+            old_stage = next((s for s in old_stages if s.workflow_stage_id == previous.review_episode.workflow_stage_id), None)
+            current_stage = next((s for s in current_stages if s.workflow_stage_id == frozen.review_episode.workflow_stage_id), None)
+            excluded = {"workflow_stage_id", "due_requirement_ids"}
+            if (old_stage is None or current_stage is None
+                    or old_stage.model_dump(exclude=excluded) != current_stage.model_dump(exclude=excluded)):
+                continue
+            previous_targets = targets_for_review(previous, old_rules)
         for step in store.list_steps(job.job_id):
             if not step.step_id.startswith("semantic"):
                 continue
             checkpoint = store.get_last_checkpoint(job.job_id, step.step_id)
             if checkpoint is None:
                 continue
-            rows, origins = revalidate_saved_source_read(checkpoint[1], frozen, targets, model, artifact_store)
+            rows, origins = revalidate_saved_source_read(checkpoint[1], frozen, targets, model, artifact_store,
+                previous_targets=previous_targets)
             for key, row in rows.items():
                 if key not in accepted:
                     accepted[key] = row
@@ -143,11 +163,13 @@ class WorkDraftReviewService:
             preview = assemble_review_context(session, self.artifact_store, review_episode_id=review_episode_id,
                 review_run_id="pending", evaluator_version=CALCULATION_VERSION,
                 created_at=datetime.now(UTC), work_draft=True)
-            from app.services.work_draft_semantics import BATCH_SIZE, runtime_model, targets_for_review
+            from app.services.work_draft_semantics import runtime_model, targets_for_review, source_batches
             rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
             targets = targets_for_review(preview, rule_set)
             model = runtime_model() if targets else None
-            batches = [targets[index:index + BATCH_SIZE] for index in range(0, len(targets), BATCH_SIZE)] or [[]]
+            reusable, _ = _reusable_source_reads(session, JobStore(session), preview, targets, model,
+                self.artifact_store) if targets else ({}, {})
+            batches = source_batches(targets, reusable)
             identity = canonical_hash({"authority": authority.model_dump(mode="json"),
                 "rule_set_sha256": preview.rule_set_sha256,
                 "clinical_facts": [item.model_dump(mode="json") for item in preview.facts],
@@ -155,7 +177,7 @@ class WorkDraftReviewService:
                 "source_pages": [item.model_dump(mode="json") for item in preview.source_pages],
                 "calculation_version": CALCULATION_VERSION,
                 "semantic_model": model.model_dump(mode="json") if model else None,
-                "semantic_batches": batches})
+                "semantic_targets": targets})
             receipt, created = IdempotencyRepository(session).resolve(scope=f"work-draft:{review_episode_id}",
                 idempotency_key=identity, submitted_hash=identity, result_type="work_draft_job", result_id=uuid4().hex)
             store = JobStore(session)
@@ -277,7 +299,13 @@ class WorkDraftReviewService:
                             "blocked_by_step": prior.step_id, "error": "病例核对模型访问受限，本批未重复请求。"}
                 index = int(context.step_id.split(":")[1]) if ":" in context.step_id else 0
                 model = ModelConfigContract.model_validate(payload["semantic_model"]) if payload.get("semantic_model") else runtime_model()
-                reused, proofs = _reusable_source_reads(session, store, frozen, batches[index], model, self.artifact_store)
+                # Verify original full request groups before selecting this batch;
+                # regrouping targets must not invalidate otherwise identical reads.
+                reused, proofs = _reusable_source_reads(session, store, frozen,
+                    targets_for_review(frozen, rule_set), model, self.artifact_store)
+                batch_ids = {target["target_id"] for target in batches[index]}
+                reused = {key: row for key, row in reused.items() if key in batch_ids}
+                proofs = {key: proof for key, proof in proofs.items() if key in batch_ids}
                 # No database transaction is held while the product model reads sources.
                 session.close()
                 return read_source_relations(frozen, batches[index], model, self.artifact_store,

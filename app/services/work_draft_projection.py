@@ -11,14 +11,23 @@ from app.storage.work_draft_repository import WorkDraftRepository
 from app.services.work_draft_calculation import LABELS
 
 
-def display_source_reason(text):
+def display_source_reason(text, *, decision=None):
     """Clean transport vocabulary in explanations, never source excerpts."""
     labels = {"supports": "原文支持", "refutes": "原文明示不符合该条件",
               "not_found": "本次资料未见记录", "unclear": "尚未核清", "conflict": "资料矛盾",
               "relation": "原文关系", "applicable": "适用范围", "site": "研究中心"}
+    if decision == "not_applicable":
+        text = text.removeprefix("已找到相关原文，但尚不足以证明本条件，不能当作未见记录。")
+    text = re.sub(r"(?<![A-Za-z0-9_])applicable\s*=\s*(yes|no|unclear)(?![A-Za-z0-9_])",
+        lambda match: {"yes": "适用范围已核对", "no": "有据不适用", "unclear": "适用范围尚未核清"}[match[1]], text)
     text = re.sub(r"(?<![A-Za-z0-9_])(?:relation\s*=\s*)?(supports|refutes|not_found|unclear|conflict)(?![A-Za-z0-9_])",
                   lambda match: labels[match[1]], text)
     text = re.sub(r"(?<![A-Za-z0-9_])(?:relation|applicable|site)(?![A-Za-z0-9_])", lambda match: labels[match[0]], text)
+    text = re.sub(r"(?<![A-Za-z0-9_])requires_professional_judgment\s*=\s*(true|false)(?![A-Za-z0-9_])", lambda match:
+        "本条件需要研究者判断" if match[1] == "true" else "本条件不额外要求研究者判断", text)
+    for key, label in {"applicable_population": "条款限定的适用人群", "observed_value": "原始读数",
+                       "observed_unit": "原始单位"}.items():
+        text = re.sub(r"(?<![A-Za-z0-9_])" + key + r"(?![A-Za-z0-9_])", label, text)
     return re.sub(r"(?<![A-Za-z0-9_])[PT]\d{2}(?![A-Za-z0-9_])", "所列原文", text)
 
 
@@ -56,7 +65,8 @@ def project_work_draft(session, *, authority, rule_set, clause_pack, artifact_st
                 rule_kind=item.rule_kind.value, text_summary=item.title, source_text=item.source_text,
                 parent_rule_code=item.official_code if item.rule_component_id is not None else None, decision=item.decision.value if item.decision else "system_issue",
                 decision_label=LABELS[item.decision] if item.decision else "系统问题",
-                reason=display_source_reason(item.reason_text) if item.source_read_refs else item.reason_text,
+                reason=display_source_reason(item.reason_text, decision=item.decision.value if item.decision else None)
+                    if item.source_read_refs else item.reason_text,
                 fact_refs=refs, source_read_refs=tuple(EligibilitySourceReadRef(**ref.model_dump(mode="json")) for ref in item.source_read_refs),
                 gap_type=None, determination_mode="restricted" if item.system_issue else "semantic" if item.source_read_refs else "deterministic",
                 confidence=item.confidence, confidence_reason=item.confidence_reason)

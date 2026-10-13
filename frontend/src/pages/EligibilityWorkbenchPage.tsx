@@ -95,6 +95,11 @@ function workItemKindLabel(item: EligibilityWorkItem): string {
   return item.controlId ? "方案补充要求" : clauseKindLabel(item.ruleKind);
 }
 
+function hasJudgedSource(clause: EligibilityClauseView): boolean {
+  return (Boolean(clause.confidence) || clause.decision === "not_applicable")
+    && (clause.sourceReadRefs ?? []).some((ref) => ref.disposition === "mentioned" && ref.excerpt);
+}
+
 export function isUndeterminedDecision(decision: EligibilityDecision): boolean {
   return decision === "professional_judgment" || decision === "indeterminate" || decision === "conflict" || decision === "system_issue";
 }
@@ -588,7 +593,7 @@ function EligibilityClauseDetail({
       <details className="eligibility-detail-section">
         <summary>关联事实的原件位置（{clause.factRefs.length}）</summary>
         {clause.factRefs.length === 0 ? (
-          <p className="eligibility-muted">{clause.confidence && (clause.sourceReadRefs ?? []).some((ref) => ref.excerpt)
+          <p className="eligibility-muted">{hasJudgedSource(clause)
             ? "本次判断依据病历原文，具体摘录与页码见右侧。"
             : clause.determinationMode === "restricted"
             ? "方案要求尚待核清，暂不据此判定病历事实。"
@@ -746,7 +751,7 @@ function EligibilityEvidencePanel({
           </span>
         </div>
       )}
-      {clause.factRefs.length === 0 && !(clause.confidence && (clause.sourceReadRefs ?? []).some((ref) => ref.excerpt)) && (
+      {clause.factRefs.length === 0 && !hasJudgedSource(clause) && (
         <p className="eligibility-muted">当前条款没有已采用事实，可浏览全部原件页核实。</p>
       )}
       {isReferencePage && selectedFact === null && selectedSource?.excerpt
@@ -763,7 +768,7 @@ function EligibilityEvidencePanel({
             return <li key={`${ref.pageArtifactId}-${index}`}>
               <button type="button" className="eligibility-evidence__ref" disabled={!page}
                 onClick={() => page && setBrowsedPage({ context: sourceContext, entryId: page.entryId })}>
-                <strong>{ref.disposition === "mentioned" ? clause.confidence ? "本次判断的病历依据" : "已找到相关原文，待核清" : ref.disposition === "not_seen" ? "本页未见相关记录" : "本页尚未核清"}</strong>
+                <strong>{ref.disposition === "mentioned" ? hasJudgedSource(clause) ? "本次判断的病历依据" : "已找到相关原文，待核清" : ref.disposition === "not_seen" ? "本页未见相关记录" : "本页尚未核清"}</strong>
                 {ref.excerpt && <span>{ref.excerpt}</span>}
                 <span>{documentNames.get(ref.sourceDocumentVersionId) ?? "原始资料"} · 第 {ref.pageNumber} 页</span>
               </button>

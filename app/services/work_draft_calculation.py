@@ -32,6 +32,21 @@ def atomic_expressions(expression):
             yield from atomic_expressions(operand)
 
 
+def applicable_expression(expression, excluded_predicates):
+    """Build a calculation-only tree; inapplicable atoms are not TRUE or FALSE."""
+    if expression is None:
+        return None
+    if isinstance(expression, AtomicExpression):
+        return None if expression.predicate.predicate_id in excluded_predicates else expression
+    children = [active for child in expression.children
+                if (active := applicable_expression(child, excluded_predicates)) is not None]
+    if not children:
+        return None
+    if len(children) == 1 and expression.operator.value != "not":
+        return children[0]
+    return expression.model_copy(update={"children": children})
+
+
 @dataclass(frozen=True)
 class VariableSelection:
     fact_ids: tuple[str, ...]
@@ -248,6 +263,7 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
     bound_variables.update(definitions[key].reference_ratio_of for key in tuple(bound_variables)
         if key in definitions and definitions[key].reference_ratio_of is not None)
     input_hash = canonical_hash({"clause": clause.model_dump(mode="json"),
+        "evaluator_version": getattr(frozen, "evaluator_version", None),
         "facts": [fact.model_dump(mode="json") for fact in frozen.facts
                   if fact.variable_id in bound_variables],
         "calculations": [definitions[key].model_dump(mode="json") for key in sorted(bound_variables) if key in definitions],
@@ -292,6 +308,7 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
         selection = select_by_variable(component, frozen.facts, frozen.review_episode.anchor_dates,
             authority=frozen.authority, definitions=definitions, stage=frozen.review_episode.stage,
             evidence_refs=evidence_refs, source_pages=getattr(frozen, "source_pages", ()))
+        dated_selection = dict(selection)
         needs_source = {p.predicate_id for p in predicates if p.requires_professional_judgment
             or p.semantic_proposition or p.applicable_population or p.prospective_period or p.prospective_window}
         needs_source.update(pid for req in due if req.variable_id in definitions
@@ -391,30 +408,55 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             from app.domain.expression import ComponentEvaluation, EvaluationResult, _combine_bound_expression
             from app.domain.gates.assessment import derive_component_decision, derive_gate_gap_types
             values = dict(outcome.evaluation.predicate_evaluations)
+            unverified_source_times = set()
+            atoms = {atom.predicate.predicate_id: atom for expression in (
+                calculation_component.expression, calculation_component.exception_expression)
+                if expression is not None for atom in atomic_expressions(expression)}
             for pid, row in relations.items():
                 truth = TruthValue(row["truth"])
                 if truth != TruthValue.UNKNOWN and not row.get("source_read_refs"):
                     raise ValueError("原文关系缺少逐字来源或已查范围")
+                constraint = atoms[pid].time_constraint
+                anchor = context.anchor_dates.get(constraint.anchor_type) if constraint else None
+                if truth != TruthValue.UNKNOWN and constraint is not None and (anchor is None or anchor.value is None):
+                    truth = TruthValue.UNKNOWN
+                    unverified_source_times.add(pid)
+                elif truth == TruthValue.TRUE and constraint is not None:
+                    # Source support proves the event, not its calendar window.
+                    # Use only a dated accepted observation at that exact excerpt.
+                    dated_ids = set(dated_selection.get(pid, VariableSelection(())).fact_ids)
+                    dated = [fact for fact in frozen.facts if fact.fact_id in dated_ids
+                        and fact.date_role in {"sampling", "visit"} and fact.date_range is not None
+                        and any(ref.excerpt and all(getattr(ref, key) == quote.get(key) for key in (
+                            "source_document_version_id", "page_artifact_id", "page_number", "excerpt"))
+                            for ref in evidence_refs.get(fact.fact_id, ()) for quote in row["source_read_refs"])]
+                    if not dated:
+                        truth = TruthValue.UNKNOWN
+                        unverified_source_times.add(pid)
                 values[pid] = EvaluationResult(truth=truth,
                     reason_codes=["source_conflict"] if row["conflict"] else [] if truth != TruthValue.UNKNOWN else ["observation_unverified"])
-            evaluation = ComponentEvaluation(applicable=TruthValue.FALSE if any(
-                p.applicable_population is not None and relations.get(p.predicate_id, {}).get("applicable") == "no"
-                for p in predicates) else TruthValue.TRUE,
-                trigger=_combine_bound_expression(calculation_component.expression, values),
-                exception=_combine_bound_expression(calculation_component.exception_expression, values)
-                    if calculation_component.exception_expression is not None else None,
+            excluded = {p.predicate_id for p in predicates if p.applicable_population
+                and relations.get(p.predicate_id, {}).get("applicable") == "no"
+                and not relations[p.predicate_id]["conflict"]
+                and any(ref.get("excerpt") for ref in relations[p.predicate_id].get("source_read_refs", ()))}
+            active_trigger = applicable_expression(calculation_component.expression, excluded)
+            active_exception = applicable_expression(calculation_component.exception_expression, excluded)
+            evaluation = ComponentEvaluation(applicable=TruthValue.FALSE if active_trigger is None else TruthValue.TRUE,
+                trigger=_combine_bound_expression(active_trigger, values) if active_trigger is not None
+                    else EvaluationResult(truth=TruthValue.UNKNOWN),
+                exception=_combine_bound_expression(active_exception, values) if active_exception is not None else None,
                 predicate_evaluations=values)
             # An absent sibling cannot block a result that stays identical under
             # both counterfactual values. Keep source requirements unrelated to it.
-            inactive_predicates = set()
+            inactive_predicates = set(excluded)
             for pid, value in values.items():
-                if value.truth != TruthValue.UNKNOWN:
+                if value.truth != TruthValue.UNKNOWN or pid in excluded or active_trigger is None:
                     continue
                 signatures = set()
                 for possible in (TruthValue.TRUE, TruthValue.FALSE):
                     variant = {**values, pid: EvaluationResult(truth=possible)}
-                    t = _combine_bound_expression(calculation_component.expression, variant).truth
-                    e = _combine_bound_expression(calculation_component.exception_expression, variant).truth if calculation_component.exception_expression else None
+                    t = _combine_bound_expression(active_trigger, variant).truth
+                    e = _combine_bound_expression(active_exception, variant).truth if active_exception is not None else None
                     signatures.add((t, e if t == TruthValue.TRUE else None))
                 if signatures == {(evaluation.trigger.truth,
                         evaluation.exception.truth if evaluation.exception and evaluation.trigger.truth == TruthValue.TRUE else None)}:
@@ -510,6 +552,8 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
         if relations:
             notes = list(dict.fromkeys(row["reason"] for row in relations.values()))
             reason = "；".join([*summaries, *notes])
+            if unverified_source_times:
+                reason += "。已找到相关记录，但方案要求的日期锚点或同一记录的发生时间尚未核实，不能直接认作落入规定期间。"
             if any(row["policy"] for row in relations.values()):
                 reason += "。按本次已提供且已核对资料未见排除依据，不表示原件明确否认或研究者另行签字。"
         if any(row["conflict"] for row in relations.values()) and outcome.decision not in DETERMINATE:

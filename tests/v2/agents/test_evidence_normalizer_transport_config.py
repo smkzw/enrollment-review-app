@@ -182,6 +182,44 @@ def test_cms_chart_role_opts_into_streaming_without_rerouting_other_roles():
     assert "stream" not in other.initial_request_body(prompt="合成资料")
 
 
+def test_gateway_empty_heartbeat_preserves_actual_model_request_and_usage():
+    receipts = []
+    stream = _FakeStream([
+        _stream_chunk(model="keepalive", chunk_id="heartbeat-before"),
+        _stream_chunk(content="{}", model="glm-5.3-flash", finish="stop"),
+        _stream_chunk(model="glm-5.3-flash", usage={"total_tokens": 5}),
+        _stream_chunk(model="keepalive", chunk_id="heartbeat-after", usage={"total_tokens": 999}),
+    ])
+    transport = transport_module.DeepSeekEvidenceNormalizerTransport(backend="cms-router",
+        model="glm-5.3-flash", stream_response=True, client=_glm_stream_client(lambda **kwargs: stream),
+        receipt_callback=receipts.append)
+    assert transport.start(prompt="合成资料").text == "{}"
+    assert receipts[0]["response_model"] == "glm-5.3-flash"
+    assert receipts[0]["response_id"] == "chatcmpl-glm-1"
+    assert receipts[0]["usage"]["total_tokens"] == 5 and stream.closed
+
+
+@pytest.mark.parametrize("heartbeat", [
+    {"content": "{}"}, {"reasoning": "内容"}, {"finish": "stop"},
+])
+def test_heartbeat_cannot_smuggle_output_or_finish(heartbeat):
+    state = transport_module._new_glm_stream_state()
+    with pytest.raises(RuntimeError, match="保活消息"):
+        transport_module._absorb_glm_stream_chunk(_stream_chunk(model="keepalive", **heartbeat), state,
+            allow_model_identity_change=True)
+    assert state["response_model"] is None and not state["content_parts"]
+
+
+def test_gateway_alias_does_not_allow_switching_models_mid_answer():
+    stream = _FakeStream([_stream_chunk(content="{", model="actual-model"),
+        _stream_chunk(content="}", model="different-model", finish="stop")])
+    transport = transport_module.DeepSeekEvidenceNormalizerTransport(backend="cms-router", model="request-alias",
+        stream_response=True, client=_glm_stream_client(lambda **kwargs: stream))
+    with pytest.raises(Exception, match="身份发生变化"):
+        transport.start(prompt="合成资料")
+    assert stream.closed
+
+
 @pytest.mark.parametrize("second_fails", [False, True])
 def test_completion_receipts_preserve_length_retry_and_failure(second_fails):
     receipts, budgets, requests = [], [], []

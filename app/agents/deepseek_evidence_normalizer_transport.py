@@ -125,6 +125,13 @@ def _absorb_glm_stream_chunk(
     if getattr(chunk, "error", None):
         raise RuntimeError("GLM 流式响应包含服务错误，拒绝采信")
     model = getattr(chunk, "model", None)
+    if model == "keepalive":
+        if any(getattr(choice, "finish_reason", None)
+                or getattr(getattr(choice, "delta", None), "content", None)
+                or getattr(getattr(choice, "delta", None), "reasoning_content", None)
+                for choice in getattr(chunk, "choices", None) or []):
+            raise RuntimeError("网关保活消息混入模型输出或结束标记，拒绝采信")
+        return
     if model:
         if state["response_model"] and state["response_model"] != model:
             if not allow_model_identity_change:
@@ -173,9 +180,8 @@ def _assemble_glm_stream(
     同步迭代器在单个块上最多阻塞到客户端读超时（600s），因此实际总时长最多
     可能超出 total_limit 一个不活动窗口，块内挂起由客户端读超时兜底。
 
-    ``allow_model_identity_change`` 供网关路由（cms-router 等）使用：网关
-    会在流中途把请求切换到另一个上游，模型字段随之变化；此时记录最终身份
-    并继续，不视为致命错误（2026-09-19 实测 deepseek 网关流）。
+    ``allow_model_identity_change`` 仅保留既有调用接口；产品请求不启用。
+    请求别名可由首个真实模型名解析，后续真实内容流不能切换模型。
     """
     started = clock()
     last_activity = started
@@ -441,8 +447,8 @@ class DeepSeekEvidenceNormalizerTransport:
     def _request_stream(self, kwargs, *, strict_model_check: bool = True):
         """流式执行一次 GLM 请求：逐块观测，失败小票保留部分输出诊断。
 
-        ``strict_model_check`` 供经网关路由的请求放宽：路由器会回填上游真实
-        模型名（如 cms-deepseek-flash → deepseek-flash），身份仍记录在小票。
+        ``strict_model_check`` 允许网关请求名与首个实际返回名不同；实际内容流
+        内的模型身份仍须稳定。空保活消息不提供模型或请求身份。
         """
         started = monotonic()
         receipt = {"mode": "stream",
@@ -455,9 +461,7 @@ class DeepSeekEvidenceNormalizerTransport:
         try:
             self._bind_request_receipt(receipt, kwargs)
             stream = self._client.chat.completions.create(**kwargs)
-            _assemble_glm_stream(
-                stream, state, allow_model_identity_change=not strict_model_check,
-            )
+            _assemble_glm_stream(stream, state)
             if strict_model_check and str(state["response_model"] or "").lower() != self._model.lower():
                 raise RuntimeError("GLM 实际响应模型与请求模型不一致")
             content = "".join(state["content_parts"])
