@@ -822,7 +822,7 @@ function EligibilityEvidencePanel({
             <>
             {!isReferencePage && referencePage !== null ? (
               <button type="button" className="button button--quiet" onClick={returnToReference}>
-                返回事实来源页
+                返回本条依据页
               </button>
             ) : null}
             {isReferencePage && locatorPage.state.status === "error" ? (

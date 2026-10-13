@@ -170,8 +170,8 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
         <ProtocolReviewLogic item={selectedItem} content={content} bindings={bindings} />
         {selectedItem.reasons.length > 0 && <details className="protocol-review-advice" aria-label="备选解释与处理" key={entry.official_code}>
           <summary><SlidersHorizontal size={16} aria-hidden="true" /> 比较备选解释与手动调整</summary>
-          {ruleReviewAdvice(selectedItem, content).map(advice => <section className="protocol-review-advice__group" key={advice.componentId ?? advice.title}>
-            <h4><GitBranch size={16} aria-hidden="true" />{advice.title}</h4><p className="protocol-review-advice__analysis">{advice.analysis}</p>
+          {ruleReviewAdvice(selectedItem, content).map((advice, index) => <details className="protocol-review-advice__group" key={advice.componentId ?? advice.title} open={index === 0}>
+            <summary><GitBranch size={16} aria-hidden="true" />{advice.title}</summary><p className="protocol-review-advice__analysis">{advice.analysis}</p>
             <ol>{advice.options.map((option, index) => <li key={option.label} className={option.recommended ? "is-recommended" : ""}>
               <div className="protocol-review-option__head"><span className="protocol-review-option__letter">{String.fromCharCode(65 + index)}</span>
                 <strong>{option.label}</strong></div>
@@ -183,7 +183,7 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
                 onClick={() => onEdit(advice.componentId!, option.operator)}>
                 {option.operator ? "按此方向预览修订" : "打开手动调整"}</button>}
             </li>)}</ol>
-          </section>)}
+          </details>)}
         </details>}
         {onEdit && entry.kind === "rule" && selectedItem.rule?.components[0] && <button className="button" disabled={busy}
           onClick={() => onEdit(selectedItem.rule?.components[0]?.componentId)}>手动修改本条解析</button>}

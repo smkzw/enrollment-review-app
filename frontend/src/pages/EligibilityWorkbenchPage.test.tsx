@@ -288,7 +288,7 @@ describe("入排审核工作台", () => {
     expect(screen.queryByLabelText(/^重点标注/)).not.toBeInTheDocument();
     const panel = screen.getByRole("complementary", { name: "原件面板" });
     expect(panel.querySelector(".eligibility-evidence__excerpt")).toBeNull();
-    await user.click(within(panel).getByRole("button", { name: "返回事实来源页" }));
+    await user.click(within(panel).getByRole("button", { name: "返回本条依据页" }));
     expect(reference).toHaveAttribute("aria-current", "page");
     expect(adjacent).not.toHaveAttribute("aria-current");
     expect(panel.querySelector(".eligibility-evidence__excerpt")).toHaveTextContent("检查结果见原件");

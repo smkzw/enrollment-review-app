@@ -129,4 +129,29 @@ describe("逐条审定", () => {
     expect(screen.queryByRole("region", { name: "逻辑解析" })).not.toBeInTheDocument();
     expect(screen.getByText("当前范围没有条目。")).toBeInTheDocument();
   });
+  it("多子项备选默认只展开第一组，其他组可独立打开且预览不保存审定", async () => {
+    const atom = (id: string) => ({ kind: "predicate", predicate: { predicate_id: id,
+      subject: "受试者", attribute: "年龄", comparator: "gte", value: 18, unit: "岁" } });
+    const content = { proposed_rules: [{ rule_id: "r", official_code: "IN-01", kind: "inclusion", source_text: entry.label,
+      components: ["a", "b"].map(id => ({ rule_component_id: id, parent_rule_id: "r", display_code: `IN-01${id}`,
+        title: `条件${id}`, expression: { kind: "logical", operator: "any", children: [atom(`${id}1`), atom(`${id}2`)] },
+        exception_expression: null })) }] };
+    const fetcher = vi.fn(async (url: RequestInfo | URL, _options?: RequestInit) => new Response(JSON.stringify(String(url).endsWith("/variables")
+      ? { job_id: "job", draft_revision_id: "revision", variables: [], predicates: [] } : initial)));
+    const onEdit = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const { container } = render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity}
+      sources={sources} content={content} onReady={vi.fn()} onEdit={onEdit} />);
+    await screen.findByLabelText("备选解释与处理");
+    const advice = screen.getByLabelText("备选解释与处理");
+    await userEvent.click(advice.querySelector("summary")!);
+    const groups = [...container.querySelectorAll<HTMLDetailsElement>(".protocol-review-advice__group")];
+    expect(groups).toHaveLength(2);
+    expect(groups.map(group => group.open)).toEqual([true, false]);
+    await userEvent.click(groups[1].querySelector("summary")!);
+    expect(groups[1].open).toBe(true);
+    await userEvent.click(groups[1].querySelector("button")!);
+    expect(onEdit).toHaveBeenCalledWith("b", "all");
+    expect(fetcher.mock.calls.every(([, options]) => !options || options.method === "GET")).toBe(true);
+  });
 });

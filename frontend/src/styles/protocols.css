@@ -1960,8 +1960,10 @@
 .protocol-review-focus summary svg, .protocol-review-advice summary svg, .protocol-review-requirements summary svg { display: inline-block; vertical-align: middle; }
 .protocol-review-focus ul { margin-top: var(--space-2); line-height: 1.7; }
 .protocol-review-advice { border-top: 1px solid #dde3e8; padding: 12px 0; margin-bottom: 12px; }
-.protocol-review-advice__group { margin-top: var(--space-4); }
-.protocol-review-advice h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+.protocol-review-advice__group { margin-top: var(--space-3); padding-block: var(--space-2); border-bottom: 1px solid var(--color-line); }
+.protocol-review-advice__group > summary { cursor: pointer; font-weight: 600; }
+.protocol-review-advice__group > summary svg { display: inline-block; vertical-align: middle; margin-inline: 6px; }
+.protocol-review-advice__group[open] > summary { margin-bottom: var(--space-3); }
 .protocol-review-advice__analysis { max-width: 72ch; margin-bottom: var(--space-3); line-height: 1.7; }
 .protocol-review-advice ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); padding: 0; list-style: none; }
 .protocol-review-advice li { min-width: 0; padding: var(--space-3); border: 1px solid var(--color-line); border-radius: 6px; background: var(--surface-glass); display: flex; flex-direction: column; gap: var(--space-2); }

@@ -238,7 +238,7 @@ export function OriginalEvidenceViewer({
           <span>{pages.length} 页连续查看</span>
         </div>
         <div className="original-evidence-viewer__zoom">
-          <button type="button" aria-label="回到当前核对页" title="回到当前核对页"
+          <button type="button" aria-label="定位当前查看页" title="定位当前查看页"
             disabled={selectedPage === undefined} onClick={() => {
               userScrolling.current = false;
               manualScrollUntil.current = 0;
