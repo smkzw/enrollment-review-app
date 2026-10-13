@@ -89,6 +89,54 @@ def test_changed_entry_invalidates_only_it_and_changed_source_invalidates_it(sli
         assert rechecked[1]["review"] is not None
 
 
+@pytest.mark.parametrize("mutation", [None, "rule", "source", "project", "receipt", "revoke", "other_due", "own_stage"])
+def test_source_identical_formal_copy_reuses_actual_reviews_without_new_approvals(slice4_env, data_paths, mutation):
+    from app.domain.contracts.agent_io import ProtocolDeconstructionInput
+    from tests.v2.protocols.test_redeconstruction_backend import (
+        _make_service, _write_minimal_docx, AlwaysPublishableGate, _control_refs,
+    )
+    factory, _ = slice4_env
+    service = _make_service(factory, data_paths, gate=AlwaysPublishableGate())
+    source, draft, spans = confirmed_fixture()
+    path = _write_minimal_docx(data_paths, "review-copy.docx")
+    initial = service.start_first_deconstruction(upload_path=path, original_name=path.name,
+        idempotency_key="review-copy-first", actor="测试")
+    service.seed_review_session(initial.job_id, source_input=source, draft=draft, source_spans=spans, wait_at="publish")
+    approve_draft(factory, source, draft)
+    published = service.publish_first_project(initial.job_id, idempotency_key="review-copy-published",
+        actor="测试", **_control_refs(service, data_paths, initial.job_id))
+    original = service.get_rule_reviews(initial.job_id)
+    copied = service.start_feedback_re_deconstruction(project_id=published.project_id,
+        idempotency_key="review-copy-feedback", actor="测试")
+    merged = service._merged_payload(copied.job_id)
+    current = service._load_draft_revision(merged).content.model_copy(deep=True)
+    current_source = ProtocolDeconstructionInput.model_validate(merged["source_input"])
+    if mutation == "rule": current.proposed_rules[0].components[0].title += "内容改变"
+    if mutation == "source": current_source.source_materials[0].text += "来源改变"
+    if mutation == "project": current.project_id = "another-project"
+    if mutation == "receipt": current.draft_id = "unproven-copy"
+    if mutation == "other_due": current.proposed_workflow_stages[0].due_requirement_ids.append("unrelated-requirement")
+    if mutation == "own_stage": current.proposed_workflow_stages[0].display_name += "节点已改变"
+    if mutation == "revoke":
+        view = service.get_rule_reviews(copied.job_id)
+        entry = view["entries"][0]
+        service.review_rule(copied.job_id, entry["official_code"], expected_revision_id=view["draft_revision_id"],
+            rule_content_hash=entry["rule_content_hash"], reviewer_kind="builder_verification", action="revoked")
+    with factory() as session:
+        entries, history = current_reviews(session, current_source, current)
+        count = session.scalar(select(func.count()).select_from(RuleReviewRecordRow))
+    assert all(entry["reviewed_content_hash"] == (entry["rule_content_hash"] if entry["review"] else None) for entry in entries)
+    if mutation in {"source", "project", "receipt"}:
+        assert all(entry["review"] is None for entry in entries)
+    else:
+        assert (entries[0]["review"] is not None) == (mutation in {None, "other_due", "own_stage"})
+        assert all(entry["review"] is not None for entry in entries[1:] if mutation != "own_stage" or entry["kind"] == "rule")
+        if mutation == "own_stage":
+            assert any(entry["review"] is None for entry in entries if entry["kind"] == "procedure")
+        assert history[0].record_id == original["history"][0].record_id
+    assert count == len(original["history"]) + (mutation == "revoke")
+
+
 def test_revocation_wins_at_same_timestamp_without_rewriting_history(slice4_env):
     factory, _ = slice4_env
     source, draft, _ = confirmed_fixture()

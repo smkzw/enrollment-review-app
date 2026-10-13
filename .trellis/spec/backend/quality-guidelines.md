@@ -40,6 +40,16 @@ V2 必须把方案事实、证据事实、候选解释、确定性判定和用�
 
 ## Testing Requirements
 
+### 0.2.0 同源反馈审定绑定
+
+1. **范围**：已发布规则的同源反馈草稿；不能凭调用者声称旧批准有效。
+2. **签名**：`review_entries(source, draft, scoped_stages=False)`保持历史哈希；`current_reviews(session, source, draft)`供API及发布共用。无新表／迁移。
+3. **合同**：`GET .../{job}/draft/reviews`的entry新增可空`reviewed_content_hash`；只有后端验证当前内容有效才返回当前哈希，`review`仍是原不可变事件。REQ等价比较只限定自己的到期要求，节点、窗、映射、变量及来源仍完整比较。
+4. **校验**：实际Job冻源、生成草稿与published基线相符；新增解释来源、错项目／来源／草稿／缺证明不继承，内容改变使受影响项失效；当前撤销优先。前端拒绝未绑定旧哈希、错绑定、撤销及重复清单。
+5. **正／基线／反例**：同源复制沿用原事件ID；原接口哈希一致仍有效；改临床条件或自身节点必须重审；删除无关到期项不让所有REQ重审。
+6. **测试**：`test_rule_reviews.py`的formal-copy变体＋`test_rule_reviews_api.py`＋重新解构／保存消费者＋`ProtocolRuleReviewPanel.test.tsx`；实际UI确认待审范围，不点击代批准。
+7. **错误／正确**：复制64个新“医学经理”批准或前端忽略全部哈希错误均不合法；核真实来源和逐项内容，返回当前绑定、保留原事件，改项等待本人审定。
+
 - 单元测试：领域值对象、四值逻辑、AND/OR/NOT、子规则 rollup、时间窗、单位换算、日期精度。
 - 属性/变异测试：重点验证把 AND 改 OR、阈值运算符变化、未知值传播时测试必然失败。
 - 契约测试：JSON Schema、API 请求/响应、Agent 输入输出、PromptVersion 与 SchemaVersion 匹配。

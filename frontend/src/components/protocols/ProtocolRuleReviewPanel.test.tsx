@@ -34,6 +34,10 @@ describe("逐条审定", () => {
       reviewer_kind: "builder_verification", reviewed_by: "构建者（验证）", reviewed_at: "2026-10-12T00:00:00Z",
       action: "approved", note: null, result_variables: [] };
     expect(() => decodeRuleReviews({ ...initial, entries: [{ ...entry, review }] }, "job")).toThrow();
+    const copied = { ...initial, all_reviewed: true, entries: [{ ...entry, review, reviewed_content_hash: hash }], history: [review] };
+    expect(decodeRuleReviews(copied, "job").entries[0].review?.rule_content_hash).toBe("b".repeat(64));
+    expect(() => decodeRuleReviews({ ...copied, entries: [{ ...entry, review, reviewed_content_hash: "c".repeat(64) }] }, "job")).toThrow();
+    expect(() => decodeRuleReviews({ ...copied, entries: [{ ...entry, review: { ...review, action: "revoked" }, reviewed_content_hash: hash }] }, "job")).toThrow();
   });
 
   it("显示对应提示，明确验证身份，并用内容与修订核对保存", async () => {

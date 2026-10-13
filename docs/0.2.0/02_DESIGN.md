@@ -178,6 +178,7 @@
 
 - 后端：`POST /api/v2/protocol/deconstructions/{job}/draft/rules/{official_code}/review`（审定，请求体含 `reviewer_kind`）与 `DELETE`（撤销）；发布前检查全部 IN/EX／REQ／禁用药条目均有与当前内容哈希一致的 `RuleReviewRecord`。
 - **构建者不得以医学经理身份审定。** 构建者在验证副本上走流程时，`reviewer_kind=builder_verification`，`reviewed_by` 写"构建者（验证）"。0.2.0-M1 要求至少一次由用户本人完成的 `medical_manager` 审定与发布。
+- 正式规则的同源反馈草稿复用审定，必须由实际Job的冻结来源、生成草稿身份及已发布基线修订证明；有新增解释来源时不继承。保留旧审定事件原ID／哈希／人员，不复制批准记录。REQ只比较自身要求对应的阶段到期项，阶段名称、时间窗、映射、来源、变量及自身要求仍严格核对；无关条款删除不能让全部检查项目失效。当前撤销优先，改动条款须重审。服务与发布共用`current_reviews`，API新增`reviewed_content_hash`作为当前内容已核绑定；前端保留历史记录的原哈希，缺少绑定或绑定失配仍拒绝。
 - 前端：在现有 `ProtocolDraftWorkbench` 每条规则上加"审定通过"按钮与状态；`ProtocolManualEditDialog`（`frontend/src/components/protocols/ProtocolRedoDialogs.tsx:389-628`）中 subject/attribute 自由输入改为"变量"下拉（来自字典＋项目变量，可新增）。
 - 审定人：前端目前多处写死 `actor: "用户"`（`frontend/src/api/protocolWorkbenchHttp.ts:114, 147, 362`），改为本机配置的用户名（`.env` 新增 `ENROLLMENT_OPERATOR_NAME`，后端在响应中下发）。
 

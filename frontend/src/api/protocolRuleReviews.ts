@@ -21,6 +21,7 @@ export interface RuleReviewEntry {
   source_refs: string[];
   issue_refs: string[];
   review: RuleReviewRecord | null;
+  reviewed_content_hash?: string | null;
 }
 export interface RuleReviews {
   job_id: string;
@@ -58,7 +59,9 @@ export function decodeRuleReviews(value: unknown, jobId: string): RuleReviews {
         !entry.source_refs.every(ref => typeof ref === "string") || !Array.isArray(entry.issue_refs) ||
         !entry.issue_refs.every(ref => typeof ref === "string")) throw new Error("条目审定信息不完整，请刷新。");
     const review = entry.review === null ? null : readReview(entry.review);
-    if (review && (review.action !== "approved" || review.official_code !== entry.official_code || review.rule_content_hash !== entry.rule_content_hash)) throw new Error("审定内容已经变化，请刷新。");
+    if (entry.reviewed_content_hash != null && (!review || entry.reviewed_content_hash !== entry.rule_content_hash)) throw new Error("审定内容已经变化，请刷新。");
+    if (review && (review.action !== "approved" || review.official_code !== entry.official_code ||
+        (review.rule_content_hash !== entry.rule_content_hash && entry.reviewed_content_hash !== entry.rule_content_hash))) throw new Error("审定内容已经变化，请刷新。");
     return { ...entry, review } as unknown as RuleReviewEntry;
   });
   if (new Set(entries.map(entry => entry.official_code)).size !== entries.length ||

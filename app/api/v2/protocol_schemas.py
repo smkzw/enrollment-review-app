@@ -359,6 +359,7 @@ class RuleReviewEntryDTO(_StrictModel):
     source_refs: list[str]
     issue_refs: list[str]
     review: RuleReviewRecord | None
+    reviewed_content_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 class RuleReviewResponse(_StrictModel):
