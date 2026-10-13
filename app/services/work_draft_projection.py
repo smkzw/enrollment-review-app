@@ -68,7 +68,9 @@ def project_work_draft(session, *, authority, rule_set, clause_pack, artifact_st
                 reason=display_source_reason(item.reason_text, decision=item.decision.value if item.decision else None),
                 fact_refs=refs, source_read_refs=tuple(EligibilitySourceReadRef(**ref.model_dump(mode="json")) for ref in item.source_read_refs),
                 gap_type=None, determination_mode="restricted" if item.system_issue else "semantic" if item.source_read_refs else "deterministic",
-                confidence=item.confidence, confidence_reason=item.confidence_reason)
+                confidence=item.confidence, confidence_reason=item.confidence_reason,
+                reason_parts=tuple(part.model_dump(mode="json") | {
+                    "reason_text": display_source_reason(part.reason_text)} for part in item.reason_parts))
             (components if item.rule_component_id is not None else clauses).append(projection)
     else:
         for rule in rule_set.rules:

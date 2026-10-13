@@ -22,7 +22,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v28"
+CALCULATION_VERSION = "work-draft/0.2.0-v29"
 
 
 def _reusable_source_reads(session, store, frozen, targets, model, artifact_store):
@@ -353,6 +353,7 @@ class WorkDraftReviewService:
                                     "本条原文核对未完成；已有其他独立结论和原件均保留。",
                                 alternative="模型恢复或启用已批准连接后只核未完成范围；原件和已核结果保留。")
                             item.reason_text = item.system_issue.detail
+                            item.reason_parts = []
                 items.extend(WorkDraftItem.model_validate(value) for value in calculated[1]["items"]
                     if (value.get("system_issue") or {}).get("kind") == "component_unstructured")
                 for rule in rule_set.rules:

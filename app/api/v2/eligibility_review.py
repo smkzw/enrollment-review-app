@@ -9,7 +9,7 @@ from typing import Literal
 from datetime import date
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from app.services.evidence_app_errors import AppReviewSourceIncompleteError, translate_storage_error
 from app.domain.contracts.work_draft import SystemIssue
@@ -43,6 +43,15 @@ class EligibilitySourceReadRefDTO(BaseModel):
     disposition: Literal["mentioned", "not_seen", "unresolved"]
 
 
+class EligibilityReasonPartDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    condition_id: str = Field(min_length=1)
+    condition_text: str = Field(min_length=1)
+    reason_text: str = Field(min_length=1)
+    requires_attention: StrictBool
+
+
 class EligibilityClauseDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -68,6 +77,7 @@ class EligibilityClauseDTO(BaseModel):
     ]
     decision_label: str = Field(min_length=1)
     reason: str = Field(min_length=1)
+    reason_parts: list[EligibilityReasonPartDTO] = Field(default_factory=list)
     fact_refs: list[EligibilityFactRefDTO] = Field(default_factory=list)
     source_read_refs: list[EligibilitySourceReadRefDTO] = Field(default_factory=list)
     gap_type: str | None = Field(default=None, min_length=1)
@@ -82,6 +92,12 @@ class EligibilityClauseDTO(BaseModel):
     limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"] | None = None
     confidence: Literal["high", "low"] | None = None
     confidence_reason: str | None = None
+
+    @model_validator(mode="after")
+    def validate_reason_part_identity(self):
+        if len({part.condition_id for part in self.reason_parts}) != len(self.reason_parts):
+            raise ValueError("判断依据的条件身份不得重复")
+        return self
 
 
 class EligibilityUnassignedConflictDTO(BaseModel):

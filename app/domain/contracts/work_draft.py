@@ -1,7 +1,7 @@
 """Source-linked working results are separate from clinical signature records."""
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, StrictBool, model_validator
 
 from .common import ContractModel
 from .enums import ComponentDecision, RuleKind
@@ -52,6 +52,13 @@ class WorkDraftSourceRef(ContractModel):
     disposition: Literal["mentioned", "not_seen", "unresolved"]
 
 
+class WorkDraftReasonPart(ContractModel):
+    condition_id: str = Field(min_length=1)
+    condition_text: str = Field(min_length=1)
+    reason_text: str = Field(min_length=1)
+    requires_attention: StrictBool
+
+
 class WorkDraftItem(ContractModel):
     item_id: str
     review_run_id: str
@@ -64,6 +71,7 @@ class WorkDraftItem(ContractModel):
     confidence: Literal["high", "low"] | None = None
     confidence_reason: str | None = None
     reason_text: str
+    reason_parts: list[WorkDraftReasonPart] = Field(default_factory=list, exclude_if=lambda value: not value)
     evidence_refs: list[WorkDraftEvidenceRef] = Field(default_factory=list)
     source_read_refs: list[WorkDraftSourceRef] = Field(default_factory=list, exclude_if=lambda value: not value)
     input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -72,6 +80,8 @@ class WorkDraftItem(ContractModel):
 
     @model_validator(mode="after")
     def validate_confidence(self):
+        if len({part.condition_id for part in self.reason_parts}) != len(self.reason_parts):
+            raise ValueError("判断依据的条件身份不得重复")
         determinate = self.decision in {
             ComponentDecision.INCLUSION_MET, ComponentDecision.INCLUSION_NOT_MET,
             ComponentDecision.EXCLUSION_TRIGGERED, ComponentDecision.EXCLUSION_NOT_TRIGGERED,

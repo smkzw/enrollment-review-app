@@ -42,6 +42,7 @@ export interface EligibilityClauseView {
   confidenceReason?: string | null;
   decisionLabel: string;
   reason: string;
+  reasonParts?: Array<{ conditionId: string; conditionText: string; reasonText: string; requiresAttention: boolean }>;
   factRefs: EligibilityFactRefView[];
   sourceReadRefs?: EligibilitySourceReadRefView[];
   gapType: string | null;
@@ -176,6 +177,22 @@ function arrayValue(value: unknown, path: string): unknown[] {
     throw new EligibilityReviewDecodeError(`${path} 必须是数组`);
   }
   return value;
+}
+
+
+function decodeReasonParts(value: unknown, path: string): NonNullable<EligibilityClauseView["reasonParts"]> {
+  if (value === undefined) return [];
+  const seen = new Set<string>();
+  return arrayValue(value, path).map((raw, index) => {
+    const row = objectValue(raw, `${path}[${index}]`);
+    const conditionId = requiredString(row.condition_id, `${path}[${index}].condition_id`);
+    if (seen.has(conditionId) || typeof row.requires_attention !== "boolean") {
+      throw new EligibilityReviewDecodeError(`${path} 条件重复或核对状态不正确`);
+    }
+    seen.add(conditionId);
+    return { conditionId, conditionText: requiredString(row.condition_text, `${path}[${index}].condition_text`),
+      reasonText: requiredString(row.reason_text, `${path}[${index}].reason_text`), requiresAttention: row.requires_attention };
+  });
 }
 
 function enumValue<T extends string>(
@@ -313,6 +330,7 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
       `${path}.decision_label`,
     ),
     reason: requiredString(field(row, "reason", path), `${path}.reason`),
+    reasonParts: decodeReasonParts(row.reason_parts, `${path}.reason_parts`),
     factRefs: refs.map((value, index) => decodeFactRef(value, index)),
     sourceReadRefs: decodeSourceReads(row.source_read_refs, `${path}.source_read_refs`),
     gapType: nullableString(field(row, "gap_type", path), `${path}.gap_type`),

@@ -316,7 +316,7 @@ def targets_for_review(frozen, rule_set):
                         "只有原文能建立所要求的对应关系才supports；已有相关记录却无法对应时unclear，"
                         "保留相关摘录，并在reason说明哪一个对象或期间的关联尚无依据。"
                         "不凭药物常识、季节常识或总体符合入排的说法补齐关系。"
-                    )} if context is not None and p.requires_professional_judgment else {})})
+                    )} if context is not None else {})})
     reviews = {item.official_code: item for item in rule_set.review_records or ()}
     if frozen.procedure_catalog is not None:
         for item in sorted(frozen.procedure_catalog.items, key=lambda value: value.position):

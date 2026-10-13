@@ -40,6 +40,23 @@ function reviewBody() {
 }
 
 describe("eligibility review HTTP repository", () => {
+  it("保留逐条件依据，不把字符串核对状态或重复条件当成合法记录", async () => {
+    const part = { condition_id: "condition", condition_text: "对应疗效", reason_text: "关系尚未核清", requires_attention: true };
+    const body = { ...reviewBody(), clauses: [{ ...reviewBody().clauses[0], reason_parts: [part] }] };
+    const repository = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
+    expect((await repository.getEligibilityReview("subject", "episode")).clauses[0]?.reasonParts).toEqual([
+      { conditionId: "condition", conditionText: "对应疗效", reasonText: "关系尚未核清", requiresAttention: true },
+    ]);
+    body.clauses[0]!.reason_parts.push({ ...part });
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+    body.clauses[0]!.reason_parts.pop();
+    Object.assign(part, { requires_attention: "false" });
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+    Object.assign(part, { requires_attention: false, condition_text: "" });
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+    const legacy = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(reviewBody()))) as typeof fetch });
+    expect((await legacy.getEligibilityReview("subject", "episode")).clauses[0]?.reasonParts).toEqual([]);
+  });
   it("保留工作稿子条件及验证身份，不把低置信当成未决或签发", async () => {
     const body = { ...reviewBody(), verification_only: true, review_run_id: "working-run",
       component_clauses: [{ ...reviewBody().clauses[0], rule_component_id: "child-1", parent_rule_code: "IN-01",

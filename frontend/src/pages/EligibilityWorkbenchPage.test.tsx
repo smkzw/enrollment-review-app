@@ -145,6 +145,27 @@ function installSourcePages() {
 }
 
 describe("入排审核工作台", () => {
+  it("组合条件先展示真正待核的对应关系，已有条件与原汇总可展开保留", async () => {
+    const compound = { ...review.clauses[0]!, decision: "indeterminate" as const,
+      decisionLabel: "证据不足", reason: "治疗有记录，但其对应疗效尚无依据。",
+      reasonParts: [
+        { conditionId: "compound:therapy", conditionText: "当前或既往治疗", reasonText: "治疗记录已找到。", requiresAttention: false },
+        { conditionId: "compound:response", conditionText: "与该次治疗对应的疗效", reasonText: "记录不能对应到同次治疗。", requiresAttention: true },
+      ] };
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review, clauses: [compound] }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByText("尚需核对的条件");
+    expect(screen.getByText("记录不能对应到同次治疗。").closest("details")).toBeNull();
+    const other = screen.getByText("其他条件及依据（1）").closest("details")!;
+    expect(other).not.toHaveAttribute("open");
+    expect(within(other).getByText("治疗记录已找到。")).toBeInTheDocument();
+    const summary = screen.getByText("完整汇总说明").closest("details")!;
+    expect(summary).not.toHaveAttribute("open");
+    expect(within(summary).getByText(compound.reason)).toBeInTheDocument();
+    await userEvent.click(screen.getByText("其他条件及依据（1）"));
+    expect(other).toHaveAttribute("open");
+    expect(screen.getAllByText("证据不足").length).toBeGreaterThan(0);
+  });
   it("审核方式更新后旧条目链接不遮住更新入口，不把旧条目猜映到新结果", async () => {
     window.location.hash = "#/workbench?component=retired-result";
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({

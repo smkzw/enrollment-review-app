@@ -56,6 +56,7 @@ export interface EligibilityClauseWire {
   confidence_reason?: string | null;
   decision_label: string;
   reason: string;
+  reason_parts?: Array<{ condition_id: string; condition_text: string; reason_text: string; requires_attention: boolean }>;
   fact_refs: EligibilityFactRefWire[];
   source_read_refs?: EligibilitySourceReadRefWire[];
   gap_type: string | null;

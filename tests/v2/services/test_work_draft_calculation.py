@@ -47,6 +47,9 @@ def test_chart_judgment_relations_enter_saved_rule_consumer(kind, truth, expecte
     result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules, evidence_refs={},
         source_results={f"{component.rule_component_id}:{predicate.predicate_id}": relation})
     assert result.decision == expected and result.system_issue is None
+    assert len(result.reason_parts) == 1
+    assert result.reason_parts[0].requires_attention == (truth == "unknown")
+    assert result.reason_parts[0].reason_text == relation["reason"]
     if truth != "unknown":
         assert result.confidence == "low" and result.source_read_refs and not result.evidence_refs
 
@@ -68,6 +71,38 @@ def test_false_base_condition_does_not_require_unrelated_positive_judgment():
             "conflict": False, "policy": False, "relation": "not_found", "reason": "未见针对性判断", "source_read_refs": []}})
     assert result.decision == D.EXCLUSION_NOT_TRIGGERED
     assert result.system_issue is None
+
+
+def test_reason_parts_are_optional_for_legacy_hashes_and_strict_for_new_items():
+    from pydantic import ValidationError
+    from app.domain.contracts.work_draft import WorkDraftReasonPart
+    from app.domain.publication import canonical_hash
+    rules, _, _ = clause()
+    item = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([material()]), rules, evidence_refs={})
+    legacy = item.model_dump(mode="json")
+    assert "reason_parts" not in legacy
+    assert canonical_hash(WorkDraftItem.model_validate(legacy).model_dump(mode="json")) == canonical_hash(legacy)
+    part = WorkDraftReasonPart(condition_id="condition", condition_text="条件", reason_text="依据", requires_attention=False)
+    with pytest.raises(ValidationError, match="重复"):
+        WorkDraftItem.model_validate({**legacy, "reason_parts": [part.model_dump(), part.model_dump()]})
+    with pytest.raises(ValidationError):
+        WorkDraftReasonPart.model_validate({**part.model_dump(), "requires_attention": "false"})
+
+
+def test_parent_reason_parts_keep_current_conditions_not_future_siblings():
+    from app.domain.contracts.work_draft import WorkDraftReasonPart
+    _, _, component = clause()
+    rule = Rule(rule_id="parent", official_code="IN-01", kind=RuleKind.INCLUSION, study_phase=StudyPhase.PHASE_III,
+        source_text="当前及后续要求", components=[component])
+    common = dict(review_run_id="run", official_code=rule.official_code, rule_kind=rule.kind,
+        source_text=rule.source_text, title="要求", reason_text="依据", input_hash="f" * 64)
+    current = WorkDraftItem(**common, item_id="current", decision=D.INDETERMINATE,
+        reason_parts=[WorkDraftReasonPart(condition_id="current:p", condition_text="当前条件", reason_text="待核", requires_attention=True)])
+    later = WorkDraftItem(**common, item_id="later", decision=D.NOT_DUE,
+        reason_parts=[WorkDraftReasonPart(condition_id="later:p", condition_text="后续条件", reason_text="未到期", requires_attention=False)])
+    parent = compose_parent(rule, [current, later], "run")
+    assert parent.decision == D.INDETERMINATE
+    assert parent.reason_parts == current.reason_parts
 
 
 @pytest.mark.parametrize("operator,first_truth,second_truth,expected", [
@@ -111,6 +146,8 @@ def test_joint_source_requirement_follows_only_its_relevant_bound_conditions(ope
         evidence_refs={}, source_results=relations)
     assert result.decision == expected and result.system_issue is None
     assert canonical_hash(rules.model_dump(mode="json")) == before
+    assert {part.condition_id for part in result.reason_parts if part.requires_attention} == (
+        {f"{component.rule_component_id}:judgment"} if expected == D.INDETERMINATE else set())
     if expected in {D.EXCLUSION_NOT_TRIGGERED, D.EXCLUSION_TRIGGERED}:
         assert result.confidence == "low"
         # A changed child is not proof that the original joint source requirement was fulfilled.
@@ -141,6 +178,8 @@ def test_source_notes_do_not_hide_a_missing_numeric_operand():
         evidence_refs={}, source_results={f"{component.rule_component_id}:judgment": relation})
     assert result.decision == D.INDETERMINATE
     assert "另一条件明确否认" in result.reason_text and "年龄已核实记录" in result.reason_text
+    assert [part.condition_text for part in result.reason_parts if part.requires_attention] == ["年龄"]
+    assert any("另一条件明确否认" in part.reason_text and not part.requires_attention for part in result.reason_parts)
 
 
 @pytest.mark.parametrize("original_types,bound_types,compatible", [
@@ -187,8 +226,10 @@ def test_source_relation_cannot_bypass_deterministic_time_proof(anchor, role, ex
     result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules,
         evidence_refs={fact.fact_id: [ref]}, source_results={f"{component.rule_component_id}:age-limit": relation})
     assert result.decision == expected and result.system_issue is None
+    assert result.reason_parts[0].requires_attention == (expected == D.INDETERMINATE)
     if expected == D.INDETERMINATE:
         assert "不能直接认作落入规定期间" in result.reason_text
+        assert "不能直接认作落入规定期间" in result.reason_parts[0].reason_text
 
 
 @pytest.mark.parametrize("stage,expected_ids,expected_decision", [
@@ -468,7 +509,7 @@ def test_compound_judgment_reads_receive_approved_policy_and_full_sibling_logic(
     assert len(targets) == 2
     context = targets[0]["source_context"]
     assert all(t["source_context"] == context for t in targets)
-    assert "correspondence_check" not in targets[0]
+    assert targets[0]["correspondence_check"] == targets[1]["correspondence_check"]
     assert "同一事件、治疗或采集" in targets[1]["correspondence_check"]
     assert "其他期间的结果不能移给所要求的期间" in targets[1]["correspondence_check"]
     assert context["expression"]["operator"] == "all"

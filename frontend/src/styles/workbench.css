@@ -1466,6 +1466,14 @@
   font-size: var(--font-size-small);
 }
 
+.eligibility-reason-parts {
+  margin: 0;
+}
+
+.eligibility-reason-parts dd {
+  margin: var(--space-1) 0 var(--space-3);
+}
+
 .eligibility-issue-queue__group {
   border: 1px solid var(--color-line);
   border-radius: var(--radius-m);

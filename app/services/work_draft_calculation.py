@@ -6,7 +6,7 @@ import re
 import unicodedata
 from app.domain.contracts.enums import AnchorType, ComponentDecision as D, ReviewStage, RuleKind, TruthValue
 from app.domain.contracts.rules import AtomicExpression, RuleComponent, iter_atomic_predicates
-from app.domain.contracts.work_draft import SystemIssue, WorkDraftItem
+from app.domain.contracts.work_draft import SystemIssue, WorkDraftItem, WorkDraftReasonPart
 from app.domain.expression import EvaluationContext, _evaluate_time, _compare
 from app.domain.policies import STAGE_RANK
 from app.domain.publication import canonical_hash
@@ -619,9 +619,28 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
         elif outcome.decision == D.PROFESSIONAL_JUDGMENT and relations:
             outcome = replace(outcome, decision=D.INDETERMINATE)
             reason = "对应节点病历尚无足以支持本条判断的记录，现为证据不足；不要求另外重复签名。" + reason
+        reason_parts = []
+        if relations:
+            for predicate in predicates:
+                pid = predicate.predicate_id
+                attention = (outcome.evaluation.predicate_evaluations[pid].truth == TruthValue.UNKNOWN
+                    and pid not in inactive_predicates and outcome.decision != D.NOT_APPLICABLE)
+                row = relations.get(pid)
+                if row is None and not attention:
+                    continue
+                note = row["reason"] if row else "尚未核实可用于本条件的相关记录；请对照原件核对，不代表检查未做。"
+                if pid in unverified_source_times:
+                    note = "已找到相关记录，但日期锚点或同一记录的发生时间尚未核实，不能直接认作落入规定期间。" + note
+                if pid in numeric_source_conflicts:
+                    note = "数量记录与病历原文关系不一致，两者均已保留。" + note
+                definition = definitions.get(predicate_variables.get(pid))
+                label = (predicate.attribute if re.search(r"[\u3400-\u9fff]", predicate.attribute) or definition is None
+                    else definition.label_zh)
+                reason_parts.append(WorkDraftReasonPart(condition_id=f"{clause.rule_component_id}:{pid}",
+                    condition_text=label, reason_text=note, requires_attention=attention))
         return WorkDraftItem(**common, decision=outcome.decision,
             confidence=("low" if low_reason else "high") if outcome.decision in DETERMINATE else None,
-            confidence_reason=low_reason, reason_text=reason,
+            confidence_reason=low_reason, reason_text=reason, reason_parts=reason_parts,
             policy_group="not_seen_in_supplied_records" if any(row["policy"] for row in relations.values()) else None,
             evidence_refs=[ref for fact in used for ref in evidence_refs.get(fact.fact_id, ())]
                 if outcome.decision in DETERMINATE else available_refs)
@@ -670,7 +689,7 @@ def compose_parent(rule, children, review_run_id):
         confidence=("low" if low else "high") if decision in DETERMINATE else None,
         confidence_reason=("；".join(dict.fromkeys(item.confidence_reason for item in current if item.confidence_reason))
             or "部分子项仍未核实，本结论只由已有独立依据决定。") if low and decision in DETERMINATE else None,
-        reason_text=reason,
+        reason_text=reason, reason_parts=[part for item in current for part in item.reason_parts] if issue is None else [],
         policy_group="not_seen_in_supplied_records" if any(item.policy_group == "not_seen_in_supplied_records" for item in current) else None,
         evidence_refs=list(refs.values()), source_read_refs=list(source_refs.values()),
         input_hash=canonical_hash([item.input_hash for item in children]))

@@ -169,6 +169,7 @@ class EligibilityClauseProjection:
     source_read_refs: tuple[EligibilitySourceReadRef, ...] = ()
     confidence: str | None = None
     confidence_reason: str | None = None
+    reason_parts: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)

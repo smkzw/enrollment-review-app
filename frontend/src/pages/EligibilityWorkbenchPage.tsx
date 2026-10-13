@@ -544,6 +544,9 @@ function EligibilityClauseDetail({
   selectedFactIndex,
   onSelectFact,
 }: EligibilityClauseDetailProps) {
+  const parts = clause.reasonParts ?? [];
+  const pendingParts = isUndeterminedDecision(clause.decision)
+    ? parts.filter(part => part.requiresAttention) : [];
   return (
     <div className="eligibility-clause-detail">
       <div className="eligibility-clause-detail__decision">
@@ -558,10 +561,18 @@ function EligibilityClauseDetail({
       </div>
       <ul className="eligibility-clause-detail__bullets" aria-label="条款详情">
         <li className="eligibility-detail-bullet">
-          <strong>{unresolvedConditions.length ? "尚缺的依据" : "判定依据"}</strong>
-          <ReasonText text={unresolvedConditions.length
-            ? unresolvedConditions.map(item => item.reason).join("\n") : clause.reason} />
-          {unresolvedConditions.length > 0 && <details>
+          <strong>{pendingParts.length ? "尚需核对的条件" : unresolvedConditions.length ? "尚缺的依据" : "判定依据"}</strong>
+          {pendingParts.length > 0 ? <dl className="eligibility-reason-parts">{pendingParts.map(part => <div key={part.conditionId}>
+            <dt><strong>{part.conditionText}</strong></dt><dd><ReasonText text={part.reasonText} /></dd>
+          </div>)}</dl> : <ReasonText text={unresolvedConditions.length
+            ? unresolvedConditions.map(item => item.reason).join("\n") : clause.reason} />}
+          {pendingParts.length > 0 && parts.some(part => !part.requiresAttention) && <details>
+            <summary>其他条件及依据（{parts.filter(part => !part.requiresAttention).length}）</summary>
+            <dl className="eligibility-reason-parts">{parts.filter(part => !part.requiresAttention).map(part => <div key={part.conditionId}>
+              <dt><strong>{part.conditionText}</strong></dt><dd><ReasonText text={part.reasonText} /></dd>
+            </div>)}</dl>
+          </details>}
+          {(pendingParts.length > 0 || unresolvedConditions.length > 0) && <details>
             <summary>完整汇总说明</summary>
             <ReasonText text={clause.reason} />
           </details>}
