@@ -1023,7 +1023,7 @@
 .eligibility-workbench .workbench-pane__subtitle { font-size: var(--font-size-small); font-weight: 400; margin-block: var(--space-1); }
 .eligibility-workbench .eligibility-clause { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: var(--space-2); }
 .eligibility-workbench .eligibility-clause__identity { grid-column: 1 / -1; }
-.eligibility-workbench .eligibility-clause .status-badge { max-width: none; }
+.eligibility-workbench .eligibility-clause .status-badge { max-width: 100%; justify-self: start; }
 
 .eligibility-workbench__clauses,
 .eligibility-workbench__detail,

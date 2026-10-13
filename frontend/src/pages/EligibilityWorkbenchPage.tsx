@@ -1003,7 +1003,8 @@ export function EligibilityWorkbenchPage() {
   ];
   const requestedClause = componentParam === null
     ? null : [...allClauses, ...(reviewData.componentClauses ?? [])].find((clause) => clause.ruleComponentId === componentParam);
-  if (componentParam !== null && requestedClause === undefined) {
+  if (componentParam !== null && requestedClause === undefined
+      && reviewData.workDraftState !== "method_changed" && reviewData.workDraftState !== "source_changed") {
     return <ErrorState message="链接中的审核要点不存在，请重新选择。" onRetry={() => updateParams({ component: null })} />;
   }
   const matches = (clause: EligibilityWorkItem, mode: EligibilityListMode, decisionFilter: EligibilityDecisionFilter) =>
@@ -1207,6 +1208,8 @@ export function EligibilityWorkbenchPage() {
             {selectedClause ? <EligibilityClauseDetail
               clause={selectedClause}
               unresolvedConditions={selectedClause.parentRuleCode === null && isUndeterminedDecision(selectedClause.decision)
+                && reviewData.componentClauses?.some(item => item.ruleCode === selectedClause.ruleCode
+                  && item.ruleComponentId !== selectedClause.ruleComponentId && !isUndeterminedDecision(item.decision))
                 ? reviewData.componentClauses?.filter(item => item.ruleCode === selectedClause.ruleCode
                   && item.ruleComponentId !== selectedClause.ruleComponentId && isUndeterminedDecision(item.decision)) : []}
               selectedFactIndex={selectedFactIndex}

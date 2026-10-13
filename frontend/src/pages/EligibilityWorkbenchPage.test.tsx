@@ -145,6 +145,26 @@ function installSourcePages() {
 }
 
 describe("入排审核工作台", () => {
+  it("审核方式更新后旧条目链接不遮住更新入口，不把旧条目猜映到新结果", async () => {
+    window.location.hash = "#/workbench?component=retired-result";
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review, workDraftState: "method_changed", reviewRunId: null,
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByLabelText("审核方式已更新");
+    expect(screen.queryByText("链接中的审核要点不存在，请重新选择。")).not.toBeInTheDocument();
+    expect(window.location.hash).toContain("component=retired-result");
+    expect(screen.getByText("工作稿操作与节点日期")).toBeInTheDocument();
+  });
+  it("整组尚未核清时不把整段综合说明误标成具体缺失依据", async () => {
+    const first = review.clauses[0]!;
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [first], componentClauses: [{ ...first, ruleComponentId: "compound", parentRuleCode: first.ruleCode }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByText("判定依据");
+    expect(screen.queryByText("尚缺的依据")).not.toBeInTheDocument();
+  });
   it("未决汇总先显示具体缺口，完整理由可展开，选择子项时不带兄弟理由", async () => {
     const first = review.clauses[0]!;
     const missing = { ...first, ruleComponentId: "missing", parentRuleCode: first.ruleCode,
