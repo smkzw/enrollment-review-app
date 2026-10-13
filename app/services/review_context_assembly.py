@@ -42,11 +42,12 @@ def normalization_source_is_reusable(run, authority, old_rules, current_rules, o
 def clinical_source_scope_is_compatible(previous, authority, old_rules, current_rules, old_protocol, current_protocol):
     """Same clinical material across a rule-only revision, not result adoption."""
     identity_fields = {"episode_revision", "protocol_version_id", "rule_set_revision"}
+    old_variables = {item.variable_id: item.model_dump(mode="json") for item in old_rules.variable_definitions or ()}
+    current_variables = {item.variable_id: item.model_dump(mode="json") for item in current_rules.variable_definitions or ()}
     return (previous.model_dump(exclude=identity_fields) == authority.model_dump(exclude=identity_fields)
         and old_protocol.sha256 == current_protocol.sha256
         and old_rules.study_phase == current_rules.study_phase
-        and {item.variable_id: item.model_dump(mode="json") for item in old_rules.variable_definitions or ()}
-            == {item.variable_id: item.model_dump(mode="json") for item in current_rules.variable_definitions or ()})
+        and all(current_variables.get(key) == value for key, value in old_variables.items()))
 
 
 def review_method_is_current(context: ReviewContextSnapshotV2) -> bool:

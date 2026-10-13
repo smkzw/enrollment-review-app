@@ -251,6 +251,8 @@ Job 幂等键：`(review_episode_id, 资料快照哈希, rule_set_id, rule_set_r
 
 节点回溯复用 `AnchorResolutionStatement`／`InterpretationSource` 与现有时间求值器，不新增病种分支。工作稿 `review_anchor_dates` 仅把本次明确筛选／基线日期映射到已审定条件声明的 `review_node_date`，不写回节点、不借用旧日期；变量选择及原文关系的时间核验共用该映射。解释材料按实际适用条目纳入审定内容哈希，复制时仅身份重绑定不使内容改变；无范围、未知范围或正式修订材料影响全部条目。正式复制仍核来源冻结回执、原方案输入与既有本人审定；未变条目才能继承，新增说明不是新的批准记录。
 
+规则局部修订新增数据项目时，已有变量定义须逐项原样保留，才可复用已读文字范围；删除或改变旧定义仍拒绝复用。每条原文关系另核实际目标及请求哈希：新项目／新条件不能继承旧判断，不因共享一页而自动成为已核内容。
+
 ### 7.2 投影
 
 `EligibilityReviewProjectionService.project`（`app/services/eligibility_review_projection.py:874`）改为：存在最新工作稿时直接读取其结论；否则返回"尚未生成工作稿"并提供"开始审核"动作。删除"无已完成 prepared-review 时把全部谓词强制标为未核实"的分支（`:956-1001`）对主路径的影响。

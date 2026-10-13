@@ -122,7 +122,7 @@ def test_product_batch_execution_revalidates_whole_frozen_target_scope_then_filt
 
 
 @pytest.mark.parametrize("change,expected", [(None, True), ("subject", False), ("file", False),
-    ("visit", False), ("variable", False)])
+    ("visit", False), ("variable", False), ("additional_variable", True)])
 def test_product_reuse_across_rule_revision_requires_same_patient_source_visit_and_variables(monkeypatch, change, expected):
     import json
     from app.domain.contracts.facts import FactAuthority
@@ -134,10 +134,12 @@ def test_product_reuse_across_rule_revision_requires_same_patient_source_visit_a
         **({"subject_id": "other-patient"} if change == "subject" else {})})
     old = SimpleNamespace(authority=old_authority, source_pages=[page()], review_episode=SimpleNamespace(workflow_stage_id="old-stage"))
     current = SimpleNamespace(authority=authority, source_pages=[page()], review_episode=SimpleNamespace(workflow_stage_id="new-stage"))
-    variable = SimpleNamespace(variable_id="observation", model_dump=lambda **_: {"unit": "different"})
-    old_rules = SimpleNamespace(rule_set_id="rules", revision=1, study_phase="same", variable_definitions=[])
+    variable = SimpleNamespace(variable_id="observation", model_dump=lambda **_: {"unit": "original"})
+    different = SimpleNamespace(variable_id="observation", model_dump=lambda **_: {"unit": "different"})
+    extra = SimpleNamespace(variable_id="another_observation", model_dump=lambda **_: {"unit": "new"})
+    old_rules = SimpleNamespace(rule_set_id="rules", revision=1, study_phase="same", variable_definitions=[variable])
     new_rules = SimpleNamespace(rule_set_id="rules", revision=2, study_phase="same",
-        variable_definitions=[variable] if change == "variable" else [])
+        variable_definitions=[different] if change == "variable" else [variable, extra] if change == "additional_variable" else [variable])
     payload = json.dumps({"context_id": "previous"})
     job = SimpleNamespace(job_id="old-job", payload_json=payload, payload_sha256=sha256(payload.encode()).hexdigest())
     session = SimpleNamespace(scalars=lambda _: SimpleNamespace(all=lambda: [job]))
@@ -478,6 +480,7 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
 
 @pytest.mark.parametrize("change,expected", [(None, {"component:infection", "component:other"}),
     ("removed", {"component:infection"}), ("meaning", {"component:other"}), ("tampered", set()),
+    ("added", {"component:infection", "component:other"}),
     ("context_missing", {"component:other"}), ("context_changed", {"component:other"}),
     ("correspondence_missing", {"component:other"}), ("correspondence_changed", {"component:other"})])
 def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request_verification(change, expected):
@@ -491,6 +494,8 @@ def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request
     if change == "correspondence_changed":
         previous[0] = {**previous[0], "correspondence_check": "旧对应要求"}
     current = previous[:1] if change == "removed" else [target("inclusion"), previous[1]] if change == "meaning" else previous
+    if change == "added":
+        current = [*previous, {**target(), "target_id": "component:new-requirement", "variable": {"variable_id": "new_item"}}]
     if change in {"context_missing", "context_changed"}:
         current = [{**previous[0], "source_context": {"purpose": "新增限定"}}, previous[1]]
     if change in {"correspondence_missing", "correspondence_changed"}:

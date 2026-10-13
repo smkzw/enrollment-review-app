@@ -425,6 +425,7 @@ export function buildEligibilityIssueGroups(
   }
   return [...byKey.values()].sort(
     (a, b) =>
+      Number(a.key === "low_confidence") - Number(b.key === "low_confidence") ||
       ISSUE_SEVERITY_ORDER[a.severity] - ISSUE_SEVERITY_ORDER[b.severity] ||
       b.clauses.length - a.clauses.length ||
       a.key.localeCompare(b.key),
@@ -435,13 +436,12 @@ function compareEligibilityClauses(
   left: EligibilityClauseView,
   right: EligibilityClauseView,
 ): number {
-  const leftSeverity = clauseIsIssue(left)
-    ? ISSUE_SEVERITY_ORDER[clauseIssueKey(left).severity]
-    : 3;
-  const rightSeverity = clauseIsIssue(right)
-    ? ISSUE_SEVERITY_ORDER[clauseIssueKey(right).severity]
-    : 3;
-  return leftSeverity - rightSeverity
+  const leftIssue = clauseIsIssue(left) ? clauseIssueKey(left) : null;
+  const rightIssue = clauseIsIssue(right) ? clauseIssueKey(right) : null;
+  const leftSeverity = leftIssue ? ISSUE_SEVERITY_ORDER[leftIssue.severity] : 3;
+  const rightSeverity = rightIssue ? ISSUE_SEVERITY_ORDER[rightIssue.severity] : 3;
+  return Number(leftIssue?.key === "low_confidence") - Number(rightIssue?.key === "low_confidence")
+    || leftSeverity - rightSeverity
     || left.ruleCode.localeCompare(right.ruleCode, "zh-CN", { numeric: true })
     || left.ruleComponentId.localeCompare(right.ruleComponentId);
 }
@@ -486,7 +486,7 @@ function EligibilityIssueQueue({
             open={index === 0}
           >
             <summary>
-              <StatusBadge tone={meta.tone} text={meta.text} />
+              <StatusBadge tone={meta.tone} text={group.key === "low_confidence" ? "需核对" : meta.text} />
               <strong>{group.label}</strong>
               <span className="eligibility-issue-queue__count">
                 影响 {group.clauses.length} 条

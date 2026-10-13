@@ -953,7 +953,7 @@ def test_unknown_value_does_not_shadow_a_literal_valid_reading():
 
 @pytest.mark.parametrize("change,expected", [(None, True), ("source", False), ("subject", False),
     ("snapshot", False), ("processing", False), ("dictionary", False), ("running", False),
-    ("rules", False), ("phase", False)])
+    ("rules", False), ("phase", False), ("additional_variable", True), ("changed_definition", False)])
 def test_saved_page_coverage_reuse_checks_source_and_dictionary_not_rule_revision(change, expected):
     from app.services.review_context_assembly import normalization_source_is_reusable
     current = material().authority
@@ -971,6 +971,12 @@ def test_saved_page_coverage_reuse_checks_source_and_dictionary_not_rule_revisio
         run.authority = prior.model_copy(update={key: "other"})
     elif change == "dictionary":
         new_rules.variable_definitions = []
+    elif change == "additional_variable":
+        from app.domain.variables.dictionary import VariableDef
+        new_rules.variable_definitions.append(VariableDef(variable_id="new_history", label_zh="新增既往项目",
+            value_type="boolean", domain="history"))
+    elif change == "changed_definition":
+        new_rules.variable_definitions[0].label_zh += "另一个含义"
     elif change == "running":
         run.status.value = "running"
     elif change == "phase":

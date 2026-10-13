@@ -637,6 +637,23 @@ describe("入排审核工作台", () => {
       expect(groups[0]!.clauses.map(item => item.ruleComponentId)).toEqual(["low"]);
     });
 
+    it("大量低置信正常项不遮住风险与真正未决，全部项目仍保留", () => {
+      const normal = Array.from({ length: 35 }, (_, index) => clause({
+        ruleComponentId: `normal-${index}`, decision: "exclusion_not_triggered", confidence: "low",
+      }));
+      const groups = buildEligibilityIssueGroups([...normal,
+        clause({ ruleComponentId: "missing", gapType: "observation_unverified" }),
+        clause({ ruleComponentId: "conflict", decision: "conflict", gapType: "source_conflict" }),
+        clause({ ruleComponentId: "restricted", determinationMode: "restricted", limitationKind: "interpretation_unresolved" }),
+      ]);
+      expect(groups.map(group => group.key)).toEqual([
+        "source_conflict", "protocol_meaning_unresolved", "observation_unverified", "low_confidence",
+      ]);
+      expect(groups.reduce((count, group) => count + group.clauses.length, 0)).toBe(38);
+      expect(groups.at(-1)?.clauses).toHaveLength(35);
+      expect(normal.every(item => item.confidence === "low" && item.decision === "exclusion_not_triggered")).toBe(true);
+    });
+
     it("按根因聚合、按严重度排序且全量保留", () => {
       const groups = buildEligibilityIssueGroups([
         clause({ ruleComponentId: "a", ruleCode: "IN-10", gapType: "observation_unverified" }),
