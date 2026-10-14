@@ -7,12 +7,12 @@ import { ProfileNormalizationStatus } from "./ProfileNormalizationStatus";
 describe("ProfileNormalizationStatus", () => {
   it("已完成的过程说明默认收起，仍可展开；不折叠失败和陈旧", async () => {
     render(<ProfileNormalizationStatus state={{ status: "active", jobId: "done", phase: "succeeded",
-      title: "个例档案已整理完成", recoveryHint: "本次处理已完成。", job: null, canRetry: false }} />);
-    const summary = screen.getByText("资料整理已完成");
+      title: "本次资料整理结果已保存", recoveryHint: "可查看整理结果。", job: null, canRetry: false }} />);
+    const summary = screen.getByText("查看本次资料整理结果");
     expect(summary.closest("details")).not.toHaveAttribute("open");
-    expect(screen.getByText("本次处理已完成。")).not.toBeVisible();
+    expect(screen.getByText("可查看整理结果。")).not.toBeVisible();
     await userEvent.click(summary);
-    expect(screen.getByText("本次处理已完成。")).toBeVisible();
+    expect(screen.getByText("可查看整理结果。")).toBeVisible();
   });
   it("idle 不渲染", () => {
     const { container } = render(

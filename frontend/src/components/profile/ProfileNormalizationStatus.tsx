@@ -90,6 +90,6 @@ export function ProfileNormalizationStatus({
     </div>
   );
   return state.phase === "succeeded"
-    ? <details className="profile-normalization-details"><summary>资料整理已完成</summary>{content}</details>
+    ? <details className="profile-normalization-details"><summary>查看本次资料整理结果</summary>{content}</details>
     : content;
 }

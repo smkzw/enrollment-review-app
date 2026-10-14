@@ -66,7 +66,7 @@ describe("个例档案整理解码与中文投影", () => {
 
     expect(factNormalizationPhaseTitle("queued")).toBe("个例档案整理排队中");
     expect(factNormalizationPhaseTitle("running")).toBe("正在整理个例档案");
-    expect(factNormalizationPhaseTitle("succeeded")).toBe("个例档案已整理完成");
+    expect(factNormalizationPhaseTitle("succeeded")).toBe("本次资料整理结果已保存");
     expect(factNormalizationPhaseTitle("failed")).toBe("个例档案整理未完成");
     expect(factNormalizationPhaseTitle("stale")).toBe("资料已更新，需重新整理个例档案");
 

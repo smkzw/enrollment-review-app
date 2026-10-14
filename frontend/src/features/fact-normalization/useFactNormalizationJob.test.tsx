@@ -295,7 +295,7 @@ describe("个例档案整理任务恢复与文案", () => {
 
     await waitFor(() => {
       expect(screen.getByLabelText("个例档案整理状态")).toHaveTextContent(
-        "个例档案已整理完成",
+        "本次资料整理结果已保存",
       );
     });
     expect(onSucceeded).toHaveBeenCalledWith("job-normalize-1");

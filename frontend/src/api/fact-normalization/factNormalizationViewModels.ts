@@ -335,7 +335,7 @@ export function factNormalizationPhaseTitle(phase: FactNormalizationDisplayPhase
     case "running":
       return "正在整理个例档案";
     case "succeeded":
-      return "个例档案已整理完成";
+      return "本次资料整理结果已保存";
     case "failed":
       return "个例档案整理未完成";
     case "stale":
