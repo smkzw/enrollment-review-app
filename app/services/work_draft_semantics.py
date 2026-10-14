@@ -212,7 +212,8 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
                 reasons = list(dict.fromkeys([*proofs[key].get("uncertain_classification_reasons", [previous["reason"]]),
                                              value["reason"]]))
                 accepted[key] = {**previous, "conflict": False, "relation": "unclear",
-                    "reason": "两次核对均尚不能确定本条件，是否存在资料矛盾也未核清。" + "；".join(reasons),
+                    "reason": "两次核对均未能确定“" + current["atom"]["predicate"].get("attribute", "本条件")
+                        + "”是否符合方案限定；是否构成资料矛盾尚未核清，相关原文均已保留。",
                     "source_read_refs": list(refs.values())}
                 proofs[key]["uncertain_classification_reasons"] = reasons
                 proofs[key]["uncertain_classification_raw_response_refs"] = list(dict.fromkeys([
@@ -540,7 +541,8 @@ def relation_inputs(row, target, pages):
     if (row.relation == "not_found" and target["kind"] == RuleKind.EXCLUSION.value
             and pages and all(page.extraction_complete for page in pages)
             and any(page.document_category in {"study_chart", "screening_transcription", "historical_record"} for page in pages)
-            and target["atom"]["predicate"]["comparator"] in {"exists", "eq"}
+            and (predicate["comparator"] == "exists"
+                 or predicate["comparator"] == "eq" and predicate.get("value") is True)
             and not target["atom"]["predicate"].get("source_computation")):
         truth, policy = TruthValue.FALSE, True
         refs = [WorkDraftSourceRef(source_document_version_id=page.source_document_version_id,

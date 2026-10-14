@@ -22,6 +22,74 @@ from app.domain.contracts.work_draft import WorkDraftEvidenceRef
 NOW = datetime(2026, 10, 12, tzinfo=UTC)
 
 
+@pytest.mark.parametrize("shape,expected", [("event", D.EXCLUSION_NOT_TRIGGERED),
+    ("not", D.INDETERMINATE), ("double_not", D.EXCLUSION_NOT_TRIGGERED),
+    ("eq_false", D.INDETERMINATE), ("exception", D.INDETERMINATE),
+    ("positive_trigger_with_exception", D.EXCLUSION_NOT_TRIGGERED)])
+def test_absence_policy_cannot_turn_missing_negation_or_exception_into_a_trigger(shape, expected):
+    from app.domain.variables.dictionary import VariableDef
+    from app.services.work_draft_calculation import positive_event_predicate_ids
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    event = AtomicExpression(predicate=AtomicPredicate(predicate_id="event", subject="受试者",
+        attribute="既往事件", comparator=Comparator.EXISTS))
+    component.expression = event
+    rules.variable_definitions = [VariableDef(variable_id="event", label_zh="既往事件", value_type="boolean", domain="history")]
+    component.evidence_requirements = [component.evidence_requirements[0].model_copy(update={
+        "variable_id": "event", "predicate_ids": ["event"]})]
+    if shape == "eq_false": event.predicate.comparator, event.predicate.value = Comparator.EQ, False
+    if shape in {"not", "double_not"}:
+        component.expression = LogicalExpression(operator=LogicalOperator.NOT, children=[event])
+        if shape == "double_not": component.expression = LogicalExpression(operator=LogicalOperator.NOT, children=[component.expression])
+    rows = {"event": {"truth": "false", "applicable": "yes", "conflict": False, "policy": True,
+        "relation": "not_found", "reason": "本次已查资料未见相关事件。", "source_read_refs": [
+            {"source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
+             "excerpt": None, "disposition": "not_seen"}]}}
+    if shape in {"exception", "positive_trigger_with_exception"}:
+        exception = AtomicExpression(predicate=AtomicPredicate(predicate_id="exception", subject="受试者",
+            attribute="例外条件", comparator=Comparator.EXISTS))
+        component.exception_expression = exception
+        component.evidence_requirements.append(component.evidence_requirements[0].model_copy(update={
+            "requirement_id": "exception-record", "predicate_ids": ["exception"], "variable_id": "exception"}))
+        rules.variable_definitions.append(VariableDef(variable_id="exception", label_zh="例外条件", value_type="boolean", domain="history"))
+        rows["exception"] = dict(rows["event"])
+        if shape == "exception":
+            rows["event"] = {**rows["event"], "truth": "true", "policy": False, "relation": "supports",
+                "source_read_refs": [{"source_document_version_id": "document", "page_artifact_id": "page",
+                    "page_number": 1, "excerpt": "事件已有记载", "disposition": "mentioned"}]}
+    frame = frozen([material()])
+    frame.facts, frame.source_pages = [], []
+    before = {key: dict(value) for key, value in rows.items()}
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules, evidence_refs={},
+        source_results={f"{component.rule_component_id}:{key}": value for key, value in rows.items()})
+    assert result.decision == expected and rows == before and result.system_issue is None
+    assert result.decision != D.EXCLUSION_TRIGGERED
+    assert positive_event_predicate_ids(component.expression) == (set() if shape in {"not", "eq_false"} else {"event"})
+
+
+def test_complete_negative_chart_reason_still_names_an_unresolved_independent_record_requirement():
+    from app.domain.variables.dictionary import VariableDef
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    predicate = component.expression.predicate
+    predicate.comparator, predicate.value, predicate.unit = Comparator.EXISTS, None, None
+    rules.variable_definitions = [VariableDef(variable_id="condition", label_zh="需核对的病情", value_type="boolean", domain="history")]
+    component.evidence_requirements[0].variable_id = "condition"
+    independent = component.evidence_requirements[0].model_copy(update={"requirement_id": "independent-record",
+        "variable_id": None, "predicate_ids": [], "description": "相应筛查结果记录"})
+    component.evidence_requirements.append(independent)
+    frame = frozen([material()])
+    frame.facts, frame.source_pages = [], []
+    relation = {"truth": "false", "applicable": "yes", "conflict": False, "policy": False,
+        "relation": "refutes", "reason": "病历明确否认该病情。", "source_read_refs": [{
+            "source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
+            "excerpt": "病历明确否认该病情", "disposition": "mentioned"}]}
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules, evidence_refs={},
+        source_results={f"{component.rule_component_id}:{predicate.predicate_id}": relation})
+    assert result.decision == D.INDETERMINATE and result.system_issue is None
+    assert "相应筛查结果记录" in result.reason_text and "尚未核实" in result.reason_text
+    assert any(part.condition_text == independent.description and part.requires_attention for part in result.reason_parts)
+    assert relation["reason"] in result.reason_text and result.source_read_refs
+
+
 @pytest.mark.parametrize("kind,truth,expected", [
     (RuleKind.INCLUSION, "true", D.INCLUSION_MET),
     (RuleKind.INCLUSION, "unknown", D.INDETERMINATE),

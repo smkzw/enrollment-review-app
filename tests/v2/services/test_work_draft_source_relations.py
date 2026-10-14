@@ -135,7 +135,7 @@ def test_product_composition_separates_reader_disagreement_from_patient_conflict
     components = [SimpleNamespace(rule_component_id=value) for value in ("affected", "sibling")]
     frame = SimpleNamespace(work_draft=True, review_run_id="run", authority=authority,
         rule_set_sha256=canonical_hash(rules.model_dump()), facts=[], clause_pack=SimpleNamespace(clauses=components),
-        evaluator_version=service.CALCULATION_VERSION)
+        evaluator_version=service.CALCULATION_VERSION, system_issues=[])
     frame.model_copy = lambda **_: frame
     source = {"source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
         "excerpt": "原件中保留的记录", "disposition": "unresolved"}
@@ -589,7 +589,8 @@ def test_uncertain_classification_is_not_direction_disagreement_or_confirmed_pat
         assert result["relation"] == "unclear" and result["conflict"] is False and result["applicable"] == "yes"
         assert "conflicting_raw_response_refs" not in proof
         assert set(proof["uncertain_classification_raw_response_refs"]) == set(refs)
-        assert first.reason in result["reason"] and second.reason in result["reason"]
+        assert first.reason in proof["uncertain_classification_reasons"] and second.reason in proof["uncertain_classification_reasons"]
+        assert "是否构成资料矛盾尚未核清" in result["reason"] and "并列记录，限定程度" not in result["reason"]
         assert len(result["source_read_refs"]) == 2
     elif change != "both_conflict":
         assert proof.get("conflicting_raw_response_refs") and result["conflict"] is True
@@ -632,6 +633,67 @@ def test_product_restricted_reason_preserves_specific_dimensions_without_inventi
     assert expected in actual.reason_text and clause.unresolved_dimensions[0] in actual.reason_text
     assert actual.source_text == clause.source_text and actual.source_read_refs == []
     assert ("澄清" if kind == "interpretation_unresolved" else "完善") in actual.system_issue.alternative
+
+
+@pytest.mark.parametrize("blocked,decision", [(False, "indeterminate"), (True, "indeterminate"),
+    (False, "requirement_met"), (True, "not_due")])
+def test_product_procedure_failure_keeps_its_catalog_identity_and_source_closure_issues(monkeypatch, blocked, decision):
+    from app.domain.contracts.enums import ComponentDecision, RuleKind
+    from app.domain.contracts.work_draft import WorkDraftItem, SystemIssue
+    from app.domain.publication import canonical_hash
+    from app.services import work_draft_review as service
+    rules = SimpleNamespace(rules=[], model_dump=lambda **_: {"rules": "frozen"})
+    authority = SimpleNamespace(review_episode_id="episode", rule_set_id="rules", rule_set_revision=1)
+    frame = SimpleNamespace(work_draft=True, review_run_id="run", authority=authority,
+        rule_set_sha256=canonical_hash(rules.model_dump()), facts=[], system_issues=[],
+        clause_pack=SimpleNamespace(clauses=[]), procedure_catalog=SimpleNamespace(
+            items=[SimpleNamespace(item_id=key) for key in ("check", "sibling")]),
+        evaluator_version=service.CALCULATION_VERSION)
+    frame.model_copy = lambda *, update: SimpleNamespace(**(vars(frame) | update))
+    def procedures(actual, *_args, **_kwargs):
+        assert actual.system_issues and isinstance(actual.system_issues[0], SystemIssue)
+        assert actual.system_issues[0].kind == "fact_closure_failed"
+        return [WorkDraftItem(item_id=f"run:procedure:{key}", review_run_id="run", official_code=code,
+            rule_kind=RuleKind.REQUIRED_PROCEDURE, title="检查", source_text="原文检查要求",
+            decision=ComponentDecision(decision if key == "check" else "requirement_met"),
+            confidence="low" if key == "sibling" or decision == "requirement_met" else None,
+            reason_text="原记录核对", input_hash="a" * 64) for key, code in (("check", "REQ-01"), ("sibling", "REQ-02"))]
+    source_issue = SystemIssue(kind="fact_closure_failed", affected_codes=["REQ-02"],
+        detail="另有摘录尚未核清", alternative="核对原件")
+    batch = [{"target_id": "procedure:check", "component_id": "check"},
+        {"target_id": "procedure:sibling", "component_id": "sibling"}]
+    checkpoints = {"calculate": {"items": [], "source_issues": [source_issue.model_dump(mode="json")]},
+        "semantic:0000": {"results": {}, "error": "未完成读取", "error_target_ids": ["procedure:check"],
+            "provider_blocked": blocked}}
+    class Session:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+    monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: frame))
+    monkeypatch.setattr(service, "authority_from_active_episode", lambda *_: authority)
+    monkeypatch.setattr(service, "get_rule_set", lambda *_: rules)
+    monkeypatch.setattr(service, "_fact_refs", lambda *_: {})
+    monkeypatch.setattr(service, "calculate_procedures", procedures)
+    monkeypatch.setattr(service, "JobStore", lambda _: SimpleNamespace(
+        list_steps=lambda _: [SimpleNamespace(step_id="semantic:0000")],
+        get_last_checkpoint=lambda _, step: ("checkpoint", checkpoints[step])))
+    context = SimpleNamespace(job_type=service.JOB_TYPE, job_id="job", step_id="compose",
+        job_payload={"context_id": "context", "review_run_id": "run", "calculation_version": service.CALCULATION_VERSION,
+            "semantic_batches": [batch]})
+    result = [WorkDraftItem.model_validate(item) for item in service.WorkDraftReviewService(Session, object()).execute(context)["items"]]
+    if decision == "indeterminate":
+        assert result[0].decision is None
+        assert result[0].system_issue.kind == ("model_unavailable" if blocked else "model_output_invalid")
+    else:
+        assert result[0].decision.value == decision and result[0].system_issue is None
+    assert result[1].decision == ComponentDecision.REQUIREMENT_MET and result[1].system_issue is None
+
+
+@pytest.mark.parametrize("comparator,value,expected", [("exists", None, "false"), ("eq", True, "false"),
+    ("eq", False, "unknown"), ("eq", "阳性", "unknown")])
+def test_absence_is_only_negative_evidence_for_a_positive_event(comparator, value, expected):
+    event = {**target(), "atom": {"predicate": {"comparator": comparator, "value": value}}}
+    actual = relation_inputs(row(relation="not_found", quotes=[]), event, [page()])
+    assert actual["truth"] == expected and actual["policy"] == (expected == "false")
 
 
 @pytest.mark.parametrize("change,expected", [(None, {"component:infection", "component:other"}),

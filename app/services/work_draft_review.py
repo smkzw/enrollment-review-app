@@ -23,7 +23,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v32"
+CALCULATION_VERSION = "work-draft/0.2.0-v33"
 
 
 def confirmation_allowed(item, items):
@@ -486,23 +486,33 @@ class WorkDraftReviewService:
                             provider_blocked_components.update(target["component_id"] for target in batches[index]
                                 if target["target_id"] in failed_ids)
                 refs = _fact_refs(session, frozen, self.artifact_store)
-                frame = frozen.model_copy(update={"facts": tuple(fact for fact in frozen.facts if fact.fact_id in refs)})
+                frame = frozen.model_copy(update={"facts": tuple(fact for fact in frozen.facts if fact.fact_id in refs),
+                    "system_issues": (*frozen.system_issues, *(SystemIssue.model_validate(issue)
+                        for issue in calculated[1].get("source_issues", ())))})
                 items = [calculate_work_component(clause, frame, rule_set, evidence_refs=refs,
                     source_results=source_results) for clause in frozen.clause_pack.clauses]
                 items.extend(calculate_procedures(frame, rule_set, evidence_refs=refs, source_results=source_results))
                 for item in items:
-                    if item.rule_component_id in failed_components and item.decision not in {
+                    key = item.rule_component_id
+                    if item.rule_kind.value == "required_procedure":
+                        if frozen.procedure_catalog is None:
+                            raise ScopeViolationError("检查条目缺少本次冻结流程目录")
+                        key = next((procedure.item_id for procedure in frozen.procedure_catalog.items
+                            if item.item_id == f"{frozen.review_run_id}:procedure:{procedure.item_id}"), None)
+                        if key is None:
+                            raise ScopeViolationError("检查条目未对应本次冻结流程目录")
+                    if key in failed_components and item.decision not in {
                             ComponentDecision.NOT_DUE, ComponentDecision.NOT_APPLICABLE}:
                         from app.services.work_draft_calculation import DETERMINATE
                         if item.decision not in DETERMINATE:
                             item.decision = None
                             item.confidence = None
                             item.confidence_reason = None
-                            blocked = item.rule_component_id in provider_blocked_components
+                            blocked = key in provider_blocked_components
                             item.system_issue = SystemIssue(kind="model_unavailable" if blocked else "model_output_invalid",
                                 affected_codes=[item.official_code],
                                 detail="两次读取对本要求的理解不一致，尚未完成核对；不表示病历资料相互矛盾。"
-                                    if item.rule_component_id in response_disagreement_components else
+                                    if key in response_disagreement_components else
                                     "病例核对模型访问受限，尚未完成本条病历核对。" if blocked else
                                     "本条原文核对未完成；已有其他独立结论和原件均保留。",
                                 alternative="模型恢复或启用已批准连接后只核未完成范围；原件和已核结果保留。")

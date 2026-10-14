@@ -32,6 +32,16 @@ def atomic_expressions(expression):
             yield from atomic_expressions(operand)
 
 
+def positive_event_predicate_ids(expression, negated=False):
+    """Keep absence policy on positive event leaves, never a negated or exception leaf."""
+    if isinstance(expression, AtomicExpression):
+        predicate = expression.predicate
+        return {predicate.predicate_id} if not negated and (predicate.comparator.value == "exists"
+            or predicate.comparator.value == "eq" and predicate.value is True) else set()
+    return set().union(*(positive_event_predicate_ids(child, not negated if expression.operator.value == "not" else negated)
+                         for child in expression.children))
+
+
 def verified_population_scope(row, predicate, source_text):
     """A reader's applicability needs both the rule scope and subject evidence."""
     excerpt = row.get("population_scope_excerpt")
@@ -264,7 +274,8 @@ def absence_policy(clause, frozen, definitions):
     # explicit, positive historical-event condition qualifies for absence policy.
     atoms = [atom for expression in (clause.expression, clause.exception_expression)
              if expression is not None for atom in atomic_expressions(expression)]
-    if clause.exception_expression is not None or not atoms or any(
+    if (clause.exception_expression is not None or not atoms
+            or {atom.predicate.predicate_id for atom in atoms} != positive_event_predicate_ids(clause.expression)) or any(
         atom.time_constraint is None or atom.time_constraint.direction != TimeDirection.BEFORE
         or atom.predicate.comparator not in {Comparator.EXISTS, Comparator.EQ}
         or atom.predicate.comparator == Comparator.EQ and atom.predicate.value is not True
@@ -334,6 +345,11 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             policy_group="not_seen_in_supplied_records")
     relations = {p.predicate_id: source_results[f"{clause.rule_component_id}:{p.predicate_id}"]
                  for p in predicates if source_results and f"{clause.rule_component_id}:{p.predicate_id}" in source_results}
+    policy_predicates = positive_event_predicate_ids(clause.expression) - {
+        predicate.predicate_id for predicate in iter_atomic_predicates(clause.exception_expression)} if clause.exception_expression else positive_event_predicate_ids(clause.expression)
+    relations = {key: {**row, "truth": TruthValue.UNKNOWN.value, "policy": False,
+            "reason": "本条含否定、例外或其他非事件条件，未见记录不能替代这些条件的核实。"}
+                if row["policy"] and key not in policy_predicates else row for key, row in relations.items()}
     from app.domain.contracts.work_draft import WorkDraftSourceRef
     source_refs = [WorkDraftSourceRef.model_validate(ref) for row in relations.values()
                    for ref in row.get("source_read_refs", ())]
@@ -602,6 +618,11 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
         if relations:
             notes = list(dict.fromkeys(row["reason"] for row in relations.values()))
             reason = "；".join([*summaries, *notes])
+            pending_requirements = [req for req in due if req.requirement_id not in observed
+                and req.requirement_id not in inactive_requirements]
+            if outcome.decision not in DETERMINATE | {D.NOT_DUE, D.NOT_APPLICABLE} and pending_requirements:
+                labels = list(dict.fromkeys(req.description for req in pending_requirements if req.description))
+                reason += "。原文关系与所需记录分别核对；以下记录尚未核实：" + "；".join(labels)
             missing_calculations = list(dict.fromkeys(definitions[variable_id].label_zh
                 for predicate_id, variable_id in predicate_variables.items()
                 if variable_id in definitions and predicate_id not in relations
@@ -651,6 +672,21 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                     else definition.label_zh)
                 reason_parts.append(WorkDraftReasonPart(condition_id=f"{clause.rule_component_id}:{pid}",
                     condition_text=label, reason_text=note, requires_attention=attention))
+            if outcome.decision not in DETERMINATE | {D.NOT_DUE, D.NOT_APPLICABLE}:
+                for original in pending_requirements:
+                    if not original.description or original.predicate_ids:
+                        continue
+                    linked_attention = any(req.variable_id is not None and len(req.predicate_ids) == 1
+                        and req.predicate_ids[0] in attention_predicates
+                        and req.requirement_id == "variable_requirement:" + sha256(":".join((
+                            component.rule_component_id, req.predicate_ids[0], original.requirement_id)).encode()).hexdigest()[:32]
+                        and binding_preserves_source_requirement(original, req) for req in due)
+                    if not linked_attention:
+                        reason_parts.append(WorkDraftReasonPart(
+                            condition_id=f"{clause.rule_component_id}:requirement:{original.requirement_id}",
+                            condition_text=original.description,
+                            reason_text="这项所需记录尚未核实。已有原件可继续查看，不表示检查未做或资料一定未提供。",
+                            requires_attention=True))
         return WorkDraftItem(**common, decision=outcome.decision,
             confidence=("low" if low_reason else "high") if outcome.decision in DETERMINATE else None,
             confidence_reason=low_reason, reason_text=reason, reason_parts=reason_parts,
