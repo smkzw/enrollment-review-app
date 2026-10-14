@@ -725,6 +725,19 @@
   overflow-wrap: anywhere;
 }
 
+.protocol-review-scope { border-block: 1px solid var(--border-color, #d8dde3); padding-block: 0.75rem; }
+.protocol-review-scope summary { cursor: pointer; }
+.protocol-review-scope__body { padding-block: 0.75rem; }
+.protocol-review-scope__note { color: var(--text-muted, #536170); margin-block: 0 0.75rem; }
+.protocol-review-scope__group { padding-block: 0.5rem; }
+.protocol-review-scope__group > summary { font-weight: 600; }
+.protocol-review-scope__group summary span { color: var(--text-muted, #536170); font-weight: 400; }
+.protocol-review-scope__item { margin-block: 0.5rem; padding-inline-start: 1rem; }
+.protocol-review-scope__item summary { overflow-wrap: anywhere; }
+.protocol-review-scope__source { max-height: 60vh; overflow: auto; padding: 0.75rem 1rem; }
+.protocol-review-scope__source p { white-space: pre-wrap; margin-block: 0.25rem 1rem; line-height: 1.7; }
+.protocol-review-scope__source small { color: var(--text-muted, #536170); }
+
 .protocol-draft-meta {
   display: flex;
   flex-wrap: wrap;

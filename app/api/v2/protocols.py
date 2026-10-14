@@ -78,6 +78,11 @@ def get_variables(job_id: str, request: Request):
     return _service(request).get_variable_bindings(job_id)
 
 
+@router.get("/{job_id}/draft/review-scope")
+def get_review_scope(job_id: str, request: Request):
+    return _service(request).get_review_scope(job_id)
+
+
 @router.put("/{job_id}/draft/variables", response_model=DraftRevisionResponse)
 def save_variables(job_id: str, body: VariableBindingRequest, request: Request):
     return _draft_dto(_service(request).save_variable_bindings(job_id,

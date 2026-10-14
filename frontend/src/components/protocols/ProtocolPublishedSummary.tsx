@@ -6,6 +6,7 @@ import type {
 } from "../../api/protocolWorkbenchTypes";
 import { RouteLink } from "../../app/router";
 import { CheckIcon, HistoryIcon } from "../shell/icons";
+import { ProtocolReviewScope } from "./ProtocolReviewScope";
 
 interface ProtocolPublishedSummaryProps {
   session: ProtocolSessionView;
@@ -61,6 +62,8 @@ export function ProtocolPublishedSummary({
           </div>
         </dl>
       </section>
+
+      <ProtocolReviewScope key={draft.revisionId} jobId={session.jobId} revisionId={draft.revisionId} />
 
       <div className="protocol-publish-result__actions">
         <RouteLink to="/protocols" className="button button--primary">

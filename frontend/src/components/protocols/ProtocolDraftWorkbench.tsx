@@ -12,6 +12,7 @@ import { ProtocolDeconstructionRuleTree } from "./ProtocolDeconstructionRuleTree
 import { ProtocolDraftEditPane } from "./ProtocolDraftEditPane";
 import { ProtocolDraftSourcePane } from "./ProtocolDraftSourcePane";
 import { RouteLink } from "../../app/router";
+import { ProtocolReviewScope } from "./ProtocolReviewScope";
 
 type DraftTab = "tree" | "edit" | "source";
 
@@ -171,6 +172,7 @@ export function ProtocolDraftWorkbench({
         )}
       </section>
 
+      <ProtocolReviewScope key={draft.revisionId} jobId={session.jobId} revisionId={draft.revisionId} />
       {supplementaryRequirements}
       <div className="protocol-draft-tabs" role="tablist" aria-label="草稿工作区切换">
         {tabs.map((item) => (

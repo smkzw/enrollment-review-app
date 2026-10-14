@@ -164,6 +164,8 @@
 - **SAR（已有 rev21）不重新起草**：范围清单只作为条款的"定义依据"挂在对应规则上（存 `protocol_review_scopes`，审定页与工作台中可展开原文），并作为禁用药抽取（R-A4）的输入。
 - **新方案（如 D001）起草时**才把范围单元加入官方解构的 `source_materials`／`allowed_source_span_ids`（`app/protocols/deconstruction_service.py:574-610`），同时让 `catalog_material_coverage` 检查接受这些单元（否则会因"材料多于目录"报错）。
 
+当前已接通只读定位子包：`ProtocolWorkbenchService.get_review_scope` → `GET .../{job}/draft/review-scope` → 草稿及历史发布摘要的“查看审核范围”。从原任务保存的同一提取快照读结构工件并核哈希；重新解构任务没有重复结构时，按精确snapshot身份读取原任务保存记录，不重新解析方案／调用模型。S1/S3复用冻结目录，S2定位明确引用，S4取真实标题的有界子树；表格根文字复用`native_source_text`，不因根块无正文报损坏，不跨表借单元格。摘录仅要求逐字片段，不强求等于整段；项目／版本／期别／内容不符拒绝，未知引用显式保留。Word多级自动编号模板未完整还原时不猜编号，例如“参照6.5”能发现但仍可待指定。页面分类按需展开，来源页码只在变化处显示；不写草稿、发布或事实。范围增删保存、定义依据挂接及R-A4提取／审定／发布仍是本WP待完成部分，当前`clinical_adoption_applied=false`不得冒充完整四块临床采用。
+
 ### 5.3 静态检查重新分级（P5）
 
 `ProtocolDeconstructionGate.evaluate`（`app/protocols/deconstruction_gate.py:1972-2024`）的 12 项检查按下表处理。`publishable` 的计算（`:2018-2022`）改为：**按检查名**判断，只有下表"结构性"检查中的问题（无论原级别是"阻止发布"还是"需要核对"）阻止发布；其余检查的问题一律作为提示返回。`blocking_count` 等按级别计数的字段相应改为只计结构性问题。WP1 第一步同时统计 rev21 在新分级下的结构性问题；能通过 MM 界面编辑解决的，用界面解决，不改代码。

@@ -1393,6 +1393,28 @@ class ProtocolWorkbenchService:
         return {"job_id": job_id, "draft_revision_id": revision.revision_id,
                 **binding_view(revision.content)}
 
+    def get_review_scope(self, job_id: str) -> dict[str, Any]:
+        from app.services.protocol_review_scope_service import review_scope_view, scope_source_snapshot
+
+        self._require_protocol_job(job_id)
+        merged = self._merged_payload(job_id)
+        source = self._load_source_input(merged)
+        revision = self._load_draft_revision(merged)
+        try:
+            if (revision.content.project_id != source.project_id
+                    or revision.content.protocol_version_id != source.protocol_version_id
+                    or revision.content.selected_phase != source.selected_phase):
+                raise ValueError("范围来源与该草稿的项目、方案版本或期别不一致。")
+            with self.session_factory() as session:
+                snapshot = scope_source_snapshot(session, source, merged.get("extraction_snapshot"))
+            view = review_scope_view(source=source,
+                spans=list(self._load_source_spans(merged).values()),
+                snapshot=snapshot, data_paths=self.data_paths)
+        except (ValueError, OSError) as exc:
+            raise ProtocolWorkbenchError("REVIEW_SCOPE_SOURCE_UNAVAILABLE", title="审核范围暂不可核对",
+                detail=str(exc), recovery="请核对本版方案保存的原文结构；已发布规则不会改变。") from exc
+        return {"job_id": job_id, "draft_revision_id": revision.revision_id, **view}
+
     def save_variable_bindings(self, job_id: str, *, expected_revision_id: str, proposal):
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
