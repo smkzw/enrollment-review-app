@@ -29,6 +29,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.domain.contracts.facts import ClinicalFactCandidateV2, FactAuthority
+from app.domain.contracts.enums import ProfileLane
 from app.domain.contracts.patient_profile_v2 import (
     PatientProfileRevisionV2,
     ProfileItemKind,
@@ -115,7 +116,9 @@ class PatientProfileService:
                     or sorted(fact.locator_ids) != sorted(item.locator_ids)):
                 raise PatientProfileProjectionError("时间线记录与原事实不一致")
             metadata[item.source_id] = {"date_role": fact.date_role,
-                                        "reference_abnormality": reference_abnormality(fact)}
+                "reference_abnormality": reference_abnormality(fact),
+                "record_label": (fact.fact_type if not fact.fact_type.isascii() else "用药记录")
+                    if fact.profile_lane == ProfileLane.MEDICATION else None}
         return metadata
 
     def fact_source_readings(

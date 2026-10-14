@@ -15,6 +15,28 @@ function modelFor(items: ReturnType<typeof makeFactItem>[]) {
 const date = (value: string) => ({ source_text: value, precision: "day" as const, precision_label: "日", lower_bound: value, upper_bound: value });
 
 describe("交互式临床时间图", () => {
+  it("保留购药记录性质，不以图点暗示实际服药或持续疗程", async () => {
+    const user = userEvent.setup();
+    const model = modelFor([makeFactItem({ lane: "medication", asserted_object: "药物甲", title: "药物甲",
+      kind_label: "购药记录", lane_label: "用药与治疗", value: "1盒", unit: null, start_range: date("2026-09-18") })]);
+    const { container } = render(<ProfileTimeline model={model} />);
+    expect(screen.getByText("购药记录")).toBeInTheDocument();
+    const point = screen.getByRole("button", { name: "药物甲（购药记录），2026-09-18，1盒" });
+    expect(point).not.toHaveClass("is-interval");
+    await user.click(point);
+    expect(within(screen.getByRole("complementary", { name: "临床记录详情" })).getByText("购药记录")).toBeInTheDocument();
+    expect(screen.queryByText("药物暴露")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".clinical-chart__point")).toHaveLength(1);
+    expect(model.items[0]!.kind).toBe("fact");
+  });
+  it("单次事件即使保存相同的起止日，也不画作持续疗程", () => {
+    const model = modelFor([makeFactItem({ kind: "event", lane: "medication", kind_label: "事件",
+      event_type: "药房购药", duration_status: "single", duration_status_label: "单次",
+      start_range: date("2026-09-18"), end_range: date("2026-09-18") })]);
+    expect(clinicalSpan(model.items[0]!)).toMatchObject({ interval: false, uncertain: false });
+    const { container } = render(<ProfileTimeline model={model} />);
+    expect(container.querySelector(".clinical-chart__point")).not.toHaveClass("is-interval");
+  });
   it("按病史／用药画点；正常检查、行政信息和明确否认不铺在主图", () => {
     const model = modelFor([
       makeFactItem({ lane: "target_disease", asserted_object: "研究疾病", title: "研究疾病" }),

@@ -93,7 +93,7 @@ PROFILE_LANE_LABELS: dict[str, str] = {
     "target_disease": "目标疾病",
     "symptoms_signs": "症状体征",
     "medical_history": "病史",
-    "medication": "药物暴露",
+    "medication": "用药与治疗",
     "non_drug_treatment": "非药物治疗/操作",
     "test_exam_score": "检验检查/评分",
     "allergy_infection_immune": "过敏/感染/免疫",
@@ -368,7 +368,8 @@ def _date_range_dto(value: Any) -> ProfileDateRangeDTO | None:
     )
 
 
-def profile_item_dto(item: ProfileItem, *, date_role: str | None = None, reference_abnormality: str | None = None) -> ProfileItemDTO:
+def profile_item_dto(item: ProfileItem, *, date_role: str | None = None, reference_abnormality: str | None = None,
+                     record_label: str | None = None) -> ProfileItemDTO:
     """把领域 Profile 条目映射为中文原生 DTO（机器值 + 标签，无临床推断）。"""
     lane = item.lane.value if hasattr(item.lane, "value") else item.lane
     kind = item.kind.value if hasattr(item.kind, "value") else item.kind
@@ -377,7 +378,8 @@ def profile_item_dto(item: ProfileItem, *, date_role: str | None = None, referen
         lane=lane,
         lane_label=PROFILE_LANE_LABELS.get(lane, lane),
         kind=kind,
-        kind_label=PROFILE_ITEM_KIND_LABELS.get(kind, kind),
+        kind_label=(record_label if kind == "fact" and record_label is not None
+                    else PROFILE_ITEM_KIND_LABELS.get(kind, kind)),
         source_id=item.source_id,
         source_revision=item.source_revision,
         title=item.title,

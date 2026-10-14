@@ -1726,6 +1726,7 @@
 .clinical-chart__axis > div > span:last-child { transform: translateX(-100%); }
 .clinical-chart__row { padding-block: var(--space-2); border-bottom: 1px solid var(--color-line); }
 .clinical-chart__row > strong { font-weight: 500; align-self: start; padding-block: .4rem; overflow-wrap: anywhere; }
+.clinical-chart__record-kind { display: block; color: var(--color-muted); font-size: var(--font-size-small); font-weight: 400; margin-top: .15rem; }
 .clinical-chart__track { position: relative; display: flow-root; min-width: 0; background: repeating-linear-gradient(to right, transparent 0, transparent calc(25% - 1px), var(--color-line) calc(25% - 1px), var(--color-line) 25%); }
 .clinical-chart__track--undated { background: none; }
 .clinical-chart__unscheduled summary { color: var(--color-muted); cursor: pointer; margin-block: var(--space-2); font-size: var(--font-size-small); }

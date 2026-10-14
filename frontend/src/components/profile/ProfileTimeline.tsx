@@ -29,6 +29,10 @@ export function timelineTime(item: ProfileItemView) {
 }
 
 function title(item: ProfileItemView) { return item.assertedObject || item.medicationName || item.title; }
+function recordLabel(item: ProfileItemView) {
+  return item.kind === "fact" && item.kindLabel !== "事实" ? item.kindLabel :
+    item.kind === "event" && item.eventType && /[\u3400-\u9fff]/.test(item.eventType) ? item.eventType : null;
+}
 function valueText(item: ProfileItemView) {
   return item.value === null || typeof item.value === "boolean" ? "" : `${item.value}${item.unit && item.unit !== "unitless" ? ` ${item.unit}` : ""}`;
 }
@@ -40,7 +44,7 @@ export function clinicalSpan(item: ProfileItemView) {
   const explicitEnd = item.kind !== "fact" ? day(item.endRange?.upperBound) : null;
   const end = explicitEnd ?? day(item.startRange?.upperBound) ?? start;
   if (end < start) return null;
-  return { start, end, interval: explicitEnd !== null,
+  return { start, end, interval: explicitEnd !== null && item.durationStatus !== "single",
     uncertain: item.startRange?.precision !== "day" || explicitEnd !== null && item.endRange?.precision !== "day" };
 }
 
@@ -99,14 +103,16 @@ function ClinicalChart({ label, tone, items, selectedId, onSelect }: {
         return [{ item, span, left, right, slot }];
       });
       const unknown = records.filter(record => !record.span);
-      return <div key={key} className="clinical-chart__row"><strong>{title(records[0]!.item)}</strong>
+      const labels = [...new Set(records.map(({ item }) => recordLabel(item)).filter(Boolean))];
+      return <div key={key} className="clinical-chart__row"><strong>{title(records[0]!.item)}
+        {labels.length > 0 && <span className="clinical-chart__record-kind">{labels.join(" · ")}</span>}</strong>
         <div className={`clinical-chart__track${points.length ? "" : " clinical-chart__track--undated"}`} style={{ minHeight: `${Math.max(1, slots.length) * 1.8}rem` }}>
           {points.map(({ item, span, left, right, slot }) => <button type="button" key={item.itemId}
             className={`clinical-chart__point${span.interval ? " is-interval" : right > left ? " is-range" : ""}${span.uncertain ? " is-uncertain" : ""}`}
             style={{ left: `${left}%`, width: right > left ? `max(1rem, ${right - left}%)` : undefined, top: `${slot * 1.8 + .5}rem` }}
             aria-pressed={selectedId === item.itemId}
-            aria-label={`${title(item)}，${timelineTime(item).label}${valueText(item) ? `，${valueText(item)}` : ""}`}
-            title={`${title(item)}\n${profileDateRoleLabel(item) ?? "原文日期"}：${timelineTime(item).label}${item.endRange ? ` 至 ${item.endRange.sourceText ?? item.endRange.upperBound ?? "未明确"}` : ""}\n${span.interval ? "明确起止区间" : span.uncertain ? "日期范围，非持续用药时长" : "日期点"}\n${valueText(item)}`}
+            aria-label={`${title(item)}${recordLabel(item) ? `（${recordLabel(item)}）` : ""}，${timelineTime(item).label}${valueText(item) ? `，${valueText(item)}` : ""}`}
+            title={`${title(item)}${recordLabel(item) ? `（${recordLabel(item)}）` : ""}\n${profileDateRoleLabel(item) ?? "原文日期"}：${timelineTime(item).label}${item.endRange ? ` 至 ${item.endRange.sourceText ?? item.endRange.upperBound ?? "未明确"}` : ""}\n${span.interval ? "明确起止区间" : span.uncertain ? "日期范围，非持续用药时长" : "日期点"}\n${valueText(item)}`}
             onClick={() => onSelect(item.itemId)} />)}
           {unknown.length > 0 && <div className="clinical-chart__undated" style={{ marginTop: `${slots.length * 1.8 + .2}rem` }}>
             {unknown.map(({ item }, index) => <button type="button" key={item.itemId} aria-pressed={selectedId === item.itemId}

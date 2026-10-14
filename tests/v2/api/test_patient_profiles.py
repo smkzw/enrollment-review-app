@@ -312,6 +312,21 @@ def test_profile_date_role_comes_from_frozen_fact_without_rewriting_profile(clie
     assert client.get(_latest_url(chain).replace(chain["subject_id"], "other-subject", 1)).status_code == 404
 
 
+def test_medication_fact_label_is_not_an_exposure_or_a_new_approval(client):
+    from app.api.v2.patient_profile_schemas import profile_item_dto
+    chain = _seed(client, "medication-label")
+    with client.app.state.session_factory() as session:
+        ClinicalFactV2Repository(session).create(_fact(chain))
+        revision = PatientProfileService().generate(session, authority=_authority(chain))
+        item = next(row for row in profile_items(revision) if row.kind.value == "fact")
+        before = item.model_dump_json()
+        labeled = profile_item_dto(item.model_copy(update={"lane": ProfileLane.MEDICATION}), record_label="购药记录")
+        assert labeled.kind == "fact" and labeled.kind_label == "购药记录"
+        assert labeled.lane_label == "用药与治疗"
+        assert labeled.source_strength == item.source_strength.value
+        assert item.model_dump_json() == before
+
+
 def test_profile_fact_source_readings_keep_raw_candidate_and_revision_scope(client) -> None:
     chain = _seed(client, "source-readings")
     with client.app.state.session_factory() as session:
