@@ -20,6 +20,7 @@ import {
   decodeFactCorrectionPreview,
   decodeFactCorrectionSubmit,
   decodeFactCorrectionWorkDraftLink,
+  decodeFactCorrectionOptions,
 } from "./factCorrectionViewModels";
 import type {
   PatientProfileHistoryView,
@@ -129,6 +130,16 @@ export function createPatientProfileHttp(
         { method: "GET", signal: options?.signal },
         decodeFactSourceReadings,
       );
+    },
+
+    async getFactCorrectionOptions(subjectId, reviewEpisodeId, factId, options) {
+      const result = await request(
+        `/api/v2/subjects/${encodeURIComponent(subjectId)}/review-episodes/${encodeURIComponent(reviewEpisodeId)}/fact-corrections/facts/${encodeURIComponent(factId)}/options`,
+        { method: "GET", signal: options?.signal }, decodeFactCorrectionOptions);
+      if (result.subjectId !== subjectId || result.reviewEpisodeId !== reviewEpisodeId || result.targetId !== factId) {
+        throw new PatientProfileApiError("SOURCE_SCOPE_MISMATCH", "记录不匹配", "数据项目不属于当前记录。", "请关闭后重新打开。");
+      }
+      return result;
     },
 
     async previewFactCorrection(

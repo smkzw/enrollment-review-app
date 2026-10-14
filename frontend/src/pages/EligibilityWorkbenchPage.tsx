@@ -482,13 +482,13 @@ function EligibilityIssueQueue({
         {totalIssues - lowConfidence} 条存在风险或未决。
         {lowConfidence > 0 && `另有 ${lowConfidence} 条已判定，保留低置信标记。`}
       </p>
-      {groups.map((group, index) => {
+      {groups.map((group) => {
         const meta = ISSUE_SEVERITY_META[group.severity];
         return (
           <details
             key={group.key}
             className="eligibility-issue-queue__group"
-            open={index === 0 && group.key !== "low_confidence"}
+            open={group.key !== "low_confidence"}
           >
             <summary>
               <StatusBadge tone={meta.tone} text={group.key === "low_confidence" ? "低置信" : meta.text} />
@@ -509,7 +509,7 @@ function EligibilityIssueQueue({
                       onClick={() => onSelect(clause.ruleComponentId)}
                     >
                       <span className="eligibility-clause__identity">
-                        <strong>{clause.ruleCode}</strong>
+                        <strong>{clause.ruleCode}</strong>{" "}
                         <span
                           className="eligibility-clause__summary"
                           title={clause.textSummary}

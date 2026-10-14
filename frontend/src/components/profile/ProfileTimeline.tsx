@@ -67,10 +67,14 @@ function ClinicalChart({ label, tone, items, selectedId, onSelect }: {
     const key = `${record.item.lane}:${title(record.item).normalize("NFKC").replace(/\s/g, "")}`;
     rows.set(key, [...(rows.get(key) ?? []), record]);
   }
-  const dateLabel = (time: number) => new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "UTC", year: "numeric", ...((max - min) < 86400000 * 800 ? { month: "numeric" as const } : {}),
-    ...((max - min) < 86400000 * 65 ? { day: "numeric" as const } : {}),
-  }).format(time);
+  const ticks = [0, 1, 2, 3, 4].map(tick => min + (max - min) * tick / 4);
+  const formatTicks = (month: boolean, fullDay: boolean) => ticks.map(time => new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "UTC", year: "numeric", ...(month ? { month: "numeric" as const } : {}),
+    ...(fullDay ? { day: "numeric" as const } : {}),
+  }).format(time));
+  let tickLabels = formatTicks(max - min < 86400000 * 800, false);
+  if (new Set(tickLabels).size !== ticks.length) tickLabels = formatTicks(true, false);
+  if (new Set(tickLabels).size !== ticks.length) tickLabels = formatTicks(true, true);
   return <section className={`clinical-chart clinical-chart--${tone}`} aria-label={`${label}时间图`}>
     <header className="clinical-chart__head"><h3>{label}</h3>
       {dates.length > 0 && <div role="group" aria-label={`${label}时间范围`}>
@@ -79,7 +83,7 @@ function ClinicalChart({ label, tone, items, selectedId, onSelect }: {
       </div>}
     </header>
     {timed.length > 0 && <div className="clinical-chart__axis"><span />
-      <div>{[0, 1, 2, 3, 4].map(tick => <span key={tick} style={{ left: `${tick * 25}%` }}>{dateLabel(min + (max - min) * tick / 4)}</span>)}</div>
+      <div>{tickLabels.map((label, tick) => <span key={tick} style={{ left: `${tick * 25}%` }}>{label}</span>)}</div>
     </div>}
     {recent && spans.length > visible.length && <button type="button" className="clinical-chart__earlier" onClick={() => setRecent(false)}>查看更早的 {spans.length - visible.length} 条记录</button>}
     {[true, false].map(dated => {

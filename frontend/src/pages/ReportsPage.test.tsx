@@ -190,7 +190,9 @@ describe("报告", () => {
       reviewRunId: report.run.reviewRunId, clauses: [clause], controls: [],
       componentClauses: [{ ...clause, ruleComponentId: "child", parentRuleCode: "IN-01", confidence: null,
         decision: "not_due", decisionLabel: "未到期", reason: "基线期还未到，届时核对。" }],
-      systemIssues: [{ kind: "model_output_invalid", affectedCodes: ["IN-01"], detail: "读取意见尚未一致", alternative: "原件保留，可继续核查" }] };
+      systemIssues: [{ kind: "model_output_invalid", affectedCodes: ["IN-01"], detail: "读取意见尚未一致", alternative: "原件保留，可继续核查" },
+        { kind: "excerpt_unverified", affectedCodes: [], detail: "原件记录尚待核实", alternative: "不作阴性解释", pageNumber: 4 },
+        { kind: "excerpt_unverified", affectedCodes: [], detail: "来源范围尚待核清", alternative: "不猜来源" }] };
     mocks.getRun.mockResolvedValue(report);
     mocks.listRuns.mockImplementation(async (subjectId: string, reviewEpisodeId: string) => ({ subjectId, reviewEpisodeId, items: [report.run] }));
     const before = JSON.stringify(report);
@@ -205,12 +207,16 @@ describe("报告", () => {
     await user.click(screen.getByText("分项核对（1）"));
     expect(screen.getByText("基线期还未到，届时核对。")).toBeVisible();
     expect(screen.getByText(/读取意见尚未一致/)).toBeInTheDocument();
+    expect(screen.getByText("原件第 4 页")).toBeInTheDocument();
+    expect(screen.getByText("尚未关联条款的记录")).toBeInTheDocument();
     expect(screen.queryByText("本次审核未记录补充事项。")).not.toBeInTheDocument();
     for (const format of ["html", "md"] as const) {
       const content = frozenReviewExport(report, format, new Date(timestamp));
       expect(content).toContain("未签发");
       expect(content).toContain("基线期还未到");
       expect(content).toContain("读取意见尚未一致");
+      expect(content).toContain("原件第 4 页");
+      expect(content).toContain("尚未关联条款的记录");
       expect(content).toContain("后续节点仍须另行审核");
       expect(content).not.toContain("本次审核未记录补充事项");
     }

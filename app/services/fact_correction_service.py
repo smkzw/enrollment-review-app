@@ -493,6 +493,34 @@ def preview_fact_correction(
     )
 
 
+def fact_correction_options(session: Session, *, authority: FactAuthority, target_id: str) -> dict:
+    """Read the current published dictionary and exact editable fact; no model or write."""
+    from app.domain.variables.dictionary import load_dictionary
+    from app.storage.repositories import get_rule_set
+    _require_authority(session, authority)
+    target = _load_target(session, "fact", target_id)
+    if target.authority != authority and not FactAuthorityValidator(session).rule_revision_source_is_reusable(target.authority, authority):
+        raise FactCorrectionValidationError("修订目标不属于当前审核节点的活动证据。")
+    if FactCorrectionRepository(session).outgoing(target_id) is not None:
+        raise FactCorrectionValidationError("该记录已被修订，请打开最新记录。")
+    rules = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
+    definitions = load_dictionary(rules.variable_definitions or ())
+    return {"subject_id": authority.subject_id, "review_episode_id": authority.review_episode_id,
+            "target_id": target.fact_id, "target_revision": target.revision, "variable_id": target.variable_id,
+            "variables": [item.model_dump(mode="json") for item in definitions.values() if item.reference_ratio_of is None]}
+
+
+def fact_correction_variable_labels(session, authority, snapshots) -> dict[str, str]:
+    ids = {item["variable_id"] for item in snapshots if item.get("variable_id") is not None}
+    if not ids:
+        return {}
+    from app.domain.variables.dictionary import load_dictionary
+    from app.storage.repositories import get_rule_set
+    rules = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
+    definitions = load_dictionary(rules.variable_definitions or ())
+    return {key: definitions[key].label_zh for key in ids if key in definitions}
+
+
 def _same_observation_siblings(
     session: Session, *, authority: FactAuthority,
     target_kind: str, target_id: str,
@@ -568,7 +596,7 @@ def prepare_fact_correction(
                 "该事实关联多处原始观察；仅选择部分原文时无法核清其余观察的归属，请先逐处核对。"
             )
         if len(target.source_observation_refs) > 1 and set(updates) & {
-            "fact_type", "polarity", "asserted_object", "value", "unit", "date_range",
+            "fact_type", "polarity", "asserted_object", "value", "unit", "date_range", "variable_id",
         }:
             raise FactCorrectionValidationError(
                 "该事实关联多项原始观察；不能将一次改值应用到所有观察，请先逐项核对。"
@@ -583,8 +611,9 @@ def prepare_fact_correction(
         created_at=created_at,
         authority=authority,
     )
-    old_snapshot = snapshot_for_kind(target_kind, target)
-    new_snapshot = snapshot_for_kind(target_kind, new_entity)
+    include_variable = target_kind == "fact" and "variable_id" in updates
+    old_snapshot = snapshot_for_kind(target_kind, target, include_variable_id=include_variable)
+    new_snapshot = snapshot_for_kind(target_kind, new_entity, include_variable_id=include_variable)
     old_json = canonical_json(old_snapshot)
     new_json = canonical_json(new_snapshot)
     if old_json == new_json:
@@ -724,6 +753,15 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
     asserted_object = str(updates.get("asserted_object") or target.asserted_object)
     value = target.value if "value" not in updates else updates["value"]
     unit = target.unit if "unit" not in updates else updates["unit"]
+    variable_id = updates.get("variable_id", target.variable_id)
+    if variable_id is not None and (not isinstance(variable_id, str) or not variable_id.strip()):
+        raise FactCorrectionValidationError("所属数据项目无效。")
+    variable_changed = variable_id != target.variable_id
+    risks = list(target.risk_flags)
+    if variable_changed or type(value) is not type(target.value) or value != target.value or unit != target.unit:
+        from app.domain.risk_flags import RiskFlag
+        # Publication recomputes these against the current value and selected definition.
+        risks = [flag for flag in risks if flag not in {RiskFlag.NEAR_THRESHOLD, RiskFlag.IMPLAUSIBLE_VALUE}]
     date_range = (
         target.date_range
         if "date_range" not in updates
@@ -733,6 +771,28 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         _enum(updates.get("profile_lane"), ProfileLane, "主题泳道") or target.profile_lane
     )
     supported = updates.get("supported_requirement_ids")
+    if "variable_id" in updates and variable_id is not None:
+        from app.domain.variables.dictionary import load_dictionary
+        from app.storage.repositories import get_rule_set
+        rules = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
+        definition = load_dictionary(rules.variable_definitions or ()).get(variable_id)
+        if definition is None or definition.reference_ratio_of is not None:
+            raise FactCorrectionValidationError("请选择已发布的原始数据项目，不能将原值直接作为派生计算。")
+        if value is not None:
+            if definition.value_type == "number":
+                try:
+                    definition.convert(value, unit or "")
+                except (ValueError, TypeError) as exc:
+                    raise FactCorrectionValidationError("读数类型或单位与所选数据项目不符，请同时核对。") from exc
+            elif definition.value_type in {"boolean", "procedure"} and not isinstance(value, bool):
+                raise FactCorrectionValidationError("所选数据项目需要明确的是或否，不能自动转换原记录。")
+            elif definition.value_type in {"category", "date", "exposure"} and not isinstance(value, str):
+                raise FactCorrectionValidationError("所选数据项目需要文字记录，不能自动转换原读数。")
+        if variable_changed:
+            supported = [requirement.requirement_id for rule in rules.rules for component in rule.components
+                         for requirement in component.evidence_requirements if requirement.variable_id == variable_id]
+    elif variable_changed:
+        supported = []
     if supported is None:
         supported_requirement_ids = list(target.supported_requirement_ids)
     else:
@@ -782,7 +842,7 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         unit=unit,
         date_range=date_range,
         assertion_basis=assertion_basis,
-        variable_id=target.variable_id,
+        variable_id=variable_id,
         date_role=target.date_role,
     )
     existing = ClinicalFactV2Repository(session).list_for_authority(authority)
@@ -803,9 +863,9 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
     candidate_payload = {
         "candidate_id": candidate_id,
         "fact_type": fact_type,
-        **({"variable_id": target.variable_id} if target.variable_id is not None else {}),
+        **({"variable_id": variable_id} if variable_id is not None else {}),
         **({"date_role": target.date_role} if target.date_role is not None else {}),
-        **({"risk_flags": [flag.value for flag in target.risk_flags]} if target.risk_flags else {}),
+        **({"risk_flags": [flag.value for flag in risks]} if risks else {}),
         "profile_lane": profile_lane.value,
         "supported_requirement_ids": supported_requirement_ids,
         "polarity": polarity.value,
@@ -840,9 +900,9 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         fact_type=fact_type,
         profile_lane=profile_lane,
         supported_requirement_ids=supported_requirement_ids,
-        variable_id=target.variable_id,
+        variable_id=variable_id,
         date_role=target.date_role,
-        risk_flags=list(target.risk_flags),
+        risk_flags=risks,
         polarity=polarity,
         asserted_object=asserted_object,
         value=value,
@@ -1185,7 +1245,8 @@ def apply_prepared_fact_correction(
             )
         new_entity = _load_target(session, prepared.target_kind, prepared.new_entity_id)
         published_new_json = canonical_json(
-            snapshot_for_kind(prepared.target_kind, new_entity)
+            snapshot_for_kind(prepared.target_kind, new_entity,
+                              include_variable_id="variable_id" in json.loads(prepared.new_snapshot_json))
         )
         if published_new_json != prepared.new_snapshot_json:
             raise FactCorrectionError(
@@ -1483,7 +1544,8 @@ def _require_active_correction_head(session: Session, prepared: PreparedFactCorr
     if outgoing is not None:
         raise FactCorrectionValidationError("该记录已被修订，不能再从同一原记录分叉。")
     target = _load_target(session, prepared.target_kind, prepared.target_id)
-    old_json = canonical_json(snapshot_for_kind(prepared.target_kind, target))
+    old_json = canonical_json(snapshot_for_kind(prepared.target_kind, target,
+        include_variable_id="variable_id" in json.loads(prepared.old_snapshot_json)))
     if old_json != prepared.old_snapshot_json:
         raise FactCorrectionStaleError("原记录内容已变化，本次修订没有写入。")
     if prepared.target_kind == "fact":

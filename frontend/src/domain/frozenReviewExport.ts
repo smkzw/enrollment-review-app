@@ -4,6 +4,9 @@ import { reviewConditionNotes } from "./reviewConditionNotes";
 import type { LocatorView } from "../api/evidence";
 
 interface ReportSection { title: string; paragraphs: string[] }
+export function reviewSystemIssueLabel(issue: { affectedCodes: string[]; pageNumber?: number | null }): string {
+  return issue.affectedCodes.join("、") || (issue.pageNumber ? `原件第 ${issue.pageNumber} 页` : "尚未关联条款的记录");
+}
 export const reviewEvidenceScopeNote = "本次审核仅依据本次已提供的资料及其核对结果。已知缺失和待核实事项另列；未提供的情况不作推断。";
 export const reviewLimitationLabel = {
   interpretation_unresolved: "方案含义尚待澄清，不能判为符合或不符合",
@@ -67,7 +70,7 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
       { title: "系统尚未完成的核对", issues: report.workDraft.systemIssues?.filter(issue => issue.kind !== "excerpt_unverified") ?? [] },
       { title: "尚未用于判断的原件记录", issues: report.workDraft.systemIssues?.filter(issue => issue.kind === "excerpt_unverified") ?? [] },
     ]) if (group.issues.length) result.push({ title: group.title, paragraphs: group.issues.flatMap(issue => [
-      `${issue.affectedCodes.join("、")}：${issue.detail}`, issue.alternative]) });
+      `${reviewSystemIssueLabel(issue)}：${issue.detail}`, issue.alternative]) });
   }
   for (const item of report.assessments) {
     result.push({ title: `${item.clause.ruleDisplayCode} · ${item.clause.ruleTitle}`, paragraphs: [

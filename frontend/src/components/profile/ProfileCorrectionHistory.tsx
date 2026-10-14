@@ -196,7 +196,7 @@ function CorrectionHistoryEntry({
             <p className="profile-correction-history__scope-label">
               {record.impact.scopeKindLabel}
             </p>
-            {record.impact.fallbackReason !== null && (
+            {record.impact.scopeKind !== "node" && record.impact.fallbackReason !== null && (
               <p>{record.impact.fallbackReason}</p>
             )}
             <CorrectionImpactSummary impact={record.impact} />
@@ -213,12 +213,14 @@ function CorrectionHistoryEntry({
           snapshot={record.oldSnapshot}
           targetKind={record.targetKind}
           item={item ?? undefined}
+          variableLabels={record.variableLabels}
         />
         <CorrectionSnapshotPanel
           label="修改后"
           snapshot={record.newSnapshot}
           targetKind={record.targetKind}
           item={item ?? undefined}
+          variableLabels={record.variableLabels}
         />
       </div>
     </article>

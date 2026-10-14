@@ -16,6 +16,101 @@ from tests.v2.storage.test_fact_repositories import _update_episode
 NOW = datetime(2026, 8, 23, 8, 0, 0, tzinfo=UTC)
 
 
+def test_variable_correction_options_preview_persistence_history_and_consumer(client):
+    """Synthetic source, real API/publication; not a real-patient or M2 acceptance claim."""
+    from app.domain.variables.dictionary import VariableDef
+    from app.storage.repositories import get_rule_set, save_rule_set
+    from app.storage.fact_repositories import ClinicalFactV2Repository
+    from app.storage.active_facts import current_fact_heads
+    from app.workflow.runner import JobRunner
+    from app.domain.contracts.enums import Comparator, ReviewStage
+    from app.domain.contracts.rules import AtomicExpression, AtomicPredicate, EvidenceRequirement, RuleComponent
+    from app.domain.variables.dictionary import load_dictionary
+    from app.services.work_draft_calculation import select_by_variable
+    factory = client.app.state.session_factory
+    with factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "variable-correction")
+        rules = get_rule_set(session, chain["authority"].rule_set_id, 1)
+        save_rule_set(session, rules.model_copy(update={"revision": 2, "variable_definitions": [
+            VariableDef(variable_id="pressure_record", label_zh="血压记录", value_type="category", domain="vital")]}))
+        _update_episode(session, session.get(ReviewEpisodeRecord, chain["review_episode_id"]), revision=2, rule_set_revision=2)
+        chain["authority"] = chain["authority"].model_copy(update={"episode_revision": 2, "rule_set_revision": 2})
+        fact = _create_fact_with_candidate(session, chain, fact_id="variable-target", run_id="variable-source",
+            call_id="variable-call", gate_id="variable-gate", cand_id="variable-candidate", include_source_candidates=True)
+        original = PatientProfileService().generate(session, authority=chain["authority"], created_at=NOW, generated_at=NOW)
+    base = f"/api/v2/subjects/{chain['subject_id']}/review-episodes/{chain['review_episode_id']}/fact-corrections"
+    options = client.get(base + f"/facts/{fact.fact_id}/options")
+    assert options.status_code == 200, options.text
+    assert options.json()["variable_id"] is None
+    assert any(item["variable_id"] == "pressure_record" for item in options.json()["variables"])
+    assert not any(item.get("reference_ratio_of") for item in options.json()["variables"])
+    body = {"target_kind": "fact", "target_id": fact.fact_id, "locator_ids": list(fact.locator_ids),
+            "variable_id": "pressure_record", "reason": "为原血压读数关联正确数据项目"}
+    preview = client.post(base + "/preview", json=body)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["old_snapshot"]["variable_id"] is None
+    assert preview.json()["new_snapshot"]["variable_id"] == "pressure_record"
+    assert preview.json()["variable_labels"] == {"pressure_record": "血压记录"}
+    assert preview.json()["old_snapshot"]["value"] == preview.json()["new_snapshot"]["value"] == "120/80"
+    # This fixture checks publication, not the separately covered automatic child-job graph.
+    client.app.state.fact_correction_job_service.work_draft_enabled = False
+    submit = client.post(base, json=body)
+    assert submit.status_code == 201, submit.text
+    assert JobRunner(factory, client.app.state.job_executors, worker_id="variable-correction").run_job(submit.json()["job_id"])
+    history = client.get(base)
+    assert history.status_code == 200, history.text
+    record = history.json()["items"][0]
+    assert record["new_snapshot"]["variable_id"] == "pressure_record"
+    assert record["variable_labels"] == {"pressure_record": "血压记录"}
+    with factory() as session:
+        updated = ClinicalFactV2Repository(session).get(record["new_entity_id"])
+        assert updated.variable_id == "pressure_record"
+        assert updated.locator_ids == fact.locator_ids and updated.value == fact.value
+        assert ClinicalFactV2Repository(session).get(fact.fact_id) == fact
+        active = current_fact_heads(session, chain["authority"])
+        assert fact.fact_id not in {item.fact_id for item in active}
+        component = RuleComponent(rule_component_id="record-component", parent_rule_id="record-rule",
+            display_code="IN-TEST-a", title="合成记录消费者",
+            expression=AtomicExpression(predicate=AtomicPredicate(predicate_id="record-reading", subject="受试者",
+                attribute="血压记录", comparator=Comparator.EQ, value="120/80")),
+            evidence_requirements=[EvidenceRequirement(requirement_id="record-requirement", rule_component_id="record-component",
+                fact_type="vital_sign", description="合成记录核对", variable_id="pressure_record", predicate_ids=["record-reading"],
+                due_stage=ReviewStage.SCREENING, allows_screening_record_transcription=True,
+                requires_contemporaneous_objective_source=False)])
+        definitions = load_dictionary(rules.model_copy(update={"variable_definitions": [VariableDef(
+            variable_id="pressure_record", label_zh="血压记录", value_type="category", domain="vital")]}).variable_definitions)
+        assert not select_by_variable(component, [fact], {}, authority=chain["authority"],
+                                      definitions=definitions)["record-reading"].fact_ids
+        assert select_by_variable(component, active, {}, authority=chain["authority"],
+                                  definitions=definitions)["record-reading"].fact_ids == (updated.fact_id,)
+        old = PatientProfileService().get(session, original.patient_profile_revision_id)
+        assert old == original
+    assert client.get(base + f"/facts/{fact.fact_id}/options").status_code == 422
+
+
+def test_variable_correction_rejects_unknown_type_units_and_wrong_scope_without_write(client):
+    from sqlalchemy import func, select
+    from app.storage.models import JobRecord
+    from app.storage.fact_repositories import ClinicalFactV2Repository
+    with client.app.state.session_factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "variable-rejection")
+        fact = _create_fact_with_candidate(session, chain, fact_id="variable-reject-target", run_id="variable-reject-run",
+            call_id="variable-reject-call", gate_id="variable-reject-gate", cand_id="variable-reject-candidate")
+        count = session.scalar(select(func.count()).select_from(JobRecord))
+    base = f"/api/v2/subjects/{chain['subject_id']}/review-episodes/{chain['review_episode_id']}/fact-corrections"
+    body = {"target_kind": "fact", "target_id": fact.fact_id, "locator_ids": list(fact.locator_ids), "reason": "合成反例"}
+    for updates in [{"variable_id": "not_published"}, {"variable_id": "age"},
+                    {"variable_id": "age", "value": 50, "unit": "kg"},
+                    {"variable_id": "icf_signed"}, {"variable_id": "alt_uln_ratio", "value": 2, "unit": "×ULN"}]:
+        result = client.post(base + "/preview", json={**body, **updates})
+        assert result.status_code == 422, result.text
+    wrong = f"/api/v2/subjects/not-this-subject/review-episodes/{chain['review_episode_id']}/fact-corrections"
+    assert client.get(wrong + f"/facts/{fact.fact_id}/options").status_code in {404, 422}
+    with client.app.state.session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(JobRecord)) == count
+        assert ClinicalFactV2Repository(session).get(fact.fact_id) == fact
+
+
 def test_v2_app_registers_fact_correction_executor(client):
     assert FACT_CORRECTION_JOB_TYPE in client.app.state.job_executors
 

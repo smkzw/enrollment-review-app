@@ -30,7 +30,7 @@ import {
   PatientProfileDecodeError,
 } from "../../api/patient-profile";
 import type { ProfileDatePrecisionWire } from "../../api/patient-profile/patientProfileTypes";
-import type { FactCorrectionWorkDraftLinkView } from "../../api/patient-profile/factCorrectionViewModels";
+import type { FactCorrectionWorkDraftLinkView, FactCorrectionOptionsView } from "../../api/patient-profile/factCorrectionViewModels";
 import type { ProfileItemView } from "../../api/patient-profile";
 import type { PatientProfileModel } from "../../features/patient-profile/model";
 import { locatorsForItem } from "../../features/patient-profile/model";
@@ -49,6 +49,7 @@ interface DateRangeDraft {
 }
 
 interface CorrectionDraft {
+  variableId?: string | null;
   assertedObject: string;
   valueText: string;
   valueBoolean: "" | "true" | "false";
@@ -171,6 +172,7 @@ function updatesForDraft(
     return {
       error: value.error,
       updates: {
+        ...(draft.variableId === undefined ? {} : { variableId: draft.variableId }),
         assertedObject: draft.assertedObject.trim() || null,
         value: value.value,
         unit: draft.unit.trim() || null,
@@ -444,17 +446,32 @@ function CorrectionFields({
   draft,
   onChange,
   disabled,
+  options,
 }: {
   targetKind: FactCorrectionTargetKind;
   item: ProfileItemView;
   draft: CorrectionDraft;
   onChange: (patch: Partial<CorrectionDraft>) => void;
   disabled: boolean;
+  options: FactCorrectionOptionsView | null;
 }) {
   if (targetKind === "fact") {
     return (
       <div className="profile-correction-fields">
         <div className="profile-correction-fields__grid">
+          {options && <label className="profile-correction-field"><span>所属审核项目</span>
+            <select value={draft.variableId === undefined ? options.variableId ?? "" : draft.variableId ?? ""}
+              disabled={disabled} onChange={event => {
+                const variableId = event.target.value || null;
+                onChange({ variableId });
+              }}>
+              <option value="">仅保留在个例档案</option>
+              {options.variableId && !options.variables.some(value => value.variableId === options.variableId)
+                && <option value={options.variableId} disabled>原关联项目（仅保留）</option>}
+              {[...options.variables].sort((a, b) => a.label.localeCompare(b.label, "zh-CN")).map(value =>
+                <option key={value.variableId} value={value.variableId}>{value.label}{value.unit && value.unit !== "unitless" ? ` · ${value.unit}` : ""}</option>)}
+            </select>
+          </label>}
           <TextField
             label="记录项目"
             value={draft.assertedObject}
@@ -632,6 +649,15 @@ export function ProfileFactCorrectionDialog({
   const [statusError, setStatusError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const completionReported = useRef<string | null>(null);
+  const options = useLoad(async signal => {
+    const read = getPatientProfileRepository().getFactCorrectionOptions;
+    if (targetKind !== "fact" || !read) return null;
+    const result = await read(subjectId, reviewEpisodeId, item.sourceId, { signal });
+    if (result.targetRevision !== item.sourceRevision) throw new PatientProfileDecodeError("记录版本已变化，请打开最新档案。");
+    return result;
+  }, [subjectId, reviewEpisodeId, item.sourceId, item.sourceRevision, targetKind]);
+  const variableOptions = options.state.status === "success" ? options.state.data : null;
+  const variableLabels = useMemo(() => new Map(variableOptions?.variables.map(value => [value.variableId, value.label]) ?? []), [variableOptions]);
   const closeBlocked =
     submitted !== null &&
     (jobStatus === null || !isTerminal(jobStatus.state));
@@ -896,7 +922,9 @@ export function ProfileFactCorrectionDialog({
                 draft={draft}
                 onChange={updateDraft}
                 disabled={locked}
+                options={variableOptions}
               />
+              {targetKind === "fact" && options.state.status === "error" && <p className="profile-correction-warning">所属审核项目暂时无法读取，原关联保持不变。</p>}
             </section>
 
             <SourceLocatorList model={model} item={item} onOpenEvidence={onOpenEvidence} />
@@ -972,12 +1000,14 @@ export function ProfileFactCorrectionDialog({
                       snapshot={preview.oldSnapshot}
                       targetKind={targetKind}
                       item={item}
+                      variableLabels={preview.variableLabels?.size ? preview.variableLabels : variableLabels}
                     />
                     <CorrectionSnapshotPanel
                       label="拟修改"
                       snapshot={preview.newSnapshot}
                       targetKind={targetKind}
                       item={item}
+                      variableLabels={preview.variableLabels?.size ? preview.variableLabels : variableLabels}
                     />
                   </div>
                   <section className={`profile-correction-impact${preview.impact.scopeKind === "node" ? " profile-correction-impact--node" : ""}`}>
@@ -992,7 +1022,7 @@ export function ProfileFactCorrectionDialog({
                         将重新整理本审核节点全部事实。既有档案版本保持不变，完成后只会生成新的当前档案版本。
                       </p>
                     )}
-                    {preview.impact.fallbackReason !== null &&
+                    {preview.impact.scopeKind !== "node" && preview.impact.fallbackReason !== null &&
                       preview.impact.fallbackReason !== "将重新整理本审核节点全部事实" && (
                       <p className="profile-correction-impact__reason">{preview.impact.fallbackReason}</p>
                     )}

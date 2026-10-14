@@ -9,7 +9,7 @@ import type { ReviewHistoryRunDetailView } from "../../api/review-history/review
 import { actionStateLabel, actionTargetLabel, decisionLabel, gapTypeLabel, stageLabel } from "../../domain/labels";
 import { useApplicationMode } from "../../app/applicationMode";
 import { reviewConditionNotes } from "../../domain/reviewConditionNotes";
-import { frozenReviewExport, reviewEvidenceScopeNote, reviewLimitationLabel, reviewLimitationContext } from "../../domain/frozenReviewExport";
+import { frozenReviewExport, reviewEvidenceScopeNote, reviewLimitationLabel, reviewLimitationContext, reviewSystemIssueLabel } from "../../domain/frozenReviewExport";
 
 export function reviewTime(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -255,7 +255,10 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
         {[{ label: "系统尚未完成的核对", issues: draft.systemIssues?.filter(issue => issue.kind !== "excerpt_unverified") ?? [] },
           { label: "尚未用于判断的原件记录", issues: draft.systemIssues?.filter(issue => issue.kind === "excerpt_unverified") ?? [] }].map(group => group.issues.length > 0 &&
           <details className="reports-print__conditions" key={group.label}><summary>{group.label}（{group.issues.length}）</summary>
-            <ul>{group.issues.map((issue, index) => <li key={index}><strong>{issue.affectedCodes.join("、")}</strong>：{issue.detail}<small>{issue.alternative}</small></li>)}</ul>
+            <ul>{group.issues.map((issue, index) => <li key={index}>
+              <strong>{reviewSystemIssueLabel(issue)}</strong>：{issue.detail}
+              <small>{issue.alternative}</small>
+            </li>)}</ul>
           </details>)}
       </section> : <section className="reports-print__section" aria-labelledby="reports-actions-title">
         <h3 id="reports-actions-title">补充资料与核实事项</h3>

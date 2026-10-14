@@ -136,6 +136,31 @@ const requestInput: FactCorrectionRequestInput = {
 };
 
 describe("Patient Profile fact-correction HTTP contract", () => {
+  it("读取明确记录的中文项目选择，拒绝异患者、重复身份及未知类型", async () => {
+    const payload = { subject_id: "subject", review_episode_id: "episode", target_id: "fact", target_revision: 1,
+      variable_id: null, variables: [{ variable_id: "reading", label_zh: "测量读数", value_type: "number", canonical_unit: "mg/L" }] };
+    const repo = createPatientProfileHttp({ fetchImpl: async () => jsonResponse(payload) });
+    const result = await repo.getFactCorrectionOptions!("subject", "episode", "fact");
+    expect(result.variables[0]).toEqual({ variableId: "reading", label: "测量读数", valueType: "number", unit: "mg/L" });
+    for (const altered of [{ ...payload, subject_id: "other" }, { ...payload, target_id: "other" },
+      { ...payload, variables: [...payload.variables, ...payload.variables] },
+      { ...payload, variables: [{ ...payload.variables[0], value_type: "guess" }] }]) {
+      const invalid = createPatientProfileHttp({ fetchImpl: async () => jsonResponse(altered) });
+      await expect(invalid.getFactCorrectionOptions!("subject", "episode", "fact")).rejects.toThrow();
+    }
+  });
+
+  it("明确清除关联时发送null，未改关联时沿用旧请求", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const repo = createPatientProfileHttp({ fetchImpl: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body))); return jsonResponse(correctionPreview());
+    } });
+    await repo.previewFactCorrection("subject", "episode", requestInput);
+    await repo.previewFactCorrection("subject", "episode", { ...requestInput, updates: { ...requestInput.updates, variableId: null } });
+    expect(bodies[0]).not.toHaveProperty("variable_id");
+    expect(bodies[1]).toHaveProperty("variable_id", null);
+  });
+
   it("maps a preview request and keeps preview read-only", async () => {
     const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
     const repo = createPatientProfileHttp({

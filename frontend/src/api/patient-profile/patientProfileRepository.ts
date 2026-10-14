@@ -18,6 +18,7 @@ import type {
   FactCorrectionPreviewView,
   FactCorrectionSubmitView,
   FactCorrectionWorkDraftLinkView,
+  FactCorrectionOptionsView,
 } from "./factCorrectionViewModels";
 
 export {
@@ -56,6 +57,9 @@ export interface PatientProfileRepository {
     options?: PatientProfileRequestOptions,
   ): Promise<FactSourceReadingView[]>;
   /** POST .../fact-corrections/preview：只读预览，不创建修订或任务。 */
+  getFactCorrectionOptions?(
+    subjectId: string, reviewEpisodeId: string, factId: string, options?: PatientProfileRequestOptions,
+  ): Promise<FactCorrectionOptionsView>;
   previewFactCorrection(
     subjectId: string,
     reviewEpisodeId: string,

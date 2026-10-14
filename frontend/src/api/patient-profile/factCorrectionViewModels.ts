@@ -46,6 +46,7 @@ export interface FactCorrectionImpactView {
 }
 
 export interface FactCorrectionPreviewView {
+  variableLabels?: ReadonlyMap<string, string>;
   targetKind: FactCorrectionTargetKind;
   targetKindLabel: string;
   targetId: string;
@@ -54,6 +55,44 @@ export interface FactCorrectionPreviewView {
   newSnapshot: FactCorrectionJsonRecord;
   impact: FactCorrectionImpactView;
   siblingFactIds: string[];
+}
+
+export interface FactCorrectionVariableOption {
+  variableId: string;
+  label: string;
+  valueType: "number" | "category" | "boolean" | "date" | "exposure" | "procedure";
+  unit: string | null;
+}
+
+export interface FactCorrectionOptionsView {
+  subjectId: string;
+  reviewEpisodeId: string;
+  targetId: string;
+  targetRevision: number;
+  variableId: string | null;
+  variables: FactCorrectionVariableOption[];
+}
+
+export function decodeFactCorrectionOptions(payload: unknown): FactCorrectionOptionsView {
+  const row = record(payload, "correction_options");
+  if (!Array.isArray(row.variables)) throw new PatientProfileDecodeError("所属数据项目须为清单。");
+  const variables = row.variables.map((value, index): FactCorrectionVariableOption => {
+    const path = `correction_options.variables[${index}]`;
+    const item = record(value, path);
+    const valueType = requiredString(item.value_type, path);
+    if (valueType !== "number" && valueType !== "category" && valueType !== "boolean"
+        && valueType !== "date" && valueType !== "exposure" && valueType !== "procedure") {
+      throw new PatientProfileDecodeError("数据项目类型无法识别。");
+    }
+    return { variableId: requiredString(item.variable_id, path), label: requiredString(item.label_zh, path),
+      valueType, unit: nullableString(item.canonical_unit ?? null, path) };
+  });
+  if (new Set(variables.map(item => item.variableId)).size !== variables.length) {
+    throw new PatientProfileDecodeError("数据项目身份重复，不能选择。");
+  }
+  return { subjectId: requiredString(row.subject_id, "subject_id"), reviewEpisodeId: requiredString(row.review_episode_id, "review_episode_id"),
+    targetId: requiredString(row.target_id, "target_id"), targetRevision: positiveInteger(row.target_revision, "target_revision"),
+    variableId: nullableString(requiredField(row, "variable_id", "correction_options"), "variable_id"), variables };
 }
 
 export interface FactCorrectionSubmitView {
@@ -66,6 +105,7 @@ export interface FactCorrectionSubmitView {
 }
 
 export interface FactCorrectionRecordView {
+  variableLabels?: ReadonlyMap<string, string>;
   correctionId: string;
   targetKind: FactCorrectionTargetKind;
   targetKindLabel: string;
@@ -219,6 +259,12 @@ function jsonRecord(value: unknown, path: string): FactCorrectionJsonRecord {
   return decoded;
 }
 
+function variableLabels(value: unknown): ReadonlyMap<string, string> {
+  if (value === undefined) return new Map();
+  return new Map(Object.entries(record(value, "variable_labels")).map(([key, label]) =>
+    [key, requiredString(label, "variable_labels")]));
+}
+
 function targetKind(value: unknown, path: string): FactCorrectionTargetKind {
   if (value === "fact" || value === "event" || value === "exposure") return value;
   throw new PatientProfileDecodeError(`${path} 不是可识别的修订对象。`);
@@ -336,6 +382,7 @@ export function decodeFactCorrectionPreview(payload: unknown): FactCorrectionPre
     throw new PatientProfileDecodeError("preview.sibling_facts 应为清单。");
   }
   return {
+    variableLabels: variableLabels(row.variable_labels),
     targetKind: targetKind(requiredField(row, "target_kind", "preview"), "preview.target_kind"),
     targetKindLabel: requiredString(
       requiredField(row, "target_kind_label", "preview"),
@@ -389,6 +436,7 @@ export function decodeFactCorrectionSubmit(payload: unknown): FactCorrectionSubm
 function correctionRecord(value: unknown, path: string): FactCorrectionRecordView {
   const row = record(value, path);
   return {
+    variableLabels: variableLabels(row.variable_labels),
     correctionId: requiredString(requiredField(row, "correction_id", path), `${path}.correction_id`),
     targetKind: targetKind(requiredField(row, "target_kind", path), `${path}.target_kind`),
     targetKindLabel: requiredString(

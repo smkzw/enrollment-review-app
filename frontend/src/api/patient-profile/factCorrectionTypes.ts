@@ -31,6 +31,7 @@ export interface FactCorrectionDateRangeWire {
 
 export interface FactCorrectionUpdates {
   factType?: string | null;
+  variableId?: string | null;
   supportedRequirementIds?: string[] | null;
   polarity?: string | null;
   assertedObject?: string | null;
@@ -68,6 +69,7 @@ export interface FactCorrectionRequestWire {
   reason: string;
   operator_id?: string;
   fact_type?: string | null;
+  variable_id?: string | null;
   supported_requirement_ids?: string[] | null;
   polarity?: string | null;
   asserted_object?: string | null;
@@ -111,6 +113,7 @@ export function encodeFactCorrectionRequest(
   };
   if (input.operatorId !== undefined) wire.operator_id = input.operatorId;
   if (updates.factType !== undefined) wire.fact_type = updates.factType;
+  if (updates.variableId !== undefined) wire.variable_id = updates.variableId;
   if (updates.supportedRequirementIds !== undefined) {
     wire.supported_requirement_ids = updates.supportedRequirementIds;
   }

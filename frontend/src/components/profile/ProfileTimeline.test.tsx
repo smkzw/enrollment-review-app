@@ -100,4 +100,16 @@ describe("交互式临床时间图", () => {
     wire.lanes.flatMap(lane => lane.items)[0]!.reference_abnormality = "invented" as never;
     expect(() => decodePatientProfileRevision(wire)).toThrow("参考范围异常");
   });
+
+  it("数月范围的刻度不重复月份，改用准确日期；不改变记录的日期精度", () => {
+    const model = modelFor([makeFactItem({ lane: "medication", start_range: date("2025-04-01") }),
+      makeFactItem({ item_id: "last", source_id: "last-source", lane: "medication", start_range: date("2025-06-01") })]);
+    const before = JSON.stringify(model.items);
+    const { container } = render(<ProfileTimeline model={model} />);
+    const labels = [...container.querySelectorAll(".clinical-chart__axis > div > span")].map(value => value.textContent);
+    expect(labels).toHaveLength(5);
+    expect(new Set(labels).size).toBe(5);
+    expect(labels.every(label => /\d{4}\/\d{1,2}\/\d{1,2}/.test(label ?? ""))).toBe(true);
+    expect(JSON.stringify(model.items)).toBe(before);
+  });
 });

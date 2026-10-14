@@ -470,6 +470,20 @@ describe("入排审核工作台", () => {
     expect(group).toHaveAttribute("open");
     expect(within(group).getByRole("button")).toBeInTheDocument();
   });
+
+  it("待处理的不同风险组都默认展开，标识与数字开头的标题保留分隔", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]! }, { ...review.clauses[1]!, ruleCode: "REQ-14", textSummary: "12导联心电图",
+        decision: "indeterminate", decisionLabel: "证据不足", gapType: null }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const queue = await screen.findByLabelText("问题队列");
+    const groups = [...queue.querySelectorAll("details")];
+    expect(groups).toHaveLength(2);
+    expect(groups.every(value => value.open)).toBe(true);
+    const item = within(queue).getByRole("button", { name: /REQ-14/ });
+    expect(item.querySelector(".eligibility-clause__identity")?.textContent).toBe("REQ-14 12导联心电图");
+  });
   it("核对方法未支持时显示处理方向，不要求研究者替软件作判断", async () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
       ...review, clauses: [{ ...review.clauses[0]!, determinationMode: "restricted",

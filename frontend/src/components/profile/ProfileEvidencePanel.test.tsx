@@ -7,7 +7,7 @@
  * - 冲突条目按并列记录展示，不合成坐标。
  */
 
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -315,7 +315,7 @@ describe("ProfileEvidencePanel", () => {
     const model = adaptPatientProfile(decodePatientProfileRevision(wire));
     const { container } = render(<ProfileEvidencePanel model={model} item={openItem(model)} onClose={vi.fn()} />);
     const choices = await screen.findByRole("combobox", { name: "原文依据" });
-    expect(choices).toHaveValue("object-excerpt");
+    await waitFor(() => expect(choices).toHaveValue("object-excerpt"));
     const quote = container.querySelector(".profile-locator__excerpt")!;
     expect(quote.textContent).toBe("血压 120/80 mmHg，未见其他异常");
     expect(quote.querySelector("mark")).toHaveTextContent("血压");
