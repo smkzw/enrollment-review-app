@@ -19,7 +19,7 @@
 │                                                                    S7 结论组装 ─► S8 写工作稿    │
 │                                                                    (确定性)       ReviewRun     │
 │ H2 MM处理问题卡片（更正/补证/已核）──► 触发 S1/S4 起受影响部分重算 ──► 新 ReviewRun(supersedes) │
-│ H3 签发（0.2.0 仅记录）                                                                          │
+│ 查看当前结果／历史与导出（不收集最终入组决定或签发意见）                                           │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -52,7 +52,7 @@
 | S7 结论组装 | det | S5、S6、风险标记 | 六结论＋置信＋原因＋问题卡片＋系统问题 | **新增** `app/services/review_conclusions.py` | — |
 | S8 写工作稿 | det | S7 | `ReviewRun(run_kind=work_draft)`＋`work_draft_items`＋`system_issues` | **新增** `app/services/work_draft_review.py` | 身份不一致→停止 |
 | H2 处理问题 | human | 卡片 | 更正／补证／已核记录 | 复用 `fact_correction_service`、增量上传 | — |
-| H3 签发 | human | 工作稿 | 签发记录 | 复用 `publish_frozen_review` 路径（0.2.0 只接记录） | — |
+| 历史与导出 | det＋human | 已保存工作稿 | 当前／历史展示、导出 | 复用历史读取与导出；旧正式签发代码保留，不在0.2.0新增签发流程 | 读取失败显式提示，不重算旧稿 |
 
 ### 2.3 图的运行规则
 
@@ -298,7 +298,7 @@ Job 幂等键：`(review_episode_id, 资料快照哈希, rule_set_id, rule_set_r
 
 | 页面／组件 | 改动 |
 |---|---|
-| `EligibilityWorkbenchPage.tsx` | 默认显示"问题卡片"视图（新组件 `IssueCardList`），点卡片进入现有三栏；保留"全部条款"切换 |
+| `EligibilityWorkbenchPage.tsx` | 默认问题列表＋宽判定详情；点来源打开宽幅原件侧栏，关闭恢复当前选择。保留全部条款与历史；不为入组决定收集评估理由 |
 | 文案 | `frontend/src/domain/labels.ts:64-76` 与后端 `_DECISION_LABELS`（`eligibility_review_projection.py:114-126`）统一为 PRD §7；修正后端把 `professional_judgment` 标为"无法判定"的不一致（`:121`） |
 | 置信 | `eligibilityReviewTypes.ts`、`eligibilityReviewViewModels.ts` 保留 `confidence`、`confidenceReasons`；结果页低置信只留简短标记，具体原因不占正文（可悬停查看）；不是删除原回执或改置信等级 |
 | 系统问题栏 | 工作台右上角"系统问题（n）"抽屉，列出受影响条款与替代路径 |
@@ -314,6 +314,10 @@ Job 幂等键：`(review_episode_id, 资料快照哈希, rule_set_id, rule_set_r
 
 `EligibilityWorkbenchPage`去完整研究名称，以项目代号、节点和版本识别；中栏权重增大，提供列表收起／恢复。判定理由按中文句界与已有项目标签排版、显式使用分点标记，不生成新医学摘要；原件区保留当前摘录，其他依据及核对范围按需展开，冲突仍显式保留。工作稿操作和次要方法说明下钻，已有更正及取证入口不改。工具栏“定位当前查看页”只滚动到正在浏览的页；“返回本条依据页”恢复该条真实来源及摘录，两者不混淆。实际Ego三宽屏与点击已检查，实际浏览器缩放尚未验证；构建／视口模拟均不能冒充全部视觉验收。
 
+2026-10-14 展示纠偏：全局导航为可叠加展开的图标轨；原件侧栏用原生dialog承载既有查看器，负责焦点、Esc、滚动隔离，不新建来源数据层。个例默认时间线，由现有Profile条目的原始时间与值派生，只分组显示、不合并独立观察、不推断缺失日期；无日期的内容单列。来源强度、生成信息及修订谱系下钻，风险与真实未决仍可达。规则备选通过既有手工编辑／审定入口执行，不让说明文字冒充可选动作。
+
+时间线按既有语义分区分类，默认病史与诊疗，异常／矛盾等实际高亮即使位于背景区仍保留；基本情况一键可达，计数是记录数，不是独立采集次数。`ProfileItemDTO.date_role`从已存事实精确ID批量只读补充，核同项目／个例／节点／资料处理身份、源修订、值／单位／极性／对象／日期范围及定位一致；仅展示原日期用途，不重新采用事实，不要求最新规则下重读旧资料。报告日、采样日、就诊日分别展示，未知用途为原文日期；月／年／范围保持原精度。普通来源只铺当前摘录，其他来源选择可达；真实冲突仍并列。规则所选修改未保存前，单条及跨条目批量批准均不得将旧解释当作已完成修改。
+
 ## 10. 评测工具
 
 - `scripts/import_manual_ie.py`：读 CSV／Excel（列：`subject_id, stage, official_code, manual_conclusion, note`；`manual_conclusion` 取值：满足／不满足／未触发／已触发／不确定），写入 `data_v2` 下的评测表，不进入任何提示词。
@@ -326,7 +330,7 @@ Job 幂等键：`(review_episode_id, 资料快照哈希, rule_set_id, rule_set_r
 | 跨章控制链（`protocol_control_execution`、`protocol_control_*` agents／gates／contracts） | 不在主流程排队；相关测试保留 |
 | prepared-review 子任务链（`prepared_review_workflow.py` 及绑定资格等子任务） | 不再由前端调用 |
 | 逐页双 VLM、页判读 main-A/main-B | 不默认运行；局部视觉复核保留为手动入口 |
-| 方法采用 gate（`ENROLLMENT_REVIEW_METHOD_APPROVAL_GATE_ID`） | 只用于 H3 签发 |
+| 方法采用 gate（`ENROLLMENT_REVIEW_METHOD_APPROVAL_GATE_ID`） | 保留旧正式签发消费者，不进入0.2.0工作稿／展示主路径 |
 | v1 应用（`app/main.py`、`app/router`、`app/pipeline`、`static/`） | 保持只读；`run.sh` 改为启动 v2（0.2.0-WP0） |
 
 0.2.0-M3 之后再评估是否删除上述代码。

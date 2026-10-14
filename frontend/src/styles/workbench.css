@@ -1014,10 +1014,11 @@
 }
 
 .eligibility-workbench .workbench-panes {
-  grid-template-columns: minmax(0, 0.65fr) minmax(0, 1.6fr) minmax(0, 1.75fr);
+  grid-template-columns: minmax(18rem, 0.8fr) minmax(0, 2.4fr);
   gap: var(--space-3);
 }
-.eligibility-workbench--reading .workbench-panes { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+.eligibility-workbench--reading .workbench-panes { grid-template-columns: minmax(0, 1fr); }
+.eligibility-open-source { margin-block: var(--space-3); }
 .eligibility-workbench .workbench-pane { max-height: max(24rem, calc(100dvh - var(--topbar-height) - 13rem)); }
 .eligibility-workbench .workbench-pane__head { margin-bottom: var(--space-2); padding-bottom: var(--space-2); }
 .eligibility-workbench .workbench-pane__subtitle { font-size: var(--font-size-small); font-weight: 400; margin-block: var(--space-1); }

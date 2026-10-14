@@ -55,6 +55,17 @@ export function formatProfileDateTime(iso: string | null): string | null {
   }).format(date)}（北京时间）`;
 }
 
+export function profileDateRoleLabel(item: ProfileItemView): string {
+  if (item.kind === "exposure") return "用药／治疗时间";
+  if (item.kind === "event") return "事件时间";
+  switch (item.dateRole) {
+    case "sampling": return "采样日期";
+    case "report": return "报告日期";
+    case "visit": return "就诊日期";
+    default: return "原文日期";
+  }
+}
+
 export interface ProfileLaneModel {
   lane: ProfileLaneWire;
   laneLabel: string;

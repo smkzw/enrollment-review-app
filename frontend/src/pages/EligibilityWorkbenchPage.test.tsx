@@ -144,6 +144,10 @@ function installSourcePages() {
   }) });
 }
 
+async function openOriginal() {
+  await userEvent.click(await screen.findByRole("button", { name: "查看原件" }));
+}
+
 describe("入排审核工作台", () => {
   it("长核对说明默认保留首句，完整限定可展开，不改判断", async () => {
     const condition = { ...review.clauses[0]!, decision: "indeterminate" as const, decisionLabel: "证据不足",
@@ -277,6 +281,7 @@ describe("入排审核工作台", () => {
       }] }],
     }) });
     render(<EligibilityWorkbenchPage />);
+    await openOriginal();
     const summary = await screen.findByText("已核对 1 页，未见相关记录 · 查看范围");
     expect(summary.closest("details")).not.toHaveAttribute("open");
     await userEvent.click(summary);
@@ -318,6 +323,7 @@ describe("入排审核工作台", () => {
         }] }],
     }) });
     render(<EligibilityWorkbenchPage />);
+    await openOriginal();
     await userEvent.click(await screen.findByText("病历依据与核对范围（1）"));
     const button = await screen.findByRole("button", { name: /本次判断的病历依据/ });
     await userEvent.click(button);
@@ -340,6 +346,7 @@ describe("入排审核工作台", () => {
       }],
     }) });
     render(<EligibilityWorkbenchPage />);
+    await openOriginal();
     const summary = await screen.findByText("病历依据与核对范围（4）");
     expect(summary.closest("details")).toHaveAttribute("open");
     const range = screen.getByText("查看其余检索范围").closest("details")!;
@@ -366,6 +373,7 @@ describe("入排审核工作台", () => {
       }] }],
     }) });
     render(<EligibilityWorkbenchPage />);
+    await openOriginal();
     await screen.findByText("已检索 1 页，部分尚未核清 · 查看范围");
     expect(screen.queryByText("已核对 1 页，未见相关记录 · 查看范围")).not.toBeInTheDocument();
   });
@@ -380,6 +388,7 @@ describe("入排审核工作台", () => {
     }) });
     render(<EligibilityWorkbenchPage />);
     await userEvent.click(await screen.findByRole("button", { name: "全部条款" }));
+    await openOriginal();
     await userEvent.click(await screen.findByText("病历依据与核对范围（1）"));
     await userEvent.click(await screen.findByRole("button", { name: /本次判断的病历依据/ }));
     expect(screen.queryByText("当前条款没有已采用事实，可浏览全部原件页核实。")).not.toBeInTheDocument();
@@ -396,6 +405,7 @@ describe("入排审核工作台", () => {
       }] }],
     }) });
     render(<EligibilityWorkbenchPage />);
+    await openOriginal();
     await userEvent.click(await screen.findByText("病历依据与核对范围（1）"));
     const button = await screen.findByRole("button", { name: /已找到相关原文，待核清/ });
     await userEvent.click(button);
@@ -415,10 +425,15 @@ describe("入排审核工作台", () => {
     const reasons = detail.querySelector(".eligibility-reason-lines");
     expect(reasons?.children).toHaveLength(2);
     expect(reasons?.textContent).toBe(reason);
+    expect(screen.queryByLabelText("原件面板")).not.toBeInTheDocument();
+    await openOriginal();
+    await userEvent.click(screen.getByRole("button", { name: "关闭原件" }));
     await userEvent.click(screen.getByRole("button", { name: "收起条款列表" }));
     expect(screen.queryByLabelText("审核要点列表")).not.toBeInTheDocument();
     expect(detail).toBeInTheDocument();
+    await openOriginal();
     expect(screen.getByLabelText("原件面板")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "关闭原件" }));
     await userEvent.click(screen.getByRole("button", { name: "显示条款列表" }));
     expect(screen.getByLabelText("审核要点列表")).toBeInTheDocument();
   });
@@ -501,6 +516,7 @@ describe("入排审核工作台", () => {
     installSourcePages();
     const user = userEvent.setup();
     render(<EligibilityWorkbenchPage />);
+    await openOriginal();
     const reference = await screen.findByRole("button", { name: "检验报告.pdf 第 1 页" });
     expect(screen.queryByText("private-fact-id")).not.toBeInTheDocument();
     expect(screen.getAllByText("检查结果见原件")).toHaveLength(2);

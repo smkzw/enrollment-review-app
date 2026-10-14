@@ -2005,7 +2005,7 @@
 }
 .protocol-rule-reviews label { display: inline-flex; align-items: center; gap: 8px; }
 .protocol-rule-reviews fieldset label { margin-right: 16px; }
-.protocol-rule-reviews select, .protocol-rule-reviews input:not([type="checkbox"]) {
+.protocol-rule-reviews select, .protocol-rule-reviews input:not([type="checkbox"]):not([type="radio"]) {
   min-height: 32px;
   max-width: 100%;
   border: 1px solid #c6cfd8;
@@ -2014,6 +2014,9 @@
   background: #fff;
 }
 .protocol-rule-reviews__actions { display: flex; gap: 8px; margin-block: 16px; }
+.protocol-review-option__head label { flex: 1; min-width: 0; cursor: pointer; }
+.protocol-review-option__head input[type="radio"] { flex-shrink: 0; margin: 0; }
+.protocol-review-advice fieldset legend { font-size: var(--font-size-base); font-weight: 600; }
 .protocol-rule-reviews details { margin-block: 12px; }
 .protocol-variable-bindings { border-top: 1px solid #d6dde5; padding-block: 1rem; }
 .protocol-variable-bindings h2 { font-size: 1.125rem; }

@@ -145,6 +145,7 @@ export interface ProfileItemWire {
   duration_status: ProfileDurationStatusWire | null;
   duration_status_label: string | null;
   record_time: string | null;
+  date_role?: "sampling" | "report" | "visit" | "unknown" | null;
 
   // 溯源与定位
   source_strength: ProfileSourceStrengthWire | null;

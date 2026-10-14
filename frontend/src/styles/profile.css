@@ -7,6 +7,9 @@
   gap: var(--space-4);
   align-items: start;
 }
+.subjects-layout--timeline { grid-template-columns: minmax(0, 1fr); }
+.profile-normalization-details { margin-block: var(--space-2); color: var(--color-muted); }
+.profile-normalization-details > summary { cursor: pointer; }
 
 /* 正式资料目录：仅呈现已保存的项目、受试者与审核节点，不混入后续审核结论。 */
 .catalog-selection,
@@ -1705,3 +1708,31 @@
 .judgment-search-card__error {
   color: var(--color-ink);
 }
+.profile-timeline__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); }
+.profile-timeline__head h3 { margin: 0; font-size: var(--font-size-title); }
+.profile-timeline__categories { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
+.profile-timeline__categories button { background: transparent; border: 1px solid var(--color-line); border-radius: var(--radius-s); padding: var(--space-2) var(--space-3); font: inherit; color: var(--color-muted); cursor: pointer; }
+.profile-timeline__categories button[aria-pressed="true"] { background: var(--color-teal-bg); color: var(--color-teal); border-color: var(--color-teal); font-weight: 600; }
+.profile-timeline__groups, .profile-timeline__group > ul { list-style: none; padding: 0; margin: 0; }
+.profile-timeline__group { display: grid; grid-template-columns: minmax(9rem, 0.22fr) minmax(0, 1fr); gap: var(--space-5); padding-block: var(--space-4); border-top: 1px solid var(--color-line); }
+.profile-timeline__date h4 { margin: 0; font-size: var(--font-size-base); color: var(--color-ink); font-weight: 600; }
+.profile-timeline__date > span { color: var(--color-muted); }
+.profile-timeline__record { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); padding-bottom: var(--space-3); margin-bottom: var(--space-3); border-bottom: 1px solid var(--color-line); }
+.profile-timeline__record:last-child { border-bottom: 0; margin-bottom: 0; }
+.profile-timeline__record-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.profile-timeline__value { font-weight: 600; }
+.profile-timeline__attention { color: var(--color-red); font-weight: 600; }
+.profile-timeline__category { color: var(--color-muted); margin-left: auto; }
+.profile-timeline__open { display: flex; align-items: start; gap: var(--space-2); min-width: 0; border: 0; padding: var(--space-2); border-radius: var(--radius-s); background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.profile-timeline__open:hover, .profile-timeline__open[aria-expanded="true"] { background: var(--color-muted-bg); }
+.profile-timeline__open > svg { flex-shrink: 0; margin-top: var(--space-1); }
+.profile-timeline__record-content { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; flex: 1; }
+.profile-timeline__source { align-self: start; margin-top: var(--space-2); }
+.profile-timeline__details { grid-column: 1 / -1; min-width: 0; }
+.profile-timeline__details .profile-item { box-shadow: none; border: 0; }
+.profile-head__record-info summary { cursor: pointer; color: var(--color-muted); }
+.profile-head__record-info { align-self: center; }
+.profile-head__record-info[open] { flex-basis: 100%; order: 3; }
+.profile-head__record-info p { margin-block: var(--space-1); }
+.profile-locator-list > label { display: grid; gap: var(--space-2); min-width: 0; }
+.profile-locator-list > label select { width: 100%; min-width: 0; }

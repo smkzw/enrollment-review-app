@@ -13,6 +13,12 @@ import {
 import { createCatalogTrial, setCatalogRepository } from "../api/catalog";
 import { setEligibilityReviewRepository } from "../api/eligibility-review";
 
+// jsdom lacks the native dialog methods. Focus trapping/inert is checked in the real browser.
+if (typeof HTMLDialogElement !== "undefined") {
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
+}
+
 beforeEach(() => {
   setProtocolWorkbenchRepository(createProtocolWorkbenchStub());
   setCatalogRepository(createCatalogTrial());

@@ -21,6 +21,7 @@ const emptyContent = {};
 export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources, content = emptyContent, onReady, onEdit }: Props) {
   const [data, setData] = useState<RuleReviews | null>(null);
   const [selection, setSelection] = useState<string | null>(null);
+  const [choices, setChoices] = useState<Record<string, number>>({});
   const [kind, setKind] = useState<ReviewerKind>("medical_manager");
   const [excluded, setExcluded] = useState(false);
   const [variables, setVariables] = useState("");
@@ -47,12 +48,19 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
     .sort((a, b) => Number(!!b.reasons.length) - Number(!!a.reasons.length)), [items, category, filter, search]);
   const selectedItem = visible.find(item => item.entry.official_code === selection) ?? visible[0] ?? null;
   const entry = selectedItem?.entry ?? null;
+  const adviceGroups = selectedItem ? ruleReviewAdvice(selectedItem, content) : [];
+  const unsavedChoiceCodes = new Set(items.filter(item => ruleReviewAdvice(item, content).some(advice => {
+    const option = advice.options[choices[`${item.entry.official_code}:${advice.componentId ?? advice.title}`] ?? -1];
+    return option && !option.keep && !option.current;
+  })).map(item => item.entry.official_code));
+  const hasUnsavedChoice = entry ? unsavedChoiceCodes.has(entry.official_code) : false;
   const selectedBatch = visible.filter(item => checked.has(item.entry.official_code));
+  const batchHasUnsavedChoice = selectedBatch.some(item => unsavedChoiceCodes.has(item.entry.official_code));
   const reviewedCount = data?.entries.filter(entry => entry.review).length ?? 0;
 
   useEffect(() => {
     const controller = new AbortController();
-    setData(null); setSelection(null); setChecked(new Set()); setBatchOpen(false); setError(null); setBusy(false); onReady(false);
+    setData(null); setSelection(null); setChoices({}); setChecked(new Set()); setBatchOpen(false); setError(null); setBusy(false); onReady(false);
     requestRuleReviews(jobId, { signal: controller.signal }).then(value => {
       if (controller.signal.aborted) return;
       if (value.draft_revision_id !== revisionId) throw new Error("草稿已更新，请刷新工作区。");
@@ -100,7 +108,7 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
       result_variables: current ? variables.split(/[、,，\s]+/).filter(Boolean) : item.entry.review?.result_variables ?? [] };
   }
   async function submitBatch() {
-    if (!selectedBatch.length) return;
+    if (!selectedBatch.length || batchHasUnsavedChoice) return;
     setBusy(true); setError(null);
     try {
       const value = await requestRuleReviews(jobId, { draftRevisionId: revisionId, reviewerKind: kind,
@@ -122,7 +130,6 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
     {savedNotice && <p role="status">{savedNotice}</p>}
     {error && <p role="alert">{error} <button className="button" onClick={() => setReload(value => value + 1)}>重新读取</button></p>}
     {data && <>
-      {reviewedCount > 0 && <p className="protocol-review-retained">已审定且内容未变的条目无需重复批准。</p>}
       <div className="protocol-review-categories" aria-label="要求分类">
         <button type="button" aria-pressed={category === "all"} onClick={() => setCategory("all")} disabled={busy}>全部 {items.length}</button>
         {Object.entries(reviewCategories).map(([key, label]) => <button key={key} type="button" aria-pressed={category === key}
@@ -141,7 +148,7 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
         <div className="protocol-review-batch-actions">
           <label><input type="checkbox" checked={visible.length > 0 && visible.every(item => checked.has(item.entry.official_code))}
             disabled={busy || !visible.length} onChange={event => setChecked(event.target.checked ? new Set(visible.map(item => item.entry.official_code)) : new Set())} /> 选择当前列表</label>
-          <button className="button button--primary" disabled={busy || !selectedBatch.length || !integrity.publishable}
+          <button className="button button--primary" disabled={busy || !selectedBatch.length || !integrity.publishable || batchHasUnsavedChoice}
             onClick={() => setBatchOpen(true)}>批准所选 {selectedBatch.length} 项</button>
         </div>
         <ul aria-label="审定条目">{visible.map(item => <li key={item.entry.official_code}>
@@ -153,7 +160,7 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
             {item.rule && <span>{item.rule.components.length + item.rule.restrictedComponents.length} 个子项</span>}
             <span>{[...new Set(item.requirements.map(value => value.stage))].join("、")}</span>
             <span className={item.reasons.length ? "protocol-review-confidence--low" : "protocol-review-confidence--high"}>
-              {item.reasons.length ? "把握度不足 · 重点核对" : "把握度较高 · 结构清楚"}</span></span>
+              {item.reasons.length ? "重点核对" : "结构清楚"}</span></span>
         </button>
       </li>)}</ul>
         {!visible.length && <p role="status">{category === "medication" ? "此类尚无独立审定条目；官方入排标准内已有的用药条件仍在原编号下查看，不能据此认为方案没有用药限制。" : "当前范围没有条目。"}</p>}
@@ -172,20 +179,31 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
         <ProtocolReviewLogic item={selectedItem} content={content} bindings={bindings} />
         {selectedItem.reasons.length > 0 && <details className="protocol-review-advice" aria-label="备选解释与处理" key={entry.official_code}>
           <summary><SlidersHorizontal size={16} aria-hidden="true" /> 比较备选解释与手动调整</summary>
-          {ruleReviewAdvice(selectedItem, content).map((advice, index) => <details className="protocol-review-advice__group" key={advice.componentId ?? advice.title} open={index === 0}>
-            <summary><GitBranch size={16} aria-hidden="true" />{advice.title}</summary><p className="protocol-review-advice__analysis">{advice.analysis}</p>
-            <ol>{advice.options.map((option, index) => <li key={option.label} className={option.recommended ? "is-recommended" : ""}>
+          {adviceGroups.map((advice, groupIndex) => {
+            const choiceKey = `${entry.official_code}:${advice.componentId ?? advice.title}`;
+            const selected = advice.options[choices[choiceKey] ?? -1];
+            return <details className="protocol-review-advice__group" key={choiceKey} open={groupIndex === 0}>
+            <summary><GitBranch size={16} aria-hidden="true" />{advice.title}</summary>
+            <details><summary>为什么需要核对</summary><p className="protocol-review-advice__analysis">{advice.analysis}</p></details>
+            <fieldset><legend>选择解释方向</legend><ol>{advice.options.map((option, index) => <li key={option.label} className={option.recommended ? "is-recommended" : ""}>
               <div className="protocol-review-option__head"><span className="protocol-review-option__letter">{String.fromCharCode(65 + index)}</span>
-                <strong>{option.label}</strong></div>
+                <label><input type="radio" name={`choice:${choiceKey}`} value={index} checked={choices[choiceKey] === index} disabled={busy}
+                  onChange={() => setChoices(previous => ({ ...previous, [choiceKey]: index }))} /><strong>{option.label}</strong></label></div>
               <div className="protocol-review-option__tags">
                 {option.current && <span>当前解释</span>}{option.recommended && <span><Check size={13} aria-hidden="true" />推荐核对方向</span>}
               </div>
               <p><b>判断变化</b>{option.explanation}</p>
-              {onEdit && advice.componentId && (option.operator || option.manual || option.label === "分组或手动调整") && <button className="button" disabled={busy}
-                onClick={() => onEdit(advice.componentId!, option.operator)}>
-                {option.operator ? "按此方向预览修订" : "打开手动调整"}</button>}
-            </li>)}</ol>
-          </details>)}
+            </li>)}</ol></fieldset>
+            {selected && (selected.keep || selected.current) ? <button className="button button--primary"
+              disabled={busy || !integrity.publishable || hasUnsavedChoice} onClick={() => void submit(false)}>确认现有解释并审定本条</button>
+              : selected?.defer ? <button className="button" disabled={busy}
+                onClick={() => { if (entry.review) void submit(true); else setSavedNotice("本条保留待审，未改变现有解释。"); }}>
+                {entry.review ? "撤销本条审定，保留待审" : "确认暂不审定"}</button>
+              : <button className="button" disabled={busy || !selected || !onEdit || !advice.componentId}
+                onClick={() => { if (selected && advice.componentId) onEdit?.(advice.componentId, selected.operator); }}>
+                {selected?.operator ? "按此方向预览修订" : "打开手动调整"}</button>}
+          </details>;
+          })}
         </details>}
         {onEdit && entry.kind === "rule" && selectedItem.rule?.components[0] && <button className="button" disabled={busy}
           onClick={() => onEdit(selectedItem.rule?.components[0]?.componentId)}>手动修改本条解析</button>}
@@ -199,9 +217,10 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
         </fieldset>}
         {entry.review && <p>已由{entry.review.reviewed_by}于{new Date(entry.review.reviewed_at).toLocaleString("zh-CN")}审定{entry.review.note === "excluded" ? "，不参与入组前判定" : ""}。</p>}
         <div className="protocol-rule-reviews__actions">
-          <button className="button button--primary" disabled={busy || !integrity.publishable} onClick={() => void submit(false)}>{busy ? "正在保存…" : "审定通过"}</button>
+          <button className="button button--primary" disabled={busy || !integrity.publishable || hasUnsavedChoice} onClick={() => void submit(false)}>{busy ? "正在保存…" : "审定通过"}</button>
           <button className="button" disabled={busy || !entry.review} onClick={() => void submit(true)}>撤销审定</button>
         </div>
+        {hasUnsavedChoice && <p role="status">所选调整尚未保存，请先预览修订；或改选保留现有解释。</p>}
         <details><summary>原文依据与位置</summary><ProtocolDraftSourcePane component={null} fileName={null}
           selectionLabel={entry.kind === "rule" ? entry.official_code : entry.label}
           locators={displayProtocolSourceLocators(sources.sourceSpans, entry.source_refs)} /></details>

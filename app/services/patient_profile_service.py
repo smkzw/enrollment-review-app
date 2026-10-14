@@ -93,6 +93,26 @@ def _chain_heads(entities: list[Any], identity_attr: str) -> list[Any]:
 class PatientProfileService:
     """Project current records and verified rule-only source reuse without copying facts."""
 
+    def fact_date_roles(self, session: Session, revision: PatientProfileRevisionV2) -> dict[str, str | None]:
+        """Expose original date roles in one batch; never change a saved profile or infer an event date."""
+        items = [item for lane in revision.lanes for item in lane.items if item.kind == ProfileItemKind.FACT]
+        facts = ClinicalFactV2Repository(session).get_many([item.source_id for item in items])
+        # A profile keeps its exact source IDs; this read must not switch to today's chain heads.
+        # Reading original date metadata is not fact adoption or a fresh clinical source review.
+        display_scope = revision.authority.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"})
+        roles = {}
+        for item in items:
+            fact = facts[item.source_id]
+            if (fact.authority.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"}) != display_scope
+                    or fact.revision != item.source_revision or fact.date_range != item.start_range
+                    or fact.value != item.value or type(fact.value) is not type(item.value)
+                    or fact.polarity != item.polarity or fact.unit != item.unit
+                    or fact.asserted_object != item.asserted_object
+                    or sorted(fact.locator_ids) != sorted(item.locator_ids)):
+                raise PatientProfileProjectionError("时间线记录与原事实不一致")
+            roles[item.source_id] = fact.date_role
+        return roles
+
     def fact_source_readings(
         self, session: Session, revision: PatientProfileRevisionV2, fact_id: str,
     ) -> list[ClinicalFactCandidateV2]:

@@ -6,6 +6,7 @@ export {
   adaptPatientProfile,
   clinicalDisplayLanes,
   formatProfileDateTime,
+  profileDateRoleLabel,
   locatorsForItem,
   PROFILE_LANE_ORDER,
   type PatientProfileModel,

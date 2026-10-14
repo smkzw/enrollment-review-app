@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { FileSearch, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { EvidenceReader } from "../components/evidence/EvidenceReader";
 import {
   getCatalogRepository,
   getEvidenceRepository,
@@ -615,7 +616,7 @@ function EligibilityClauseDetail({
         <summary>关联事实的原件位置（{clause.factRefs.length}）</summary>
         {clause.factRefs.length === 0 ? (
           <p className="eligibility-muted">{hasJudgedSource(clause)
-            ? "本次判断依据病历原文，具体摘录与页码见右侧。"
+            ? "本次判断依据病历原文，可打开原件查看。"
             : clause.determinationMode === "restricted"
             ? "方案要求尚待核清，暂不据此判定病历事实。"
             : "当前条款没有关联事实。"}</p>
@@ -914,6 +915,8 @@ export function EligibilityWorkbenchPage() {
     ? requestedPageValue : 0;
   const [selectedFactIndex, setSelectedFactIndex] = useState(0);
   const [queueVisible, setQueueVisible] = useState(true);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [evidenceVisited, setEvidenceVisited] = useState(false);
 
   const projects = useLoad((signal) => getCatalogRepository().listProjects(signal), []);
   const projectList = projects.state.status === "success" ? projects.state.data : [];
@@ -965,6 +968,8 @@ export function EligibilityWorkbenchPage() {
 
   useEffect(() => {
     setSelectedFactIndex(0);
+    setEvidenceOpen(false);
+    setEvidenceVisited(false);
   }, [selectedEpisode?.reviewEpisodeId, componentParam]);
 
   const setProject = (projectId: string) =>
@@ -1107,7 +1112,7 @@ export function EligibilityWorkbenchPage() {
           onClick={() => setQueueVisible(value => !value)}>
           {queueVisible ? <PanelLeftClose size={17} aria-hidden="true" /> : <PanelLeftOpen size={17} aria-hidden="true" />}
         </button>
-        <span>{reviewData.verificationOnly ? "规则包为构建者验证用；工作稿未签发。" : "工作稿未签发。"}</span>
+        {reviewData.verificationOnly && <span>验证用规则包</span>}
         <span
           className="eligibility-undetermined"
           role="status"
@@ -1243,8 +1248,12 @@ export function EligibilityWorkbenchPage() {
                 ? reviewData.componentClauses?.filter(item => item.ruleCode === selectedClause.ruleCode
                   && item.ruleComponentId !== selectedClause.ruleComponentId && isUndeterminedDecision(item.decision)) : []}
               selectedFactIndex={selectedFactIndex}
-              onSelectFact={setSelectedFactIndex}
+              onSelectFact={index => { setSelectedFactIndex(index); setEvidenceVisited(true); setEvidenceOpen(true); }}
             /> : <p className="eligibility-muted">当前筛选没有符合条件的审核要点。</p>}
+            {selectedClause && <button type="button" className="button button--primary eligibility-open-source"
+              onClick={() => { setEvidenceVisited(true); setEvidenceOpen(true); }}>
+              <FileSearch size={17} aria-hidden="true" /> 查看原件
+            </button>}
             {selectedClause && !!reviewData.componentClauses?.some(item => item.ruleCode === selectedClause.ruleCode) &&
               <details className="eligibility-clause-detail">
                 <summary>逐项条件与依据</summary>
@@ -1258,18 +1267,18 @@ export function EligibilityWorkbenchPage() {
               </details>}
           </div>
         </section>
-        <section className="workbench-col eligibility-workbench__evidence">
-          {selectedClause && <EligibilityEvidencePanel
+        {selectedClause && evidenceVisited && <EvidenceReader title={`${selectedClause.ruleCode} · 原始资料`}
+          open={evidenceOpen} onClose={() => setEvidenceOpen(false)}>
+          <EligibilityEvidencePanel
             review={reviewData}
             clause={selectedClause}
             selectedFactIndex={selectedFactIndex}
             onSelectFact={setSelectedFactIndex}
-          />}
-        </section>
+          />
+        </EvidenceReader>}
       </div>
       <footer className="eligibility-workbench__footnote">
         规则修订：{formatSnapshotVersion(reviewData.ruleSetRevision, null)} · 节点修订：{formatSnapshotVersion(selectedEpisode.revision, null)}
-        {" · 原件及旧版结果保留"}
       </footer>
     </div>
   );

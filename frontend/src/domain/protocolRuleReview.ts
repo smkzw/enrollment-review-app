@@ -9,7 +9,7 @@ export interface RuleReviewAdvice {
   componentId: string | null;
   title: string;
   analysis: string;
-  options: { label: string; explanation: string; operator?: "all" | "any"; recommended?: boolean; current?: boolean; manual?: boolean }[];
+  options: { label: string; explanation: string; operator?: "all" | "any"; recommended?: boolean; current?: boolean; manual?: boolean; keep?: boolean; defer?: boolean }[];
 }
 
 /** Suggestions are review directions, never edits or model-calibrated probabilities. */
@@ -40,7 +40,7 @@ export function ruleReviewAdvice(item: RuleReviewPresentation, content: Record<s
       options: [
         { label: "各项必须同时满足", explanation: `只有所有独立条件都成立才${item.rule?.kind === "exclusion" ? "触发这一排除子项" : "满足这一入选子项"}；项目内部的任选关系保留。`, operator: "all", recommended: localChoice },
         { label: "任一项满足即可", explanation: `任一独立条件成立即可${item.rule?.kind === "exclusion" ? "触发这一排除子项" : "满足这一入选子项"}，不要求其他条件同时成立。`, operator: "any", recommended: explicitWholeChoice, current: true },
-        { label: "分组或手动调整", explanation: "部分条件须同时成立、部分可任选时，逐层指定关系，不把整组统一改成全部或任一。" },
+        { label: "分组或手动调整", manual: true, explanation: "部分条件须同时成立、部分可任选时，逐层指定关系，不把整组统一改成全部或任一。" },
       ],
     });
   }
@@ -66,16 +66,16 @@ export function ruleReviewAdvice(item: RuleReviewPresentation, content: Record<s
             explanation: "原文要求研究者判断时保留；缺少记录在病例审核中说明，不能把单纯异常标记当书面判断。" },
           { label: "按已有诊断或客观结果核对", manual: true,
             explanation: "仅在原文允许且记录能证明对应条件时选择；需同时核对条件的数据对应与资料要求，不能只取消判断标记。" },
-          { label: "暂保留待审，明确依据后再定", explanation: "来源或医学含义仍不足时不作无依据的推荐，也不默认为已批准。" },
+          { label: "暂保留待审，明确依据后再定", defer: true, explanation: "来源或医学含义仍不足时不作无依据的推荐，也不默认为已批准。" },
         ],
       });
     }
   }
   if (item.reasons.length && !result.length) result.push({ componentId: components[0]?.componentId ?? null,
     title: "这一项为什么需要核对", analysis: item.reasons.join("\n"), options: [
-      { label: "核对原文后保留现有解释", explanation: "提示可能来自复杂条件或书面判断要求，不一定是解析错误；原文支持时可以保持现状。" },
+      { label: "核对原文后保留现有解释", keep: true, explanation: "提示可能来自复杂条件或书面判断要求，不一定是解析错误；原文支持时可以保持现状。" },
       { label: "手动调整当前条款", manual: true, explanation: "可调整条件、数值、时间窗及所需资料；修改后需重新审定，不自动发布。" },
-      { label: "暂不审定，补充依据", explanation: "来源或关系仍不清时保留待审；不会把未核内容当作已批准。" },
+      { label: "暂不审定，补充依据", defer: true, explanation: "来源或关系仍不清时保留待审；不会把未核内容当作已批准。" },
     ] });
   return result;
 }

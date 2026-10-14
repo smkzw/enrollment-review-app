@@ -71,6 +71,7 @@ export interface ProfileItemView {
   durationStatus: ProfileDurationStatusWire | null;
   durationStatusLabel: string | null;
   recordTime: string | null;
+  dateRole: "sampling" | "report" | "visit" | "unknown" | null;
 
   sourceStrength: ProfileSourceStrengthWire | null;
   sourceStrengthLabel: string | null;
@@ -620,6 +621,8 @@ function decodeItem(value: unknown, index: number): ProfileItemView {
       `${path}.title`,
     ),
     subtitle: requiredNullableString(row, "subtitle", `${path}.subtitle`),
+    dateRole: row.date_role == null ? null : enumValue(row.date_role,
+      ["sampling", "report", "visit", "unknown"] as const, `${path}.date_role`, "日期用途"),
     startRange: decodeDateRange(
       field(row, "start_range", `${path}.start_range`),
       `${path}.start_range`,

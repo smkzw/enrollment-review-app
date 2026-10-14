@@ -8,7 +8,6 @@
 
 import type { ProfileGapTypeWire, ProfileItemView } from "../../api/patient-profile";
 import type { PatientProfileModel } from "../../features/patient-profile/model";
-import { Info } from "lucide-react";
 import {
   AttentionIcon,
   ConflictIcon,
@@ -139,6 +138,7 @@ export function ProfileTodoSummaryCard({
 }: ProfileTodoSummaryCardProps) {
   const counts = summarizeProfileTodos(model);
   const hasTodos = PROFILE_TODO_GROUPS.some((group) => counts[group] > 0);
+  if (!hasTodos) return null;
 
   return (
     <section
@@ -152,7 +152,6 @@ export function ProfileTodoSummaryCard({
         </h3>
       </header>
 
-      {hasTodos ? (
         <div className="profile-todo-summary__items" aria-label="四组待办数量">
           {PROFILE_TODO_GROUPS.map((group) => {
             const count = counts[group];
@@ -179,12 +178,6 @@ export function ProfileTodoSummaryCard({
             );
           })}
         </div>
-      ) : (
-        <div className="profile-todo-summary__clear" role="status">
-          <Info size={17} aria-hidden="true" />
-          <span>档案中暂无单列问题；入排结论以本节点工作稿为准。</span>
-        </div>
-      )}
     </section>
   );
 }

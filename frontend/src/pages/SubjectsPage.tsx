@@ -23,7 +23,8 @@ import { useLoad } from "../app/useLoad";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
 import { ProfileStatusBanner } from "../components/profile/ProfileStatusBanner";
 import { ProfileNormalizationStatus } from "../components/profile/ProfileNormalizationStatus";
-import { ProfileHighlights } from "../components/profile/ProfileHighlights";
+import { ProfileTimeline } from "../components/profile/ProfileTimeline";
+import { EvidenceReader } from "../components/evidence/EvidenceReader";
 import {
   ProfileTodoSummaryCard,
   firstProfileTodoItemId,
@@ -457,34 +458,10 @@ export function SubjectsPage() {
         </div>
       </section>
 
-      <div className={`subjects-layout${evidenceItem !== null ? " subjects-layout--with-evidence" : ""}`}>
-        {evidenceItem === null && (
-        <aside className="subjects-list" aria-label="受试者列表">
-          <h2 className="subjects-list__title">受试者</h2>
-          <ul>
-            {subjectList.map((subject: CatalogSubjectView) => {
-              const isActive = subject.subjectId === selectedSubject?.subjectId;
-              return (
-                <li key={subject.subjectId}>
-                  <button
-                    type="button"
-                    className={`subjects-list__item${isActive ? " subjects-list__item--active" : ""}`}
-                    aria-pressed={isActive}
-                    onClick={() => setSubject(subject.subjectId)}
-                  >
-                    <span className="subjects-list__code">{subject.subjectCode}</span>
-                    <span className="subjects-list__center">{centerLabel(subject)}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </aside>
-        )}
+      <div className="subjects-layout subjects-layout--timeline">
 
         <section className="profile" aria-label="个例全景">
           <div className="profile-nodes" role="group" aria-label="审核节点">
-            {evidenceItem !== null && (
               <label className="profile-subject-switch">
                 <span>受试者</span>
                 <select
@@ -499,7 +476,6 @@ export function SubjectsPage() {
                   ))}
                 </select>
               </label>
-            )}
             {episodeList.map((episode) => {
               const isActive = episode.reviewEpisodeId === selectedEpisode?.reviewEpisodeId;
               return (
@@ -592,12 +568,12 @@ export function SubjectsPage() {
                 </button>
               </div>
             )}
-            <JudgmentSearchCard
+            <details className="profile-section"><summary>查找病历中的研究者判断</summary><JudgmentSearchCard
               subjectId={selectedSubject.subjectId}
               reviewEpisodeId={selectedEpisode.reviewEpisodeId}
               evidenceNavigation={profile.state.data.evidenceNavigation}
               onSelectCandidate={openJudgmentSearchCandidate}
-            />
+            /></details>
             </>
           )}
           {historyOpen && (
@@ -611,9 +587,6 @@ export function SubjectsPage() {
                       : 0}
                   </span>
                 </h3>
-                <p className="profile-section__note">
-                  每条记录都保留修改前后内容、来源定位和影响范围；既有档案版本不会被覆盖。
-                </p>
               </header>
               <ProfileCorrectionHistory
                 state={correctionHistory.state}
@@ -625,12 +598,15 @@ export function SubjectsPage() {
         </section>
 
         {evidenceItem !== null && evidenceModel !== null && (
+          <EvidenceReader title="原始资料" onClose={closeEvidence}>
           <ProfileEvidencePanel
             model={evidenceModel}
             item={evidenceItem}
             initialPageArtifactId={evidencePageArtifactId}
             onClose={closeEvidence}
+            showClose={false}
           />
+          </EvidenceReader>
         )}
         {correctionItem !== null && correctionKind !== null && correctionModel !== null && (
           <ProfileFactCorrectionDialog
@@ -763,14 +739,10 @@ function ProfileBody({
           </p>
         </div>
         <div className="profile-head__node">
-          <span className="count-chip">档案第 {model.revision} 版</span>
-          <span className="count-chip">生成时间 {formatProfileDateTime(model.generatedAt) ?? "未记录"}</span>
-          <span className="count-chip">档案待核对 {model.pendingReviewCount} 项</span>
-          {unverifiedSourceCount > 0 && (
-            <span className="count-chip" title="这些来源记录保留核实提示；结论及实际使用范围以本节点工作稿为准">
-              来源提示 {unverifiedSourceCount} 项
-            </span>
-          )}
+          <details className="profile-head__record-info"><summary>资料信息</summary>
+            <p>档案第 {model.revision} 版 · {formatProfileDateTime(model.generatedAt) ?? "生成时间未记录"}</p>
+            <p>档案待核对 {model.pendingReviewCount} 项{unverifiedSourceCount > 0 && <> · <span>来源提示 {unverifiedSourceCount} 项</span></>}</p>
+          </details>
           <RouteLink
             to={`/subjects/${subjectId}/evidence`}
             params={{ episode: episode.reviewEpisodeId }}
@@ -807,9 +779,9 @@ function ProfileBody({
               className="chip"
               aria-pressed={showAll}
               onClick={onToggleAll}
-              title={showAll ? "返回首屏重点" : "展开完整历时信息"}
+              title={showAll ? "返回临床时间线" : "按类型查看"}
             >
-              {showAll ? "返回首屏" : "全部历时信息"}
+              {showAll ? "临床时间线" : "按类型查看"}
             </button>
           )}
           <button
@@ -837,18 +809,12 @@ function ProfileBody({
           onRequestCorrection={onRequestCorrection}
         />
       ) : (
-        <section className="profile-section" aria-labelledby="profile-highlights-title">
-          <h3 id="profile-highlights-title" className="profile-section__title">
-            首屏重点
-            <span className="section-count">{model.highlights.length}</span>
-          </h3>
-          <ProfileHighlights
+          <ProfileTimeline
             key={model.revisionId}
             model={model}
             onOpenEvidence={onOpenEvidence}
             onRequestCorrection={onRequestCorrection}
           />
-        </section>
       )}
     </>
   );

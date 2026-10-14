@@ -11,6 +11,7 @@ import type { PatientProfileModel } from "../../features/patient-profile/model";
 import {
   formatProfileDateTime,
   locatorsForItem,
+  profileDateRoleLabel,
 } from "../../features/patient-profile/model";
 
 export interface ProfileItemCardProps {
@@ -98,7 +99,7 @@ export function ProfileItemCard({
       <dl className="profile-item__meta">
         {(eventStart !== null || eventEnd !== null) && (
           <div className="profile-item__row">
-            <dt>事件时间</dt>
+            <dt>{profileDateRoleLabel(item)}</dt>
             <dd>
               {eventStart ?? "起止未记录"}
               {eventEnd !== null && eventEnd !== eventStart ? ` 至 ${eventEnd}` : ""}

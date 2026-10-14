@@ -59,7 +59,7 @@ describe("图标可访问性（合同 §7.1）", () => {
 
   it("图标为 lucide 风格 svg（stroke 属性，非文本填充伪图标）", () => {
     render(<SideNav currentPath="/today" />);
-    const svg = document.querySelector(".side-nav__menu-button svg");
+    const svg = document.querySelector(".side-nav__pin svg");
     expect(svg).not.toBeNull();
     expect(svg).toHaveAttribute("stroke");
     expect(svg?.textContent ?? "").not.toMatch(/[\u4e00-\u9fff]/);

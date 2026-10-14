@@ -289,6 +289,29 @@ def test_latest_profile_returns_complete_dto_with_lanes(client) -> None:
     assert fact["value"] == "120/80"
 
 
+def test_profile_date_role_comes_from_frozen_fact_without_rewriting_profile(client) -> None:
+    chain = _seed(client, "date-role")
+    with client.app.state.session_factory() as session:
+        from app.domain.contracts.facts import clinical_fact_stable_identity
+        original = _fact(chain)
+        identity = clinical_fact_stable_identity(authority=original.authority, fact_type=original.fact_type,
+            profile_lane=original.profile_lane, asserted_object=original.asserted_object,
+            polarity=original.polarity, value=original.value, unit=original.unit,
+            date_range=original.date_range, assertion_basis=original.assertion_basis, date_role="report")
+        ClinicalFactV2Repository(session).create(_fact(chain, date_role="report", stable_identity=identity))
+        revision = PatientProfileService().generate(session, authority=_authority(chain), created_at=NOW, generated_at=NOW)
+        before = revision.model_dump_json()
+        session.commit()
+    response = client.get(_latest_url(chain))
+    assert response.status_code == 200, response.text
+    item = next(item for lane in response.json()["lanes"] for item in lane["items"] if item["kind"] == "fact")
+    assert item["date_role"] == "report"
+    assert item["start_range"]["source_text"] == "2026-03-01"
+    with client.app.state.session_factory() as session:
+        assert PatientProfileService().get(session, revision.patient_profile_revision_id).model_dump_json() == before
+    assert client.get(_latest_url(chain).replace(chain["subject_id"], "other-subject", 1)).status_code == 404
+
+
 def test_profile_fact_source_readings_keep_raw_candidate_and_revision_scope(client) -> None:
     chain = _seed(client, "source-readings")
     with client.app.state.session_factory() as session:

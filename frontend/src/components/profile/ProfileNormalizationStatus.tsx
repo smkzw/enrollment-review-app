@@ -59,7 +59,7 @@ export function ProfileNormalizationStatus({
           ? "succeeded"
           : "progress";
 
-  return (
+  const content = (
     <div
       className={`profile-normalization profile-normalization--${tone}`}
       role={state.phase === "failed" ? "alert" : "status"}
@@ -89,4 +89,7 @@ export function ProfileNormalizationStatus({
       )}
     </div>
   );
+  return state.phase === "succeeded"
+    ? <details className="profile-normalization-details"><summary>资料整理已完成</summary>{content}</details>
+    : content;
 }

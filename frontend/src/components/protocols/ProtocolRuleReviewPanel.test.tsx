@@ -36,7 +36,7 @@ describe("逐条审定", () => {
     vi.stubGlobal("fetch", fetcher);
     render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity} sources={sources} onReady={vi.fn()} />);
     await screen.findByText("待审定 1 项 · 已审定 1 项");
-    expect(screen.getByText("已审定且内容未变的条目无需重复批准。")).toBeInTheDocument();
+    expect(screen.queryByText("已审定且内容未变的条目无需重复批准。")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("选择IN-01")).not.toBeInTheDocument();
     expect(screen.getByLabelText("选择IN-02")).toBeInTheDocument();
     expect(fetcher.mock.calls.every(([, options]) => options?.method === "GET")).toBe(true);
@@ -187,8 +187,60 @@ describe("逐条审定", () => {
     expect(groups.map(group => group.open)).toEqual([true, false]);
     await userEvent.click(groups[1].querySelector("summary")!);
     expect(groups[1].open).toBe(true);
+    expect(groups[1].querySelector("button")).toBeDisabled();
+    await userEvent.click(groups[1].querySelector('input[type="radio"][value="0"]')!);
+    expect(screen.getByRole("button", { name: "审定通过" })).toBeDisabled();
     await userEvent.click(groups[1].querySelector("button")!);
     expect(onEdit).toHaveBeenCalledWith("b", "all");
     expect(fetcher.mock.calls.every(([, options]) => !options || options.method === "GET")).toBe(true);
+    await userEvent.click(groups[1].querySelector('input[type="radio"][value="1"]')!);
+    expect(screen.getByRole("button", { name: "审定通过" })).toBeEnabled();
+  });
+
+  it("保留现有解释需要选择和明确确认；暂不审定不偷偷写批准", async () => {
+    const review = { record_id: "confirmed", official_code: "IN-01", rule_content_hash: hash,
+      reviewer_kind: "builder_verification", reviewed_by: "构建者验证", reviewed_at: "2026-10-14T00:00:00Z",
+      action: "approved", note: null, result_variables: [] };
+    const fetcher = vi.fn(async (url: RequestInfo | URL, options?: RequestInit) => {
+      if (options?.method === "POST") {
+        expect(String(url)).toMatch(/\/draft\/rules\/IN-01\/review$/);
+        expect(JSON.parse(String(options.body))).toMatchObject({ reviewer_kind: "builder_verification",
+          expected_revision_id: "revision", rule_content_hash: hash });
+        return new Response(JSON.stringify({ ...initial, all_reviewed: true, entries: [{ ...entry, review }], history: [review] }));
+      }
+      return new Response(JSON.stringify(String(url).endsWith("/variables")
+        ? { job_id: "job", draft_revision_id: "revision", variables: [], predicates: [] } : initial));
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity} sources={sources} onReady={vi.fn()} />);
+    await userEvent.click(await screen.findByText("比较备选解释与手动调整"));
+    await userEvent.click(screen.getByRole("radio", { name: "暂不审定，补充依据" }));
+    await userEvent.click(screen.getByRole("button", { name: "确认暂不审定" }));
+    expect(screen.getByText("本条保留待审，未改变现有解释。")).toBeInTheDocument();
+    expect(fetcher.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
+    await userEvent.click(screen.getByRole("radio", { name: "核对原文后保留现有解释" }));
+    expect(fetcher.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "审定身份" }), "builder_verification");
+    await userEvent.click(screen.getByRole("button", { name: "确认现有解释并审定本条" }));
+    await screen.findByText("该条审定已保存。没有发布规则包。");
+    expect(fetcher.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+  });
+
+  it("切换条目不会让未保存的选择被集中批准", async () => {
+    const second = { ...entry, official_code: "IN-02", label: "病史要求" };
+    const fetcher = vi.fn(async (url: RequestInfo | URL, _options?: RequestInit) => new Response(JSON.stringify(String(url).endsWith("/variables")
+      ? { job_id: "job", draft_revision_id: "revision", variables: [], predicates: [] }
+      : { ...initial, entries: [entry, second] })));
+    vi.stubGlobal("fetch", fetcher);
+    render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity} sources={sources} onReady={vi.fn()} />);
+    await userEvent.click(await screen.findByText("比较备选解释与手动调整"));
+    await userEvent.click(screen.getByRole("radio", { name: "暂不审定，补充依据" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "选择当前列表" }));
+    await userEvent.click(screen.getByRole("button", { name: /IN-02.*病史要求/ }));
+    expect(screen.getByRole("button", { name: "审定通过" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "批准所选 2 项" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("checkbox", { name: "选择IN-01" }));
+    expect(screen.getByRole("button", { name: "批准所选 1 项" })).toBeEnabled();
+    expect(fetcher.mock.calls.every(([, options]) => options?.method !== "POST")).toBe(true);
   });
 });

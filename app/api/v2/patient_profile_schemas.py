@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -242,6 +242,7 @@ class ProfileItemDTO(_StrictModel):
     duration_status: str | None = None
     duration_status_label: str | None = None
     record_time: datetime | None = None
+    date_role: Literal["sampling", "report", "visit", "unknown"] | None = None
 
     # 溯源与定位
     source_strength: str | None = None
@@ -366,7 +367,7 @@ def _date_range_dto(value: Any) -> ProfileDateRangeDTO | None:
     )
 
 
-def profile_item_dto(item: ProfileItem) -> ProfileItemDTO:
+def profile_item_dto(item: ProfileItem, *, date_role: str | None = None) -> ProfileItemDTO:
     """把领域 Profile 条目映射为中文原生 DTO（机器值 + 标签，无临床推断）。"""
     lane = item.lane.value if hasattr(item.lane, "value") else item.lane
     kind = item.kind.value if hasattr(item.kind, "value") else item.kind
@@ -395,6 +396,7 @@ def profile_item_dto(item: ProfileItem) -> ProfileItemDTO:
             else item.duration_status
         ),
         record_time=_as_utc(item.record_time),
+        date_role=date_role,
         source_strength=(
             item.source_strength.value
             if hasattr(item.source_strength, "value")
@@ -482,6 +484,7 @@ def profile_revision_dto(
     revision: PatientProfileRevisionV2,
     *,
     locators: dict[str, EvidenceLocatorArtifact] | None = None,
+    fact_date_roles: dict[str, str | None] | None = None,
 ) -> PatientProfileRevisionDTO:
     """把领域 revision 映射为带证据导航上下文的 DTO（状态/历史/深链一次给全）。"""
     status = revision.status.value if hasattr(revision.status, "value") else revision.status
@@ -515,7 +518,7 @@ def profile_revision_dto(
                 lane_label=PROFILE_LANE_LABELS.get(
                     section.lane.value, section.lane.value
                 ),
-                items=[profile_item_dto(item) for item in section.items],
+                items=[profile_item_dto(item, date_role=(fact_date_roles or {}).get(item.source_id)) for item in section.items],
             )
             for section in revision.lanes
         ],
