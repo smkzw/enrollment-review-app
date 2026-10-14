@@ -32,6 +32,7 @@ import {
 } from "../api/evidence";
 import { matchRouteParams } from "../app/routes";
 import { RouteLink, updateParams, useHashRoute } from "../app/router";
+import { isInterfaceTrialMode } from "../app/runtimeMode";
 import { useLoad, type UseLoadResult } from "../app/useLoad";
 import {
   EmptyState,
@@ -1501,7 +1502,7 @@ export function EvidencePage() {
     subject.centerCode !== null && subject.centerName !== null
       ? `${subject.centerCode}｜${subject.centerName}`
       : (subject.centerCode ?? subject.centerName ?? "中心信息尚未填写");
-  const projectLabel = `${project.projectName} · ${project.studyPhaseLabel}`;
+  const projectLabel = `${isInterfaceTrialMode() ? project.projectName : project.protocolCode} · ${project.studyPhaseLabel}`;
   const pendingCount = pendingCountOf(preview);
   const viewedPairConsistent = viewedRevisionConsistent;
   const viewedMemberByVersionId = new Map(
@@ -1911,6 +1912,7 @@ export function EvidencePage() {
       </header>
       <ContextBand
         projectLabel={projectLabel}
+        projectTitle={project.projectName}
         protocolVersion={project.officialVersion}
         subjectCode={subjectCode}
         centerLabel={centerLabel}

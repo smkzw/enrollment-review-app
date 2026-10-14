@@ -44,6 +44,23 @@ function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onCon
     return () => { active = false; controller.abort(); };
   }, [subjectId, episodeId, jobId, offset, retry]);
 
+  const questions = data?.items.filter((item) => item.kind === "reading_uncertainty") ?? [];
+  const otherText = data?.items.filter((item) => item.kind === "unquoted_text") ?? [];
+  function renderItem(item: NormalizationUnresolvedPageView["items"][number]) {
+    return <li key={item.itemId}>
+      <div><strong>{item.sourceExcerpt ?? item.message}</strong>
+        <details className="normalization-unresolved__explanation"><summary>核对说明</summary><p>{item.reason}</p></details>
+      </div>
+      <div className="normalization-unresolved__sources">{item.sources.map((source) => <RouteLink
+        key={source.pageArtifactId} to={`/subjects/${encodeURIComponent(subjectId)}/evidence`}
+        params={{ episode: episodeId, ocrSnapshot: data!.evidenceSnapshotId,
+          ocrRevision: data!.processingRevisionId, sourcePage: source.pageArtifactId }}
+        className="button" title={`${source.fileName} · 第${source.pageNumber}页`}>
+        <Eye size={16} />{source.fileName} · 第{source.pageNumber}页
+      </RouteLink>)}</div>
+    </li>;
+  }
+
   return <section className="normalization-unresolved" aria-label="尚未整理清楚的资料">
     <h3>尚未整理清楚的资料{data ? `（${data.total}项）` : ""}</h3>
     {busy && <p role="status">正在读取…</p>}
@@ -53,24 +70,18 @@ function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onCon
     {data && <>
       {!data.isCurrent && <p>这是历史资料版本，不能代替当前审核结果。</p>}
       {!data.textAccountingApplied && <p>这次记录未逐段检查是否漏项。</p>}
-      <p>这些记录不代表患者缺少检查，也不能证明图片、手写和每项临床含义已核清。</p>
+      <p className="normalization-unresolved__caption">读取疑问不等于患者缺少检查，尚未核清的内容仍保留。</p>
       {data.isCurrent && data.runId && (data.failedPageCount ?? 0) > 0 && onContinue &&
         <button className="button" type="button" disabled={continuing} onClick={async () => {
           setContinuing(true);
           try { await onContinue(data.runId!); } finally { setContinuing(false); }
         }}><RefreshCw size={16} />{continuing ? "正在提交" : `继续整理未完成的${data.failedPageCount}页`}</button>}
       {data.total === 0 && <p>暂无待核对记录。入排结论仍以审核结果为准。</p>}
-      <ul>{data.items.map((item) => <li key={item.itemId}>
-        <div><span>{item.kind === "unquoted_text" ? "尚未整理的文字" : "读取时留下的疑问"}</span>
-          <strong>{item.message}</strong><p>{item.reason}</p></div>
-        <div className="normalization-unresolved__sources">{item.sources.map((source) => <RouteLink
-          key={source.pageArtifactId} to={`/subjects/${encodeURIComponent(subjectId)}/evidence`}
-          params={{ episode: episodeId, ocrSnapshot: data.evidenceSnapshotId,
-            ocrRevision: data.processingRevisionId, sourcePage: source.pageArtifactId }}
-          className="button" title={`${source.fileName} · 第${source.pageNumber}页`}>
-          <Eye size={16} />{source.fileName} · 第{source.pageNumber}页
-        </RouteLink>)}</div>
-      </li>)}</ul>
+      <ul>{questions.map(renderItem)}</ul>
+      {otherText.length > 0 && <details className="normalization-unresolved__other">
+        <summary>其他待核对文字（{data.hasMore ? "已加载" : ""}{otherText.length}项）</summary>
+        <ul>{otherText.map(renderItem)}</ul>
+      </details>}
       {data.hasMore && <button type="button" className="button" disabled={busy}
         onClick={() => setOffset(data.items.length)}>加载更多</button>}
     </>}

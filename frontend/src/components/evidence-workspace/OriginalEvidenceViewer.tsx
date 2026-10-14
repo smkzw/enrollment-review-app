@@ -117,6 +117,17 @@ export function OriginalEvidenceViewer({
     setZoom(next);
   }
 
+  useEffect(() => {
+    // Resizing changes the height of every preceding image in the continuous view.
+    const alignSelectedPage = () => {
+      userScrolling.current = false;
+      manualScrollUntil.current = 0;
+      setPageNavigationSequence((sequence) => sequence + 1);
+    };
+    window.addEventListener("resize", alignSelectedPage);
+    return () => window.removeEventListener("resize", alignSelectedPage);
+  }, []);
+
   useLayoutEffect(() => {
     const anchor = zoomAnchor.current;
     zoomAnchor.current = null;
@@ -188,7 +199,7 @@ export function OriginalEvidenceViewer({
     scrollTimer.current = window.setTimeout(() => {
       programmaticScrolling.current = false;
     }, 500);
-  }, [selectedLocatorId, highlightIdentity]);
+  }, [selectedLocatorId, highlightIdentity, pageNavigationSequence]);
 
   useEffect(
     () => () => {

@@ -706,6 +706,7 @@ describe("证据工作台", () => {
     await openValid(user);
     const band = screen.getByLabelText("当前资料上下文");
     expect(band).toHaveTextContent("界面试用项目 · Ⅲ期");
+    expect(within(band).getByTitle("界面试用项目")).toHaveTextContent("界面试用项目 · Ⅲ期");
     expect(band).toHaveTextContent("UAT-01");
     expect(band).toHaveTextContent("筛选期");
     expect(band).toHaveTextContent("V1.0");

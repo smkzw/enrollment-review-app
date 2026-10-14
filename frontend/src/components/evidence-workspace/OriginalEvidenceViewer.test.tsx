@@ -158,6 +158,19 @@ describe("OriginalEvidenceViewer", () => {
     rerender(<OriginalEvidenceViewer {...props} navigationKey="reference-2" />);
     expect(scrollTo).toHaveBeenCalledTimes(1);
   });
+  it("窗口尺寸改变后重定位所选来源页，不把布局滚动解释为用户换页", () => {
+    const onSelectPage = vi.fn();
+    render(<OriginalEvidenceViewer revisionId="revision-1" pages={[readyPage, failedPage]}
+      documentNames={new Map()} selectedEntryId="entry-2" selectedLocatorId={null}
+      selectedPageLocators={[]} onSelectPage={onSelectPage} />);
+    const viewer = screen.getByLabelText("原始资料查看区");
+    const scrollTo = vi.fn();
+    Object.defineProperty(viewer, "scrollTo", { configurable: true, value: scrollTo });
+    fireEvent.resize(window);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(onSelectPage).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /第 2 页/ })).toHaveAttribute("aria-current", "page");
+  });
   it("定位异步到达后才滚动，同一定位无关重渲染不重复回拉", () => {
     const props = {
       revisionId: "revision-1", pages: [readyPage], documentNames: new Map<string, string>(),

@@ -66,10 +66,8 @@ export function OcrReprocessingPanel({ scope, onView, blocked = false }: { scope
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "暂未恢复识别，请刷新处理详情。");
     } finally { if (!controller.signal.aborted) setBusy(false); }
   }
-  return <section className="tasks-section persistent-task" aria-label="重新识别原件">
-    <div className="tasks-section__head"><h2 className="tasks-section__title">原件识别</h2>
-      {view && <span role="status">{labels[view.state]}</span>}
-    </div>
+  return <section className="evidence-reprocessing" aria-label="重新识别原件">
+    {view && <span role="status">{labels[view.state]}</span>}
     {error && <p className="evidence-notice evidence-notice--error" role="alert">{error}</p>}
     <div className="job-detail__actions">
       {view?.state === "failed_final" && <button type="button" className="button button--primary" disabled={busy} onClick={() => void retry()}>重试未完成的识别</button>}

@@ -242,7 +242,9 @@ class EvidenceApiReadService:
                 rows.append({
                     "item_id": saved.unresolved_item_id, "message": item.message,
                     "kind": "unquoted_text" if item.source_text_range is not None else "reading_uncertainty",
-                    "reason": item.reason, "source_text_range": item.source_text_range,
+                    "reason": ("本页读取未完成；已整理的资料保留。服务恢复后可只重读未完成页。"
+                               if item.code == "extraction_failed" else item.reason),
+                    "source_text_range": item.source_text_range,
                     "sources": [{"source_document_version_id": entry.source_document_version_id,
                                  "page_artifact_id": entry.page_artifact_id, "page_number": entry.page_number,
                                  "file_name": documents.get(entry.source_document_version_id).file_name}

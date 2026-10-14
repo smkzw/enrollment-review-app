@@ -91,7 +91,7 @@ export interface NormalizationUnresolvedPageView {
   textAccountingApplied: boolean;
   evidenceSnapshotId: string;
   processingRevisionId: string;
-  items: { itemId: string; kind: "unquoted_text" | "reading_uncertainty"; message: string; reason: string; sources: NormalizationSourceView[] }[];
+  items: { itemId: string; kind: "unquoted_text" | "reading_uncertainty"; message: string; reason: string; sourceExcerpt?: string; sources: NormalizationSourceView[] }[];
 }
 
 /** 前端展示用精简相位（不向用户暴露内部枚举名）。 */
@@ -194,6 +194,8 @@ export function decodeNormalizationUnresolved(payload: unknown): NormalizationUn
       if (item.kind !== "unquoted_text" && item.kind !== "reading_uncertainty")
         throw new FactNormalizationDecodeError("待核对内容类型不明确。");
       return { itemId: requiredString(item.item_id, "item_id"), kind: item.kind as "unquoted_text" | "reading_uncertainty", message: requiredString(item.message, "message"),
+        sourceExcerpt: item.source_text_range == null ? undefined
+          : requiredString(record(item.source_text_range, "source_text_range").excerpt, "source_text_range.excerpt"),
         reason: requiredString(item.reason, "reason"), sources: item.sources.map((value: unknown) => {
           const source = record(value, "source");
           const pageNumber = nonNegativeInteger(source.page_number, "page_number");

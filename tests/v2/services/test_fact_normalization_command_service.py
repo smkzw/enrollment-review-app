@@ -131,6 +131,22 @@ def test_select_config_happy_path(session_factory):
         )
 
 
+@pytest.mark.parametrize("provider,streamed", [("cms-router", True), ("ollama-cloud", False)])
+def test_registered_gateway_streaming_is_explicit_and_provider_scoped(session_factory, provider, streamed):
+    from app.agents.deepseek_evidence_normalizer_transport import evidence_normalizer_transport_from_model_config
+    registered = register_evidence_normalizer_runtime_config(session_factory, provider=provider,
+        model="configured-test-model", reasoning_effort="high", max_tokens=65536)
+    with session_factory() as session:
+        model = AppendRepository(session, MODEL_CONFIG_CONFIG).get(registered.model_config_id)
+        assert model.parameters.get("stream_response", False) is streamed
+        selected = select_registered_evidence_normalizer_config(session, registered_config=registered)
+        assert selected == registered
+        from unittest.mock import patch
+        with patch("app.agents.deepseek_evidence_normalizer_transport.DeepSeekEvidenceNormalizerTransport") as transport:
+            evidence_normalizer_transport_from_model_config(model)
+            assert transport.call_args.kwargs["stream_response"] is streamed
+
+
 def test_select_config_absent_prompt(session_factory):
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="cmd-cfg-miss")

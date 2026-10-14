@@ -321,6 +321,14 @@ def test_incremental_product_job_reads_only_added_page_and_preserves_saved_sourc
         assert PatientProfileService().fact_display_metadata(session, profile)
         checkpoint = JobStore(session).get_last_checkpoint(job.job_id, "finalize")[1]
         assert checkpoint["unread_page_refs"] == ([f"{added['logical_document_id']}:1"] if case == "new_page_failed" else [])
+        if case == "new_page_failed":
+            from app.services.evidence_api_read_service import EvidenceApiReadService
+            from app.storage.fact_repositories import FactNormalizationUnresolvedItemRepository
+            view = EvidenceApiReadService(session_factory, artifacts).normalization_unresolved(
+                current.subject_id, current.review_episode_id, job.job_id)
+            assert view["failed_page_count"] == 1
+            assert view["items"][0]["reason"] == "本页读取未完成；已整理的资料保留。服务恢复后可只重读未完成页。"
+            assert "TRANSPORT_FAILED" in FactNormalizationUnresolvedItemRepository(session).list_by_run(job.run_id)[0].item.reason
         queued = JobStore(session).get_job(checkpoint["work_draft_job_id"])
         assert queued.job_type == "work_draft_review" and queued.state == "queued"
         previous = JobStore(session).get_job(jobs[0].job_id)

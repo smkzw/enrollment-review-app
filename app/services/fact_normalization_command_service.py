@@ -200,6 +200,9 @@ def _runtime_model(
         "max_tokens": max_tokens,
         "normalization_policy_version": _NORMALIZATION_POLICY_VERSION,
     }
+    if normalized_provider == "cms-router":
+        # This gateway may time out while buffering long non-streamed responses.
+        parameters["stream_response"] = True
     if temperature is not None:
         if isinstance(temperature, bool) or not isinstance(
             temperature, (int, float)
