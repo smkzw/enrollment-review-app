@@ -1,11 +1,11 @@
 # 0.2.0 当前交接
 
-更新：2026-10-15。**Goal实际active**。源码fa444cc7已提交并部署；本轮86后台／153相连前端通过、build exit0，前基包366保留。31001 v33／Profile7未重跑，旧hash保持，给定目录5份均已上传。独立合成TEST-001两图均终态：首图6事实，购药补图仅1新请求／0新事实，3候选因来源未核未采用；Profile2保留旧6事实，新稿正确继承旧稿。血糖未在151目标，不称模型漏读。Ego三宽屏原件导航／缩放重新定位及文字折叠实际检查；不改.env／默认角色，不混充真实补证。不是暂停、M1／M2或全产品完成；claims_complete=false。
+更新：2026-10-15。**Goal实际active**。源码93808b44已提交、推送及部署，含1f8d783e来源输入衔接、aa2b38de校对重建入口。353来源后台／60显示消费者后台通过，最终9文件175前端9.17秒exit0（前113/62窗口不累加），build exit0。合成购药单在Ego核类别及13OCR片段后，仅1新页GLM调用201.865秒，保存2购药事实＋1单次事件、0实际暴露；Profile3保留旧6事实，新149项稿supersedes正确。来源仍未知，未造服药起止或疗效；真实31001 v33／Profile7及旧hash不变。不是暂停、M1／M2、自动核实采用或全产品完成；claims_complete=false。
 
 ## 1. 五分钟接手
 
 - 唯一工作树：`/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/build-0.2.0`，分支`dev/0.2.0`。旧主checkout及phase5工作树不能代替本树。
-- 本轮源码`fa444cc7`（基准3ac4c8bc）包含CMS显式流式、失败中文投影、紧凑资料区／文字折叠／窗口尺寸变化后的原件重定位。此前b87db1da增量基包、结论核实／独立Ego／所属项目／时间图不重做；不能把前轮271／907归到本轮完整证明。
+- 本轮源码`93808b44`；1f8d783e修文件名分类、未知类别整例阻断及结构类别未进模型；aa2b38de让当前待启用校对可从原入口生成范围性资料版；93808b44用原事实类型展示购药性质、单次事件不画持续条。前fa444cc7／b87db1da成果保留，不重做；旧271／907不归本轮全量证明。
 - 现行入口仅本树AGENTS及`docs/0.2.0/01_PRD.md`、`02_DESIGN.md`、`03_PLAN.md`、`04_ACCEPTANCE.md`、`05_PROGRESS.md`。0.1.x档案仅按07索引查必要证据，不重新启动旧链。
 - 当前完成的是WP7几个衔接子包，不是WP7全包、M1验收或全产品交付。**不要重跑已终态方案解构、变量建议、53次既往抽取、24页成功证明、生化局部读取或v32/v33。**
 - 构建期自主验证，不逐条要求用户批准。验证副本内模拟规则审定／发布须标`builder_verification`，正式本人批准和旧签名不变；未改条款沿实际内容哈希继承。评审A/B前次各一次完成，不把当前代码称再次独立通过。
@@ -26,17 +26,17 @@
 | 试用处置 | 确认并修复重复月份刻度、所有真正未决组默认展开、编号与数字标题分隔、报告UI／HTML／MD空标题。自身预览发现未知节点影响不能显示全零，现只留真实已知数量与整节点核对说明，不铺Profile索引术语。未采纳常驻三栏、来源未知改可信、猜姓名正则改原文；会商把3840CSS/DPR2当1920CSS的解释不成立，不据此改字号 |
 | 精确文件 | `git show --stat`为当前清单；后台fact_corrections合同／API／service／repository，前端相连HTTP／解码／编辑／历史；ProfileTimeline、EligibilityWorkbenchPage、FrozenReviewReport／frozenReviewExport及相关测试；02/03/05及本Handoff。未新增依赖、DB或模型路线；旧SourceExcerpt等97984d0c成果沿用 |
 | 结论核实 | 当前完整低置信确定父项可显式核实，不改变值或结论，不收集理由；未决／矛盾／系统问题、未完成子项及未核来源拒绝。先核整例来源及原稿完整性，沿既有3步Job保存新版，无模型／OCR。普通更新及整理后自动工作稿冻结核实集合，内容或计算方式变化不沿用；报告／导出保留构建者与医学经理身份 |
-| 集中验证 | 当前后台271通过69.33秒；完整前端102文件907通过42.66秒（2workers），tsc/Vite exit0。合成typed方案装配边界、真实API／SQLite／来源闭包／Job／历史和确认正反例；不是方案发布或临床金标。前轮299／902为旧窗口，不混记 |
+| 集中验证 | 本轮353来源包72.91秒、60显示/消费者89.31秒；113资料UI8.96秒、62档案UI3.34秒；build exit0。新配置带分类、旧请求原布局复验、新页故障/取消/损坏、真实Profile/API旧hash及购药类型反例通过。旧271/907及366为历史窗口，不混成当前全库证明 |
 | 真实核实 | Ego42/p2看IN01原图51岁及18~75要求，以builder_verification保存。Job44d64fd…completed3/3、39.667秒；v33仅IN01父项4个核实元数据字段变，其他148项、全部结论／引用、30系统／来源提示不变；新旧报告可切换。三宽屏DPR1无横溢，不替代M2数值更正／补证 |
-| 保全与服务 | 当前61134 PID58131／exec49764，本树.env／data_v2，output/wp7-synthetic-deployed-server.log；44794 TERM收回143。运行源码fa444cc7，后台历史失败中文投影API已读回。新旧全部合成Job终态，不重跑；真实31001不写。18文件153前端／86后台通过，build exit0；没有新医学批准 |
-| 下一功能包 | 沿既有上传／整理finalize接新增范围，后者已会排队工作稿，不再造队列。真实数值更正／补证和两次新旧稿仍未完成；未确认数字错读，不修改正确值演示，不重读已完成方案或24页 |
+| 保全与服务 | 当前61134 PID68998／exec21622，本树.env／data_v2，output/wp3-source-metadata-final-server.log，运行93808b44；58131／65658已TERM收回143。0活动Job，3waiting_user原状态保留，包括单页核对生成的旧strict候选，不自动改成功。真实31001不写，原125事实／29稿等旧hash保持；未新增医学批准 |
+| 下一功能包 | 合成来源分类→读取→保存→档案→新稿已接通；回到真实v33的2系统项首因只读核查，先辨来源／规则／消费者而非再读病例。真实数值更正／补证仍无新依据，不制造演示或重读24页；完整范围／禁用药及M1自查未完成 |
 
 ### 临床状态（仅追加结论核实版本，临床原值及决定不改）
 
 | 项 | 实际状态 |
 |---|---|
 | Goal | 本轮工具实际active；未标complete或paused |
-| 自有服务 | 当前58131／61134，exec49764，日志output/wp7-synthetic-deployed-server.log；44794／13685均已结束，旧日志保留，共享8001/8900等不动 |
+| 自有服务 | 当前68998／61134，exec21622，日志output/wp3-source-metadata-final-server.log，运行93808b44；58131/65658/44794/13685已结束，旧日志保留，共享8001/8900等不动 |
 | 数据 | 本树`data_v2/enrollment-review-v2.sqlite3`及`.env`；WP0验证副本，非原临床库。没有重造16GB备份、改原件或旧终态 |
 | 项目／规则 | project `draft-project-1153e25b4eba`；ruleset `ruleset:draft-version-1153e25b4eba:phase_iii`，正式revision7，verification_only=false，64/64本人medical_manager。原草稿rev21保留 |
 | 个例／节点 | subject `58ff71df0cff4a2c9107be743d82584b`，31001，中心31；筛选episode `b843b2c07d6d4318a6df741eb7902eb3`，revision8，日期2025-08-08。基线节点未借用后续结果 |
@@ -75,6 +75,10 @@ API `fact-corrections/jobs/{job_id}/work-draft`核路径个例／节点、提交
 
 | 项 | 本轮结果 | 本机证据 |
 |---|---|---|
+| 当前来源分类与输入 | 353 passed72.91秒exit0；旧配置不变、新配置include_source_categories=true进入实际请求；未知类型可读而来源不升格，错来源/损坏仍拒。新fixture前三次失败先因相同断言合并、后揭示模型输入漏类别；没有改去重或放宽源门槛来变绿 | output/wp3-source-metadata-package.log，实际8文件pytest命令在日志与提交；早期family/release失败日志保留。1f8d783e源码／测试已推送，旧真实请求无改写 |
+| 当前合成分类更正 | 原UI核类别为购药、出具方未知，原图逐项核13OCR片段，原入口生成complete-47aecc…；公开API启用evt-673340…（非普通UI启用），显式产品GLM high65536读取1新页、1旧页实际证明沿用，201.865秒/30010输入12217输出42227总量，39290思考字符与上游零思考计数不一致；费用未知 | output/synthetic-sources-20261015/source-metadata-{corrected-revision,product-read,result-audit}.json及实际工件请求hash6981574…；Job51aee8…/run48acc257…completed/partial，2事实1事件0暴露，不能把partial标全资料医学核清 |
+| 当前实际消费 | Profile3 profile:749024…含旧6事实＋新2事实及1单次事件；新稿review-run:f7f9bc…149项，子Jobaf1b73…completed，supersedes475034…；没有实际服药/停药/疗效，来源unverifiable_source。Ego购药点→详情→正确购药原件→关闭回同点；三CSS1920/2560/3840、DPR1无横溢，药名加重、无伪造坐标 | purchase-timeline-1920.png、purchase-source-{1920,2560,3840}.png及purchase-source-viewports.json均已实际看；wp3-source-metadata-preservation-final.json旧hash保持。纯测试身份，不混31001、D001或M2；原合成旧稿/元数据/失败留存 |
+| 当前显示接线 | 60后台89.31秒、113资料UI8.96秒、62档案UI3.34秒exit0；build exit0既有chunk提醒。按精确保存事实读回类型标签，kind/source/值/事实资格不变；泛药物暴露分区改用药与治疗，单次事件保留日期点 | wp3-purchase-meaning-{backend,frontend-accepted,release-build}.log、wp3-source-metadata-ui.log；初次前端失败是新购药fixture仍带mmHg，已按图片量单位null修，不放宽产品单位校验。2K/4K最后页完整可见时贴顶条件不可实现，图与几何证明后修验收条件，未改产品或隐藏旧页 |
 | 本轮增量来源／更正消费者 | 最终366 passed208.15秒exit0、5第三方SWIG警告；涵盖原请求／回执、同／异模型历史身份、损坏拒绝、新页失败一重试、取消、零新增调用、累计档案／期望、旧来源更正与派生引用、同页不误合并。不是完整临床补证或全库回归 | `output/wp7-incremental-consumers-accepted.log`；实际命令与早期失败日志在本机output，测试源码已随本提交。前序375／142／64通过属于重叠不同窗口，不累加 |
 | 本轮真实只读检查 | query_only；v33冻结上下文重新装配逐字段相同，122事实、24/24页、122档案项，0模型、0临床写入。31001给定目录5份均已上传；实际入组不证明资料完整或符合 | `output/wp7-incremental-current-context-final.json`、`wp7-source-folder-inventory.json`及对应只读脚本；不重复上传相同hash |
 | 本轮合成图片 | 实际生成2图、模型身份／费用未知；不喂生成提示／离线期望。OCR两页均可读，首图GLM流式1请求561.425秒、30223输入／36667输出，保存年龄／性别／4检验；血糖不在151目标，NCS作者未知。购药1请求314.304秒、29996输入／17687输出，3候选因来源核实未完成被拦、0新事实，不造实际服药日／疗效；候选来源语义误称病历转述也不可无条件采用。旧429／timeout不改，用量未知不填0 | 本机output/synthetic-sources-20261015/expectations.json、product-results.json、原图及回执。首图6e0c472…、补图79178f0…均completed／run partial；complete-9e67ccf4b6ba427c94aeff2c0bc1f1e5公开API启用，不称普通UI全闭环。旧成功call_cac42c5342d97bffc99e692e保持；Profile1→2相同6事实，新稿475034…supersedes42148…，149项。不是31001补证、临床验收或局部视觉能力证明 |
@@ -96,6 +100,13 @@ API `fact-corrections/jobs/{job_id}/work-draft`核路径个例／节点、提交
 | 最终原件／历史保全 | 125事实、29运行、4369工作项、36抽取调用、5资料版本、1快照、旧6档案全部不变，仅追加Profile1条 | `output/wp7-rule-source-before.json`、`-after.json`、`wp7_rule_source_audit.py` |
 | 真实界面 | 更正打开／无变化预览拒绝／关闭；长名称收紧、档案空态不再宣称入排无问题，三视口无横溢 | `output/wp7-profile-final-{1920,2560,3840}.png`、`-viewports.json`；1920图实际看过 |
 
+本轮实际后台命令（唯一工作树根目录，均exit0；353/60是不同、有重叠窗口，不合计）：
+```sh
+.venv/bin/python -m pytest tests/v2/services/test_evidence_upload_service.py tests/v2/services/test_incremental_fact_sources.py tests/v2/services/test_fact_normalization_command_service.py tests/v2/services/test_fact_normalization_source_adapter.py tests/v2/services/test_fact_normalization_executor_profile.py tests/v2/agents/test_evidence_normalizer_adapter.py tests/v2/agents/test_evidence_normalizer_transport_config.py tests/v2/api/test_fact_normalization.py -q
+.venv/bin/python -m pytest tests/v2/services/test_patient_profile_service.py tests/v2/api/test_patient_profiles.py tests/v2/services/test_incremental_fact_sources.py -q
+```
+前端在frontend运行npm test --具体测试文件 --maxWorkers=2及npm run build；最终将五文件资料包与四文件档案包合并为9文件175通过9.17秒exit0，output/wp3-source-purchase-ui-release.log包含实际命令和文件清单，代码已推送。实际Ego沿42/p3，新当前稿显示44未决／20系统＋1未采用来源，不拿合成小样冒充正常完整个例。确认回源关闭后仍停同一购药点；原件只页级定位，药名逐字加重，无位置核实则不画红框。
+
 上述output／原件／数据库／原答是受控本机材料，**外部审阅不可仅凭路径取得**，未提交。前序窗口不是本轮全库证明，后端全库未重跑，249基线失败只是历史。本轮初次失败分别为旧首屏／常驻原件／移动导航断言、测试夹具错误身份／分区及按钮名称定位；均保留日志，不删来源反例。实际审查另补跨条目未存选择的批量批准保护和来源选择测试。Ego截图曾因应用未在前台超时、旧ref因视口变化失效；激活原应用窗口及重新取定位解决，未新建空间或改用别的浏览器。
 
 ## 5. 未完成与不重跑清单
@@ -108,11 +119,13 @@ API `fact-corrections/jobs/{job_id}/work-draft`核路径个例／节点、提交
 
 ## 6. 恢复步骤
 
-1. Goal实际active；核本树HEAD／dirty、61134所有者及活动Job。当前58131／exec49764运行源码fa444cc7，合成两次流式及其子工作稿均终态，勿重跑。先读product-results.json和当前已知缺口；下一包只诊断既有来源分类与提取目标／资格的衔接，不提高旧候选已核状态、不换默认角色。失去服务时先核租约和原答，再用本树虚拟环境及显式.env/data_v2恢复，不停共享服务、不重建病例或重读方案。
+1. Goal实际active；核HEAD／dirty、61134归属及活动Job。当前68998／exec21622运行93808b44，本轮合成读取及子工作稿均终态，勿重跑。先读source-metadata-result-audit.json；来源分类子包已完成，下一包核真实v33剩余系统项的当前有源规则及实际消费首因，不换默认角色或先重开读取。新布局仅由冻结ModelConfig决定，旧请求以原参数重建。服务失去时核租约和原答，用本树venv／显式.env/data_v2恢复，不停共享服务。
 2. 打开现有workbench路径，读取v33与Profile7；核实Job已completed，不重复点IN01或重开原稿。旧v32及历史保留，旧只读审计脚本会因新增run而拒绝，改用本轮wp7_confirmation_audit.py，不覆盖旧基线。
 3. 时间图、原文重点、备选和所属审核项目选择已实现验证，勿重新从原型开始。部署本轮增量修订前先核自有服务和Job空闲；沿用v33，不新建病例读取。合成图片以单独标识的测试受试者走产品入口，原件／离线期望分开；不得挂31001或当D001留出。真实补证仅在有新原件时进行，不在正式v7重复批准演示。
 4. 更正保存后核真实子Job、新run、supersedes、受影响结果与无关项不变、旧hash保持；失败仅重试失败范围。不要为了消除未决删来源、放宽已核或冒用用户签名。
 5. 同功能包集中验证，里程碑按04与06处理，不重开全库追绿／模型横评／跨章长链。M1/M2仍须真实用户流程证据，不以文档、HTTP200或测试数量代替。
+
+已经只读核实v33的当前首因而非凭历史估计：EX07组件25是两份读取意见不一致，保存7来源关系＋1事实引用；EX13组件03是忠实未结构化，子项0来源关系但父项仍保留10项。work_draft_review.py约417及502分别产生两类问题，不混成病例本身矛盾。output/wp4-current-system-first-causes.json为净化数量/分类记录，0新模型/写入。接续时读取这些完整消费分支和对应保存请求/原答，在来源边界内决定是否局部修复；此诊断没有核准新医学结论、删除时间限定或批准重试。
 
 启动（仅当前自有服务已结束且端口归属核清时）：
 ```sh
@@ -134,3 +147,5 @@ API `fact-corrections/jobs/{job_id}/work-draft`核路径个例／节点、提交
 真实试用的反证：OCR读出5行不证明事实提取完成；Ollama月额度耗尽后Job completed／run partial，原页面仍说“整理已完成”。现只说结果已保存；失败信息用中文展示但不改旧回执，未核文字折叠而不删除。GLM非流式2次600秒timeout后，显式流式1次561.425秒成功；仍有瞬时服务状态这一替代解释，不声称独立因果对照。单页输入84823字符／30223 token、输出36667，另报113496思考字符但思考token未可靠拆分。冻结输入151目标中无血糖，不能称模型漏读；源文字373字符、目标22446、两类条款上下文33766、前导含Schema26262字符，首先是提取范围与请求负担问题。不在增量验证途中换提示使旧证明失配，不加某检验／病例特例；真实来源、准确提取、工程采用和临床验收分别记录。
 
 本轮把预留的结论核实表接到真实动作，不把显式核实变成必填意见或入组决定。已有原文足够的年龄条款只提升试用置信，不重新判读病史；真实剩余7未决和2系统问题不减少。前期成本还包括使用旧Phase夹具启动现行完整装配，接连暴露缺目录、节点、范围证明；改用明确typed装配边界＋实际持久化／来源闭包／Job／历史测试，不能将此称全链方案发布验证，也不放宽生产保护。Ego截图前台状态与Node绝对输出路径亦曾出错，修运行方法、保留现场，不新建空间或换浏览器。实际3步仍耗39.667秒，不能说零模型就瞬时；后续若优化，先量出来源复验与保存成本，不为性能跳过历史／身份检查。
+
+本轮有可复查的第一因果错误：购药filename被裸record分类为病历，结构类别虽保存却未进模型输入，模型随后按病历转述写来源；宿主仍按真实元数据校验，没有证据证明其来源强度被偷偷升级。新配置明确携带既有类别、保留旧布局复验历史，避免为表示修复重读全例。实际核对后发现strict页核对候选阻断了范围性新版本入口，修的是可操作入口，不是删除风险保护。最后API泛分区把购药事实显示成药物暴露，现用精确事实类型和单次性质呈现；没有改业务值或资格。性能201.865秒比前次314.304秒短，但输入仍约3万token、无单因素对照，不能断言加速来自本次修复。生成图片是可控工程素材，不是临床金标；首图异常显示及全核心检验覆盖仍未证，真实M1/M2/IE仍需实际材料与产品流程。
