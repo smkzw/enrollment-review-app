@@ -48,6 +48,7 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
   const selectedItem = visible.find(item => item.entry.official_code === selection) ?? visible[0] ?? null;
   const entry = selectedItem?.entry ?? null;
   const selectedBatch = visible.filter(item => checked.has(item.entry.official_code));
+  const reviewedCount = data?.entries.filter(entry => entry.review).length ?? 0;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -112,15 +113,16 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
     finally { if (currentScope.current === scope) setBusy(false); }
   }
   return <section className="protocol-rule-reviews" aria-label="逐条审定">
-    <header><h2>逐条审定</h2><span>{data ? `${data.entries.filter(entry => entry.review).length} / ${data.entries.length} 项已审定` : "正在读取审定记录…"}</span>
+    <header><h2>规则审定</h2><span>{data ? `待审定 ${data.entries.length - reviewedCount} 项 · 已审定 ${reviewedCount} 项` : "正在读取审定记录…"}</span>
       <label>审定身份 <select value={kind} disabled={busy} onChange={event => setKind(event.target.value as ReviewerKind)}>
         <option value="medical_manager">医学经理本人</option><option value="builder_verification">构建者验证</option>
       </select></label>
     </header>
-    {kind === "builder_verification" && <p role="status">此身份的审定仅供验证，不能代替医学经理正式审定。</p>}
+    {kind === "builder_verification" && <p role="status">构建者验证：发布为验证用规则包。</p>}
     {savedNotice && <p role="status">{savedNotice}</p>}
     {error && <p role="alert">{error} <button className="button" onClick={() => setReload(value => value + 1)}>重新读取</button></p>}
     {data && <>
+      {reviewedCount > 0 && <p className="protocol-review-retained">已审定且内容未变的条目无需重复批准。</p>}
       <div className="protocol-review-categories" aria-label="要求分类">
         <button type="button" aria-pressed={category === "all"} onClick={() => setCategory("all")} disabled={busy}>全部 {items.length}</button>
         {Object.entries(reviewCategories).map(([key, label]) => <button key={key} type="button" aria-pressed={category === key}

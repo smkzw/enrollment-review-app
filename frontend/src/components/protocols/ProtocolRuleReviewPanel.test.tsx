@@ -25,6 +25,22 @@ beforeAll(() => {
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
 });
 describe("逐条审定", () => {
+  it("未改条目保持审定，默认只列剩余项，不发起重复批准", async () => {
+    const retained = { record_id: "retained", official_code: "IN-01", rule_content_hash: hash,
+      reviewer_kind: "medical_manager", reviewed_by: "王医学经理", reviewed_at: "2026-10-12T00:00:00Z",
+      action: "approved", note: null, result_variables: [] };
+    const fetcher = vi.fn(async (url: RequestInfo | URL, _options?: RequestInit) => new Response(JSON.stringify(String(url).endsWith("/variables")
+      ? { job_id: "job", draft_revision_id: "revision", variables: [], predicates: [] }
+      : { ...initial, entries: [{ ...entry, review: retained }, { ...entry, official_code: "IN-02", label: "病史要求" }],
+          history: [retained] })));
+    vi.stubGlobal("fetch", fetcher);
+    render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity} sources={sources} onReady={vi.fn()} />);
+    await screen.findByText("待审定 1 项 · 已审定 1 项");
+    expect(screen.getByText("已审定且内容未变的条目无需重复批准。")).toBeInTheDocument();
+    expect(screen.queryByLabelText("选择IN-01")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("选择IN-02")).toBeInTheDocument();
+    expect(fetcher.mock.calls.every(([, options]) => options?.method === "GET")).toBe(true);
+  });
   it("拒绝错任务、过期内容、重复条目与虚假的全部已审定状态", () => {
     expect(decodeRuleReviews(initial, "job").all_reviewed).toBe(false);
     expect(() => decodeRuleReviews(initial, "other")).toThrow();
@@ -62,7 +78,7 @@ describe("逐条审定", () => {
     await userEvent.click(hint.closest("details")!.querySelector("summary")!);
     expect(hint.closest("details")).toHaveAttribute("open");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "审定身份" }), "builder_verification");
-    expect(screen.getByText(/不能代替医学经理正式审定/)).toBeInTheDocument();
+    expect(screen.getByText("构建者验证：发布为验证用规则包。")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "审定通过" }));
     await waitFor(() => expect(onReady).toHaveBeenLastCalledWith(true));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "审定范围" }), "approved");
@@ -106,7 +122,7 @@ describe("逐条审定", () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...initial, job_id: PROTOCOL_DEMO_JOB_ID })));
     vi.stubGlobal("fetch", fetcher);
     render(<ProtocolJobFlow jobId={PROTOCOL_DEMO_JOB_ID} componentParam={null} />);
-    await screen.findByRole("heading", { name: "逐条审定" });
+    await screen.findByRole("heading", { name: "规则审定" });
     await waitFor(() => expect(fetcher).toHaveBeenCalled());
     expect(fetcher.mock.calls.every(([url, options]) => /\/draft\/(reviews|variables)$/.test(String(url)) && options.method === "GET")).toBe(true);
     expect(screen.getByRole("button", { name: "发布" })).toBeDisabled();

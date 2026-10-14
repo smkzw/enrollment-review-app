@@ -394,7 +394,7 @@ function clauseIssueKey(clause: EligibilityClauseView): {
 }
 
 function issueGroupLabel(key: string): string {
-  if (key === "low_confidence") return "依据仍需核对";
+  if (key === "low_confidence") return "已判定 · 低置信";
   const labels = gapTypeLabel as Record<string, string>;
   return labels[key] ?? FALLBACK_ISSUE_LABELS[key] ?? key;
 }
@@ -472,10 +472,12 @@ function EligibilityIssueQueue({
     );
   }
   const totalIssues = groups.reduce((sum, group) => sum + group.clauses.length, 0);
+  const lowConfidence = groups.find(group => group.key === "low_confidence")?.clauses.length ?? 0;
   return (
     <section className="eligibility-issue-queue" aria-label="问题队列">
       <p className="eligibility-issue-queue__summary">
-        {totalIssues} 条条款需要处理，按问题类型归为 {groups.length} 类。
+        {totalIssues - lowConfidence} 条存在风险或未决。
+        {lowConfidence > 0 && `另有 ${lowConfidence} 条已判定，保留低置信标记。`}
       </p>
       {groups.map((group, index) => {
         const meta = ISSUE_SEVERITY_META[group.severity];
@@ -483,10 +485,10 @@ function EligibilityIssueQueue({
           <details
             key={group.key}
             className="eligibility-issue-queue__group"
-            open={index === 0}
+            open={index === 0 && group.key !== "low_confidence"}
           >
             <summary>
-              <StatusBadge tone={meta.tone} text={group.key === "low_confidence" ? "需核对" : meta.text} />
+              <StatusBadge tone={meta.tone} text={group.key === "low_confidence" ? "低置信" : meta.text} />
               <strong>{group.label}</strong>
               <span className="eligibility-issue-queue__count">
                 影响 {group.clauses.length} 条
@@ -563,8 +565,8 @@ function EligibilityClauseDetail({
         <li className="eligibility-detail-bullet">
           <strong>{pendingParts.length ? "尚需核对的条件" : unresolvedConditions.length ? "尚缺的依据" : "判定依据"}</strong>
           {pendingParts.length > 0 ? <dl className="eligibility-reason-parts">{pendingParts.map(part => <div key={part.conditionId}>
-            <dt><strong>{part.conditionText}</strong></dt><dd><ReasonText text={part.reasonText} /></dd>
-          </div>)}</dl> : <ReasonText text={unresolvedConditions.length
+            <dt><strong>{part.conditionText}</strong></dt><dd><ReasonText text={part.reasonText} compact /></dd>
+          </div>)}</dl> : <ReasonText compact text={unresolvedConditions.length
             ? unresolvedConditions.map(item => item.reason).join("\n") : clause.reason} />}
           {pendingParts.length > 0 && parts.some(part => !part.requiresAttention) && <details>
             <summary>其他条件及依据（{parts.filter(part => !part.requiresAttention).length}）</summary>
@@ -645,13 +647,18 @@ function EligibilityClauseDetail({
   );
 }
 
-/** Typography only: keep every qualifier, number and original sentence. */
-function ReasonText({ text }: { text: string }) {
-  return <ul className="eligibility-reason-lines">{text.split(/(?<=；)|(?<=。)|\n+/u).filter(part => part.trim() && part.trim() !== "；").map((part, index) => {
+/** Display only: the remaining sentences stay reachable, never summarized. */
+function ReasonText({ text, compact = false }: { text: string; compact?: boolean }) {
+  const parts = text.split(/(?<=；)|(?<=。)|\n+/u).filter(part => part.trim() && part.trim() !== "；");
+  const folded = compact && parts.length > 2;
+  const lines = (values: string[]) => <ul className="eligibility-reason-lines">{values.map((part, index) => {
     const colon = part.indexOf("：");
     return <li key={index}>{colon > 0 && colon < 64
       ? <><strong>{part.slice(0, colon + 1)}</strong>{part.slice(colon + 1)}</> : part}</li>;
   })}</ul>;
+  return <>{lines(folded ? parts.slice(0, 1) : parts)}{folded && <details key={text} className="eligibility-reason-details">
+    <summary>展开核对说明</summary>{lines(parts.slice(1))}
+  </details>}</>;
 }
 
 function determinationModeLabel(clause: EligibilityClauseView): string {
@@ -682,7 +689,7 @@ function EligibilityEvidencePanel({
   selectedFactIndex,
   onSelectFact,
 }: EligibilityEvidencePanelProps) {
-  const [browsedPage, setBrowsedPage] = useState<{ context: string; entryId: string } | null>(null);
+  const [browsedPage, setBrowsedPage] = useState<{ context: string; entryId: string; sourceKey?: string } | null>(null);
   const [navigationAttempt, setNavigationAttempt] = useState(0);
   const returnToReference = () => {
     setBrowsedPage(null);
@@ -714,7 +721,14 @@ function EligibilityEvidencePanel({
     );
   }, [snapshot.state]);
   const selectedFact = clause.factRefs[selectedFactIndex] ?? clause.factRefs[0] ?? null;
-  const selectedSource = (clause.sourceReadRefs ?? []).find((ref) => ref.excerpt) ?? null;
+  // Display duplicates only; all source records remain in the saved review.
+  const sourceRefs = useMemo(() => [...new Map((clause.sourceReadRefs ?? []).map(ref =>
+    [JSON.stringify(ref), ref])).values()], [clause.sourceReadRefs]);
+  const quotedRefs = sourceRefs.filter(ref => ref.excerpt);
+  const scopeRefs = sourceRefs.filter(ref => !ref.excerpt);
+  const sourcePageCount = new Set(sourceRefs.map(ref => JSON.stringify([
+    ref.sourceDocumentVersionId, ref.pageArtifactId, ref.pageNumber]))).size;
+  const selectedSource = quotedRefs[0] ?? null;
   const referencePage = selectedFact === null
     ? selectedSource === null ? null : pages.find((page) => page.pageNumber === selectedSource.pageNumber
         && page.sourceDocumentVersionId === selectedSource.sourceDocumentVersionId
@@ -733,7 +747,9 @@ function EligibilityEvidencePanel({
   const selectedPage = browsedPage?.context === sourceContext
     ? pages.find((page) => page.entryId === browsedPage.entryId) ?? referencePage
     : referencePage ?? pages[0] ?? null;
-  const isReferencePage = referencePage !== null && selectedPage?.entryId === referencePage.entryId;
+  const browsedSource = browsedPage?.context === sourceContext && browsedPage.sourceKey
+    ? sourceRefs.find(ref => JSON.stringify(ref) === browsedPage.sourceKey) ?? null : null;
+  const isReferencePage = browsedSource === null && referencePage !== null && selectedPage?.entryId === referencePage.entryId;
   const locatorPage = useLoad(
     (signal) => selectedPage?.ocrPageId
       ? getEvidenceRepository().getOcrPage(selectedPage.ocrPageId, review.completeProcessingRevisionId, { signal })
@@ -752,6 +768,25 @@ function EligibilityEvidencePanel({
     locator.precision === "bbox" && locator.authenticity === "authenticated"
     && locator.bbox !== null && locator.coordinateFrame !== null);
 
+  const sourceButtons = (refs: typeof sourceRefs) => refs.map(ref => {
+    const key = JSON.stringify(ref);
+    const page = pages.find(item => item.sourceDocumentVersionId === ref.sourceDocumentVersionId
+      && item.pageArtifactId === ref.pageArtifactId && item.pageNumber === ref.pageNumber);
+    return <li key={key}>
+      <button type="button" className="eligibility-evidence__ref" disabled={!page}
+        aria-pressed={browsedSource !== null && JSON.stringify(browsedSource) === key}
+        onClick={event => {
+          if (!page) return;
+          setBrowsedPage({ context: sourceContext, entryId: page.entryId, sourceKey: key });
+          event.currentTarget.closest(".eligibility-evidence__sources")?.removeAttribute("open");
+        }}>
+        <strong>{ref.disposition === "mentioned" ? hasJudgedSource(clause) ? "本次判断的病历依据" : "已找到相关原文，待核清" : ref.disposition === "not_seen" ? "本页未见相关记录" : "本页尚未核清"}</strong>
+        {ref.excerpt && <span>{ref.excerpt}</span>}
+        <span>{documentNames.get(ref.sourceDocumentVersionId) ?? "原始资料"} · 第 {ref.pageNumber} 页</span>
+      </button>
+    </li>;
+  });
+
   return (
     <aside className="eligibility-evidence" aria-label="原件面板">
       <header className="workbench-pane__head">
@@ -762,7 +797,8 @@ function EligibilityEvidencePanel({
       </header>
       {selectedPage !== null && (
         <div className="eligibility-evidence__state" role="status">
-          <strong>{isReferencePage ? selectedFact === null ? "病历依据页" : "事实来源页" : "浏览原件"}</strong>
+          <strong>{browsedSource ? browsedSource.disposition === "unresolved" || !hasJudgedSource(clause)
+            ? "待核原文页" : "病历依据页" : isReferencePage ? selectedFact === null ? "病历依据页" : "事实来源页" : "浏览原件"}</strong>
           <span>
             {documentNames.get(selectedPage.sourceDocumentVersionId) ?? "原始资料"}
             {` · 第 ${selectedPage.pageNumber} 页`}
@@ -772,27 +808,23 @@ function EligibilityEvidencePanel({
       {clause.factRefs.length === 0 && !hasJudgedSource(clause) && (
         <p className="eligibility-muted">当前条款没有已采用事实，可浏览全部原件页核实。</p>
       )}
+      {browsedSource?.excerpt && <blockquote className="eligibility-evidence__excerpt">{browsedSource.excerpt}</blockquote>}
       {isReferencePage && selectedFact === null && selectedSource?.excerpt
         && <blockquote className="eligibility-evidence__excerpt">{selectedSource.excerpt}</blockquote>}
-      {(clause.sourceReadRefs ?? []).length > 0 && (
+      {sourceRefs.length > 0 && (
         <details className="eligibility-evidence__sources" key={`sources:${clause.ruleComponentId}`} open={clause.decision === "conflict"}>
-          <summary>{(clause.sourceReadRefs ?? []).some((ref) => ref.excerpt)
-            ? `病历依据与核对范围（${(clause.sourceReadRefs ?? []).length}）`
-            : `已核对 ${(clause.sourceReadRefs ?? []).length} 页，未见相关记录 · 查看范围`}</summary>
+          <summary>{quotedRefs.length
+            ? `病历依据与核对范围（${sourceRefs.length}）`
+            : scopeRefs.some(ref => ref.disposition === "unresolved")
+              ? `已检索 ${sourcePageCount} 页，部分尚未核清 · 查看范围`
+              : `已核对 ${sourcePageCount} 页，未见相关记录 · 查看范围`}</summary>
         <ul className="eligibility-evidence__refs" aria-label="检索范围与待核原文">
-          {(clause.sourceReadRefs ?? []).map((ref, index) => {
-            const page = pages.find((item) => item.sourceDocumentVersionId === ref.sourceDocumentVersionId
-              && item.pageArtifactId === ref.pageArtifactId && item.pageNumber === ref.pageNumber);
-            return <li key={`${ref.pageArtifactId}-${index}`}>
-              <button type="button" className="eligibility-evidence__ref" disabled={!page}
-                onClick={() => page && setBrowsedPage({ context: sourceContext, entryId: page.entryId })}>
-                <strong>{ref.disposition === "mentioned" ? hasJudgedSource(clause) ? "本次判断的病历依据" : "已找到相关原文，待核清" : ref.disposition === "not_seen" ? "本页未见相关记录" : "本页尚未核清"}</strong>
-                {ref.excerpt && <span>{ref.excerpt}</span>}
-                <span>{documentNames.get(ref.sourceDocumentVersionId) ?? "原始资料"} · 第 {ref.pageNumber} 页</span>
-              </button>
-            </li>;
-          })}
+          {sourceButtons(quotedRefs.length ? quotedRefs : scopeRefs)}
         </ul>
+        {quotedRefs.length > 0 && scopeRefs.length > 0 && <details>
+          <summary>查看其余检索范围</summary>
+          <ul className="eligibility-evidence__refs">{sourceButtons(scopeRefs)}</ul>
+        </details>}
         </details>
       )}
       {(

@@ -145,6 +145,24 @@ function installSourcePages() {
 }
 
 describe("入排审核工作台", () => {
+  it("长核对说明默认保留首句，完整限定可展开，不改判断", async () => {
+    const condition = { ...review.clauses[0]!, decision: "indeterminate" as const, decisionLabel: "证据不足",
+      reason: "对应关系尚未核清。", reasonParts: [
+        { conditionId: "therapy", conditionText: "治疗与疗效对应", requiresAttention: true,
+          reasonText: "治疗有记录但对应期间未明确。后续治疗不能反推本节点。2018年用药不单独证明疗效。" },
+      ] };
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review, clauses: [condition] }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByText("治疗有记录但对应期间未明确。");
+    const summary = screen.getByText("展开核对说明");
+    const detail = summary.closest("details")!;
+    expect(detail).not.toHaveAttribute("open");
+    expect(screen.getByText("治疗有记录但对应期间未明确。").closest("details")).toBeNull();
+    expect(within(detail).getByText("后续治疗不能反推本节点。")).toBeInTheDocument();
+    expect(within(detail).getByText("2018年用药不单独证明疗效。")).toBeInTheDocument();
+    await userEvent.click(summary);
+    expect(detail).toHaveAttribute("open");
+  });
   it("组合条件先展示真正待核的对应关系，已有条件与原汇总可展开保留", async () => {
     const compound = { ...review.clauses[0]!, decision: "indeterminate" as const,
       decisionLabel: "证据不足", reason: "治疗有记录，但其对应疗效尚无依据。",
@@ -307,6 +325,50 @@ describe("入排审核工作台", () => {
     expect(within(screen.getByLabelText("原始资料查看区"))
       .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
   });
+  it("仅合并相同来源展示，保留不同页或处置；点击摘录不继续显示别的事实", async () => {
+    installSourcePages();
+    const source = { sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
+      excerpt: "该项目与前次记录存在差异", disposition: "mentioned" as const };
+    const scope = { sourceDocumentVersionId: "document-a", pageArtifactId: "page-a", pageNumber: 1,
+      excerpt: null, disposition: "not_seen" as const };
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, decision: "conflict", decisionLabel: "资料矛盾",
+        factRefs: [{ factId: "fact", locatorId: "locator-b", sourceDocumentVersionId: "document-b",
+          pageArtifactId: "page-b", pageNumber: 1, excerpt: "已采用的另一项检验" }],
+        sourceReadRefs: [source, { ...source }, { ...source, disposition: "unresolved" },
+          { ...source, sourceDocumentVersionId: "document-a", pageArtifactId: "page-a" }, scope, { ...scope }],
+      }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const summary = await screen.findByText("病历依据与核对范围（4）");
+    expect(summary.closest("details")).toHaveAttribute("open");
+    const range = screen.getByText("查看其余检索范围").closest("details")!;
+    expect(range).not.toHaveAttribute("open");
+    const refs = screen.getAllByRole("button", { name: /已找到相关原文，待核清/ });
+    expect(refs).toHaveLength(2); // Same excerpt in another document is not a duplicate.
+    expect(screen.getByRole("button", { name: /本页尚未核清/ })).toBeInTheDocument();
+    await userEvent.click(refs[0]!);
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    const panel = screen.getByLabelText("原件面板");
+    expect(panel.querySelector(".eligibility-evidence__excerpt")).toHaveTextContent(source.excerpt);
+    expect(within(panel).queryByText("已采用的另一项检验")).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("原始资料查看区"))
+      .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+    await userEvent.click(screen.getByRole("button", { name: "返回本条依据页" }));
+    expect(panel.querySelector(".eligibility-evidence__excerpt")).toHaveTextContent("已采用的另一项检验");
+  });
+  it("无摘录的未核清页面不显示成已核对未见记录", async () => {
+    installSourcePages();
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, factRefs: [], sourceReadRefs: [{
+        sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
+        excerpt: null, disposition: "unresolved",
+      }] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByText("已检索 1 页，部分尚未核清 · 查看范围");
+    expect(screen.queryByText("已核对 1 页，未见相关记录 · 查看范围")).not.toBeInTheDocument();
+  });
   it("不适用无需置信等级，已核人群依据仍可回源且不显示成待核", async () => {
     installSourcePages();
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
@@ -359,6 +421,21 @@ describe("入排审核工作台", () => {
     expect(screen.getByLabelText("原件面板")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "显示条款列表" }));
     expect(screen.getByLabelText("审核要点列表")).toBeInTheDocument();
+  });
+  it("已判定的低置信条款与真正未决分别计数，低置信组默认收起仍可查看", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, decision: "indeterminate", confidence: "low" },
+        { ...review.clauses[1]!, decision: "inclusion_met", confidence: "low", confidenceReason: "来源提醒" }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const queue = await screen.findByLabelText("问题队列");
+    expect(within(queue).getByText(/1 条存在风险或未决。另有 1 条已判定，保留低置信标记。/)).toBeInTheDocument();
+    const heading = within(queue).getByText("已判定 · 低置信");
+    const group = heading.closest("details")!;
+    expect(group).not.toHaveAttribute("open");
+    await userEvent.click(heading);
+    expect(group).toHaveAttribute("open");
+    expect(within(group).getByRole("button")).toBeInTheDocument();
   });
   it("核对方法未支持时显示处理方向，不要求研究者替软件作判断", async () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
@@ -500,7 +577,7 @@ describe("入排审核工作台", () => {
   it("问题队列只聚合风险/冲突/未决条款，已满足与未到期不进入队列", async () => {
     render(<EligibilityWorkbenchPage />);
     await screen.findByRole("heading", { name: "待处理要点" });
-    expect(screen.getByText(/1 条条款需要处理，按问题类型归为 1 类/)).toBeInTheDocument();
+    expect(screen.getByText("1 条存在风险或未决。")).toBeInTheDocument();
     expect(screen.getByText("待研究者判断")).toBeInTheDocument();
     expect(screen.getByText("影响 1 条")).toBeInTheDocument();
     // 已满足/未触发/尚未到期的条款不属于问题。
@@ -654,7 +731,7 @@ describe("入排审核工作台", () => {
         clause({ ruleComponentId: "high", decision: "inclusion_met", confidence: "high" }),
       ]);
       expect(groups).toHaveLength(1);
-      expect(groups[0]!.label).toBe("依据仍需核对");
+      expect(groups[0]!.label).toBe("已判定 · 低置信");
       expect(groups[0]!.clauses.map(item => item.ruleComponentId)).toEqual(["low"]);
     });
 
