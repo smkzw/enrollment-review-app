@@ -7,6 +7,7 @@
 
 import type { LocatorView } from "../../api/evidence";
 import type { ProfileItemView } from "../../api/patient-profile";
+import { SourceExcerpt } from "../evidence/SourceExcerpt";
 
 /** 定位是否为真实区域（可画唯一红框的前提）。 */
 export function isRealBboxLocator(locator: LocatorView): boolean {
@@ -90,7 +91,8 @@ export function ProfileLocatorList({
               第 {locator.pageNumber} 页 · {locator.sourceLayerLabel}
             </p>
             {locator.excerpt !== null && locator.excerpt.length > 0 && (
-              <p className="profile-locator__excerpt">{locator.excerpt}</p>
+              <p className="profile-locator__excerpt"><SourceExcerpt text={locator.excerpt}
+                focusTexts={[item.assertedObject || item.medicationName || item.title]} /></p>
             )}
             <details open={!compact || isConflict}><summary>定位说明</summary>
             {locator.degradationReason !== null && (

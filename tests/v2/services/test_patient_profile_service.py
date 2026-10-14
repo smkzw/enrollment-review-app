@@ -218,18 +218,18 @@ def test_date_metadata_binds_exact_saved_fact_without_rewriting_history(chain, s
     revision = service.generate(session, authority=_authority(chain))
     before = revision.model_dump_json()
     item = next(item for item in profile_items(revision) if item.kind == ProfileItemKind.FACT)
-    assert service.fact_date_roles(session, revision) == {item.source_id: None}
+    assert service.fact_display_metadata(session, revision) == {item.source_id: {"date_role": None, "reference_abnormality": None}}
     for field, value in (("subject_id", "other-subject"), ("review_episode_id", "other-node")):
         changed = revision.model_copy(update={"authority": revision.authority.model_copy(update={field: value})})
         with pytest.raises(PatientProfileProjectionError, match="原事实不一致"):
-            service.fact_date_roles(session, changed)
+            service.fact_display_metadata(session, changed)
     for update in ({"value": "130/80"}, {"source_revision": item.source_revision + 1}, {"start_range": None}):
         changed = revision.model_copy(update={"lanes": [
             lane.model_copy(update={"items": [entry.model_copy(update=update) if entry.item_id == item.item_id else entry for entry in lane.items]})
             for lane in revision.lanes
         ]})
         with pytest.raises(PatientProfileProjectionError, match="原事实不一致"):
-            service.fact_date_roles(session, changed)
+            service.fact_display_metadata(session, changed)
     assert revision.model_dump_json() == before
 
 

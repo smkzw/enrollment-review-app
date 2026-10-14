@@ -149,6 +149,24 @@ async function openOriginal() {
 }
 
 describe("入排审核工作台", () => {
+  it("原件侧栏按当前条款强调相关原文，保留否定、读数和其余文字", async () => {
+    installSourcePages();
+    const excerpt = "血小板计数 180；未见该项异常，另有其他记录。";
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review, clauses: [{ ...review.clauses[0]!, textSummary: "血小板计数应符合阈值",
+        factRefs: [{ factId: "platelet", excerpt, locatorId: "locator-b", pageNumber: 1,
+          sourceDocumentVersionId: "document-b", pageArtifactId: "page-b" }] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await openOriginal();
+    await screen.findByRole("button", { name: "检验报告.pdf 第 1 页" });
+    const quote = screen.getByRole("complementary", { name: "原件面板" })
+      .querySelector("blockquote.eligibility-evidence__excerpt")!;
+    expect(quote.textContent).toBe(excerpt);
+    expect(quote.querySelector("mark")).toHaveTextContent("血小板计数");
+    expect(quote.textContent).toContain("未见该项异常");
+  });
+
   it("长核对说明默认保留首句，完整限定可展开，不改判断", async () => {
     const condition = { ...review.clauses[0]!, decision: "indeterminate" as const, decisionLabel: "证据不足",
       reason: "对应关系尚未核清。", reasonParts: [

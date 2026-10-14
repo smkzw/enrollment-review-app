@@ -236,3 +236,4 @@
 .evidence-reader__body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: var(--space-4); }
 .evidence-reader__body > .eligibility-evidence { height: 100%; position: static; max-height: none; }
 .evidence-reader__body > .profile-evidence { width: 100%; height: 100%; max-height: none; position: static; }
+.source-text-focus { color: #a52d29; background: #fff1dc; font-weight: 700; padding-inline: .05em; }

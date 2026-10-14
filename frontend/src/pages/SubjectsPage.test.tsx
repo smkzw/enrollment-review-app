@@ -175,7 +175,7 @@ describe("受试者与 Patient Profile 页", () => {
     setFactNormalizationRepository(null);
   });
 
-  it("默认选择首个项目/受试者/审核节点并读取真实档案，首屏只显示后端 highlights", async () => {
+  it("默认选择项目/受试者/节点，异常检验以项目及读数紧凑显示", async () => {
     render(<SubjectsPage />);
     // 正式目录：项目、受试者、审核节点
     expect(await screen.findByRole("combobox", { name: "切换受试者" })).toBeInTheDocument();
@@ -185,8 +185,7 @@ describe("受试者与 Patient Profile 页", () => {
     // 首屏标题与后端 highlight 原因（来自 makeRevision 默认 highlight：原报告异常）
     expect(await screen.findByRole("heading", { name: /临床时间线/ })).toBeInTheDocument();
     expect(screen.getByText("原报告异常")).toBeInTheDocument();
-    // 突出条目标题来自档案
-    expect(screen.getByText("基线血压 120/80 mmHg")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /血压.*120\/80.*mmHg.*原报告异常/ })).toBeInTheDocument();
     // 首屏不应直接展开 13 条泳道
     expect(screen.queryByRole("heading", { name: /生育/ })).not.toBeInTheDocument();
     // 审核节点选择存在
@@ -280,7 +279,7 @@ describe("受试者与 Patient Profile 页", () => {
     expect(screen.getByText(/资料已更新，档案待重新生成/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重新整理个例档案" })).toBeInTheDocument();
     // 仍展示历史内容（临床时间线）
-    expect(screen.getByText("基线血压 120/80 mmHg")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /血压.*120\/80.*原报告异常/ })).toBeInTheDocument();
   });
 
   it("已生成空态：区分于生成中/失败", async () => {
@@ -475,7 +474,7 @@ describe("受试者与 Patient Profile 页", () => {
     );
 
     render(<SubjectsPage />);
-    expect(await screen.findByText(GENERATED_TITLE)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /血压.*130\/85.*原报告异常/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /修订记录/ }));
     expect(await screen.findByText("本次修订形成档案第 3 版。")).toBeInTheDocument();
     expect(

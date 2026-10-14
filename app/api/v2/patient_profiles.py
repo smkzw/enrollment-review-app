@@ -84,8 +84,8 @@ def _revision_dto(
         ),
     )
     with _session(request) as session:
-        date_roles = _profile(request).fact_date_roles(session, revision)
-    return profile_revision_dto(revision, locators=locators, fact_date_roles=date_roles)
+        metadata = _profile(request).fact_display_metadata(session, revision)
+    return profile_revision_dto(revision, locators=locators, fact_metadata=metadata)
 
 
 @router.get(

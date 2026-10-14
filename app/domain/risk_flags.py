@@ -87,6 +87,26 @@ def reference_upper_bound(fact) -> Decimal:
     return upper
 
 
+def reference_abnormality(fact) -> str | None:
+    """Display only: compare with a verified same-row reference, not protocol eligibility."""
+    import unicodedata
+    try:
+        upper = reference_upper_bound(fact)
+    except ValueError:
+        return None
+    label = next(item.label for item in fact.assertion_basis.contextual_qualifiers if item.kind == "reference_range")
+    text = unicodedata.normalize("NFKC", label).replace(" ", "")
+    reading = Decimal(str(fact.value))
+    if reading > upper or reading == upper and text.startswith("<"):
+        return "high"
+    interval = _REFERENCE_RANGE.match(text)
+    if interval is not None:
+        lower = _NUMBER.match(interval.group())
+        if lower is not None and reading < Decimal(lower.group()):
+            return "low"
+    return None
+
+
 def fact_risk_flags(candidate, definition: VariableDef | None, *, text: str,
                     low_ocr: bool = False, handwritten: bool = False,
                     weak_source: bool = False, thresholds=(), date_sensitive=False) -> list[RiskFlag]:

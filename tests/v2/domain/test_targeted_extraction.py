@@ -104,6 +104,33 @@ def test_reference_upper_requires_same_field_not_same_page(row, range_text, valu
             reference_upper_bound(fact)
 
 
+@pytest.mark.parametrize("row,range_text,value,expected", [
+    ("ALT 180 10-100 U/L", "10-100", 180, "high"),
+    ("ALT 5 10-100 U/L", "10-100", 5, "low"),
+    ("ALT 50 10-100 U/L", "10-100", 50, None),
+    ("ALT 10 10-100 U/L", "10-100", 10, None),
+    ("ALT 100 10-100 U/L", "10-100", 100, None),
+    ("ALT 100 <100 U/L", "<100", 100, "high"),
+    ("ALT 100 ≤100 U/L", "≤100", 100, None),
+    ("ALT 5 U/L １０～１００", "１０～１００", 5, "low"),
+    ("ALT 180 10-100 mg/dL", "10-100", 180, None),
+    ("ALT 180\nAST 10-100 U/L", "10-100", 180, None),
+    ("ALT 1.8 10-100 U/L", "10-100", 100, None),
+    ("ALT 180 10-100 U/L AST 25", "10-100", 180, None),
+])
+def test_reference_abnormality_is_display_only_and_requires_same_row(row, range_text, value, expected):
+    from app.domain.risk_flags import reference_abnormality
+    from app.domain.contracts.fact_context import FactContextQualifier
+    basis = SimpleNamespace(asserted_object="ALT", assertion_text=row,
+        contextual_qualifiers=[FactContextQualifier(kind="reference_range", label=range_text)])
+    fact = SimpleNamespace(assertion_basis=basis, value=value, unit="U/L")
+    assert reference_abnormality(fact) == expected
+    assert fact.value == value
+    assert basis.assertion_text == row
+    fact.assertion_basis = None
+    assert reference_abnormality(fact) is None
+
+
 def test_frozen_input_identity_includes_target_dictionary():
     original = _input()
     material = {key: getattr(original, key) for key in (

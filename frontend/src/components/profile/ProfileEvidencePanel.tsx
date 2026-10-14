@@ -132,7 +132,7 @@ export function ProfileEvidencePanel({
   );
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
-  // 条目或原件页变化时初始化到候选指定页；没有指定页时选最精确定位。
+  // Keep exact geometry first; text-only sources prefer the object's excerpt over a date/value fragment.
   useEffect(() => {
     if (initialPageArtifactId !== null) {
       const initialEntryId = entryByArtifact.get(initialPageArtifactId);
@@ -148,6 +148,10 @@ export function ProfileEvidencePanel({
     }
     const firstReal =
       consistentItemLocators.find((locator) => isRealBboxLocator(locator)) ??
+      consistentItemLocators.find((locator) => {
+        const object = item.assertedObject || item.medicationName || item.title;
+        return object.length >= 2 && locator.excerpt?.includes(object);
+      }) ??
       consistentItemLocators[0] ??
       null;
     if (firstReal === null) {
@@ -161,6 +165,9 @@ export function ProfileEvidencePanel({
     );
   }, [
     item.itemId,
+    item.assertedObject,
+    item.medicationName,
+    item.title,
     consistentItemLocators,
     entryByArtifact,
     initialPageArtifactId,

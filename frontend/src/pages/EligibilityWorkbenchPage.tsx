@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { FileSearch, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { EvidenceReader } from "../components/evidence/EvidenceReader";
+import { SourceExcerpt } from "../components/evidence/SourceExcerpt";
 import {
   getCatalogRepository,
   getEvidenceRepository,
@@ -796,9 +797,9 @@ function EligibilityEvidencePanel({
       {clause.factRefs.length === 0 && !hasJudgedSource(clause) && (
         <p className="eligibility-muted">当前条款没有已采用事实，可浏览全部原件页核实。</p>
       )}
-      {browsedSource?.excerpt && <blockquote className="eligibility-evidence__excerpt">{browsedSource.excerpt}</blockquote>}
+      {browsedSource?.excerpt && <blockquote className="eligibility-evidence__excerpt"><SourceExcerpt text={browsedSource.excerpt} context={clause.textSummary} /></blockquote>}
       {isReferencePage && selectedFact === null && selectedSource?.excerpt
-        && <blockquote className="eligibility-evidence__excerpt">{selectedSource.excerpt}</blockquote>}
+        && <blockquote className="eligibility-evidence__excerpt"><SourceExcerpt text={selectedSource.excerpt} context={clause.textSummary} /></blockquote>}
       {sourceRefs.length > 0 && (
         <details className="eligibility-evidence__sources" key={`sources:${clause.ruleComponentId}`} open={clause.decision === "conflict"}>
           <summary>{quotedRefs.length
@@ -817,7 +818,7 @@ function EligibilityEvidencePanel({
       )}
       {(
         <>
-          {isReferencePage && selectedFact?.excerpt && <blockquote className="eligibility-evidence__excerpt">{selectedFact.excerpt}</blockquote>}
+          {isReferencePage && selectedFact?.excerpt && <blockquote className="eligibility-evidence__excerpt"><SourceExcerpt text={selectedFact.excerpt} context={clause.textSummary} /></blockquote>}
           {clause.factRefs.length > 1 && <details className="eligibility-evidence__sources" key={`facts:${clause.ruleComponentId}`}>
           <summary>选择其他依据（{clause.factRefs.length - 1}）</summary>
           <ul className="eligibility-evidence__refs" aria-label="关联事实的原件位置">

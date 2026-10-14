@@ -37,6 +37,7 @@ from app.domain.contracts.patient_profile_v2 import (
     profile_revision_identity,
 )
 from app.domain.contracts.review import ReviewEpisode
+from app.domain.risk_flags import reference_abnormality
 from app.projections.patient_profile import project_patient_profile
 from app.storage.evidence_expectation_repository import EvidenceExpectationV2Repository
 from app.storage.active_facts import current_fact_heads
@@ -93,14 +94,14 @@ def _chain_heads(entities: list[Any], identity_attr: str) -> list[Any]:
 class PatientProfileService:
     """Project current records and verified rule-only source reuse without copying facts."""
 
-    def fact_date_roles(self, session: Session, revision: PatientProfileRevisionV2) -> dict[str, str | None]:
-        """Expose original date roles in one batch; never change a saved profile or infer an event date."""
+    def fact_display_metadata(self, session: Session, revision: PatientProfileRevisionV2) -> dict[str, dict]:
+        """Read exact saved-source metadata; never adopt facts or infer clinical significance."""
         items = [item for lane in revision.lanes for item in lane.items if item.kind == ProfileItemKind.FACT]
         facts = ClinicalFactV2Repository(session).get_many([item.source_id for item in items])
         # A profile keeps its exact source IDs; this read must not switch to today's chain heads.
         # Reading original date metadata is not fact adoption or a fresh clinical source review.
         display_scope = revision.authority.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"})
-        roles = {}
+        metadata = {}
         for item in items:
             fact = facts[item.source_id]
             if (fact.authority.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"}) != display_scope
@@ -110,8 +111,9 @@ class PatientProfileService:
                     or fact.asserted_object != item.asserted_object
                     or sorted(fact.locator_ids) != sorted(item.locator_ids)):
                 raise PatientProfileProjectionError("时间线记录与原事实不一致")
-            roles[item.source_id] = fact.date_role
-        return roles
+            metadata[item.source_id] = {"date_role": fact.date_role,
+                                        "reference_abnormality": reference_abnormality(fact)}
+        return metadata
 
     def fact_source_readings(
         self, session: Session, revision: PatientProfileRevisionV2, fact_id: str,

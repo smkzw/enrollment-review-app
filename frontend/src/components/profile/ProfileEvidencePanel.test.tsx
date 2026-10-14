@@ -304,6 +304,26 @@ describe("ProfileEvidencePanel", () => {
     expect(screen.getAllByLabelText(/^重点标注/).filter(node => node.classList.contains("original-evidence-page__box--selected"))).toHaveLength(1);
   });
 
+  it("文字来源优先当前项目而非孤立日期，突出项目且其他依据仍可选择", async () => {
+    const wire = makeRevision();
+    const first = { ...wire.evidence_locators[0]!, precision: "page_only" as const,
+      authenticity: "degraded" as const, bbox: null, coordinate_frame: null, excerpt: "2026-03",
+      degradation_reason: "仅能定位页面" };
+    wire.evidence_locators[0] = first;
+    wire.evidence_locators.push({ ...first, locator_id: "object-excerpt", excerpt: "血压 120/80 mmHg，未见其他异常" });
+    wire.lanes.find(lane => lane.lane === "demographics")!.items[0]!.locator_ids.push("object-excerpt");
+    const model = adaptPatientProfile(decodePatientProfileRevision(wire));
+    const { container } = render(<ProfileEvidencePanel model={model} item={openItem(model)} onClose={vi.fn()} />);
+    const choices = await screen.findByRole("combobox", { name: "原文依据" });
+    expect(choices).toHaveValue("object-excerpt");
+    const quote = container.querySelector(".profile-locator__excerpt")!;
+    expect(quote.textContent).toBe("血压 120/80 mmHg，未见其他异常");
+    expect(quote.querySelector("mark")).toHaveTextContent("血压");
+    expect(screen.queryByLabelText(/^重点标注/)).not.toBeInTheDocument();
+    await userEvent.selectOptions(choices, first.locator_id);
+    expect(container.querySelector(".profile-locator__excerpt")).toHaveTextContent("2026-03");
+  });
+
   it("定位页码或资料版本与实际页不一致时停止精确定位且不画框", async () => {
     const wire = makeRevision();
     wire.evidence_locators[0] = {
