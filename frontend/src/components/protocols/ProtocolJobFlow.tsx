@@ -38,6 +38,7 @@ import { ProtocolPublishedSummary } from "./ProtocolPublishedSummary";
 import { ProtocolRecoveryBanner } from "./ProtocolRecoveryBanner";
 import { patchComponentSemantics } from "../../domain/protocolManualEdit";
 import { ProtocolRuleReviewPanel } from "./ProtocolRuleReviewPanel";
+import { ProtocolReviewScope } from "./ProtocolReviewScope";
 import { ProtocolVariableBindingPanel } from "./ProtocolVariableBindingPanel";
 import { ProtocolWorkflowStagePanel } from "./ProtocolWorkflowStagePanel";
 
@@ -87,7 +88,6 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
   const [reviewReady, setReviewReady] = useState(false);
   const onReviewReady = useCallback((ready: boolean) => setReviewReady(ready), []);
   useEffect(() => { setReviewReady(false); }, [jobId, sessionData?.draftRevisionId]);
-  const publicationBlocked = repo.kind === "http" && !reviewReady;
 
   const identity = useLoad(
     (signal) => repo.getIdentityReview(jobId, { signal }),
@@ -149,6 +149,10 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
   const onBindingsSaved = useCallback(() => {
     session.retry(); draftBundle.retry(); comparison.retry(); redoReview.retry();
   }, [session.retry, draftBundle.retry, comparison.retry, redoReview.retry]);
+  const scopePending = isRedo && comparison.state.status === "success"
+    ? comparison.state.data.candidate.reviewScopePending
+    : draftBundle.state.status === "success" && draftBundle.state.data.draft.reviewScopePending;
+  const publicationBlocked = repo.kind === "http" && (!reviewReady || Boolean(scopePending));
 
   useEffect(() => {
     if (
@@ -520,7 +524,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           sources={redoReview.state.data.sources}
           saving={saveBusy}
           publicationBlocked={publicationBlocked || publishBusy}
-          supplementaryRequirements={repo.kind === "http" ? <><ProtocolWorkflowStagePanel jobId={jobId} draft={comparison.state.data.candidate} onSaved={onBindingsSaved} /><ProtocolVariableBindingPanel
+          supplementaryRequirements={repo.kind === "http" ? <><ProtocolReviewScope jobId={jobId} revisionId={comparison.state.data.candidate.revisionId} onSaved={onBindingsSaved} /><ProtocolWorkflowStagePanel jobId={jobId} draft={comparison.state.data.candidate} onSaved={onBindingsSaved} /><ProtocolVariableBindingPanel
             jobId={jobId} revisionId={comparison.state.data.candidate.revisionId} onSaved={onBindingsSaved} /><ProtocolRuleReviewPanel
             jobId={jobId} revisionId={comparison.state.data.candidate.revisionId}
             content={comparison.state.data.candidate.content}
@@ -617,7 +621,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           }}
           saving={saveBusy}
           publicationBlocked={publicationBlocked}
-          supplementaryRequirements={repo.kind === "http" ? <><ProtocolWorkflowStagePanel jobId={jobId} draft={draft} onSaved={onBindingsSaved} /><ProtocolVariableBindingPanel
+          supplementaryRequirements={repo.kind === "http" ? <><ProtocolReviewScope jobId={jobId} revisionId={draft.revisionId} onSaved={onBindingsSaved} /><ProtocolWorkflowStagePanel jobId={jobId} draft={draft} onSaved={onBindingsSaved} /><ProtocolVariableBindingPanel
             jobId={jobId} revisionId={draft.revisionId} onSaved={onBindingsSaved} /><ProtocolRuleReviewPanel
             jobId={jobId} revisionId={draft.revisionId} integrity={integrity}
             content={draft.content}

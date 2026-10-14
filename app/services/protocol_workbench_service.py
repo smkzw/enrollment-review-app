@@ -31,7 +31,7 @@ from app.domain.contracts.agent_io import (
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.rule_reviews import RuleReviewRecord, ReviewerKind
 from app.domain.contracts.enums import DatePrecision, MetadataResolutionStatus, StudyPhase
-from app.domain.contracts.protocol_drafts import DraftFeedbackKind, ProtocolDraftRevision
+from app.domain.contracts.protocol_drafts import DraftFeedbackKind, DraftRevisionStatus, ProtocolDraftRevision
 from app.evidence.artifacts import ArtifactStore
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
 from app.domain.contracts.rules import RestrictedRuleComponent, iter_atomic_predicates
@@ -193,6 +193,14 @@ class ProtocolWorkbenchError(RuntimeError):
         super().__init__(detail)
 
 
+def _publication_error(exc: ProtocolPublicationError) -> ProtocolWorkbenchError:
+    if exc.code == "review_scope_not_applied":
+        return ProtocolWorkbenchError("REVIEW_SCOPE_NOT_APPLIED", title="新增范围尚未完成",
+            detail=str(exc), recovery="请先完成新增范围中要求的整理与审定；已发布规则不受影响。")
+    return ProtocolWorkbenchError("PUBLICATION_FAILED", title="发布未能完成", detail=str(exc),
+        recovery="请刷新草稿状态后重试；若仍失败，请联系维护人员并保留操作时间。")
+
+
 @dataclass(frozen=True)
 class StartDeconstructionResult:
     job_id: str
@@ -285,6 +293,7 @@ class DraftComparisonSideView:
     is_formal_baseline: bool
     content: dict[str, Any]
     source_refs: list[str]
+    review_scope_pending: bool = False
 
 
 @dataclass(frozen=True)
@@ -1394,7 +1403,7 @@ class ProtocolWorkbenchService:
                 **binding_view(revision.content)}
 
     def get_review_scope(self, job_id: str) -> dict[str, Any]:
-        from app.services.protocol_review_scope_service import review_scope_view, scope_source_snapshot
+        from app.services.protocol_review_scope_service import load_scope_structure, review_scope_view, scope_source_snapshot, validate_scope_proposal
 
         self._require_protocol_job(job_id)
         merged = self._merged_payload(job_id)
@@ -1409,11 +1418,79 @@ class ProtocolWorkbenchService:
                 snapshot = scope_source_snapshot(session, source, merged.get("extraction_snapshot"))
             view = review_scope_view(source=source,
                 spans=list(self._load_source_spans(merged).values()),
-                snapshot=snapshot, data_paths=self.data_paths)
+                snapshot=snapshot, data_paths=self.data_paths,
+                additional_ids=[span_id for addition in revision.review_scope_selection.additions
+                    for span_id in addition.source_span_ids] if revision.review_scope_selection else ())
+            selection = revision.review_scope_selection
+            if selection is not None and selection.scope_content_hash == view["scope_content_hash"]:
+                if selection.snapshot_id != source.extraction_snapshot_id:
+                    raise ValueError("保存的范围不属于本版方案。")
+                validate_scope_proposal(selection, view, source, list(self._load_source_spans(merged).values()),
+                    load_scope_structure(snapshot, self.data_paths))
+                resolved = {key for addition in selection.additions for key in addition.resolves_references}
+            else:
+                resolved = set()
+            for diagnostic in view["diagnostics"]:
+                diagnostic["resolved_by_manual_selection"] = diagnostic["diagnostic_key"] in resolved
         except (ValueError, OSError) as exc:
             raise ProtocolWorkbenchError("REVIEW_SCOPE_SOURCE_UNAVAILABLE", title="审核范围暂不可核对",
                 detail=str(exc), recovery="请核对本版方案保存的原文结构；已发布规则不会改变。") from exc
-        return {"job_id": job_id, "draft_revision_id": revision.revision_id, **view}
+        status = self.jobs.get_status(job_id)
+        editable = (revision.status in {DraftRevisionStatus.DRAFT, DraftRevisionStatus.SAVED, DraftRevisionStatus.RESTORED_FROM}
+            and status.state == "waiting_user" and not status.cancel_requested
+            and any(step.step_id in {STEP_AWAIT_REVIEW, STEP_PUBLISH} and step.state == "waiting_user" for step in status.steps))
+        return {"job_id": job_id, "draft_revision_id": revision.revision_id, **view, "editable": editable,
+            "selection": revision.review_scope_selection.model_dump(mode="json") if revision.review_scope_selection else None}
+
+    def get_review_scope_options(self, job_id: str, *, query: str, offset: int = 0) -> dict[str, Any]:
+        from app.protocols.review_scope import review_scope_source_options
+        from app.services.protocol_review_scope_service import load_scope_structure, scope_source_snapshot
+        view = self.get_review_scope(job_id)
+        merged = self._merged_payload(job_id)
+        source = self._load_source_input(merged)
+        revision = self._load_draft_revision(merged)
+        if revision.revision_id != view["draft_revision_id"]:
+            raise ProtocolWorkbenchError("DRAFT_REVISION_CONFLICT", title="草稿已变化",
+                detail="原文查找未使用旧版草稿。", recovery="请刷新后重新查找。")
+        try:
+            with self.session_factory() as session:
+                snapshot = scope_source_snapshot(session, source, merged.get("extraction_snapshot"))
+            options = review_scope_source_options(blocks=load_scope_structure(snapshot, self.data_paths),
+                source_spans=list(self._load_source_spans(merged).values()), query=query, offset=offset)
+        except (ValueError, OSError) as exc:
+            raise ProtocolWorkbenchError("REVIEW_SCOPE_SOURCE_UNAVAILABLE", title="原文暂不可查找",
+                detail=str(exc), recovery="请核对本版方案保存的原文结构。") from exc
+        return {"job_id": job_id, "draft_revision_id": revision.revision_id, **options}
+
+    def save_review_scope(self, job_id: str, *, expected_revision_id: str, proposal) -> dict[str, Any]:
+        from app.domain.contracts.protocol_drafts import ReviewScopeSelection
+        from app.services.protocol_review_scope_service import load_scope_structure, scope_source_snapshot, validate_scope_proposal
+        view = self.get_review_scope(job_id)
+        if view["draft_revision_id"] != expected_revision_id or not view["editable"]:
+            raise ProtocolWorkbenchError("REVIEW_SCOPE_NOT_EDITABLE", title="本次范围尚不能保存",
+                detail="草稿已变化、取消或发布，或不在可编辑步骤。", recovery="请刷新草稿；已发布版本须从新草稿修订。")
+        merged = self._merged_payload(job_id)
+        source = self._load_source_input(merged)
+        revision = self._load_draft_revision(merged)
+        try:
+            with self.session_factory() as session, session.begin():
+                job = JobStore(session).get_job(job_id)
+                if job.state != "waiting_user" or job.cancel_requested:
+                    raise ValueError("任务已离开编辑步骤或正在取消，未保存本次选择。")
+                snapshot = scope_source_snapshot(session, source, merged.get("extraction_snapshot"))
+                validate_scope_proposal(proposal, view, source,
+                    list(self._load_source_spans(merged).values()), load_scope_structure(snapshot, self.data_paths))
+                selection = ReviewScopeSelection(**proposal.model_dump(mode="python"),
+                    snapshot_id=source.extraction_snapshot_id, saved_by=self.operator_name(), saved_at=self.now())
+                saved = ProtocolDraftService(session).save_review_scope(draft_id=revision.draft_id,
+                    selection=selection, expected_revision_id=expected_revision_id,
+                    actor=self.operator_name(), created_at=self.now())
+                if saved.revision_id != revision.revision_id:
+                    self._update_draft_checkpoint(session, job_id, saved)
+        except ValueError as exc:
+            raise ProtocolWorkbenchError("REVIEW_SCOPE_SELECTION_INVALID", title="范围选择未保存",
+                detail=str(exc), recovery="请核对所选原文、关联条款及移除理由。") from exc
+        return self.get_review_scope(job_id)
 
     def save_variable_bindings(self, job_id: str, *, expected_revision_id: str, proposal):
         merged = self._merged_payload(job_id)
@@ -1629,6 +1706,7 @@ class ProtocolWorkbenchService:
             is_formal_baseline=formal,
             content=content.model_dump(mode="json"),
             source_refs=sorted(set(content.source_refs)),
+            review_scope_pending=revision.review_scope_selection is not None,
         )
 
     def get_sources(self, job_id: str) -> dict[str, Any]:
@@ -3506,12 +3584,7 @@ class ProtocolWorkbenchService:
                 recovery="请确认上传的是当前项目对应方案与研究期别，或另建独立项目。",
             ) from exc
         except ProtocolPublicationError as exc:
-            raise ProtocolWorkbenchError(
-                "PUBLICATION_FAILED",
-                title="发布未能完成",
-                detail=str(exc),
-                recovery="请刷新草稿状态后重试；若仍失败，请联系维护人员并保留操作时间。",
-            ) from exc
+            raise _publication_error(exc) from exc
 
         if not result.replay:
             self._complete_user_step(
@@ -3612,12 +3685,7 @@ class ProtocolWorkbenchService:
                 recovery="请确认上传的新版方案属于目标项目的同一方案与研究期别。",
             ) from exc
         except ProtocolPublicationError as exc:
-            raise ProtocolWorkbenchError(
-                "PUBLICATION_FAILED",
-                title="发布未能完成",
-                detail=str(exc),
-                recovery="请刷新草稿状态后重试；若仍失败，请联系维护人员并保留操作时间。",
-            ) from exc
+            raise _publication_error(exc) from exc
 
         if not result.replay:
             self._complete_user_step(

@@ -237,6 +237,9 @@ class ProtocolPublicationService:
 
         revisions = ProtocolDraftRevisionRepository(session)
         revision = revisions.get(request.draft_revision_id)
+        if revision.review_scope_selection is not None:
+            raise ProtocolPublicationError("review_scope_not_applied",
+                "新增范围尚未形成并审定对应要求，本次选择已保存，但不能当作完整规则包发布。")
         head = revisions.get_head(revision.draft_id)
         if head is None or head.revision_id != revision.revision_id:
             from app.services.protocol_draft_service import head_stale_error

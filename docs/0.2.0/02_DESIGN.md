@@ -161,10 +161,12 @@
   3. 按标题关键词定位 S3（研究流程表／访视流程／Schedule of Activities）与 S4（禁用药物／合并用药／伴随治疗／Prohibited／Concomitant）；
   4. 输出范围清单，每项带理由（"被 EX-07 引用"／"标题匹配：合并用药"）。
 - 未能匹配的引用作为提示显示在审定页，由 MM 手工指定。
-- **SAR（已有 rev21）不重新起草**：范围清单只作为条款的"定义依据"挂在对应规则上（存 `protocol_review_scopes`，审定页与工作台中可展开原文），并作为禁用药抽取（R-A4）的输入。
+- **SAR（已有 rev21）不重新起草**：范围定位与选择复用外层不可变 `ProtocolDraftRevision.review_scope_selection` 保存，不另建 `protocol_review_scopes` 表。它不是模型作者Schema、另一份规则或临床采用。后续将已选范围作为对应条款的定义依据及禁用药抽取（R-A4）的输入。
 - **新方案（如 D001）起草时**才把范围单元加入官方解构的 `source_materials`／`allowed_source_span_ids`（`app/protocols/deconstruction_service.py:574-610`），同时让 `catalog_material_coverage` 检查接受这些单元（否则会因"材料多于目录"报错）。
 
-当前已接通只读定位子包：`ProtocolWorkbenchService.get_review_scope` → `GET .../{job}/draft/review-scope` → 草稿及历史发布摘要的“查看审核范围”。从原任务保存的同一提取快照读结构工件并核哈希；重新解构任务没有重复结构时，按精确snapshot身份读取原任务保存记录，不重新解析方案／调用模型。S1/S3复用冻结目录，S2定位明确引用，S4取真实标题的有界子树；表格根文字复用`native_source_text`，不因根块无正文报损坏，不跨表借单元格。摘录仅要求逐字片段，不强求等于整段；项目／版本／期别／内容不符拒绝，未知引用显式保留。Word多级自动编号模板未完整还原时不猜编号，例如“参照6.5”能发现但仍可待指定。页面分类按需展开，来源页码只在变化处显示；不写草稿、发布或事实。范围增删保存、定义依据挂接及R-A4提取／审定／发布仍是本WP待完成部分，当前`clinical_adoption_applied=false`不得冒充完整四块临床采用。
+定位链为 `ProtocolWorkbenchService.get_review_scope` → `GET .../{job}/draft/review-scope` → 草稿及历史发布摘要的“查看审核范围”。从原任务保存的同一提取快照读结构工件并核哈希；重新解构任务没有重复结构时，按精确snapshot身份读取原任务保存记录，不重新解析方案／调用模型。S1/S3复用冻结目录，S2定位明确引用，S4取真实标题的有界子树；表格根文字复用`native_source_text`，不因根块无正文报损坏，不跨表借单元格。摘录仅要求逐字片段，不强求等于整段；项目／版本／期别／内容不符拒绝，未知引用显式保留。
+
+选择链为同页勾选／移除理由／原文查找 → `PUT .../{job}/draft/review-scope` → 正常追加草稿修订及现有checkpoint → 同接口读回。S1/S3固定；S2/S4每项必须保留或说明移除。手工指定只允许同一冻结来源，关联官方条款与具体待定位引用；原文查找真正分页，不要求用户填写内部ID。Word多级自动编号模板未完整还原时不猜编号，例如“参照6.5”可手工指定实际章节，但这仅解决位置，不批准含义。正常手工编辑、变量修改、恢复历史均保留相应选择，旧无选择payload及hash不变。保存不是采用：对应要求未整理与审定前，API与两种发布入口明确阻止把选择冒充完整规则包；后续R-A4实际接线后以真实采用结果替代这项临时阻止，不关闭保护。当前`clinical_adoption_applied=false`，定义依据挂接及R-A4提取／审定／发布仍待完成。
 
 ### 5.3 静态检查重新分级（P5）
 

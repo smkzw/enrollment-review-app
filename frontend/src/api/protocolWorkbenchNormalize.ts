@@ -886,6 +886,7 @@ export function normalizeDraftRevision(wire: unknown): DraftRevisionView {
     reasonLabel: requireString(row.reason_label, "reason_label"),
     importedUnpublishedProposal: row.imported_unpublished_proposal === undefined
       ? false : requireBoolean(row.imported_unpublished_proposal, "imported_unpublished_proposal"),
+    reviewScopePending: row.review_scope_pending === undefined ? false : requireBoolean(row.review_scope_pending, "review_scope_pending"),
     actor: requireString(row.actor, "actor"),
     createdAt: requireString(row.created_at, "created_at"),
     studyPhase: requireStudyPhase(row.study_phase, "study_phase"),
@@ -1078,6 +1079,7 @@ function normalizeDraftComparisonSide(raw: unknown): DraftComparisonSideView {
     ruleCount: requireNumber(row.rule_count, "rule_count"),
     workflowStageCount: requireNumber(row.workflow_stage_count, "workflow_stage_count"),
     isFormalBaseline: row.is_formal_baseline === true,
+    reviewScopePending: row.review_scope_pending === undefined ? false : requireBoolean(row.review_scope_pending, "review_scope_pending"),
     content: requireRecord(row.content, "content"),
     sourceRefs: requireArray<unknown>(row.source_refs, "source_refs").map((value) =>
       requireString(value, "source_refs[]"),

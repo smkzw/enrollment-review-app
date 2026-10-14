@@ -12,7 +12,6 @@ import { ProtocolDeconstructionRuleTree } from "./ProtocolDeconstructionRuleTree
 import { ProtocolDraftEditPane } from "./ProtocolDraftEditPane";
 import { ProtocolDraftSourcePane } from "./ProtocolDraftSourcePane";
 import { RouteLink } from "../../app/router";
-import { ProtocolReviewScope } from "./ProtocolReviewScope";
 
 type DraftTab = "tree" | "edit" | "source";
 
@@ -141,7 +140,7 @@ export function ProtocolDraftWorkbench({
             type="button"
             className="button button--primary"
             disabled={saving || publishing || !integrity.publishable || publicationBlocked}
-            title={publicationBlocked ? "请先完成全部条目审定" : integrity.publishable ? "发布已审定规则版本" : "请先处理结构性问题"}
+            title={draft.reviewScopePending ? "补充范围尚未形成已审定要求" : publicationBlocked ? "请先完成全部条目审定" : integrity.publishable ? "发布已审定规则版本" : "请先处理结构性问题"}
             onClick={onPublish}
           >
             {publishing ? "正在发布…" : "发布"}
@@ -172,7 +171,6 @@ export function ProtocolDraftWorkbench({
         )}
       </section>
 
-      <ProtocolReviewScope key={draft.revisionId} jobId={session.jobId} revisionId={draft.revisionId} />
       {supplementaryRequirements}
       <div className="protocol-draft-tabs" role="tablist" aria-label="草稿工作区切换">
         {tabs.map((item) => (

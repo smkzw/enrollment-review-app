@@ -105,6 +105,7 @@ class DraftComparisonSideResponse(_StrictModel):
     is_formal_baseline: bool
     content: dict[str, Any]
     source_refs: list[str]
+    review_scope_pending: bool = False
 
 
 class DraftComparisonResponse(_StrictModel):
@@ -238,6 +239,7 @@ class DraftRevisionResponse(_StrictModel):
     reason: str
     reason_label: str
     imported_unpublished_proposal: bool = False
+    review_scope_pending: bool = False
     actor: str
     created_at: datetime
     study_phase: StudyPhase

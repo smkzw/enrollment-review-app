@@ -817,3 +817,26 @@ def test_reference_cue_dotted_section_without_di_or_jie_is_not_silently_ignored(
     unresolved = discover_review_scope(source_input=source, blocks=blocks[:1], source_spans=[])
     assert any(d.kind == ScopeDiagnosticKind.REFERENCE_UNRESOLVED and d.identifiers == (f"{cue} 8.12",)
                for d in unresolved.diagnostics)
+
+
+def test_source_options_paginate_native_structure_without_truncating_the_denominator():
+    from app.protocols.review_scope import review_scope_source_options
+    blocks = [_para(index, f"body.p{index}", f"共同说明{index}") for index in range(25)]
+    spans = [_span(f"span{index}", f"body.p{index}", index) for index in range(25)]
+    first = review_scope_source_options(blocks=blocks, source_spans=spans, query="共同说明")
+    second = review_scope_source_options(blocks=blocks, source_spans=spans, query="共同说明", offset=first["next_offset"])
+    assert first["total"] == second["total"] == 25
+    assert len(first["items"]) == 20 and len(second["items"]) == 5
+    assert second["next_offset"] is None
+    assert len({row["source_span_ids"][0] for row in first["items"] + second["items"]}) == 25
+
+
+def test_source_options_select_complete_heading_subtree_not_toc_or_next_section():
+    from app.protocols.review_scope import review_scope_source_options
+    blocks = [_para(0, "body.p0", "合并用药", level=0, style="TOC 1"),
+        _para(1, "body.p1", "合并用药", level=0), _para(2, "body.p2", "本节说明"),
+        _para(3, "body.p3", "下一章节", level=0)]
+    spans = [_span(f"span{index}", f"body.p{index}", index) for index in range(4)]
+    result = review_scope_source_options(blocks=blocks, source_spans=spans, query="合并用药")
+    assert result["total"] == 1
+    assert result["items"][0]["source_span_ids"] == ["span1", "span2"]

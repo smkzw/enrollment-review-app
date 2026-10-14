@@ -26,6 +26,7 @@ from app.domain.contracts.protocol_drafts import (
     ParentRuleDiff,
     ProtocolDraftRevision,
     ProtocolDraftRevisionDiff,
+    ReviewScopeSelection,
 )
 from app.domain.contracts.rules import (
     RestrictedRuleComponent,
@@ -1112,6 +1113,20 @@ class ProtocolDraftService:
             reason=DraftRevisionReason.MANUAL_EDIT, feedback_kind=None, feedback_note=None,
             actor=actor, created_at=created_at, variable_bindings=proposal)
 
+    def save_review_scope(self, *, draft_id: str, selection: ReviewScopeSelection,
+                          expected_revision_id: str, actor: str, created_at: datetime) -> ProtocolDraftRevision:
+        head = self._require_head(draft_id, expected_revision_id)
+        if head.status not in {DraftRevisionStatus.DRAFT, DraftRevisionStatus.SAVED, DraftRevisionStatus.RESTORED_FROM}:
+            raise DraftEditBoundaryError("DRAFT_NOT_EDITABLE", "已发布或已取消的草稿不能修改范围。")
+        if head.review_scope_selection is not None:
+            previous = head.review_scope_selection.model_dump(exclude={"saved_at", "saved_by"})
+            if previous == selection.model_dump(exclude={"saved_at", "saved_by"}):
+                return head
+        return self._append_revision(head.content, expected_revision_id=expected_revision_id,
+            reason=DraftRevisionReason.MANUAL_EDIT, feedback_kind=None,
+            feedback_note="审核范围选择已保存，尚未纳入规则。", actor=actor, created_at=created_at,
+            review_scope_selection=selection)
+
     def apply_manual_edit(
         self,
         draft: ProtocolDeconstructionDraft,
@@ -1205,6 +1220,7 @@ class ProtocolDraftService:
             status=DraftRevisionStatus.RESTORED_FROM,
             reason=DraftRevisionReason.RESTORE,
             actor=actor,
+            review_scope_selection=source.review_scope_selection,
             content=restored_content,
             content_sha256=canonical_hash(restored_content.model_dump(mode="json")),
             diff=compute_draft_diff(head.content, restored_content),
@@ -1294,6 +1310,7 @@ class ProtocolDraftService:
         created_at: datetime,
         variable_bindings=None,
         reviewed_stage_assignment: bool = False,
+        review_scope_selection: ReviewScopeSelection | None = None,
     ) -> ProtocolDraftRevision:
         head = self._require_head(draft.draft_id, expected_revision_id)
         if head.status == DraftRevisionStatus.CANCELLED:
@@ -1365,6 +1382,7 @@ class ProtocolDraftService:
             feedback_note=feedback_note,
             actor=actor,
             content=normalized_content,
+            review_scope_selection=review_scope_selection or head.review_scope_selection,
             content_sha256=canonical_hash(normalized_content.model_dump(mode="json")),
             diff=compute_draft_diff(head.content, normalized_content),
             created_at=created_at,

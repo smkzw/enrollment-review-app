@@ -9,7 +9,7 @@ import tempfile
 from datetime import timezone
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, Request, Response, UploadFile, status as http_status
+from fastapi import APIRouter, File, Form, Query, Request, Response, UploadFile, status as http_status
 
 from app.api.v2.protocol_schemas import (
     ConfirmIdentityRequest,
@@ -59,6 +59,7 @@ from app.services.protocol_workbench_service import ProtocolWorkbenchService
 from pydantic import Field
 from app.domain.contracts.common import ContractModel
 from app.services.protocol_variable_binding import VariableBindingProposal
+from app.domain.contracts.protocol_drafts import ReviewScopeProposal
 
 
 class VariableBindingRequest(ContractModel):
@@ -68,6 +69,11 @@ class VariableBindingRequest(ContractModel):
 
 class VariableSuggestionRequest(ContractModel):
     expected_revision_id: str = Field(min_length=1)
+
+
+class ReviewScopeRequest(ContractModel):
+    expected_revision_id: str = Field(min_length=1)
+    proposal: ReviewScopeProposal
 
 router = APIRouter(prefix="/api/v2/protocol/deconstructions", tags=["v2-protocol"])
 projects_router = APIRouter(prefix="/api/v2/protocol", tags=["v2-protocol"])
@@ -81,6 +87,18 @@ def get_variables(job_id: str, request: Request):
 @router.get("/{job_id}/draft/review-scope")
 def get_review_scope(job_id: str, request: Request):
     return _service(request).get_review_scope(job_id)
+
+
+@router.get("/{job_id}/draft/review-scope/sources")
+def get_review_scope_sources(job_id: str, request: Request, q: str = Query("", max_length=200),
+                             offset: int = Query(0, ge=0)):
+    return _service(request).get_review_scope_options(job_id, query=q, offset=offset)
+
+
+@router.put("/{job_id}/draft/review-scope")
+def save_review_scope(job_id: str, body: ReviewScopeRequest, request: Request):
+    return _service(request).save_review_scope(job_id,
+        expected_revision_id=body.expected_revision_id, proposal=body.proposal)
 
 
 @router.put("/{job_id}/draft/variables", response_model=DraftRevisionResponse)
@@ -347,6 +365,7 @@ def _draft_dto(view) -> DraftRevisionResponse:
             revision.reason.value, revision.reason.value
         ),
         imported_unpublished_proposal=(revision.reason.value == "initial_save" and revision.feedback_note is not None),
+        review_scope_pending=revision.review_scope_selection is not None,
         actor=revision.actor,
         created_at=_as_utc(revision.created_at),
         study_phase=revision.study_phase.value,
@@ -373,6 +392,7 @@ def _comparison_side_dto(side) -> DraftComparisonSideResponse:
         is_formal_baseline=side.is_formal_baseline,
         content=side.content,
         source_refs=list(side.source_refs),
+        review_scope_pending=side.review_scope_pending,
     )
 
 

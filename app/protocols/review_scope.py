@@ -503,6 +503,34 @@ def _resolve_reference(
 # ---------------------------------------------------------------------------
 
 
+def review_scope_source_options(*, blocks: Sequence[StructureBlock], source_spans: Sequence[ProtocolSourceSpan],
+                              query: str, offset: int = 0, limit: int = 20) -> dict:
+    """Search the frozen native source, returning whole sections or individual paragraphs."""
+    if offset < 0 or not 1 <= limit <= 20:
+        raise ValueError("原文查找范围不合法")
+    entries = _body_entries(sorted(blocks, key=lambda block: (block.block_order, block.source_ref)))
+    spans_by_ref = {span.source_ref: span for span in source_spans}
+    matches = [entry for entry in entries if entry.block.text.strip()
+        and not _TOC_STYLE_RE.search(f"{entry.block.style_name or ''} {entry.block.style or ''}")
+        and (_normalize_text(query).casefold() in _normalize_text(entry.block.text).casefold()
+             if query.strip() else entry.level is not None)]
+    options = []
+    for entry in matches[offset:offset + limit]:
+        indexes = _subtree_indexes(entries, entry.index) if entry.level is not None else (entry.index,)
+        span = spans_by_ref.get(entry.block.source_ref)
+        options.append({
+            "label": entry.block.text if entry.level is not None else "方案原文段落",
+            "text": entry.block.text,
+            "page": span.render_page if span else None,
+            "source_span_ids": [spans_by_ref[entries[index].block.source_ref].source_span_id
+                for index in indexes if entries[index].block.source_ref in spans_by_ref],
+            "missing_positions": sum(entries[index].block.source_ref not in spans_by_ref for index in indexes),
+        })
+    next_offset = offset + len(options)
+    return {"items": options, "total": len(matches),
+            "next_offset": next_offset if next_offset < len(matches) else None}
+
+
 def discover_review_scope(
     *,
     source_input: ProtocolDeconstructionInput,

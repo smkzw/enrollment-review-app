@@ -200,6 +200,7 @@ export interface DraftRevisionView {
   reason: string;
   reasonLabel: string;
   importedUnpublishedProposal?: boolean;
+  reviewScopePending?: boolean;
   actor: string;
   createdAt: string;
   studyPhase: StudyPhase;
@@ -502,6 +503,7 @@ export interface DraftComparisonSideView {
   isFormalBaseline: boolean;
   content: Record<string, unknown>;
   sourceRefs: string[];
+  reviewScopePending?: boolean;
 }
 
 export interface DraftComparisonView {
