@@ -16,7 +16,7 @@ from app.domain.variables.dictionary import load_dictionary
 from app.services.work_draft_calculation import atomic_expressions, is_numeric_history_condition
 
 PROMPT_VERSION = "work-draft-source-relations/v5"
-VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v27"
+VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v28"
 BATCH_SIZE = 16
 SEMANTIC_INSTRUCTIONS = (
     "你是入排审核产品的原文关系核对员。逐项查找本次提供的病历与报告中，对原子条件的支持或否定；"
@@ -107,7 +107,9 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
         old_model = saved["model"]
         if any(old_model[key] != getattr(model, key) for key in ("provider", "model", "reasoning_effort")):
             continue
-        metadata = {"prompt_version", "semantic_instructions_sha256"}
+        # Source relations submit their own frozen prompt directly; this flag
+        # only changes the normalizer's message builder, not this request.
+        metadata = {"prompt_version", "semantic_instructions_sha256", "include_source_categories"}
         old_params = {k: v for k, v in old_model["parameters"].items() if k not in metadata}
         new_params = {k: v for k, v in model.parameters.items() if k not in metadata}
         if old_params != new_params:
@@ -160,6 +162,7 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
         except (ValueError, JudgmentSearchReaderError):
             continue
         validated_targets = {target["target_id"]: target for target in selected}
+        raw_rows = {row["target_id"]: row for row in raw["results"]}
         for key, value in valid.items():
             current = expected.get(key)
             if current is None or wire_target(current) != wire_target(validated_targets[key]):
@@ -185,8 +188,37 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
                 # Revalidation may retain uncertainty, not newly qualify a
                 # direction that the original read failed to establish.
                 continue
+            scope_verified = (raw_rows[key]["object_matches"] and raw_rows[key]["time_matches"]
+                              and value["applicable"] == "yes")
+            previous = accepted.get(key)
+            # Two qualified UNKNOWN reads may disagree about the uncertainty
+            # label, not truth. Retain that disagreement without claiming a
+            # patient contradiction or upgrading either answer to a direction.
+            if (previous is not None and scope_verified and proofs[key].get("uncertainty_scope_verified")
+                    and not proofs[key].get("conflicting_raw_response_refs")
+                    and previous["truth"] == value["truth"] == TruthValue.UNKNOWN.value
+                    and previous["applicable"] == value["applicable"] == "yes"
+                    and not previous["policy"] and not value["policy"]
+                    and ({previous["relation"], value["relation"]} == {"conflict", "unclear"}
+                         or proofs[key].get("uncertain_classification_raw_response_refs")
+                             and previous["relation"] in {"conflict", "unclear"}
+                             and value["relation"] in {"conflict", "unclear"})
+                    and {item["page_artifact_id"] for item in previous["source_read_refs"]}
+                        == {item["page_artifact_id"] for item in value["source_read_refs"]}
+                    and {canonical_hash(item) for item in previous["source_read_refs"]}
+                        & {canonical_hash(item) for item in value["source_read_refs"]}):
+                refs = {canonical_hash(item): item for item in
+                        [*previous["source_read_refs"], *value["source_read_refs"]]}
+                reasons = list(dict.fromkeys([*proofs[key].get("uncertain_classification_reasons", [previous["reason"]]),
+                                             value["reason"]]))
+                accepted[key] = {**previous, "conflict": False, "relation": "unclear",
+                    "reason": "两次核对均尚不能确定本条件，是否存在资料矛盾也未核清。" + "；".join(reasons),
+                    "source_read_refs": list(refs.values())}
+                proofs[key]["uncertain_classification_reasons"] = reasons
+                proofs[key]["uncertain_classification_raw_response_refs"] = list(dict.fromkeys([
+                    *proofs[key].get("uncertain_classification_raw_response_refs", [proofs[key]["raw_response_ref"]]), ref]))
             # Newly recoverable old answers cannot be cherry-picked by direction.
-            if (prior is None and key in accepted
+            elif (prior is None and key in accepted
                     and any(accepted[key].get(field) != value.get(field)
                             for field in ("truth", "applicable", "conflict", "policy"))):
                 previous = accepted[key]
@@ -201,7 +233,8 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
             elif key not in accepted:
                 accepted[key] = value
                 proofs[key] = {"raw_response_ref": ref, "request_sha256": call["request_artifact_sha256"],
-                               "revalidation_version": VALIDATION_VERSION}
+                               "revalidation_version": VALIDATION_VERSION,
+                               "uncertainty_scope_verified": bool(scope_verified)}
     return accepted, proofs
 
 
@@ -240,7 +273,7 @@ def runtime_model():
         model=config.WORK_DRAFT_SEMANTIC_MODEL, reasoning_effort=config.WORK_DRAFT_SEMANTIC_REASONING_EFFORT,
         max_tokens=config.WORK_DRAFT_SEMANTIC_MAX_TOKENS, temperature=None)
     parameters = {key: value for key, value in model.parameters.items()
-                  if key not in {"agent_node", "normalization_policy_version"}}
+                  if key not in {"agent_node", "normalization_policy_version", "include_source_categories"}}
     parameters.update(agent_node="work_draft_semantic", prompt_version=PROMPT_VERSION,
         semantic_instructions_sha256=canonical_hash([SEMANTIC_INSTRUCTIONS, RELATION_SCOPE_INSTRUCTIONS]),
         stream_response=model.provider == "cms-router")

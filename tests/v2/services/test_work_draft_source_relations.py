@@ -122,7 +122,8 @@ def test_product_batch_execution_revalidates_whole_frozen_target_scope_then_filt
 
 
 @pytest.mark.parametrize("response_disagreement,decision", [
-    (True, "conflict"), (False, "conflict"), (True, "exclusion_not_triggered")])
+    (True, "conflict"), (False, "conflict"), (True, "exclusion_not_triggered"),
+    (False, "indeterminate")])
 def test_product_composition_separates_reader_disagreement_from_patient_conflict(monkeypatch, response_disagreement, decision):
     from app.domain.contracts.enums import ComponentDecision, RuleKind
     from app.domain.contracts.work_draft import WorkDraftItem
@@ -146,7 +147,9 @@ def test_product_composition_separates_reader_disagreement_from_patient_conflict
         reason_text="原始理由", input_hash="a" * 64, source_read_refs=[source]) for key in ("affected", "sibling")}
     batch = [{"target_id": "affected:predicate", "component_id": "affected"},
         {"target_id": "sibling:predicate", "component_id": "sibling"}]
-    proof = {"conflicting_raw_response_refs": ["second-answer"]} if response_disagreement else {}
+    proof = ({"conflicting_raw_response_refs": ["second-answer"]} if response_disagreement else
+        {"uncertain_classification_raw_response_refs": ["first-answer", "second-answer"]}
+            if decision == "indeterminate" else {})
     checkpoints = {"calculate": {"items": []}, "semantic:0000": {"results": {},
         "reuse_proofs": {"affected:predicate": proof, "sibling:predicate": {}}}}
     class Session:
@@ -482,7 +485,7 @@ def test_exact_scope_echo_is_not_a_missing_target_but_other_fields_still_rejecte
             source_result_envelope({**payload, **change}, material)
 
 
-@pytest.mark.parametrize("mutation", [None, "wrap", "disagreement", "old_scope_schema", "source", "target", "policy", "model", "truncated"])
+@pytest.mark.parametrize("mutation", [None, "wrap", "disagreement", "old_scope_schema", "normalizer_metadata", "source", "target", "policy", "model", "truncated"])
 def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutation):
     import json
     from app.domain.contracts.agents import ModelConfigContract
@@ -504,6 +507,7 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
     request = {"messages": [{"role": "user", "content":
         ("不同语义要求" if mutation == "policy" else SEMANTIC_INSTRUCTIONS) + "每个target_id恰好返回一次。\n" + json.dumps(material,ensure_ascii=False)}]}
     old_model = model.model_copy(update={"parameters": {"max_tokens": 65536, "prompt_version": "old-format"}}).model_dump(mode="json")
+    if mutation == "normalizer_metadata": old_model["parameters"]["include_source_categories"] = True
     if mutation == "model": old_model["model"] = "different-model"
     saved = {"model": old_model, "text": json.dumps({"results": [row().model_dump()]},ensure_ascii=False),
         "calls": [{"finish_reason": "length" if mutation == "truncated" else "stop", "response_model": "fixture", "request_artifact_sha256": "request"}]}
@@ -524,12 +528,110 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
     refs = ["response", "conflicting"] if mutation == "disagreement" else ["response"]
     values, proofs = revalidate_saved_source_read({"raw_refs": refs, "results": {} if mutation in {"wrap", "disagreement"} else {
         "component:infection": original_result}}, frame, [target()], model, Artifacts())
-    assert bool(values) == (mutation in {None, "wrap", "disagreement", "old_scope_schema"})
+    assert bool(values) == (mutation in {None, "wrap", "disagreement", "old_scope_schema", "normalizer_metadata"})
     if values:
         assert values["component:infection"]["truth"] == ("unknown" if mutation == "disagreement" else "false")
         assert proofs["component:infection"]["request_sha256"] == "request"
         if mutation == "disagreement":
             assert values["component:infection"]["conflict"] and len(values["component:infection"]["source_read_refs"]) == 2
+
+
+@pytest.mark.parametrize("change,compatible", [
+    (None, True), ("reverse", True), ("prior", True), ("third_unknown", True), ("page_restored", True),
+    ("object", False), ("time", False), ("applicability", False), ("direction", False),
+    ("different_sources", False), ("both_conflict", False),
+])
+def test_uncertain_classification_is_not_direction_disagreement_or_confirmed_patient_conflict(change, compatible):
+    import json
+    from app.domain.contracts.agents import ModelConfigContract
+    from app.domain.contracts.enums import ReviewStage
+    from app.services.work_draft_semantics import revalidate_saved_source_read, SEMANTIC_INSTRUCTIONS, SourceRelations, SourceQuote
+    model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
+    sources = [page("否认严重感染。曾有感染，严重程度未记载。"), page("另一处记录尚需核实。", key="other")]
+    frame = SimpleNamespace(source_pages=sources, review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+        anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
+    material = {"version": "frozen", "stage": "screening", "anchor_dates": {}, "targets": [target()],
+        "pages": [{"page_artifact_id": p.page_artifact_id, "page_number": p.page_number,
+                   "category": p.document_category, "text": p.effective_text} for p in sources],
+        "output_schema": SourceRelations.model_json_schema()}
+    request = {"messages": [{"role": "user", "content": SEMANTIC_INSTRUCTIONS + "每个target_id恰好一次。\n" + json.dumps(material)}]}
+    quotes = [{"page_artifact_id": "page", "excerpt": text}
+              for text in ("否认严重感染", "曾有感染，严重程度未记载")]
+    first = row(relation="conflict", quotes=quotes).model_copy(update={"reason": "并列记录，限定程度尚未核清。"})
+    second = row(relation="unclear", quotes=quotes).model_copy(update={"reason": "无法确定已有记录是否达到限定程度。"})
+    if change in {"object", "time"}:
+        second = second.model_copy(update={f"{change}_matches": False})
+    if change == "applicability": second = second.model_copy(update={"applicable": "unclear"})
+    if change == "direction": second = second.model_copy(update={"relation": "supports"})
+    if change == "different_sources": second = second.model_copy(update={"quotes": [SourceQuote(page_artifact_id="other", excerpt="另一处记录尚需核实")]})
+    if change == "both_conflict": second = second.model_copy(update={"relation": "conflict"})
+    if change == "page_restored":
+        second = second.model_copy(update={"quotes": [SourceQuote.model_validate(quotes[0]),
+            SourceQuote.model_validate({**quotes[1], "page_artifact_id": "other"})]})
+    rows = {"first": first.model_dump(), "second": second.model_dump()}
+    refs = ["second", "first"] if change == "reverse" else ["first", "second"]
+    if change == "third_unknown":
+        rows["third"] = second.model_dump()
+        refs.append("third")
+    class Artifacts:
+        def read(self, ref):
+            return json.dumps({"model": model.model_dump(mode="json"),
+                "text": json.dumps({"version": "frozen", "results": [rows[ref]]}),
+                "calls": [{"finish_reason": "stop", "response_model": model.model,
+                           "request_artifact_sha256": "request"}]}).encode()
+        def read_by_sha(self, *_): return json.dumps(request).encode()
+    prior = {"component:infection": relation_inputs(first, target(), sources)} if change == "prior" else {}
+    values, proofs = revalidate_saved_source_read({"raw_refs": refs, "results": prior}, frame, [target()], model, Artifacts())
+    result, proof = values["component:infection"], proofs["component:infection"]
+    assert result["truth"] == "unknown" and result["policy"] is False
+    assert bool(proof.get("uncertain_classification_raw_response_refs")) is compatible
+    if compatible:
+        assert result["relation"] == "unclear" and result["conflict"] is False and result["applicable"] == "yes"
+        assert "conflicting_raw_response_refs" not in proof
+        assert set(proof["uncertain_classification_raw_response_refs"]) == set(refs)
+        assert first.reason in result["reason"] and second.reason in result["reason"]
+        assert len(result["source_read_refs"]) == 2
+    elif change != "both_conflict":
+        assert proof.get("conflicting_raw_response_refs") and result["conflict"] is True
+    else:
+        assert result["relation"] == "conflict" and result["conflict"] is True
+
+
+@pytest.mark.parametrize("kind,expected", [
+    ("interpretation_unresolved", "适用含义尚未核清"),
+    ("consumer_unavailable", "当前审核方式尚不能可靠判定"),
+])
+def test_product_restricted_reason_preserves_specific_dimensions_without_inventing_a_patient_decision(monkeypatch, kind, expected):
+    from app.domain.contracts.clause_pack import ClausePackRestrictedClause
+    from app.domain.contracts.work_draft import WorkDraftItem
+    from app.domain.publication import canonical_hash
+    from app.services import work_draft_review as service
+    clause = ClausePackRestrictedClause(clause_id="restricted", rule_id="rule", official_code="EX-01",
+        display_code="EX-01a", kind="exclusion", title="有源要求", source_text="原文要求",
+        source_span_ids=["source"], source_excerpts=["原文要求"], limitation_kind=kind,
+        unresolved_dimensions=["共同限定是否也适用于后一个分支，原文尚不明确"])
+    rules = SimpleNamespace(model_dump=lambda **_: {"rules": "frozen"})
+    authority = SimpleNamespace(review_episode_id="episode", rule_set_id="rules", rule_set_revision=1)
+    frame = SimpleNamespace(work_draft=True, review_run_id="run", authority=authority,
+        rule_set_sha256=canonical_hash(rules.model_dump()), facts=[], system_issues=[],
+        clause_pack=SimpleNamespace(clauses=[], restricted_clauses=[clause]))
+    frame.model_copy = lambda **_: frame
+    class Session:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+    monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: frame))
+    monkeypatch.setattr(service, "authority_from_active_episode", lambda *_: authority)
+    monkeypatch.setattr(service, "get_rule_set", lambda *_: rules)
+    monkeypatch.setattr(service, "_fact_refs", lambda *_: {})
+    monkeypatch.setattr(service, "calculate_procedures", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(service, "JobStore", lambda _: SimpleNamespace())
+    context = SimpleNamespace(job_type=service.JOB_TYPE, job_id="job", step_id="calculate",
+        job_payload={"context_id": "context", "review_run_id": "run", "calculation_version": service.CALCULATION_VERSION})
+    actual = WorkDraftItem.model_validate(service.WorkDraftReviewService(Session, object()).execute(context)["items"][0])
+    assert actual.decision is None and actual.system_issue.kind == "component_unstructured"
+    assert expected in actual.reason_text and clause.unresolved_dimensions[0] in actual.reason_text
+    assert actual.source_text == clause.source_text and actual.source_read_refs == []
+    assert ("澄清" if kind == "interpretation_unresolved" else "完善") in actual.system_issue.alternative
 
 
 @pytest.mark.parametrize("change,expected", [(None, {"component:infection", "component:other"}),
@@ -589,7 +691,20 @@ def test_chart_role_override_does_not_change_normalizer_role(monkeypatch):
     model = runtime_model()
     assert (model.provider, model.model, model.reasoning_effort) == ("cms-router", "glm-5.3-flash", "high")
     assert model.parameters["max_tokens"] == 65536
+    assert "include_source_categories" not in model.parameters
     assert (config.EVIDENCE_NORMALIZER_PROVIDER, config.EVIDENCE_NORMALIZER_MODEL) == normalizer
+
+
+def test_source_relation_transport_does_not_use_normalizer_category_message_builder():
+    from app.agents.deepseek_evidence_normalizer_transport import DeepSeekEvidenceNormalizerTransport
+    sent = []
+    for enabled in (False, True):
+        transport = DeepSeekEvidenceNormalizerTransport(client=object(), backend="cms-router",
+            model="fixture", include_source_categories=enabled)
+        transport._complete = lambda messages, **kwargs: sent.append((messages, kwargs)) or "{}"
+        transport.propose_question_classifications(prompt="本次冻结原文关系材料", output_schema={"type": "object"})
+    assert sent[0] == sent[1] == ([{"role": "user", "content": "本次冻结原文关系材料"}],
+                                {"output_schema": {"type": "object"}})
 
 
 @pytest.mark.parametrize("literal,value,unit,expected", [

@@ -23,7 +23,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v31"
+CALCULATION_VERSION = "work-draft/0.2.0-v32"
 
 
 def confirmation_allowed(item, items):
@@ -414,8 +414,10 @@ class WorkDraftReviewService:
                          for clause in frozen.clause_pack.clauses]
                 items.extend(calculate_procedures(calculation_frame, rule_set, evidence_refs=refs))
                 for clause in frozen.clause_pack.restricted_clauses:
+                    from app.services.eligibility_review_projection import _restricted_clause_projection
+                    limitation = _restricted_clause_projection(clause)
                     issue = SystemIssue(kind="component_unstructured", affected_codes=[clause.official_code],
-                        detail="本条部分要求尚不能由系统完整核对。", alternative="请对照所列方案原文核对该子项。")
+                        detail=limitation.reason, alternative=limitation.action_detail)
                     items.append(WorkDraftItem(item_id=f"{frozen.review_run_id}:{clause.clause_id}",
                         review_run_id=frozen.review_run_id, official_code=clause.official_code,
                         rule_component_id=clause.clause_id, rule_kind=clause.kind, title=clause.title,
