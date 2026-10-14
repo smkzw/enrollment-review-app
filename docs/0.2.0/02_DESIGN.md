@@ -290,6 +290,7 @@ Job 幂等键：`(review_episode_id, 资料快照哈希, rule_set_id, rule_set_r
 ## 8. 更正、补证与重算
 
 - 更正：沿用 `apply_prepared_fact_correction`（`app/services/fact_correction_service.py:1121-1275`）；可更正字段增加 `variable_id`。
+- 规则单独更新后的来源复用：复用既有来源相容判断，逐项核同项目／受试者／节点／快照／处理修订、方案文件哈希、期别及完整旧变量定义。工作稿更新可确定性追加当前Profile，沿用真实事实ID及来源身份，不复制或改写旧事实、不重跑OCR／抽取；默认正式事实选择仍要求原权威完全一致。更正只对已通过来源核对的事实允许旧规则身份，保存新事实于当前权威，原快照／更正谱系与旧报告不改；事件及用药暴露不借此放宽。复用证明不是医学批准，也不修改来源强度或已核标记。
 - **更正后的自动重算**：0.2.0更正Job冻结`work_draft_recompute`，沿用plan→apply，再追加独立work_draft步骤。apply先原子保存更正及提交证明；第三步重新核当前节点／已发布规则，调用既有`WorkDraftReviewService.start`，保存子Job关联。不在apply事务内调用后续核对：后续故障只重试失败步骤或子Job，不回滚已提交更正、不重复发布。路径绑定的`fact-corrections/jobs/{job_id}/work-draft`读取实际关联与终态；界面只有新稿真正保存才显示完成。旧两步任务及其幂等身份不改，未配置数据字典的旧链不自动接入。增量上传及“已核”的自动触发仍待实现；“已核”不改资料哈希，因此其集合哈希须进入工作稿身份。
 - 新工作稿写 `supersedes_review_run_id`；前端在工作稿顶部显示"第 N 版（较上一版：结论变化 x 条）"，可打开旧版。
 
