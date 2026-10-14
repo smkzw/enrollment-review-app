@@ -229,18 +229,18 @@ export function ReportsPage() {
                 onChange={(event) => updateParams({ run: event.target.value, action: null })}>
                 {selectedRun === null && <option value="">请重新选择审核记录</option>}
                 {[...runs].reverse().map((run) => <option key={run.reviewRunId} value={run.reviewRunId}>
-                  {reviewTime(run.completedAt ?? run.startedAt)} · {run.status === "completed" ? "记录已保存，打开查看" : "尚未完成"}
+                  {reviewTime(run.completedAt ?? run.startedAt)} · {run.runKind === "work_draft" ? "工作稿 · 未签发" : "正式审核记录"} · {run.status === "completed" ? "已保存" : "尚未完成"}
                 </option>)}
               </select>
             </label>
           </section>
         )}
       </div>
-      {canModify && <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode}
+      {canModify && runs.length === 0 && <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode}
         onCompleted={() => history.retry()} />}
       {history.state.status === "loading" ? <LoadingState />
         : history.state.status === "error" ? <ErrorState message={history.state.message} onRetry={history.retry} />
-        : runs.length === 0 ? <EmptyState message="该节点尚无正式审核记录。" hint="审核完成后，报告会保留当时的资料与结论。" />
+        : runs.length === 0 ? <EmptyState message="该节点尚无审核记录。" hint="工作稿保存后，可在这里回看当时的资料与结论。" />
         : selectedRun === null ? <ErrorState message="链接中的审核记录不属于该节点。" onRetry={() => updateParams({ run: null })} />
         : detail.state.status === "error" ? <ErrorState message={detail.state.message} onRetry={detail.retry} />
         : report === null ? <LoadingState /> : <FrozenReviewReport report={report} onActionChanged={detail.retry} focusActionId={params.get("action")} />}

@@ -11,6 +11,7 @@ from app.api.v2.review_history import (
 )
 from app.domain.contracts.protocol_controls import RestrictedProtocolControlStatement
 from app.domain.publication import canonical_hash
+from tests.v2.services.test_work_draft_history import frozen_history
 from tests.v2.services.test_receipt_verified_work_draft_consumer import (
     _aligned_review_context,
     _synthetic_material,
@@ -89,7 +90,7 @@ def test_history_http_uses_the_frozen_source_not_current_material(client, monkey
     # The history storage boundary is explicit; HTTP/DTO consume a real typed frozen context.
     detail = SimpleNamespace(run=run, context=context, status="in_progress", controls=(),
                              assessments=(), actions=(), missing_rule_component_ids=("component-a",),
-                             evidence_locators=(), missing_protocol_control_ids=())
+                             evidence_locators=(), missing_protocol_control_ids=(), work_draft=None, source_file_names={})
     monkeypatch.setattr("app.api.v2.review_history.get_run", lambda *args: detail)
     url = (f"/api/v2/subjects/{authority.subject_id}/review-episodes/"
            f"{authority.review_episode_id}/review-runs/{context.review_run_id}")
@@ -108,4 +109,22 @@ def test_history_http_uses_the_frozen_source_not_current_material(client, monkey
         else:
             changed["restricted_requirements"][0]["dependency_refs"] = ["missing-requirement"]
         with pytest.raises(ValidationError, match="身份不一致"):
+            ReviewHistoryRunResponse.model_validate(changed)
+
+
+def test_working_history_http_preserves_frozen_results_and_rejects_mixed_kinds(client, monkeypatch, frozen_history):
+    from app.services import review_history_service as history
+    run, context, _, _, _ = frozen_history
+    detail = history._work_draft_detail(None, run, context, "completed")
+    monkeypatch.setattr("app.api.v2.review_history.get_run", lambda *args: detail)
+    response = client.get(f"/api/v2/subjects/{context.authority.subject_id}/review-episodes/{run.review_episode_id}/review-runs/{run.review_run_id}")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["run_kind"] == "work_draft"
+    assert body["work_draft"]["component_clauses"][0]["decision"] == "exclusion_not_triggered"
+    assert body["source_file_names"] == {"doc": "原报告.pdf"}
+    for changed in (body | {"work_draft": None},
+                    body | {"run": body["run"] | {"run_kind": "formal"}},
+                    body | {"work_draft": body["work_draft"] | {"subject_id": "other-patient"}}):
+        with pytest.raises(ValidationError):
             ReviewHistoryRunResponse.model_validate(changed)

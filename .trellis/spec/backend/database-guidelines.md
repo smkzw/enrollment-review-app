@@ -17,6 +17,8 @@ V2使用 SQLite/WAL、SQLAlchemy 2和Alembic。文件系统只保存原文件、
 - 仓储返回领域对象或明确DTO，不让API组件直接拼SQL。
 - 列表查询必须批量加载计数/状态，禁止按受试者逐行N+1查询。
 - 临床判断查询必须带方案版本、RuleModelRevision、ReviewEpisode、EvidenceSnapshot和ReviewRun范围。
+- 历史工作稿按自身冻结 RuleSet、IN/EX父子项及流程目录核完整性，读取既有 WorkDraftItem；正式审核仍读取 FinalAssessment。不得为打开工作稿补造正式结论、调用模型或用当前节点指针重算旧结果。
+- 工作稿历史引用必须对应冻结事实的定位及冻结页面逐字摘录，跨受试者、错位置、漏项或重复均拒绝；后续方法升级不改变已保存的结论与置信。未采用原件记录与系统未完成核查分开展示。
 
 ## 迁移
 

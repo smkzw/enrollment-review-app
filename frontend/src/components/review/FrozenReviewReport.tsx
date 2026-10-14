@@ -2,6 +2,9 @@ import { Printer, FileSearch, Download } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { FrozenReviewEvidence } from "./FrozenReviewEvidence";
 import { ReviewActionResponseDialog } from "./ReviewActionResponseDialog";
+import { ReasonText } from "./ReasonText";
+import { StatusBadge } from "../shell/StatusBadge";
+import type { EligibilityClauseView } from "../../api/eligibility-review/eligibilityReviewViewModels";
 import type { ReviewHistoryRunDetailView } from "../../api/review-history/reviewHistoryTypes";
 import { actionStateLabel, actionTargetLabel, decisionLabel, gapTypeLabel, stageLabel } from "../../domain/labels";
 import { useApplicationMode } from "../../app/applicationMode";
@@ -38,6 +41,11 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
   const [responseSelection, setResponseSelection] = useState<{ runId: string; actionId: string; transitionId: string } | null>(null);
   const [editingAction, setEditingAction] = useState<{ runId: string; actionId: string } | null>(null);
   const [controlSelection, setControlSelection] = useState<{ runId: string; controlId: string; obligationId: string; doubtLocatorId?: string } | null>(null);
+  const [draftSelection, setDraftSelection] = useState<{ runId: string; itemId: string } | null>(null);
+  useEffect(() => {
+    setDraftSelection(null); setEvidenceSelection(null); setOrderingSelection(null);
+    setControlSelection(null); setResponseSelection(null); setEditingAction(null);
+  }, [report.run.reviewRunId]);
   useEffect(() => {
     if (focusActionId === null) return;
     const row = Array.from(article.current?.querySelectorAll<HTMLElement>("[data-review-action]") ?? [])
@@ -61,6 +69,15 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
     };
   }, [report.run.reviewRunId]);
   const { run, context, assessments, actions } = report;
+  const draft = report.workDraft;
+  const draftParents = [...(draft?.clauses ?? [])].sort((a, b) =>
+    ({ inclusion: 0, exclusion: 1, required_procedure: 2 })[a.ruleKind] - ({ inclusion: 0, exclusion: 1, required_procedure: 2 })[b.ruleKind]
+      || a.ruleCode.localeCompare(b.ruleCode));
+  const draftItem = draftSelection?.runId === run.reviewRunId
+    ? [...(draft?.clauses ?? []), ...(draft?.componentClauses ?? [])].find(item => item.ruleComponentId === draftSelection.itemId) : undefined;
+  const draftSource = (item: EligibilityClauseView) => (item.factRefs.length > 0 || (item.sourceReadRefs?.length ?? 0) > 0)
+    ? <button type="button" className="button reports-print__action reports-print__source" onClick={() => setDraftSelection({ runId: run.reviewRunId, itemId: item.ruleComponentId })}>
+      <FileSearch size={16} aria-hidden="true" />查看原件</button> : null;
   const evidenceAssessment = evidenceSelection?.runId === run.reviewRunId
     ? assessments.find((item) => item.assessmentId === evidenceSelection.assessmentId) : undefined;
   const responseAction = responseSelection?.runId === run.reviewRunId
@@ -76,9 +93,9 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
     <article ref={article} className="reports-print" data-testid="reports-print">
       <header className="reports-print__head">
         <div>
-          <p className="reports-print__eyebrow">{complete ? "入排审核报告" : "审核尚未完成"}</p>
+          <p className="reports-print__eyebrow">{draft ? "入排审核工作稿 · 未签发" : complete ? "入排审核报告" : "审核尚未完成"}</p>
           <h2>{context.subjectCode} · {context.workflowStageLabel}</h2>
-          <p>{context.projectName} · 方案 {context.officialProtocolVersion}</p>
+          <p>方案 {context.officialProtocolVersion} · 规则第 {run.ruleSetRevision} 版</p>
         </div>
         <div className="reports-print__tools reports-print__action">
         <button type="button" className="button button--primary reports-print__action"
@@ -92,17 +109,19 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
         </div>
       </header>
       {exportError && <p role="alert">{exportError}</p>}
+      {draft?.verificationOnly && <p role="status">本工作稿使用构建者审定的验证规则，不用于正式审核。</p>}
       <section className="reports-print__section" aria-label="本次审核资料">
         <p className="reports-print__reason">{reviewEvidenceScopeNote}</p>
         <table className="reports-print__table reports-print__subject-table"><tbody>
           <tr><th scope="row">中心</th><td>{center}</td><th scope="row">审核节点</th><td>{context.workflowStageLabel}</td></tr>
           <tr><th scope="row">审核时间</th><td>{reviewTime(run.completedAt ?? run.startedAt)}</td>
-            <th scope="row">审核情况</th><td>{complete ? "已完成，逐项结果见下表" : "尚未完成，不作为正式报告"}</td></tr>
+            <th scope="row">审核情况</th><td>{complete ? draft ? "工作稿已保存，未签发" : "已完成，逐项结果见下表" : "尚未完成，不作为正式报告"}</td></tr>
         </tbody></table>
       </section>
       {report.restrictedRequirements.length > 0 && <section className="reports-print__section" aria-label="尚不能判定的方案要求">
         <h3>尚不能判定的方案要求（{report.restrictedRequirements.length}）</h3>
         <p className="reports-print__reason">以下是方案含义或系统计算能力的限制，不等于病例缺少资料，也不能据此认为受试者符合全部要求。</p>
+        <details className="reports-print__conditions" open={draft ? undefined : true}><summary>查看受影响要求与原文</summary>
         <table className="reports-print__table"><thead><tr><th scope="col">方案要求</th><th scope="col">尚未解决的问题</th><th scope="col">本次保存的方案原文</th></tr></thead>
           <tbody>{report.restrictedRequirements.map((item) => <tr key={item.requirementId}>
             <th scope="row">{item.displayLabel}<small>{item.title}</small></th>
@@ -116,9 +135,30 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
             </td>
           </tr>)}</tbody>
         </table>
+        </details>
       </section>}
       <section className="reports-print__section" aria-labelledby="reports-decisions-title">
         <h3 id="reports-decisions-title">逐项审核结果</h3>
+        {draft ? <table className="reports-print__table reports-print__draft-table">
+          <thead><tr><th scope="col">审核要求</th><th scope="col">结论</th><th scope="col">判定依据</th></tr></thead>
+          <tbody>{draftParents.map(item => {
+            const children = draft.componentClauses?.filter(child => child.parentRuleCode === item.ruleCode) ?? [];
+            return <tr key={item.ruleComponentId}>
+              <th scope="row">{item.ruleCode}
+                <details className="reports-print__conditions"><summary>方案要求</summary><p>{item.sourceText ?? item.textSummary}</p></details>
+              </th>
+              <td><strong>{item.decisionLabel}</strong>{item.confidence && <StatusBadge tone={item.confidence === "low" ? "info" : "neutral"} text={item.confidence === "low" ? "低置信" : "高置信"} />}</td>
+              <td><ReasonText text={item.reason} compact />{draftSource(item)}
+                {children.length > 0 && <details className="reports-print__conditions"><summary>分项核对（{children.length}）</summary>
+                  <ol>{children.map(child => <li key={child.ruleComponentId}>
+                    <p><strong>{child.textSummary}</strong> · {child.decisionLabel}</p>
+                    <ReasonText text={child.reason} compact />{draftSource(child)}
+                  </li>)}</ol>
+                </details>}
+              </td>
+            </tr>;
+          })}</tbody>
+        </table> : <>
         <table className="reports-print__table reports-print__decision-table">
           <thead><tr><th scope="col">审核要求</th><th scope="col">结论</th><th scope="col">尚待补充或核实</th></tr></thead>
           <tbody>{assessments.map((item) => (
@@ -166,6 +206,7 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
           ))}</tbody>
         </table>
         {!complete && <p className="reports-print__reason">还有 {report.missingRuleComponentIds.length} 项尚未形成审核记录。</p>}
+        </>}
       </section>
       {(report.controls.length > 0 || report.missingProtocolControlIds.length > 0) && <section className="reports-print__section" aria-labelledby="reports-controls-title">
         <h3 id="reports-controls-title">方案其他章节的审核要求</h3>
@@ -210,7 +251,13 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
           </li>)}</ol>
         </details>
       </section>}
-      <section className="reports-print__section" aria-labelledby="reports-actions-title">
+      {draft ? (draft.systemIssues?.length ?? 0) > 0 && <section className="reports-print__section" aria-label="核对范围与未采用记录">
+        {[{ label: "系统尚未完成的核对", issues: draft.systemIssues?.filter(issue => issue.kind !== "excerpt_unverified") ?? [] },
+          { label: "尚未用于判断的原件记录", issues: draft.systemIssues?.filter(issue => issue.kind === "excerpt_unverified") ?? [] }].map(group => group.issues.length > 0 &&
+          <details className="reports-print__conditions" key={group.label}><summary>{group.label}（{group.issues.length}）</summary>
+            <ul>{group.issues.map((issue, index) => <li key={index}><strong>{issue.affectedCodes.join("、")}</strong>：{issue.detail}<small>{issue.alternative}</small></li>)}</ul>
+          </details>)}
+      </section> : <section className="reports-print__section" aria-labelledby="reports-actions-title">
         <h3 id="reports-actions-title">补充资料与核实事项</h3>
         {focusActionId !== null && !actions.some((item) => item.actionId === focusActionId)
           && <p role="status">未在本次审核中找到所选办理事项，请返回待办清单重新选择。</p>}
@@ -241,10 +288,14 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
             </td>
           </tr>)}</tbody></table>
         )}
-      </section>
+      </section>}
       <footer className="reports-print__footnote">
         审核时间为本次记录保存的时间（北京时间）。本报告辅助医学监查，不代替研究者的最终入组决定。
       </footer>
+      {draftItem && <FrozenReviewEvidence key={JSON.stringify(draftSelection)} context={context}
+        title={`${draftItem.ruleCode} · 当时的原始资料`}
+        locators={report.evidenceLocators.filter(locator => draftItem.factRefs.some(ref => ref.locatorId === locator.locatorId))}
+        pageRefs={draftItem.sourceReadRefs} onClose={() => setDraftSelection(null)} />}
       {evidenceAssessment && <FrozenReviewEvidence key={JSON.stringify(evidenceSelection)}
         context={context} title={`${evidenceAssessment.clause.ruleDisplayCode} · ${evidenceSelection?.doubtLocatorId ? "待核实原件" : "原始资料"}`}
         locators={report.evidenceLocators.filter((item) => evidenceSelection?.doubtLocatorId

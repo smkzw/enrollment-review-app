@@ -23,6 +23,7 @@ from typing import Literal
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.api.v2.evidence_processing_schemas import LocatorDTO, locator_dto
+from app.api.v2.eligibility_review import EligibilityReviewResponse
 
 from app.domain.contracts.clause_pack import DeterminationMode
 from app.domain.contracts.common import ScalarValue
@@ -75,6 +76,7 @@ class ReviewHistoryRunSummaryDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     review_run_id: str = Field(min_length=1)
+    run_kind: Literal["formal", "work_draft"] = "formal"
     status: ReviewHistoryRunStatus
     stage: ReviewStage
     workflow_stage_id: str | None
@@ -331,9 +333,23 @@ class ReviewHistoryRunResponse(BaseModel):
     missing_protocol_control_ids: list[str] = Field(default_factory=list)
     control_selection_records: list[ReviewHistoryControlSelectionDTO] = Field(default_factory=list)
     restricted_requirements: list[ReviewHistoryRestrictedRequirementDTO] = Field(default_factory=list)
+    work_draft: EligibilityReviewResponse | None = None
+    source_file_names: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_component_identity(self) -> "ReviewHistoryRunResponse":
+        if self.run.run_kind == "work_draft":
+            draft = self.work_draft
+            if (draft is None or self.assessments or self.actions or self.controls
+                    or draft.review_run_id != self.run.review_run_id
+                    or draft.subject_id != self.context.subject_id
+                    or draft.review_episode_id != self.context.review_episode_id
+                    or draft.rule_set_id != self.run.rule_set_id or draft.rule_set_revision != self.run.rule_set_revision
+                    or draft.evidence_snapshot_v2_id != self.run.evidence_snapshot_v2_id
+                    or draft.complete_processing_revision_id != self.run.complete_processing_revision_id):
+                raise ValueError("工作稿记录类型或冻结资料身份不一致")
+        elif self.work_draft is not None:
+            raise ValueError("正式签发记录不能混入工作稿结果")
         component_ids = [item.clause.rule_component_id for item in self.assessments]
         if len(component_ids) != len(set(component_ids)):
             raise ValueError("同一次审核出现重复的审核要点结论")
@@ -397,6 +413,7 @@ def _run_dto(
     authority = context.authority
     return ReviewHistoryRunSummaryDTO(
         review_run_id=run.review_run_id,
+        run_kind=run.run_kind if run.run_kind is not None else "formal",
         status=status,
         stage=context.review_episode.stage,
         workflow_stage_id=context.review_episode.workflow_stage_id,
@@ -714,6 +731,8 @@ def get_review_run(
         missing_protocol_control_ids=list(detail.missing_protocol_control_ids),
         control_selection_records=selection_records,
         restricted_requirements=_restricted_requirement_dtos(detail.context),
+        work_draft=EligibilityReviewResponse.model_validate(detail.work_draft.to_dict()) if detail.work_draft is not None else None,
+        source_file_names=detail.source_file_names,
     )
 
 

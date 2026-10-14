@@ -19,6 +19,7 @@
  * 现有 ``useLoad`` 无需改动即可显示中文信封；结构不可信时抛 ``ReviewHistoryDecodeError``。
  */
 import { decodeEligibilityReviewError } from "../eligibility-review";
+import { decodeEligibilityReview } from "../eligibility-review/eligibilityReviewViewModels";
 import { decodeEvidenceLocator } from "../evidence/evidenceProcessingViewModels";
 import { getProtocolApiBase } from "../protocolApiConfig";
 import {
@@ -214,6 +215,7 @@ const CLAUSE_KEYS = [
 
 const RUN_SUMMARY_KEYS = [
   "review_run_id",
+  "run_kind",
   "status",
   "stage",
   "workflow_stage_id",
@@ -364,6 +366,7 @@ function decodeRunSummary(value: unknown, path: string): ReviewHistoryRunSummary
   }
   return {
     reviewRunId,
+    runKind: row.run_kind === undefined ? "formal" : enumValue(row.run_kind, ["formal", "work_draft"] as const, `${path}.run_kind`),
     status,
     stage: enumValue<ReviewHistoryStage>(
       field(row, "stage", path),
@@ -758,7 +761,7 @@ export function decodeReviewHistoryRunDetail(value: unknown): ReviewHistoryRunDe
   const row = objectValue(value, "review_history");
   exactKeys(
     row,
-    ["run", "context", "assessments", "actions", "missing_rule_component_ids", "evidence_locators", "controls", "missing_protocol_control_ids", "control_selection_records", "restricted_requirements"],
+    ["run", "context", "assessments", "actions", "missing_rule_component_ids", "evidence_locators", "controls", "missing_protocol_control_ids", "control_selection_records", "restricted_requirements", "work_draft", "source_file_names"],
     "review_history",
   );
   const run = decodeRunSummary(field(row, "run", "review_history"), "review_history.run");
@@ -898,13 +901,25 @@ export function decodeReviewHistoryRunDetail(value: unknown): ReviewHistoryRunDe
       || (run.status === "completed" && missingProtocolControlIds.length > 0)) {
     throw new ReviewHistoryDecodeError("跨章节要求的审核记录重复或不完整，暂不能展示报告。");
   }
+  const workDraft = row.work_draft == null ? null : decodeEligibilityReview(row.work_draft);
   const evidenceLocators = arrayValue(field(row, "evidence_locators", "review_history"), "review_history.evidence_locators")
     .map((item, index) => decodeEvidenceLocator(item, index, "review_history.evidence_locators"));
   const locatorIds = new Set(evidenceLocators.map((item) => item.locatorId));
   const referencedIds = new Set([...assessments.flatMap((item) => item.locatorIds), ...controls.flatMap((item) => item.locatorIds),
     ...controls.flatMap((item) => item.unverifiedEvidence.map((gap) => gap.locatorId)),
     ...assessments.flatMap((item) => item.conditions.flatMap((condition) => condition.unverifiedEvidence.map((gap) => gap.locatorId))),
-    ...assessments.flatMap((item) => item.conditions.flatMap((condition) => condition.notSelected.flatMap((record) => record.locatorIds)))]);
+    ...assessments.flatMap((item) => item.conditions.flatMap((condition) => condition.notSelected.flatMap((record) => record.locatorIds))),
+    ...[...(workDraft?.clauses ?? []), ...(workDraft?.componentClauses ?? [])].flatMap(item => item.factRefs.flatMap(ref => ref.locatorId ? [ref.locatorId] : []))]);
+  for (const item of [...(workDraft?.clauses ?? []), ...(workDraft?.componentClauses ?? [])]) {
+    for (const ref of item.factRefs) {
+      const locator = evidenceLocators.find(position => position.locatorId === ref.locatorId);
+      if (!locator || locator.sourceDocumentVersionId !== ref.sourceDocumentVersionId
+          || locator.pageArtifactId !== ref.pageArtifactId || locator.pageNumber !== ref.pageNumber
+          || !ref.excerpt || !locator.excerpt?.includes(ref.excerpt)) {
+        throw new ReviewHistoryDecodeError("工作稿结果与保存的原件位置或摘录不一致。");
+      }
+    }
+  }
   for (const assessment of assessments) {
     const factIds = new Set(assessment.usedFactIds);
     const assessmentLocators = new Set(assessment.locatorIds);
@@ -976,7 +991,24 @@ export function decodeReviewHistoryRunDetail(value: unknown): ReviewHistoryRunDe
       || restrictedRequirements.some((item) => item.dependencyRefs.some((id) => !restrictedControlIds.has(id)))) {
     throw new ReviewHistoryDecodeError("方案待澄清或暂不能计算的要求身份不一致。");
   }
-  return { run, context, assessments, actions, missingRuleComponentIds, evidenceLocators, controls, missingProtocolControlIds, controlSelectionRecords, restrictedRequirements };
+  if (run.runKind === "work_draft") {
+    if (!workDraft || assessments.length || actions.length || controls.length || missingRuleComponentIds.length || missingProtocolControlIds.length) {
+      throw new ReviewHistoryDecodeError("工作稿与正式签发记录混用或缺失。");
+    }
+    requireSameBinding("工作稿运行", workDraft.reviewRunId, run.reviewRunId);
+    requireSameBinding("工作稿受试者", workDraft.subjectId, context.subjectId);
+    requireSameBinding("工作稿审核节点", workDraft.reviewEpisodeId, context.reviewEpisodeId);
+    requireSameBinding("工作稿规则", workDraft.ruleSetId, run.ruleSetId);
+    requireSameBinding("工作稿规则修订", workDraft.ruleSetRevision, run.ruleSetRevision);
+    requireSameBinding("工作稿资料", workDraft.evidenceSnapshotV2Id, run.evidenceSnapshotV2Id);
+    requireSameBinding("工作稿资料整理修订", workDraft.completeProcessingRevisionId, run.completeProcessingRevisionId);
+  } else if (workDraft) {
+    throw new ReviewHistoryDecodeError("正式签发记录不能混入工作稿。");
+  }
+  const sourceFileNames = Object.fromEntries(Object.entries(objectValue(row.source_file_names ?? {}, "review_history.source_file_names"))
+    .map(([key, value]) => [key, requiredString(value, `source_file_names.${key}`)]));
+  return { run, context, assessments, actions, missingRuleComponentIds, evidenceLocators, controls, missingProtocolControlIds,
+    controlSelectionRecords, restrictedRequirements, workDraft, sourceFileNames };
 }
 
 function reviewRunsPath(subjectId: string, reviewEpisodeId: string): string {

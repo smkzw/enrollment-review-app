@@ -39,9 +39,36 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
     `审核节点：${context.workflowStageLabel}`, `方案版本：${context.officialProtocolVersion}`,
     `审核完成时间：${time(run.completedAt)}`, `导出时间：${time(exportedAt.toISOString())}`,
     reviewEvidenceScopeNote,
-    "本报告保留该次审核的结论，不代替研究者最终入组决定。办理情况截至本次读取报告时；事项关闭不改变原审核结论。",
+    report.workDraft ? "本工作稿保留当时的结果，尚未签发，不代替研究者最终入组决定。"
+      : "本报告保留该次审核的结论，不代替研究者最终入组决定。办理情况截至本次读取报告时；事项关闭不改变原审核结论。",
+    ...(report.workDraft?.verificationOnly ? ["本工作稿使用构建者审定的验证规则，不用于正式审核。"] : []),
     ...(report.restrictedRequirements.length ? ["方案仍有尚不能判定的要求，不能据此认为受试者符合全部要求。"] : []),
   ] }];
+  if (report.workDraft) {
+    const parents = [...report.workDraft.clauses].sort((a, b) =>
+      ({ inclusion: 0, exclusion: 1, required_procedure: 2 })[a.ruleKind] - ({ inclusion: 0, exclusion: 1, required_procedure: 2 })[b.ruleKind]
+        || a.ruleCode.localeCompare(b.ruleCode));
+    for (const parent of parents) {
+      for (const item of [parent, ...(report.workDraft.componentClauses?.filter(child => child.parentRuleCode === parent.ruleCode) ?? [])]) {
+        result.push({ title: `${item.ruleCode} · ${item.textSummary}`, paragraphs: [
+          `审核结果：${item.decisionLabel}${item.confidence ? ` · ${item.confidence === "high" ? "高置信" : "低置信"}` : ""}`,
+          `判定依据：${item.reason}`, `方案要求：${item.sourceText ?? item.textSummary}`,
+          ...item.factRefs.map(ref => {
+            const locator = report.evidenceLocators.find(position => position.locatorId === ref.locatorId);
+            if (!locator) throw new Error("工作稿引用的原件位置不完整，请刷新后重试。");
+            return `${report.sourceFileNames?.[locator.sourceDocumentVersionId] ?? "原始资料"} · 第 ${locator.pageNumber} 页：${ref.excerpt ?? "本处未保存文字摘录"}`;
+          }),
+          ...[...new Map((item.sourceReadRefs ?? []).map(ref => [JSON.stringify(ref), ref])).values()].map(ref =>
+            `${report.sourceFileNames?.[ref.sourceDocumentVersionId] ?? "原始资料"} · 第 ${ref.pageNumber} 页 · ${ref.disposition === "not_seen" ? "本页未见相关记录，不代表明确否认" : ref.disposition === "unresolved" ? "原文尚待核清" : "原文摘录"}：${ref.excerpt ?? "本处未保存文字摘录，请核对原件"}`),
+        ] });
+      }
+    }
+    for (const group of [
+      { title: "系统尚未完成的核对", issues: report.workDraft.systemIssues?.filter(issue => issue.kind !== "excerpt_unverified") ?? [] },
+      { title: "尚未用于判断的原件记录", issues: report.workDraft.systemIssues?.filter(issue => issue.kind === "excerpt_unverified") ?? [] },
+    ]) if (group.issues.length) result.push({ title: group.title, paragraphs: group.issues.flatMap(issue => [
+      `${issue.affectedCodes.join("、")}：${issue.detail}`, issue.alternative]) });
+  }
   for (const item of report.assessments) {
     result.push({ title: `${item.clause.ruleDisplayCode} · ${item.clause.ruleTitle}`, paragraphs: [
       `审核结果：${decisionLabel[item.decision]}`,
@@ -100,7 +127,7 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
       }),
     ] });
   }
-  result.push({ title: "补充资料与核实事项", paragraphs: report.actions.length ? report.actions.flatMap((action) => [
+  if (!report.workDraft) result.push({ title: "补充资料与核实事项", paragraphs: report.actions.length ? report.actions.flatMap((action) => [
     `${action.clause?.ruleDisplayCode ?? action.control?.displayLabel ?? "对应要求未列明"}：${action.requestedAction}`,
     `应提供资料：${action.acceptableEvidence}`,
     `负责方及节点：${actionTargetLabel[action.targetParty]} · ${stageLabel[action.dueStage]}`,
@@ -124,7 +151,7 @@ const markdownText = (text: string) => htmlText(text).replace(/([\\`*_{}\[\]()#+
 
 export function frozenReviewExport(report: ReviewHistoryRunDetailView, format: "md" | "html", exportedAt = new Date()): string {
   const content = sections(report, exportedAt);
-  const title = `入排审核报告 · ${report.context.subjectCode} · ${report.context.workflowStageLabel}`;
+  const title = `${report.workDraft ? "入排审核工作稿 · 未签发" : "入排审核报告"} · ${report.context.subjectCode} · ${report.context.workflowStageLabel}`;
   return renderDocument(title, content, format);
 }
 
