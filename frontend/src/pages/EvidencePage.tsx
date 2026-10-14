@@ -1941,7 +1941,8 @@ export function EvidencePage() {
           ? "正在查看已保存、尚未启用的校对内容；当前有效资料和原报告未改变。"
           : "正在查看所选识别结果，原报告未改变。"}</strong>
         <button type="button" className="button" disabled={buildBusy} onClick={() => setReprocessedView(null)}>返回已启用资料</button>
-        {selectedSnapshot && viewedRevisionConsistent && processingCandidate === null && <button type="button" className="button button--primary" disabled={buildBusy}
+        {selectedSnapshot && viewedRevisionConsistent && (processingCandidate === null ||
+          (viewingPendingCorrections && processingCandidate.candidateStatus === "needs_attention")) && <button type="button" className="button button--primary" disabled={buildBusy}
           onClick={() => void buildReviewableRevision(selectedSnapshot, viewedProcessingRevisionId!)}>检查核对结果并生成资料版本</button>}
       </div>}
       {!viewingReprocessed && processingCandidate?.candidateStatus === "needs_attention" &&
