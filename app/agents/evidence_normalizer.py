@@ -159,6 +159,8 @@ def validate_evidence_normalizer_model_config(
         raise ValueError("模型最大输出长度无效")
     if raw_max_tokens < 1:
         raise ValueError("模型最大输出长度必须大于零")
+    if not isinstance(model_config.parameters.get("include_source_categories", False), bool):
+        raise ValueError("资料类别提示配置必须是布尔值")
     if "temperature" in model_config.parameters:
         raw_temperature = model_config.parameters["temperature"]
         if isinstance(raw_temperature, bool) or not isinstance(
@@ -861,7 +863,8 @@ def _visual_observation_prompt_payload(
     ]
 
 
-def _model_input_payload(evidence_input: EvidenceNormalizerInput, *, pending_details_retained: bool = False) -> dict:
+def _model_input_payload(evidence_input: EvidenceNormalizerInput, *, pending_details_retained: bool = False,
+                         include_source_categories: bool = False) -> dict:
     """Project the frozen audit contract into the smallest model-facing input.
 
     仅省略运行身份和哈希等模型不需要的审计字段。有效原文与
@@ -913,6 +916,11 @@ def _model_input_payload(evidence_input: EvidenceNormalizerInput, *, pending_det
             for item in evidence_input.available_locators
         ],
     }
+    if include_source_categories:
+        payload["context"].update({
+            "document_category": evidence_input.context.document_category,
+            "source_category": evidence_input.context.source_category,
+        })
     if evidence_input.variable_definitions:
         # Extraction needs identities, labels and literal units; clinical source policy,
         # plausible ranges and conversions remain frozen and enforced by the host.
@@ -1020,6 +1028,7 @@ def build_evidence_normalizer_prompt(
     pending_details_retained: bool = False,
     reference_aliases: NormalizerReferenceAliases | None = None,
     verified_scope_prompt: bool = False,
+    include_source_categories: bool = False,
 ) -> str:
     """从冻结输入构建唯一可审计的 prompt，不含隐藏自由文本。
 
@@ -1031,7 +1040,9 @@ def build_evidence_normalizer_prompt(
     受限解码强制输出结构的传输使用：此时同一份 Schema 不再在提示内重复内嵌
     （消除重复 Schema）；输出结构约束本身不变，仍由同一 schema 与本地门禁负责。
     """
-    payload = _model_input_payload(evidence_input, pending_details_retained=pending_details_retained)
+    # Frozen model configs opt in; old request receipts must keep their exact layout.
+    payload = _model_input_payload(evidence_input, pending_details_retained=pending_details_retained,
+        include_source_categories=include_source_categories)
     if reference_aliases is not None:
         payload = reference_aliases.transform(payload)
     if evidence_input.variable_definitions:
@@ -2416,6 +2427,7 @@ class EvidenceNormalizerRunner:
             pending_details_retained=pending_details_retained,
             reference_aliases=reference_aliases,
             verified_scope_prompt=verified_scope_prompt,
+            include_source_categories=getattr(transport, "include_source_categories", False) is True,
         )
         available = set(evidence_input.available_locator_ids)
         locator_source_hashes = {

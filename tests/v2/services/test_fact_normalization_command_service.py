@@ -125,6 +125,7 @@ def test_select_config_happy_path(session_factory):
             selected.model_config_id
         )
         assert model is not None
+        assert model.parameters["include_source_categories"] is True
         assert (
             model.parameters["normalization_policy_version"]
             == "phase5/normalization-policy/v10"

@@ -110,6 +110,7 @@ def _load_normalizer_context(
     revision: CompleteEvidenceProcessingRevision,
     doc_version_to_logical: dict[str, str],
     logical_to_metadata_revision: dict[str, str],
+    allow_unconfirmed_metadata: bool = False,
 ) -> tuple[dict[str, EvidenceNormalizerContextInput], tuple[EvidenceRequirement, ...]]:
     """读取当前审核节点、资料元数据与本节点已到期的资料要求。"""
     from app.storage.evidence_repositories import (
@@ -148,10 +149,10 @@ def _load_normalizer_context(
             raise FactPlanningSourceError(
                 f"逻辑文档 {logical_document_id} 的元数据修订与活动资料版本不一致"
             )
-        # R14修复：有据的自动建议可直接采用，不构成隐藏人工门禁。
-        # 仅当document_type为完全未知的占位值时才阻断——
-        # "其他资料（待确认）"表示系统无法识别文件类型。
-        if metadata.is_auto_suggestion and "待确认" in (metadata.document_type or ""):
+        # Variable-directed reads preserve unknown metadata instead of asking
+        # the user to classify every file. Legacy readers keep their old boundary.
+        if (not allow_unconfirmed_metadata and metadata.is_auto_suggestion
+                and "待确认" in (metadata.document_type or "")):
             raise UnconfirmedDocumentMetadataError(
                 f"逻辑文档 {logical_document_id} 的资料类型无法自动识别（仍为待确认），"
                 "需人工确认后才能进入证据规范化"
@@ -428,16 +429,17 @@ def build_fact_normalization_plan(
     doc_version_to_logical, logical_to_meta = build_doc_version_to_logical_map(
         session, revision
     )
+    from app.storage.repositories import get_rule_set
+    from app.domain.variables.extraction import build_extraction_targets
+    rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
     contexts, related_requirements = _load_normalizer_context(
         session,
         authority=authority,
         revision=revision,
         doc_version_to_logical=doc_version_to_logical,
         logical_to_metadata_revision=logical_to_meta,
+        allow_unconfirmed_metadata=bool(rule_set.variable_definitions),
     )
-    from app.storage.repositories import get_rule_set
-    from app.domain.variables.extraction import build_extraction_targets
-    rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
     stage = next(iter(contexts.values())).current_review_stage
     targets = build_extraction_targets(rule_set, stage, list(related_requirements))
     related_requirements = targets.requirements
@@ -711,7 +713,8 @@ def retained_normalization_reads(
                 if aliases is not None and aliases != evidence_normalizer_reference_aliases(evidence_input):
                     raise FactPlanningSourceError("旧读取的短引用与当前真实来源不一致")
                 prompt = build_evidence_normalizer_prompt(evidence_input, prompt_template=prompt_template,
-                    include_output_schema=schema is None, reference_aliases=aliases)
+                    include_output_schema=schema is None, reference_aliases=aliases,
+                    include_source_categories=model.parameters.get("include_source_categories", False))
                 if not any(row.get("role") == "user" and row.get("content") == prompt for row in body.get("messages", ())):
                     continue
                 result.append({"run_id": run.run_id, "call_id": call.call_id,

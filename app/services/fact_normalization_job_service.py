@@ -234,7 +234,7 @@ def _validate_registered_agent_config(
     prompt_version_id: str,
     model_config_id: str,
     prompt_template: str,
-) -> None:
+) -> ModelConfigContract:
     """创建或复用任务前核对实际提示词和完整模型行为配置。"""
     try:
         prompt = AppendRepository(session, PROMPT_VERSION_CONFIG).get(
@@ -261,6 +261,7 @@ def _validate_registered_agent_config(
         validate_evidence_normalizer_model_config(model_config)
     except ValueError as exc:
         raise InvalidJobDefinitionError(str(exc)) from exc
+    return model_config
 
 
 def _build_step_specs(calls: list[FactNormalizationCallSpec], *, targeted_extraction: bool = False) -> list[dict[str, Any]]:
@@ -385,6 +386,9 @@ class FactNormalizationJobService:
 
         with self.session_factory() as session:
             previous = None
+            model_config = _validate_registered_agent_config(session,
+                prompt_version_id=prompt_version_id, model_config_id=model_config_id,
+                prompt_template=self.prompt_template)
             if retry_failed_from_run_id:
                 previous = FactNormalizationRunRepository(session).get(retry_failed_from_run_id)
                 previous_record = session.get(FactNormalizationRunRecord, previous.run_id)
@@ -480,6 +484,7 @@ class FactNormalizationJobService:
                                 visual_observations=selected or None,
                                 reference_aliases=(evidence_normalizer_reference_aliases(evidence_input)
                                                    if compact_text_references else None),
+                                include_source_categories=model_config.parameters.get("include_source_categories", False),
                             )
                         except EvidenceNormalizerPromptTooLong as exc:
                             oversized = (call, exc)

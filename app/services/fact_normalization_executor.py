@@ -933,7 +933,8 @@ def _prepare_response_revalidation(payload, evidence_input, model_config, prompt
     prompt = build_evidence_normalizer_prompt(evidence_input, prompt_template=prompt_template,
         visual_observations=visual_observations or None,
         include_output_schema=not transport.enforces_output_json_schema,
-        pending_details_retained=strategy, reference_aliases=aliases, verified_scope_prompt=strategy)
+        pending_details_retained=strategy, reference_aliases=aliases, verified_scope_prompt=strategy,
+        include_source_categories=transport.include_source_categories)
     return transport.initial_request_body(prompt=prompt), aliases
 
 

@@ -199,6 +199,7 @@ def _runtime_model(
         "agent_node": AgentNode.EVIDENCE_NORMALIZER.value,
         "max_tokens": max_tokens,
         "normalization_policy_version": _NORMALIZATION_POLICY_VERSION,
+        "include_source_categories": True,
     }
     if normalized_provider == "cms-router":
         # This gateway may time out while buffering long non-streamed responses.

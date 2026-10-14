@@ -83,6 +83,23 @@ def test_ollama_normalizer_frozen_factory_keeps_text_mode(monkeypatch):
     assert "temperature" not in kwargs
 
 
+@pytest.mark.parametrize("flag", [False, True, "false"])
+def test_source_category_layout_is_frozen_and_not_a_provider_option(flag):
+    config = ModelConfigContract(model_config_id="source-layout-test", provider="omlx",
+        model="synthetic-model", reasoning_effort="high",
+        parameters={"agent_node": "evidence_normalizer", "max_tokens": 65536,
+                    "include_source_categories": flag})
+    if not isinstance(flag, bool):
+        with pytest.raises(ValueError, match="布尔值"):
+            validate_evidence_normalizer_model_config(config)
+        with pytest.raises(ValueError, match="布尔值"):
+            transport_module.evidence_normalizer_transport_from_model_config(config, client=object())
+        return
+    transport = transport_module.evidence_normalizer_transport_from_model_config(config, client=object())
+    assert transport.include_source_categories is flag
+    assert "include_source_categories" not in transport._completion_kwargs([{"role": "user", "content": "测试"}])
+
+
 class _FakeStream:
     def __init__(self, chunks):
         self._chunks = tuple(chunks)

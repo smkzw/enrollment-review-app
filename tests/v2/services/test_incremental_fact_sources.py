@@ -56,7 +56,8 @@ def _incremental_source(session, old, added, *, change_metadata=False, retained_
         metadata = SourceDocumentMetadataRevisionRepository(session)
         original = metadata.get(metadata_ids[0])
         revised = original.model_copy(update={"metadata_revision_id": "inc-metadata", "revision": original.revision + 1,
-            "supersedes_metadata_revision_id": original.metadata_revision_id, "document_type": "另一类资料"})
+            "supersedes_metadata_revision_id": original.metadata_revision_id,
+            **(change_metadata if isinstance(change_metadata, dict) else {"document_type": "另一类资料"})})
         metadata.append(revised)
         metadata_ids = [revised.metadata_revision_id]
     manifest = [item.model_copy(update={"entry_id": f"inc-page-{index}", "position": index})
@@ -192,7 +193,7 @@ def test_retained_profile_includes_original_linked_history_and_medication(sessio
     assert {row.source_id for row in profile_items(profile)} == {fact.fact_id, "retained-event", "retained-exposure"}
 
 
-def _receipt_transport_factory(requests, *, fail_after=None):
+def _receipt_transport_factory(requests, *, fail_after=None, distinct_document_assertions=False):
     """Real product transport and receipts, synthetic model response, no network."""
     import json
     from types import SimpleNamespace
@@ -208,6 +209,10 @@ def _receipt_transport_factory(requests, *, fail_after=None):
             if payload.get("locator_columns"):
                 locators = [dict(zip(payload["locator_columns"], row)) for row in locators]
             requests.append([row["locator_id"] for row in locators])
+            if distinct_document_assertions:
+                # Both repository seeds contain the same two rows. Isolate a
+                # different literal assertion from each, not a merged-source fact.
+                locators = locators[:1] if payload["context"].get("source_category") == "unknown" else locators[-1:]
             candidates = []
             for index, row in enumerate(locators):
                 text = row["localized_text"]
@@ -225,12 +230,71 @@ def _receipt_transport_factory(requests, *, fail_after=None):
             return SimpleNamespace(model=model.model, id="synthetic-response", usage=None,
                 choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content=answer))])
         return DeepSeekEvidenceNormalizerTransport(backend="omlx", model=model.model,
+            include_source_categories=model.parameters.get("include_source_categories", False),
             client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=complete))),
             receipt_callback=receipt_callback, request_callback=request_callback)
     return factory
 
 
-@pytest.mark.parametrize("case", ["normal", "other_model", "receipt_damage", "new_page_failed", "cancelled", "all_retained"])
+def test_unknown_type_runs_targeted_product_job_without_upgrading_source(session_factory, data_paths, monkeypatch):
+    from app.evidence.artifacts import ArtifactStore
+    from app.services import fact_normalization_executor as executor_module
+    from app.services.fact_normalization_job_service import FactNormalizationJobService
+    from app.services.fact_normalization_source_adapter import (
+        _load_normalizer_context, build_doc_version_to_logical_map, build_fact_normalization_plan,
+        UnconfirmedDocumentMetadataError,
+    )
+    from app.storage.fact_repositories import ClinicalFactV2Repository, FactNormalizationCandidateRepository
+    from app.workflow.jobstore import JobStore
+    from app.workflow.runner import JobRunner
+    requests = []
+    monkeypatch.setattr(executor_module, "evidence_normalizer_transport_from_model_config",
+        _receipt_transport_factory(requests, distinct_document_assertions=True))
+    with session_factory() as session:
+        old, _, current, _, _ = _seed_incremental(session, targeted=True, change_metadata={
+            "document_type": "其他资料（待确认）", "source_party": "来源待核对",
+            "source_category": "unknown", "is_auto_suggestion": True,
+        })
+        revision = CompleteEvidenceProcessingRevisionRepository(session).get(current.complete_processing_revision_id)
+        mapping, metadata_ids = build_doc_version_to_logical_map(session, revision)
+        with pytest.raises(UnconfirmedDocumentMetadataError):
+            _load_normalizer_context(session, authority=current, revision=revision,
+                doc_version_to_logical=mapping, logical_to_metadata_revision=metadata_ids)
+        plan, source = build_fact_normalization_plan(session, authority=current, revision=revision)
+        context = source.context_by_logical_document[old["logical_document_id"]]
+        assert context.document_type == "其他资料（待确认）" and context.source_category == "unknown"
+        assert len(plan.calls) == 2
+        from app.storage.repositories import AppendRepository, MODEL_CONFIG_CONFIG
+        config = AppendRepository(session, MODEL_CONFIG_CONFIG).get(old["model_config_id"])
+        config = config.model_copy(update={"model_config_id": "classified-source-input",
+            "parameters": {**config.parameters, "include_source_categories": True}})
+        AppendRepository(session, MODEL_CONFIG_CONFIG).save(config)
+        session.commit()
+    service = FactNormalizationJobService(session_factory)
+    job = service.create_or_reuse_from_source(authority=current, prompt_version_id=old["prompt_version_id"],
+        model_config_id=config.model_config_id, created_by="synthetic-builder")
+    runner = JobRunner(session_factory, {"fact_normalization": executor_module.create_fact_normalization_executor(
+        executor_module.FactNormalizationExecutorConfig(session_factory=session_factory, artifact_store=ArtifactStore(data_paths)))})
+    assert runner.run_job(job.job_id)
+    with session_factory() as session:
+        assert JobStore(session).get_job(job.job_id).state == "completed"
+        candidates = FactNormalizationCandidateRepository(session).list_by_run(job.run_id)
+        from_old_document = [row for row in candidates if any(locator in row.locator_ids for locator in
+            CompleteEvidenceProcessingRevisionRepository(session).get(old["complete_revision_id"]).locator_ids)]
+        assert from_old_document and all(row.candidate_source_semantics == "无法确认来源" for row in from_old_document)
+        from app.domain.gates.fact_evidence_closure import resolve_source_strength_for_candidate
+        assert all(resolve_source_strength_for_candidate(session, row, revision).value == "unverifiable_source"
+                   for row in from_old_document)
+        facts = [row for row in ClinicalFactV2Repository(session).list_for_authority(current) if row.run_id == job.run_id]
+        assert facts  # Independent readable material continues; this is not adoption of every candidate.
+        unknown_ids = {row.candidate_id for row in from_old_document}
+        assert all(row.source_strength.value == "unverifiable_source" for row in facts
+                   if unknown_ids.intersection(row.source_candidate_ids))
+        assert PatientProfileService().latest(session, current.review_episode_id)
+        assert len(requests) == 2
+
+
+@pytest.mark.parametrize("case", ["normal", "other_model", "new_source_layout", "receipt_damage", "new_page_failed", "cancelled", "all_retained"])
 def test_incremental_product_job_reads_only_added_page_and_preserves_saved_sources(session_factory, data_paths, monkeypatch, case):
     from app.evidence.artifacts import ArtifactStore
     from app.services import fact_normalization_executor as executor_module
@@ -286,11 +350,13 @@ def test_incremental_product_job_reads_only_added_page_and_preserves_saved_sourc
                 model_config_id=model_id, created_by="synthetic-builder")
         assert len(requests) == 1
         return
-    if case == "other_model":
+    if case in {"other_model", "new_source_layout"}:
         from app.storage.repositories import AppendRepository, MODEL_CONFIG_CONFIG
         with session_factory() as session, session.begin():
             config = AppendRepository(session, MODEL_CONFIG_CONFIG).get(model_id)
-            config = config.model_copy(update={"model_config_id": "new-synthetic-route", "model": "other-synthetic-model"})
+            changes = ({"model": "other-synthetic-model"} if case == "other_model" else
+                {"parameters": {**config.parameters, "include_source_categories": True}})
+            config = config.model_copy(update={"model_config_id": "new-synthetic-route", **changes})
             AppendRepository(session, MODEL_CONFIG_CONFIG).save(config)
             model_id = config.model_config_id
     job = service.create_or_reuse_from_source(authority=current, prompt_version_id=old["prompt_version_id"],

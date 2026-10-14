@@ -224,12 +224,16 @@ class DeepSeekEvidenceNormalizerTransport:
         temperature: float | None = None,
         response_format: Mapping[str, Any] | None = None,
         stream_response: bool = False,
+        include_source_categories: bool = False,
         client: Any | None = None,
         receipt_callback: Callable[[dict[str, Any]], None] | None = None,
         request_callback: Callable[[dict[str, Any]], str] | None = None,
     ) -> None:
         self._receipt_callback = receipt_callback
         self._request_callback = request_callback
+        if not isinstance(include_source_categories, bool):
+            raise ValueError("资料类别提示配置必须是布尔值")
+        self.include_source_categories = include_source_categories
         selected_backend = (backend or EVIDENCE_NORMALIZER_PROVIDER).strip().lower()
         if selected_backend not in {
             "deepseek",
@@ -649,6 +653,9 @@ def evidence_normalizer_transport_from_model_config(
     """按已冻结模型配置创建 OpenAI 兼容传输，不静默替换供应商或模型。"""
     provider = model_config.provider.strip().lower()
     parameters = model_config.parameters
+    include_source_categories = parameters.get("include_source_categories", False)
+    if not isinstance(include_source_categories, bool):
+        raise ValueError("资料类别提示配置必须是布尔值")
     max_tokens = int(parameters.get("max_tokens", EVIDENCE_NORMALIZER_MAX_TOKENS))
     raw_temperature = parameters.get(
         "temperature", EVIDENCE_NORMALIZER_TEMPERATURE
@@ -659,6 +666,7 @@ def evidence_normalizer_transport_from_model_config(
             raise ValueError("DeepSeek 语义服务尚未配置")
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            include_source_categories=include_source_categories,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -681,6 +689,7 @@ def evidence_normalizer_transport_from_model_config(
             raise ValueError("本次整理的模型加载配置已改变，请新建整理任务，历史结果仍保留")
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            include_source_categories=include_source_categories,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -697,6 +706,7 @@ def evidence_normalizer_transport_from_model_config(
     if provider in {"omlx", "local-omlx"}:
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            include_source_categories=include_source_categories,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -726,6 +736,7 @@ def evidence_normalizer_transport_from_model_config(
             )
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            include_source_categories=include_source_categories,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -744,6 +755,7 @@ def evidence_normalizer_transport_from_model_config(
         # the transport. The frozen job still owns model, effort and budget.
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            include_source_categories=include_source_categories,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,

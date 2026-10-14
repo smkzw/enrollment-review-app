@@ -701,6 +701,25 @@ def test_prompt_layout_version_is_v42():
     assert _PROMPT_LAYOUT_VERSION == "phase5/evidence-normalizer-prompt/v42"
 
 
+def test_source_categories_are_explicit_without_changing_legacy_input():
+    original = _input()
+    context = original.context.model_copy(update={"document_category": "other", "source_category": "unknown"})
+    evidence_input = original.model_copy(update={"context": context})
+    legacy = build_evidence_normalizer_prompt(evidence_input, prompt_template="抽取候选")
+    assert legacy == build_evidence_normalizer_prompt(evidence_input, prompt_template="抽取候选",
+        include_source_categories=False)
+    payload = json.JSONDecoder().raw_decode(legacy.split("本次输入：", 1)[1])[0]
+    assert "source_category" not in payload["context"]
+    current = build_evidence_normalizer_prompt(evidence_input, prompt_template="抽取候选",
+        include_source_categories=True)
+    classified = json.JSONDecoder().raw_decode(current.split("本次输入：", 1)[1])[0]
+    assert classified["context"]["document_category"] == "other"
+    assert classified["context"]["source_category"] == "unknown"
+    classified["context"].pop("document_category")
+    classified["context"].pop("source_category")
+    assert classified == payload
+
+
 def test_targeted_procedure_prompt_distinguishes_completion_from_results_and_orders():
     prompt = build_evidence_normalizer_prompt(_input(), prompt_template="按原文抽取。")
     for boundary in (
