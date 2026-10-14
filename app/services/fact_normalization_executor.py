@@ -412,6 +412,12 @@ def _load_frozen_agent_config(
     """确保审计记录中的冻结配置就是本次实际执行配置。"""
     run = FactNormalizationRunRepository(session).get(run_id)
     chain_scope = run.input_scope_sha256
+    if payload.get("retained_reads") is not None:
+        precondition = payload.get("retained_read_precondition_sha256")
+        if (not isinstance(precondition, str) or not payload.get("targeted_extraction")
+                or canonical_hash({"input_scope_sha256": precondition, "retained_reads": payload["retained_reads"]}) != chain_scope):
+            raise StepFailure(retryable=False, error_code="INVALID_AUTHORITY", detail="保留的旧读取与本次冻结身份不一致。")
+        chain_scope = precondition
     if payload.get("retry_failed_from_run_id") is not None:
         precondition = payload.get("retry_failed_precondition_sha256")
         if (not isinstance(precondition, str) or canonical_hash({"input_scope_sha256": precondition,
@@ -1654,6 +1660,9 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                     elif saved_call.candidate_partition_sha256 is not None:
                         _validate_partition_replay(session, payload, authority, run,
                             saved_call, config.artifact_store)
+                from app.services.fact_normalization_source_adapter import validated_retained_normalization_calls
+                validated_retained_normalization_calls(session, payload,
+                    prompt_template=config.prompt_template, artifact_store=config.artifact_store)
                 _verify_finalize_checkpoint_profile(
                     session,
                     authority=authority,
@@ -1688,9 +1697,12 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 elif saved_call.candidate_partition_sha256 is not None:
                     _validate_partition_replay(session, payload, authority,
                         FactNormalizationRunRepository(session).get(run_id), saved_call, config.artifact_store)
+            from app.services.fact_normalization_source_adapter import validated_retained_normalization_calls
+            retained_calls = validated_retained_normalization_calls(session, payload,
+                prompt_template=config.prompt_template, artifact_store=config.artifact_store)
             readable_calls = [call for call in calls if call.status == FactCallStatus.SUCCEEDED]
             coverage_calls = readable_calls if payload.get("targeted_extraction") else calls
-            outcome, reasons, affected_pages = validate_page_coverage(revision, coverage_calls, session=session)
+            outcome, reasons, affected_pages = validate_page_coverage(revision, [*coverage_calls, *retained_calls], session=session)
             if outcome.value != "accepted" and not payload.get("targeted_extraction"):
                 raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail="；".join(reasons))
             checkpoint["unread_page_refs"] = affected_pages
@@ -1708,6 +1720,9 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             accounting_issues = _validate_saved_text_accounting(session, payload, authority, run_id, calls)
             checkpoint["accounting_issue_call_ids"] = [call.call_id for call in accounting_issues]
             final_status = FactNormalizationRunStatus.SUCCEEDED
+            if any(FactNormalizationRunRepository(session).get(call.run_id).status == FactNormalizationRunStatus.PARTIAL
+                    for call in retained_calls):
+                final_status = FactNormalizationRunStatus.PARTIAL
             has_partitioned_calls = any(call.candidate_partition_sha256 is not None for call in calls)
             if facts or events or exposures:
                 run_result = orchestrate_run_gates(
@@ -1762,6 +1777,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                         gap_signals=gap_signals,
                         created_at=finalized_at,
                         run_id=publication.run_id,
+                        include_rule_revision_sources=bool(payload.get("targeted_extraction")),
                     )
                     FactAuthorityValidator(session).validate(publication.authority)
                     profile = PatientProfileService().generate(
@@ -1770,6 +1786,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                         created_at=finalized_at,
                         generated_at=finalized_at,
                         run_id=publication.run_id,
+                        include_rule_revision_sources=bool(payload.get("targeted_extraction")),
                     )
                     if profile.status != ProfileStatus.SUCCEEDED:
                         raise StepFailure(
@@ -1827,6 +1844,18 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             else:
                 checkpoint.update(gate_result_count=0, conflict_group_count=0, rejected_candidate_count=0)
                 final_status = FactNormalizationRunStatus.PARTIAL
+                if retained_calls:
+                    EvidenceExpectationProjectionService().project(session, authority=authority,
+                        gap_signals=[], created_at=finalized_at, include_rule_revision_sources=True)
+                    profile = PatientProfileService().generate(session, authority=authority,
+                        created_at=finalized_at, generated_at=finalized_at, include_rule_revision_sources=True)
+                    checkpoint.update(patient_profile_revision_id=profile.patient_profile_revision_id,
+                        patient_profile_revision=profile.revision, patient_profile_pending_review_count=profile.pending_review_count,
+                        patient_profile_status=profile.status.value, published_fact_count=0,
+                        published_event_count=0, published_exposure_count=0)
+                    if not calls and not affected_pages and all(FactNormalizationRunRepository(session).get(call.run_id).status
+                            == FactNormalizationRunStatus.SUCCEEDED for call in retained_calls):
+                        final_status = FactNormalizationRunStatus.SUCCEEDED
             checkpoint["unresolved_item_count"] = len(unresolved_items)
             if has_partitioned_calls or any(call.question_classification_sha256 is not None for call in calls):
                 final_status = FactNormalizationRunStatus.PARTIAL

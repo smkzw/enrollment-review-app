@@ -184,8 +184,8 @@ class FactCorrectionRepository:
         new_entity = self._get_entity(contract.target_kind, contract.new_entity_id)
 
         old_source_matches = (old_entity.authority == contract.authority or (
-            contract.target_kind == "fact" and self._authority.rule_revision_source_is_reusable(
-                old_entity.authority, contract.authority)))
+            contract.target_kind == "fact" and self._authority.retained_fact_source_is_reusable(
+                old_entity, contract.authority)))
         if not old_source_matches or new_entity.authority != contract.authority:
             raise RepositoryError("修订目标与新实体必须与修订同属同一不可变权威元组")
 

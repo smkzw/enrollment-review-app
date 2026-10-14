@@ -40,6 +40,7 @@ class EvidenceExpectationProjectionService:
         template_ids: set[str] | None = None,
         exclude_fact_ids: set[str] | None = None,
         run_id: str | None = None,
+        include_rule_revision_sources: bool = False,
     ) -> list[EvidenceExpectationV2]:
         created_at = created_at or datetime.now(UTC)
         episode = EpisodeRepository(session).get(authority.review_episode_id)
@@ -54,9 +55,12 @@ class EvidenceExpectationProjectionService:
                 "资料期望所用审核节点与不可变权威元组不一致"
             )
         # run_id is the triggering batch, not the scope of current evidence.
-        facts = current_fact_heads(
-            session, authority, exclude_fact_ids=exclude_fact_ids
-        )
+        if include_rule_revision_sources:
+            from app.services.patient_profile_service import PatientProfileService
+            facts = [fact for fact in PatientProfileService()._published_facts(session, authority,
+                include_rule_revision_sources=True) if fact.fact_id not in (exclude_fact_ids or ())]
+        else:
+            facts = current_fact_heads(session, authority, exclude_fact_ids=exclude_fact_ids)
         observations = self._observations(session, authority, facts)
         templates = list_expectation_templates(
             session, authority.rule_set_id, authority.rule_set_revision
@@ -95,6 +99,8 @@ class EvidenceExpectationProjectionService:
                     current_stage=episode.stage,
                     anchors=episode.anchor_dates,
                 ),
+                **({"retained_fact_authorities": {fact.fact_id: fact.authority for fact in facts if fact.authority != authority}}
+                   if include_rule_revision_sources else {}),
             )
             result.append(repository.project(expectation))
         return result

@@ -133,7 +133,8 @@ def test_product_composition_separates_reader_disagreement_from_patient_conflict
     authority = SimpleNamespace(review_episode_id="episode", rule_set_id="rules", rule_set_revision=1)
     components = [SimpleNamespace(rule_component_id=value) for value in ("affected", "sibling")]
     frame = SimpleNamespace(work_draft=True, review_run_id="run", authority=authority,
-        rule_set_sha256=canonical_hash(rules.model_dump()), facts=[], clause_pack=SimpleNamespace(clauses=components))
+        rule_set_sha256=canonical_hash(rules.model_dump()), facts=[], clause_pack=SimpleNamespace(clauses=components),
+        evaluator_version=service.CALCULATION_VERSION)
     frame.model_copy = lambda **_: frame
     source = {"source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
         "excerpt": "原件中保留的记录", "disposition": "unresolved"}

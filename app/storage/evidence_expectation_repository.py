@@ -222,7 +222,7 @@ class EvidenceExpectationV2Repository:
         repository = ClinicalFactV2Repository(self.session)
         for fact_id in sorted(set(expectation.coverage_fact_ids)):
             fact = repository.get(fact_id)
-            if fact.authority != expectation.authority:
+            if fact.authority != expectation.authority and not self._authority.retained_fact_source_is_reusable(fact, expectation.authority):
                 raise Phase5RepositoryError(
                     f"覆盖事实 {fact_id} 与期望不属于同一不可变权威元组，拒绝投影"
                 )

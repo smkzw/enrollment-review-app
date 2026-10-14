@@ -92,7 +92,7 @@ def _chain_heads(entities: list[Any], identity_attr: str) -> list[Any]:
 
 
 class PatientProfileService:
-    """Project current records and verified rule-only source reuse without copying facts."""
+    """Project current records and verified retained sources without copying facts."""
 
     def fact_display_metadata(self, session: Session, revision: PatientProfileRevisionV2) -> dict[str, dict]:
         """Read exact saved-source metadata; never adopt facts or infer clinical significance."""
@@ -101,10 +101,13 @@ class PatientProfileService:
         # A profile keeps its exact source IDs; this read must not switch to today's chain heads.
         # Reading original date metadata is not fact adoption or a fresh clinical source review.
         display_scope = revision.authority.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"})
+        from app.storage.fact_authority import FactAuthorityValidator
+        validator = FactAuthorityValidator(session)
         metadata = {}
         for item in items:
             fact = facts[item.source_id]
-            if (fact.authority.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"}) != display_scope
+            if ((fact.authority.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"}) != display_scope
+                    and not validator.retained_fact_source_is_reusable(fact, revision.authority))
                     or fact.revision != item.source_revision or fact.date_range != item.start_range
                     or fact.value != item.value or type(fact.value) is not type(item.value)
                     or fact.polarity != item.polarity or fact.unit != item.unit
@@ -126,8 +129,10 @@ class PatientProfileService:
             raise InvalidReferenceError("该病历档案中没有对应事实")
         fact = ClinicalFactV2Repository(session).get(fact_id)
         from app.storage.fact_authority import FactAuthorityValidator
-        if not FactAuthorityValidator(session).rule_revision_source_is_reusable(fact.authority, revision.authority):
+        validator = FactAuthorityValidator(session)
+        if not validator.retained_fact_source_is_reusable(fact, revision.authority):
             raise PatientProfileProjectionError("事实与病历档案的资料版本不一致")
+        validator.validate_locators(revision.authority, fact.locator_ids)
         candidates = FactNormalizationCandidateRepository(session)
         runs = FactNormalizationRunRepository(session)
         readings = []
@@ -143,13 +148,14 @@ class PatientProfileService:
             readings.append(candidate)
         return readings
 
-    def validate_published_references(self, session: Session, authority: FactAuthority) -> None:
+    def validate_published_references(self, session: Session, authority: FactAuthority, *, include_rule_revision_sources=False) -> None:
         """Check the existing source graph before starting a new normalization run."""
+        options = {"include_rule_revision_sources": True} if include_rule_revision_sources else {}
         self._validate_referential_closure(
-            facts=self._published_facts(session, authority),
-            events=self._published_events(session, authority),
-            exposures=self._published_exposures(session, authority),
-            conflicts=self._published_conflicts(session, authority),
+            facts=self._published_facts(session, authority, **options),
+            events=self._published_events(session, authority, **options),
+            exposures=self._published_exposures(session, authority, **options),
+            conflicts=self._published_conflicts(session, authority, **options),
             expectations=self._latest_expectations(session, authority),
         )
 
@@ -169,7 +175,7 @@ class PatientProfileService:
     ) -> PatientProfileRevisionV2:
         """生成并持久化当前权威元组的完整确定性 Profile（``succeeded``）。
 
-        - 只读同一权威元组的已发布事实/事件/暴露/冲突/期望（链头合并）；
+        - 默认只读同一权威元组；定向抽取可保留真实版本链中未变原件的记录；
         - 泳道归属只来自已发布 ``profile_lane`` 字段，绝不另行分类；
         - 同内容重生成幂等返回最新行；内容/权威变化追加链头 +1。
         - run_id仅兼容触发批次信息，不能缩小当前档案的已发布内容范围。
@@ -177,10 +183,11 @@ class PatientProfileService:
         episode = EpisodeRepository(session).get(authority.review_episode_id)
         self._require_episode_scope(authority, episode)
 
-        facts = self._published_facts(session, authority, include_rule_revision_sources=include_rule_revision_sources)
-        events = self._published_events(session, authority)
-        exposures = self._published_exposures(session, authority)
-        conflicts = self._published_conflicts(session, authority)
+        options = {"include_rule_revision_sources": True} if include_rule_revision_sources else {}
+        facts = self._published_facts(session, authority, **options)
+        events = self._published_events(session, authority, **options)
+        exposures = self._published_exposures(session, authority, **options)
+        conflicts = self._published_conflicts(session, authority, **options)
         if exclude_conflict_group_ids:
             conflicts = [
                 group
@@ -235,6 +242,15 @@ class PatientProfileService:
             created_at=created_at,
             generated_at=generated_at,
             fact_source_authorities={fact.fact_id: fact.authority for fact in facts if fact.authority != authority},
+            source_authorities={
+                ProfileItemKind.EVENT: {row.event_id: row.authority for row in events if row.authority != authority},
+                ProfileItemKind.EXPOSURE: {row.exposure_id: row.authority for row in exposures if row.authority != authority},
+                ProfileItemKind.CONFLICT: {row.conflict_group_id: row.authority for row in conflicts if row.authority != authority},
+            },
+            retained_snapshots=self._snapshot_chain(session, authority) if any(
+                (row.authority.evidence_snapshot_v2_id, row.authority.complete_processing_revision_id) !=
+                (authority.evidence_snapshot_v2_id, authority.complete_processing_revision_id)
+                for row in (*facts, *events, *exposures, *conflicts)) else (),
         )
         return repository.create(profile)
 
@@ -411,48 +427,122 @@ class PatientProfileService:
             key = fact.authority.model_dump_json()
             if key not in compatible:
                 compatible[key] = validator.rule_revision_source_is_reusable(fact.authority, authority)
-            if compatible[key]:
+            if compatible[key] or validator.retained_fact_source_is_reusable(fact, authority):
                 selected.append(fact)
         validator.validate_locators(authority, sorted({locator for fact in selected for locator in fact.locator_ids}))
         superseded = {item.target_id for item in FactCorrectionRepository(session).list_by_review_episode(authority.review_episode_id)}
         heads = _chain_heads(selected, "stable_identity")
         return [fact for fact in heads if fact.fact_id not in superseded]
 
+    @staticmethod
+    def _snapshot_chain(session, authority):
+        from app.storage.evidence_repositories import EvidenceSnapshotRepository
+        rows, seen = [], set()
+        key = authority.evidence_snapshot_v2_id
+        while key is not None:
+            if key in seen:
+                raise PatientProfileProjectionError("资料版本链重复")
+            seen.add(key)
+            snapshot = EvidenceSnapshotRepository(session).get(key)
+            if (snapshot.project_id, snapshot.subject_id, snapshot.review_episode_id) != (
+                    authority.project_id, authority.subject_id, authority.review_episode_id):
+                raise PatientProfileProjectionError("资料版本链属于其他个例或节点")
+            rows.append(snapshot)
+            key = snapshot.prior_snapshot_id
+        return tuple(rows)
+
     def _published_events(
-        self, session: Session, authority: FactAuthority
+        self, session: Session, authority: FactAuthority, *, include_rule_revision_sources=False,
     ) -> list[Any]:
         repository = ClinicalEventV2Repository(session)
-        superseded = _superseded_ids(session, authority)
+        superseded = self._retained_superseded_ids(session, authority) if include_rule_revision_sources else _superseded_ids(session, authority)
+        from app.storage.fact_authority import FactAuthorityValidator
+        validator = FactAuthorityValidator(session)
         bound = [
             event
             for event in repository.list_by_episode(authority.review_episode_id)
-            if event.authority == authority
+            if event.authority == authority or include_rule_revision_sources and validator.retained_fact_source_is_reusable(event, authority)
         ]
+        superseded |= self._cascade_source_ids(session, bound, "event", "event_id")
         return [
             event for event in _chain_heads(bound, "stable_identity")
             if event.event_id not in superseded
         ]
 
     def _published_exposures(
-        self, session: Session, authority: FactAuthority
+        self, session: Session, authority: FactAuthority, *, include_rule_revision_sources=False,
     ) -> list[Any]:
         repository = MedicationExposureV2Repository(session)
-        superseded = _superseded_ids(session, authority)
+        superseded = self._retained_superseded_ids(session, authority) if include_rule_revision_sources else _superseded_ids(session, authority)
+        from app.storage.fact_authority import FactAuthorityValidator
+        validator = FactAuthorityValidator(session)
         bound = [
             exposure
             for exposure in repository.list_by_episode(authority.review_episode_id)
-            if exposure.authority == authority
+            if exposure.authority == authority or include_rule_revision_sources and validator.retained_fact_source_is_reusable(exposure, authority)
         ]
+        superseded |= self._cascade_source_ids(session, bound, "exposure", "exposure_id")
         return [
             exposure for exposure in _chain_heads(bound, "stable_identity")
             if exposure.exposure_id not in superseded
         ]
 
     def _published_conflicts(
-        self, session: Session, authority: FactAuthority
+        self, session: Session, authority: FactAuthority, *, include_rule_revision_sources=False,
     ) -> list[Any]:
         from app.storage.active_conflicts import current_conflict_heads
+        if include_rule_revision_sources:
+            from app.storage.active_conflicts import source_conflict_heads
+            from app.storage.fact_authority import FactAuthorityValidator
+            from app.storage.fact_correction_commit_repository import FactCorrectionCommitRepository
+            groups = ClinicalConflictGroupV2Repository(session).list_by_episode(authority.review_episode_id)
+            excluded = set()
+            for source in {row.authority.model_dump_json(): row.authority for row in groups}.values():
+                excluded.update(FactCorrectionCommitRepository(session).superseded_conflict_ids(source))
+            excluded.update(FactCorrectionCommitRepository(session).superseded_conflict_ids(authority))
+            validator = FactAuthorityValidator(session)
+            return [row for row in source_conflict_heads(groups) if row.conflict_group_id not in excluded
+                and (row.authority == authority or validator.retained_fact_source_is_reusable(row, authority))]
         return current_conflict_heads(session, authority)
+
+    @staticmethod
+    def _retained_superseded_ids(session, authority):
+        from app.storage.fact_correction_repository import FactCorrectionRepository
+        return {row.target_id for row in FactCorrectionRepository(session).list_by_review_episode(authority.review_episode_id)}
+
+    @staticmethod
+    def _cascade_source_ids(session, entities, kind, id_field):
+        """Fold only a host-generated successor bound to an actual fact correction.
+
+        Same clinical wording is not enough: source IDs, changed references and
+        the deterministic cascade candidate/gate must all agree. This preserves
+        the original immutable entity while excluding it from today's heads.
+        """
+        from app.services.fact_correction_service import _cascade_ids
+        from app.storage.fact_correction_repository import FactCorrectionRepository
+        if not entities:
+            return set()
+        corrections = FactCorrectionRepository(session).list_by_review_episode(entities[0].authority.review_episode_id)
+        mutable = {id_field, "run_id", "gate_id", "source_candidate_ids", "gate_ids", "authority", "stable_identity",
+            "revision", "created_at", "fact_ids", "referenced_fact_objects", "source_strength", "source_revision_of"}
+        by_candidate = {}
+        for entity in entities:
+            for candidate_id in entity.source_candidate_ids:
+                by_candidate.setdefault(candidate_id, []).append(entity)
+        superseded = set()
+        for prior in entities:
+            for correction in corrections:
+                if correction.target_kind != "fact" or correction.target_id not in prior.fact_ids:
+                    continue
+                cascade = _cascade_ids(correction, kind, getattr(prior, id_field))
+                expected_refs = sorted(correction.new_entity_id if identity == correction.target_id else identity for identity in prior.fact_ids)
+                if any(successor.authority == correction.authority
+                        and successor.gate_ids == [cascade["gate_id"]] and successor.gate_id == cascade["gate_id"]
+                        and successor.fact_ids == expected_refs
+                        and successor.model_dump(exclude=mutable) == prior.model_dump(exclude=mutable)
+                        for successor in by_candidate.get(cascade["candidate_id"], ())):
+                    superseded.add(getattr(prior, id_field))
+        return superseded
 
     def _latest_expectations(
         self, session: Session, authority: FactAuthority

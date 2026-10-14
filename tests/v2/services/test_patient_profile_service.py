@@ -164,6 +164,7 @@ def _event_via_candidate(session, chain, event_id, *, fact_candidate_ids, fact_i
     return ClinicalEventV2Repository(session).create(
         _event(
             chain,
+            authority=chain.get("authority") or _authority(chain),
             event_id=event_id,
             gate_id=f"cc-{event_id}-gate",
             fact_ids=sorted(set(fact_ids)),
@@ -200,6 +201,7 @@ def _exposure_via_candidate(session, chain, exposure_id, *, fact_candidate_ids, 
     return MedicationExposureV2Repository(session).create(
         _exposure(
             chain,
+            authority=chain.get("authority") or _authority(chain),
             exposure_id=exposure_id,
             gate_id=f"cc-{exposure_id}-gate",
             fact_ids=sorted(set(fact_ids)),

@@ -37,6 +37,7 @@ from app.domain.contracts.enums import (
     SourceStrength,
 )
 from app.domain.contracts.evidence_expectations_v2 import EvidenceExpectationV2
+from app.domain.contracts.evidence_ingestion import EvidenceSnapshot
 from app.domain.contracts.facts import (
     ClinicalConflictGroupV2,
     ClinicalEventV2,
@@ -357,6 +358,8 @@ def project_patient_profile(
     created_at: datetime | None = None,
     generated_at: datetime | None = None,
     fact_source_authorities: Mapping[str, FactAuthority] | None = None,
+    source_authorities: Mapping[ProfileItemKind, Mapping[str, FactAuthority]] | None = None,
+    retained_snapshots: Sequence[EvidenceSnapshot] = (),
 ) -> PatientProfileRevisionV2:
     """投影当前权威元组的完整确定性 Patient Profile（纯函数，不做持久化）。
 
@@ -368,18 +371,41 @@ def project_patient_profile(
 
     items: list[ProfileItem] = []
     facts_by_id = {fact.fact_id: fact for fact in facts}
-    source_authorities = fact_source_authorities or {}
-    if set(source_authorities) - set(facts_by_id):
+    fact_sources = fact_source_authorities or {}
+    if set(fact_sources) - set(facts_by_id):
         raise ProjectionInputError("病例原文身份包含档案中不存在的事实")
+    sources = source_authorities or {}
+    pools = {
+        ProfileItemKind.EVENT: {row.event_id for row in events},
+        ProfileItemKind.EXPOSURE: {row.exposure_id for row in exposures},
+        ProfileItemKind.CONFLICT: {row.conflict_group_id for row in conflicts},
+    }
+    if any(kind not in pools or set(values) - pools[kind] for kind, values in sources.items()):
+        raise ProjectionInputError("病例原文身份包含档案中不存在的事件、用药或争议")
+    retained_ids = set()
+    for index, snapshot in enumerate(retained_snapshots):
+        if ((snapshot.project_id, snapshot.subject_id, snapshot.review_episode_id) != (
+                authority.project_id, authority.subject_id, authority.review_episode_id)
+                or snapshot.evidence_snapshot_id in retained_ids
+                or snapshot.evidence_snapshot_id != (authority.evidence_snapshot_v2_id if index == 0
+                    else retained_snapshots[index - 1].prior_snapshot_id)):
+            raise ProjectionInputError("档案的原件版本链不完整或不属于当前个例")
+        retained_ids.add(snapshot.evidence_snapshot_id)
+    if retained_snapshots and retained_snapshots[-1].prior_snapshot_id is not None:
+        raise ProjectionInputError("档案的原件版本链尚未读完")
+
+    def require_source(entity_id, label, actual, source):
+        _require_authority(entity_id, label, actual, source)
+        excluded = {"episode_revision", "protocol_version_id", "rule_set_revision"}
+        if source.evidence_snapshot_v2_id in retained_ids:
+            excluded |= {"evidence_snapshot_v2_id", "complete_processing_revision_id"}
+        if source.model_dump(exclude=excluded) != authority.model_dump(exclude=excluded):
+            raise ProjectionInputError("事实来源与本档案不是同一个例、节点或已核实的原件版本")
     for fact in facts:
-        source = source_authorities.get(fact.fact_id, authority)
-        _require_authority(fact.fact_id, "事实", fact.authority, source)
-        if source.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"}) != authority.model_dump(
-                exclude={"episode_revision", "protocol_version_id", "rule_set_revision"}):
-            raise ProjectionInputError("事实来源与本档案不是同一个例、节点或原件版本")
+        require_source(fact.fact_id, "事实", fact.authority, fact_sources.get(fact.fact_id, authority))
         items.append(_fact_item(fact, lane_map[(ProfileItemKind.FACT, fact.fact_id)]))
     for event in events:
-        _require_authority(event.event_id, "事件", event.authority, authority)
+        require_source(event.event_id, "事件", event.authority, sources.get(ProfileItemKind.EVENT, {}).get(event.event_id, authority))
         items.append(
             _event_item(
                 event,
@@ -388,12 +414,11 @@ def project_patient_profile(
             )
         )
     for exposure in exposures:
-        _require_authority(exposure.exposure_id, "暴露", exposure.authority, authority)
+        require_source(exposure.exposure_id, "暴露", exposure.authority, sources.get(ProfileItemKind.EXPOSURE, {}).get(exposure.exposure_id, authority))
         items.append(_exposure_item(exposure))
     for conflict in conflicts:
-        _require_authority(
-            conflict.conflict_group_id, "冲突", conflict.authority, authority
-        )
+        require_source(conflict.conflict_group_id, "冲突", conflict.authority,
+            sources.get(ProfileItemKind.CONFLICT, {}).get(conflict.conflict_group_id, authority))
         items.append(_conflict_item(conflict))
     for expectation in expectations:
         _require_authority(

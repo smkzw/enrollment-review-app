@@ -182,8 +182,14 @@ def assemble_review_context(
                 heads[fact.stable_identity] = fact
         facts = []
         frozen_source_revision = validator.validate_frozen_source(authority)
+        compatible_sources = {}
         for fact in heads.values():
             try:
+                key = fact.authority.model_dump_json()
+                if key not in compatible_sources:
+                    compatible_sources[key] = validator.rule_revision_source_is_reusable(fact.authority, authority)
+                if not compatible_sources[key] and not validator.retained_fact_source_is_reusable(fact, authority):
+                    raise FactLocatorReferenceError("记录来源不属于当前未变资料范围")
                 validator.validate_locators(authority, fact.locator_ids)
                 from app.domain.gates.fact_evidence_closure import _localized_locator_text
                 from app.storage.evidence_locator_repositories import EvidenceLocatorRepository
@@ -227,6 +233,7 @@ def assemble_review_context(
         read_pages = set()
         from app.storage.repositories import get_rule_set, AppendRepository, PROTOCOL_DOC_CONFIG
         runs = []
+        retained_by_run = {}
         for run in FactNormalizationRunRepository(session).list_by_episode(review_episode_id):
             if (run.authority.project_id, run.authority.subject_id, run.authority.review_episode_id,
                     run.authority.evidence_snapshot_v2_id, run.authority.complete_processing_revision_id) != (
@@ -238,6 +245,21 @@ def assemble_review_context(
             if normalization_source_is_reusable(run, authority, old_rules, protocol.rule_set,
                     old_protocol, project.protocol_version):
                 runs.append(run)
+                from app.storage.facts_models import FactNormalizationRunRecord
+                from app.workflow.jobstore import JobStore
+                from app.storage.codecs import verify_payload_sha256
+                row = session.get(FactNormalizationRunRecord, run.run_id)
+                if row.job_id:
+                    job = JobStore(session).get_job(row.job_id)
+                    if job.state == "completed":
+                        payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+                        from app.agents.evidence_normalizer import DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE
+                        from app.services.fact_normalization_source_adapter import validated_retained_normalization_calls
+                        for call in validated_retained_normalization_calls(session, payload,
+                                prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, artifact_store=artifact_store):
+                            retained_by_run.setdefault(call.run_id, set()).add(call.call_id)
+        for run_id in retained_by_run:
+            runs.append(FactNormalizationRunRepository(session).get(run_id))
         logical_to_version = {value: key for key, value in source.doc_version_to_logical.items()}
         adopted_readings = {_source_reading_identity(fact) for fact in facts if fact.assertion_basis is not None}
         for run in runs:
@@ -248,6 +270,8 @@ def assemble_review_context(
             accounting_issue_ids = set(checkpoint[1].get("accounting_issue_call_ids", ())) if checkpoint else set()
             candidates = {item.candidate_id: item for item in FactNormalizationCandidateRepository(session).list_by_run(run.run_id)}
             for gate in FactGateResultRepository(session).list_by_run(run.run_id):
+                if run.run_id in retained_by_run and gate.call_id not in retained_by_run[run.run_id]:
+                    continue
                 if gate.outcome.value == "accepted":
                     continue
                 candidate = candidates.get(gate.candidate_id)
@@ -277,6 +301,8 @@ def assemble_review_context(
                     page_artifact_id=locator.page_artifact_id if locator else None,
                     page_number=locator.page_number if locator else None))
             for call in FactNormalizationCallRepository(session).list_by_run(run.run_id):
+                if run.run_id in retained_by_run and call.call_id not in retained_by_run[run.run_id]:
+                    continue
                 if call.status == FactCallStatus.SUCCEEDED and call.call_id not in accounting_issue_ids:
                     document_id = logical_to_version.get(call.logical_document_id)
                     read_pages.update((document_id, page) for page in call.page_numbers)

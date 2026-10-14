@@ -406,6 +406,12 @@ def select_reprojection_source_runs(
         key = previous.model_dump_json()
         if key not in reusable_sources:
             reusable_sources[key] = validator.rule_revision_source_is_reusable(previous, authority)
+            if not reusable_sources[key]:
+                retained = validator.retained_source_documents(previous, authority)
+                source = validator.validate_frozen_source(previous)
+                # This routine replays an entire run's gaps, not one selected fact.
+                # Partial document retention cannot authorize unrelated old signals.
+                reusable_sources[key] = bool(retained) and {page.source_document_version_id for page in source.manifest} <= retained
         return reusable_sources[key]
     run_ids: set[str] = set()
     for kind, entity_id in sorted(lineage_entities):
@@ -415,7 +421,7 @@ def select_reprojection_source_runs(
             raise ReprojectionLineageError(
                 f"修订谱系/活动实体 {kind} {entity_id} 不存在，拒绝重投影"
             ) from exc
-        if entity.authority != authority and (kind != "fact" or not source_matches(entity.authority)):
+        if entity.authority != authority and (kind != "fact" or not validator.retained_fact_source_is_reusable(entity, authority)):
             raise ReprojectionLineageError(
                 f"实体 {entity_id} 的权威元组与本次修订不一致，拒绝重投影"
             )

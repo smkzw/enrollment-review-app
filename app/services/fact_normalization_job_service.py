@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -194,8 +194,8 @@ def _job_payload_hash(payload: dict[str, Any]) -> str:
     return request_hash(payload)
 
 
-def _validate_call_specs(calls: list[FactNormalizationCallSpec], *, allow_gaps: bool = False) -> None:
-    if not calls:
+def _validate_call_specs(calls: list[FactNormalizationCallSpec], *, allow_gaps: bool = False, allow_empty: bool = False) -> None:
+    if not calls and not allow_empty:
         raise InvalidJobDefinitionError("规范化调用切片不能为空")
     seen_pages: set[tuple[str, int]] = set()
     by_document: dict[str, list[int]] = {}
@@ -364,6 +364,7 @@ class FactNormalizationJobService:
             collect_visual_observation_attachments,
             select_call_visual_observation_attachments,
             visual_observation_run_scope,
+            retained_normalization_reads,
         )
         from app.services.selective_vision_postprocess_job_service import (
             SelectiveVisionPostprocessJobService,
@@ -411,6 +412,31 @@ class FactNormalizationJobService:
                 allow_candidate_partition = True
                 allow_question_classification_repair = False
                 compact_text_references = True
+                PatientProfileService().validate_published_references(session, authority,
+                    include_rule_revision_sources=True)
+            attachments = (
+                ()
+                if page_review_coverage_id is not None
+                else collect_visual_observation_attachments(
+                    session,
+                    revision=source.revision,
+                    doc_version_to_logical=source.doc_version_to_logical,
+                    required_scope=verified_vision_scope,
+                )
+            )
+            retained_reads = (retained_normalization_reads(session, authority=authority,
+                prompt_version_id=prompt_version_id, model_config_id=model_config_id,
+                prompt_template=self.prompt_template) if targeted and not retry_failed_from_run_id
+                and page_review_coverage_id is None and not attachments else [])
+            retained_pages = {(row["logical_document_id"], page)
+                for row in retained_reads for page in row["page_numbers"]}
+            if any(0 < len({(call.logical_document_id, page) for page in call.page_numbers} & retained_pages)
+                    < len(call.page_numbers) for call in plan.calls):
+                max_pages_per_call = 1
+                plan, source = build_fact_normalization_plan(session, authority=authority,
+                    revision=source.revision, max_pages_per_call=1)
+            pending_calls = tuple(call for call in plan.calls
+                if not {(call.logical_document_id, page) for page in call.page_numbers} <= retained_pages)
             if retry_failed_from_run_id:
                 if not targeted:
                     raise InvalidJobDefinitionError("仅能继续整理同一资料范围内已终结的部分失败任务")
@@ -424,22 +450,12 @@ class FactNormalizationJobService:
                 max_pages_per_call = 1
                 plan, source = build_fact_normalization_plan(session, authority=authority,
                     revision=source.revision, max_pages_per_call=1)
-                plan = replace(plan, calls=tuple(call for call in plan.calls
-                    if (call.logical_document_id, call.page_numbers[0]) in failed_pages))
-            attachments = (
-                ()
-                if page_review_coverage_id is not None
-                else collect_visual_observation_attachments(
-                    session,
-                    revision=source.revision,
-                    doc_version_to_logical=source.doc_version_to_logical,
-                    required_scope=verified_vision_scope,
-                )
-            )
+                pending_calls = tuple(call for call in plan.calls
+                    if (call.logical_document_id, call.page_numbers[0]) in failed_pages)
             if page_review_coverage_id is None:
                 while True:
                     oversized = None
-                    for call in plan.calls:
+                    for call in pending_calls:
                         evidence_input = build_evidence_normalizer_input(
                             session,
                             authority=authority,
@@ -484,10 +500,12 @@ class FactNormalizationJobService:
                         revision=source.revision,
                         max_pages_per_call=max_pages_per_call,
                     )
+                    pending_calls = tuple(call for call in plan.calls
+                        if not {(call.logical_document_id, page) for page in call.page_numbers} <= retained_pages)
             if page_review_coverage_id is None:
                 calls = [
                     FactNormalizationCallSpec.from_planned_call(call)
-                    for call in plan.calls
+                    for call in pending_calls
                 ]
             else:
                 calls = [
@@ -507,7 +525,7 @@ class FactNormalizationJobService:
                             include_visual_sources=include_visual_sources,
                         ).input_scope_sha256,
                     )
-                    for call in plan.calls
+                    for call in pending_calls
                 ]
         vision_scope = visual_observation_run_scope(attachments)
         if vision_scope is None:
@@ -533,8 +551,9 @@ class FactNormalizationJobService:
                 account_source_text=account_source_text,
                 allow_candidate_partition=allow_candidate_partition,
                 allow_question_classification_repair=allow_question_classification_repair,
-                targeted_extraction=any(call.variable_definitions for call in plan.calls),
+                targeted_extraction=targeted,
                 retry_failed_from_run_id=retry_failed_from_run_id,
+                retained_reads=retained_reads or None,
             )
         stitched_scope = _compute_input_scope_sha256(
             authority,
@@ -557,7 +576,8 @@ class FactNormalizationJobService:
             account_source_text=account_source_text,
             allow_candidate_partition=allow_candidate_partition,
             allow_question_classification_repair=allow_question_classification_repair,
-            targeted_extraction=any(call.variable_definitions for call in plan.calls),
+            targeted_extraction=targeted,
+            retained_reads=retained_reads or None,
         )
 
     @app_error_boundary
@@ -582,6 +602,7 @@ class FactNormalizationJobService:
         allow_question_classification_repair: bool = False,
         targeted_extraction: bool = False,
         retry_failed_from_run_id: str | None = None,
+        retained_reads: list[dict] | None = None,
     ) -> CreateNormalizationJobResult:
         """幂等创建规范化 Job 与冻结的 FactNormalizationRun。
 
@@ -589,7 +610,8 @@ class FactNormalizationJobService:
         任务载荷（执行期据此复核观察清单未被漂移）；为 ``None`` 时保持旧键与
         旧载荷形状不变。
         """
-        _validate_call_specs(calls, allow_gaps=retry_failed_from_run_id is not None)
+        _validate_call_specs(calls, allow_gaps=retry_failed_from_run_id is not None or retained_reads is not None,
+            allow_empty=bool(retained_reads))
         if not prompt_version_id or not prompt_version_id.strip():
             raise InvalidJobDefinitionError("PromptVersion 不能为空")
         if not model_config_id or not model_config_id.strip():
@@ -681,6 +703,12 @@ class FactNormalizationJobService:
             retry_scope = effective_scope
             effective_scope = canonical_hash({"input_scope_sha256": effective_scope,
                                                "retry_failed_from_run_id": retry_failed_from_run_id})
+        retained_scope = None
+        if retained_reads is not None:
+            if not targeted_extraction or retry_failed_from_run_id is not None or visual_observation_scope_sha256 is not None:
+                raise InvalidJobDefinitionError("旧读取只能用于定向文字补证，不能混用旧判读或续读策略")
+            retained_scope = effective_scope
+            effective_scope = canonical_hash({"input_scope_sha256": effective_scope, "retained_reads": retained_reads})
 
         expected_key = fact_run_idempotency_key(
             authority=authority,
@@ -708,6 +736,9 @@ class FactNormalizationJobService:
         if retry_failed_from_run_id is not None:
             job_request_payload["retry_failed_from_run_id"] = retry_failed_from_run_id
             job_request_payload["retry_failed_precondition_sha256"] = retry_scope
+        if retained_reads is not None:
+            job_request_payload["retained_reads"] = retained_reads
+            job_request_payload["retained_read_precondition_sha256"] = retained_scope
         if visual_observation_scope_sha256 is not None:
             # 仅在确有视觉材料时新增载荷字段：无观察任务保持与旧链路逐字节一致，
             # 升级后同键重放不会因请求哈希漂移误报幂等冲突。
@@ -740,6 +771,21 @@ class FactNormalizationJobService:
             submitted_hash = _job_payload_hash(job_request_payload)
 
         with self.session_factory() as session, session.begin():
+            if retained_reads is not None:
+                from app.services.fact_normalization_source_adapter import retained_normalization_reads, build_fact_normalization_plan
+                proven = {row["call_id"]: row for row in retained_normalization_reads(session,
+                    authority=authority, prompt_version_id=prompt_version_id, model_config_id=model_config_id,
+                    prompt_template=self.prompt_template)}
+                if (len({row["call_id"] for row in retained_reads}) != len(retained_reads)
+                        or any(proven.get(row["call_id"]) != row for row in retained_reads)):
+                    raise InvalidJobDefinitionError("保留的旧读取未通过当前原件、请求及回执核对")
+                plan, _ = build_fact_normalization_plan(session, authority=authority,
+                    revision_id=authority.complete_processing_revision_id, max_pages_per_call=max_pages_per_call)
+                expected = {(call.logical_document_id, page) for call in plan.calls for page in call.page_numbers}
+                requested = {(call.logical_document_id, page) for call in calls for page in call.page_numbers}
+                retained = {(row["logical_document_id"], page) for row in retained_reads for page in row["page_numbers"]}
+                if requested & retained or requested | retained != expected:
+                    raise InvalidJobDefinitionError("补证读取和保留的旧读取必须逐页覆盖当前资料，不重复、不遗漏")
             if retry_failed_from_run_id is not None:
                 previous = FactNormalizationRunRepository(session).get(retry_failed_from_run_id)
                 previous_row = session.get(FactNormalizationRunRecord, previous.run_id)
@@ -831,6 +877,9 @@ class FactNormalizationJobService:
             if retry_failed_from_run_id is not None:
                 job_payload["retry_failed_from_run_id"] = retry_failed_from_run_id
                 job_payload["retry_failed_precondition_sha256"] = retry_scope
+            if retained_reads is not None:
+                job_payload["retained_reads"] = retained_reads
+                job_payload["retained_read_precondition_sha256"] = retained_scope
             step_defs = _build_step_specs(calls, targeted_extraction=targeted_extraction)
             if question_policy is not None:
                 job_payload["question_classification_repair_policy"] = question_policy

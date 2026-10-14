@@ -238,16 +238,14 @@ def active_entity_ids_after_corrections(
     fact_ids = {item.fact_id for item in fact_heads}
     events = [
         item
-        for item in ClinicalEventV2Repository(session).list_for_authority(authority)
+        for item in PatientProfileService()._published_events(session, authority, include_rule_revision_sources=True)
         if item.event_id not in superseded and set(item.fact_ids) <= fact_ids
     ]
     event_heads = _chain_heads(events, "stable_identity", "event_id")
     event_ids = {item.event_id for item in event_heads}
     exposures = [
         item
-        for item in MedicationExposureV2Repository(session).list_for_authority(
-            authority
-        )
+        for item in PatientProfileService()._published_exposures(session, authority, include_rule_revision_sources=True)
         if item.exposure_id not in superseded and set(item.fact_ids) <= fact_ids
     ]
     exposure_heads = _chain_heads(exposures, "stable_identity", "exposure_id")
@@ -499,7 +497,7 @@ def fact_correction_options(session: Session, *, authority: FactAuthority, targe
     from app.storage.repositories import get_rule_set
     _require_authority(session, authority)
     target = _load_target(session, "fact", target_id)
-    if target.authority != authority and not FactAuthorityValidator(session).rule_revision_source_is_reusable(target.authority, authority):
+    if target.authority != authority and not FactAuthorityValidator(session).retained_fact_source_is_reusable(target, authority):
         raise FactCorrectionValidationError("修订目标不属于当前审核节点的活动证据。")
     if FactCorrectionRepository(session).outgoing(target_id) is not None:
         raise FactCorrectionValidationError("该记录已被修订，请打开最新记录。")
@@ -586,7 +584,7 @@ def prepare_fact_correction(
     except (NotFoundError, InvalidReferenceError) as exc:
         raise FactCorrectionValidationError("找不到要修订的事实记录。") from exc
     if target.authority != authority and (target_kind != "fact" or not
-            FactAuthorityValidator(session).rule_revision_source_is_reusable(target.authority, authority)):
+            FactAuthorityValidator(session).retained_fact_source_is_reusable(target, authority)):
         raise FactCorrectionValidationError("修订目标不属于当前审核节点的活动证据。")
     if FactCorrectionRepository(session).outgoing(target_id) is not None:
         raise FactCorrectionValidationError("该记录已被修订，不能再从同一原记录分叉。")
@@ -1473,6 +1471,7 @@ def _reproject_expectations(
         created_at=prepared.created_at,
         template_ids=template_ids,
         exclude_fact_ids=superseded_entity_ids(session, prepared.authority),
+        include_rule_revision_sources=True,
     )
 
 
@@ -1947,7 +1946,7 @@ def _rewrite_referencing_events_and_exposures(
     """事实修订后，为仍引用旧事实 ID 的事件/暴露追加新 revision，保证 Profile 引用闭合。"""
     extra: dict[str, str] = {}
     new_fact = ClinicalFactV2Repository(session).get(prepared.new_entity_id)
-    events = ClinicalEventV2Repository(session).list_for_authority(prepared.authority)
+    events = PatientProfileService()._published_events(session, prepared.authority, include_rule_revision_sources=True)
     for event in events:
         if prepared.target_id not in event.fact_ids:
             continue
@@ -1960,9 +1959,7 @@ def _rewrite_referencing_events_and_exposures(
             continue
         rewritten = _rewrite_event(session, prepared, event, new_fact_ids, new_fact)
         extra[event.event_id] = rewritten
-    exposures = MedicationExposureV2Repository(session).list_for_authority(
-        prepared.authority
-    )
+    exposures = PatientProfileService()._published_exposures(session, prepared.authority, include_rule_revision_sources=True)
     for exposure in exposures:
         if prepared.target_id not in exposure.fact_ids:
             continue
@@ -1990,7 +1987,7 @@ def _rewrite_event(session, prepared, event: ClinicalEventV2, fact_ids, new_fact
     if not locators:
         locators = list(new_fact.locator_ids)
     stable = clinical_event_stable_identity(
-        authority=event.authority,
+        authority=prepared.authority,
         event_type=event.event_type,
         profile_lane=event.profile_lane,
         referenced_fact_objects=referenced,
@@ -1998,7 +1995,7 @@ def _rewrite_event(session, prepared, event: ClinicalEventV2, fact_ids, new_fact
         end_range=event.end_range,
         duration_status=event.duration_status,
     )
-    existing = ClinicalEventV2Repository(session).list_for_authority(event.authority)
+    existing = ClinicalEventV2Repository(session).list_for_authority(prepared.authority)
     revision = (
         event.revision + 1
         if stable == event.stable_identity
@@ -2037,7 +2034,8 @@ def _rewrite_event(session, prepared, event: ClinicalEventV2, fact_ids, new_fact
         created_at=prepared.created_at,
     )
     _persist_candidate_and_gate(session, prepared, cascade, candidate)
-    source_strength = _derive_strength(session, prepared.authority, candidate)
+    source_strength = (_derive_strength(session, prepared.authority, candidate)
+        if event.authority == prepared.authority else event.source_strength)
     ClinicalEventV2Repository(session).create(
         ClinicalEventV2(
             event_id=new_id,
@@ -2045,7 +2043,7 @@ def _rewrite_event(session, prepared, event: ClinicalEventV2, fact_ids, new_fact
             gate_id=cascade["gate_id"],
             source_candidate_ids=[cascade["candidate_id"]],
             gate_ids=[cascade["gate_id"]],
-            authority=event.authority,
+            authority=prepared.authority,
             event_type=event.event_type,
             profile_lane=event.profile_lane,
             start_range=event.start_range,
@@ -2077,7 +2075,7 @@ def _rewrite_exposure(session, prepared, exposure: MedicationExposureV2, fact_id
     if not locators:
         locators = list(new_fact.locator_ids)
     stable = medication_exposure_stable_identity(
-        authority=exposure.authority,
+        authority=prepared.authority,
         medication_name=exposure.medication_name,
         category=exposure.category,
         indication=exposure.indication,
@@ -2089,7 +2087,7 @@ def _rewrite_exposure(session, prepared, exposure: MedicationExposureV2, fact_id
         end_range=exposure.end_range,
         duration_status=exposure.duration_status,
     )
-    existing = MedicationExposureV2Repository(session).list_for_authority(exposure.authority)
+    existing = MedicationExposureV2Repository(session).list_for_authority(prepared.authority)
     revision = (
         exposure.revision + 1
         if stable == exposure.stable_identity
@@ -2133,7 +2131,8 @@ def _rewrite_exposure(session, prepared, exposure: MedicationExposureV2, fact_id
         created_at=prepared.created_at,
     )
     _persist_candidate_and_gate(session, prepared, cascade, candidate)
-    source_strength = _derive_strength(session, prepared.authority, candidate)
+    source_strength = (_derive_strength(session, prepared.authority, candidate)
+        if exposure.authority == prepared.authority else exposure.source_strength)
     MedicationExposureV2Repository(session).create(
         MedicationExposureV2(
             exposure_id=new_id,
@@ -2141,7 +2140,7 @@ def _rewrite_exposure(session, prepared, exposure: MedicationExposureV2, fact_id
             gate_id=cascade["gate_id"],
             source_candidate_ids=[cascade["candidate_id"]],
             gate_ids=[cascade["gate_id"]],
-            authority=exposure.authority,
+            authority=prepared.authority,
             medication_name=exposure.medication_name,
             category=exposure.category,
             indication=exposure.indication,
