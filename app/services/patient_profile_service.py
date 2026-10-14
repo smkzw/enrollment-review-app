@@ -82,6 +82,8 @@ def _chain_heads(entities: list[Any], identity_attr: str) -> list[Any]:
         current = heads.get(key)
         if current is None or entity.revision > current.revision:
             heads[key] = entity
+        elif entity.revision == current.revision and entity != current:
+            raise PatientProfileProjectionError("同一记录出现不同的同号修订，请先核对来源。")
     return sorted(
         heads.values(),
         key=lambda item: (item.revision, getattr(item, identity_attr)),
@@ -89,7 +91,7 @@ def _chain_heads(entities: list[Any], identity_attr: str) -> list[Any]:
 
 
 class PatientProfileService:
-    """把当前权威元组的已发布 v2 实体投影为一条不可变 Patient Profile revision。"""
+    """Project current records and verified rule-only source reuse without copying facts."""
 
     def fact_source_readings(
         self, session: Session, revision: PatientProfileRevisionV2, fact_id: str,
@@ -101,7 +103,8 @@ class PatientProfileService:
         ):
             raise InvalidReferenceError("该病历档案中没有对应事实")
         fact = ClinicalFactV2Repository(session).get(fact_id)
-        if fact.authority != revision.authority:
+        from app.storage.fact_authority import FactAuthorityValidator
+        if not FactAuthorityValidator(session).rule_revision_source_is_reusable(fact.authority, revision.authority):
             raise PatientProfileProjectionError("事实与病历档案的资料版本不一致")
         candidates = FactNormalizationCandidateRepository(session)
         runs = FactNormalizationRunRepository(session)
@@ -110,7 +113,7 @@ class PatientProfileService:
             candidate = candidates.get(candidate_id)
             if (
                 not isinstance(candidate, ClinicalFactCandidateV2)
-                or runs.get(candidate.run_id).authority != revision.authority
+                or runs.get(candidate.run_id).authority != fact.authority
                 or not set(candidate.locator_ids) <= set(fact.locator_ids)
                 or not set(candidate.source_observation_refs) <= set(fact.source_observation_refs)
             ):
@@ -140,6 +143,7 @@ class PatientProfileService:
         exclude_conflict_group_ids: set[str] | None = None,
         exclude_expectation_ids: set[str] | None = None,
         run_id: str | None = None,
+        include_rule_revision_sources: bool = False,
     ) -> PatientProfileRevisionV2:
         """生成并持久化当前权威元组的完整确定性 Profile（``succeeded``）。
 
@@ -151,7 +155,7 @@ class PatientProfileService:
         episode = EpisodeRepository(session).get(authority.review_episode_id)
         self._require_episode_scope(authority, episode)
 
-        facts = self._published_facts(session, authority)
+        facts = self._published_facts(session, authority, include_rule_revision_sources=include_rule_revision_sources)
         events = self._published_events(session, authority)
         exposures = self._published_exposures(session, authority)
         conflicts = self._published_conflicts(session, authority)
@@ -208,6 +212,7 @@ class PatientProfileService:
             revision=revision,
             created_at=created_at,
             generated_at=generated_at,
+            fact_source_authorities={fact.fact_id: fact.authority for fact in facts if fact.authority != authority},
         )
         return repository.create(profile)
 
@@ -371,9 +376,25 @@ class PatientProfileService:
                 )
 
     def _published_facts(
-        self, session: Session, authority: FactAuthority
+        self, session: Session, authority: FactAuthority, *, include_rule_revision_sources: bool = False,
     ) -> list[Any]:
-        return current_fact_heads(session, authority)
+        if not include_rule_revision_sources:
+            return current_fact_heads(session, authority)
+        from app.storage.fact_authority import FactAuthorityValidator
+        from app.storage.fact_correction_repository import FactCorrectionRepository
+        validator = FactAuthorityValidator(session)
+        compatible = {}
+        selected = []
+        for fact in ClinicalFactV2Repository(session).list_by_episode(authority.review_episode_id):
+            key = fact.authority.model_dump_json()
+            if key not in compatible:
+                compatible[key] = validator.rule_revision_source_is_reusable(fact.authority, authority)
+            if compatible[key]:
+                selected.append(fact)
+        validator.validate_locators(authority, sorted({locator for fact in selected for locator in fact.locator_ids}))
+        superseded = {item.target_id for item in FactCorrectionRepository(session).list_by_review_episode(authority.review_episode_id)}
+        heads = _chain_heads(selected, "stable_identity")
+        return [fact for fact in heads if fact.fact_id not in superseded]
 
     def _published_events(
         self, session: Session, authority: FactAuthority

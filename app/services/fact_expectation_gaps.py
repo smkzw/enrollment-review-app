@@ -373,7 +373,7 @@ def select_reprojection_source_runs(
     无关修订后被静默丢弃。任一实体或运行缺失、跨权威即视为谱系损坏并拒绝；
     绝不纳入已被丢弃的分支或全部历史运行。
     """
-    corrections = FactCorrectionRepository(session).list_by_authority(authority)
+    corrections = FactCorrectionRepository(session).list_by_review_episode(authority.review_episode_id)
     by_new_entity = corrections_by_new_entity(corrections)
     superseded = {item.target_id for item in corrections}
     repositories = {
@@ -383,7 +383,10 @@ def select_reprojection_source_runs(
     }
     entities: set[tuple[str, str]] = set()
     for kind, repository in repositories.items():
-        for entity in repository.list_for_authority(authority):
+        from app.services.patient_profile_service import PatientProfileService
+        published = (PatientProfileService()._published_facts(session, authority, include_rule_revision_sources=True)
+                     if kind == "fact" else repository.list_for_authority(authority))
+        for entity in published:
             entity_id = getattr(entity, f"{kind}_id")
             if entity_id not in superseded:
                 entities.add((kind, entity_id))
@@ -396,6 +399,14 @@ def select_reprojection_source_runs(
                 by_new_entity, target_kind=kind, target_id=entity_id
             )
         )
+    from app.storage.fact_authority import FactAuthorityValidator
+    validator = FactAuthorityValidator(session)
+    reusable_sources = {}
+    def source_matches(previous):
+        key = previous.model_dump_json()
+        if key not in reusable_sources:
+            reusable_sources[key] = validator.rule_revision_source_is_reusable(previous, authority)
+        return reusable_sources[key]
     run_ids: set[str] = set()
     for kind, entity_id in sorted(lineage_entities):
         try:
@@ -404,7 +415,7 @@ def select_reprojection_source_runs(
             raise ReprojectionLineageError(
                 f"修订谱系/活动实体 {kind} {entity_id} 不存在，拒绝重投影"
             ) from exc
-        if entity.authority != authority:
+        if entity.authority != authority and (kind != "fact" or not source_matches(entity.authority)):
             raise ReprojectionLineageError(
                 f"实体 {entity_id} 的权威元组与本次修订不一致，拒绝重投影"
             )
@@ -417,7 +428,7 @@ def select_reprojection_source_runs(
             raise ReprojectionLineageError(
                 f"所选源运行 {run_id} 缺少持久化运行记录，拒绝重投影"
             ) from exc
-        if run.authority != authority:
+        if not source_matches(run.authority):
             raise ReprojectionLineageError(
                 f"源运行 {run_id} 的权威元组与本次修订不一致，拒绝将其纳入重投影"
             )

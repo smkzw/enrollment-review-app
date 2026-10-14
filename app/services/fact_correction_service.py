@@ -233,9 +233,8 @@ def active_entity_ids_after_corrections(
 ) -> dict[str, set[str]]:
     """当前权威下应进入新投影的实体 ID（排除修订目标后的链头，并要求引用闭合）。"""
     superseded = superseded_entity_ids(session, authority)
-    from app.storage.active_facts import current_fact_heads
 
-    fact_heads = current_fact_heads(session, authority)
+    fact_heads = PatientProfileService()._published_facts(session, authority, include_rule_revision_sources=True)
     fact_ids = {item.fact_id for item in fact_heads}
     events = [
         item
@@ -501,7 +500,6 @@ def _same_observation_siblings(
     """Show active facts sharing an explicit original observation identity."""
     from sqlalchemy import select
     from app.storage.fact_repositories import ClinicalFactV2Repository
-    from app.storage.active_facts import current_fact_heads
 
     facts = ClinicalFactV2Repository(session).list_by_episode(
         authority.review_episode_id
@@ -513,7 +511,7 @@ def _same_observation_siblings(
     if not target_observations:
         return []
     siblings = []
-    for fact in current_fact_heads(session, authority):
+    for fact in PatientProfileService()._published_facts(session, authority, include_rule_revision_sources=True):
         if fact.fact_id == target.fact_id:
             continue
         if fact.asserted_object != target.asserted_object:
@@ -559,7 +557,8 @@ def prepare_fact_correction(
         target = _load_target(session, target_kind, target_id)
     except (NotFoundError, InvalidReferenceError) as exc:
         raise FactCorrectionValidationError("找不到要修订的事实记录。") from exc
-    if target.authority != authority:
+    if target.authority != authority and (target_kind != "fact" or not
+            FactAuthorityValidator(session).rule_revision_source_is_reusable(target.authority, authority)):
         raise FactCorrectionValidationError("修订目标不属于当前审核节点的活动证据。")
     if FactCorrectionRepository(session).outgoing(target_id) is not None:
         raise FactCorrectionValidationError("该记录已被修订，不能再从同一原记录分叉。")
@@ -582,6 +581,7 @@ def prepare_fact_correction(
         locator_ids=locators,
         updates=updates,
         created_at=created_at,
+        authority=authority,
     )
     old_snapshot = snapshot_for_kind(target_kind, target)
     new_snapshot = snapshot_for_kind(target_kind, new_entity)
@@ -709,15 +709,16 @@ def _build_new_entity(
     locator_ids: list[str],
     updates: dict[str, Any],
     created_at: datetime,
+    authority: FactAuthority,
 ):
     if target_kind == "fact":
-        return _build_new_fact(session, target, locator_ids, updates, created_at)
+        return _build_new_fact(session, target, locator_ids, updates, created_at, authority)
     if target_kind == "event":
         return _build_new_event(session, target, locator_ids, updates, created_at)
     return _build_new_exposure(session, target, locator_ids, updates, created_at)
 
 
-def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, created_at):
+def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, created_at, authority):
     fact_type = str(updates.get("fact_type") or target.fact_type)
     polarity = _enum(updates.get("polarity"), FactPolarity, "极性") or target.polarity
     asserted_object = str(updates.get("asserted_object") or target.asserted_object)
@@ -772,7 +773,7 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
             contextual_qualifiers=qualifiers if preserves_context else [],
         )
     stable = clinical_fact_stable_identity(
-        authority=target.authority,
+        authority=authority,
         fact_type=fact_type,
         profile_lane=profile_lane,
         asserted_object=asserted_object,
@@ -784,7 +785,7 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         variable_id=target.variable_id,
         date_role=target.date_role,
     )
-    existing = ClinicalFactV2Repository(session).list_for_authority(target.authority)
+    existing = ClinicalFactV2Repository(session).list_for_authority(authority)
     revision = (
         target.revision + 1
         if stable == target.stable_identity
@@ -835,7 +836,7 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         source_candidate_ids=[],
         source_observation_refs=list(target.source_observation_refs),
         gate_ids=[],
-        authority=target.authority,
+        authority=authority,
         fact_type=fact_type,
         profile_lane=profile_lane,
         supported_requirement_ids=supported_requirement_ids,
@@ -849,7 +850,7 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         source_strength=(
             target.source_strength
             if locator_ids == list(target.locator_ids)
-            else _strength_for_locators(session, target.authority, locator_ids, created_at)
+            else _strength_for_locators(session, authority, locator_ids, created_at)
         ),
         date_range=date_range,
         record_time=target.record_time,
@@ -1237,6 +1238,7 @@ def apply_prepared_fact_correction(
         profile = PatientProfileService().generate(
             session,
             authority=prepared.authority,
+            include_rule_revision_sources=True,
             created_at=prepared.created_at,
             generated_at=prepared.created_at,
             exclude_conflict_group_ids=historical_conflict_ids
@@ -1490,11 +1492,11 @@ def _require_active_correction_head(session: Session, prepared: PreparedFactCorr
         repo = ClinicalEventV2Repository(session)
     else:
         repo = MedicationExposureV2Repository(session)
-    bound = [
-        item
-        for item in repo.list_for_authority(prepared.authority)
-        if item.stable_identity == target.stable_identity
-    ]
+    entities = (PatientProfileService()._published_facts(session, prepared.authority, include_rule_revision_sources=True)
+                if prepared.target_kind == "fact" else repo.list_for_authority(prepared.authority))
+    bound = [item for item in entities if item.stable_identity == target.stable_identity]
+    if not bound:
+        raise FactCorrectionValidationError("修订目标已不属于当前可复用的原件记录。")
     head = max(bound, key=lambda item: item.revision)
     if _entity_pk(prepared.target_kind, head) != prepared.target_id:
         raise FactCorrectionValidationError("修订目标已不是当前活动链头，不能提交陈旧修订。")

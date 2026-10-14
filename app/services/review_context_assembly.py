@@ -14,7 +14,7 @@ from app.services.fact_normalization_command_service import authority_from_activ
 from app.services.patient_profile_service import PatientProfileService
 from app.services.review_judgment_provenance import freeze_judgment_search_result
 from app.services.review_protocol_source import load_review_protocol_source
-from app.storage.fact_authority import FactAuthorityValidator
+from app.storage.fact_authority import FactAuthorityValidator, clinical_source_scope_is_compatible
 from app.storage.fact_rule_link_repository import FactRuleLinkV2Repository
 from app.storage.judgment_search_repository import JudgmentSearchSummaryRepository
 from app.storage.repositories import (
@@ -37,17 +37,6 @@ def normalization_source_is_reusable(run, authority, old_rules, current_rules, o
     """Coverage of immutable text is not approval of a new rule's interpretation."""
     return run.status.value in {"succeeded", "partial"} and clinical_source_scope_is_compatible(
         run.authority, authority, old_rules, current_rules, old_protocol, current_protocol)
-
-
-def clinical_source_scope_is_compatible(previous, authority, old_rules, current_rules, old_protocol, current_protocol):
-    """Same clinical material across a rule-only revision, not result adoption."""
-    identity_fields = {"episode_revision", "protocol_version_id", "rule_set_revision"}
-    old_variables = {item.variable_id: item.model_dump(mode="json") for item in old_rules.variable_definitions or ()}
-    current_variables = {item.variable_id: item.model_dump(mode="json") for item in current_rules.variable_definitions or ()}
-    return (previous.model_dump(exclude=identity_fields) == authority.model_dump(exclude=identity_fields)
-        and old_protocol.sha256 == current_protocol.sha256
-        and old_rules.study_phase == current_rules.study_phase
-        and all(current_variables.get(key) == value for key, value in old_variables.items()))
 
 
 def review_method_is_current(context: ReviewContextSnapshotV2) -> bool:

@@ -61,6 +61,17 @@ class FactLocatorReferenceError(RepositoryError):
     """定位引用不在当前审核节点/活动快照/处理修订闭包内（跨节点/跨快照/跨修订）。"""
 
 
+def clinical_source_scope_is_compatible(previous, authority, old_rules, current_rules, old_protocol, current_protocol):
+    """A rule-only revision can reuse source readings, not its former conclusions."""
+    identity_fields = {"episode_revision", "protocol_version_id", "rule_set_revision"}
+    old_variables = {item.variable_id: item.model_dump(mode="json") for item in old_rules.variable_definitions or ()}
+    current_variables = {item.variable_id: item.model_dump(mode="json") for item in current_rules.variable_definitions or ()}
+    return (previous.model_dump(exclude=identity_fields) == authority.model_dump(exclude=identity_fields)
+        and old_protocol.sha256 == current_protocol.sha256
+        and old_rules.study_phase == current_rules.study_phase
+        and all(current_variables.get(key) == value for key, value in old_variables.items()))
+
+
 class FactAuthorityValidator:
     """把不可变权威元组与数据库当前状态确定性核对。
 
@@ -103,6 +114,26 @@ class FactAuthorityValidator:
         """
         self._validate_snapshot(authority)
         return self._validate_complete_revision(authority)
+
+    def rule_revision_source_is_reusable(self, previous: FactAuthority, current: FactAuthority) -> bool:
+        """Verify retained material for 0.2.0; current writes still require validate()."""
+        if previous == current:
+            return True
+        identity_fields = {"episode_revision", "protocol_version_id", "rule_set_revision"}
+        if previous.model_dump(exclude=identity_fields) != current.model_dump(exclude=identity_fields):
+            return False
+        from app.storage.repositories import AppendRepository, PROTOCOL_DOC_CONFIG, get_rule_set
+        old_rules = get_rule_set(self.session, previous.rule_set_id, previous.rule_set_revision)
+        current_rules = get_rule_set(self.session, current.rule_set_id, current.rule_set_revision)
+        if not old_rules.variable_definitions or not current_rules.variable_definitions:
+            return False
+        protocols = AppendRepository(self.session, PROTOCOL_DOC_CONFIG)
+        if not clinical_source_scope_is_compatible(previous, current, old_rules, current_rules,
+                protocols.get(previous.protocol_version_id), protocols.get(current.protocol_version_id)):
+            return False
+        self.validate_frozen_source(previous)
+        self.validate_frozen_source(current)
+        return True
 
     def _validate_snapshot(self, authority: FactAuthority) -> None:
         snapshot = self.session.get(

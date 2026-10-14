@@ -213,8 +213,8 @@ describe("受试者与 Patient Profile 页", () => {
       };
     }));
     render(<SubjectsPage />);
-    expect(await screen.findByText("来源待确认 1 项")).toBeInTheDocument();
-    expect(screen.getByTitle(/不能直接用于入排判断/)).toBeInTheDocument();
+    expect(await screen.findByText("来源提示 1 项")).toBeInTheDocument();
+    expect(screen.getByTitle(/这些来源记录保留核实提示/)).toBeInTheDocument();
   });
 
   it("“全部历时信息”展开 13 条泳道，空泳道不判为资料缺口", async () => {
@@ -333,10 +333,12 @@ describe("受试者与 Patient Profile 页", () => {
     expect(screen.queryByText(/后续节点关注/)).not.toBeInTheDocument();
   });
 
-  it("资料页元信息使用中文项目展示名，不暴露原始项目代号", async () => {
+  it("资料页使用方案编号和版本，不铺开完整研究名称或内部项目ID", async () => {
     render(<SubjectsPage />);
-    expect(await screen.findByText(/界面试用项目 · Ⅲ期/)).toBeInTheDocument();
-    expect(screen.queryByText(/SYNTHETIC-001-III/)).not.toBeInTheDocument();
+    expect((await screen.findAllByText(/SYNTHETIC-001-III · Ⅲ期/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/界面试用项目 · Ⅲ期/)).not.toBeInTheDocument();
+    expect(screen.queryByText(PROJECT_ID)).not.toBeInTheDocument();
+    expect(screen.queryByText(/资料版本/)).not.toBeInTheDocument();
   });
 
   it("待核对数与生成时间来自真实档案模型", async () => {

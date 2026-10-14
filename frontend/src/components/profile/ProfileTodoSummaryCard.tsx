@@ -8,9 +8,9 @@
 
 import type { ProfileGapTypeWire, ProfileItemView } from "../../api/patient-profile";
 import type { PatientProfileModel } from "../../features/patient-profile/model";
+import { Info } from "lucide-react";
 import {
   AttentionIcon,
-  CheckIcon,
   ConflictIcon,
   GapIcon,
   JudgmentIcon,
@@ -148,14 +148,8 @@ export function ProfileTodoSummaryCard({
     >
       <header className="profile-todo-summary__head">
         <h3 id="profile-todo-summary-title" className="profile-section__title">
-          本节点资料核对情况
+          档案记录问题
         </h3>
-        <p
-          className="profile-todo-summary__note"
-          title="档案头“待核对 N 项”是需人工过目的条目总数；本卡按资料性质分组，未解决冲突按组计数。"
-        >
-          按资料性质分组 · 档案头“待核对”统计需人工过目的条目总数
-        </p>
       </header>
 
       {hasTodos ? (
@@ -187,8 +181,8 @@ export function ProfileTodoSummaryCard({
         </div>
       ) : (
         <div className="profile-todo-summary__clear" role="status">
-          <CheckIcon size={17} />
-          <span>本次提交资料中，暂无待补资料、待判断、矛盾或待核对事项</span>
+          <Info size={17} aria-hidden="true" />
+          <span>档案中暂无单列问题；入排结论以本节点工作稿为准。</span>
         </div>
       )}
     </section>

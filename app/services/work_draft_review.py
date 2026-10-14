@@ -159,6 +159,13 @@ class WorkDraftReviewService:
                        if run.authority == authority and run.status.value in {"created", "queued", "running"}]
             if running:
                 raise ScopeViolationError("当前资料仍在整理，请完成后生成工作稿；已有读取结果会保留。")
+            from app.services.patient_profile_service import PatientProfileService
+            from app.storage.fact_authority import FactAuthorityValidator
+            profile = PatientProfileService()
+            previous_profile = profile.latest(session, review_episode_id)
+            reproject_profile = (previous_profile is not None and previous_profile.status.value == "stale"
+                    and FactAuthorityValidator(session, self.artifact_store).rule_revision_source_is_reusable(
+                        previous_profile.authority, authority))
             from app.services.review_context_assembly import assemble_review_context
             preview = assemble_review_context(session, self.artifact_store, review_episode_id=review_episode_id,
                 review_run_id="pending", evaluator_version=CALCULATION_VERSION,
@@ -196,6 +203,10 @@ class WorkDraftReviewService:
                         name="核对病历原文与条件关系" if step.startswith("semantic") else
                             {"calculate": "核对确定性条件", "compose": "合并条款结果", "save": "保存工作稿"}[step],
                         depends_on=depends_on)
+            if reproject_profile:
+                # Finish expensive read-only planning before acquiring a write
+                # lock for this deterministic view; no source reread is needed.
+                profile.generate(session, authority=authority, include_rule_revision_sources=True)
             return self.status(subject_id=subject_id, review_episode_id=review_episode_id,
                                job_id=receipt.result_id, session=session)
 

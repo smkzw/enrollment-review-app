@@ -436,16 +436,12 @@ export function SubjectsPage() {
     <div className="subjects">
       <header className="page-head">
         <h1 className="page-head__title">{path === "/profiles" ? "个例档案" : "受试者与资料"}</h1>
-        <p className="page-head__note">
-          按项目和受试者选择审核节点，查看已生成的病历档案。首屏显示系统整理的重点条目，完整历时信息按需展开。
-        </p>
       </header>
 
       <section className="catalog-selection" aria-labelledby="profile-project-title">
         <div className="catalog-selection__head">
           <div>
             <h2 id="profile-project-title">选择项目</h2>
-            <p>方案中包含多个研究期别时，每个已选择期别都是独立项目。</p>
           </div>
           <select
             aria-label="选择项目"
@@ -454,7 +450,7 @@ export function SubjectsPage() {
           >
             {projectList.map((project) => (
               <option key={project.projectId} value={project.projectId}>
-                {project.projectName} · {project.studyPhaseLabel} · 方案 {project.officialVersion}
+                {project.protocolCode} · {project.studyPhaseLabel} · 方案 {project.officialVersion}
               </option>
             ))}
           </select>
@@ -761,19 +757,18 @@ function ProfileBody({
           <h2 className="profile-head__subject">{subjectCode}</h2>
           <p className="profile-head__meta">
             {project !== null
-              ? `${project.projectName} · ${project.studyPhaseLabel} · 方案 ${project.officialVersion}`
+              ? `${project.protocolCode} · ${project.studyPhaseLabel} · 方案 ${project.officialVersion}`
               : ""}
             {center !== "" ? ` · ${center}` : ""}
           </p>
         </div>
         <div className="profile-head__node">
           <span className="count-chip">档案第 {model.revision} 版</span>
-          <span className="count-chip">资料版本 {episode.revision}</span>
           <span className="count-chip">生成时间 {formatProfileDateTime(model.generatedAt) ?? "未记录"}</span>
-          <span className="count-chip">待核对 {model.pendingReviewCount} 项</span>
+          <span className="count-chip">档案待核对 {model.pendingReviewCount} 项</span>
           {unverifiedSourceCount > 0 && (
-            <span className="count-chip" title="这些内容已从原件整理，但来源尚未确认，不能直接用于入排判断">
-              来源待确认 {unverifiedSourceCount} 项
+            <span className="count-chip" title="这些来源记录保留核实提示；结论及实际使用范围以本节点工作稿为准">
+              来源提示 {unverifiedSourceCount} 项
             </span>
           )}
           <RouteLink

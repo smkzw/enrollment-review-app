@@ -25,7 +25,7 @@
 """
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
 from app.domain.contracts.enums import (
@@ -356,6 +356,7 @@ def project_patient_profile(
     revision: int = 1,
     created_at: datetime | None = None,
     generated_at: datetime | None = None,
+    fact_source_authorities: Mapping[str, FactAuthority] | None = None,
 ) -> PatientProfileRevisionV2:
     """投影当前权威元组的完整确定性 Patient Profile（纯函数，不做持久化）。
 
@@ -367,8 +368,15 @@ def project_patient_profile(
 
     items: list[ProfileItem] = []
     facts_by_id = {fact.fact_id: fact for fact in facts}
+    source_authorities = fact_source_authorities or {}
+    if set(source_authorities) - set(facts_by_id):
+        raise ProjectionInputError("病例原文身份包含档案中不存在的事实")
     for fact in facts:
-        _require_authority(fact.fact_id, "事实", fact.authority, authority)
+        source = source_authorities.get(fact.fact_id, authority)
+        _require_authority(fact.fact_id, "事实", fact.authority, source)
+        if source.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"}) != authority.model_dump(
+                exclude={"episode_revision", "protocol_version_id", "rule_set_revision"}):
+            raise ProjectionInputError("事实来源与本档案不是同一个例、节点或原件版本")
         items.append(_fact_item(fact, lane_map[(ProfileItemKind.FACT, fact.fact_id)]))
     for event in events:
         _require_authority(event.event_id, "事件", event.authority, authority)

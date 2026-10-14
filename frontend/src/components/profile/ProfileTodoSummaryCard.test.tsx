@@ -126,7 +126,7 @@ describe("ProfileTodoSummaryCard", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "本次提交资料中，暂无待补资料、待判断、矛盾或待核对事项",
+      "档案中暂无单列问题；入排结论以本节点工作稿为准。",
     );
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
