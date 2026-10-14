@@ -199,7 +199,7 @@ export function ProtocolComparisonWorkbench({
             className="button button--primary"
             disabled={feedbackBusy || saving || !integrity.publishable || publicationBlocked}
             onClick={onPublish}
-            title={integrity.publishable ? "发布为新的正式规则版本" : "请先处理完整性检查中的问题"}
+            title={comparison.candidate.reviewScopePending ? "补充范围尚未形成已审定要求" : publicationBlocked ? "请先完成全部条目审定" : integrity.publishable ? "发布为新的正式规则版本" : "请先处理完整性检查中的问题"}
           >
             发布
           </button>

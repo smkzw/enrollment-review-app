@@ -15,8 +15,12 @@ const diagnosticLabels: Record<string, string> = {
   source_geometry_inconsistent: "来源位置与原文结构不一致",
 };
 
-export function ProtocolReviewScope({ jobId, revisionId, onSaved }: { jobId: string; revisionId: string; onSaved?: () => void }) {
-  const [open, setOpen] = useState(false);
+export function ProtocolReviewScope({ jobId, revisionId, onSaved, expanded, onExpandedChange }: {
+  jobId: string; revisionId: string; onSaved?: () => void;
+  expanded?: boolean; onExpandedChange?: (value: boolean) => void;
+}) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = expanded ?? localOpen;
   const [view, setView] = useState<ReviewScopeView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [proposal, setProposal] = useState<ScopeProposal | null>(null);
@@ -63,7 +67,9 @@ export function ProtocolReviewScope({ jobId, revisionId, onSaved }: { jobId: str
       if (active.current === identity) setError(reason instanceof Error ? reason.message : "保存结果尚未确认，请刷新核对。");
     } finally { if (active.current === identity) setSaving(false); }
   }
-  return <details className="protocol-review-scope" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+  return <details className="protocol-review-scope" open={open} onToggle={event => {
+    setLocalOpen(event.currentTarget.open); onExpandedChange?.(event.currentTarget.open);
+  }}>
     <summary>查看审核范围</summary>
     {open && <div className="protocol-review-scope__body">
       {error && <p role="alert">{error}</p>}

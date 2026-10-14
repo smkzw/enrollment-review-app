@@ -18,6 +18,14 @@ function view(job = "job", revision = "rev") {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("方案范围原文", () => {
+  it("草稿刷新重新挂载后沿用宿主保存的展开状态", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response(JSON.stringify(view()))));
+    const mounted = render(<ProtocolReviewScope jobId="job" revisionId="rev" expanded />);
+    expect(await screen.findByText(/不代表这些内容已经审定/)).toBeVisible();
+    mounted.rerender(<div>正在更新草稿</div>);
+    mounted.rerender(<ProtocolReviewScope jobId="job" revisionId="rev" expanded />);
+    expect(await screen.findByText(/不代表这些内容已经审定/)).toBeVisible();
+  });
   it("按需读取、分类下钻，不冒称新增内容已采用", async () => {
     const user = userEvent.setup();
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(view())));
