@@ -1,11 +1,11 @@
 # 0.2.0 当前交接
 
-更新：2026-10-15。Goal实际active，**不是暂停、正式验收或全产品完成**。源码f935040f已部署，范围查看子包接通；31001工作稿v36／125关系不重跑，新增临床模型调用0。相连后端120通过72.16秒、完整前端920通过12.79秒、构建及Ego42三宽屏已核。源结构只读定位23官方／1引用／41必做／3用药章节，EX12“参照6.5”明确待定位，未伪装完整采用。M1仍有时间范围裁定待答：24页处理但8/8锚点只读取22页；8/15复查被排除。cd18完整后端的原249失败/错误基线未改变，但不称已对f935全库验证。claims_complete=false。
+更新：2026-10-15。Goal实际active，**不是暂停、正式验收或全产品完成**。后端0ae67f37／前端0fd0f315已部署，范围选择→不可变草稿→刷新读回已实际走通；新草稿afe79035…，EX12引用已手工指定41原文位置，尚未临床采用，发布按钮准确保留限制。31001工作稿v36／125关系不重跑，新增模型0。集中后端168通过92.07秒、完整前端925通过11.66秒、正式构建及Ego42保存／刷新已核。M1时间范围问题仍只问过一次待答，继续不依赖它的S4提取与消费工程。claims_complete=false。
 
 ## 1. 五分钟入口
 
 - 唯一树：/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/build-0.2.0，dev/0.2.0；主checkout及phase5旧树不能替代。
-- 源码f935040f18f6773b158c7af76c41088c40f89360，前端精简10e57e1f；临床消费源码cd18a4d3／734998ee保留。源码文件哈希output/wp5-scope-code-identity.json；文档HEAD看git log。上次已推送88bfc062，本包推送看wp5-scope-push.log及远端读回，不把文档HEAD或查询串当运行源码。
+- 后端源码0ae67f3793ad32056ff1a3b67ad23f8c647c9526，前端0fd0f315746efe24a4b95e9d66cdc0c1d6a0ff21；临床消费cd18／734保留。读回output/wp5-scope-selection-audit.json；文档HEAD看git log。前已推送06d92326，本包推送看wp5-scope-selection-push.log与远端读回，不把文档HEAD或查询串当运行源码。
 - 只读本树AGENTS、01_PRD／02_DESIGN／03_PLAN／04_ACCEPTANCE／05_PROGRESS。archives是0.1.x历史，不注入旧授权、Phase、预算或长链。
 - 从05的当前WP接续，不重跑方案、变量建议、既往53次抽取、已处理24页、125成功关系、已终态v32–36。历史调用、错误和原答均保留，不筛选有利回答。
 - 构建者自主走验证流程，用builder_verification；正式医学经理审定及最终验收不代签。用户已经真实批准规则7，未改条目不重复请求批准。
@@ -15,7 +15,7 @@
 | 层 | 实际状态 |
 |---|---|
 | 产品 | 医学人员／监察人员的信息和风险展示，不是最终入组决定、反馈或事无巨细留痕平台 |
-| 服务 | 61134，PID97943／exec31732，f935源码；显式本树.env／data_v2；output/wp5-review-scope-release-server.log |
+| 服务 | 61134，PID2542／exec75641，后端0ae／前端0fd；显式本树.env／data_v2；output/wp5-scope-selection-server.log；旧97943／31732已TERM收回143 |
 | 服务历史 | 自有84383／16038、97209／38678已TERM并收回143；更早68998／76651同样终态。共享8001/8900不操作，旧build查询串不代表代码 |
 | 数据 | WP0验证副本data_v2/enrollment-review-v2.sqlite3，约16GB；没再复制大型库、没有修改原临床库或原件 |
 | 项目 | draft-project-1153e25b4eba |
@@ -30,7 +30,7 @@
 | 结果 | 64父／85子＝149项；5入选满足、9排除未触发、21操作满足、15未到期、5不适用、8未决、1系统问题；待处理仍9 |
 | 其他来源提示 | 28未采用原件提示独立于1规则系统问题；ReviewRun内29系统／来源记录，不与UI的1混分母 |
 | 新核实 | 仅IN01父项高置信及builder_verification。看到原图51岁／生日再选“仅作试用核实”；仅4元数据字段改变，148无关项与所有结论／来源不变 |
-| 当前Job | 最近只读62completed／139failed_final／6cancelled／3waiting_user，0queued/running/retryable；旧终态保持 |
+| 当前Job | 最近只读62completed／139failed_final／6cancelled／4waiting_user，0活动；新增合法草稿afe79035d4e04d1b9b8f4778dbc0e54e，范围修订2，原规则7及旧任务保持 |
 | 模型角色 | 病历关系cms-router/glm-5.3-flash high65536流式经OmniRouter；规范化ollama-cloud/deepseek-v4.1-flash high65536，本月额度失败保留。默认角色及.env未改 |
 
 用户最新允许生图造测试源：只作明确虚构的工程材料，独立TEST001／离线期望，不进入真实31001、IE或D001。不能把“生成成功”“图像好看”“来源文字可读”称临床批准或医学金标。
@@ -62,6 +62,8 @@ EX13保留restricted状态，沿现有投影显示limitation_kind及unresolved_d
 
 ## 4. 真实用户动作及证据边界
 
+当前范围选择子包（0ae/0fd）：在原Ego42/p1从正式项目“不上传文件，按反馈修订”合法建立afe79035…，未起草／建议模型；勾选范围、EX12具体待定位引用、实际章节及一句理由，保存为外层草稿修订2。41原文位置及对应引用读回，刷新仍在；未改旧规则／事实／38报告，UI发布按钮禁用并说明补充要求未完成。选择仅为位置提案，S4和定义依据未采用；正常手工编辑、绑定、历史恢复及过期／跨来源反例有服务测试。原无选择payload不改变；未新增表或16GB备份。相连168后端通过，完整925前端通过；第一次夹具重复消费同一个Response导致单例失败，已改为每次真实新响应，不改产品断言。Ego截图wp5-scope-selection-saved-1920.png已实际查看，无横向溢出；未再次做全宽屏／真实缩放。readback为wp5-scope-selection-audit.json，模型0／临床采用写入0，作者草稿写入独立记录。保存后面板曾自动收起，已由宿主保留展开状态；后台/前台版本分别记录，源码提交不等于医学验收。
+
 范围查看子包（f935）：`review_scope.py`生产→现有原任务已保存的结构／来源→`ProtocolWorkbenchService.get_review_scope`→`GET .../{job}/draft/review-scope`→草稿及已发布任务“查看审核范围”。不是新增临床保存／采用；范围选择持久化及禁用药仍待做。3280原生块哈希核验，221来源身份一致；表格根复用已有`native_source_text`拼接，889空／片段摘录不误称损坏。23官方／1已定位引用／41必做／3用药章节；3用药章节有重叠，后续按来源身份取并集，不按59引用重复送读。EX12“参照6.5”此前漏识别，现通用写法已发现，但Word自动编号不猜，准确列待指定。界面仅在展开时GET，按类别／章节下钻，页码变化才显示，不重复标题；错任务／修订及伪造采用身份拒绝。真实GET、三宽屏、状态／数量读回在output/wp5-scope-product-final-readback.json、wp5-scope-product-final-{1920,2560,3840}.png。均CSS仿真，不称物理4K／实际缩放。真实病例原件／旧稿／规则7不改，整个库133事实（含合成）／38报告／5710项／7规则及Job状态前后一致；31001仍125物理事实。
 
 本包相连120后端／920完整前端／构建通过；未重跑全后端。E03节点实际CodeBuddy/DeepSeek max、493.406秒exit0、37工具、无fallback，主线程读完整源码后修表格归属、逐字数值、几何身份及新增反例；guard审计通过，非医学评审。初始packet路径错误、新API夹具漏建Job、Ego相对保存路径及不可见option等待错误保留日志，不借失败掩盖结果。保留code、API、UI及源核对同版本证据，不将纯定位成功称四块临床覆盖完整。
@@ -91,6 +93,7 @@ approved runner C03和M1 A/B实际单轮完成，均codebuddy/codebuddy-cli/deep
 
 | 窗口 | 真实结果／证据 |
 |---|---|
+| 0ae范围保存包 | 相连168passed92.07秒，含API／原API／草稿服务／发布／Schema；log为wp5-scope-selection-consumers-final.log；完整前端103文件925passed11.66秒exit0、构建exit0，wp5-scope-selection-ui-verified-2.log及-ui-build-verified.log。未重跑全后端 |
 | 734未知／复用子包 | 最终369passed，72.91秒exit0；output/wp4-uncertainty-source-package-tests.log，5SWIG警告。此前365及路径错误日志保留，不累加 |
 | 734完整后端 | 10569pass／247fail／6error／20skip／8xfail／18subtests，2157.17秒exit1；253失败／错误ID比WP0多4个历史夹具漏authority，不冒称全库无新增；原XML／log保留 |
 | cd18相连消费包 | 最终393passed，46.48秒exit0、5SWIG；output/wp4-consumer-review-integration-final.log。首轮391pass/2fail是独立资料理由重复，修真实依赖去重，未放宽断言 |
@@ -139,8 +142,8 @@ npm test -- --maxWorkers=2
 
 ## 9. 接续与复盘
 
-1. 核f935服务与Job归属，沿v36及已保存范围接续；原工作稿、读取及变量建议均不重跑。120相连后端／920前端属于f935；全后端249基线仍只属cd18。
-2. 先在合法新草稿补范围选择／局部来源指定与理由的保存，再接S4抽取、审定发布及用药消费。不更改旧v7或已终态任务，不把只读API当完整WP5。按实际范围来源复用，不重开旧全方案链。
+1. 核0ae/0fd服务与Job归属，沿v36及afe79035草稿范围修订2接续；原读取及变量建议不重跑。168相连后端／925前端属于本包；全后端249基线仍只属cd18。
+2. 范围选择／局部来源指定已真实保存，接S4唯一来源提取、审定发布及用药消费。不更改旧v7或已终态任务，当前选择尚未采用不得解除发布保护；后续实际采用后才替代临时限制。复用现有草稿／规则，不新表、不重开全方案链。
 3. 若范围答案到达，按上述分支继续现有产品链；健康已completed Job不重派。若外部条件仅阻断某支，继续独立工作，不自行pause/complete Goal。
 4. 真实更正／补证仍沿正式UI，保存→受影响重算→新稿→旧稿回看；不依赖手写JSON或人工补模型答案。Profile、签发、工作稿核实、临床采用与验收各分层。
 

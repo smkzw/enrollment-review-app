@@ -106,7 +106,7 @@
 | 每个需要数据的谓词必须有一条 `EvidenceRequirement`，其 `predicate_ids` 包含该谓词、`variable_id` 非空 | P4 产出，P6 发布前校验 | 0.1.x 旧规则的 89 个需求 `predicate_ids` 为空，是工作稿失败的直接原因之一 |
 | 新增 `ProhibitedMedicationItem` | `app/domain/contracts/` 新文件 | 字段：`item_id`、`drug_text`、`drug_class_id`（可空）、`window: TimeConstraint`（复用，可含 `half_life_multiplier`）、`direction`、`source_span_ids`、`source_excerpt`、`applies_to_rule`（关联的 EX 编号，可空）。随 `RuleSet` 保存 |
 | 新增 `RuleReviewRecord` | 新表 `rule_review_records` | `protocol_version_id`、`official_code`（或 REQ／禁用药条目 ID）、`rule_content_hash`、`reviewer_kind`（`medical_manager`｜`builder_verification`）、`reviewed_by`、`reviewed_at`、`note`（含 `excluded`、`result_variables` 设置）。有效性按 `rule_content_hash` 判断：草稿新修订中该条内容哈希不变则审定继续有效；变了则失效。发布时任一条为 `builder_verification`→`RuleSet` 标 `verification_only=true` |
-| 范围清单 | 新表 `protocol_review_scopes` | `protocol_version_id`、单元 ID 列表、每项理由、来源（自动／MM 手工）、MM 增删记录 |
+| 范围清单 | 现有 `ProtocolDraftRevision.review_scope_selection` | 外层修订元数据保存冻结范围身份、保留／移除理由、手工原文及对应引用；不是作者Schema或采用，详见§5.2；不新增表或大型库迁移 |
 
 ### 4.3 事实侧
 
