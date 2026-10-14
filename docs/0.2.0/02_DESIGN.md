@@ -290,7 +290,7 @@ Job 幂等键：`(review_episode_id, 资料快照哈希, rule_set_id, rule_set_r
 ## 8. 更正、补证与重算
 
 - 更正：沿用 `apply_prepared_fact_correction`（`app/services/fact_correction_service.py:1121-1275`）；可更正字段增加 `variable_id`。
-- **自动重算钩子**：在 `app/services/fact_correction_executor.py` 应用成功后（约 `:150`）排队 `work_draft_review` Job（幂等键见 §7.1）。增量上传处理完成、"标记已核"（事实级或结论级）完成后同样排队；"已核"不改资料哈希，因此幂等键中包含已核记录集合哈希。
+- **更正后的自动重算**：0.2.0更正Job冻结`work_draft_recompute`，沿用plan→apply，再追加独立work_draft步骤。apply先原子保存更正及提交证明；第三步重新核当前节点／已发布规则，调用既有`WorkDraftReviewService.start`，保存子Job关联。不在apply事务内调用后续核对：后续故障只重试失败步骤或子Job，不回滚已提交更正、不重复发布。路径绑定的`fact-corrections/jobs/{job_id}/work-draft`读取实际关联与终态；界面只有新稿真正保存才显示完成。旧两步任务及其幂等身份不改，未配置数据字典的旧链不自动接入。增量上传及“已核”的自动触发仍待实现；“已核”不改资料哈希，因此其集合哈希须进入工作稿身份。
 - 新工作稿写 `supersedes_review_run_id`；前端在工作稿顶部显示"第 N 版（较上一版：结论变化 x 条）"，可打开旧版。
 
 ## 9. 前端

@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { FactCorrectionRequestInput } from "./factCorrectionTypes";
 import { createPatientProfileHttp } from "./patientProfileHttp";
+import { decodeFactCorrectionWorkDraftLink } from "./factCorrectionViewModels";
+
+it("更正／重算关联按节点校验，不把排队或缺结果视为完成", async () => {
+  const link = { job_id: "correction-job", subject_id: "subject", review_episode_id: "episode", enabled: true,
+    correction_applied: true, work_draft_job_id: "working-job", work_draft_state: "queued", review_run_id: null };
+  expect(decodeFactCorrectionWorkDraftLink(link).workDraftState).toBe("queued");
+  for (const changed of [
+    { ...link, correction_applied: false }, { ...link, work_draft_state: "completed" },
+    { ...link, work_draft_job_id: null }, { ...link, enabled: false }, { ...link, review_run_id: "not-yet-saved" },
+  ]) expect(() => decodeFactCorrectionWorkDraftLink(changed)).toThrow();
+  const repo = createPatientProfileHttp({ fetchImpl: async () => jsonResponse({ ...link, subject_id: "other-patient" }) });
+  await expect(repo.getFactCorrectionWorkDraftLink!("subject", "episode", "correction-job")).rejects.toThrow("不属于");
+});
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

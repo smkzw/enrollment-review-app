@@ -98,6 +98,70 @@ def _run(session_factory, executors=None):
     return runner.run_once()
 
 
+@pytest.mark.parametrize("queue_failure", [False, True])
+def test_working_review_queue_is_after_the_committed_correction_and_retry_does_not_republish(session_factory, monkeypatch, queue_failure):
+    """Storage/dispatch integration only: synthetic source and a declared queue seam."""
+    from app.services.work_draft_review import WorkDraftReviewService
+    from app.storage.fact_correction_commit_repository import FactCorrectionCommitRepository
+    from app.storage.repositories import NotFoundError, ScopeViolationError
+    with session_factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "corr-review")
+        fact = _publish_fact(session, chain)
+    # Only the new-capability selector is replaced; actual correction, commits,
+    # job steps, leases and checkpoint consumers remain production implementations.
+    monkeypatch.setattr("app.services.fact_correction_job_service.get_rule_set", lambda *args: SimpleNamespace(variable_definitions=["synthetic-capability"]))
+    service = FactCorrectionJobService(session_factory, work_draft_enabled=True)
+    args = dict(authority=_authority(chain), target_kind="fact", target_id=fact.fact_id,
+        locator_ids=[chain["locator_id"]], reason="对照合成原件更正", operator_id="builder-verification",
+        updates={"value": "130/80"}, created_by="builder-verification", created_at=NOW)
+    job = service.create_or_reuse_job(**args)
+    assert service.create_or_reuse_job(**args).job_id == job.job_id
+    attempts = []
+    def queue(self, *, subject_id, review_episode_id, session):
+        assert FactCorrectionCommitRepository(session).get_optional(job.correction_id) is not None
+        attempts.append(1)
+        if queue_failure and len(attempts) == 1:
+            raise RuntimeError("Injected queue failure after the committed correction")
+        JobStore(session).create_job(job_id="new-working-review", job_type="work_draft_review", progress_total=1,
+            payload={"subject_id": subject_id, "review_episode_id": review_episode_id})
+        JobStore(session).create_step(job_id="new-working-review", step_id="synthetic_consumer", name="队列边界验证")
+        return {"job_id": "new-working-review"}
+    monkeypatch.setattr(WorkDraftReviewService, "start", queue)
+    executors = {FACT_CORRECTION_JOB_TYPE: create_fact_correction_executor(
+        FactCorrectionExecutorConfig(session_factory=session_factory, artifact_store=object()))}
+    assert _run(session_factory, executors)
+    if queue_failure:
+        link = service.work_draft_link(job_id=job.job_id, subject_id=chain["authority"].subject_id,
+            review_episode_id=chain["authority"].review_episode_id)
+        assert link["correction_applied"] and link["work_draft_job_id"] is None
+        assert service.get_job(job.job_id)["state"] == "failed_final"
+        service.retry(job.job_id)
+        assert _run(session_factory, executors)
+    link = service.work_draft_link(job_id=job.job_id, subject_id=chain["authority"].subject_id,
+        review_episode_id=chain["authority"].review_episode_id)
+    assert link["enabled"] and link["correction_applied"]
+    assert link["work_draft_job_id"] == "new-working-review"
+    assert link["work_draft_state"] == "queued" and link["review_run_id"] is None
+    assert service.get_job(job.job_id)["progress_completed"] == 3
+    with session_factory() as session:
+        assert len(FactCorrectionRepository(session).list_by_authority(_authority(chain))) == 1
+        facts = ClinicalFactV2Repository(session).list_for_authority(_authority(chain))
+        assert [f.value for f in facts].count("130/80") == 1
+        assert [f.value for f in facts].count("120/80") == 1
+    with pytest.raises(NotFoundError):
+        service.work_draft_link(job_id=job.job_id, subject_id="wrong-patient", review_episode_id=chain["authority"].review_episode_id)
+    with session_factory() as session, session.begin():
+        from app.storage.codecs import verify_payload_sha256
+        record = session.get(JobRecord, "new-working-review")
+        data = verify_payload_sha256(record.payload_json, record.payload_sha256) | {"subject_id": "wrong-patient"}
+        from app.domain.contracts.fact_corrections import canonical_json
+        from app.domain.publication import canonical_hash
+        record.payload_json = canonical_json(data)
+        record.payload_sha256 = canonical_hash(data)
+    with pytest.raises(ScopeViolationError):
+        service.work_draft_link(job_id=job.job_id, subject_id=chain["authority"].subject_id, review_episode_id=chain["authority"].review_episode_id)
+
+
 def _day(text: str):
     from app.domain.contracts.enums import DatePrecision
     from app.domain.contracts.facts import PartialDateRange

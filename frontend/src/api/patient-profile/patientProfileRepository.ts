@@ -17,6 +17,7 @@ import type {
   FactCorrectionJobStatusView,
   FactCorrectionPreviewView,
   FactCorrectionSubmitView,
+  FactCorrectionWorkDraftLinkView,
 } from "./factCorrectionViewModels";
 
 export {
@@ -79,6 +80,9 @@ export interface PatientProfileRepository {
     jobId: string,
     options?: PatientProfileRequestOptions,
   ): Promise<FactCorrectionJobStatusView>;
+  getFactCorrectionWorkDraftLink?(
+    subjectId: string, reviewEpisodeId: string, jobId: string, options?: PatientProfileRequestOptions,
+  ): Promise<FactCorrectionWorkDraftLinkView>;
   /** POST /api/v2/jobs/{job_id}/cancel：持久停止请求。 */
   cancelFactCorrectionJob(
     jobId: string,

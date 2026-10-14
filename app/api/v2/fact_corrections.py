@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
 from fastapi import status as http_status
+from pydantic import BaseModel, ConfigDict
 
 from app.api.v2.fact_correction_schemas import (
     FactCorrectionHistoryDTO,
@@ -130,6 +131,29 @@ def submit_correction(
 def _authority(request: Request, review_episode_id: str):
     with _session(request) as session:
         return authority_from_episode(session, review_episode_id)
+
+
+class FactCorrectionWorkDraftLinkDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_id: str
+    subject_id: str
+    review_episode_id: str
+    enabled: bool
+    correction_applied: bool
+    work_draft_job_id: str | None
+    work_draft_state: str | None
+    review_run_id: str | None
+
+
+@router.get("/subjects/{subject_id}/review-episodes/{review_episode_id}/fact-corrections/jobs/{job_id}/work-draft",
+    response_model=FactCorrectionWorkDraftLinkDTO)
+def correction_work_draft_link(subject_id: str, review_episode_id: str, job_id: str, request: Request):
+    _require_episode_scope(request, subject_id, review_episode_id)
+    try:
+        return _jobs(request).work_draft_link(job_id=job_id, subject_id=subject_id, review_episode_id=review_episode_id)
+    except Exception as exc:
+        _raise_translated(exc)
+        raise
 
 
 @router.get(

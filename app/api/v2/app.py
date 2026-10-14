@@ -287,7 +287,7 @@ def create_app(
         )
         app.state.evidence_normalizer_runtime_config = evidence_normalizer_runtime_config
         app.state.fact_correction_job_service = FactCorrectionJobService(
-            session_factory, lease_ttl=lease_ttl
+            session_factory, lease_ttl=lease_ttl, work_draft_enabled=True
         )
         app.state.selective_vision_postprocess_job_service = (
             SelectiveVisionPostprocessJobService(
@@ -339,7 +339,7 @@ def create_app(
                 FactNormalizationExecutorConfig(session_factory=session_factory, artifact_store=artifact_store)
             ),
             FACT_CORRECTION_JOB_TYPE: create_fact_correction_executor(
-                FactCorrectionExecutorConfig(session_factory=session_factory)
+                FactCorrectionExecutorConfig(session_factory=session_factory, artifact_store=artifact_store)
             ),
             SELECTIVE_VISION_POSTPROCESS_JOB_TYPE: create_selective_vision_postprocess_executor(
                 SelectiveVisionPostprocessExecutorConfig(

@@ -30,6 +30,7 @@ import {
   PatientProfileDecodeError,
 } from "../../api/patient-profile";
 import type { ProfileDatePrecisionWire } from "../../api/patient-profile/patientProfileTypes";
+import type { FactCorrectionWorkDraftLinkView } from "../../api/patient-profile/factCorrectionViewModels";
 import type { ProfileItemView } from "../../api/patient-profile";
 import type { PatientProfileModel } from "../../features/patient-profile/model";
 import { locatorsForItem } from "../../features/patient-profile/model";
@@ -248,7 +249,7 @@ function isFailure(state: FactCorrectionJobStatusView["state"]): boolean {
 }
 
 function statusText(status: FactCorrectionJobStatusView | null, initial: string | null): string {
-  if (status?.errorCode === "STALE_AUTHORITY") return "原资料已变化，本次修订未提交";
+  if (status?.errorCode === "STALE_AUTHORITY") return "资料版本已变化，请查看保存记录后重新核对";
   return status?.stateLabel ?? initial ?? "等待处理";
 }
 
@@ -626,6 +627,8 @@ export function ProfileFactCorrectionDialog({
     stateLabel: string;
   } | null>(null);
   const [jobStatus, setJobStatus] = useState<FactCorrectionJobStatusView | null>(null);
+  const [reviewLink, setReviewLink] = useState<FactCorrectionWorkDraftLinkView | null>(null);
+  const [statusRefresh, setStatusRefresh] = useState(0);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const completionReported = useRef<string | null>(null);
@@ -742,6 +745,20 @@ export function ProfileFactCorrectionDialog({
         if (cancelled) return;
         setJobStatus(next);
         setStatusError(null);
+        if (next.progressTotal > 2) {
+          const readLink = getPatientProfileRepository().getFactCorrectionWorkDraftLink;
+          if (!readLink) throw new Error("更正后的自动核对记录尚不能读取，系统未把它当作已完成。");
+          const link = await readLink(subjectId, reviewEpisodeId, job.jobId);
+          if (cancelled) return;
+          setReviewLink(link);
+          if (link.workDraftJobId) localStorage.setItem(`work-draft-job:${reviewEpisodeId}`, link.workDraftJobId);
+          if (next.state === "completed" && link.enabled && link.workDraftState !== "completed") {
+            if (link.workDraftState && isTerminal(link.workDraftState)) {
+              setStatusError("更正已经保存，新工作稿尚未生成；原结果保留，可重新更新工作稿。");
+            } else timer = window.setTimeout(readStatus, 900);
+            return;
+          }
+        }
         if (next.errorCode === "STALE_AUTHORITY") {
           setPreview(null);
           setConfirmed(false);
@@ -770,52 +787,61 @@ export function ProfileFactCorrectionDialog({
       cancelled = true;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [onCompleted, reviewEpisodeId, subjectId, submitted]);
+  }, [onCompleted, reviewEpisodeId, subjectId, submitted, statusRefresh]);
 
   const retry = useCallback(async () => {
     if (submitted === null) return;
     setStatusError(null);
     try {
-      const next = await getPatientProfileRepository().retryFactCorrectionJob(submitted.jobId);
-      setJobStatus((current) =>
+      const childFailed = reviewLink?.workDraftJobId && reviewLink.workDraftState && isFailure(reviewLink.workDraftState);
+      const next = await getPatientProfileRepository().retryFactCorrectionJob(childFailed ? reviewLink.workDraftJobId! : submitted.jobId);
+      if (!childFailed) setJobStatus((current) =>
         current === null
           ? null
           : { ...current, state: next.state, stateLabel: next.stateLabel, errorCode: null, errorClassification: null },
       );
+      setStatusRefresh(value => value + 1);
     } catch (error) {
       setStatusError(errorMessage(error));
     }
-  }, [submitted]);
+  }, [submitted, reviewLink]);
 
   const cancel = useCallback(async () => {
     if (submitted === null) return;
     setStatusError(null);
     try {
-      const next = await getPatientProfileRepository().cancelFactCorrectionJob(submitted.jobId);
-      setJobStatus((current) =>
+      const childRunning = reviewLink?.workDraftJobId && reviewLink.workDraftState && !isTerminal(reviewLink.workDraftState);
+      const next = await getPatientProfileRepository().cancelFactCorrectionJob(childRunning ? reviewLink.workDraftJobId! : submitted.jobId);
+      if (!childRunning) setJobStatus((current) =>
         current === null
           ? null
           : { ...current, state: next.state, stateLabel: next.stateLabel, cancelRequested: next.state === "cancel_requested" },
       );
+      setStatusRefresh(value => value + 1);
     } catch (error) {
       setStatusError(errorMessage(error));
     }
-  }, [submitted]);
+  }, [submitted, reviewLink]);
 
   const activeStatus = jobStatus;
-  const statusLabel = statusText(activeStatus, submitted?.stateLabel ?? null);
-  const locked = submitted !== null && (activeStatus === null || !isFailure(activeStatus.state));
+  const statusLabel = reviewLink?.enabled && reviewLink.correctionApplied
+    ? reviewLink.workDraftState === "completed" ? "更正与新工作稿均已保存，未签发"
+      : reviewLink.workDraftState === "cancel_requested" ? "更正已保存，正在停止结果更新"
+      : activeStatus && isFailure(activeStatus.state) || reviewLink.workDraftState && isTerminal(reviewLink.workDraftState) || activeStatus?.state === "cancelled" ? "更正已保存，新工作稿尚未更新"
+      : "更正已保存，正在更新工作稿"
+    : statusText(activeStatus, submitted?.stateLabel ?? null);
+  const locked = submitted !== null && (reviewLink?.correctionApplied === true || activeStatus === null || !isFailure(activeStatus.state));
   const canRetry =
     submitted !== null &&
     activeStatus !== null &&
-    isFailure(activeStatus.state) &&
+    (isFailure(activeStatus.state) || !!(reviewLink?.workDraftState && isFailure(reviewLink.workDraftState))) &&
     activeStatus.errorCode !== "STALE_AUTHORITY";
   const canCancel =
     submitted !== null &&
     activeStatus !== null &&
-    !isTerminal(activeStatus.state) &&
-    activeStatus.state !== "cancel_requested";
-  const showCompleted = activeStatus?.state === "completed";
+    ((!isTerminal(activeStatus.state) && activeStatus.state !== "cancel_requested")
+      || !!(reviewLink?.workDraftState && !isTerminal(reviewLink.workDraftState) && reviewLink.workDraftState !== "cancel_requested"));
+  const showCompleted = activeStatus?.state === "completed" && (!reviewLink?.enabled || reviewLink.workDraftState === "completed");
 
   return (
     <div
@@ -997,9 +1023,11 @@ export function ProfileFactCorrectionDialog({
                     <h3>修订处理状态</h3>
                     <p>{statusLabel}</p>
                   </div>
-                  {showCompleted ? <Check size={20} className="profile-correction-job__done" aria-label="修订已完成" /> : <LoaderCircle size={20} className="profile-correction-spin" aria-label="正在读取状态" />}
+                  {showCompleted ? <Check size={20} className="profile-correction-job__done" aria-label="修订已完成" />
+                    : activeStatus && isFailure(activeStatus.state) || reviewLink?.workDraftState && isFailure(reviewLink.workDraftState)
+                    ? <XCircle size={20} aria-label="核对尚未完成" /> : <LoaderCircle size={20} className="profile-correction-spin" aria-label="正在读取状态" />}
                 </div>
-                {activeStatus !== null && activeStatus.progressTotal > 0 && (
+                {activeStatus !== null && activeStatus.progressTotal > 0 && !reviewLink?.correctionApplied && (
                   <p className="profile-correction-job__progress">已完成 {activeStatus.progressCompleted} / {activeStatus.progressTotal} 项整理</p>
                 )}
                 {closeBlocked && (
@@ -1008,11 +1036,13 @@ export function ProfileFactCorrectionDialog({
                   </p>
                 )}
                 {activeStatus?.errorCode === "STALE_AUTHORITY" && (
-                  <p className="profile-correction-job__warning">审核节点的活动资料已变化，本次没有写入。请返回档案重新核对。</p>
+                  <p className="profile-correction-job__warning">{reviewLink?.correctionApplied
+                    ? "更正已经保存，但资料版本已变化，新结果尚未更新。请返回档案重新核对。"
+                    : "审核节点的活动资料已变化，请返回档案核对保存记录后再处理。"}</p>
                 )}
-                {activeStatus !== null && isFailure(activeStatus.state) && activeStatus.errorCode !== "STALE_AUTHORITY" && (
+                {canRetry && (
                   <div className="profile-correction-job__recovery">
-                    <p>修改内容仍保留在当前窗口，可以重新处理失败部分。</p>
+                    <p>{reviewLink?.correctionApplied ? "更正已经保存，仅重新核对结果，不重复保存更正。" : "修改内容仍保留在当前窗口，可以重新处理失败部分。"}</p>
                     {canRetry && (
                       <button type="button" className="button" onClick={() => void retry()}>
                         <RefreshCw size={15} aria-hidden="true" />

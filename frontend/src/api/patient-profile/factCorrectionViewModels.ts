@@ -104,6 +104,38 @@ export interface FactCorrectionJobStatusView {
   lastEventSeq: number;
 }
 
+export interface FactCorrectionWorkDraftLinkView {
+  jobId: string;
+  subjectId: string;
+  reviewEpisodeId: string;
+  enabled: boolean;
+  correctionApplied: boolean;
+  workDraftJobId: string | null;
+  workDraftState: FactCorrectionJobState | null;
+  reviewRunId: string | null;
+}
+
+export function decodeFactCorrectionWorkDraftLink(payload: unknown): FactCorrectionWorkDraftLinkView {
+  const row = record(payload, "correction_work_draft");
+  const result = {
+    jobId: requiredString(requiredField(row, "job_id", "correction_work_draft"), "job_id"),
+    subjectId: requiredString(requiredField(row, "subject_id", "correction_work_draft"), "subject_id"),
+    reviewEpisodeId: requiredString(requiredField(row, "review_episode_id", "correction_work_draft"), "review_episode_id"),
+    enabled: requiredBoolean(requiredField(row, "enabled", "correction_work_draft"), "enabled"),
+    correctionApplied: requiredBoolean(requiredField(row, "correction_applied", "correction_work_draft"), "correction_applied"),
+    workDraftJobId: nullableString(requiredField(row, "work_draft_job_id", "correction_work_draft"), "work_draft_job_id"),
+    workDraftState: row.work_draft_state === null ? null : jobState(requiredField(row, "work_draft_state", "correction_work_draft"), "work_draft_state"),
+    reviewRunId: nullableString(requiredField(row, "review_run_id", "correction_work_draft"), "review_run_id"),
+  };
+  if ((result.workDraftJobId === null) !== (result.workDraftState === null)
+      || (!result.enabled || !result.correctionApplied) && result.workDraftJobId !== null
+      || result.workDraftState === "completed" && result.reviewRunId === null
+      || result.workDraftState !== "completed" && result.reviewRunId !== null) {
+    throw new PatientProfileDecodeError("更正与新工作稿的保存记录不一致");
+  }
+  return result;
+}
+
 export interface FactCorrectionJobActionView {
   jobId: string;
   state: FactCorrectionJobState;

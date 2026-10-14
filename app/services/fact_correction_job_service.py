@@ -22,11 +22,13 @@ from app.storage.idempotency import IdempotencyRepository, request_hash
 from app.workflow.errors import InvalidJobDefinitionError
 from app.workflow.jobstore import DEFAULT_LEASE_TTL, JobStore
 from app.workflow.states import backoff_delay
+from app.storage.repositories import get_rule_set, NotFoundError
 
 FACT_CORRECTION_JOB_TYPE = "fact_correction"
 FACT_CORRECTION_IDEMPOTENCY_SCOPE = "fact_correction"
 FACT_CORRECTION_PLAN_STEP_ID = "plan"
 FACT_CORRECTION_APPLY_STEP_ID = "apply"
+FACT_CORRECTION_REVIEW_STEP_ID = "work_draft"
 
 
 @dataclass(frozen=True)
@@ -50,11 +52,13 @@ class FactCorrectionJobService:
         now=utc_now,
         lease_ttl: timedelta = DEFAULT_LEASE_TTL,
         backoff=backoff_delay,
+        work_draft_enabled: bool = False,
     ) -> None:
         self.session_factory = session_factory
         self.now = now
         self.lease_ttl = lease_ttl
         self.backoff = backoff
+        self.work_draft_enabled = work_draft_enabled
 
     def _store(self, session: Session) -> JobStore:
         return JobStore(session, now=self.now, lease_ttl=self.lease_ttl, backoff=self.backoff)
@@ -94,6 +98,12 @@ class FactCorrectionJobService:
             {"request_idempotency_key": request_idempotency_key, **request_material}
         )
         with self.session_factory() as session, session.begin():
+            auto_review = self.work_draft_enabled and bool(get_rule_set(
+                session, authority.rule_set_id, authority.rule_set_revision).variable_definitions)
+            if auto_review:
+                request_material["work_draft_recompute"] = True
+                request_idempotency_key = request_hash(request_material)
+                submitted_hash = request_hash({"request_idempotency_key": request_idempotency_key, **request_material})
             job_id = uuid4().hex
             record, created = IdempotencyRepository(session).resolve(
                 scope=FACT_CORRECTION_IDEMPOTENCY_SCOPE,
@@ -121,6 +131,7 @@ class FactCorrectionJobService:
                 created_by=created_by,
                 job_id=job_id,
                 request_idempotency_key=request_idempotency_key,
+                auto_review=auto_review,
             )
 
     def _reuse_job(self, session: Session, job_id: str) -> CreateFactCorrectionJobResult:
@@ -147,6 +158,7 @@ class FactCorrectionJobService:
         created_by: str,
         job_id: str,
         request_idempotency_key: str,
+        auto_review: bool = False,
     ) -> CreateFactCorrectionJobResult:
         job_request = {
             "idempotency_key": prepared.idempotency_key,
@@ -156,11 +168,14 @@ class FactCorrectionJobService:
             "created_by": created_by,
         }
         store = self._store(session)
+        if auto_review:
+            job_request["work_draft_recompute"] = True
+        total = 3 if auto_review else 2
         store.create_job(
             job_id=job_id,
             job_type=FACT_CORRECTION_JOB_TYPE,
             payload=job_request,
-            progress_total=2,
+            progress_total=total,
         )
         store.create_step(
             step_id=FACT_CORRECTION_PLAN_STEP_ID,
@@ -181,11 +196,15 @@ class FactCorrectionJobService:
             step_id=FACT_CORRECTION_APPLY_STEP_ID,
             depends_on=(FACT_CORRECTION_PLAN_STEP_ID,),
         )
+        if auto_review:
+            store.create_step(step_id=FACT_CORRECTION_REVIEW_STEP_ID, job_id=job_id,
+                name="启动更正后的工作稿", max_attempts=2, retryable=True,
+                depends_on=(FACT_CORRECTION_APPLY_STEP_ID,))
         store.append_event(
             store.make_event(
                 job_id=job_id,
                 event_type=JobEventType.CREATED,
-                progress_total=2,
+                progress_total=total,
                 payload={
                     "job_type": FACT_CORRECTION_JOB_TYPE,
                     "correction_id": prepared.correction_id,
@@ -221,3 +240,33 @@ class FactCorrectionJobService:
                 "progress_total": job.progress_total,
                 "progress_completed": job.progress_completed,
             }
+
+    def work_draft_link(self, *, job_id: str, subject_id: str, review_episode_id: str):
+        from app.services.fact_correction_service import prepared_from_payload
+        from app.services.work_draft_review import WorkDraftReviewService
+        from app.storage.fact_correction_commit_repository import FactCorrectionCommitRepository
+        with self.session_factory() as session:
+            store = self._store(session)
+            job = store.get_job(job_id)
+            data = verify_payload_sha256(job.payload_json, job.payload_sha256)
+            if job.job_type != FACT_CORRECTION_JOB_TYPE:
+                raise NotFoundError("该记录不是本次事实更正任务")
+            prepared = prepared_from_payload(data["prepared"])
+            if (prepared.authority.subject_id, prepared.authority.review_episode_id) != (subject_id, review_episode_id):
+                raise NotFoundError("更正任务不属于所选受试者节点")
+            applied = FactCorrectionCommitRepository(session).get_optional(prepared.correction_id) is not None
+            checkpoint = store.get_last_checkpoint(job_id, FACT_CORRECTION_REVIEW_STEP_ID)
+            child = None
+            if checkpoint:
+                if not applied or checkpoint[1]["correction_id"] != prepared.correction_id:
+                    raise InvalidJobDefinitionError("更正后的核对任务与保存记录不一致")
+                child = WorkDraftReviewService(self.session_factory, None).status(subject_id=subject_id,
+                    review_episode_id=review_episode_id, job_id=checkpoint[1]["work_draft_job_id"], session=session)
+            enabled = data.get("work_draft_recompute") is True
+            if enabled and job.state == "completed" and child is None:
+                raise InvalidJobDefinitionError("更正已保存，但对应的新工作稿任务记录缺失")
+            return {"job_id": job_id, "subject_id": subject_id, "review_episode_id": review_episode_id,
+                "enabled": enabled, "correction_applied": applied,
+                "work_draft_job_id": child["job_id"] if child else None,
+                "work_draft_state": child["state"] if child else None,
+                "review_run_id": child["review_run_id"] if child else None}

@@ -19,6 +19,7 @@ import {
   decodeFactCorrectionJobStatus,
   decodeFactCorrectionPreview,
   decodeFactCorrectionSubmit,
+  decodeFactCorrectionWorkDraftLink,
 } from "./factCorrectionViewModels";
 import type {
   PatientProfileHistoryView,
@@ -187,6 +188,15 @@ export function createPatientProfileHttp(
         { method: "GET", signal: options?.signal },
         decodeFactCorrectionJobStatus,
       );
+    },
+
+    async getFactCorrectionWorkDraftLink(subjectId, reviewEpisodeId, jobId, options) {
+      const result = await request(`/api/v2/subjects/${encodeURIComponent(subjectId)}/review-episodes/${encodeURIComponent(reviewEpisodeId)}/fact-corrections/jobs/${encodeURIComponent(jobId)}/work-draft`,
+        { method: "GET", signal: options?.signal }, decodeFactCorrectionWorkDraftLink);
+      if (result.jobId !== jobId || result.subjectId !== subjectId || result.reviewEpisodeId !== reviewEpisodeId) {
+        throw new Error("更正后的核对记录不属于所选受试者节点");
+      }
+      return result;
     },
 
     async cancelFactCorrectionJob(

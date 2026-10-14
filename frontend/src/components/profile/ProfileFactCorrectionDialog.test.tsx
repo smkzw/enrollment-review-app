@@ -276,6 +276,52 @@ describe("ProfileFactCorrectionDialog", () => {
     expect(screen.getByText("修订已完成，档案和修订记录正在刷新。")).toBeInTheDocument();
   });
 
+  it("更正已保存不冒充新版工作稿完成，后续核对完成才刷新", async () => {
+    const user = userEvent.setup();
+    const completed = vi.fn();
+    const { repo } = makeRepo({ ...completedStatus(), progressTotal: 3, progressCompleted: 3 });
+    let ready = false;
+    repo.getFactCorrectionWorkDraftLink = vi.fn<NonNullable<PatientProfileRepository["getFactCorrectionWorkDraftLink"]>>(async () => ({
+      jobId: "job-1", subjectId: SUBJECT, reviewEpisodeId: EPISODE, enabled: true, correctionApplied: true,
+      workDraftJobId: "new-work-draft", workDraftState: ready ? "completed" : "running", reviewRunId: ready ? "new-review-run" : null,
+    }));
+    renderDialog(repo, completed);
+    await user.type(screen.getByRole("textbox", { name: "修订理由（必填）" }), "核对合成原件，更正读数。");
+    await user.click(screen.getByRole("button", { name: "预览影响范围" }));
+    await screen.findByText("拟修改");
+    await user.click(screen.getByRole("checkbox", { name: /我已核对/ }));
+    await user.click(screen.getByRole("button", { name: "提交修订" }));
+    await screen.findByText("更正已保存，正在更新工作稿");
+    expect(completed).not.toHaveBeenCalled();
+    expect(localStorage.getItem(`work-draft-job:${EPISODE}`)).toBe("new-work-draft");
+    ready = true;
+    await waitFor(() => expect(completed).toHaveBeenCalledTimes(1), { timeout: 2500 });
+    expect(screen.getByText("更正与新工作稿均已保存，未签发")).toBeInTheDocument();
+  });
+
+  it("结果更新失败可只重试核对任务，不再次保存更正", async () => {
+    const user = userEvent.setup();
+    const completed = vi.fn();
+    const { repo, submit } = makeRepo({ ...completedStatus(), progressTotal: 3, progressCompleted: 3 });
+    let recovered = false;
+    repo.getFactCorrectionWorkDraftLink = vi.fn<NonNullable<PatientProfileRepository["getFactCorrectionWorkDraftLink"]>>(async () => ({ jobId: "job-1", subjectId: SUBJECT, reviewEpisodeId: EPISODE,
+      enabled: true, correctionApplied: true, workDraftJobId: "failed-working-job", workDraftState: recovered ? "completed" : "failed_final",
+      reviewRunId: recovered ? "new-run" : null }));
+    repo.retryFactCorrectionJob = vi.fn<PatientProfileRepository["retryFactCorrectionJob"]>(async () => { recovered = true; return { jobId: "failed-working-job", state: "queued", stateLabel: "等待处理", changed: true }; });
+    renderDialog(repo, completed);
+    await user.type(screen.getByRole("textbox", { name: "修订理由（必填）" }), "核对合成原件，更正读数。");
+    await user.click(screen.getByRole("button", { name: "预览影响范围" }));
+    await screen.findByText("拟修改");
+    await user.click(screen.getByRole("checkbox", { name: /我已核对/ }));
+    await user.click(screen.getByRole("button", { name: "提交修订" }));
+    await screen.findByText("更正已经保存，新工作稿尚未生成；原结果保留，可重新更新工作稿。");
+    expect(completed).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "重新处理失败部分" }));
+    await waitFor(() => expect(completed).toHaveBeenCalledTimes(1));
+    expect(repo.retryFactCorrectionJob).toHaveBeenCalledWith("failed-working-job");
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the workspace mounted while the persistent task is active", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
