@@ -22,7 +22,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v30"
+CALCULATION_VERSION = "work-draft/0.2.0-v31"
 
 
 def _reusable_source_reads(session, store, frozen, targets, model, artifact_store):
@@ -317,6 +317,7 @@ class WorkDraftReviewService:
             if context.step_id == "compose":
                 from app.services.work_draft_semantics import targets_for_review
                 source_results, failed_components, provider_blocked_components = {}, {}, set()
+                response_disagreement_components = set()
                 for step in store.list_steps(context.job_id):
                     if not step.step_id.startswith("semantic"):
                         continue
@@ -324,9 +325,15 @@ class WorkDraftReviewService:
                     if checkpoint is None:
                         raise ScopeViolationError("缺少本批次已保存的原文核对结果")
                     source_results.update(checkpoint[1].get("results", {}))
+                    batches = payload.get("semantic_batches") or [targets_for_review(frozen, rule_set)]
+                    index = int(step.step_id.split(":")[1]) if ":" in step.step_id else 0
+                    disagreed_ids = {key for key, proof in checkpoint[1].get("reuse_proofs", {}).items()
+                        if proof.get("conflicting_raw_response_refs")}
+                    for target in batches[index]:
+                        if target["target_id"] in disagreed_ids:
+                            response_disagreement_components.add(target["component_id"])
+                            failed_components[target["component_id"]] = "读取意见未一致"
                     if checkpoint[1].get("error"):
-                        batches = payload.get("semantic_batches") or [targets_for_review(frozen, rule_set)]
-                        index = int(step.step_id.split(":")[1]) if ":" in step.step_id else 0
                         failed_ids = set(checkpoint[1].get("error_target_ids", [target["target_id"] for target in batches[index]]))
                         failed_components.update({target["component_id"]: checkpoint[1]["error"]
                             for target in batches[index] if target["target_id"] in failed_ids})
@@ -349,7 +356,9 @@ class WorkDraftReviewService:
                             blocked = item.rule_component_id in provider_blocked_components
                             item.system_issue = SystemIssue(kind="model_unavailable" if blocked else "model_output_invalid",
                                 affected_codes=[item.official_code],
-                                detail="病例核对模型访问受限，尚未完成本条病历核对。" if blocked else
+                                detail="两次读取对本要求的理解不一致，尚未完成核对；不表示病历资料相互矛盾。"
+                                    if item.rule_component_id in response_disagreement_components else
+                                    "病例核对模型访问受限，尚未完成本条病历核对。" if blocked else
                                     "本条原文核对未完成；已有其他独立结论和原件均保留。",
                                 alternative="模型恢复或启用已批准连接后只核未完成范围；原件和已核结果保留。")
                             item.reason_text = item.system_issue.detail

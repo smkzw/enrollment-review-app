@@ -121,6 +121,59 @@ def test_product_batch_execution_revalidates_whole_frozen_target_scope_then_filt
     assert checked and result["pending"] == 9
 
 
+@pytest.mark.parametrize("response_disagreement,decision", [
+    (True, "conflict"), (False, "conflict"), (True, "exclusion_not_triggered")])
+def test_product_composition_separates_reader_disagreement_from_patient_conflict(monkeypatch, response_disagreement, decision):
+    from app.domain.contracts.enums import ComponentDecision, RuleKind
+    from app.domain.contracts.work_draft import WorkDraftItem
+    from app.domain.publication import canonical_hash
+    from app.services import work_draft_review as service
+
+    rules = SimpleNamespace(rules=[], model_dump=lambda **_: {"rules": "frozen"})
+    authority = SimpleNamespace(review_episode_id="episode", rule_set_id="rules", rule_set_revision=1)
+    components = [SimpleNamespace(rule_component_id=value) for value in ("affected", "sibling")]
+    frame = SimpleNamespace(work_draft=True, review_run_id="run", authority=authority,
+        rule_set_sha256=canonical_hash(rules.model_dump()), facts=[], clause_pack=SimpleNamespace(clauses=components))
+    frame.model_copy = lambda **_: frame
+    source = {"source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
+        "excerpt": "原件中保留的记录", "disposition": "unresolved"}
+    items = {key: WorkDraftItem(item_id=f"item:{key}", review_run_id="run", official_code="EX-01",
+        rule_kind=RuleKind.EXCLUSION, rule_component_id=key, title="条件", source_text="条件原文",
+        decision=ComponentDecision(decision) if key == "affected" else ComponentDecision.EXCLUSION_NOT_TRIGGERED,
+        confidence="low" if key == "sibling" or decision == "exclusion_not_triggered" else None,
+        confidence_reason="仅核对所提供资料" if key == "sibling" or decision == "exclusion_not_triggered" else None,
+        reason_text="原始理由", input_hash="a" * 64, source_read_refs=[source]) for key in ("affected", "sibling")}
+    batch = [{"target_id": "affected:predicate", "component_id": "affected"},
+        {"target_id": "sibling:predicate", "component_id": "sibling"}]
+    proof = {"conflicting_raw_response_refs": ["second-answer"]} if response_disagreement else {}
+    checkpoints = {"calculate": {"items": []}, "semantic:0000": {"results": {},
+        "reuse_proofs": {"affected:predicate": proof, "sibling:predicate": {}}}}
+    class Session:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+    monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: frame))
+    monkeypatch.setattr(service, "authority_from_active_episode", lambda *_: authority)
+    monkeypatch.setattr(service, "get_rule_set", lambda *_: rules)
+    monkeypatch.setattr(service, "_fact_refs", lambda *_: {})
+    monkeypatch.setattr(service, "calculate_work_component", lambda clause, *_args, **_kwargs: items[clause.rule_component_id])
+    monkeypatch.setattr(service, "calculate_procedures", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(service, "JobStore", lambda _: SimpleNamespace(
+        list_steps=lambda _: [SimpleNamespace(step_id="semantic:0000")],
+        get_last_checkpoint=lambda _, step: ("checkpoint", checkpoints[step])))
+    context = SimpleNamespace(job_type=service.JOB_TYPE, job_id="job", step_id="compose",
+        job_payload={"context_id": "context", "review_run_id": "run", "calculation_version": service.CALCULATION_VERSION,
+            "semantic_batches": [batch]})
+    result = service.WorkDraftReviewService(Session, object()).execute(context)
+    actual = [WorkDraftItem.model_validate(item) for item in result["items"]]
+    if response_disagreement and decision == "conflict":
+        assert actual[0].decision is None and actual[0].system_issue.kind == "model_output_invalid"
+        assert "不表示病历资料相互矛盾" in actual[0].reason_text
+    else:
+        assert actual[0].decision == ComponentDecision(decision) and actual[0].system_issue is None
+    assert actual[0].source_read_refs == items["sibling"].source_read_refs
+    assert actual[1].decision == ComponentDecision.EXCLUSION_NOT_TRIGGERED and actual[1].system_issue is None
+
+
 @pytest.mark.parametrize("change,expected", [(None, True), ("subject", False), ("file", False),
     ("visit", False), ("variable", False), ("additional_variable", True)])
 def test_product_reuse_across_rule_revision_requires_same_patient_source_visit_and_variables(monkeypatch, change, expected):
