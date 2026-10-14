@@ -147,7 +147,8 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
               <th scope="row">{item.ruleCode}
                 <details className="reports-print__conditions"><summary>方案要求</summary><p>{item.sourceText ?? item.textSummary}</p></details>
               </th>
-              <td><strong>{item.decisionLabel}</strong>{item.confidence && <StatusBadge tone={item.confidence === "low" ? "info" : "neutral"} text={item.confidence === "low" ? "低置信" : "高置信"} />}</td>
+              <td><strong>{item.decisionLabel}</strong>{item.confidence && <StatusBadge tone={item.confidence === "low" ? "info" : "neutral"} text={item.confidence === "low" ? "低置信" : "高置信"} />}
+                {item.confirmationKind && <small>{item.confirmationKind === "medical_manager" ? "医学经理已核实" : "构建者试用核实，非正式医学核实"}</small>}</td>
               <td><ReasonText text={item.reason} compact />{draftSource(item)}
                 {children.length > 0 && <details className="reports-print__conditions"><summary>分项核对（{children.length}）</summary>
                   <ol>{children.map(child => <li key={child.ruleComponentId}>

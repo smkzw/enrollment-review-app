@@ -40,6 +40,21 @@ function reviewBody() {
 }
 
 describe("eligibility review HTTP repository", () => {
+  it("明确核实走独立命令，拒绝假完成和不完整回执", async () => {
+    let receipt: unknown = { job_id: "job", state: "queued", review_run_id: null };
+    const requests: RequestInit[] = [];
+    const repo = createEligibilityReviewHttp({ fetchImpl: (async (_url, options) => {
+      requests.push(options!); return response(receipt);
+    }) as typeof fetch });
+    const input = { review_run_id: "saved", item_id: "saved:parent", confirmed: true as const, actor_kind: "builder_verification" as const };
+    expect(await repo.confirmWorkDraft!("subject", "episode", input)).toEqual(receipt);
+    expect(JSON.parse(requests[0]!.body as string)).toEqual(input);
+    for (const bad of [{ job_id: "job", state: "completed", review_run_id: null },
+      { job_id: "job", state: "queued", review_run_id: "unsaved" }, { job_id: "", state: "queued", review_run_id: null }]) {
+      receipt = bad;
+      await expect(repo.confirmWorkDraft!("subject", "episode", input)).rejects.toThrow("记录不完整");
+    }
+  });
   it("保留逐条件依据，不把字符串核对状态或重复条件当成合法记录", async () => {
     const part = { condition_id: "condition", condition_text: "对应疗效", reason_text: "关系尚未核清", requires_attention: true };
     const body = { ...reviewBody(), clauses: [{ ...reviewBody().clauses[0], reason_parts: [part] }] };

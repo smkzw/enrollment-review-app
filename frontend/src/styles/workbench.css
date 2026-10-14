@@ -1221,6 +1221,13 @@
   padding-block: var(--space-2);
 }
 .eligibility-confidence { font-size: var(--font-size-small); color: var(--color-muted); }
+.work-draft-confirmation-dialog { width: min(38rem, 80%); padding: 1.5rem; border: 1px solid var(--color-border); border-radius: 8px; }
+.work-draft-confirmation-dialog::backdrop { background: rgb(0 0 0 / 24%); }
+.work-draft-confirmation-dialog h2 { font-size: 1.125rem; margin: 0 0 1rem; }
+.work-draft-confirmation-dialog p { margin: .75rem 0; }
+.work-draft-confirmation-actions { display: flex; justify-content: flex-end; gap: .75rem; margin-top: 1.5rem; }
+.work-draft-confirmation-dialog details { margin-top: 1rem; color: var(--color-muted); font-size: var(--font-size-small); }
+.work-draft-confirmation-dialog small { display: block; margin-top: .5rem; }
 .eligibility-reason-lines { margin: 0; padding-left: 1.2em; list-style: disc; display: grid; gap: var(--space-2); line-height: 1.8; }
 .eligibility-reason-lines li { overflow-wrap: anywhere; }
 .eligibility-reason-lines strong { font-weight: 600; }

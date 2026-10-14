@@ -72,6 +72,7 @@ def project_work_draft(session, *, authority, rule_set, clause_pack, artifact_st
 def project_saved_items(rows, *, authority, rule_set, run_id, issues=()):
     """One presentation for current and frozen history; no evaluation or active lookup."""
     from app.services.eligibility_review_projection import EligibilityClauseProjection, EligibilityFactRef, EligibilitySourceReadRef
+    from app.services.work_draft_review import confirmation_allowed
     clauses, components = [], []
     for item in rows:
         projection = EligibilityClauseProjection(rule_component_id=item.item_id, rule_code=item.official_code,
@@ -84,6 +85,7 @@ def project_saved_items(rows, *, authority, rule_set, run_id, issues=()):
             source_read_refs=tuple(EligibilitySourceReadRef(**ref.model_dump(mode="json")) for ref in item.source_read_refs),
             gap_type=None, determination_mode="restricted" if item.system_issue else "semantic" if item.source_read_refs else "deterministic",
             confidence=item.confidence, confidence_reason=item.confidence_reason,
+            can_confirm=confirmation_allowed(item, rows), confirmation_kind=item.confirmation_kind,
             reason_parts=tuple(part.model_dump(mode="json") | {
                 "reason_text": display_source_reason(part.reason_text)} for part in item.reason_parts))
         (components if item.rule_component_id is not None else clauses).append(projection)
@@ -97,4 +99,4 @@ def _review_projection(authority, rule_set, clauses, components, run_id, issues,
         evidence_snapshot_v2_id=authority.evidence_snapshot_v2_id,
         complete_processing_revision_id=authority.complete_processing_revision_id,
         clauses=tuple(clauses), work_draft_state=state, review_run_id=run_id, system_issues=issues,
-        verification_only=rule_set.verification_only, component_clauses=tuple(components))
+        verification_only=rule_set.verification_only is not False, component_clauses=tuple(components))

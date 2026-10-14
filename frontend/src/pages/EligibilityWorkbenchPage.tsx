@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { FileSearch, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Check, FileSearch, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import type { WorkDraftJobView } from "../api/eligibility-review/eligibilityReviewRepository";
 import { EvidenceReader } from "../components/evidence/EvidenceReader";
 import { SourceExcerpt } from "../components/evidence/SourceExcerpt";
 import {
@@ -18,6 +19,7 @@ import {
 } from "../api/eligibility-review";
 import { updateParams, useHashRoute, RouteLink } from "../app/router";
 import { useLoad } from "../app/useLoad";
+import { useApplicationMode } from "../app/applicationMode";
 import { OriginalEvidenceViewer } from "../components/evidence-workspace/OriginalEvidenceViewer";
 import { WorkDraftPanel } from "../components/review/WorkDraftPanel";
 import { ReasonText } from "../components/review/ReasonText";
@@ -39,6 +41,34 @@ type EligibilityListMode = "pending" | "all";
 const CLAUSE_PAGE_SIZES = [25, 50, 100] as const;
 
 type EligibilityWorkItem = EligibilityClauseView & { controlId?: string; controlStatement?: string; continuingNote?: string | null };
+
+function ConfirmationDialog({ clause, verificationOnly, busy, onConfirm, onClose }: {
+  clause: EligibilityWorkItem; verificationOnly: boolean; busy: boolean;
+  onConfirm: (actor: "medical_manager" | "builder_verification") => void; onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.showModal();
+    return () => previous?.focus();
+  }, []);
+  return <dialog ref={dialog} className="work-draft-confirmation-dialog" aria-labelledby="work-draft-confirmation-title"
+    onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
+    <h2 id="work-draft-confirmation-title">核实 {clause.ruleCode} 的当前依据</h2>
+    <p><strong>{clause.decisionLabel}</strong> · {clause.textSummary}</p>
+    <p>确认已对照原件？只更新置信标记，原值、结论及旧版保持。</p>
+    <div className="work-draft-confirmation-actions">
+      <button type="button" className="button button--quiet" disabled={busy} onClick={onClose}>取消</button>
+      <button type="button" className="button button--primary" disabled={busy}
+        onClick={() => onConfirm(verificationOnly ? "builder_verification" : "medical_manager")}>
+        {busy ? "正在提交" : verificationOnly ? "保存试用核实" : "保存核实结果"}</button>
+    </div>
+    {!verificationOnly && <details><summary>构建验证</summary>
+      <button type="button" className="button button--quiet" disabled={busy} onClick={() => onConfirm("builder_verification")}>仅作试用核实</button>
+      <small>保留试用标记，不代替正式医学核实。</small>
+    </details>}
+  </dialog>;
+}
 
 function controlWorkItems(controls: ReadonlyArray<EligibilityControlView>): EligibilityWorkItem[] {
   return controls.flatMap((control) => control.obligations.map((obligation) => ({
@@ -563,6 +593,8 @@ function EligibilityClauseDetail({
         />
         {clause.confidence && <span className="eligibility-confidence" title={clause.confidenceReason ?? undefined}>
           {clause.confidence === "low" ? "低置信" : "高置信"}</span>}
+        {clause.confirmationKind && <span title={clause.confirmationKind === "medical_manager" ? "医学经理已核实本条依据" : "构建者试用验证，非正式医学核实"}>
+          {clause.confirmationKind === "medical_manager" ? "已核实" : "试用已核实"}</span>}
       </div>
       <ul className="eligibility-clause-detail__bullets" aria-label="条款详情">
         <li className="eligibility-detail-bullet">
@@ -918,6 +950,12 @@ export function EligibilityWorkbenchPage() {
   const [queueVisible, setQueueVisible] = useState(true);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [evidenceVisited, setEvidenceVisited] = useState(false);
+  const [confirmationJob, setConfirmationJob] = useState<{ episodeId: string; job: WorkDraftJobView } | null>(null);
+  const [confirmationBusy, setConfirmationBusy] = useState(false);
+  const [confirmationError, setConfirmationError] = useState<string | null>(null);
+  const [confirmedRule, setConfirmedRule] = useState<{ episodeId: string; ruleCode: string; previousRun: string } | null>(null);
+  const [confirmingClause, setConfirmingClause] = useState<EligibilityWorkItem | null>(null);
+  const { canModify } = useApplicationMode();
 
   const projects = useLoad((signal) => getCatalogRepository().listProjects(signal), []);
   const projectList = projects.state.status === "success" ? projects.state.data : [];
@@ -973,6 +1011,18 @@ export function EligibilityWorkbenchPage() {
     setEvidenceVisited(false);
   }, [selectedEpisode?.reviewEpisodeId, componentParam]);
 
+  useEffect(() => {
+    setConfirmationError(null); setConfirmingClause(null);
+  }, [selectedEpisode?.reviewEpisodeId]);
+
+  useEffect(() => {
+    if (review.state.status !== "success" || !confirmedRule || selectedEpisode?.reviewEpisodeId !== confirmedRule.episodeId
+        || review.state.data.reviewRunId === confirmedRule.previousRun) return;
+    const target = review.state.data.clauses.find(item => item.ruleCode === confirmedRule.ruleCode);
+    if (target) updateParams({ component: target.ruleComponentId, view: "all", filter: null, page: null });
+    setConfirmedRule(null);
+  }, [review.state, confirmedRule, selectedEpisode?.reviewEpisodeId]);
+
   const setProject = (projectId: string) =>
     updateParams({ project: projectId, subject: null, episode: null, component: null });
   const setSubject = (subjectId: string) =>
@@ -980,10 +1030,28 @@ export function EligibilityWorkbenchPage() {
   const setEpisode = (episodeId: string) =>
     updateParams({ episode: episodeId, component: null });
   const refreshWorkDraft = () => {
-    updateParams({ component: null, page: null });
+    if (!confirmedRule) updateParams({ component: null, page: null });
+    setConfirmationJob(null);
     episodes.retry();
     review.retry();
   };
+
+  async function confirmClause(clause: EligibilityWorkItem, actor: "medical_manager" | "builder_verification") {
+    const repo = getEligibilityReviewRepository();
+    if (!canModify || review.state.status !== "success" || !review.state.data.reviewRunId || !selectedSubject || !selectedEpisode || !repo.confirmWorkDraft) return;
+    setConfirmationBusy(true); setConfirmationError(null);
+    try {
+      const job = await repo.confirmWorkDraft(selectedSubject.subjectId, selectedEpisode.reviewEpisodeId, {
+        review_run_id: review.state.data.reviewRunId, item_id: clause.ruleComponentId, confirmed: true,
+        actor_kind: actor });
+      setConfirmingClause(null);
+      setConfirmedRule({ episodeId: selectedEpisode.reviewEpisodeId, ruleCode: clause.ruleCode, previousRun: review.state.data.reviewRunId });
+      localStorage.setItem(`work-draft-job:${selectedEpisode.reviewEpisodeId}`, job.job_id);
+      if (job.state === "completed") { episodes.retry(); review.retry(); }
+      else setConfirmationJob({ episodeId: selectedEpisode.reviewEpisodeId, job });
+    } catch (error) { setConfirmationError(error instanceof Error ? error.message : "本条尚未核实，请稍后重试。"); }
+    finally { setConfirmationBusy(false); }
+  }
 
   if (projects.state.status === "loading") return <LoadingState />;
   if (projects.state.status === "error") {
@@ -1139,7 +1207,14 @@ export function EligibilityWorkbenchPage() {
         </RouteLink>
       </div>
       <details className="eligibility-work-draft-tools"><summary>工作稿操作与节点日期</summary>
-        <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode} onCompleted={refreshWorkDraft} />
+        <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode} onCompleted={refreshWorkDraft}
+          initialJob={confirmationJob?.episodeId === selectedEpisode.reviewEpisodeId ? confirmationJob.job : null}
+          onSettled={job => {
+            if (job.state !== "completed" && confirmationJob?.episodeId === selectedEpisode.reviewEpisodeId) {
+              setConfirmationJob(null); setConfirmedRule(null);
+              setConfirmationError("新版尚未保存，旧版未改变。请在任务详情查看原因，处理后再试。");
+            }
+          }} />
       </details>
       {issueGroups.filter(group => group.issues.length).map(group => <details key={group.label}
         aria-label={group.label} className="eligibility-context-bar">
@@ -1251,6 +1326,14 @@ export function EligibilityWorkbenchPage() {
               selectedFactIndex={selectedFactIndex}
               onSelectFact={index => { setSelectedFactIndex(index); setEvidenceVisited(true); setEvidenceOpen(true); }}
             /> : <p className="eligibility-muted">当前筛选没有符合条件的审核要点。</p>}
+            {canModify && selectedClause?.canConfirm && getEligibilityReviewRepository().confirmWorkDraft && <button type="button" className="button button--quiet"
+              disabled={confirmationBusy || confirmationJob?.episodeId === selectedEpisode.reviewEpisodeId}
+              onClick={() => setConfirmingClause(selectedClause)}><Check size={16} aria-hidden="true" />我已核实本条依据</button>}
+            {confirmationJob?.episodeId === selectedEpisode.reviewEpisodeId && <p role="status">已收到核实，正在保存新版工作稿。</p>}
+            {confirmationError && <p role="alert">{confirmationError}</p>}
+            {confirmingClause && <ConfirmationDialog clause={confirmingClause} verificationOnly={reviewData.verificationOnly ?? false}
+              busy={confirmationBusy} onClose={() => setConfirmingClause(null)}
+              onConfirm={actor => void confirmClause(confirmingClause, actor)} />}
             {selectedClause && <button type="button" className="button button--primary eligibility-open-source"
               onClick={() => { setEvidenceVisited(true); setEvidenceOpen(true); }}>
               <FileSearch size={17} aria-hidden="true" /> 查看原件

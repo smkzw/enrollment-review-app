@@ -1,13 +1,13 @@
 # 0.2.0 当前交接
 
-更新：2026-10-14。**Goal实际active**。WP7所属审核项目选择、验证、预览、追加保存／历史及资格消费者已接通；用户另要求独立实际Ego试用，已完成并选择性处理可复核发现。M1本人验收、WP7真实更正／补证、M2/M3未完成，claims_complete=false。0新增临床／产品模型作业；会商为工程只读试用，不修改正式v7或旧结果。不是暂停指令。
+更新：2026-10-14。**Goal实际active**。WP7结论核实→自动新版→报告／旧版已真实贯通；仅以构建者试用核实IN01，新增v33，不改患者原值、规则或旧结果。前轮用户要求的独立实际Ego试用已完成并处理可复核发现。M1本人验收、真实数值更正／补证、M2/M3未完成，claims_complete=false。0本轮产品模型调用；不是暂停指令。
 
 ## 1. 五分钟接手
 
 - 唯一工作树：`/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/build-0.2.0`，分支`dev/0.2.0`。旧主checkout及phase5工作树不能代替本树。
-- 本轮基准HEAD `97984d0c466ca4374074449a8ba206f4004e3b92`（已推送），此前导航／侧栏／备选／时间图成果不重做；当前源码／测试／规范按包含本文的`0.2.0-WP7:`提交核定。先核实际HEAD／dirty，不reset／clean，不把前轮894通过归到当前修订。
+- 本轮基准HEAD `9d4d50dc8c31156350702ec128478a03f7ce664f`（已推送），此前独立Ego／所属项目／时间图成果不重做；当前源码／测试／规范按包含本文的`0.2.0-WP7:`提交核定。先核实际HEAD／dirty，不reset／clean，不把前轮299／902通过归到当前修订。
 - 现行入口仅本树AGENTS及`docs/0.2.0/01_PRD.md`、`02_DESIGN.md`、`03_PLAN.md`、`04_ACCEPTANCE.md`、`05_PROGRESS.md`。0.1.x档案仅按07索引查必要证据，不重新启动旧链。
-- 当前完成的是WP7几个衔接子包，不是WP7全包、M1验收或全产品交付。**不要重跑已终态方案解构、变量建议、53次既往抽取、24页成功证明、生化局部读取和工作稿v32。**
+- 当前完成的是WP7几个衔接子包，不是WP7全包、M1验收或全产品交付。**不要重跑已终态方案解构、变量建议、53次既往抽取、24页成功证明、生化局部读取或v32/v33。**
 - 构建期自主验证，不逐条要求用户批准。验证副本内模拟规则审定／发布须标`builder_verification`，正式本人批准和旧签名不变；未改条款沿实际内容哈希继承。评审A/B前次各一次完成，不把当前代码称再次独立通过。
 
 ## 2. 当前现场
@@ -25,22 +25,24 @@
 | 独立试用 | guard C02 pi/google-antigravity/gemini-3.8-flash high，930.52秒，健康预检成功、真实身份匹配、无fallback，session01a13ab0-b226-7000-9122-88e3b1fd43e6。实际110工具开始、71Ego、29PNG查看；在旧部署97984d0c上操作Ego42/p2，主线程未抢浏览器／重部署。原报告、图与回执受控本机output/wp7-ego-conference，未提交，非医学批准 |
 | 试用处置 | 确认并修复重复月份刻度、所有真正未决组默认展开、编号与数字标题分隔、报告UI／HTML／MD空标题。自身预览发现未知节点影响不能显示全零，现只留真实已知数量与整节点核对说明，不铺Profile索引术语。未采纳常驻三栏、来源未知改可信、猜姓名正则改原文；会商把3840CSS/DPR2当1920CSS的解释不成立，不据此改字号 |
 | 精确文件 | `git show --stat`为当前清单；后台fact_corrections合同／API／service／repository，前端相连HTTP／解码／编辑／历史；ProfileTimeline、EligibilityWorkbenchPage、FrozenReviewReport／frozenReviewExport及相关测试；02/03/05及本Handoff。未新增依赖、DB或模型路线；旧SourceExcerpt等97984d0c成果沿用 |
-| 集中验证 | 最终后台299通过91.26秒，完整前端102文件902通过44.22秒（2workers）、tsc＋Vite build exit0。合成有源API→实际Job→追加实体／Profile／历史→资格选择正反闭合；自动重算子Job原测试同窗覆盖。Ego真实195选项加载、变更关联只读预览、原值日期保留后取消；9待处理均展开／35低置信已判收起；三宽屏DPR1无横溢。非M2真实更正／物理屏／实际缩放验收 |
-| 保全与服务 | 自有61134 PID1661／exec96753，显式本树.env／data_v2，日志output/wp7-variable-server.log；前代87785 TERM收回143。125事实、29运行、4369项、36抽取调用、5资料版本、1快照旧hash不变；旧6Profile不变，Profile7是前轮新增。jobs无queued/running/retryable，0本轮产品模型／临床写入 |
-| 下一功能包 | 沿既有入口接补证／已核自动新稿及真正有源更正，核新旧史。当前没有已确认的真实数字错读，不修改正确值作演示；不重跑方案、建议或24页成功读取。更正工程闭合不等于M2真实动作已完成 |
+| 结论核实 | 当前完整低置信确定父项可显式核实，不改变值或结论，不收集理由；未决／矛盾／系统问题、未完成子项及未核来源拒绝。先核整例来源及原稿完整性，沿既有3步Job保存新版，无模型／OCR。普通更新及整理后自动工作稿冻结核实集合，内容或计算方式变化不沿用；报告／导出保留构建者与医学经理身份 |
+| 集中验证 | 当前后台271通过69.33秒；完整前端102文件907通过42.66秒（2workers），tsc/Vite exit0。合成typed方案装配边界、真实API／SQLite／来源闭包／Job／历史和确认正反例；不是方案发布或临床金标。前轮299／902为旧窗口，不混记 |
+| 真实核实 | Ego42/p2看IN01原图51岁及18~75要求，以builder_verification保存。Job44d64fd…completed3/3、39.667秒；v33仅IN01父项4个核实元数据字段变，其他148项、全部结论／引用、30系统／来源提示不变；新旧报告可切换。三宽屏DPR1无横溢，不替代M2数值更正／补证 |
+| 保全与服务 | 当前61134 PID13685／exec79995，本树.env／data_v2，output/wp7-confirm-server.log；前代1661 TERM收回143。125事实、29旧运行、4369旧项、36调用、5来源版本、1快照及旧Profile hash不变；只追加1核实、1run／149项。无活动Job，0模型，不改正式v7 |
+| 下一功能包 | 沿既有上传／整理finalize接新增范围，后者已会排队工作稿，不再造队列。真实数值更正／补证和两次新旧稿仍未完成；未确认数字错读，不修改正确值演示，不重读已完成方案或24页 |
 
-### 临床状态（本轮只读复核身份，不重新计算或写入）
+### 临床状态（仅追加结论核实版本，临床原值及决定不改）
 
 | 项 | 实际状态 |
 |---|---|
 | Goal | 本轮工具实际active；未标complete或paused |
-| 自有服务 | 当前1661／61134，exec96753，日志output/wp7-variable-server.log；只操作本树自有服务，共享8001/8900等不动 |
+| 自有服务 | 当前13685／61134，exec79995，日志output/wp7-confirm-server.log；只操作本树自有服务，共享8001/8900等不动 |
 | 数据 | 本树`data_v2/enrollment-review-v2.sqlite3`及`.env`；WP0验证副本，非原临床库。没有重造16GB备份、改原件或旧终态 |
 | 项目／规则 | project `draft-project-1153e25b4eba`；ruleset `ruleset:draft-version-1153e25b4eba:phase_iii`，正式revision7，verification_only=false，64/64本人medical_manager。原草稿rev21保留 |
 | 个例／节点 | subject `58ff71df0cff4a2c9107be743d82584b`，31001，中心31；筛选episode `b843b2c07d6d4318a6df741eb7902eb3`，revision8，日期2025-08-08。基线节点未借用后续结果 |
 | 资料 | snapshot `c69c297a3ea84c57a8fa953e07567b1d`；complete `complete-ad2f258d2aff46a98affc99dfac3ea78`；5文件24页，125物理事实、122当前冻结事实，0事件／暴露 |
-| 当前工作稿 | Job `f77d4d663b9f4febac65b32e3953e6b7` completed11/11；run `review-run:3703b7a371644a6891dbd910dc3863c8`；context `review-context-v2:309dc390c8a7453c98fa8fd4e6998db3`；保存v32、计算方式`work-draft/0.2.0-v31`，二者不是同一编号 |
-| 结果 | 64父／85子，7资料或含义未决＋2系统问题；5入选满足、9排除未触发、21操作满足、15未到期、5不适用、7indeterminate、2system_issue。高置信正常样本0，不能写准确率100% |
+| 当前工作稿 | Job `44d64fd9f2184938b57237177e9ab426` completed3/3；run `review-run:03754ec576c04698b9e2997e87fb1db2`，保存v33／计算方式work-draft/0.2.0-v31。supersedes旧v32 `review-run:3703b7a371644a6891dbd910dc3863c8`；原v32 Job f77d4d66…仍completed11/11，不重跑 |
+| 结果 | 64父／85子、7资料或含义未决＋2系统问题不变；5入选满足、9排除未触发、21操作满足、15未到期、5不适用、7indeterminate、2system_issue。IN01父项高置信且builder_verification，仅试用核实，不是本人验收、模型金标或准确率100% |
 | 新档案 | Profile7 `profile:72808cf0f4a7f6310e17f66952a4b537` succeeded，当前规则7／节点8；122原事实ID不变。旧Profile1–6不改。档案0单列问题不等于入排0问题，118来源提示不被伪装已核 |
 | 更正 | 真实记录0；Ego已真实加载195可选项目，并将现有关联改为“仅保留在档案”做只读预览，中文两侧关联／原值／日期／来源均保留，随后关闭未提交。此前无变化422记录保留；都不是M2真实更正 |
 | 浏览器 | Ego Lite原空间42，p1保留已发布规则，p2沿原工作台／个例。三图实际CSS1920/2560/3840、DPR1，原件交互为1920/DPR2；以对应viewports.json为准，物理屏及浏览器缩放未验 |
@@ -73,9 +75,11 @@ API `fact-corrections/jobs/{job_id}/work-draft`核路径个例／节点、提交
 
 | 项 | 本轮结果 | 本机证据 |
 |---|---|---|
-| 当前更正／历史／资格消费者 | 299 passed，91.26秒exit0、5 SWIG警告；含显式关联／旧快照、未知项目／类型／单位／派生值／错节点拒绝、实际保存／读回／资格选择及既有自动子Job恢复 | `output/wp7-variable-backend-accepted.log`；初轮缺json导入／新测试非法双fixture失败已修，旧日志保留，不能称旧产品问题 |
-| 当前完整前端 | 102文件902 passed，44.22秒exit0、2workers；曾暴露来源默认选择异步时序，新测试改为等待实际选择而不放宽断言／超时 | `output/wp7-variable-frontend-release.log`；旧894及中间901／902窗不混为当前最终 |
-| 当前正式构建 | tsc＋Vite exit0；既有chunk提示，未新增依赖 | `output/wp7-variable-build-release.log` |
+| 本轮结论核实 | 271 passed69.33秒exit0、5SWIG警告；完整前端102文件907 passed42.66秒exit0；tsc/Vite成功。空语义批次仍排semantic已修；合成旧来源夹具以明确typed装配边界隔离，不放宽产品发布保护；未知旧规则身份保守只作验证 | `output/wp7-confirm-backend-accepted.log`、`wp7-confirm-frontend-release.log`、`wp7-confirm-build.log`；早期夹具／排序／路径失败日志保留，不冒称临床失败 |
+| 本轮真实核实／保全 | 0模型；原件→builder确认→v33→新／旧报告，148无关项及全部结论／来源不变，30系统／来源提示不丢；旧125事实／29运行／4369项／36调用／5版本hash保持 | `output/wp7-confirm-{before,after,result-audit,history-new}.json`、`wp7_confirmation_audit.py`、`wp7_confirmation_result.py`；`wp7-confirm-age-source.png`、`-dialog.png`、`-report-new.png`、`-workbench-{1920,2560,3840}.png`及viewports.json。私有材料不提交 |
+| 前轮更正／历史／资格消费者 | 299 passed，91.26秒exit0、5 SWIG警告；含显式关联／旧快照、未知项目／类型／单位／派生值／错节点拒绝、实际保存／读回／资格选择及既有自动子Job恢复 | `output/wp7-variable-backend-accepted.log`；初轮缺json导入／新测试非法双fixture失败已修，旧日志保留，不能称旧产品问题 |
+| 前轮完整前端 | 102文件902 passed，44.22秒exit0、2workers；曾暴露来源默认选择异步时序，新测试改为等待实际选择而不放宽断言／超时 | `output/wp7-variable-frontend-release.log`；旧894及中间901／902窗不混为当前最终 |
+| 前轮正式构建 | tsc＋Vite exit0；既有chunk提示，未新增依赖 | `output/wp7-variable-build-release.log` |
 | 当前独立Ego及主线程复核 | 原部署只读试用完成，报告建议逐项核实；最终实际5不同日期刻度、9未决可见，195项目与只读前后预览成功取消，三宽屏DPR1无溢出 | `output/wp7-ego-conference/`；`output/wp7-variable-{timeline-1920,timeline-2560,timeline-3840,workbench-groups-1920,preview-initial}.png`；初稿图不是最终节点范围文字证明 |
 | 前轮日期／参考范围与Profile | 90 passed，78.08秒；旧Projection hash不变 | `output/wp6-chart-backend-final.log`，当前未重复跑该独立窗口 |
 | 当前真实界面 | 时间图6点、近一年5可恢复，点选→详情→原件4页且药名加重，Esc回焦点；三宽屏无横溢或图点越界，图实际看过。原图无坐标不造框；无字面对应的摘录不强行标重点 | `output/wp6-chart-delivered-{1920,2560,3840}.png`、`wp6-chart-viewports.json`、`wp6-chart-source-highlight.png` |
@@ -90,7 +94,7 @@ API `fact-corrections/jobs/{job_id}/work-draft`核路径个例／节点、提交
 
 ## 5. 未完成与不重跑清单
 
-- WP7所属项目工程与真实只读预览已收口；尚缺真实数值更正、补证／已核自动触发及两次新旧稿对照。没有已确认的真实数值错读，不能改变正确数字制造M2；模拟夹具不替代真实病例动作。
+- WP7所属项目与结论核实子包已收口；尚缺真实数值更正、补证自动衔接及两次新旧稿。没有已确认真实数字错读，不改正确值制造M2；IN01试用核实不替代更正／补证或本人批准。
 - IN03按本人D20保留对应季节治疗及疗效不足；不能拼接不同月份或节点后研究治疗反推满足。EX06/10随机锚点、筛选ANC遮挡单位、FEV1用药前关系、HBV-DNA等真实未决仍保留。EX07读取意见不一致不宣称患者记录矛盾；EX13范围、EX14流程表人群关系仍需来源核清。不要按问题减少叫准确率提升。
 - WP5完整范围／禁用药能力、M1本人验收、M2/M3、人工IE对照、实际缩放及备份恢复尚未完成。D001在M3前保持留出，IE表不进提示。
 - 当前是既有事实的交互时间图，不宣称已重建未提取事件；病史6项缺日期，因此紧凑列入未明确区域，不强画时间点。已存33检验只2有同排异常依据，未知项不冒充正常。文字路线不带可信坐标，页定位可用，红框渲染测试保留；不为坐标新启OCR。书面判断检索仍下钻；完整更正／实际缩放未验，不宣称全站UX／M2完成。
@@ -98,8 +102,8 @@ API `fact-corrections/jobs/{job_id}/work-draft`核路径个例／节点、提交
 
 ## 6. 恢复步骤
 
-1. Goal实际active；核本树HEAD／dirty、61134所有者及活动Job。自有1661仍供试用，不重复起服务；失去该服务时才使用本树虚拟环境和显式.env/data_v2启动，不停共享服务，不重建病例或读方案。
-2. 打开现有workbench路径，读取v32与Profile7；上表Job已completed，启动／打开UI不等于重跑。历史读取及导出已收口，不从这些入口再次开整例测试。
+1. Goal实际active；核本树HEAD／dirty、61134所有者及活动Job。自有13685仍供试用，不重复起服务；失去该服务时才使用本树虚拟环境和显式.env/data_v2启动，不停共享服务，不重建病例或读方案。
+2. 打开现有workbench路径，读取v33与Profile7；核实Job已completed，不重复点IN01或重开原稿。旧v32及历史保留，旧只读审计脚本会因新增run而拒绝，改用本轮wp7_confirmation_audit.py，不覆盖旧基线。
 3. 时间图、原文重点、备选和所属审核项目选择已实现验证，勿重新从原型开始。接WP7真实更正／补证，仅读新增或失效范围，不凭构建者想象更改患者数据；不在正式v7写重复批准来演示。
 4. 更正保存后核真实子Job、新run、supersedes、受影响结果与无关项不变、旧hash保持；失败仅重试失败范围。不要为了消除未决删来源、放宽已核或冒用用户签名。
 5. 同功能包集中验证，里程碑按04与06处理，不重开全库追绿／模型横评／跨章长链。M1/M2仍须真实用户流程证据，不以文档、HTTP200或测试数量代替。
@@ -118,3 +122,5 @@ API `fact-corrections/jobs/{job_id}/work-draft`核路径个例／节点、提交
 本轮产品模型调用0；工程独立试用1会话，不能写成零外部模型使用，也不能将其当产品病例读取。实屏复核发现月份刻度碰撞、默认收起待处理及报告空标题，修消费者而非换模型。最终报告30个系统／未采用记录标题0空，仍标未签发。换构建后旧页懒加载chunk404导致空页，日志核因后只刷新原p2恢复，非读病例失败、不新建空间。一个重要反证是：有文件可打开不代表来源级别已核；不要为视觉“变绿”改资格。DPR不等于缩放。测试缺导入及异步时序是本轮构建成本，不称医学遗漏、不删失败记录。
 
 生产／保存／消费应优先接线后核真实动作；故障模拟、工程通过、来源资格与正式医学验收分别记录。当前实质进步包括可选并保存所属项目、旧格式兼容和相连资格选择；真正更正／补证闭环仍需完成。无需重开第二轮会商验证可确定性检查的显示修正。
+
+本轮把预留的结论核实表接到真实动作，不把显式核实变成必填意见或入组决定。已有原文足够的年龄条款只提升试用置信，不重新判读病史；真实剩余7未决和2系统问题不减少。前期成本还包括使用旧Phase夹具启动现行完整装配，接连暴露缺目录、节点、范围证明；改用明确typed装配边界＋实际持久化／来源闭包／Job／历史测试，不能将此称全链方案发布验证，也不放宽生产保护。Ego截图前台状态与Node绝对输出路径亦曾出错，修运行方法、保留现场，不新建空间或换浏览器。实际3步仍耗39.667秒，不能说零模型就瞬时；后续若优化，先量出来源复验与保存成本，不为性能跳过历史／身份检查。

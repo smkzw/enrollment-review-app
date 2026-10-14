@@ -55,6 +55,16 @@ it("失败回执保留旧结果，不调用完成通知", async () => {
   expect(completed).not.toHaveBeenCalled();
 });
 
+it("核实命令沿用既有轮询，只在实际保存后通知并保留恢复位置", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ok: true, json: async () => ({
+    job_id: "confirmed-job", state: "completed", review_run_id: "confirmed-result",
+  })}));
+  const completed = vi.fn();
+  render(<WorkDraftPanel episode={episode} initialJob={{job_id: "confirmed-job", state: "queued", review_run_id: null}} onCompleted={completed} />);
+  await waitFor(() => expect(completed).toHaveBeenCalledExactlyOnceWith("confirmed-result"));
+  expect(localStorage.getItem("work-draft-job:episode")).toBe("confirmed-job");
+});
+
 
 it("连续保存日期使用回执修订，外部新修订也同步", async () => {
   const fetched = vi.fn().mockResolvedValue({ok: true, json: async () => ({revision: 2})});

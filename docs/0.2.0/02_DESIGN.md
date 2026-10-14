@@ -124,7 +124,7 @@
 | `ReviewRun.run_kind: Literal["work_draft","formal"]` | `app/domain/contracts/review.py:156-165`；`app/storage/models.py` 加列，默认 `formal` 兼容历史 | 工作稿与签发分开 |
 | 工作稿写 `supersedes_review_run_id` | `review.py:163` 已有字段，至今无人写入（只在 `app/api/v2/review_history.py` 读取） | 同一 episode 的上一版工作稿 |
 | **工作稿条目不写 `FinalAssessment`**，新表 `work_draft_items` | 新契约 `WorkDraftItem` | `FinalAssessment`（`review.py:291-308`）强制要求 `gate_result_id`、`publication_fingerprint`，属于正式签发，工作稿不伪造这些字段。`WorkDraftItem`：`review_run_id`、`official_code`、`rule_component_id`（父规则行为空）、`decision`（`ComponentDecision`）、`display_state`（六结论之一或 `system_issue`）、`confidence`（`high`｜`low`｜null）、`confidence_reason`、`reason_text`、`evidence_refs`（事实 ID→locator→页码→摘录）、`input_hash`（所用事实修订＋规则内容哈希）、`policy_group`（如 `not_recorded_in_scope`） |
-| 结论级"已核"：新表 `work_draft_acknowledgements` | 新契约 | `official_code`、`input_hash`、`acknowledged_by`、`at`、`note`。新工作稿中同一条款 `input_hash` 相同则沿用 |
+| 结论级"已核"：既有 `work_draft_acknowledgements` | `WorkDraftAcknowledgement`、`WorkDraftRepository` | 冻结节点、原工作稿／条目、依据内容指纹、执行Job、核实身份和时间；不收集理由。新稿只有本条依据与计算方式完全相同才沿用，构建者试用与医学经理核实分开 |
 | `SystemIssue` | 作为 `ReviewRun` 下的 JSON 列 `system_issues` 保存 | `kind`（`method_unsupported`｜`page_unreadable`｜`model_output_invalid`｜`excerpt_unverified`｜`extraction_failed`｜`component_unstructured`｜`fact_closure_failed`）、受影响条款、说明、替代路径 |
 | 命名 | — | 现有 `_completed_work_draft` 指 prepared-review 结果；新代码统一用 `work_draft_review`／`WorkDraftItem`，不复用旧名 |
 
@@ -292,7 +292,8 @@ Job 幂等键：`(review_episode_id, 资料快照哈希, rule_set_id, rule_set_r
 - 更正：沿用 `apply_prepared_fact_correction`（`app/services/fact_correction_service.py:1121-1275`）；可更正字段增加 `variable_id`。
 - 所属审核项目：`fact-corrections/facts/{fact_id}/options`只读当前节点已发布字典及精确事实修订；不提供派生倍数作原值选项。选择不自动换值／单位／类型；服务核类型、单位及作用域，变更关联时重建对应资料要求，清除关联则只保留档案记录。显式变更的两侧快照同时含`variable_id`，旧格式与旧hash不改；更正历史按冻结规则显示中文名称，不露内部ID。节点级影响无法逐项列清时不显示全零计数，不把未知范围冒充无影响。
 - 规则单独更新后的来源复用：复用既有来源相容判断，逐项核同项目／受试者／节点／快照／处理修订、方案文件哈希、期别及完整旧变量定义。工作稿更新可确定性追加当前Profile，沿用真实事实ID及来源身份，不复制或改写旧事实、不重跑OCR／抽取；默认正式事实选择仍要求原权威完全一致。更正只对已通过来源核对的事实允许旧规则身份，保存新事实于当前权威，原快照／更正谱系与旧报告不改；事件及用药暴露不借此放宽。复用证明不是医学批准，也不修改来源强度或已核标记。
-- **更正后的自动重算**：0.2.0更正Job冻结`work_draft_recompute`，沿用plan→apply，再追加独立work_draft步骤。apply先原子保存更正及提交证明；第三步重新核当前节点／已发布规则，调用既有`WorkDraftReviewService.start`，保存子Job关联。不在apply事务内调用后续核对：后续故障只重试失败步骤或子Job，不回滚已提交更正、不重复发布。路径绑定的`fact-corrections/jobs/{job_id}/work-draft`读取实际关联与终态；界面只有新稿真正保存才显示完成。旧两步任务及其幂等身份不改，未配置数据字典的旧链不自动接入。增量上传及“已核”的自动触发仍待实现；“已核”不改资料哈希，因此其集合哈希须进入工作稿身份。
+- **更正后的自动重算**：0.2.0更正Job冻结`work_draft_recompute`，沿用plan→apply，再追加独立work_draft步骤。apply先原子保存更正及提交证明；第三步重新核当前节点／已发布规则，调用既有`WorkDraftReviewService.start`，保存子Job关联。不在apply事务内调用后续核对：后续故障只重试失败步骤或子Job，不回滚已提交更正、不重复发布。路径绑定的`fact-corrections/jobs/{job_id}/work-draft`读取实际关联与终态；界面只有新稿真正保存才显示完成。旧两步任务及其幂等身份不改，未配置数据字典的旧链不自动接入。增量上传的自动衔接仍待完成；现有整理finalize已会排队工作稿，不能再造第二套队列。
+- **结论核实**：`work-draft-confirmations`显式操作仅接受当前、完整且来源闭合的已保存低置信确定父项；未决／矛盾／系统问题、未完成子项和未核来源不允许点击变通过。冻结材料与计算版本须仍匹配，原值、结论与旧版均不改。以既有3步Job复制已验证的完整结果，仅提升目标置信，保存新run及supersedes；无语义读取步骤，不重新OCR或调用模型。重复提交读原Job，不重复追加。普通重新计算及整理后自动工作稿的身份均冻结核实集合；临床内容、来源或计算方式变化时不继承旧核实。报告／导出同样保留`confirmation_kind`；构建者只写`builder_verification`，旧未知规则身份保守显示验证用。界面不收集评估理由，失败不显示成功；保存后回到同条新版，不携旧item_id。其真实试用不替代M2数值更正／补证。
 - 新工作稿写 `supersedes_review_run_id`；前端在工作稿顶部显示"第 N 版（较上一版：结论变化 x 条）"，可打开旧版。
 
 ## 9. 前端

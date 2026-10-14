@@ -92,6 +92,8 @@ class EligibilityClauseDTO(BaseModel):
     limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"] | None = None
     confidence: Literal["high", "low"] | None = None
     confidence_reason: str | None = None
+    can_confirm: StrictBool = False
+    confirmation_kind: Literal["medical_manager", "builder_verification"] | None = None
 
     @model_validator(mode="after")
     def validate_reason_part_identity(self):
@@ -222,6 +224,30 @@ def start_work_draft(subject_id: str, review_episode_id: str, request: Request):
     try:
         return request.app.state.work_draft_review_service.start(
             subject_id=subject_id, review_episode_id=review_episode_id)
+    except Exception as exc:
+        _raise_translated(exc)
+
+
+class WorkDraftConfirmationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    review_run_id: str = Field(min_length=1)
+    item_id: str = Field(min_length=1)
+    confirmed: StrictBool
+    actor_kind: Literal["medical_manager", "builder_verification"]
+
+    @model_validator(mode="after")
+    def require_confirmation(self):
+        if not self.confirmed:
+            raise ValueError("请明确核实本条依据后再提交")
+        return self
+
+
+@router.post("/subjects/{subject_id}/review-episodes/{review_episode_id}/work-draft-confirmations")
+def confirm_work_draft(subject_id: str, review_episode_id: str, body: WorkDraftConfirmationRequest, request: Request):
+    _read(request).require_subject_episode(subject_id, review_episode_id)
+    try:
+        return request.app.state.work_draft_review_service.confirm(subject_id=subject_id, review_episode_id=review_episode_id,
+            review_run_id=body.review_run_id, item_id=body.item_id, actor_kind=body.actor_kind)
     except Exception as exc:
         _raise_translated(exc)
 

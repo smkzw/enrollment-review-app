@@ -54,7 +54,7 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
     for (const parent of parents) {
       for (const item of [parent, ...(report.workDraft.componentClauses?.filter(child => child.parentRuleCode === parent.ruleCode) ?? [])]) {
         result.push({ title: `${item.ruleCode} · ${item.textSummary}`, paragraphs: [
-          `审核结果：${item.decisionLabel}${item.confidence ? ` · ${item.confidence === "high" ? "高置信" : "低置信"}` : ""}`,
+          `审核结果：${item.decisionLabel}${item.confidence ? ` · ${item.confidence === "high" ? "高置信" : "低置信"}` : ""}${item.confirmationKind ? ` · ${item.confirmationKind === "medical_manager" ? "医学经理已核实" : "构建者试用核实，非正式医学核实"}` : ""}`,
           `判定依据：${item.reason}`, `方案要求：${item.sourceText ?? item.textSummary}`,
           ...item.factRefs.map(ref => {
             const locator = report.evidenceLocators.find(position => position.locatorId === ref.locatorId);

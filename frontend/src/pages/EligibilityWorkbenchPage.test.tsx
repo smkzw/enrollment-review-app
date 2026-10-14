@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEvidenceRepository, type ProcessingRevisionPageView } from "../api/evidence";
@@ -149,6 +149,35 @@ async function openOriginal() {
 }
 
 describe("入排审核工作台", () => {
+  it("明确核实无需收集理由，试用身份保存后选中同一条的新版本", async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal");
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function(this: HTMLDialogElement) { this.open = true; } });
+    try {
+      window.location.hash = "#/workbench?view=all&component=old:parent";
+      const base = { ...review.clauses[2]!, ruleComponentId: "old:parent", confidence: "low" as const, canConfirm: true };
+      let saved: EligibilityReviewView = { ...review, reviewRunId: "old", clauses: [base] };
+      const confirm = vi.fn().mockImplementation(async () => {
+        saved = { ...saved, reviewRunId: "new", clauses: [{ ...base, ruleComponentId: "new:parent", canConfirm: false,
+          confidence: "high", confirmationKind: "builder_verification" }] };
+        return { job_id: "confirmed", state: "completed", review_run_id: "new" };
+      });
+      setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => saved, confirmWorkDraft: confirm });
+      render(<EligibilityWorkbenchPage />);
+      await userEvent.click(await screen.findByRole("button", { name: "我已核实本条依据" }));
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).queryByRole("textbox")).not.toBeInTheDocument();
+      await userEvent.click(within(dialog).getByText("构建验证"));
+      await userEvent.click(within(dialog).getByRole("button", { name: "仅作试用核实" }));
+      await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+      expect(confirm.mock.calls[0]![2]).toEqual({ review_run_id: "old", item_id: "old:parent", confirmed: true, actor_kind: "builder_verification" });
+      await screen.findByText("试用已核实");
+      await waitFor(() => expect(window.location.hash).toContain("component=new%3Aparent"));
+      expect(screen.queryByRole("button", { name: "我已核实本条依据" })).not.toBeInTheDocument();
+    } finally {
+      if (descriptor) Object.defineProperty(HTMLDialogElement.prototype, "showModal", descriptor);
+      else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal;
+    }
+  });
   it("原件侧栏按当前条款强调相关原文，保留否定、读数和其余文字", async () => {
     installSourcePages();
     const excerpt = "血小板计数 180；未见该项异常，另有其他记录。";

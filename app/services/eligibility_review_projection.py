@@ -170,6 +170,8 @@ class EligibilityClauseProjection:
     confidence: str | None = None
     confidence_reason: str | None = None
     reason_parts: tuple[dict[str, Any], ...] = ()
+    can_confirm: bool = False
+    confirmation_kind: str | None = None
 
 
 @dataclass(frozen=True)

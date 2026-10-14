@@ -6,7 +6,8 @@ from sqlalchemy import func, select
 
 from app.domain.contracts.review import ReviewRun
 from app.domain.contracts.enums import ComponentDecision
-from app.domain.contracts.work_draft import SystemIssue, WorkDraftEvidenceRef, WorkDraftItem
+from app.domain.contracts.work_draft import (SystemIssue, WorkDraftEvidenceRef, WorkDraftItem,
+    WorkDraftAcknowledgement, acknowledgement_input_hash)
 from app.domain.publication import canonical_hash
 from app.graph.subject_graph import work_draft_steps
 from app.services.fact_normalization_command_service import authority_from_active_episode
@@ -23,6 +24,30 @@ from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
 CALCULATION_VERSION = "work-draft/0.2.0-v31"
+
+
+def confirmation_allowed(item, items):
+    from app.services.work_draft_calculation import DETERMINATE
+    return (item.rule_component_id is None and item.decision in DETERMINATE and item.confidence == "low"
+        and item.system_issue is None and bool(item.evidence_refs or item.source_read_refs)
+        and not any(ref.disposition == "unresolved" for ref in item.source_read_refs)
+        and all(child.system_issue is None and child.decision in DETERMINATE | {
+            ComponentDecision.NOT_DUE, ComponentDecision.NOT_APPLICABLE}
+            for child in items if child.official_code == item.official_code and child.rule_component_id is not None))
+
+
+def _apply_confirmations(items, confirmations, evaluator_version):
+    matches = {record.input_hash: record for record in confirmations}
+    result = []
+    for item in items:
+        record = matches.get(acknowledgement_input_hash(item, evaluator_version))
+        if record and confirmation_allowed(item, items):
+            item = WorkDraftItem.model_validate(item.model_dump(mode="json") | {
+                "confidence": "high", "confidence_reason": "医学经理已核实本条依据" if record.actor_kind == "medical_manager"
+                    else "构建者验证已核实，非正式医学审定",
+                "acknowledgement_id": record.acknowledgement_id, "confirmation_kind": record.actor_kind})
+        result.append(item)
+    return result
 
 
 def _reusable_source_reads(session, store, frozen, targets, model, artifact_store):
@@ -80,8 +105,10 @@ def enqueue_normalized_work_draft(session, *, authority, run_id):
     """Queue only: an unavailable review consumer cannot undo successful fact publication."""
     from app.services.work_draft_semantics import runtime_model
     model = runtime_model()
+    confirmations = WorkDraftRepository(session).list_acknowledgements(authority.review_episode_id)
     key = canonical_hash({"normalization_run_id": run_id, "authority": authority.model_dump(mode="json"),
-                          "calculation_version": CALCULATION_VERSION, "semantic_model": model.model_dump(mode="json")})
+                          "calculation_version": CALCULATION_VERSION, "semantic_model": model.model_dump(mode="json"),
+                          **({"acknowledgements": [row.model_dump(mode="json") for row in confirmations]} if confirmations else {})})
     receipt, created = IdempotencyRepository(session).resolve(scope="automatic-work-draft",
         idempotency_key=key, submitted_hash=key, result_type="work_draft_job", result_id=uuid4().hex)
     if created:
@@ -89,7 +116,8 @@ def enqueue_normalized_work_draft(session, *, authority, run_id):
         store.create_job(job_id=receipt.result_id, job_type=JOB_TYPE, progress_total=4,
             payload={"normalization_run_id": run_id, "authority": authority.model_dump(mode="json"),
                      "subject_id": authority.subject_id, "review_episode_id": authority.review_episode_id,
-                     "calculation_version": CALCULATION_VERSION, "semantic_model": model.model_dump(mode="json")})
+                     "calculation_version": CALCULATION_VERSION, "semantic_model": model.model_dump(mode="json"),
+                     **({"acknowledgement_ids": [row.acknowledgement_id for row in confirmations]} if confirmations else {})})
         for step, depends_on in work_draft_steps():
             store.create_step(job_id=receipt.result_id, step_id=step,
                 name={"calculate": "核对确定性条件", "semantic": "核对病历原文与条件关系",
@@ -128,6 +156,84 @@ def _fact_refs(session, frozen, artifact_store=None):
 class WorkDraftReviewService:
     def __init__(self, session_factory, artifact_store):
         self.session_factory, self.artifact_store = session_factory, artifact_store
+
+    def confirm(self, *, subject_id, review_episode_id, review_run_id, item_id, actor_kind):
+        from app.storage.repositories import EpisodeRepository
+        from app.storage.models import JobRecord
+        from app.storage.codecs import verify_payload_sha256
+        with self.session_factory() as session, session.begin():
+            episode = EpisodeRepository(session).get(review_episode_id)
+            if episode.subject_id != subject_id:
+                raise ScopeViolationError("审核节点不属于当前受试者")
+            if actor_kind not in {"medical_manager", "builder_verification"}:
+                raise ScopeViolationError("核实身份无效")
+            repository = WorkDraftRepository(session)
+            ack_id = "work-draft-confirmation:" + canonical_hash({"episode": review_episode_id,
+                "run": review_run_id, "item": item_id, "actor_kind": actor_kind})[:32]
+            existing = repository.acknowledgements.get_or_none(ack_id)
+            if existing is not None:
+                return self.status(subject_id=subject_id, review_episode_id=review_episode_id,
+                    job_id=existing.work_draft_job_id, session=session)
+            run, baseline = self._current_base(session, subject_id, review_episode_id, review_run_id)
+            latest = session.scalars(select(ReviewRunRecord.review_run_id).where(
+                ReviewRunRecord.review_episode_id == review_episode_id, ReviewRunRecord.run_kind == "work_draft")
+                .order_by(ReviewRunRecord.created_at.desc())).first()
+            if latest != review_run_id:
+                raise ScopeViolationError("工作稿已更新，请打开最新版本后核实")
+            for job in session.scalars(select(JobRecord).where(JobRecord.job_type.in_({JOB_TYPE, "fact_normalization", "fact_correction"}),
+                    JobRecord.state.in_({"queued", "running", "failed_retryable"}))):
+                data = verify_payload_sha256(job.payload_json, job.payload_sha256)
+                if (data.get("review_episode_id") or (data.get("authority") or {}).get("review_episode_id")) == review_episode_id:
+                    raise ScopeViolationError("本次资料或工作稿正在更新，请完成后核实")
+            items = repository.list_for_run(review_run_id)
+            target = next((item for item in items if item.item_id == item_id), None)
+            if target is None or not confirmation_allowed(target, items):
+                raise ScopeViolationError("本条仍有未完成的核对，不能用已核实替代缺失、矛盾或系统问题")
+            rules = get_rule_set(session, baseline.authority.rule_set_id, baseline.authority.rule_set_revision)
+            if rules.verification_only is not False and actor_kind != "builder_verification":
+                raise ScopeViolationError("验证用规则只能记录构建者验证，不能冒充正式医学核实")
+            frozen = prepare_review(session, self.artifact_store, subject_id=subject_id, review_episode_id=review_episode_id,
+                expected_authority=baseline.authority, idempotency_key=ack_id, work_draft=True, evaluator_version=CALCULATION_VERSION)
+            excluded = {"context_id", "review_run_id", "created_at", "context_sha256"}
+            if frozen.model_dump(mode="json", exclude=excluded) != baseline.model_dump(mode="json", exclude=excluded):
+                raise ScopeViolationError("核实期间资料已变化，请先更新工作稿")
+            job_id = uuid4().hex
+            confirmation = WorkDraftAcknowledgement(acknowledgement_id=ack_id, review_episode_id=review_episode_id,
+                official_code=target.official_code, input_hash=acknowledgement_input_hash(target, baseline.evaluator_version),
+                base_review_run_id=review_run_id, base_item_id=item_id, work_draft_job_id=job_id,
+                actor_kind=actor_kind, created_at=datetime.now(UTC))
+            repository.acknowledgements.save(confirmation)
+            store = JobStore(session)
+            store.create_job(job_id=job_id, job_type=JOB_TYPE, progress_total=3,
+                payload={"subject_id": subject_id, "review_episode_id": review_episode_id,
+                    "review_run_id": frozen.review_run_id, "context_id": frozen.context_id,
+                    "calculation_version": CALCULATION_VERSION, "acknowledgement_base_run_id": review_run_id,
+                    "base_items_sha256": canonical_hash([item.model_dump(mode="json") for item in items]),
+                    "acknowledgement_ids": [ack_id], "semantic_batches": []})
+            for step, dependencies in work_draft_steps(0):
+                store.create_step(job_id=job_id, step_id=step, depends_on=dependencies,
+                    name={"calculate": "核实当前依据", "compose": "更新核实结果", "save": "保存新版工作稿"}[step])
+            return self.status(subject_id=subject_id, review_episode_id=review_episode_id, job_id=job_id, session=session)
+
+    def _current_base(self, session, subject_id, review_episode_id, review_run_id):
+        from app.services.review_context_assembly import assemble_review_context
+        run = AppendRepository(session, REVIEW_RUN_CONFIG).get(review_run_id)
+        if run.run_kind != "work_draft" or run.review_episode_id != review_episode_id or run.completed_at is None:
+            raise ScopeViolationError("所选记录不是该节点已保存的工作稿")
+        frozen = ReviewContextV2Repository(session).get(run.context_id)
+        if frozen.authority.subject_id != subject_id or frozen.evaluator_version != CALCULATION_VERSION:
+            raise ScopeViolationError("本条审核对象或核对方式已变化，请先更新工作稿")
+        current = assemble_review_context(session, self.artifact_store, review_episode_id=review_episode_id,
+            review_run_id=frozen.review_run_id, evaluator_version=CALCULATION_VERSION,
+            created_at=frozen.created_at, context_id=frozen.context_id, work_draft=True)
+        if current.context_sha256 != frozen.context_sha256:
+            raise ScopeViolationError("本次资料或方案已变化，请先更新工作稿")
+        from app.services.review_history_service import _work_draft_detail, ReviewHistoryIncompleteError
+        try:
+            _work_draft_detail(session, run, frozen, "completed")
+        except ReviewHistoryIncompleteError as exc:
+            raise ScopeViolationError("原工作稿或其依据不完整，不能记录已核实") from exc
+        return run, frozen
 
     def start(self, *, subject_id, review_episode_id, session=None):
         if session is None:
@@ -177,6 +283,7 @@ class WorkDraftReviewService:
             reusable, _ = _reusable_source_reads(session, JobStore(session), preview, targets, model,
                 self.artifact_store) if targets else ({}, {})
             batches = source_batches(targets, reusable)
+            confirmations = WorkDraftRepository(session).list_acknowledgements(review_episode_id)
             identity = canonical_hash({"authority": authority.model_dump(mode="json"),
                 "rule_set_sha256": preview.rule_set_sha256,
                 "clinical_facts": [item.model_dump(mode="json") for item in preview.facts],
@@ -184,7 +291,8 @@ class WorkDraftReviewService:
                 "source_pages": [item.model_dump(mode="json") for item in preview.source_pages],
                 "calculation_version": CALCULATION_VERSION,
                 "semantic_model": model.model_dump(mode="json") if model else None,
-                "semantic_targets": targets})
+                "semantic_targets": targets,
+                **({"acknowledgements": [row.model_dump(mode="json") for row in confirmations]} if confirmations else {})})
             receipt, created = IdempotencyRepository(session).resolve(scope=f"work-draft:{review_episode_id}",
                 idempotency_key=identity, submitted_hash=identity, result_type="work_draft_job", result_id=uuid4().hex)
             store = JobStore(session)
@@ -196,6 +304,7 @@ class WorkDraftReviewService:
                     payload={"context_id": frozen.context_id, "review_run_id": frozen.review_run_id,
                              "review_episode_id": review_episode_id, "subject_id": subject_id,
                              "calculation_version": CALCULATION_VERSION, "input_hash": identity,
+                             **({"acknowledgement_ids": [row.acknowledgement_id for row in confirmations]} if confirmations else {}),
                              "semantic_model": model.model_dump(mode="json") if model else None,
                              "semantic_batches": batches}, progress_total=3 + len(batches))
                 for step, depends_on in work_draft_steps(len(batches)):
@@ -274,6 +383,23 @@ class WorkDraftReviewService:
             if canonical_hash(rule_set.model_dump(mode="json")) != frozen.rule_set_sha256:
                 raise ScopeViolationError("本次方案内容指纹不一致")
             store = JobStore(session)
+            if payload.get("acknowledgement_base_run_id"):
+                baseline_run, baseline = self._current_base(session, payload["subject_id"], payload["review_episode_id"],
+                    payload["acknowledgement_base_run_id"])
+                if frozen.authority != baseline.authority:
+                    raise ScopeViolationError("核实记录的资料范围已变化")
+                if context.step_id == "calculate":
+                    items = WorkDraftRepository(session).list_for_run(baseline_run.review_run_id)
+                    if canonical_hash([item.model_dump(mode="json") for item in items]) != payload["base_items_sha256"]:
+                        raise ScopeViolationError("原工作稿内容已变化，未复制旧结论")
+                    if any(not item.item_id.startswith(baseline_run.review_run_id + ":") for item in items):
+                        raise ScopeViolationError("原条目身份不属于本次工作稿")
+                    items = [WorkDraftItem.model_validate(item.model_dump(mode="json") | {
+                        "item_id": frozen.review_run_id + item.item_id[len(baseline_run.review_run_id):],
+                        "review_run_id": frozen.review_run_id}) for item in items]
+                    return {"items": [item.model_dump(mode="json") for item in items],
+                        "source_issues": [issue.model_dump(mode="json") for issue in baseline_run.system_issues
+                            if issue not in frozen.system_issues]}
             if context.step_id == "calculate":
                 refs = _fact_refs(session, frozen, self.artifact_store)
                 missing_refs = [fact for fact in frozen.facts if fact.fact_id not in refs]
@@ -326,6 +452,12 @@ class WorkDraftReviewService:
                 raise ScopeViolationError("缺少已保存的组件计算结果")
             items = [WorkDraftItem.model_validate(value) for value in calculated[1]["items"]]
             if context.step_id == "compose":
+                confirmations = [WorkDraftRepository(session).acknowledgements.get(key)
+                    for key in payload.get("acknowledgement_ids", ())]
+                if any(row.review_episode_id != frozen.authority.review_episode_id for row in confirmations):
+                    raise ScopeViolationError("核实记录不属于本次审核节点")
+                if payload.get("acknowledgement_base_run_id"):
+                    return {"items": [item.model_dump(mode="json") for item in _apply_confirmations(items, confirmations, frozen.evaluator_version)]}
                 from app.services.work_draft_semantics import targets_for_review
                 source_results, failed_components, provider_blocked_components = {}, {}, set()
                 response_disagreement_components = set()
@@ -381,6 +513,7 @@ class WorkDraftReviewService:
                         continue
                     children = [item for item in items if item.official_code == rule.official_code]
                     items.append(compose_parent(rule, children, frozen.review_run_id))
+                items = _apply_confirmations(items, confirmations, frozen.evaluator_version)
                 return {"items": [item.model_dump(mode="json") for item in items]}
             if context.step_id != "save":
                 raise ScopeViolationError("未知工作稿步骤")

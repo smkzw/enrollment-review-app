@@ -5,10 +5,12 @@ import type { CatalogEpisodeView } from "../../api/catalog/catalogTypes";
 interface Props {
   episode: CatalogEpisodeView;
   onCompleted?: (runId: string) => void;
+  initialJob?: Job | null;
+  onSettled?: (job: Job) => void;
 }
 interface Job { job_id: string; state: string; review_run_id: string | null }
 
-export function WorkDraftPanel({ episode, onCompleted }: Props) {
+export function WorkDraftPanel({ episode, onCompleted, initialJob, onSettled }: Props) {
   const [job, setJob] = useState<Job | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +25,12 @@ export function WorkDraftPanel({ episode, onCompleted }: Props) {
   }, [episode.reviewEpisodeId, episode.revision, storedAnchor?.value]);
   const prefix = `/api/v2/subjects/${encodeURIComponent(episode.subjectId)}/review-episodes/${encodeURIComponent(episode.reviewEpisodeId)}/work-draft-jobs`;
   const storageKey = `work-draft-job:${episode.reviewEpisodeId}`;
+  useEffect(() => {
+    if (initialJob) {
+      localStorage.setItem(storageKey, initialJob.job_id);
+      setJob(initialJob); setError(null);
+    }
+  }, [initialJob?.job_id, storageKey]);
   const read = async (url: string, method = "GET"): Promise<Job> => {
     const response = await fetch(url, { method });
     const data = await response.json();
@@ -42,6 +50,7 @@ export function WorkDraftPanel({ episode, onCompleted }: Props) {
         const result = await read(`${prefix}/${encodeURIComponent(id)}`);
         if (cancelled) return;
         setJob(result);
+        if (["completed", "failed_final", "cancelled", "waiting_user"].includes(result.state)) onSettled?.(result);
         if (result.state === "completed" && result.review_run_id) {
           // The surrounding view already reads saved results on mount. Only a
           // running job's transition needs a refresh; otherwise remount loops.

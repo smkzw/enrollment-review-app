@@ -40,6 +40,8 @@ export interface EligibilityClauseView {
   decision: EligibilityDecision;
   confidence?: "high" | "low" | null;
   confidenceReason?: string | null;
+  canConfirm?: boolean;
+  confirmationKind?: "medical_manager" | "builder_verification" | null;
   decisionLabel: string;
   reason: string;
   reasonParts?: Array<{ conditionId: string; conditionText: string; reasonText: string; requiresAttention: boolean }>;
@@ -307,6 +309,7 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
     throw new EligibilityReviewDecodeError(`${path}.parent_rule_code 格式不正确`);
   }
   const refs = arrayValue(field(row, "fact_refs", path), `${path}.fact_refs`);
+  if (row.can_confirm != null && typeof row.can_confirm !== "boolean") throw new EligibilityReviewDecodeError("核实操作记录不完整");
   return {
     ruleCode,
     ruleComponentId: requiredString(field(row, "rule_component_id", path), `${path}.rule_component_id`),
@@ -325,6 +328,8 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
     decision: enumValue(field(row, "decision", path), DECISIONS, `${path}.decision`),
     confidence: optionalEnumValue(row.confidence, ["high", "low"] as const, `${path}.confidence`),
     confidenceReason: row.confidence_reason == null ? null : requiredString(row.confidence_reason, `${path}.confidence_reason`),
+    canConfirm: row.can_confirm === true,
+    confirmationKind: optionalEnumValue(row.confirmation_kind ?? null, ["medical_manager", "builder_verification"] as const, `${path}.confirmation_kind`),
     decisionLabel: requiredString(
       field(row, "decision_label", path),
       `${path}.decision_label`,
