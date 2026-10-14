@@ -30,9 +30,9 @@ export function ProtocolPublishedSummary({
           <CheckIcon size={18} />
           {session.verificationOnly ? "验证用规则包已发布" : "方案已发布"}
         </h1>
-        <p className="page-head__note">
-          {session.verificationOnly ? "规则包未经医学经理本人审定，仅供构建验证，不能用于正式审核。" : "该方案解构任务已经完成。当前正式版本不会被直接改写；需要调整时，请从重新解构建立新草稿。"}
-        </p>
+        {session.verificationOnly && <p className="page-head__note">
+          规则包未经医学经理本人审定，仅供构建验证，不能用于正式审核。
+        </p>}
       </header>
 
       <section
@@ -40,7 +40,7 @@ export function ProtocolPublishedSummary({
         aria-labelledby="protocol-published-summary-title"
       >
         <h2 id="protocol-published-summary-title" className="protocol-publish-result__title">
-          {session.verificationOnly ? "当前验证版本" : "当前正式版本"}
+          {session.verificationOnly ? "本次验证内容" : "本次发布内容"}
         </h2>
         <dl className="protocol-publish-result__fields">
           <div>
@@ -56,13 +56,10 @@ export function ProtocolPublishedSummary({
             <dd>{session.officialVersion ?? draft.officialVersion ?? "—"}</dd>
           </div>
           <div>
-            <dt>规则条目</dt>
+            <dt>入排标准</dt>
             <dd>{draft.ruleCount} 条</dd>
           </div>
         </dl>
-        <p className="protocol-publish-result__note">
-          本页是已完成任务的只读摘要。历史版本和来源定位继续保留；重新解构会生成新的候选草稿，确认发布前不影响当前正式版本。
-        </p>
       </section>
 
       <div className="protocol-publish-result__actions">

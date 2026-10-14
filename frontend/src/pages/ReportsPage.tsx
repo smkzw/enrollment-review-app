@@ -54,12 +54,13 @@ function ReportSelection({
         <span>项目</span>
         <select
           aria-label="选择项目"
+          title={selectedProject.projectName}
           value={selectedProject.projectId}
           onChange={(event) => onProjectChange(event.target.value)}
         >
           {projects.map((project) => (
-            <option key={project.projectId} value={project.projectId}>
-              {project.projectName} · {project.studyPhaseLabel} · 方案 {project.officialVersion}
+            <option key={project.projectId} value={project.projectId} title={project.projectName}>
+              {project.projectCode} · {project.studyPhaseLabel} · 方案 {project.officialVersion}
             </option>
           ))}
         </select>

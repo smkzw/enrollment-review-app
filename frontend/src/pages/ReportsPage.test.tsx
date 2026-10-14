@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewHistoryRunDetailView } from "../api/review-history/reviewHistoryTypes";
 import { ReportsPage } from "./ReportsPage";
 import { frozenReviewExport } from "../domain/frozenReviewExport";
+import { getCatalogRepository } from "../api";
 
 const mocks = vi.hoisted(() => ({ listRuns: vi.fn(), getRun: vi.fn(), canModify: true }));
 vi.mock("../api/review-history/reviewHistoryHttp", () => ({
@@ -64,6 +65,17 @@ beforeEach(() => {
 });
 
 describe("报告", () => {
+  it("项目选择用代号、期别及版本，全名保留且项目绑定不变", async () => {
+    const projects = await getCatalogRepository().listProjects(new AbortController().signal);
+    render(<ReportsPage />);
+    const select = await screen.findByRole("combobox", { name: "选择项目" }) as HTMLSelectElement;
+    expect(select).toHaveValue(projects[0].projectId);
+    expect(select).toHaveAttribute("title", projects[0].projectName);
+    expect([...select.options].map(option => ({ value: option.value, label: option.text, title: option.title })))
+      .toEqual(projects.map(project => ({ value: project.projectId,
+        label: `${project.projectCode} · ${project.studyPhaseLabel} · 方案 ${project.officialVersion}`,
+        title: project.projectName })));
+  });
   it("报告与导出保留方案未决和计算限制，不改成病例缺失或合格", async () => {
     const report = frozenReport("subject-uat-01-clear", "episode-uat-01-screening-clear");
     report.restrictedRequirements = [{
