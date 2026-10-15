@@ -1,0 +1,315 @@
+{
+  "attached_source_refs": [
+    "body.p996",
+    "body.p997",
+    "body.p998",
+    "body.p1022",
+    "body.p1024",
+    "body.p1026",
+    "body.p340",
+    "body.p1103",
+    "body.p1104"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package87-death-overdose-medication-error-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第87包十个拥有单元全部为治疗后安全性记录与报告规范（body.p1074-p1083）：p1074（死亡标题）、p1077（与药物过量或给药错误相关的不良事件标题）、p1080（记录要求标题）、p1083（不良事件的评估标题）为结构单元，仅提供归属不独立形成控制点（structural_only_source_refs）；p1075/p1076/p1078/p1079/p1081/p1082六个语义单元保持post_treatment_execution处置。required_candidate_source_refs显式为空，任何候选发射都构成越界。",
+    "死亡结果与事件术语必须严格区分：p1076'死亡应被视为事件的结果，而非单独的事件'；导致或促成致死性结果的事件或情况以单一医学概念记录；'通常，只报告1个这样的事件或情况'是默认情形，不得绝对化为任何情况下只能记录一个；死因不明且无法查明时记录'不明原因死亡'，后来获得死因时'替换为确定的死因'，是语义替换不是物理删除历史记录；'猝死'只有与推测的死因（如'心源性猝死'）结合才可使用，不得改写为一律禁用或一律允许。",
+    "药物过量定义（p1078）同时覆盖意外和故意使用，判断核心是CMS-D001片用量严格高于指定研究剂量；等于指定研究剂量不满足该定义。不得改写为只有意外、只有故意、高于或等于、达到某个未写明倍数或只要偏离计划即过量，不得追加发生伤害、毒性、临床后果或需要治疗等原文没有的必要条件，也不得泛化为所有药物。给药错误定义（p1079）是药物分发或给药中的任何非预期用药情况；参与者漏用或未按计划使用明确不属于给药错误，不得把该排除项重新纳入给药错误，也不得外推其一定属于AE、方案偏离或入排失败。",
+    "双表并行记录逻辑（p1081-p1082）：任何研究药物过量或研究治疗给药错误都应在eCRF研究药物给药表注明；'药物过量/给药错误'本身不是AE，与其相关的所有AE另行记录在eCRF不良事件页；没有关联AE时仍保留给药表记录，有关联AE时不能只记给药表而漏记AE，也不能把过量/错误标签本身当成AE术语；双表是并行关系不是互斥关系。",
+    "只读闭包（9）：第78包SAE定义与死亡作为SAE结果（p996/p997/p998）；第80包AE收集期、全量记录与单一事件项一术语（p1022/p1024/p1026）；流程锚点D1给药后AE记录开始（p340）；第93包死亡事件报告时限细化（p1103-p1104'获知后24小时（含）内'）。全部只读，不改变所有权与候选发射权。",
+    "第93包防吞并：p1075'立即报告'的24小时细化来自p1103-p1104只读闭包，不得变成第87包重新拥有通用报告流程；p1105/p1106（严重不良事件、妊娠事件）及第93包其余应报告事件类型与随访流程（body.p1102-p1112）均不进入本包提示。",
+    "第86包防吞并：DILI评估、调查、潜在/确诊分层与报告流程（body.p1067-p1073）归第86包，仅作为前接所有权元数据保留，不进入本包语义。",
+    "第88/89/90/91/92包防吞并：AE严重程度评估与表8分级（p1084-p1086、body.t13）、因果关系共同判断（p1087-p1097）、因果判定表（body.t14）、预期性评估（p1098-p1101）均归各自后续包，本包不提前吞并或处置。",
+    "官方入排与流程矩阵不含任何以body.p1074-p1083为锚点的行，也不含不良事件/TEAE/SAE控制行；本包不合成任何IN/EX官方规则。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1074",
+    "body.p1075",
+    "body.p1076",
+    "body.p1077",
+    "body.p1078",
+    "body.p1079",
+    "body.p1080",
+    "body.p1081",
+    "body.p1082",
+    "body.p1083"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期流程表注记：不良事件于D1启动给药后开始记录，直至末次安全性随访或者退出研究为止，只读": "pending_codex",
+        "只读：AE（含死亡事件记录）始于D1给药后；不构成筛选/基线入排门槛": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件于D1启动给药后开始记录，直至末次安全性随访或者退出研究为止（以先发生时间为准）。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p340",
+      "structure_unit_id": "su-d4ba75eb21a2e2944b6aa434"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：p1075'所有死亡事件'与p1076死亡作为事件结果需要SAE定义语境；SAE严重性判定归第78-79包，本包不得改写SAE判定": "pending_codex",
+        "第78包拥有：SAE定义（死亡、危及生命、永久或严重残疾、住院、先天异常等），只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件，指参与者接受试验用药品后出现死亡、危及生命、永久或者严重的残疾或者功能丧失、参与者需要住院治疗或者延长住院时间，以及先天性异常或者出生缺陷等不良医学事件。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p996",
+      "structure_unit_id": "su-f5cd3f88b671362f6f8f4dc4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：死亡是SAE结果之一（见p998）；p1075'立即报告'与SAE OR总纲是不同规则，不得互相替换": "pending_codex",
+        "第78包拥有：SAE是符合下列标准任何一项的不良事件（OR总纲），只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件（Serious Adverse Event，SAE）是指符合下列标准任何一项的不良事件：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p997",
+      "structure_unit_id": "su-40348e74c63d71c5b6319be0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：死亡作为事件结果的SAE记录与报告依据；与p1076'死亡是事件的结果而非单独的事件'互相印证，均归各自包，本包不得改写": "pending_codex",
+        "第78包拥有：导致死亡：当一个事件的结果为'死亡'，则可明确地作为严重不良事件进行记录和报告，只读": "pending_codex"
+      },
+      "frozen_excerpt": "导致死亡：当一个事件的结果为“死亡”，则可明确地作为严重不良事件进行记录和报告。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p998",
+      "structure_unit_id": "su-e2f80718a15f7b296906c055"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：死亡记录适用于该收集期窗口；收集期定义归第80包": "pending_codex",
+        "第80包拥有：AE收集期（首次服用试验用药品后至最后一次安全性随访或者退出研究），只读": "pending_codex"
+      },
+      "frozen_excerpt": "本试验中，不良事件收集期应从参与者首次服用试验用药品后至最后一次安全性随访或者退出研究为止（以先发生时间为准）。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1022",
+      "structure_unit_id": "su-5c30706befa51335bc524ec6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：全量记录义务归第80包；p1075规定所有死亡事件如何记录与立即报告，不得从p1024反推出额外触发条件": "pending_codex",
+        "第80包拥有：首次服药至末次访视期间所有AE均需记录在eCRF，只读": "pending_codex"
+      },
+      "frozen_excerpt": "从首次服用试验用药品至末次访视期间发生的所有AE均需记录在eCRF中。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1024",
+      "structure_unit_id": "su-125f9fa39aa720039d48020e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：p1076'单一医学概念'与单一事件项一术语一致；不得把'只记录一个不良事件术语'与'通常只报告1个事件或情况'互相改写": "pending_codex",
+        "第80包拥有：eCRF不良事件页单一事件项只记录一个不良事件术语（单一医学概念），只读": "pending_codex"
+      },
+      "frozen_excerpt": "研究者在记录不良事件时应使用正确的医学术语/概念，避免使用口语和缩略语，在eCRF不良事件页的单一事件项中应只记录一个不良事件术语。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1026",
+      "structure_unit_id": "su-371620980d69d405b05cb0a5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第87包拥有：死亡（章节标题）": "pending_codex",
+        "结构标题，仅标识死亡记录章节归属，不独立形成控制点；不得把标题本身发布为控制点": "pending_codex"
+      },
+      "frozen_excerpt": "死亡",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1074",
+      "structure_unit_id": "su-c6426eb0e0bb5b40c22e522a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把'所有死亡事件'缩小为与研究药物相关死亡或研究者判定相关死亡；不得把'立即报告'改为'尽快报告'、'48小时'或删除立即报告义务；不得把'记录在eCRF不良事件上'改为只记录在给药表或其他表；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "所有死亡事件均需记录并立即报告，与研究药物关系无关；立即报告由第93包p1103-p1104'获知后24小时（含）内'细化，只读携带细化不得变成第87包重新拥有通用报告流程": "pending_codex",
+        "第87包拥有：在方案规定的AE收集期内发生的所有死亡事件，无论与研究药物的关系如何，必须记录在eCRF不良事件上，并立即报告给申办者": "pending_codex"
+      },
+      "frozen_excerpt": "在方案规定的不良事件收集期内发生的所有死亡事件，无论与研究药物的关系如何，必须记录在eCRF不良事件上，并立即报告给申办者。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1075",
+      "structure_unit_id": "su-3babf58efbef4767cda9fe2a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把死亡结果改写为独立事件或把导致死亡的事件当作独立事件重复计数；不得把'通常只报告1个'绝对化为任何情况下只能记录一个；不得把'不明原因死亡'的替换误读为删除/作废历史记录；不得把'猝死'限定改写为一律禁用或一律允许；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "死亡是事件的结果，不是独立事件；单一医学概念记录导致或促成致死性结果的事件或情况；'通常只报告1个'不是任何情况下只能记录一个；死因不明时记录'不明原因死亡'，后来获得死因时替换为确定死因，不是物理删除历史记录；'猝死'只有与推测死因（如'心源性猝死'）结合才可使用": "pending_codex",
+        "第87包拥有：死亡应被视为事件的结果，而非单独的事件；导致或促成致死性结果的事件或情况应在eCRF不良事件上记录为单一医学概念；通常只报告1个这样的事件或情况；死因不明且不能查明时记录'不明原因死亡'，死因稍后可获得时替换为确定死因；不得使用'猝死'术语，除非与推测死因结合使用": "pending_codex"
+      },
+      "frozen_excerpt": "死亡应被视为事件的结果，而非单独的事件。导致或促成致死性结果的事件或情况应在eCRF不良事件上记录为单一医学概念。通常，只报告1个这样的事件或情况。如果死因不明且不能在报告当时查明，则应在eCRF不良事件上记录“不明原因死亡”。如果死因稍后可获得，应将“不明原因死亡”替换为确定的死因。不应使用术语“猝死”，除非与推测的死因（如“心源性猝死”）结合使用。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1076",
+      "structure_unit_id": "su-bc03268e7c14e30cce29c52c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第87包拥有：与药物过量或给药错误相关的不良事件（章节标题）": "pending_codex",
+        "结构标题，仅标识过量/给药错误相关AE章节归属，不独立形成控制点；标题本身不是AE术语": "pending_codex"
+      },
+      "frozen_excerpt": "与药物过量或给药错误相关的不良事件",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1077",
+      "structure_unit_id": "su-0f46afb5de3a8343fbe21ea3"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把'意外或故意'删成单一情形；不得把'高于'弱化为'高于或等于'或'达到'；不得增加'至少达到X倍剂量'等原文未写明的阈值条件；不得把任何偏离计划用药都定义为过量；不得追加发生伤害、毒性、临床后果或需要治疗等原文没有的必要条件；不得把CMS-D001片的定义泛化为所有药物；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "第87包拥有：药物过量是指意外或故意使用的CMS-D001片用量高于指定的研究剂量": "pending_codex",
+        "过量定义同时覆盖意外和故意使用，判断核心是CMS-D001片用量严格高于指定研究剂量；等于指定研究剂量不满足该定义；不得改写为只有意外、只有故意、达到某个未写明倍数或只要偏离计划即过量": "pending_codex"
+      },
+      "frozen_excerpt": "药物过量是指意外或故意使用的CMS-D001片用量高于指定的研究剂量。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1078",
+      "structure_unit_id": "su-d32b8e0aebdc0d4a6ac125d4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把'漏用或未按计划使用'重新纳入给药错误；不得从本条外推漏用一定属于AE、方案偏离或入排失败；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "第87包拥有：给药错误指药物分发或给药中的任何非预期用药情况，参与者漏用或未按计划使用不被视为给药错误": "pending_codex",
+        "给药错误是药物分发或给药中的任何非预期用药情况；参与者漏用或未按计划使用明确排除在给药错误之外": "pending_codex"
+      },
+      "frozen_excerpt": "给药错误指药物分发或给药中的任何非预期用药情况，参与者漏用或未按计划使用不被视为给药错误。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1079",
+      "structure_unit_id": "su-9286dc17ebead6568e7b2401"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第87包拥有：记录要求（章节标题）": "pending_codex",
+        "结构标题，仅标识记录要求章节归属，不独立形成控制点": "pending_codex"
+      },
+      "frozen_excerpt": "记录要求",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1080",
+      "structure_unit_id": "su-67a240e74667a0bb49aa1707"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把给药表注记义务弱化为任选或仅在有AE时记录；不得把给药表记录当作AE记录本身；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "任何研究药物过量或研究治疗给药错误都应在eCRF研究药物给药表注明；这是双表记录逻辑的给药表一侧": "pending_codex",
+        "第87包拥有：应在eCRF研究药物给药表上注明任何研究药物过量或研究治疗给药错误的事件": "pending_codex"
+      },
+      "frozen_excerpt": "应在eCRF研究药物给药表上注明任何研究药物过量或研究治疗给药错误的事件。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1081",
+      "structure_unit_id": "su-9773e0bab4a4ae3a75ce3377"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把双表逻辑改写为互斥（有AE就删给药表、无AE才记给药表、或只记一张表）；不得把'药物过量/给药错误'标签本身当成AE术语记录在不良事件页；不得删除'相关的所有不良事件应记录在eCRF不良事件上'；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "双表并行逻辑：'药物过量/给药错误'标签本身不是AE；与其相关的所有AE另行记录在eCRF不良事件页；没有关联AE时仍保留给药表记录；有关联AE时不能只记给药表而漏记AE，也不能把过量/错误标签本身当成AE术语；双表是并行关系不是互斥关系": "pending_codex",
+        "第87包拥有：'药物过量/给药错误'本身不属于不良事件，但与药物过量或给药错误相关的所有不良事件应记录在eCRF不良事件上": "pending_codex"
+      },
+      "frozen_excerpt": "“药物过量/给药错误”本身不属于不良事件，但与药物过量或给药错误相关的所有不良事件应记录在eCRF不良事件上。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1082",
+      "structure_unit_id": "su-efac5505462921db6ad6c256"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把严重程度评估、CTCAE分级、因果关系共同判断等第88/89/90包内容并入本标题或本包": "pending_codex",
+        "第87包拥有：不良事件的评估（章节标题）": "pending_codex",
+        "结构标题，仅标识评估章节归属，不独立形成控制点；第88包自'不良事件的严重程度评估'（body.p1084）起承担严重程度评估": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件的评估",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1083",
+      "structure_unit_id": "su-6a05a5335e4ea77b18bc6980"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把本包其他死亡相关义务（记录位置、单一医学概念、不明死因替换、猝死限定等）并入第93包流程；不得把p1105/p1106（严重不良事件、妊娠事件）并入本包": "pending_codex",
+        "只读：仅按合同为p1075'立即报告'提供死亡事件报告时限的细化（获知后24小时含内）；不得变成第87包重新拥有通用报告流程": "pending_codex",
+        "第93包拥有：研究者必须在获知后24小时（含）内向申办者报告的事件类型，无论事件与试验用药品的关系如何，只读": "pending_codex"
+      },
+      "frozen_excerpt": "以下是研究者必须在获知后24小时（含）内向申办者报告的事件类型，无论事件与试验用药品的关系如何：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1103",
+      "structure_unit_id": "su-9885c453d8356d0ca4e91fb5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：与p1103配合说明死亡事件属于获知后24小时（含）内应报告类型；所有权仍归第93包": "pending_codex",
+        "第93包拥有：死亡事件（应报告事件类型列表项），只读": "pending_codex"
+      },
+      "frozen_excerpt": "死亡事件",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1104",
+      "structure_unit_id": "su-84df72afb742beeb8f47b4b9"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61by-20260830",
+  "worker": "codebuddy-worker_02"
+}

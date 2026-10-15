@@ -1,0 +1,5107 @@
+{
+  "components": {
+    "schemas": {
+      "ActionOverrideCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Span Ids",
+            "type": "array"
+          },
+          "expected_revision": {
+            "minimum": 1,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "to_state": {
+            "$ref": "#/components/schemas/ActionState"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "to_state",
+          "reason"
+        ],
+        "title": "ActionOverrideCommand",
+        "type": "object"
+      },
+      "ActionOverrideResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ActionRequest"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "ActionOverrideResponse",
+        "type": "object"
+      },
+      "ActionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptable_evidence": {
+            "minLength": 1,
+            "title": "Acceptable Evidence",
+            "type": "string"
+          },
+          "action_id": {
+            "minLength": 1,
+            "title": "Action Id",
+            "type": "string"
+          },
+          "assessment_id": {
+            "minLength": 1,
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "blocking_level": {
+            "$ref": "#/components/schemas/BlockingLevel"
+          },
+          "due_stage": {
+            "$ref": "#/components/schemas/ReviewStage"
+          },
+          "evidence_snapshot_id": {
+            "minLength": 1,
+            "title": "Evidence Snapshot Id",
+            "type": "string"
+          },
+          "gap_type": {
+            "$ref": "#/components/schemas/GapType"
+          },
+          "gate_result_id": {
+            "minLength": 1,
+            "title": "Gate Result Id",
+            "type": "string"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "publication_fingerprint": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Publication Fingerprint",
+            "type": "string"
+          },
+          "recompute_scope": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Recompute Scope",
+            "type": "array"
+          },
+          "requested_action": {
+            "minLength": 1,
+            "title": "Requested Action",
+            "type": "string"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "review_run_id": {
+            "minLength": 1,
+            "title": "Review Run Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "rule_component_id": {
+            "minLength": 1,
+            "title": "Rule Component Id",
+            "type": "string"
+          },
+          "rule_set_id": {
+            "minLength": 1,
+            "title": "Rule Set Id",
+            "type": "string"
+          },
+          "rule_set_revision": {
+            "minimum": 1,
+            "title": "Rule Set Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ActionState"
+          },
+          "subject_id": {
+            "minLength": 1,
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "target_party": {
+            "$ref": "#/components/schemas/ActionTarget"
+          },
+          "transitions": {
+            "items": {
+              "$ref": "#/components/schemas/ActionTransition"
+            },
+            "title": "Transitions",
+            "type": "array"
+          },
+          "trigger_evidence_span_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trigger Evidence Span Id"
+          }
+        },
+        "required": [
+          "action_id",
+          "project_id",
+          "protocol_version_id",
+          "subject_id",
+          "rule_set_id",
+          "rule_set_revision",
+          "review_episode_id",
+          "evidence_snapshot_id",
+          "review_run_id",
+          "assessment_id",
+          "rule_component_id",
+          "gap_type",
+          "target_party",
+          "requested_action",
+          "acceptable_evidence",
+          "due_stage",
+          "blocking_level",
+          "state",
+          "recompute_scope",
+          "gate_result_id",
+          "publication_fingerprint"
+        ],
+        "title": "ActionRequest",
+        "type": "object"
+      },
+      "ActionState": {
+        "enum": [
+          "open",
+          "closed_system",
+          "closed_manual",
+          "reopened",
+          "superseded"
+        ],
+        "title": "ActionState",
+        "type": "string"
+      },
+      "ActionTarget": {
+        "enum": [
+          "investigator",
+          "crc",
+          "cra",
+          "sponsor_medical_or_project"
+        ],
+        "title": "ActionTarget",
+        "type": "string"
+      },
+      "ActionTransition": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Span Ids",
+            "type": "array"
+          },
+          "from_state": {
+            "$ref": "#/components/schemas/ActionState"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "to_state": {
+            "$ref": "#/components/schemas/ActionState"
+          },
+          "transition_id": {
+            "minLength": 1,
+            "title": "Transition Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transition_id",
+          "from_state",
+          "to_state",
+          "occurred_at",
+          "reason"
+        ],
+        "title": "ActionTransition",
+        "type": "object"
+      },
+      "AgentCallContract": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_call_id": {
+            "minLength": 1,
+            "title": "Agent Call Id",
+            "type": "string"
+          },
+          "attempt": {
+            "minimum": 1,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "duration_ms": {
+            "minimum": 0,
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "error_codes": {
+            "items": {
+              "$ref": "#/components/schemas/RuntimeErrorCode"
+            },
+            "title": "Error Codes",
+            "type": "array"
+          },
+          "estimated_cost": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Estimated Cost"
+          },
+          "evidence_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Evidence Snapshot Id"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "gate_result_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Gate Result Ids",
+            "type": "array"
+          },
+          "idempotency_key": {
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "input_revision_map": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Input Revision Map",
+            "type": "object"
+          },
+          "input_scope_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Input Scope Hash",
+            "type": "string"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Input Tokens"
+          },
+          "max_attempts": {
+            "maximum": 3,
+            "minimum": 1,
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "model_config_id": {
+            "minLength": 1,
+            "title": "Model Config Id",
+            "type": "string"
+          },
+          "node": {
+            "$ref": "#/components/schemas/AgentNode"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/RunOutcome"
+          },
+          "output_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Output Hash",
+            "type": "string"
+          },
+          "output_kind": {
+            "$ref": "#/components/schemas/AgentOutputKind"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Output Tokens"
+          },
+          "parent_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Event Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Project Id"
+          },
+          "prompt_version_id": {
+            "minLength": 1,
+            "title": "Prompt Version Id",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Protocol Version Id"
+          },
+          "raw_output_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Raw Output Hash",
+            "type": "string"
+          },
+          "recompute_scope": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Recompute Scope",
+            "type": "array"
+          },
+          "review_episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Review Episode Id"
+          },
+          "review_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Review Run Id"
+          },
+          "rule_set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Rule Set Id"
+          },
+          "rule_set_revision": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Rule Set Revision"
+          },
+          "same_session_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Same Session Group Id"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Ids",
+            "type": "array"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subject Id"
+          },
+          "trigger": {
+            "minLength": 1,
+            "title": "Trigger",
+            "type": "string"
+          },
+          "typed_output_hashes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "minProperties": 1,
+            "title": "Typed Output Hashes",
+            "type": "object"
+          },
+          "write_scope": {
+            "$ref": "#/components/schemas/AgentWriteScope"
+          }
+        },
+        "required": [
+          "agent_call_id",
+          "node",
+          "output_kind",
+          "write_scope",
+          "prompt_version_id",
+          "model_config_id",
+          "input_scope_hash",
+          "raw_output_hash",
+          "output_hash",
+          "typed_output_hashes",
+          "idempotency_key",
+          "attempt",
+          "max_attempts",
+          "duration_ms",
+          "started_at",
+          "finished_at",
+          "outcome",
+          "recompute_scope",
+          "trigger",
+          "gate_result_ids"
+        ],
+        "title": "AgentCallContract",
+        "type": "object"
+      },
+      "AgentNode": {
+        "enum": [
+          "protocol_deconstructor",
+          "evidence_normalizer",
+          "eligibility_assessor",
+          "safety_provenance_critic"
+        ],
+        "title": "AgentNode",
+        "type": "string"
+      },
+      "AgentOutputKind": {
+        "enum": [
+          "draft",
+          "candidate",
+          "critic_run"
+        ],
+        "title": "AgentOutputKind",
+        "type": "string"
+      },
+      "AgentWriteScope": {
+        "enum": [
+          "protocol_draft",
+          "evidence_candidate",
+          "assessment_candidate",
+          "critic_run"
+        ],
+        "title": "AgentWriteScope",
+        "type": "string"
+      },
+      "AnchorType": {
+        "enum": [
+          "icf_date",
+          "screening_date",
+          "baseline_date",
+          "randomization_date",
+          "first_dose_date",
+          "study_drug_administration_date",
+          "last_dose_date",
+          "study_completion_date",
+          "event_date"
+        ],
+        "title": "AnchorType",
+        "type": "string"
+      },
+      "AssessmentCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_call_id": {
+            "minLength": 1,
+            "title": "Agent Call Id",
+            "type": "string"
+          },
+          "assessment_candidate_id": {
+            "minLength": 1,
+            "title": "Assessment Candidate Id",
+            "type": "string"
+          },
+          "candidate_confidence": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Candidate Confidence",
+            "type": "number"
+          },
+          "candidate_rationale": {
+            "minLength": 1,
+            "title": "Candidate Rationale",
+            "type": "string"
+          },
+          "evidence_snapshot_id": {
+            "minLength": 1,
+            "title": "Evidence Snapshot Id",
+            "type": "string"
+          },
+          "evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Span Ids",
+            "type": "array"
+          },
+          "gap_types": {
+            "items": {
+              "$ref": "#/components/schemas/GapType"
+            },
+            "title": "Gap Types",
+            "type": "array"
+          },
+          "missing_predicate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Predicate Ids",
+            "type": "array"
+          },
+          "predicate_observations": {
+            "items": {
+              "$ref": "#/components/schemas/PredicateObservation"
+            },
+            "title": "Predicate Observations",
+            "type": "array"
+          },
+          "processed_predicate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Processed Predicate Ids",
+            "type": "array"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "proposed_decision": {
+            "$ref": "#/components/schemas/ComponentDecision"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "review_run_id": {
+            "minLength": 1,
+            "title": "Review Run Id",
+            "type": "string"
+          },
+          "rule_component_id": {
+            "minLength": 1,
+            "title": "Rule Component Id",
+            "type": "string"
+          },
+          "rule_set_id": {
+            "minLength": 1,
+            "title": "Rule Set Id",
+            "type": "string"
+          },
+          "rule_set_revision": {
+            "minimum": 1,
+            "title": "Rule Set Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "subject_id": {
+            "minLength": 1,
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "uncertainty_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Uncertainty Codes",
+            "type": "array"
+          },
+          "unresolved_items": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unresolved Items",
+            "type": "array"
+          },
+          "used_fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Used Fact Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "assessment_candidate_id",
+          "agent_call_id",
+          "project_id",
+          "protocol_version_id",
+          "subject_id",
+          "rule_set_id",
+          "rule_set_revision",
+          "review_run_id",
+          "rule_component_id",
+          "review_episode_id",
+          "evidence_snapshot_id",
+          "proposed_decision",
+          "candidate_rationale",
+          "candidate_confidence"
+        ],
+        "title": "AssessmentCandidate",
+        "type": "object"
+      },
+      "AtomicExpression": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "predicate",
+            "default": "predicate",
+            "title": "Kind",
+            "type": "string"
+          },
+          "predicate": {
+            "$ref": "#/components/schemas/AtomicPredicate"
+          },
+          "time_constraint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeConstraint"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "predicate"
+        ],
+        "title": "AtomicExpression",
+        "type": "object"
+      },
+      "AtomicPredicate": {
+        "additionalProperties": false,
+        "properties": {
+          "applicable_population": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Applicable Population"
+          },
+          "attribute": {
+            "minLength": 1,
+            "title": "Attribute",
+            "type": "string"
+          },
+          "comparator": {
+            "$ref": "#/components/schemas/Comparator"
+          },
+          "occurrence_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OccurrenceWindow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "predicate_id": {
+            "minLength": 1,
+            "title": "Predicate Id",
+            "type": "string"
+          },
+          "prospective_period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProspectivePeriod"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "prospective_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProspectiveWindow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "requires_professional_judgment": {
+            "default": false,
+            "title": "Requires Professional Judgment",
+            "type": "boolean"
+          },
+          "source_clause": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Clause"
+          },
+          "source_clauses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Clauses",
+            "type": "array"
+          },
+          "source_term": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Term"
+          },
+          "subject": {
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unit"
+          },
+          "unit_match_policy": {
+            "const": "exact_canonical_label",
+            "default": "exact_canonical_label",
+            "title": "Unit Match Policy",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
+          }
+        },
+        "required": [
+          "predicate_id",
+          "subject",
+          "attribute",
+          "comparator"
+        ],
+        "title": "AtomicPredicate",
+        "type": "object"
+      },
+      "BlockingLevel": {
+        "enum": [
+          "none",
+          "attention",
+          "blocking"
+        ],
+        "title": "BlockingLevel",
+        "type": "string"
+      },
+      "BoundingBox": {
+        "additionalProperties": false,
+        "properties": {
+          "x0": {
+            "minimum": 0,
+            "title": "X0",
+            "type": "number"
+          },
+          "x1": {
+            "exclusiveMinimum": 0,
+            "title": "X1",
+            "type": "number"
+          },
+          "y0": {
+            "minimum": 0,
+            "title": "Y0",
+            "type": "number"
+          },
+          "y1": {
+            "exclusiveMinimum": 0,
+            "title": "Y1",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x0",
+          "y0",
+          "x1",
+          "y1"
+        ],
+        "title": "BoundingBox",
+        "type": "object"
+      },
+      "ClinicalEventCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "event_candidate_id": {
+            "minLength": 1,
+            "title": "Event Candidate Id",
+            "type": "string"
+          },
+          "event_date_lower": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Event Date Lower"
+          },
+          "event_date_upper": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Event Date Upper"
+          },
+          "event_type": {
+            "minLength": 1,
+            "title": "Event Type",
+            "type": "string"
+          },
+          "evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Evidence Span Ids",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "stage_candidate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stage Candidate"
+          },
+          "subject_role": {
+            "minLength": 1,
+            "title": "Subject Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_candidate_id",
+          "event_type",
+          "subject_role",
+          "evidence_span_ids"
+        ],
+        "title": "ClinicalEventCandidate",
+        "type": "object"
+      },
+      "ClinicalFact": {
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "polarity": {
+                  "const": "unknown"
+                }
+              },
+              "required": [
+                "polarity"
+              ]
+            },
+            "then": {
+              "properties": {
+                "unit": {
+                  "type": "null"
+                },
+                "value": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ],
+        "properties": {
+          "certainty": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Certainty",
+            "type": "number"
+          },
+          "conflict_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Conflict Group Id"
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateValue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "evidence_snapshot_id": {
+            "minLength": 1,
+            "title": "Evidence Snapshot Id",
+            "type": "string"
+          },
+          "evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Evidence Span Ids",
+            "type": "array"
+          },
+          "fact_id": {
+            "minLength": 1,
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "fact_type": {
+            "minLength": 1,
+            "title": "Fact Type",
+            "type": "string"
+          },
+          "polarity": {
+            "$ref": "#/components/schemas/FactPolarity"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "subject_id": {
+            "minLength": 1,
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unit"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
+          }
+        },
+        "required": [
+          "fact_id",
+          "project_id",
+          "subject_id",
+          "review_episode_id",
+          "evidence_snapshot_id",
+          "fact_type",
+          "polarity",
+          "certainty",
+          "evidence_span_ids"
+        ],
+        "title": "ClinicalFact",
+        "type": "object"
+      },
+      "CombinedWindowSelection": {
+        "description": "固定日历窗与半衰期窗并存时的择窗语义。\n\n``longer_of_calendar_and_half_life`` 表示“固定窗口或 N 个半衰期，以时间较长者为准”。\n这是同一洗脱/禁限窗的两种度量取较长者，不是把独立分支改写成 ``LogicalOperator.ANY``，\n也不得从原文“或”字自行推断；合同字段必须显式给出。",
+        "enum": [
+          "longer_of_calendar_and_half_life"
+        ],
+        "title": "CombinedWindowSelection",
+        "type": "string"
+      },
+      "Comparator": {
+        "enum": [
+          "eq",
+          "ne",
+          "gt",
+          "gte",
+          "lt",
+          "lte",
+          "in",
+          "not_in",
+          "exists"
+        ],
+        "title": "Comparator",
+        "type": "string"
+      },
+      "ComponentDecision": {
+        "enum": [
+          "inclusion_met",
+          "inclusion_not_met",
+          "exclusion_not_triggered",
+          "exclusion_triggered",
+          "indeterminate",
+          "professional_judgment",
+          "conflict",
+          "not_due",
+          "not_applicable",
+          "requirement_met",
+          "requirement_not_met"
+        ],
+        "title": "ComponentDecision",
+        "type": "string"
+      },
+      "ConflictGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_rule_component_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Affected Rule Component Ids",
+            "type": "array"
+          },
+          "conflict_group_id": {
+            "minLength": 1,
+            "title": "Conflict Group Id",
+            "type": "string"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2,
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "resolution_evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Resolution Evidence Span Ids",
+            "type": "array"
+          },
+          "resolved": {
+            "default": false,
+            "title": "Resolved",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conflict_group_id",
+          "fact_ids",
+          "affected_rule_component_ids"
+        ],
+        "title": "ConflictGroup",
+        "type": "object"
+      },
+      "CoverageSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicate_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Duplicate Refs",
+            "type": "array"
+          },
+          "missing_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Refs",
+            "type": "array"
+          },
+          "processed_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Processed Refs",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "title": "CoverageSummary",
+        "type": "object"
+      },
+      "DatePrecision": {
+        "enum": [
+          "day",
+          "month",
+          "year",
+          "unknown"
+        ],
+        "title": "DatePrecision",
+        "type": "string"
+      },
+      "DateValue": {
+        "additionalProperties": false,
+        "properties": {
+          "precision": {
+            "$ref": "#/components/schemas/DatePrecision"
+          },
+          "source_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Text"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
+          }
+        },
+        "required": [
+          "precision"
+        ],
+        "title": "DateValue",
+        "type": "object"
+      },
+      "EpisodeMainStatus": {
+        "enum": [
+          "clear_barrier",
+          "current_gap",
+          "conflict",
+          "professional_judgment",
+          "future_attention",
+          "no_clear_barrier"
+        ],
+        "title": "EpisodeMainStatus",
+        "type": "string"
+      },
+      "EpisodeRollup": {
+        "additionalProperties": false,
+        "properties": {
+          "barrier_count": {
+            "minimum": 0,
+            "title": "Barrier Count",
+            "type": "integer"
+          },
+          "conflict_count": {
+            "minimum": 0,
+            "title": "Conflict Count",
+            "type": "integer"
+          },
+          "current_gap_count": {
+            "minimum": 0,
+            "title": "Current Gap Count",
+            "type": "integer"
+          },
+          "future_attention_count": {
+            "minimum": 0,
+            "title": "Future Attention Count",
+            "type": "integer"
+          },
+          "gap_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Gap Counts",
+            "type": "object"
+          },
+          "gate_result_id": {
+            "minLength": 1,
+            "title": "Gate Result Id",
+            "type": "string"
+          },
+          "input_action_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Action Ids",
+            "type": "array"
+          },
+          "input_assessment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Assessment Ids",
+            "type": "array"
+          },
+          "input_expectation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Expectation Ids",
+            "type": "array"
+          },
+          "main_status": {
+            "$ref": "#/components/schemas/EpisodeMainStatus"
+          },
+          "professional_judgment_count": {
+            "minimum": 0,
+            "title": "Professional Judgment Count",
+            "type": "integer"
+          },
+          "provenance_followup_count": {
+            "minimum": 0,
+            "title": "Provenance Followup Count",
+            "type": "integer"
+          },
+          "publication_fingerprint": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Publication Fingerprint",
+            "type": "string"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "sort_rank": {
+            "minimum": 0,
+            "title": "Sort Rank",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "review_episode_id",
+          "main_status",
+          "sort_rank",
+          "barrier_count",
+          "current_gap_count",
+          "conflict_count",
+          "professional_judgment_count",
+          "future_attention_count",
+          "provenance_followup_count",
+          "gap_counts",
+          "gate_result_id",
+          "publication_fingerprint"
+        ],
+        "title": "EpisodeRollup",
+        "type": "object"
+      },
+      "ErrorCode": {
+        "enum": [
+          "invalid_request",
+          "not_found",
+          "scope_mismatch",
+          "stale_revision",
+          "contract_validation_failed",
+          "protocol_integrity_failed",
+          "publication_integrity_failed",
+          "conflict",
+          "job_failed"
+        ],
+        "title": "ErrorCode",
+        "type": "string"
+      },
+      "ErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "correlation_id": {
+            "minLength": 1,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "detail": {
+            "minLength": 1,
+            "title": "Detail",
+            "type": "string"
+          },
+          "recovery_action": {
+            "minLength": 1,
+            "title": "Recovery Action",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "recovery_action",
+          "correlation_id"
+        ],
+        "title": "ErrorDetail",
+        "type": "object"
+      },
+      "ErrorEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorEnvelope",
+        "type": "object"
+      },
+      "EvidenceExpectation": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Span Ids",
+            "type": "array"
+          },
+          "expectation_id": {
+            "minLength": 1,
+            "title": "Expectation Id",
+            "type": "string"
+          },
+          "gap_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GapType"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "requirement_id": {
+            "minLength": 1,
+            "title": "Requirement Id",
+            "type": "string"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ExpectationStatus"
+          }
+        },
+        "required": [
+          "expectation_id",
+          "requirement_id",
+          "review_episode_id",
+          "status"
+        ],
+        "title": "EvidenceExpectation",
+        "type": "object"
+      },
+      "EvidenceNormalizationCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "minLength": 1,
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "clinical_event_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ClinicalEventCandidate"
+            },
+            "title": "Clinical Event Candidates",
+            "type": "array"
+          },
+          "clinical_fact_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ClinicalFact"
+            },
+            "title": "Clinical Fact Candidates",
+            "type": "array"
+          },
+          "conflict_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ConflictGroup"
+            },
+            "title": "Conflict Candidates",
+            "type": "array"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/CoverageSummary"
+          },
+          "created_by_agent_call_id": {
+            "minLength": 1,
+            "title": "Created By Agent Call Id",
+            "type": "string"
+          },
+          "evidence_snapshot_id": {
+            "minLength": 1,
+            "title": "Evidence Snapshot Id",
+            "type": "string"
+          },
+          "evidence_span_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceSpan"
+            },
+            "title": "Evidence Span Candidates",
+            "type": "array"
+          },
+          "medication_exposure_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/MedicationExposureCandidate"
+            },
+            "title": "Medication Exposure Candidates",
+            "type": "array"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "referenced_document_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ReferencedDocumentCandidate"
+            },
+            "title": "Referenced Document Candidates",
+            "type": "array"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "subject_id": {
+            "minLength": 1,
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "uncertainty_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Uncertainty Codes",
+            "type": "array"
+          },
+          "unresolved_items": {
+            "items": {
+              "$ref": "#/components/schemas/UnresolvedItem"
+            },
+            "title": "Unresolved Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "project_id",
+          "protocol_version_id",
+          "subject_id",
+          "review_episode_id",
+          "evidence_snapshot_id",
+          "source_refs",
+          "coverage",
+          "created_by_agent_call_id"
+        ],
+        "title": "EvidenceNormalizationCandidate",
+        "type": "object"
+      },
+      "EvidenceRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "allows_screening_record_transcription": {
+            "default": true,
+            "title": "Allows Screening Record Transcription",
+            "type": "boolean"
+          },
+          "description": {
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "due_stage": {
+            "$ref": "#/components/schemas/ReviewStage"
+          },
+          "fact_type": {
+            "minLength": 1,
+            "title": "Fact Type",
+            "type": "string"
+          },
+          "procedure_catalog_item_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Procedure Catalog Item Id"
+          },
+          "required_source_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Source Types",
+            "type": "array"
+          },
+          "requirement_id": {
+            "minLength": 1,
+            "title": "Requirement Id",
+            "type": "string"
+          },
+          "requires_contemporaneous_objective_source": {
+            "default": false,
+            "title": "Requires Contemporaneous Objective Source",
+            "type": "boolean"
+          },
+          "rule_component_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Rule Component Id"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_validity_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeQuantity"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "requirement_id",
+          "fact_type",
+          "due_stage",
+          "description"
+        ],
+        "title": "EvidenceRequirement",
+        "type": "object"
+      },
+      "EvidenceSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_snapshot_id": {
+            "minLength": 1,
+            "title": "Evidence Snapshot Id",
+            "type": "string"
+          },
+          "prior_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Prior Snapshot Id"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_document_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Source Document Version Ids",
+            "type": "array"
+          },
+          "subject_id": {
+            "minLength": 1,
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "upload_mode": {
+            "$ref": "#/components/schemas/UploadMode"
+          }
+        },
+        "required": [
+          "evidence_snapshot_id",
+          "subject_id",
+          "review_episode_id",
+          "source_document_version_ids",
+          "upload_mode",
+          "created_at"
+        ],
+        "title": "EvidenceSnapshot",
+        "type": "object"
+      },
+      "EvidenceSpan": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Anchor Hash"
+          },
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BoundingBox"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "degradation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Degradation Reason"
+          },
+          "evidence_span_id": {
+            "minLength": 1,
+            "title": "Evidence Span Id",
+            "type": "string"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Excerpt"
+          },
+          "locator_algorithm_version": {
+            "minLength": 1,
+            "title": "Locator Algorithm Version",
+            "type": "string"
+          },
+          "match_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Match Confidence"
+          },
+          "page_number": {
+            "minimum": 1,
+            "title": "Page Number",
+            "type": "integer"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/LocatorPrecision"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_document_version_id": {
+            "minLength": 1,
+            "title": "Source Document Version Id",
+            "type": "string"
+          },
+          "text_end": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Text End"
+          },
+          "text_start": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Text Start"
+          }
+        },
+        "required": [
+          "evidence_span_id",
+          "source_document_version_id",
+          "page_number",
+          "precision",
+          "locator_algorithm_version"
+        ],
+        "title": "EvidenceSpan",
+        "type": "object"
+      },
+      "ExpectationStatus": {
+        "enum": [
+          "observed",
+          "observed_weak",
+          "referenced_missing",
+          "absent",
+          "not_due"
+        ],
+        "title": "ExpectationStatus",
+        "type": "string"
+      },
+      "FactPolarity": {
+        "enum": [
+          "affirmed",
+          "negated",
+          "unknown"
+        ],
+        "title": "FactPolarity",
+        "type": "string"
+      },
+      "FinalAssessment": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_id": {
+            "minLength": 1,
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "blocking_level": {
+            "$ref": "#/components/schemas/BlockingLevel"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/ComponentDecision"
+          },
+          "evidence_snapshot_id": {
+            "minLength": 1,
+            "title": "Evidence Snapshot Id",
+            "type": "string"
+          },
+          "evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Span Ids",
+            "type": "array"
+          },
+          "gap_types": {
+            "items": {
+              "$ref": "#/components/schemas/GapType"
+            },
+            "title": "Gap Types",
+            "type": "array"
+          },
+          "gate_result_id": {
+            "minLength": 1,
+            "title": "Gate Result Id",
+            "type": "string"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "publication_fingerprint": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Publication Fingerprint",
+            "type": "string"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "review_run_id": {
+            "minLength": 1,
+            "title": "Review Run Id",
+            "type": "string"
+          },
+          "rule_component_id": {
+            "minLength": 1,
+            "title": "Rule Component Id",
+            "type": "string"
+          },
+          "rule_set_id": {
+            "minLength": 1,
+            "title": "Rule Set Id",
+            "type": "string"
+          },
+          "rule_set_revision": {
+            "minimum": 1,
+            "title": "Rule Set Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "subject_id": {
+            "minLength": 1,
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "used_fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Used Fact Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "assessment_id",
+          "project_id",
+          "protocol_version_id",
+          "subject_id",
+          "rule_set_id",
+          "rule_set_revision",
+          "review_episode_id",
+          "evidence_snapshot_id",
+          "review_run_id",
+          "rule_component_id",
+          "decision",
+          "blocking_level",
+          "gate_result_id",
+          "publication_fingerprint"
+        ],
+        "title": "FinalAssessment",
+        "type": "object"
+      },
+      "FixtureV1": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ActionRequest"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "agent_calls": {
+            "items": {
+              "$ref": "#/components/schemas/AgentCallContract"
+            },
+            "title": "Agent Calls",
+            "type": "array"
+          },
+          "assessment_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/AssessmentCandidate"
+            },
+            "title": "Assessment Candidates",
+            "type": "array"
+          },
+          "conflict_groups": {
+            "items": {
+              "$ref": "#/components/schemas/ConflictGroup"
+            },
+            "title": "Conflict Groups",
+            "type": "array"
+          },
+          "episode_rollup": {
+            "$ref": "#/components/schemas/EpisodeRollup"
+          },
+          "evidence_expectations": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceExpectation"
+            },
+            "title": "Evidence Expectations",
+            "type": "array"
+          },
+          "evidence_normalization_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceNormalizationCandidate"
+            },
+            "minItems": 1,
+            "title": "Evidence Normalization Candidates",
+            "type": "array"
+          },
+          "evidence_snapshot": {
+            "$ref": "#/components/schemas/EvidenceSnapshot"
+          },
+          "evidence_spans": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceSpan"
+            },
+            "title": "Evidence Spans",
+            "type": "array"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/ClinicalFact"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "final_assessments": {
+            "items": {
+              "$ref": "#/components/schemas/FinalAssessment"
+            },
+            "title": "Final Assessments",
+            "type": "array"
+          },
+          "fixture_id": {
+            "minLength": 1,
+            "title": "Fixture Id",
+            "type": "string"
+          },
+          "gate_results": {
+            "items": {
+              "$ref": "#/components/schemas/GateResult"
+            },
+            "title": "Gate Results",
+            "type": "array"
+          },
+          "job_events": {
+            "items": {
+              "$ref": "#/components/schemas/JobEvent"
+            },
+            "title": "Job Events",
+            "type": "array"
+          },
+          "model_configs": {
+            "items": {
+              "$ref": "#/components/schemas/ModelConfigContract"
+            },
+            "title": "Model Configs",
+            "type": "array"
+          },
+          "patient_profile": {
+            "$ref": "#/components/schemas/PatientProfile"
+          },
+          "project": {
+            "$ref": "#/components/schemas/Project"
+          },
+          "prompt_versions": {
+            "items": {
+              "$ref": "#/components/schemas/PromptVersion"
+            },
+            "title": "Prompt Versions",
+            "type": "array"
+          },
+          "protocol_authority_command": {
+            "$ref": "#/components/schemas/ServiceCommandEvent"
+          },
+          "protocol_authority_confirmation": {
+            "$ref": "#/components/schemas/ProtocolAuthorityConfirmation"
+          },
+          "protocol_authority_record": {
+            "$ref": "#/components/schemas/ProtocolAuthorityRecord"
+          },
+          "protocol_integrity_manifest": {
+            "$ref": "#/components/schemas/ProtocolIntegrityManifest"
+          },
+          "protocol_source_records": {
+            "items": {
+              "$ref": "#/components/schemas/ProtocolSourceRecord"
+            },
+            "minItems": 1,
+            "title": "Protocol Source Records",
+            "type": "array"
+          },
+          "review_episode": {
+            "$ref": "#/components/schemas/ReviewEpisode"
+          },
+          "review_run_diffs": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewRunDiff"
+            },
+            "title": "Review Run Diffs",
+            "type": "array"
+          },
+          "review_runs": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewRun"
+            },
+            "title": "Review Runs",
+            "type": "array"
+          },
+          "rule_set": {
+            "$ref": "#/components/schemas/RuleSet"
+          },
+          "scenario": {
+            "minLength": 1,
+            "title": "Scenario",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_documents": {
+            "items": {
+              "$ref": "#/components/schemas/SourceDocumentVersion"
+            },
+            "title": "Source Documents",
+            "type": "array"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/Subject"
+          },
+          "workflow_stages": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStage"
+            },
+            "title": "Workflow Stages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fixture_id",
+          "scenario",
+          "project",
+          "protocol_authority_record",
+          "protocol_authority_command",
+          "protocol_authority_confirmation",
+          "protocol_source_records",
+          "protocol_integrity_manifest",
+          "rule_set",
+          "workflow_stages",
+          "subject",
+          "review_episode",
+          "evidence_snapshot",
+          "review_runs",
+          "source_documents",
+          "evidence_spans",
+          "evidence_normalization_candidates",
+          "evidence_expectations",
+          "facts",
+          "patient_profile",
+          "assessment_candidates",
+          "final_assessments",
+          "actions",
+          "episode_rollup",
+          "prompt_versions",
+          "model_configs",
+          "agent_calls",
+          "gate_results",
+          "job_events"
+        ],
+        "title": "FixtureV1",
+        "type": "object"
+      },
+      "GapType": {
+        "enum": [
+          "observation_unverified",
+          "record_incomplete",
+          "description_insufficient",
+          "historical_source_unavailable",
+          "referenced_file_missing",
+          "required_procedure_not_done",
+          "result_fields_missing",
+          "date_or_anchor_missing",
+          "professional_judgment",
+          "source_conflict",
+          "ocr_or_parse_risk",
+          "interpretation_conflict",
+          "future_stage_not_due",
+          "provenance_followup"
+        ],
+        "title": "GapType",
+        "type": "string"
+      },
+      "GateOutcome": {
+        "enum": [
+          "accepted",
+          "rejected",
+          "blocked"
+        ],
+        "title": "GateOutcome",
+        "type": "string"
+      },
+      "GateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_entity_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Accepted Entity Refs",
+            "type": "array"
+          },
+          "affected_scope": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Affected Scope",
+            "type": "array"
+          },
+          "code_version": {
+            "const": "gate_contract/v1",
+            "default": "gate_contract/v1",
+            "title": "Code Version",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_codes": {
+            "items": {
+              "$ref": "#/components/schemas/RuntimeErrorCode"
+            },
+            "title": "Error Codes",
+            "type": "array"
+          },
+          "gate_name": {
+            "minLength": 1,
+            "title": "Gate Name",
+            "type": "string"
+          },
+          "gate_result_id": {
+            "minLength": 1,
+            "title": "Gate Result Id",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "input_entity_refs": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Input Entity Refs",
+            "type": "array"
+          },
+          "input_revision_map": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Input Revision Map",
+            "type": "object"
+          },
+          "input_scope_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Input Scope Hash",
+            "type": "string"
+          },
+          "output_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Output Hash",
+            "type": "string"
+          },
+          "parent_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Event Id"
+          },
+          "recompute_scope": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Recompute Scope",
+            "type": "array"
+          },
+          "rejected_entity_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rejected Entity Refs",
+            "type": "array"
+          },
+          "result": {
+            "$ref": "#/components/schemas/GateOutcome"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gate_result_id",
+          "gate_name",
+          "result",
+          "input_scope_hash",
+          "input_entity_refs",
+          "affected_scope",
+          "recompute_scope",
+          "idempotency_key",
+          "created_at",
+          "output_hash"
+        ],
+        "title": "GateResult",
+        "type": "object"
+      },
+      "JobEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "checkpoint_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Checkpoint Id"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/JobEventType"
+          },
+          "job_event_id": {
+            "minLength": 1,
+            "title": "Job Event Id",
+            "type": "string"
+          },
+          "job_id": {
+            "minLength": 1,
+            "title": "Job Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "progress_completed": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Progress Completed",
+            "type": "integer"
+          },
+          "progress_total": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Progress Total",
+            "type": "integer"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Step Id"
+          }
+        },
+        "required": [
+          "job_event_id",
+          "job_id",
+          "event_type",
+          "occurred_at"
+        ],
+        "title": "JobEvent",
+        "type": "object"
+      },
+      "JobEventType": {
+        "enum": [
+          "created",
+          "step_started",
+          "step_completed",
+          "step_failed",
+          "retry_scheduled",
+          "waiting_user",
+          "user_resumed",
+          "user_updated",
+          "cancel_requested",
+          "cancelled",
+          "completed",
+          "failed",
+          "page_progress"
+        ],
+        "title": "JobEventType",
+        "type": "string"
+      },
+      "JobStatusResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/JobEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "job_id": {
+            "minLength": 1,
+            "title": "Job Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "events"
+        ],
+        "title": "JobStatusResponse",
+        "type": "object"
+      },
+      "LocatorPrecision": {
+        "enum": [
+          "bbox",
+          "text_range",
+          "page_excerpt",
+          "page_only"
+        ],
+        "title": "LocatorPrecision",
+        "type": "string"
+      },
+      "LogicalExpression": {
+        "additionalProperties": false,
+        "properties": {
+          "children": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "logical": "#/components/schemas/LogicalExpression",
+                  "predicate": "#/components/schemas/AtomicExpression"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/AtomicExpression"
+                },
+                {
+                  "$ref": "#/components/schemas/LogicalExpression"
+                }
+              ]
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "kind": {
+            "const": "logical",
+            "default": "logical",
+            "title": "Kind",
+            "type": "string"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/LogicalOperator"
+          }
+        },
+        "required": [
+          "operator",
+          "children"
+        ],
+        "title": "LogicalExpression",
+        "type": "object"
+      },
+      "LogicalOperator": {
+        "enum": [
+          "all",
+          "any",
+          "not"
+        ],
+        "title": "LogicalOperator",
+        "type": "string"
+      },
+      "MedicationExposureCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "dose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dose"
+          },
+          "end_date_upper": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "End Date Upper"
+          },
+          "evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Evidence Span Ids",
+            "type": "array"
+          },
+          "exposure_candidate_id": {
+            "minLength": 1,
+            "title": "Exposure Candidate Id",
+            "type": "string"
+          },
+          "frequency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Frequency"
+          },
+          "indication": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Indication"
+          },
+          "medication_or_class": {
+            "minLength": 1,
+            "title": "Medication Or Class",
+            "type": "string"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Route"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "start_date_lower": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Start Date Lower"
+          }
+        },
+        "required": [
+          "exposure_candidate_id",
+          "medication_or_class",
+          "evidence_span_ids"
+        ],
+        "title": "MedicationExposureCandidate",
+        "type": "object"
+      },
+      "ModelConfigContract": {
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "model_config_id": {
+            "minLength": 1,
+            "title": "Model Config Id",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "title": "Parameters",
+            "type": "object"
+          },
+          "provider": {
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "minLength": 1,
+            "title": "Reasoning Effort",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_config_id",
+          "provider",
+          "model",
+          "reasoning_effort"
+        ],
+        "title": "ModelConfigContract",
+        "type": "object"
+      },
+      "OccurrenceWindow": {
+        "additionalProperties": false,
+        "description": "Rolling duration used by frequency definitions.",
+        "properties": {
+          "duration": {
+            "$ref": "#/components/schemas/TimeQuantity"
+          },
+          "minimum_count": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Minimum Count"
+          }
+        },
+        "required": [
+          "duration"
+        ],
+        "title": "OccurrenceWindow",
+        "type": "object"
+      },
+      "PatientProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/PatientProfileEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "highlighted_event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Highlighted Event Ids",
+            "type": "array"
+          },
+          "missing_expectation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Expectation Ids",
+            "type": "array"
+          },
+          "patient_profile_id": {
+            "minLength": 1,
+            "title": "Patient Profile Id",
+            "type": "string"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "subject_id": {
+            "minLength": 1,
+            "title": "Subject Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "patient_profile_id",
+          "subject_id",
+          "review_episode_id",
+          "events"
+        ],
+        "title": "PatientProfile",
+        "type": "object"
+      },
+      "PatientProfileEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "end_date": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateValue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "event_id": {
+            "minLength": 1,
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "minLength": 1,
+            "title": "Event Type",
+            "type": "string"
+          },
+          "evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Evidence Span Ids",
+            "type": "array"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "has_trend_change": {
+            "default": false,
+            "title": "Has Trend Change",
+            "type": "boolean"
+          },
+          "is_abnormal": {
+            "default": false,
+            "title": "Is Abnormal",
+            "type": "boolean"
+          },
+          "is_critical": {
+            "default": false,
+            "title": "Is Critical",
+            "type": "boolean"
+          },
+          "lane": {
+            "$ref": "#/components/schemas/ProfileLane"
+          },
+          "related_rule_component_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Related Rule Component Ids",
+            "type": "array"
+          },
+          "risk_labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Risk Labels",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateValue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "lane",
+          "event_type",
+          "title",
+          "evidence_span_ids"
+        ],
+        "title": "PatientProfileEvent",
+        "type": "object"
+      },
+      "PredicateObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Span Ids",
+            "type": "array"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "observed_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Observed Unit"
+          },
+          "observed_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Observed Value"
+          },
+          "predicate_id": {
+            "minLength": 1,
+            "title": "Predicate Id",
+            "type": "string"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "truth": {
+            "$ref": "#/components/schemas/TruthValue"
+          }
+        },
+        "required": [
+          "predicate_id",
+          "truth"
+        ],
+        "title": "PredicateObservation",
+        "type": "object"
+      },
+      "ProfileLane": {
+        "enum": [
+          "study_milestone",
+          "demographics",
+          "target_disease",
+          "symptoms_signs",
+          "medical_history",
+          "medication",
+          "non_drug_treatment",
+          "test_exam_score",
+          "allergy_infection_immune",
+          "reproductive",
+          "social_environmental",
+          "special_history",
+          "evidence_quality"
+        ],
+        "title": "ProfileLane",
+        "type": "string"
+      },
+      "Project": {
+        "additionalProperties": false,
+        "properties": {
+          "project_code": {
+            "minLength": 1,
+            "title": "Project Code",
+            "type": "string"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "minLength": 1,
+            "title": "Project Name",
+            "type": "string"
+          },
+          "protocol_version": {
+            "$ref": "#/components/schemas/ProtocolDocumentVersion"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "rule_set_id": {
+            "minLength": 1,
+            "title": "Rule Set Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "study_phase": {
+            "$ref": "#/components/schemas/StudyPhase"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_code",
+          "project_name",
+          "study_phase",
+          "protocol_version",
+          "rule_set_id"
+        ],
+        "title": "Project",
+        "type": "object"
+      },
+      "ProjectListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ProjectListResponse",
+        "type": "object"
+      },
+      "PromptVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "node": {
+            "$ref": "#/components/schemas/AgentNode"
+          },
+          "prompt_version_id": {
+            "minLength": 1,
+            "title": "Prompt Version Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "schema_version_id": {
+            "minLength": 1,
+            "title": "Schema Version Id",
+            "type": "string"
+          },
+          "template_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Template Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt_version_id",
+          "node",
+          "template_sha256",
+          "schema_version_id"
+        ],
+        "title": "PromptVersion",
+        "type": "object"
+      },
+      "ProspectivePeriod": {
+        "additionalProperties": false,
+        "description": "Named protocol interval used by a future plan or intended action.",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/ProtocolPeriod"
+          }
+        },
+        "required": [
+          "period"
+        ],
+        "title": "ProspectivePeriod",
+        "type": "object"
+      },
+      "ProspectiveWindow": {
+        "additionalProperties": false,
+        "description": "Future horizon anchored to a named protocol milestone.",
+        "properties": {
+          "anchor_type": {
+            "$ref": "#/components/schemas/AnchorType"
+          },
+          "upper_bound": {
+            "$ref": "#/components/schemas/TimeQuantity"
+          }
+        },
+        "required": [
+          "anchor_type",
+          "upper_bound"
+        ],
+        "title": "ProspectiveWindow",
+        "type": "object"
+      },
+      "ProtocolAuthorityConfirmation": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "accept_protocol_authority",
+            "default": "accept_protocol_authority",
+            "title": "Action",
+            "type": "string"
+          },
+          "authority_record_id": {
+            "minLength": 1,
+            "title": "Authority Record Id",
+            "type": "string"
+          },
+          "authority_record_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Authority Record Sha256",
+            "type": "string"
+          },
+          "command_id": {
+            "minLength": 1,
+            "title": "Command Id",
+            "type": "string"
+          },
+          "confirmation_id": {
+            "minLength": 1,
+            "title": "Confirmation Id",
+            "type": "string"
+          },
+          "confirmation_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Confirmation Sha256",
+            "type": "string"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "confirmed_by": {
+            "minLength": 1,
+            "title": "Confirmed By",
+            "type": "string"
+          },
+          "protocol_document_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Protocol Document Sha256",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "recorded_by_service": {
+            "const": "enrollment-review-app",
+            "default": "enrollment-review-app",
+            "title": "Recorded By Service",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation_id",
+          "command_id",
+          "protocol_version_id",
+          "protocol_document_sha256",
+          "authority_record_id",
+          "authority_record_sha256",
+          "confirmed_by",
+          "confirmed_at",
+          "confirmation_sha256"
+        ],
+        "title": "ProtocolAuthorityConfirmation",
+        "type": "object"
+      },
+      "ProtocolAuthorityRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_record_id": {
+            "minLength": 1,
+            "title": "Authority Record Id",
+            "type": "string"
+          },
+          "authority_record_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Authority Record Sha256",
+            "type": "string"
+          },
+          "official_rules": {
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "minItems": 1,
+            "title": "Official Rules",
+            "type": "array"
+          },
+          "official_workflow_stages": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStage"
+            },
+            "minItems": 1,
+            "title": "Official Workflow Stages",
+            "type": "array"
+          },
+          "procedure_evidence_requirements": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRequirement"
+            },
+            "title": "Procedure Evidence Requirements",
+            "type": "array"
+          },
+          "procedure_requirement_source_anchor_refs": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Procedure Requirement Source Anchor Refs",
+            "type": "object"
+          },
+          "protocol_document_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Protocol Document Sha256",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "requirement_source_anchor_refs": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Requirement Source Anchor Refs",
+            "type": "object"
+          },
+          "rule_source_anchor_refs": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rule Source Anchor Refs",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "study_phase": {
+            "$ref": "#/components/schemas/StudyPhase"
+          },
+          "verification_method": {
+            "const": "human_verified_official_protocol",
+            "title": "Verification Method",
+            "type": "string"
+          },
+          "verified_at": {
+            "format": "date-time",
+            "title": "Verified At",
+            "type": "string"
+          },
+          "verified_by": {
+            "minLength": 1,
+            "title": "Verified By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authority_record_id",
+          "protocol_version_id",
+          "protocol_document_sha256",
+          "study_phase",
+          "official_rules",
+          "official_workflow_stages",
+          "rule_source_anchor_refs",
+          "verified_by",
+          "verified_at",
+          "verification_method",
+          "authority_record_sha256"
+        ],
+        "title": "ProtocolAuthorityRecord",
+        "type": "object"
+      },
+      "ProtocolDocumentVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_confirmation_id": {
+            "minLength": 1,
+            "title": "Authority Confirmation Id",
+            "type": "string"
+          },
+          "authority_gate_result_id": {
+            "minLength": 1,
+            "title": "Authority Gate Result Id",
+            "type": "string"
+          },
+          "authority_record_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Authority Record Sha256",
+            "type": "string"
+          },
+          "integrity_gate_result_id": {
+            "minLength": 1,
+            "title": "Integrity Gate Result Id",
+            "type": "string"
+          },
+          "integrity_manifest_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Integrity Manifest Sha256",
+            "type": "string"
+          },
+          "official_date": {
+            "$ref": "#/components/schemas/DateValue"
+          },
+          "official_version": {
+            "minLength": 1,
+            "title": "Official Version",
+            "type": "string"
+          },
+          "protocol_code": {
+            "minLength": 1,
+            "title": "Protocol Code",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol_version_id",
+          "protocol_code",
+          "official_version",
+          "official_date",
+          "sha256",
+          "integrity_manifest_sha256",
+          "authority_record_sha256",
+          "authority_confirmation_id",
+          "authority_gate_result_id",
+          "integrity_gate_result_id"
+        ],
+        "title": "ProtocolDocumentVersion",
+        "type": "object"
+      },
+      "ProtocolIntegrityManifest": {
+        "additionalProperties": false,
+        "properties": {
+          "authoritative_rule_set_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Authoritative Rule Set Sha256",
+            "type": "string"
+          },
+          "authoritative_workflow_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Authoritative Workflow Sha256",
+            "type": "string"
+          },
+          "authority_record_id": {
+            "minLength": 1,
+            "title": "Authority Record Id",
+            "type": "string"
+          },
+          "authority_record_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Authority Record Sha256",
+            "type": "string"
+          },
+          "manifest_id": {
+            "minLength": 1,
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "protocol_document_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Protocol Document Sha256",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "study_phase": {
+            "$ref": "#/components/schemas/StudyPhase"
+          }
+        },
+        "required": [
+          "manifest_id",
+          "protocol_version_id",
+          "protocol_document_sha256",
+          "study_phase",
+          "source_refs",
+          "authority_record_id",
+          "authority_record_sha256",
+          "authoritative_rule_set_sha256",
+          "authoritative_workflow_sha256",
+          "manifest_sha256"
+        ],
+        "title": "ProtocolIntegrityManifest",
+        "type": "object"
+      },
+      "ProtocolPeriod": {
+        "enum": [
+          "treatment_period",
+          "study_period"
+        ],
+        "title": "ProtocolPeriod",
+        "type": "string"
+      },
+      "ProtocolSourceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "locator": {
+            "minLength": 1,
+            "title": "Locator",
+            "type": "string"
+          },
+          "protocol_document_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Protocol Document Sha256",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_record_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Record Sha256",
+            "type": "string"
+          },
+          "source_ref": {
+            "minLength": 1,
+            "title": "Source Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_ref",
+          "protocol_version_id",
+          "protocol_document_sha256",
+          "locator",
+          "source_record_sha256"
+        ],
+        "title": "ProtocolSourceRecord",
+        "type": "object"
+      },
+      "ReferencedDocumentCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "referenced_by_evidence_span_id": {
+            "minLength": 1,
+            "title": "Referenced By Evidence Span Id",
+            "type": "string"
+          },
+          "referenced_document_candidate_id": {
+            "minLength": 1,
+            "title": "Referenced Document Candidate Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "referenced_document_candidate_id",
+          "description",
+          "referenced_by_evidence_span_id"
+        ],
+        "title": "ReferencedDocumentCandidate",
+        "type": "object"
+      },
+      "ReviewEpisode": {
+        "additionalProperties": false,
+        "description": "审核节点：受试者在某研究期别/审核节点的资料与处理修订活动版本。\n\n运行期唯一审核节点合同（Slice 4.4 收敛后，``evidence_ingestion`` 不再维护\n第二套同名合同）。``evidence_snapshot_id`` 是 Phase 2/3 fixture/审核链语义的\nlegacy 字段，本合同保留其原义但**不作为** Phase 4 当前资料版本的 fallback。\n\n成对活动指针 ``active_evidence_snapshot_id`` 与\n``active_evidence_processing_revision_id`` 是 Phase 4 当前版本的唯一权威：\n只在候选快照通过全部发布门禁后，在同一事务中按预期修订号原子更新；回滚通过\n新的 ActivationEvent 完成，不静默改写指针。二者必须同时存在或同时为空：活动\n资料必须既固定文档集合，又固定一份不可变证据处理修订。迁移 0010 不按时间/ID/\n历史 ACTIVE 状态回填本对指针；升级时保持 NULL，由正式激活命令建立。",
+        "properties": {
+          "active_evidence_processing_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Active Evidence Processing Revision Id"
+          },
+          "active_evidence_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Active Evidence Snapshot Id"
+          },
+          "anchor_dates": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DateValue"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/AnchorType"
+            },
+            "title": "Anchor Dates",
+            "type": "object"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Due At"
+          },
+          "evidence_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Evidence Snapshot Id"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "rule_set_id": {
+            "minLength": 1,
+            "title": "Rule Set Id",
+            "type": "string"
+          },
+          "rule_set_revision": {
+            "minimum": 1,
+            "title": "Rule Set Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/ReviewStage"
+          },
+          "study_phase": {
+            "$ref": "#/components/schemas/StudyPhase"
+          },
+          "subject_id": {
+            "minLength": 1,
+            "title": "Subject Id",
+            "type": "string"
+          },
+          "workflow_stage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Workflow Stage Id"
+          }
+        },
+        "required": [
+          "review_episode_id",
+          "subject_id",
+          "project_id",
+          "rule_set_id",
+          "study_phase",
+          "stage",
+          "protocol_version_id",
+          "rule_set_revision"
+        ],
+        "title": "ReviewEpisode",
+        "type": "object"
+      },
+      "ReviewRun": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Completed At"
+          },
+          "evidence_snapshot_id": {
+            "minLength": 1,
+            "title": "Evidence Snapshot Id",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "review_run_id": {
+            "minLength": 1,
+            "title": "Review Run Id",
+            "type": "string"
+          },
+          "rule_set_revision": {
+            "minimum": 1,
+            "title": "Rule Set Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "supersedes_review_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Supersedes Review Run Id"
+          }
+        },
+        "required": [
+          "review_run_id",
+          "review_episode_id",
+          "protocol_version_id",
+          "rule_set_revision",
+          "evidence_snapshot_id",
+          "started_at"
+        ],
+        "title": "ReviewRun",
+        "type": "object"
+      },
+      "ReviewRunDiff": {
+        "additionalProperties": false,
+        "properties": {
+          "changed_assessment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Assessment Ids",
+            "type": "array"
+          },
+          "changed_fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Fact Ids",
+            "type": "array"
+          },
+          "closed_action_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Closed Action Ids",
+            "type": "array"
+          },
+          "current_review_run_id": {
+            "minLength": 1,
+            "title": "Current Review Run Id",
+            "type": "string"
+          },
+          "opened_action_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Opened Action Ids",
+            "type": "array"
+          },
+          "prior_review_run_id": {
+            "minLength": 1,
+            "title": "Prior Review Run Id",
+            "type": "string"
+          },
+          "review_run_diff_id": {
+            "minLength": 1,
+            "title": "Review Run Diff Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "stale_projection_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Stale Projection Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "review_run_diff_id",
+          "prior_review_run_id",
+          "current_review_run_id"
+        ],
+        "title": "ReviewRunDiff",
+        "type": "object"
+      },
+      "ReviewStage": {
+        "enum": [
+          "pre_screening",
+          "screening",
+          "run_in",
+          "baseline"
+        ],
+        "title": "ReviewStage",
+        "type": "string"
+      },
+      "Rule": {
+        "additionalProperties": false,
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/RuleComponent"
+            },
+            "minItems": 1,
+            "title": "Components",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RuleKind"
+          },
+          "official_code": {
+            "pattern": "^(IN|EX|REQ)-\\d{2}$",
+            "title": "Official Code",
+            "type": "string"
+          },
+          "rule_id": {
+            "minLength": 1,
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_text": {
+            "minLength": 1,
+            "title": "Source Text",
+            "type": "string"
+          },
+          "study_phase": {
+            "$ref": "#/components/schemas/StudyPhase"
+          }
+        },
+        "required": [
+          "rule_id",
+          "official_code",
+          "kind",
+          "source_text",
+          "study_phase",
+          "components"
+        ],
+        "title": "Rule",
+        "type": "object"
+      },
+      "RuleComponent": {
+        "additionalProperties": false,
+        "properties": {
+          "display_code": {
+            "minLength": 1,
+            "title": "Display Code",
+            "type": "string"
+          },
+          "evidence_requirements": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRequirement"
+            },
+            "title": "Evidence Requirements",
+            "type": "array"
+          },
+          "exception_expression": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "logical": "#/components/schemas/LogicalExpression",
+                    "predicate": "#/components/schemas/AtomicExpression"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AtomicExpression"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LogicalExpression"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Exception Expression"
+          },
+          "expression": {
+            "discriminator": {
+              "mapping": {
+                "logical": "#/components/schemas/LogicalExpression",
+                "predicate": "#/components/schemas/AtomicExpression"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AtomicExpression"
+              },
+              {
+                "$ref": "#/components/schemas/LogicalExpression"
+              }
+            ],
+            "title": "Expression"
+          },
+          "parent_rule_id": {
+            "minLength": 1,
+            "title": "Parent Rule Id",
+            "type": "string"
+          },
+          "rule_component_id": {
+            "minLength": 1,
+            "title": "Rule Component Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_component_id",
+          "parent_rule_id",
+          "display_code",
+          "title",
+          "expression"
+        ],
+        "title": "RuleComponent",
+        "type": "object"
+      },
+      "RuleKind": {
+        "enum": [
+          "inclusion",
+          "exclusion",
+          "required_procedure"
+        ],
+        "title": "RuleKind",
+        "type": "string"
+      },
+      "RuleSet": {
+        "additionalProperties": false,
+        "properties": {
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "rule_set_id": {
+            "minLength": 1,
+            "title": "Rule Set Id",
+            "type": "string"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "minItems": 1,
+            "title": "Rules",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "study_phase": {
+            "$ref": "#/components/schemas/StudyPhase"
+          }
+        },
+        "required": [
+          "rule_set_id",
+          "protocol_version_id",
+          "study_phase",
+          "rules"
+        ],
+        "title": "RuleSet",
+        "type": "object"
+      },
+      "RunOutcome": {
+        "enum": [
+          "accepted",
+          "rejected",
+          "stopped",
+          "cancelled",
+          "partial"
+        ],
+        "title": "RunOutcome",
+        "type": "string"
+      },
+      "RuntimeErrorCode": {
+        "enum": [
+          "schema_validation_failed",
+          "scope_mismatch",
+          "upstream_gate_not_accepted",
+          "payload_hash_mismatch",
+          "protocol_integrity_failed",
+          "candidate_not_bound",
+          "synthetic_rejection"
+        ],
+        "title": "RuntimeErrorCode",
+        "type": "string"
+      },
+      "ServiceCommandEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "accept_protocol_authority",
+            "default": "accept_protocol_authority",
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_id": {
+            "minLength": 1,
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "authority_record_id": {
+            "minLength": 1,
+            "title": "Authority Record Id",
+            "type": "string"
+          },
+          "authority_record_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Authority Record Sha256",
+            "type": "string"
+          },
+          "command_id": {
+            "minLength": 1,
+            "title": "Command Id",
+            "type": "string"
+          },
+          "event_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Event Sha256",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "recorded_by_service": {
+            "const": "enrollment-review-app",
+            "default": "enrollment-review-app",
+            "title": "Recorded By Service",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "protocol_version_id",
+          "authority_record_id",
+          "authority_record_sha256",
+          "actor_id",
+          "occurred_at",
+          "event_sha256"
+        ],
+        "title": "ServiceCommandEvent",
+        "type": "object"
+      },
+      "SourceDocumentVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "document_type": {
+            "minLength": 1,
+            "title": "Document Type",
+            "type": "string"
+          },
+          "file_name": {
+            "minLength": 1,
+            "title": "File Name",
+            "type": "string"
+          },
+          "review_stage": {
+            "$ref": "#/components/schemas/ReviewStage"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "source_document_version_id": {
+            "minLength": 1,
+            "title": "Source Document Version Id",
+            "type": "string"
+          },
+          "source_party": {
+            "minLength": 1,
+            "title": "Source Party",
+            "type": "string"
+          },
+          "upload_mode": {
+            "$ref": "#/components/schemas/UploadMode"
+          }
+        },
+        "required": [
+          "source_document_version_id",
+          "file_name",
+          "sha256",
+          "document_type",
+          "source_party",
+          "upload_mode",
+          "review_stage"
+        ],
+        "title": "SourceDocumentVersion",
+        "type": "object"
+      },
+      "StudyPhase": {
+        "enum": [
+          "phase_ii",
+          "phase_iii",
+          "seamless_phase_ii_iii",
+          "other"
+        ],
+        "title": "StudyPhase",
+        "type": "string"
+      },
+      "Subject": {
+        "additionalProperties": false,
+        "properties": {
+          "age_years": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Age Years"
+          },
+          "center_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Center Code"
+          },
+          "center_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Center Name"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "sex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sex"
+          },
+          "subject_code": {
+            "minLength": 1,
+            "title": "Subject Code",
+            "type": "string"
+          },
+          "subject_id": {
+            "minLength": 1,
+            "title": "Subject Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_id",
+          "subject_code",
+          "project_id"
+        ],
+        "title": "Subject",
+        "type": "object"
+      },
+      "SubjectListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Subject"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "items"
+        ],
+        "title": "SubjectListResponse",
+        "type": "object"
+      },
+      "TimeConstraint": {
+        "additionalProperties": false,
+        "description": "相对命名锚点的时间窗。\n\n固定日历窗与半衰期倍数可同时出现，但必须显式声明\n``combined_window_selection=longer_of_calendar_and_half_life``；\n不得仅因两类字段并存或原文含“或”而推断择长语义。\n锚点必须使用方案命名的日期类型（如 ``first_dose_date``），由调用方按原文填写。",
+        "properties": {
+          "allow_partial_date": {
+            "default": false,
+            "title": "Allow Partial Date",
+            "type": "boolean"
+          },
+          "anchor_type": {
+            "$ref": "#/components/schemas/AnchorType"
+          },
+          "combined_window_selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CombinedWindowSelection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "direction": {
+            "$ref": "#/components/schemas/TimeDirection"
+          },
+          "half_life_multiplier": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Half Life Multiplier"
+          },
+          "lower_bound": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeQuantity"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "lower_bound_days": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Lower Bound Days"
+          },
+          "lower_bound_inclusive": {
+            "default": true,
+            "title": "Lower Bound Inclusive",
+            "type": "boolean"
+          },
+          "upper_bound": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeQuantity"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "upper_bound_days": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Upper Bound Days"
+          },
+          "upper_bound_inclusive": {
+            "default": true,
+            "title": "Upper Bound Inclusive",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "anchor_type",
+          "direction"
+        ],
+        "title": "TimeConstraint",
+        "type": "object"
+      },
+      "TimeDirection": {
+        "enum": [
+          "before",
+          "after",
+          "on"
+        ],
+        "title": "TimeDirection",
+        "type": "string"
+      },
+      "TimeQuantity": {
+        "additionalProperties": false,
+        "description": "带单位的正整数时间数量，例如 ``3 个月``或 ``4 周``。",
+        "properties": {
+          "unit": {
+            "$ref": "#/components/schemas/TimeUnit"
+          },
+          "value": {
+            "exclusiveMinimum": 0,
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value",
+          "unit"
+        ],
+        "title": "TimeQuantity",
+        "type": "object"
+      },
+      "TimeUnit": {
+        "description": "时间窗使用的临床日历单位。\n\n月和年不是固定天数的别名；评估器会按日历边界处理它们。",
+        "enum": [
+          "day",
+          "week",
+          "month",
+          "year"
+        ],
+        "title": "TimeUnit",
+        "type": "string"
+      },
+      "TruthValue": {
+        "enum": [
+          "true",
+          "false",
+          "unknown"
+        ],
+        "title": "TruthValue",
+        "type": "string"
+      },
+      "UnresolvedItem": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_scope": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Affected Scope",
+            "type": "array"
+          },
+          "code": {
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "code",
+          "affected_scope"
+        ],
+        "title": "UnresolvedItem",
+        "type": "object"
+      },
+      "UploadMode": {
+        "enum": [
+          "full",
+          "incremental"
+        ],
+        "title": "UploadMode",
+        "type": "string"
+      },
+      "WorkflowStage": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "due_requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Due Requirement Ids",
+            "type": "array"
+          },
+          "review_required": {
+            "default": true,
+            "title": "Review Required",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/ReviewStage"
+          },
+          "visit_instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Visit Instance"
+          },
+          "visit_window": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Visit Window"
+          },
+          "workflow_stage_id": {
+            "minLength": 1,
+            "title": "Workflow Stage Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow_stage_id",
+          "stage",
+          "display_name"
+        ],
+        "title": "WorkflowStage",
+        "type": "object"
+      },
+      "WorkspaceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "workspace": {
+            "$ref": "#/components/schemas/FixtureV1"
+          }
+        },
+        "required": [
+          "workspace"
+        ],
+        "title": "WorkspaceResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "入排审核系统 V2 Stub API",
+    "version": "fixture/v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v2/actions/{action_id}/override": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "action_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionOverrideCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionOverrideResponse"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "请求未完成"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "请求未完成"
+          }
+        },
+        "summary": "人工关闭或重新打开行动"
+      }
+    },
+    "/api/v2/jobs/{job_id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "请求未完成"
+          }
+        },
+        "summary": "读取后台任务状态"
+      }
+    },
+    "/api/v2/projects": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectListResponse"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "请求未完成"
+          }
+        },
+        "summary": "读取项目看板"
+      }
+    },
+    "/api/v2/projects/{project_id}/subjects": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectListResponse"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "请求未完成"
+          }
+        },
+        "summary": "读取项目受试者及分阶段状态"
+      }
+    },
+    "/api/v2/review-episodes/{episode_id}/workspace": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "episode_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceResponse"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "请求未完成"
+          }
+        },
+        "summary": "读取入排工作台"
+      }
+    }
+  }
+}

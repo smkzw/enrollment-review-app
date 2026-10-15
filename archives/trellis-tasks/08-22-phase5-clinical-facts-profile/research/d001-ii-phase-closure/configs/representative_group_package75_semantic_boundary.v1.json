@@ -1,0 +1,264 @@
+{
+ "schema_version": "phase5/representative-group-control-replay-config/v1",
+ "extends": "representative_group_viral_tb.v1.json",
+ "group_id": "d001-ii-package75-semantic-boundary",
+ "task_id": "phase5-slice61bm-20260829",
+ "worker": "codex-parent",
+ "artifact_dir_name": "phase5-slice61bm-package75-semantic-boundary-20260829",
+ "owned_source_refs": [
+  "body.p828",
+  "body.p831",
+  "body.p832",
+  "body.p833",
+  "body.p834",
+  "body.p835",
+  "body.p836",
+  "body.p837",
+  "body.p838"
+ ],
+ "attached_source_refs": [
+  "body.p829",
+  "body.p830",
+  "body.p749",
+  "body.t5.r29",
+  "body.t5.r30",
+  "body.t5.r37",
+  "body.t5.r38",
+  "body.p855",
+  "body.p866",
+  "body.p875",
+  "body.p883",
+  "body.p884",
+  "body.p885",
+  "body.p931",
+  "body.p932",
+  "body.p933",
+  "body.p934"
+ ],
+ "required_candidate_source_refs": [
+  "body.p837"
+ ],
+ "forbidden_candidate_source_refs": [
+  "body.p828",
+  "body.p833",
+  "body.p834",
+  "body.p836",
+  "body.p838"
+ ],
+ "pre_enrollment_source_refs": [],
+ "structural_only_source_refs": [
+  "body.p828",
+  "body.p834",
+  "body.p836",
+  "body.p838"
+ ],
+ "expected_disposition_by_source_ref": {
+  "body.p831": "post_treatment_execution",
+  "body.p832": "post_treatment_execution",
+  "body.p833": "non_enrollment_execution",
+  "body.p835": "post_treatment_execution",
+  "body.p837": "other_control_candidate"
+ },
+ "expected_workflow_stage_ids_by_source_ref": {
+  "body.p837": [
+   "flow-screening",
+   "flow-baseline",
+   "flow-d1-pre-dose"
+  ]
+ },
+ "candidate_forbidden_markers_by_source_ref": {
+  "body.p837": [
+   "不得入组",
+   "不符合入选",
+   "排除标准"
+  ]
+ },
+ "candidate_required_markers_by_source_ref": {
+  "body.p837": [
+   "开始",
+   "结束",
+   "剂量",
+   "频率",
+   "给药途径",
+   "治疗方法",
+   "适应症"
+  ]
+ },
+ "batching": {
+  "mode": "single_batch_with_known_targets",
+  "reason": "只处置PK/IL-17A血样采集、记录不良事件、记录合并用药三节的9个拥有单元；Ⅱ期流程表采样/记录行、访视安排章节、合并治疗定义与官方合并治疗流程行均作为只读权威边界，不重复发布。"
+ },
+ "phase_applicability": {
+  "disposition": "selected_phase_applicable",
+  "scope": "phase_ii",
+  "rationale": "三节内容为Ⅱ期治疗期采样执行说明、全程AE监测和ICF后合并治疗收集义务；均为非入排阶段义务，仅D1给药前IL-17A采血与筛选合并治疗记录对应已冻结流程节点。"
+ },
+ "workflow_stages": [
+  {
+   "workflow_stage_id": "flow-screening",
+   "review_stage": "screening",
+   "display_name": "筛选访视",
+   "visit_instance": "筛选访视"
+  },
+  {
+   "workflow_stage_id": "flow-baseline",
+   "review_stage": "baseline",
+   "display_name": "基线访视",
+   "visit_instance": "基线访视"
+  },
+  {
+   "workflow_stage_id": "flow-d1-pre-dose",
+   "review_stage": "baseline",
+   "display_name": "D1给药前",
+   "visit_instance": "D1给药前"
+  }
+ ],
+ "known_targets": {
+  "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+  "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+  "official_rules": [],
+  "required_procedures": [
+   {
+    "catalog_item_id": "pcm-row-ac740aed1f7fb0e761095c20",
+    "label": "合并治疗",
+    "visit_instance": "筛选访视",
+    "review_stage": "screening",
+    "position": 58,
+    "source_span_ids": [
+     "span-2d323547acf8939cd98941bb33c6c46f",
+     "span-51c7ae8e6538560ac0a287c54f35ffff",
+     "span-63c70b6d1edb889560d3a63849442a6d",
+     "span-950adc6ab3ad94a38ccf035704313a2f"
+    ],
+    "source_excerpts": [
+     "合并治疗^25",
+     "X",
+     "记录合并治疗",
+     "合并治疗：定义为自签署ICF开始至研究结束"
+    ]
+   }
+  ]
+ },
+ "ids": {
+  "manifest_id": "manifest:slice61bm-package75-semantic-boundary",
+  "catalog_id": "catalog:slice61bm-package75-semantic-boundary"
+ },
+ "clinical_qc_checks_by_source_ref": {
+  "body.p828": [
+   "PK/IL-17A血样采集章节标题，仅提供结构归属，不独立形成控制点",
+   "不得把整个采样章节改写为入排必做项或给药前资格门槛"
+  ],
+  "body.p831": [
+   "访视时PK/IL-17A采血点可与实验室检查同时采集，只要准确记录采样时间（精确到分秒）、给药时间及给药量，并记录在原始病历和/或eCRF中",
+   "采样时间/给药时间/给药量的记录义务属于治疗期执行与资料记录，处置为治疗期执行，不发射入排候选，不设阈值或证据缺口"
+  ],
+  "body.p832": [
+   "特殊情况（参与者在到达研究中心前已服药）依然可以采集PK/IL-17A血样，只需准确记录实际服药时间、剂量和采血时间",
+   "SAE或≥3级TEAE或提前退出时研究者可以选择采集计划外PK样本用于量-效分析；计划外采样为条件性可选动作，不得强化为必做或入排门槛"
+  ],
+  "body.p833": [
+   "申办者将在开始研究前向研究中心提供样本采集、处理、储存和运输说明及联系信息，细节参见《中心实验室手册》",
+   "中心实验室操作说明是申办者对研究中心的操作层指引，不是受试者级义务，不得改写为入排不通过条件"
+  ],
+  "body.p834": [
+   "记录不良事件章节标题，仅提供结构归属，不独立形成控制点",
+   "不得把全程AE监测改写为入排条件"
+  ],
+  "body.p835": [
+   "整个研究过程要严密监测参与者的不良事件，直至研究者确认不良事件消退、返回至基线等级或更好、稳定，或参与者失访或撤回同意；收集详见7.3.3",
+   "全程AE监测是治疗期监测义务，处置为治疗期执行，不发射入排候选；不形成基线前必做或证据缺口"
+  ],
+  "body.p836": [
+   "记录合并用药章节标题，仅提供结构归属，不独立形成控制点",
+   "不得把ICF后合并治疗收集改写为入排条件"
+  ],
+  "body.p837": [
+   "自签署ICF开始至研究结束，合并治疗收集包括开始/结束日期、剂量、治疗频率、给药途径或治疗方法和适应症，并记录在eCRF合并治疗页中",
+   "合并治疗收集是阶段资料收集义务（对应已冻结的官方must_record合并治疗流程行），不是入排不通过条件；不得要求\"完整合并治疗记录\"方可入组"
+  ],
+  "body.p838": [
+   "访视安排章节标题，归属下一节内容，仅提供结构归属，不独立形成控制点",
+   "不得把访视安排章节并入采样/记录义务处置"
+  ],
+  "body.p829": [
+   "Ⅱ期：W2、W4给药前1 h内和给药后2 h（±30 min）采PK；W8、W12给药前1 h内采PK；W0-W12给药前1 h内及W16、提前退出访视采IL-17A",
+   "只读：D1（W0）只有IL-17A给药前采样、无PK采血；PK采样均属治疗期访视执行，不是入排条件"
+  ],
+  "body.p830": [
+   "Ⅲ期采样安排在W2-W52各访视，只读防串期",
+   "不得用Ⅲ期采样安排覆盖Ⅱ期，不得因Ⅲ期密度虚构Ⅱ期采样义务"
+  ],
+  "body.p749": [
+   "合并治疗定义：自签署ICF开始至研究结束使用的任何药物/治疗，应详细记录在eCRF中并注明原因、方法及起止时间（第63包拥有，只读）",
+   "只读：合并治疗记录为资料收集义务，不是入排条件"
+  ],
+  "body.t5.r29": [
+   "Ⅱ期流程表PK采血行：W2、W4、W8、W12及提前退出列X；筛选、基线、D1列无标记",
+   "只读流程证据：PK采血不进入筛选/基线/D1给药前入排控制，已冻结流程目标不得重复发布"
+  ],
+  "body.t5.r30": [
+   "Ⅱ期流程表IL-17A采血行：D1（W0）起各治疗期访视及W16、提前退出列X",
+   "只读防重：D1给药前IL-17A采血节点已冻结（procedure:6a29fdf2c85847fbe189e603656b214a），不重复发布"
+  ],
+  "body.t5.r37": [
+   "Ⅱ期流程表合并治疗行：筛选列X",
+   "只读防重：筛选记录合并治疗节点已冻结（procedure:de629323fe71cc5a52b15793aa06fc8a及官方矩阵pcm-row-ac740aed1f7fb0e761095c20）"
+  ],
+  "body.t5.r38": [
+   "Ⅱ期流程表不良事件行：筛选、基线列无标记，首个X在治疗期D1",
+   "只读流程证据：AE记录起点为治疗期D1访视，不是筛选或基线义务，更不是入排条件"
+  ],
+  "body.p855": [
+   "筛选访视记录合并治疗（访视安排章节流程项）",
+   "只读：筛选期合并治疗记录为流程项，不重复发布"
+  ],
+  "body.p866": [
+   "基线访视记录合并治疗（访视安排章节流程项）",
+   "只读：基线期合并治疗记录为流程项，不重复发布"
+  ],
+  "body.p875": [
+   "D1（W0）访视IL-17A采血（治疗期流程项）",
+   "D1给药前IL-17A采血为治疗期W0访视流程项，不是入排条件；不得与PK采样混并"
+  ],
+  "body.p883": [
+   "D1（W0）访视记录不良事件（治疗期流程项）",
+   "AE记录自治疗期D1开始，非入排条件"
+  ],
+  "body.p884": [
+   "D1（W0）访视记录合并治疗（治疗期流程项）",
+   "D1记录合并治疗为治疗期流程项，非入排条件"
+  ],
+  "body.p885": [
+   "D1给药前基线注：需记录合并用药及不良事件；基线需再次审查入选和排除标准后方可随机分组",
+   "只读：D1记录合并用药/不良事件与随机资格判定是并列事实，记录动作本身不构成入排条件，也不因记录缺失否定资格"
+  ],
+  "body.p931": [
+   "计划外访视/检查章节标题，仅提供结构归属",
+   "不得把计划外访视改写成必做流程"
+  ],
+  "body.p932": [
+   "研究者可以根据参与者的情况安排计划外访视或检查，尤其当参与者出现不良事件时；计划外检查记录在原始资料并记录原因",
+   "计划外访视为条件性可选动作，不是必做流程，更不是入排条件"
+  ],
+  "body.p933": [
+   "计划外访视记录不良事件",
+   "条件性可选动作下的记录项，不形成独立入排义务"
+  ],
+  "body.p934": [
+   "计划外访视记录合并治疗",
+   "条件性可选动作下的记录项，不形成独立入排义务"
+  ]
+ },
+ "notes": [
+  "原始DOCX产品链直接提取，用户无需预处理方案文本。",
+  "本组只处置第75包PK/IL-17A血样采集、记录不良事件、记录合并用药三节；四类禁止改写：ICF后合并治疗收集、全程AE监测、计划外PK采样、中心实验室操作说明，均不得升格为入排不通过条件。",
+  "第75包拥有来源不含任何官方入排规则，official_rules显式为空；不得从采样、监测或记录来源合成IN/EX规则。",
+  "Ⅱ期流程表PK采血行（t5.r29）筛选/基线/D1无标记，IL-17A行（t5.r30）首个X在D1；PK采样均属治疗期执行，D1只有IL-17A给药前采样。",
+  "本批已知目标只注入与p837候选直接重叠的官方合并治疗矩阵行；IL-17A和流程表合并治疗目录节点保留为只读来源闭包与模型外防重证据，不作为本批候选语义对照目标。",
+  "合并治疗收集为must_record资料收集义务，官方矩阵已冻结（pcm-row-ac740aed1f7fb0e761095c20），只读防重；筛选、基线、D1三个记录节点均来自访视安排章节，不重复发布。",
+  "全程AE监测（body.p835）为治疗期监测义务；AE流程行首个X在治疗期D1，筛选/基线无AE记录义务。",
+  "计划外访视/计划外PK采样（body.p832、body.p931-p934）为条件性可选动作，保留可选语气，不得强化为必做。",
+  "中心实验室手册说明（body.p833）为申办者对研究中心的操作层指引，不发射受试者级控制候选。",
+  "本切片为来源闭包切片：不调用临床语义模型，不并入131包正式目录，claims_complete=false。"
+ ]
+}

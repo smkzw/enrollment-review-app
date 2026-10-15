@@ -1,0 +1,40 @@
+{
+  "attached_source_refs": [
+    "body.p986",
+    "body.p996"
+  ],
+  "claims_complete": false,
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/configs/representative_group_package99_pregnancy_reporting_followup_boundary.v1.json",
+  "config_sha256": "1a10430ffb4ae300533b2715ef0a018aaf0060457b516061c45f6a3f88a931bd",
+  "control_batch_id": "pcb-76ee6df8dc5121848ce00b9c",
+  "control_plan_id": "pcp-8e3f69282ab29b267af2fde9",
+  "coverage_manifest_id": "manifest:slice61ck-package99-pregnancy-reporting-followup-boundary",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "coverage_manifest_sha256": "89c7f00a8ed2d7eda666fb62538b1941b10c59f4375b8c4491436f66ea0b51e6",
+  "created_at": "2026-08-30T04:42:41.202053+00:00",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "frozen_plan_sha256": "f0aa7e4bccad782ad5472c1f446f079e26343f694ad3ddca401bfbef89f38250",
+  "group_id": "d001-ii-package99-pregnancy-reporting-followup-boundary",
+  "mode": "dry_run_prepare",
+  "owned_source_refs": [
+    "body.p1158",
+    "body.p1159",
+    "body.p1160",
+    "body.p1161",
+    "body.p1162",
+    "body.p1163",
+    "body.p1164",
+    "body.p1165",
+    "body.p1166",
+    "body.p1167"
+  ],
+  "parent_phase_qc_path": null,
+  "parent_phase_qc_sha256": null,
+  "prompt_char_count": 33074,
+  "prompt_sha256": "fd0fbf1d3801f0c7853993f480ac2c77081ac4e6ebd8fb7a026c5b4419303166",
+  "prompt_template_sha256": "88335a5f2c79ea12bec07eac832496529ead1b05fe359542873e5d54748c5650",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "replay_mode": "product_protocol_control_agent_runner_mtplx",
+  "task_id": "phase5-slice61ck-20260830",
+  "worker": "cursor-worker_01"
+}

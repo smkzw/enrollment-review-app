@@ -1,0 +1,250 @@
+{
+  "package_version": "implementation-materials/v4",
+  "status": "implementation_plan_not_executed",
+  "baseline_commit": "60f5bb8fe67ac14d44af9ceab0801a9b2a42120b",
+  "assessed_environment": "connector source access; full repository execution unavailable in authoring container",
+  "constraints": {
+    "cloud_usage": "unrestricted_by_user",
+    "user_interface": "exception_first_all_evidence_accessible",
+    "document_scale": "tens_to_over_one_hundred_pages",
+    "rewrite_framework": false,
+    "modify_originals": false,
+    "mandatory_dual_vlm": false,
+    "human_confirmation_per_item": false
+  },
+  "work_packages": [
+    {
+      "id": "WP00",
+      "title": "当前基线、回归与运行账本",
+      "depends_on": [],
+      "finding_ids": [
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R06",
+        "R07",
+        "R08",
+        "R09",
+        "R10",
+        "R11",
+        "R12",
+        "R13",
+        "R14"
+      ],
+      "acceptance_ids": [
+        "A17",
+        "A18"
+      ],
+      "state": "planned",
+      "details_file": "03_WORK_PACKAGES.md"
+    },
+    {
+      "id": "WP01",
+      "title": "解除绑定输出膨胀",
+      "depends_on": [
+        "WP00"
+      ],
+      "finding_ids": [
+        "R02",
+        "R03",
+        "R07"
+      ],
+      "acceptance_ids": [
+        "A10",
+        "A11",
+        "A13",
+        "A16",
+        "A18"
+      ],
+      "state": "planned",
+      "details_file": "03_WORK_PACKAGES.md"
+    },
+    {
+      "id": "WP02",
+      "title": "来源与核实合同",
+      "depends_on": [
+        "WP00"
+      ],
+      "finding_ids": [
+        "R01",
+        "R08",
+        "R13"
+      ],
+      "acceptance_ids": [
+        "A03",
+        "A07",
+        "A12",
+        "A15"
+      ],
+      "state": "planned",
+      "details_file": "03_WORK_PACKAGES.md"
+    },
+    {
+      "id": "WP03",
+      "title": "低清扫描与手写读取",
+      "depends_on": [
+        "WP02"
+      ],
+      "finding_ids": [
+        "R01",
+        "R10",
+        "R11"
+      ],
+      "acceptance_ids": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "A09"
+      ],
+      "state": "planned",
+      "details_file": "03_WORK_PACKAGES.md"
+    },
+    {
+      "id": "WP04",
+      "title": "角色harness与可恢复预算",
+      "depends_on": [
+        "WP00"
+      ],
+      "finding_ids": [
+        "R03",
+        "R04",
+        "R09",
+        "R12"
+      ],
+      "acceptance_ids": [
+        "A17",
+        "A18",
+        "A19",
+        "A20",
+        "A21",
+        "A27"
+      ],
+      "state": "planned",
+      "details_file": "03_WORK_PACKAGES.md"
+    },
+    {
+      "id": "WP05",
+      "title": "元数据与完整资格消费",
+      "depends_on": [
+        "WP01",
+        "WP02",
+        "WP03",
+        "WP04"
+      ],
+      "finding_ids": [
+        "R01",
+        "R05",
+        "R14"
+      ],
+      "acceptance_ids": [
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A14",
+        "A15",
+        "A16",
+        "A23",
+        "A28",
+        "A30"
+      ],
+      "state": "planned",
+      "details_file": "03_WORK_PACKAGES.md"
+    },
+    {
+      "id": "WP06",
+      "title": "例外工作台与版本",
+      "depends_on": [
+        "WP02",
+        "WP05"
+      ],
+      "finding_ids": [
+        "R06",
+        "R14"
+      ],
+      "acceptance_ids": [
+        "A22",
+        "A23",
+        "A24",
+        "A26",
+        "A30"
+      ],
+      "state": "planned",
+      "details_file": "03_WORK_PACKAGES.md"
+    },
+    {
+      "id": "WP07",
+      "title": "增量与历史不变",
+      "depends_on": [
+        "WP02",
+        "WP05"
+      ],
+      "finding_ids": [
+        "R08"
+      ],
+      "acceptance_ids": [
+        "A12",
+        "A15",
+        "A25",
+        "A29"
+      ],
+      "state": "planned",
+      "details_file": "03_WORK_PACKAGES.md"
+    },
+    {
+      "id": "WP08",
+      "title": "真实闭环、规模与全仓剩余验收",
+      "depends_on": [
+        "WP01",
+        "WP02",
+        "WP03",
+        "WP04",
+        "WP05",
+        "WP06",
+        "WP07"
+      ],
+      "finding_ids": [],
+      "acceptance_ids": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "A09",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A14",
+        "A15",
+        "A16",
+        "A17",
+        "A18",
+        "A19",
+        "A20",
+        "A21",
+        "A22",
+        "A23",
+        "A24",
+        "A25",
+        "A26",
+        "A27",
+        "A28",
+        "A29",
+        "A30"
+      ],
+      "state": "planned",
+      "details_file": "03_WORK_PACKAGES.md"
+    }
+  ]
+}

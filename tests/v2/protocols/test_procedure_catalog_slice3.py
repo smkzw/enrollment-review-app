@@ -1,0 +1,1276 @@
+"""Focused structural tests for the Phase 3 required-procedure sidecar."""
+
+from __future__ import annotations
+
+from collections import Counter
+from datetime import datetime, timezone
+import hashlib
+from pathlib import Path
+
+import pytest
+
+from app.domain.contracts.enums import (
+    AlignmentStatus,
+    ApplicabilityGranularity,
+    CatalogItemKind,
+    DocumentPart,
+    PhaseScope,
+    ReviewStage,
+    SourceLocatorPrecision,
+    StudyPhase,
+)
+from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
+from app.agents.protocol_control_deconstructor import (
+    ProtocolControlAgentInput,
+    build_protocol_control_agent_prompt,
+)
+from app.domain.contracts.protocol_metadata import (
+    PhaseApplicabilityBlock,
+    PhaseApplicabilityGraph,
+    PhaseProjection,
+)
+from app.protocols.docx_structure import BlockKind, NumberingRef, StructureBlock
+from app.protocols.docx_structure import extract_docx_structure
+from app.protocols.full_protocol_coverage import build_full_protocol_coverage_manifest
+from app.protocols.ingestion import register_source_artifact
+from app.protocols.phase_detection import (
+    build_phase_applicability_graph,
+    project_single_phase,
+)
+from app.protocols.procedure_catalog import (
+    ProcedureCatalogError,
+    _Cell,
+    _flow_footnote_refs,
+    _header_projection,
+    _make_cells,
+    _table_looks_like_flow,
+    build_required_procedure_catalog,
+    derive_review_stage,
+)
+from app.protocols.protocol_control_planning import plan_protocol_control_batches
+from app.protocols.catalogs import freeze_official_parent_rules
+from app.protocols.rendering import pdf_page_texts, render_to_pdf
+from app.protocols.section_index import build_section_index, formal_source_span_ids
+from app.protocols.source_alignment import align_blocks, verify_excerpt_against_page
+
+
+SNAPSHOT = "snapshot-procedure"
+RENDER = "render-procedure"
+FROZEN_AT = datetime(2026, 8, 14, tzinfo=timezone.utc)
+
+REAL_PROCEDURE_PROTOCOLS = [
+    (
+        "MG-K10-SAR",
+        Path(
+            "/Users/smkzw/Documents/康哲项目资料/MG-K10/SAR/4. Protocol/"
+            "MG-K10-SAR-001_临床研究方案_ V2.1_20250919_clean版 .docx"
+        ),
+        StudyPhase.PHASE_III,
+        "body.t3",
+        (7, 16),
+        {"run_in": 25, "baseline": 16},
+        {
+            "筛选/导入期* / V1 / NA / D-7~D-1": 25,
+            "双盲治疗期 / V2（基线） / W0 / D1": 16,
+        },
+    ),
+    (
+        "CMS-D001",
+        Path(
+            "/Users/smkzw/Documents/康哲项目资料/AI/入排/test-D001项目/"
+            "CMS-D001 银屑病2、3期临床方案 v1.0-2025.12.21.docx"
+        ),
+        StudyPhase.PHASE_II,
+        "body.t5",
+        (6, 30),
+        {"screening": 23, "baseline": 27},
+        {
+            "筛选期(D-28~D-1) / 筛选 / W-4~W-1 / D-28~D-1 / -": 23,
+            "筛选期(D-28~D-1) / 基线 / D≤-7 / -": 15,
+            "治疗期 / W0 / D1 / -": 12,
+        },
+    ),
+]
+
+
+def _source_snapshot(path: Path) -> tuple[str, int, int, tuple[str, ...]]:
+    stat = path.stat()
+    return (
+        hashlib.sha256(path.read_bytes()).hexdigest(),
+        stat.st_size,
+        stat.st_mtime_ns,
+        tuple(sorted(item.name for item in path.parent.iterdir())),
+    )
+
+
+def _root(*, rows: int, cols: int) -> StructureBlock:
+    return StructureBlock(
+        source_ref="body.t0",
+        document_part=DocumentPart.BODY,
+        section_index=0,
+        block_order=0,
+        kind=BlockKind.TABLE,
+        text="",
+        table_rows=rows,
+        table_cols=cols,
+    )
+
+
+def _cell(order: int, row: int, col: int, text: str) -> StructureBlock:
+    return StructureBlock(
+        source_ref=f"body.t0.r{row}.c{col}.p0",
+        document_part=DocumentPart.BODY,
+        section_index=0,
+        block_order=order,
+        kind=BlockKind.PARAGRAPH,
+        text=text,
+        table_path=(row, col),
+    )
+
+
+def _span(block: StructureBlock, *, page_only: bool = False) -> ProtocolSourceSpan:
+    common = dict(
+        source_span_id=f"span:{block.source_ref}",
+        snapshot_id=SNAPSHOT,
+        source_ref=block.source_ref,
+        document_part=DocumentPart.BODY,
+        block_order=block.block_order,
+        table_path=block.table_path,
+        table_row=block.table_path[-2] if block.table_path else None,
+        table_col=block.table_path[-1] if block.table_path else None,
+        render_artifact_id=RENDER,
+        render_page=1,
+        alignment_status=AlignmentStatus.ALIGNED,
+    )
+    if page_only:
+        return ProtocolSourceSpan(
+            **common,
+            precision=SourceLocatorPrecision.PAGE_ONLY,
+        )
+    text_start = block.block_order
+    return ProtocolSourceSpan(
+        **common,
+        text_start=text_start,
+        text_end=text_start + max(1, len(block.text)),
+        excerpt=block.text,
+        precision=SourceLocatorPrecision.TEXT_RANGE,
+    )
+
+
+def _matrix(
+    rows: list[list[str]],
+    *,
+    cols: int | None = None,
+    page_only_refs: set[str] | None = None,
+) -> tuple[list[StructureBlock], list[ProtocolSourceSpan]]:
+    width = cols or max(len(row) for row in rows)
+    blocks = [_root(rows=len(rows), cols=width)]
+    order = 1
+    for row_index, row in enumerate(rows):
+        for col_index, text in enumerate(row):
+            if text == "":
+                continue
+            block = _cell(order, row_index, col_index, text)
+            blocks.append(block)
+            order += 1
+    page_only_refs = page_only_refs or set()
+    spans = [
+        _span(block, page_only=block.source_ref in page_only_refs)
+        for block in blocks
+        if block.kind == BlockKind.PARAGRAPH
+    ]
+    return blocks, spans
+
+
+def _projection(
+    blocks: list[StructureBlock],
+    *,
+    phase: StudyPhase = StudyPhase.PHASE_III,
+    included_refs: set[str] | None = None,
+    phase_scopes: dict[str, list[PhaseScope]] | None = None,
+) -> PhaseProjection:
+    included_refs = included_refs or {
+        block.source_ref for block in blocks if block.kind == BlockKind.PARAGRAPH
+    }
+    phase_scopes = phase_scopes or {}
+    projected: list[PhaseApplicabilityBlock] = []
+    for block in blocks:
+        if block.kind != BlockKind.PARAGRAPH or block.source_ref not in included_refs:
+            continue
+        projected.append(
+            PhaseApplicabilityBlock(
+                block_id=f"phase:{block.source_ref}",
+                snapshot_id=SNAPSHOT,
+                source_ref=block.source_ref,
+                source_span_ids=[f"span:{block.source_ref}"],
+                granularity=ApplicabilityGranularity.PARAGRAPH,
+                source_order=block.block_order,
+                text=block.text,
+                phase_scopes=phase_scopes.get(block.source_ref, [PhaseScope.SHARED]),
+                table_path=block.table_path,
+            )
+        )
+    return PhaseProjection(
+        projection_id=f"projection:{phase.value}",
+        graph_id="graph:procedure",
+        selected_phase=phase,
+        blocks=projected,
+    )
+
+
+def _build(
+    blocks: list[StructureBlock],
+    spans: list[ProtocolSourceSpan],
+    projection: PhaseProjection,
+):
+    return build_required_procedure_catalog(
+        blocks,
+        phase_projection=projection,
+        source_spans=spans,
+        frozen_at=FROZEN_AT,
+    )
+
+
+def test_native_merged_heading_stops_at_its_actual_column_boundary() -> None:
+    def cell(row: int, col: int, text: str, span: int = 1) -> _Cell:
+        block = StructureBlock(
+            source_ref=f"body.t0.r{row}.c{col}.p0",
+            document_part=DocumentPart.BODY,
+            block_order=row * 10 + col,
+            kind=BlockKind.PARAGRAPH,
+            text=text,
+            table_path=(row, col),
+            table_col_span=span,
+        )
+        return _Cell("body.t0", row, col, (block,))
+
+    cells = {(0, 1): cell(0, 1, "筛选期", 2)}
+    cells.update({(1, col): cell(1, col, f"V{col}") for col in range(1, 5)})
+    headers = _header_projection(cells, first_mark_row=2, max_columns=5)
+
+    assert "筛选期" in headers[1][0]
+    assert "筛选期" in headers[2][0]
+    assert "筛选期" not in headers[3][0]
+    assert "筛选期" not in headers[4][0]
+    assert headers[2][1] == ("body.t0.r0.c1.p0", "body.t0.r1.c2.p0")
+
+
+def test_transposed_sampling_matrix_is_not_enrollment_visit_catalog() -> None:
+    flow, _ = _matrix(
+        [["项目", "筛选期", "基线期"], ["病史核对", "X", "X"]]
+    )
+    sampling, _ = _matrix(
+        [["研究日", "采样点", "PK", "PD"], ["首次访视", "D1", "X", "X"]]
+    )
+    for blocks, expected in ((flow, True), (sampling, False)):
+        root = blocks[0]
+        cells = _make_cells(blocks, root)
+        accepted, _marks, _first_row = _table_looks_like_flow(
+            root,
+            cells,
+            max_rows=root.table_rows or 0,
+            max_columns=root.table_cols or 0,
+        )
+        assert accepted is expected
+
+
+def test_merged_header_like_matrix_keeps_original_visit_text_and_structural_rows():
+    blocks, spans = _matrix(
+        [
+            ["操作项目", "预筛选期", "", "筛选期", "基线期", "治疗期"],
+            ["访视", "V0", "V1", "V2", "V3", "V4"],
+            ["知情同意", "X", "", "", "", ""],
+            ["人口学与病史", "", "", "X", "X", "X"],
+            ["实验室检查", "", "", "X", "X", "X"],
+        ],
+        cols=6,
+    )
+    catalog = _build(blocks, spans, _projection(blocks))
+
+    assert catalog.study_phase == StudyPhase.PHASE_III
+    assert [item.label for item in catalog.items] == [
+        "知情同意",
+        "人口学与病史",
+        "人口学与病史",
+        "实验室检查",
+        "实验室检查",
+    ]
+    assert catalog.items[0].visit_instance == "预筛选期 / V0"
+    assert all("治疗期" not in (item.visit_instance or "") for item in catalog.items)
+    assert all(item.source_span_ids for item in catalog.items)
+    assert derive_review_stage(catalog.items[0].visit_instance or "") is not None
+
+
+def test_frozen_visit_inventory_includes_a_column_without_required_procedures():
+    blocks, spans = _matrix([
+        ["操作项目", "筛选期", "筛选/导入期", "基线期"],
+        ["访视", "V0", "V1", "V2"],
+        ["检查甲", "", "X", "X"],
+    ], cols=4)
+    spans.append(_span(blocks[0]))
+    catalog = _build(blocks, spans, _projection(blocks))
+    assert {item.visit_instance for item in catalog.items} == {"筛选/导入期 / V1", "基线期 / V2"}
+    table = catalog.visit_tables[0]
+    assert table.column_count == 4
+    assert [column.visit_instance for column in table.columns] == ["筛选期 / V0", "筛选/导入期 / V1", "基线期 / V2"]
+    assert table.columns[0].source_excerpts == ("筛选期", "V0")
+    assert table.columns[0].review_stage == ReviewStage.SCREENING
+    from app.domain.contracts.protocol_ingestion import FrozenProtocolCatalog, frozen_catalog_content_hash
+    legacy_model = catalog.model_copy(update={"visit_tables": ()})
+    legacy = legacy_model.model_dump(mode="json")
+    legacy["catalog_sha256"] = frozen_catalog_content_hash(legacy_model)
+    reloaded = FrozenProtocolCatalog.model_validate(legacy)
+    assert reloaded.visit_tables == ()
+    assert "visit_tables" not in reloaded.model_dump(mode="json")
+
+
+def test_display_footnotes_are_removed_without_damaging_scientific_notation():
+    from app.protocols.procedure_catalog import _display_footnote_numbers, _without_display_footnotes
+
+    for value in ("血小板计数（10^9）", "给药剂量 10^9", "ANC<1.2×10^9/L"):
+        assert _without_display_footnotes(value) == value
+        assert _display_footnote_numbers(value) == ()
+    for value, expected in (("心电检查^2", "心电检查"), ("（X）^27", "（X）"),
+                            ("基线^2^6", "基线")):
+        assert _without_display_footnotes(value) == expected
+        assert _display_footnote_numbers(value)
+
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "治疗期^1", "随访期"],
+            ["访视", "V2（基线^1）", "V3"],
+            ["胸片（正侧位）^1", "X", ""],
+            ["ANC<1.2×10^9/L", "X", ""],
+        ],
+        cols=3,
+    )
+    note = StructureBlock(
+        source_ref="body.p1", document_part=DocumentPart.BODY,
+        section_index=0, block_order=max(block.block_order for block in blocks) + 1,
+        kind=BlockKind.PARAGRAPH, text="基线访视检查窗口",
+        numbering=NumberingRef(num_id=7, level=0, start=1, num_fmt="decimal", lvl_text="%1."),
+    )
+    blocks.append(note)
+    spans.append(_span(note))
+
+    catalog = _build(blocks, spans, _projection(blocks))
+
+    assert [item.label for item in catalog.items] == [
+        "胸片（正侧位）",
+        "ANC<1.2×10^9/L",
+    ]
+    assert {item.visit_instance for item in catalog.items} == {"治疗期 / V2（基线）"}
+
+
+def test_flow_display_footnotes_attach_numbered_note_sources_before_label_cleanup():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期^2"],
+            ["访视", "V1", "V2"],
+            ["血生化^3", "X", "X"],
+            ["ANC<1.2×10^9/L", "X", ""],
+        ],
+        cols=3,
+    )
+    next_order = max(block.block_order for block in blocks) + 1
+    blocks.extend(
+        [
+            StructureBlock(
+                source_ref=f"body.p{index}",
+                document_part=DocumentPart.BODY,
+                section_index=0,
+                block_order=next_order + index,
+                kind=BlockKind.PARAGRAPH,
+                text=text,
+                numbering=NumberingRef(
+                    num_id=7,
+                    level=0,
+                    start=1,
+                    num_fmt="decimal",
+                    lvl_text="%1.",
+                ),
+            )
+            for index, text in enumerate(
+                ["签署知情同意", "基线访视合并规则", "血生化应空腹采样"],
+                start=1,
+            )
+        ]
+    )
+    spans.extend(
+        _span(block) for block in blocks if block.source_ref.startswith("body.p")
+    )
+
+    catalog = _build(blocks, spans, _projection(blocks))
+    baseline_biochemistry = next(
+        item
+        for item in catalog.items
+        if item.label == "血生化" and "基线期" in (item.visit_instance or "")
+    )
+    screening_biochemistry = next(
+        item
+        for item in catalog.items
+        if item.label == "血生化" and "筛选期" in (item.visit_instance or "")
+    )
+    scientific_notation = next(
+        item for item in catalog.items if item.label == "ANC<1.2×10^9/L"
+    )
+
+    assert "span:body.p2" in baseline_biochemistry.source_span_ids
+    assert "span:body.p3" in baseline_biochemistry.source_span_ids
+    assert "基线访视合并规则" in baseline_biochemistry.source_excerpts
+    assert "血生化应空腹采样" in baseline_biochemistry.source_excerpts
+    assert "span:body.p2" not in screening_biochemistry.source_span_ids
+    assert "span:body.p3" in screening_biochemistry.source_span_ids
+    assert all(
+        not span_id.startswith("span:body.p")
+        for span_id in scientific_notation.source_span_ids
+    )
+
+
+def test_flow_notes_keep_preface_continuations_and_nested_numbering():
+    blocks, spans = _matrix([
+        ["项目", "筛选期", "基线期"], ["访视", "V1", "V2"],
+        ["心电检查^2", "X", "X"],
+    ])
+    order = max(block.block_order for block in blocks) + 1
+    for index, (text, number_id) in enumerate([
+        ("缩略语：ECG=心电图", None), ("注：以下为日程表说明", None),
+        ("首条说明", 7), ("同一条的续行", None),
+        ("心电检查：基线可采用近期报告", 7),
+        ("子项说明", 8), ("下一条说明", 7),
+    ]):
+        blocks.append(StructureBlock(
+            source_ref=f"body.p{index}", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + index,
+            kind=BlockKind.PARAGRAPH, text=text,
+            style_name="List Paragraph" if index >= 2 else "Normal",
+            numbering=(NumberingRef(num_id=number_id, level=0, start=1,
+                                    num_fmt="decimal", lvl_text="%1.")
+                       if number_id is not None else None),
+        ))
+    spans.extend(_span(block) for block in blocks if block.source_ref.startswith("body.p"))
+    refs = _flow_footnote_refs(blocks, next(block for block in blocks if block.source_ref == "body.t0"))
+    assert refs == {
+        1: ("body.p2", "body.p3"),
+        2: ("body.p4", "body.p5"),
+        3: ("body.p6",),
+    }
+    catalog = _build(blocks, spans, _projection(blocks))
+    baseline = next(item for item in catalog.items
+                    if item.label == "心电检查" and "基线期" in (item.visit_instance or ""))
+    assert "span:body.p4" in baseline.source_span_ids
+    assert "span:body.p5" in baseline.source_span_ids
+
+
+@pytest.mark.parametrize("missing_continuation", [False, True])
+def test_native_note_context_requires_all_note_parts_not_scientific_notation(missing_continuation):
+    from app.domain.contracts.protocol_controls import ProtocolStructureUnit, TableCellContext
+    from app.protocols.procedure_catalog import table_footnote_context_links
+
+    blocks, _ = _matrix([["项目", "筛选期"], ["检查^1", "X"], ["浓度10^9/L", "X"]])
+    order = max(block.block_order for block in blocks) + 1
+    for offset, (text, level) in enumerate([("本表说明", 0), ("嵌套说明", 1)]):
+        blocks.append(StructureBlock(
+            source_ref=f"body.p{offset}", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + offset, kind=BlockKind.PARAGRAPH,
+            text=text, numbering=NumberingRef(num_id=7, level=level, start=1,
+                                             num_fmt="decimal", lvl_text="%1."),
+        ))
+    units = [ProtocolStructureUnit(
+        structure_unit_id="unit:" + block.source_ref, source_ref=block.source_ref,
+        member_source_refs=[block.source_ref], source_span_ids=["span:" + block.source_ref],
+        unit_kind="table_row" if block.table_path else "list_item", heading_path=["访视安排"],
+        source_order=block.block_order, study_phase=StudyPhase.PHASE_II,
+        phase_scopes=[PhaseScope.SHARED], excerpt=block.text,
+        table_context=(TableCellContext(table_path=block.table_path, row_index=block.table_path[-2],
+                        column_index=block.table_path[-1], member_cell_paths=[block.table_path])
+                       if block.table_path else None),
+    ) for block in blocks if block.kind == BlockKind.PARAGRAPH
+       and not (missing_continuation and block.source_ref == "body.p1")]
+    before = [block.model_dump(mode="json") for block in blocks]
+    assert table_footnote_context_links(blocks, units) == (
+        {} if missing_continuation else {
+            "unit:body.t0.r1.c0.p0": {"1": ["unit:body.p0", "unit:body.p1"]},
+        }
+    )
+    assert [block.model_dump(mode="json") for block in blocks] == before
+
+
+def test_same_number_notes_remain_bound_to_their_original_table():
+    from app.domain.contracts.protocol_controls import ProtocolStructureUnit, TableCellContext
+    from app.protocols.procedure_catalog import table_footnote_context_links
+
+    blocks = []
+    for table_index in range(2):
+        matrix, _ = _matrix([["项目", "基线期^1"], ["检查", "X"]])
+        offset = len(blocks)
+        blocks.extend(block.model_copy(update={
+            "source_ref": block.source_ref.replace("body.t0", f"body.t{table_index}"),
+            "block_order": block.block_order + offset,
+        }) for block in matrix)
+        blocks.append(StructureBlock(
+            source_ref=f"body.p{table_index}", document_part=DocumentPart.BODY,
+            section_index=0, block_order=len(blocks), kind=BlockKind.PARAGRAPH,
+            text=f"第{table_index}张表的访视说明",
+            numbering=NumberingRef(num_id=7 + table_index, level=0, start=1),
+        ))
+    units = [ProtocolStructureUnit(
+        structure_unit_id="unit:" + block.source_ref, source_ref=block.source_ref,
+        member_source_refs=[block.source_ref], source_span_ids=["span:" + block.source_ref],
+        unit_kind="table_row" if block.table_path else "list_item", heading_path=["访视安排"],
+        source_order=block.block_order, study_phase=StudyPhase.PHASE_II,
+        phase_scopes=[PhaseScope.SHARED], excerpt=block.text,
+        table_context=(TableCellContext(table_path=block.table_path, row_index=block.table_path[-2],
+                        column_index=block.table_path[-1], member_cell_paths=[block.table_path])
+                       if block.table_path else None),
+    ) for block in blocks if block.kind == BlockKind.PARAGRAPH]
+    assert table_footnote_context_links(blocks, units) == {
+        f"unit:body.t{index}.r0.c1.p0": {"1": [f"unit:body.p{index}"]}
+        for index in range(2)
+    }
+
+
+@pytest.mark.parametrize("trailing_heading", [False, True])
+def test_final_nested_flow_note_does_not_require_a_later_parent(trailing_heading):
+    blocks, _ = _matrix([
+        ["项目", "基线期^1"], ["访视", "V2"], ["心电检查", "X"],
+    ], cols=2)
+    order = max(block.block_order for block in blocks) + 1
+    blocks.extend([
+        StructureBlock(
+            source_ref="body.p1", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order, kind=BlockKind.PARAGRAPH,
+            text="基线心电检查说明", style_name="List Paragraph",
+            numbering=NumberingRef(num_id=7, level=0, start=1),
+        ),
+        StructureBlock(
+            source_ref="body.p2", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + 1, kind=BlockKind.PARAGRAPH,
+            text="同一说明的嵌套子项", style_name="List Paragraph",
+            numbering=NumberingRef(num_id=7, level=1, start=1),
+        ),
+    ])
+    if trailing_heading:
+        blocks.append(StructureBlock(
+            source_ref="body.p3", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + 2, kind=BlockKind.PARAGRAPH,
+            text="下一章节", style_name="Heading 1", outline_level=0,
+        ))
+    root = next(block for block in blocks if block.source_ref == "body.t0")
+    assert _flow_footnote_refs(blocks, root) == {
+        1: ("body.p1", "body.p2"),
+    }
+
+
+def test_changed_style_unnumbered_continuation_requires_a_resuming_parent():
+    blocks, _ = _matrix([
+        ["项目", "基线期^1"], ["访视", "V2"], ["心电检查", "X"],
+    ], cols=2)
+    order = max(block.block_order for block in blocks) + 1
+
+    def paragraph(ref, text, offset, style, numbering=None, heading=None):
+        return StructureBlock(
+            source_ref=ref, document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + offset,
+            kind=BlockKind.PARAGRAPH, text=text,
+            style_name=style, numbering=numbering, outline_level=heading,
+        )
+
+    parent = NumberingRef(num_id=7, level=0, start=1)
+    blocks.extend([
+        paragraph("body.p1", "首条说明", 0, "List Paragraph", parent),
+        paragraph("body.p2", "跨页续行", 1, "Normal"),
+        paragraph("body.p3", "下一条说明", 2, "List Paragraph", parent),
+        paragraph("body.p4", "新节正文", 3, "Heading 1", heading=0),
+        paragraph("body.p5", "不得吞入", 4, "Normal"),
+    ])
+    root = next(block for block in blocks if block.source_ref == "body.t0")
+    assert _flow_footnote_refs(blocks, root) == {
+        1: ("body.p1", "body.p2"), 2: ("body.p3",),
+    }
+
+    without_resumption = [block for block in blocks if block.source_ref != "body.p3"]
+    assert _flow_footnote_refs(without_resumption, root) == {1: ("body.p1",)}
+
+
+def test_flow_note_list_restart_and_heading_do_not_absorb_next_section():
+    blocks, _ = _matrix([
+        ["项目", "基线期^1"], ["访视", "V2"], ["心电检查", "X"],
+    ], cols=2)
+    order = max(block.block_order for block in blocks) + 1
+    blocks.extend([
+        StructureBlock(
+            source_ref="body.p1", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order, kind=BlockKind.PARAGRAPH,
+            text="本表说明", style_name="List Paragraph",
+            numbering=NumberingRef(num_id=7, level=0, start=1),
+        ),
+        StructureBlock(
+            source_ref="body.p2", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + 1, kind=BlockKind.PARAGRAPH,
+            text="下一列表首条", style_name="List Paragraph",
+            numbering=NumberingRef(num_id=8, level=0, start=1),
+        ),
+        StructureBlock(
+            source_ref="body.p3", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + 2, kind=BlockKind.PARAGRAPH,
+            text="下一章节", style_name="Heading 1", outline_level=0,
+        ),
+        StructureBlock(
+            source_ref="body.p4", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + 3, kind=BlockKind.PARAGRAPH,
+            text="下一章节列表", style_name="List Paragraph",
+            numbering=NumberingRef(num_id=7, level=0, start=1),
+        ),
+    ])
+    root = next(block for block in blocks if block.source_ref == "body.t0")
+    assert _flow_footnote_refs(blocks, root) == {1: ("body.p1",)}
+
+
+def test_visit_header_mixed_note_keeps_general_context_without_specific_pollution():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期^2^3"],
+            ["访视", "V1", "V2"],
+            ["血生化", "X", "X"],
+            ["生命体征", "X", "X"],
+        ],
+        cols=3,
+    )
+    next_order = max(block.block_order for block in blocks) + 1
+    blocks.extend(
+        StructureBlock(
+            source_ref=f"body.p{index}",
+            document_part=DocumentPart.BODY,
+            section_index=0,
+            block_order=next_order + index,
+            kind=BlockKind.PARAGRAPH,
+            text=text,
+            numbering=NumberingRef(
+                num_id=7,
+                level=0,
+                start=1,
+                num_fmt="decimal",
+                lvl_text="%1.",
+            ),
+        )
+        for index, text in enumerate(
+            [
+                "签署知情同意",
+                "筛选和基线访视间隔较短可合并检查。血生化应空腹采样",
+                "血生化应空腹采样",
+            ],
+            start=1,
+        )
+    )
+    spans.extend(
+        _span(block) for block in blocks if block.source_ref.startswith("body.p")
+    )
+
+    catalog = _build(blocks, spans, _projection(blocks))
+    baseline_biochemistry = next(
+        item
+        for item in catalog.items
+        if item.label == "血生化" and "基线期" in (item.visit_instance or "")
+    )
+    baseline_vital_signs = next(
+        item
+        for item in catalog.items
+        if item.label == "生命体征" and "基线期" in (item.visit_instance or "")
+    )
+
+    assert "span:body.p2" in baseline_biochemistry.source_span_ids
+    assert "span:body.p3" in baseline_biochemistry.source_span_ids
+    assert "span:body.p2" in baseline_vital_signs.source_span_ids
+    assert "span:body.p3" not in baseline_vital_signs.source_span_ids
+    assert "筛选和基线访视间隔较短可合并检查。" in baseline_vital_signs.source_excerpts
+    assert not any(
+        excerpt and "血生化应空腹采样" in excerpt
+        for excerpt in baseline_vital_signs.source_excerpts
+    )
+
+
+def test_visit_note_with_general_and_specific_scope_in_one_sentence_is_unresolved():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期^1"], ["访视", "V1"],
+            ["血生化", "X"], ["生命体征", "X"],
+        ],
+        cols=2,
+    )
+    note = StructureBlock(
+        source_ref="body.p1", document_part=DocumentPart.BODY,
+        section_index=0, block_order=max(block.block_order for block in blocks) + 1,
+        kind=BlockKind.PARAGRAPH, text="筛选期所有检查须完成，血生化应空腹采样",
+        numbering=NumberingRef(num_id=7, level=0, start=1, num_fmt="decimal", lvl_text="%1."),
+    )
+    blocks.append(note)
+    spans.append(_span(note))
+
+    with pytest.raises(ProcedureCatalogError, match="note_scope_unresolved"):
+        _build(blocks, spans, _projection(blocks))
+
+
+def test_referenced_visit_note_cannot_disappear_when_render_alignment_fails():
+    blocks, spans = _matrix(
+        [["检查项目", "筛选期", "基线期^2"], ["访视", "V1", "V2"], ["生命体征", "X", "X"]],
+        cols=3,
+    )
+    note = StructureBlock(
+        source_ref="body.p1", document_part=DocumentPart.BODY,
+        section_index=0, block_order=max(block.block_order for block in blocks) + 1,
+        kind=BlockKind.PARAGRAPH, text="两次访视满足规定间隔时相同检查可合并",
+        numbering=NumberingRef(num_id=7, level=0, start=2, num_fmt="decimal", lvl_text="%1."),
+    )
+    blocks.append(note)
+    spans.append(_span(note).model_copy(update={
+        "render_artifact_id": None, "render_page": None,
+        "text_start": None, "text_end": None,
+        "precision": SourceLocatorPrecision.BLOCK,
+        "alignment_status": AlignmentStatus.UNALIGNED,
+        "degradation_reason": "原件文字跨页，尚无精确定位",
+    }))
+
+    with pytest.raises(ProcedureCatalogError, match="source_coverage_missing"):
+        _build(blocks, spans, _projection(blocks))
+
+
+@pytest.mark.parametrize("mark", ["X^2", "(X)^2"])
+def test_mark_and_parenthesized_header_keep_both_note_numbers(mark: str):
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期^1^2（D1）"],
+            ["访视", "V1", "V2"],
+            ["生命体征", "X", mark],
+        ],
+        cols=3,
+    )
+    for number, text in enumerate(
+        ["筛选与基线访视可按规定间隔合并", "生命体征在筛选异常时复测"], start=1,
+    ):
+        note = StructureBlock(
+            source_ref=f"body.p{number}", document_part=DocumentPart.BODY,
+            section_index=0, block_order=max(block.block_order for block in blocks) + 1,
+            kind=BlockKind.PARAGRAPH, text=text,
+            numbering=NumberingRef(
+                num_id=7, level=0, start=1, num_fmt="decimal", lvl_text="%1.",
+            ),
+        )
+        blocks.append(note)
+        spans.append(_span(note))
+
+    catalog = _build(blocks, spans, _projection(blocks))
+    baseline = next(item for item in catalog.items if item.review_stage == ReviewStage.BASELINE)
+    screening = next(item for item in catalog.items if item.review_stage == ReviewStage.SCREENING)
+    assert "^" not in (baseline.visit_instance or "")
+    assert {"span:body.p1", "span:body.p2"} <= set(baseline.source_span_ids)
+    assert "span:body.p2" not in screening.source_span_ids
+
+
+def test_flow_display_footnotes_stop_before_a_later_numbered_section():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期^2"],
+            ["访视", "V1", "V2"],
+            ["血生化^3", "X", "X"],
+        ],
+        cols=3,
+    )
+    next_order = max(block.block_order for block in blocks) + 1
+    notes = [
+        ("body.p1", "签署知情同意", 7),
+        ("body.p2", "基线访视合并规则", 7),
+        ("body.p3", "血生化应空腹采样", 7),
+        ("body.p4", "后续章节中的无关编号条目", 8),
+    ]
+    blocks.extend(
+        StructureBlock(
+            source_ref=source_ref,
+            document_part=DocumentPart.BODY,
+            section_index=0,
+            block_order=next_order + index,
+            kind=BlockKind.PARAGRAPH,
+            text=text,
+            numbering=NumberingRef(
+                num_id=num_id,
+                level=0,
+                start=1,
+                num_fmt="decimal",
+                lvl_text="%1.",
+            ),
+        )
+        for index, (source_ref, text, num_id) in enumerate(notes)
+    )
+    spans.extend(
+        _span(block) for block in blocks if block.source_ref.startswith("body.p")
+    )
+
+    catalog = _build(blocks, spans, _projection(blocks))
+    baseline_biochemistry = next(
+        item
+        for item in catalog.items
+        if item.label == "血生化" and "基线期" in (item.visit_instance or "")
+    )
+
+    assert "span:body.p2" in baseline_biochemistry.source_span_ids
+    assert "span:body.p3" in baseline_biochemistry.source_span_ids
+    assert "span:body.p4" not in baseline_biochemistry.source_span_ids
+    assert "后续章节中的无关编号条目" not in baseline_biochemistry.source_excerpts
+
+
+def test_same_operation_at_screening_and_baseline_is_not_text_deduplicated():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期", "随访期"],
+            ["访视", "V1", "V2", "V3"],
+            ["实验室检查", "X", "X", "X"],
+            ["合并用药核查", "(X)", "X", ""],
+            ["再次入排核查", "", "X", ""],
+        ],
+        cols=4,
+    )
+    catalog = _build(blocks, spans, _projection(blocks))
+
+    lab_items = [item for item in catalog.items if item.label == "实验室检查"]
+    assert len(lab_items) == 2
+    assert {item.visit_instance for item in lab_items} == {
+        "筛选期 / V1",
+        "基线期 / V2",
+    }
+    assert len({item.item_id for item in lab_items}) == 2
+    assert len([item for item in catalog.items if item.label == "合并用药核查"]) == 2
+
+
+def test_sparse_visit_rows_do_not_forward_fill_and_randomization_sets_baseline_anchor():
+    blocks, spans = _matrix(
+        [
+            ["项目", "筛选期", "", "治疗期", "", "安全性随访", "提前退出"],
+            ["", "筛选", "基线", "", "V3", "V4(EOS)", ""],
+            ["访视(周)", "W-4", "", "W0", "W2", "W8", ""],
+            ["访视(天)", "D-28", "D≤-7", "D1", "D15", "D57", "末次给药后7天内"],
+            ["入排标准审核", "X", "X", "X", "", "", ""],
+            ["随机", "", "", "X", "", "", ""],
+            ["服用试验用药品", "", "", "X", "", "", ""],
+            ["不良事件", "", "", "X", "", "", ""],
+            ["实验室检查", "X", "X", "X", "X", "X", "X"],
+        ],
+        cols=7,
+    )
+
+    catalog = _build(blocks, spans, _projection(blocks))
+
+    assert [item.label for item in catalog.items] == [
+        "入排标准审核",
+        "入排标准审核",
+        "入排标准审核",
+        "实验室检查",
+        "实验室检查",
+        "实验室检查",
+    ]
+    assert [item.visit_instance for item in catalog.items[:3]] == [
+        "筛选期 / 筛选 / W-4 / D-28",
+        "筛选期 / 基线 / D≤-7",
+        "治疗期 / W0 / D1",
+    ]
+    assert all("V3" not in (item.visit_instance or "") for item in catalog.items)
+    assert all("EOS" not in (item.visit_instance or "") for item in catalog.items)
+    assert derive_review_stage("双盲治疗期 / V2（基线） / D1") is not None
+    assert derive_review_stage("提前退出 / V7(EOS) / W12 / D85") is None
+
+
+def test_phase_graph_projection_is_the_only_phase_isolation_signal():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "筛选期", "基线期"],
+            ["访视", "II期", "III期", "III期"],
+            ["同名检查", "X", "X", "X"],
+        ],
+        cols=4,
+    )
+    scopes: dict[str, list[PhaseScope]] = {}
+    for block in blocks:
+        if block.kind != BlockKind.PARAGRAPH:
+            continue
+        if ".c0." in block.source_ref:
+            scopes[block.source_ref] = [PhaseScope.SHARED]
+        elif ".c1." in block.source_ref:
+            scopes[block.source_ref] = [PhaseScope.PHASE_II]
+        else:
+            scopes[block.source_ref] = [PhaseScope.PHASE_III]
+    graph_blocks = [
+        PhaseApplicabilityBlock(
+            block_id=f"phase:{block.source_ref}",
+            snapshot_id=SNAPSHOT,
+            source_ref=block.source_ref,
+            source_span_ids=[f"span:{block.source_ref}"],
+            granularity=ApplicabilityGranularity.PARAGRAPH,
+            source_order=block.block_order,
+            text=block.text,
+            phase_scopes=scopes[block.source_ref],
+            table_path=block.table_path,
+        )
+        for block in blocks
+        if block.kind == BlockKind.PARAGRAPH
+    ]
+    graph = PhaseApplicabilityGraph(
+        graph_id="graph:procedure",
+        snapshot_id=SNAPSHOT,
+        blocks=graph_blocks,
+        detected_phase_scopes=[
+            PhaseScope.PHASE_II,
+            PhaseScope.PHASE_III,
+            PhaseScope.SHARED,
+        ],
+    )
+
+    catalog = build_required_procedure_catalog(
+        blocks,
+        phase_graph=graph,
+        selected_phase=StudyPhase.PHASE_III,
+        source_spans=spans,
+        frozen_at=FROZEN_AT,
+    )
+    assert len(catalog.items) == 2
+    assert {item.visit_instance for item in catalog.items} == {
+        "筛选期 / III期",
+        "基线期 / III期",
+    }
+    assert all(" / II期" not in item.visit_instance for item in catalog.items)
+
+
+@pytest.mark.parametrize(
+    "mutation, expected_code",
+    [
+        ("empty", "flow_table_empty"),
+        ("placeholder", "operation_placeholder"),
+        ("unresolved_visit", "visit_unresolved"),
+        ("degraded_source", "source_coverage_missing"),
+    ],
+)
+def test_structural_flow_failures_block_catalog(mutation: str, expected_code: str):
+    rows = [
+        ["检查项目", "筛选期", "基线期", "治疗期"],
+        ["访视", "V1", "V2", "V3"],
+        ["实验室检查", "X", "X", "X"],
+    ]
+    if mutation == "empty":
+        rows = [
+            ["检查项目", "筛选期", "基线期", "治疗期"],
+            ["访视", "V1", "V2", "V3"],
+            ["实验室检查", "", "", "X"],
+        ]
+    elif mutation == "placeholder":
+        rows[2][0] = "待核对"
+    elif mutation == "unresolved_visit":
+        rows[0][1] = "访视一"
+    blocks, spans = _matrix(rows, cols=4)
+    if mutation == "degraded_source":
+        for degraded in tuple(
+            span
+            for span in spans
+            if "r0.c2" in span.source_ref or "r1.c2" in span.source_ref
+        ):
+            spans[spans.index(degraded)] = degraded.model_copy(
+                update={
+                    "alignment_status": AlignmentStatus.DEGRADED,
+                    "degradation_reason": "插值页提示",
+                }
+            )
+    with pytest.raises(ProcedureCatalogError) as exc_info:
+        _build(blocks, spans, _projection(blocks))
+    assert exc_info.value.code == expected_code
+
+
+def test_aligned_page_only_is_formal_but_degraded_page_only_is_not():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期"],
+            ["访视", "V1", "V2"],
+            ["体格检查", "X", "X"],
+        ],
+        cols=3,
+        page_only_refs={"body.t0.r1.c2.p0"},
+    )
+    catalog = _build(blocks, spans, _projection(blocks))
+    assert len(catalog.items) == 2
+
+    for page_only in tuple(
+        span
+        for span in spans
+        if span.source_ref.endswith("r0.c2.p0") or span.source_ref.endswith("r1.c2.p0")
+    ):
+        spans[spans.index(page_only)] = page_only.model_copy(
+            update={
+                "alignment_status": AlignmentStatus.DEGRADED,
+                "degradation_reason": "仅作页面提示",
+            }
+        )
+    with pytest.raises(ProcedureCatalogError, match="source_coverage_missing"):
+        _build(blocks, spans, _projection(blocks))
+
+
+def test_duplicate_aligned_page_only_is_not_formal_source_coverage():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期"],
+            ["访视", "V1", "V2"],
+            ["体格检查", "X", "X"],
+        ],
+        cols=3,
+        page_only_refs={
+            "body.t0.r0.c1.p0",
+            "body.t0.r0.c2.p0",
+            "body.t0.r1.c1.p0",
+            "body.t0.r1.c2.p0",
+        },
+    )
+
+    with pytest.raises(ProcedureCatalogError, match="source_coverage_missing"):
+        _build(blocks, spans, _projection(blocks))
+
+
+@pytest.mark.parametrize(
+    "label,path,selected_phase,expected_root,expected_parent_counts,expected_stage_counts,expected_counts",
+    REAL_PROCEDURE_PROTOCOLS,
+)
+def test_real_protocol_required_procedure_catalog_is_read_only_and_phase_isolated(
+    label: str,
+    path: Path,
+    selected_phase: StudyPhase,
+    expected_root: str,
+    expected_parent_counts: tuple[int, int],
+    expected_stage_counts: dict[str, int],
+    expected_counts: dict[str, int],
+    tmp_path: Path,
+) -> None:
+    """Exercise the actual render/alignment/phase/catalog chain, not snapshots."""
+
+    if not path.is_file():
+        pytest.skip(f"真实方案文件缺失：{path}")
+    before = _source_snapshot(path)
+    artifact = register_source_artifact(
+        path,
+        source_artifact_id=f"slice3-procedure-{label}",
+        storage_root=tmp_path,
+    )
+    extraction = extract_docx_structure(
+        path,
+        snapshot_id=f"slice3-procedure-{label}-snapshot",
+        source_artifact=artifact,
+        output_dir=tmp_path,
+    )
+    rendered = render_to_pdf(path, tmp_path / "rendered", source_artifact=artifact)
+    assert rendered.status.value == "succeeded", rendered.render_error
+    assert rendered.pdf_path is not None
+    page_texts = pdf_page_texts(rendered.pdf_path)
+    aligned = align_blocks(
+        extraction.blocks,
+        snapshot_id=extraction.snapshot.snapshot_id,
+        render_artifact_id=f"slice3-procedure-{label}-render",
+        page_texts=page_texts,
+    )
+    graph = build_phase_applicability_graph(
+        extraction.blocks,
+        snapshot_id=extraction.snapshot.snapshot_id,
+        source_span_ids={
+            span.source_ref: span.source_span_id for span in aligned.spans
+        },
+    ).graph
+    projection = project_single_phase(graph, selected_phase)
+    parent_catalog = freeze_official_parent_rules(
+        build_section_index(extraction.blocks, graph, aligned.spans),
+        selected_phase,
+        frozen_at=FROZEN_AT,
+    )
+    catalog = build_required_procedure_catalog(
+        extraction.blocks,
+        phase_projection=projection,
+        source_spans=aligned.spans,
+        frozen_at=FROZEN_AT,
+    )
+
+    if label == "MG-K10-SAR":
+        ecg = next(item for item in catalog.items
+                   if item.label == "12导联心电图" and item.review_stage.value == "baseline")
+        assert any(excerpt and "W0可接受给药前7天内结果" in excerpt
+                   for excerpt in ecg.source_excerpts)
+        symptom = next(item for item in catalog.items
+                       if item.label == "rTNSS/rTOSS评估"
+                       and item.review_stage.value == "baseline")
+        assert any(excerpt and "试验期间受试者需每日" in excerpt
+                   for excerpt in symptom.source_excerpts)
+        score = next(item for item in catalog.items
+                     if item.label == "iTNSS/iTOSS评估"
+                     and item.review_stage.value == "baseline")
+        assert "body.p279" in {
+            aligned_span.source_ref for source_id in score.source_span_ids
+            if (aligned_span := next(
+                span for span in aligned.spans if span.source_span_id == source_id
+            ))
+        }
+        vital = next(item for item in catalog.items
+                     if item.label == "生命体征"
+                     and item.review_stage.value == "baseline")
+        assert "body.p279" not in {
+            aligned_span.source_ref for source_id in vital.source_span_ids
+            if (aligned_span := next(
+                span for span in aligned.spans if span.source_span_id == source_id
+            ))
+        }
+
+    if label == "CMS-D001":
+        scoring_items = [
+            item
+            for item in catalog.items
+            if item.label in {"PASI评分", "PGA评分", "BSA评分", "DLQI评分"}
+            and item.visit_instance == "治疗期 / W0 / D1 / -"
+        ]
+        assert len(scoring_items) == 4
+        assert all(
+            "不良事件于D1启动给药后开始记录"
+            not in " ".join(item.source_excerpts)
+            for item in scoring_items
+        )
+
+    assert Counter(item.visit_instance for item in catalog.items) == expected_counts
+    assert all(item.review_stage is not None for item in catalog.items)
+    assert (
+        Counter(item.review_stage.value for item in catalog.items)
+        == expected_stage_counts
+    )
+    spans_by_id = {span.source_span_id: span for span in aligned.spans}
+    for item in (*parent_catalog.items, *catalog.items):
+        assert item.source_excerpts
+        assert len(item.source_excerpts) == len(item.source_span_ids)
+        assert any(excerpt is not None for excerpt in item.source_excerpts)
+        blocks_by_ref = {block.source_ref: block for block in extraction.blocks}
+        assert all(
+            excerpt is None
+            or (
+                excerpt in blocks_by_ref[spans_by_id[source_span_id].source_ref].text
+                if item.kind == CatalogItemKind.REQUIRED_PROCEDURE
+                else excerpt == spans_by_id[source_span_id].excerpt
+            )
+            for source_span_id, excerpt in zip(
+                item.source_span_ids,
+                item.source_excerpts,
+                strict=True,
+            )
+        )
+
+    coverage = build_full_protocol_coverage_manifest(
+        extraction.blocks,
+        projection,
+        graph,
+        protocol_version_id=f"{label}:real-direct-upload",
+        protocol_document_sha256=before[0],
+        snapshot_id=extraction.snapshot.snapshot_id,
+        manifest_id=f"manifest:{label}:real-direct-upload",
+    )
+    control_plan = plan_protocol_control_batches(
+        coverage,
+        parent_catalog,
+        catalog,
+    )
+    agent_input = ProtocolControlAgentInput.from_batch(control_plan.batches[0])
+    prompt = build_protocol_control_agent_prompt(agent_input)
+    assert agent_input.known_official_targets
+    assert agent_input.known_procedure_targets
+    assert all(target.source_excerpts for target in agent_input.known_official_targets)
+    assert all(target.source_excerpts for target in agent_input.known_procedure_targets)
+    assert agent_input.known_official_targets[0].source_excerpts[0] in prompt
+
+    if label == "CMS-D001":
+        ex20 = next(
+            target
+            for target in agent_input.known_official_targets
+            if target.official_code == "EX-20"
+        )
+        ex20_text = "".join(ex20.source_excerpts)
+        assert (
+            "丙氨酸转氨酶（ALT）或天冬氨酸转氨酶（AST）或总胆红素≥1.5×ULN" in ex20_text
+        )
+        assert "经研究者评估如果参与研究将可能对参与者构成不可接受的风险" in ex20_text
+        assert "γ-谷氨酰转移酶" not in ex20_text
+        assert ex20.source_excerpts[0] in prompt
+
+    formal_ids = formal_source_span_ids(aligned.spans)
+    inclusion_count = sum(
+        item.official_code.startswith("IN-") for item in parent_catalog.items
+    )
+    exclusion_count = sum(
+        item.official_code.startswith("EX-") for item in parent_catalog.items
+    )
+    assert (inclusion_count, exclusion_count) == expected_parent_counts
+    assert all(set(item.source_span_ids) & formal_ids for item in parent_catalog.items)
+    assert all(
+        verify_excerpt_against_page(span, page_texts[span.render_page - 1])
+        for span in aligned.spans
+        if span.source_span_id in formal_ids
+        and span.precision == SourceLocatorPrecision.TEXT_RANGE
+    )
+    item_source_refs = {
+        spans_by_id[source_span_id].source_ref
+        for item in catalog.items
+        for source_span_id in item.source_span_ids
+    }
+    assert item_source_refs
+    table_source_refs = {
+        source_ref
+        for source_ref in item_source_refs
+        if source_ref == expected_root or source_ref.startswith(expected_root + ".")
+    }
+    note_source_refs = item_source_refs - table_source_refs
+    assert table_source_refs
+    flow_root = blocks_by_ref[expected_root]
+    numbered_note_refs = {
+        ref for refs in _flow_footnote_refs(extraction.blocks, flow_root).values()
+        for ref in refs
+    }
+    assert note_source_refs <= numbered_note_refs
+    if label == "CMS-D001":
+        assert "body.p316" in note_source_refs
+        assert "body.p325" in note_source_refs
+    assert not any(source_ref.startswith("body.t6") for source_ref in item_source_refs)
+    assert all(
+        any(
+            spans_by_id[source_span_id].alignment_status == AlignmentStatus.ALIGNED
+            and spans_by_id[source_span_id].precision
+            == SourceLocatorPrecision.TEXT_RANGE
+            for source_span_id in item.source_span_ids
+        )
+        for item in catalog.items
+    )
+
+    labels = [item.label for item in catalog.items]
+    assert not any(label.startswith("随机") for label in labels)
+    if label == "MG-K10-SAR":
+        assert "胸片（正侧位）" in labels
+    assert not any("试验用药品" in label for label in labels)
+    assert not any("日记卡发放" in label or "日记卡回收" in label for label in labels)
+    assert not any("日志卡分发" in label or "日志卡回收" in label for label in labels)
+    assert not any(
+        "D1" in (item.visit_instance or "")
+        and ("不良事件" in item.label or "注射部位反应" in item.label)
+        for item in catalog.items
+    )
+    assert _source_snapshot(path) == before
+
+
+def test_catalog_ids_hash_and_default_freeze_timestamp_are_stable():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期"],
+            ["访视", "V1", "V2"],
+            ["生命体征", "X", "X"],
+        ],
+        cols=3,
+    )
+    projection = _projection(blocks)
+    first = build_required_procedure_catalog(blocks, projection, spans)
+    second = build_required_procedure_catalog(blocks, projection, spans)
+    assert first.catalog_id == second.catalog_id
+    assert first.catalog_sha256 == second.catalog_sha256
+    assert [item.item_id for item in first.items] == [
+        item.item_id for item in second.items
+    ]

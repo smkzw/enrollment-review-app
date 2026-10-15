@@ -1,0 +1,37 @@
+{
+  "attached_source_refs": [
+    "body.t5.r16",
+    "body.p327",
+    "body.p638",
+    "body.p696",
+    "body.p874"
+  ],
+  "claims_complete": false,
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/configs/representative_group_pregnancy_fsh_contract_v10.v1.json",
+  "config_sha256": "6226a1b974b8c219603e0bd154bccd589a5d0b2b9081928a4849fff544a08714",
+  "control_batch_id": "pcb-aa49746318c86366e09cf887",
+  "control_plan_id": "pcp-50d39f907b6426eb5ec48034",
+  "coverage_manifest_id": "manifest:slice59p-pregnancy-fsh-reps",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "coverage_manifest_sha256": "89c7f00a8ed2d7eda666fb62538b1941b10c59f4375b8c4491436f66ea0b51e6",
+  "created_at": "2026-08-27T20:03:06.815119+00:00",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "frozen_plan_sha256": "f0aa7e4bccad782ad5472c1f446f079e26343f694ad3ddca401bfbef89f38250",
+  "group_id": "d001-ii-pregnancy-fsh-cross-chapter",
+  "mode": "dry_run_prepare",
+  "owned_source_refs": [
+    "body.p815#atom-0-11",
+    "body.p815#atom-11-74",
+    "body.p815#atom-74-161",
+    "body.p816"
+  ],
+  "parent_phase_qc_path": null,
+  "parent_phase_qc_sha256": null,
+  "prompt_char_count": 26973,
+  "prompt_sha256": "f41a085d8af2458e96f5ab4db3d9dccfd5144963343764b3c001afcfcc6ef37b",
+  "prompt_template_sha256": "387be27c4400c8ff4c72f7ea2ba67838d67da25cd2e162329fa21a8208f26bd2",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "replay_mode": "product_protocol_control_agent_runner_mtplx",
+  "task_id": "phase5-slice59n-20260827",
+  "worker": "worker_02"
+}

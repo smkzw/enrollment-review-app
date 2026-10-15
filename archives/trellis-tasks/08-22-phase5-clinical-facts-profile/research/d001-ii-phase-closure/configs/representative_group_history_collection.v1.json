@@ -1,0 +1,202 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-history-treatment-collection",
+  "task_id": "phase5-slice60o-20260828",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice60o-d001-history-treatment-collection-replay-20260828",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "parent_phase_qc_path": null,
+  "study_phase": "phase_ii",
+  "owned_source_refs": [
+    "body.p772",
+    "body.p773",
+    "body.p858",
+    "body.p871"
+  ],
+  "attached_source_refs": [
+    "body.t5.r7",
+    "body.t5.r8",
+    "body.p316",
+    "body.p318",
+    "body.p319",
+    "body.p339",
+    "body.p632",
+    "body.p1023"
+  ],
+  "required_candidate_source_refs": [],
+  "unit_lookup": [
+    "frozen_plan_owned",
+    "frozen_plan_context",
+    "coverage_manifest"
+  ],
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "四个正文单元是唯一处置对象；流程表、摘要脚注、正式入选规则及病史/合并治疗边界只作为只读权威上下文。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "当前冻结来源位于Ⅱ期研究流程及其对应检查和评估章节。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前复核",
+      "visit_instance": "D1首次给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-7686be9f1a415e6c2bc8cc9d",
+        "official_code": "IN-03",
+        "label": "斑块状银屑病病程与稳定性",
+        "position": 3,
+        "source_span_ids": [
+          "span-e8187ca2f3db6b4910548b576701bc1f"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "procedure:d001-history-screening",
+        "label": "筛选访视既往和现病史",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 39,
+        "semantic_family": "medical_history",
+        "source_span_ids": [
+          "span-15e719b96cfe880b384570529c150597",
+          "span-4a99db79b159b052dc705bbdd8a78068",
+          "span-bfd0cba18a3b4798f615c38757e1d91a",
+          "span-dad3f27cfcc943edfe7156df86c9e23b",
+          "span-e23fb1a130f0c55d5816c263b4dc4c77"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:d001-history-baseline",
+        "label": "基线访视既往和现病史复核",
+        "visit_instance": "基线访视",
+        "review_stage": "baseline",
+        "position": 40,
+        "semantic_family": "medical_history",
+        "source_span_ids": [
+          "span-15e719b96cfe880b384570529c150597",
+          "span-4a99db79b159b052dc705bbdd8a78068",
+          "span-bfd0cba18a3b4798f615c38757e1d91a",
+          "span-dad3f27cfcc943edfe7156df86c9e23b",
+          "span-e23fb1a130f0c55d5816c263b4dc4c77"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:d001-history-d1-pre-dose",
+        "label": "D1给药前既往和现病史复核",
+        "visit_instance": "D1首次给药前",
+        "review_stage": "baseline",
+        "position": 41,
+        "semantic_family": "medical_history",
+        "source_span_ids": [
+          "span-15e719b96cfe880b384570529c150597",
+          "span-4a99db79b159b052dc705bbdd8a78068",
+          "span-bfd0cba18a3b4798f615c38757e1d91a",
+          "span-dad3f27cfcc943edfe7156df86c9e23b",
+          "span-e23fb1a130f0c55d5816c263b4dc4c77"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:d001-treatment-history-screening",
+        "label": "筛选访视治疗史",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 42,
+        "semantic_family": "treatment_history",
+        "source_span_ids": [
+          "span-39481ac9c9a50471658568e18e205ad3",
+          "span-421740060cd1340cfa365bf904b7741a",
+          "span-b20de3af26464cc5929c090e2722c563",
+          "span-b684e2906f1ddcde18fd9dcbeb2142ae",
+          "span-e4d437436a2d08fd07f0c0e0b3fbc9e6"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:d001-treatment-history-baseline",
+        "label": "基线访视治疗史复核",
+        "visit_instance": "基线访视",
+        "review_stage": "baseline",
+        "position": 43,
+        "semantic_family": "treatment_history",
+        "source_span_ids": [
+          "span-39481ac9c9a50471658568e18e205ad3",
+          "span-421740060cd1340cfa365bf904b7741a",
+          "span-b20de3af26464cc5929c090e2722c563",
+          "span-b684e2906f1ddcde18fd9dcbeb2142ae",
+          "span-e4d437436a2d08fd07f0c0e0b3fbc9e6"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:d001-treatment-history-d1-pre-dose",
+        "label": "D1给药前治疗史复核",
+        "visit_instance": "D1首次给药前",
+        "review_stage": "baseline",
+        "position": 44,
+        "semantic_family": "treatment_history",
+        "source_span_ids": [
+          "span-39481ac9c9a50471658568e18e205ad3",
+          "span-421740060cd1340cfa365bf904b7741a",
+          "span-b20de3af26464cc5929c090e2722c563",
+          "span-b684e2906f1ddcde18fd9dcbeb2142ae",
+          "span-e4d437436a2d08fd07f0c0e0b3fbc9e6"
+        ]
+      }
+    ]
+  },
+  "runner": {
+    "max_transport_retries": 1,
+    "max_schema_repairs": 2,
+    "timeout_seconds": 7200.0
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60o-history-treatment-reps",
+    "catalog_id": "catalog:slice60o-history-treatment-reps"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p772": [
+      "保留尽可能近两年的收集强度",
+      "银屑病完整病程不得被两年截断",
+      "正式排除标准各自时间窗保持独立"
+    ],
+    "body.p773": [
+      "银屑病治疗史尽可能完整",
+      "其他疾病治疗史为过去半年",
+      "不得把半年窗口扩散至正式排除标准"
+    ],
+    "body.p858": [
+      "基线复核筛选访视以来的新增病史和诊治情况"
+    ],
+    "body.p871": [
+      "D1给药前复核上次访视以来的新增病史和诊治情况"
+    ]
+  },
+  "notes": [
+    "活动冻结计划为131包，当前第67包拥有p764、p766至p773；旧137/138包快照不得解释本组身份。",
+    "人工检查清单只用于父级事后验收，不进入Agent修订提示。",
+    "允许四个单元全部由流程必做目录覆盖；候选数量不是验收目标。"
+  ]
+}

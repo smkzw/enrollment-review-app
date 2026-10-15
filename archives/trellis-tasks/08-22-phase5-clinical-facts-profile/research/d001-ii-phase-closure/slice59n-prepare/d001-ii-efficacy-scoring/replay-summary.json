@@ -1,0 +1,20 @@
+{
+  "attached_count": 10,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-828b895e214c32cd45f1a18f",
+  "group_id": "d001-ii-efficacy-scoring",
+  "lookup_counts": {
+    "coverage_manifest": 4,
+    "frozen_plan_context": 2,
+    "frozen_plan_owned": 13
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-efficacy-scoring",
+  "owned_count": 9,
+  "prompt_char_count": 41914,
+  "prompt_sha256": "768f5f0534b44e06da5c8de5aa17525e92c9c7cac047fb137a6d855e297ae64b",
+  "task_id": "phase5-slice61bk-20260829",
+  "unit_count": 19,
+  "worker": "codex-parent"
+}

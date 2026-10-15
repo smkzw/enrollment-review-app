@@ -1,0 +1,11 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral.v1.json",
+  "artifact_dir_name": "phase5-slice59n-d001-viral-control-replay-contract-v5-20260828",
+  "runner": {
+    "max_schema_repairs": 4
+  },
+  "notes": [
+    "验证后续锚点的决定节点与到期证据闭包，并验证定向修复以替换方式消除重复分支和重复候选。"
+  ]
+}

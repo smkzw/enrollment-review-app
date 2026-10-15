@@ -1,0 +1,18 @@
+{
+  "attached_count": 0,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-e7dc037e8e384ebf04e10e59",
+  "group_id": "d001-ii-package93-ae-reportable-events-followup-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 11
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package93-ae-reportable-events-followup-boundary",
+  "owned_count": 11,
+  "prompt_char_count": 31972,
+  "prompt_sha256": "07e8c839820202b24277d9bd108e0ba831863032a16c4590b0c0d143bb086a0e",
+  "task_id": "phase5-slice61ce-20260830",
+  "unit_count": 11,
+  "worker": "codebuddy-worker_01"
+}

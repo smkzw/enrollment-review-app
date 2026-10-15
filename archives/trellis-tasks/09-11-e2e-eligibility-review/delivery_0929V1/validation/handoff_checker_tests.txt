@@ -1,0 +1,23 @@
+test_allow_template_explicitly (test_check_handoff.CheckHandoffTests.test_allow_template_explicitly) ... ok
+test_claim_cannot_borrow_another_snapshot (test_check_handoff.CheckHandoffTests.test_claim_cannot_borrow_another_snapshot) ... ok
+test_dangling_evidence (test_check_handoff.CheckHandoffTests.test_dangling_evidence) ... ok
+test_duplicate_identifier (test_check_handoff.CheckHandoffTests.test_duplicate_identifier) ... ok
+test_hypothesis_requires_alternative_and_disconfirmation (test_check_handoff.CheckHandoffTests.test_hypothesis_requires_alternative_and_disconfirmation) ... ok
+test_local_evidence_honestly_warned_not_rejected (test_check_handoff.CheckHandoffTests.test_local_evidence_honestly_warned_not_rejected) ... ok
+test_malformed_values_are_errors_not_crashes (test_check_handoff.CheckHandoffTests.test_malformed_values_are_errors_not_crashes) ... ok
+test_missing_executed_snapshot (test_check_handoff.CheckHandoffTests.test_missing_executed_snapshot) ... ok
+test_passing_status_with_failures_rejected (test_check_handoff.CheckHandoffTests.test_passing_status_with_failures_rejected) ... ok
+test_product_entry_has_actual_result_not_fake_exit (test_check_handoff.CheckHandoffTests.test_product_entry_has_actual_result_not_fake_exit) ... ok
+test_product_entry_without_actual_result_rejected (test_check_handoff.CheckHandoffTests.test_product_entry_without_actual_result_rejected) ... ok
+test_restricted_source_not_ordinary_shareable (test_check_handoff.CheckHandoffTests.test_restricted_source_not_ordinary_shareable) ... ok
+test_template_not_handoff (test_check_handoff.CheckHandoffTests.test_template_not_handoff) ... ok
+test_timestamp_timezone_required (test_check_handoff.CheckHandoffTests.test_timestamp_timezone_required) ... ok
+test_unexecuted_cannot_support_verified (test_check_handoff.CheckHandoffTests.test_unexecuted_cannot_support_verified) ... ok
+test_valid_index (test_check_handoff.CheckHandoffTests.test_valid_index) ... ok
+test_worktree_needs_manifest (test_check_handoff.CheckHandoffTests.test_worktree_needs_manifest) ... ok
+test_worktree_with_indexed_manifest (test_check_handoff.CheckHandoffTests.test_worktree_with_indexed_manifest) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.001s
+
+OK

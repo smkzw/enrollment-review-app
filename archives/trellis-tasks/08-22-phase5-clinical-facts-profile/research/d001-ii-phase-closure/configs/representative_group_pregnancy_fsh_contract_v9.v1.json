@@ -1,0 +1,10 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_pregnancy_fsh_contract_v8.v1.json",
+  "artifact_dir_name": "phase5-slice60a-d001-pregnancy-fsh-control-replay-20260828",
+  "notes": [
+    "当前Agent输出必须使用linked_procedure_catalog_item_ids完整列出共同覆盖一个原文单元的全部访视级流程目标；兼容单值字段必须为null。",
+    "筛选、基线和首次给药前是不同的冻结审核节点；任何流程必做处置都不得只保留最早或最后一个访视目标。",
+    "治疗后检查、提前退出检查和可选复查不因出现在同一段而自动成为入排控制；如不能由当前入排目录完整覆盖，不得以流程必做处置吞并。"
+  ]
+}

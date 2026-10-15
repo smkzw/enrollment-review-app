@@ -1,0 +1,7 @@
+# Bounded source review: independent repeat chains
+
+You are the existing read-only engineering adviser. Do not modify any file, execute imports/tests, start services, call product models, or read clinical data. Inspect source only. The owner retains acceptance. This is not clinical acceptance or approval of a semantic method.
+
+Read complete affected definitions in app/domain/repeat_acquisition_chains.py, repeat_series_constraints.py, repeat_observation_count.py, observation_relation_graph.py and app/services/repeat_result_resolution.py. The current increment decomposes only explicit initial/repeat graph relationships. Per-initial count constraints are calculated separately, retained in the resolution, and recomputed against the sealed graph before consumption. Per-node count constraints remain separate. Multiple-initial result adoption remains unknown pending its source-declared policy; do not mistake count checks for result adoption.
+
+Challenge soundness, scope and old-v2 compatibility. The owner fixed a local variable shadowing the outer owner set. Check whether remaining graph ambiguity, count completeness or evidence presentation introduces false adoption or loss. Report only actionable defects with file/line evidence and smallest remedies, or no source defect found with coverage limitations. Do not repeat the earlier broad review or require stage tests; the user deferred runtime tests until construction is complete.

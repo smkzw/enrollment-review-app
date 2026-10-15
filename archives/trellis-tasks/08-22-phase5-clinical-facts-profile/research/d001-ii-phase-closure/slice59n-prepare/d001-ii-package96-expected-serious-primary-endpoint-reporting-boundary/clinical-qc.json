@@ -1,0 +1,146 @@
+{
+  "attached_source_refs": [
+    "body.p1133",
+    "body.p1134",
+    "body.p1135",
+    "body.p1018",
+    "body.p1019"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package96-expected-serious-primary-endpoint-reporting-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第96包两个拥有单元（body.p1136-p1137）均保持post_treatment_execution处置；structural_only_source_refs显式为空；required_candidate_source_refs显式为空。",
+    "模型外准备精确为2 owned / 5 attached / 7 total：owned=body.p1136,body.p1137；attached=body.p1133,body.p1134,body.p1135,body.p1018,body.p1019。",
+    "p1136必须保持严重AND属预期，并继承p1133“一般”非绝对强度；不得OR化、绝对化或与p1134合并。",
+    "p1137必须保留主要疗效终点条件、不建议强度、申请人、个例安全性报告形式与国家药品审评机构；不得条件删除、绝对化、省略主体/形式/机构或反向必报推理。",
+    "只读附加不得改写为拥有；第97包body.p1138-p1149不进入本包提示、配置正向语义或测试正向语义。",
+    "官方入排与流程矩阵不含任何以body.p1136-p1137或只读附加来源为锚点的行，也不含不良事件/TEAE/SAE/SUSAR控制行；本包不合成任何IN/EX官方规则。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1136",
+    "body.p1137"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第80包；不吞并第80包其余来源": "pending_codex",
+        "用于区分SUSAR三维合取与本包“严重但属预期”除外项；不得把预期不良反应改写为SUSAR，也不得弱化三维AND": "pending_codex",
+        "第80包拥有：SUSAR定义（可疑且非预期严重不良反应），只读": "pending_codex"
+      },
+      "frozen_excerpt": "可疑且非预期严重不良反应（Suspected Unexpected Serious Adverse Reaction，SUSAR）指临床表现的性质和严重程度超出了试验药物《研究者手册》、已上市药品的说明书或者产品特性摘要等已有资料信息的可疑并且非预期的严重不良反应。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1018",
+      "structure_unit_id": "su-3a466b9df7a0012b972a2b3d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第80包": "pending_codex",
+        "用于闭合“属预期”对照权威资料地位；不得脱离《研究者手册》等资料单独改写预期/非预期，也不得转移第80包所有权": "pending_codex",
+        "第80包拥有：非预期不良反应定义及《研究者手册》作为预期性主要参考，只读": "pending_codex"
+      },
+      "frozen_excerpt": "非预期不良反应指不良反应的性质、严重程度、后果或频率，不同于试验药物当前相关资料（如《研究者手册》等文件）所描述的预期风险。《研究者手册》作为主要文件提供用以判断某不良反应是否预期或非预期的安全性参考信息。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1019",
+      "structure_unit_id": "su-0230c1ca32146e5682365991"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "为本包p1136-p1137提供非绝对列表强度与连续列表引导；不得把“一般”强化为绝对禁止": "pending_codex",
+        "所有权与候选发射权归第95包；不得重复发布为本包拥有": "pending_codex",
+        "第95包拥有：“以下情况一般不作为快速报告内容”引导语，只读": "pending_codex"
+      },
+      "frozen_excerpt": "以下情况一般不作为快速报告内容：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1133",
+      "structure_unit_id": "su-98140a88b2bec06fa03040e6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第95包": "pending_codex",
+        "用于保持列表前项与p1136严重但属预期项分离；不得与p1136合并或互相替代": "pending_codex",
+        "第95包拥有：非严重不良事件（跨包列表第1项），只读": "pending_codex"
+      },
+      "frozen_excerpt": "非严重不良事件；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1134",
+      "structure_unit_id": "su-e90c66dfbc7f1ca0e2bf3a15"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第95包": "pending_codex",
+        "用于保持列表连续前段；不得截断本包后项或夺取第96包所有权": "pending_codex",
+        "第95包拥有：严重不良事件与试验用药品无关（跨包列表第2项），只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件与试验用药品无关；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1135",
+      "structure_unit_id": "su-3805178b03c7b8cacabd6f96"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "必须保持严重AND属预期；不得弱化为严重OR属预期，不得把“预期”解释为“不严重”，不得与p1134非严重不良事件合并": "pending_codex",
+        "第96包拥有：严重但属预期的不良反应（跨包“以下情况一般不作为快速报告内容”列表连续后项）": "pending_codex",
+        "继承只读p1133“一般不作为快速报告内容”的非绝对强度；不得改写成永不/禁止/无需/不允许报告": "pending_codex",
+        "零候选；不得升格为预筛、筛选或基线入排门槛": "pending_codex"
+      },
+      "frozen_excerpt": "严重但属预期的不良反应；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1136",
+      "structure_unit_id": "su-b67409702cdd94eca252289a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得反向推理：当SAE不是主要疗效终点时，不能据此推导必须/应当/必然采用个例安全性报告快速报告": "pending_codex",
+        "第96包拥有：当以严重不良事件为主要疗效终点时，不建议申请人以个例安全性报告形式向国家药品审评机构报告": "pending_codex",
+        "结论强度为“不建议”，不是禁止；必须同时保留申请人、个例安全性报告形式、国家药品审评机构": "pending_codex",
+        "触发条件必须保留“以严重不良事件为主要疗效终点”；不得删除条件、扩大为任何SAE，或缩成仅确认相关/非预期SAE": "pending_codex",
+        "零候选；不得升格为预筛、筛选或基线入排门槛": "pending_codex"
+      },
+      "frozen_excerpt": "当以严重不良事件为主要疗效终点时，不建议申请人以个例安全性报告形式向国家药品审评机构报告。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1137",
+      "structure_unit_id": "su-9aefc1fcee2ad36efca4fd7b"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61ch-20260830",
+  "worker": "cursor-worker_01"
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_height_weight.v5.json",
+  "group_id": "d001-ii-height-weight-v6",
+  "task_id": "phase5-slice60zi-20260828",
+  "artifact_dir_name": "phase5-slice60zi-d001-height-weight-replay-aggregate-closure-20260828",
+  "owned_visit_instances_by_source_ref": {
+    "body.p775": null,
+    "body.p777": null,
+    "body.p778": null,
+    "body.p779": null,
+    "body.p780": null
+  },
+  "owned_required_procedure_target_ids_by_source_ref": {
+    "body.p775": [
+      "procedure:d001-height-weight-screening",
+      "procedure:d001-weight-baseline"
+    ],
+    "body.p777": ["procedure:d001-height-weight-screening"],
+    "body.p778": ["procedure:d001-height-weight-screening"],
+    "body.p779": ["procedure:d001-height-weight-screening"],
+    "body.p780": ["procedure:d001-height-weight-screening"],
+    "body.p782": [
+      "procedure:d001-height-weight-screening",
+      "procedure:d001-weight-baseline"
+    ],
+    "body.p783": [
+      "procedure:d001-height-weight-screening",
+      "procedure:d001-weight-baseline"
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60zi-height-weight",
+    "catalog_id": "catalog:slice60zi-height-weight"
+  },
+  "notes": [
+    "v5真实失败结果保留：节点范围门生效，但逐条动作缺口反馈耗尽修订预算。",
+    "v6将同批全部流程动作缺口一次返回，避免模型每轮只修一条来源。",
+    "body.p775同时覆盖筛选期身高体重和其余访视体重，不再错误冻结为仅筛选访视；在当前入排节点目录中关联筛选及基线目标。"
+  ]
+}

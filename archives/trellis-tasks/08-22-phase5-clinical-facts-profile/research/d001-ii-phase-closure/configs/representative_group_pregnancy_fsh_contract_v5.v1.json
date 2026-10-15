@@ -1,0 +1,14 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_pregnancy_fsh_contract_v4.v1.json",
+  "artifact_dir_name": "phase5-slice59t-d001-pregnancy-fsh-control-replay-20260828",
+  "forbidden_candidate_source_refs": [
+    "body.p815#atom-11-74"
+  ],
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p816": [
+      "已绝经妇女",
+      "永久性绝育"
+    ]
+  }
+}

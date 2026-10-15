@@ -1,0 +1,193 @@
+{
+  "attached_source_refs": [
+    "body.p1225"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package103-safety-pk-exposure-statistical-boundary",
+  "notes": [
+    "模型外闭包：11个拥有来源，1个Ⅲ期只读来源，12个声明来源均禁止候选；required candidates、workflow bindings、official rules和required procedures均为零。",
+    "p1226的基线/治疗前后、p1228的血妊娠检查、p1229的合并治疗、p1231的PK采样与血药浓度、p1233的PopPK和p1235的暴露-效应均保留原始统计语义，不向单例入排控制反向推理。",
+    "p1225严格隔离Ⅲ期AE/TEAE统计；p1210-p1223无拥有权且p1236/p1237归Package 104，不进入本包准备提示。",
+    "claims_complete=false；本配置不调用临床语义模型、不发布控制点、不宣称D001全量或受试者/Patient Profile验收完成。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1224",
+    "body.p1226",
+    "body.p1227",
+    "body.p1228",
+    "body.p1229",
+    "body.p1230",
+    "body.p1231",
+    "body.p1232",
+    "body.p1233",
+    "body.p1234",
+    "body.p1235"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "安全性分析标题仅提供统计章节结构，不独立产生受试者级安全性筛选、基线或给药前控制点": "pending_codex"
+      },
+      "frozen_excerpt": "安全性分析",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1224",
+      "structure_unit_id": "su-f0c049a52a17bb04c2678aaa"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "p1225只读属于Ⅲ期AE/TEAE统计语境；Ⅲ期基础期和整个研究期汇总不得进入Ⅱ期控制": "pending_codex",
+        "治疗后TEAE、严重不良事件、死亡等统计列表不是Ⅱ期受试者级入排义务": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件（AE）采用MedDRA（28.0版本或届时最高版本）进行编码，依据系统器官分类（SOC）和首选语（PT）进行汇总，Ⅲ期临床阶段将分别对各组16周基础期和整个研究期的AE进行汇总。主要报告发生治疗期出现的不良事件（TEAE）（即在治疗过程中出现的事件，在治疗前并未出现或相对于治疗前发生恶化的事件）的参与者例数、例次和发生率，并按照不良事件类型、与研究药物的因果关系及严重程度汇总TEAE并列表。对于与研究药物相关的TEAE、导致永久停用研究药物的TEAE、导致退出试验的TEAE、导致中断治疗（暂停给药）的TEAE、严重不良事件、死亡事件进行单独汇总并列表。对治疗前（即签署知情同意后，接受试验用药品前以及接受试验用药品后未发生严重程度加重的不良医学事件）发生的不良医学事件以清单形式列出。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1225",
+      "structure_unit_id": "su-ea5183042e51c003a1bb56d2"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "异常结果列表是治疗后安全性描述，不是单例资格判定或给药前必做": "pending_codex",
+        "血常规、血生化、生命体征按评价时间点和治疗前后变化进行统计汇总；治疗后异常及基线变化不得改写为筛选或基线资料缺口": "pending_codex"
+      },
+      "frozen_excerpt": "按照组别对在计划的评价时间点的参与者血常规和血生化等实验室检查、生命体征的结果进行统计汇总，描述指标检查结果相对于基线的变化情况，主要关注治疗前正常而治疗后异常的发生情况，以及治疗前异常但在治疗后异常加重的参与者，需列表描述上述两种情况。以交叉表的形式，分别列出各组别例数和百分比。将按照参与者对所有异常检查结果进行列表。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1226",
+      "structure_unit_id": "su-9b15d9260c296212cb45b6ba"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "体格检查按组别列表、交叉表汇总例数百分比及异常结果；不形成体格检查筛选义务或异常即不得入组规则": "pending_codex"
+      },
+      "frozen_excerpt": "按照组别对受试者的体格检查数据进行列表，以交叉表的形式，分别描述例数和百分比，并对异常结果进行汇总。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1227",
+      "structure_unit_id": "su-9471f1cf4b0c3c90fb7acced"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具有生育能力女性的血妊娠检查仅作为安全性统计列表；不得倒置为本包新增的妊娠筛查、阳性判定或访视流程控制": "pending_codex"
+      },
+      "frozen_excerpt": "列出所有具有生育能力的女性的血妊娠检查结果。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1228",
+      "structure_unit_id": "su-22233ad4faaa63fde78c241a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "合并用药及治疗按组别汇总并列表，仅是统计域；不独立形成合并用药禁限、病史筛查或资格决定": "pending_codex"
+      },
+      "frozen_excerpt": "按照组别对合并用药及治疗进行汇总并列表。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1229",
+      "structure_unit_id": "su-44d285efe3644d182df46fc7"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "药代动力学分析标题仅提供统计分析结构，不产生PK采样、访视或给药前控制点": "pending_codex"
+      },
+      "frozen_excerpt": "药代动力学分析",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1230",
+      "structure_unit_id": "su-c65ca0704622be6c77eb68ec"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "PKCS、计划/实际PK采样时间、CMS-D001浓度和曲线属于PK描述性统计输出；不得变成受试者级PK采样必做、浓度阈值或入排条件": "pending_codex"
+      },
+      "frozen_excerpt": "本研究将基于PKCS，按照剂量组对各计划PK采样时间的CMS-D001及其主要代谢产物（如适用）血药浓度（血浆C_trough或C_max）进行列表和描述性统计汇总，包括例数、算术均值、标准差、变异系数、几何均值、几何变异系数、中位数、最大值和最小值等。还将按实际PK采样时间，绘制个体血药浓度-时间曲线图（线性和半对数）；按计划PK采样时间，绘制各剂量组的平均血药浓度-时间曲线图（线性和半对数）。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1231",
+      "structure_unit_id": "su-ce3995c1532608db1e1780b6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "群体药代动力学分析标题仅提供模型分析结构，不产生受试者资格、采样义务或工作流绑定": "pending_codex"
+      },
+      "frozen_excerpt": "群体药代动力学分析",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1232",
+      "structure_unit_id": "su-b4b73bf4822e4834677fbaed"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "本研究与前期研究血药浓度合并并使用NONMEM建立PopPK模型，另行准备定量药理计划及报告；不得改写为模型纳入资格、缺失证据不足或给药前控制": "pending_codex"
+      },
+      "frozen_excerpt": "在本研究中获得的所有CMS-D001及其主要代谢产物（如适用）的血药浓度数据将与前期已完成研究的数据合并，用于PopPK分析（使用非线性混合效应模型[NONMEM]），建立PopPK模型以表征CMS-D001及其主要代谢产物（如适用）的PK特征。这些分析将另行准备定量药理分析计划及报告。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1233",
+      "structure_unit_id": "su-70bee489846ac0a1d8402eaa"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "暴露-效应分析标题仅提供定量药理分析结构，不独立形成疗效/安全性入选阈值或给药前义务": "pending_codex"
+      },
+      "frozen_excerpt": "暴露-效应分析",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1234",
+      "structure_unit_id": "su-2215e90b929724adc1afbcda"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "如数据允许的个体暴露参数及暴露/疗效、暴露/安全性相关性探索另行准备定量药理计划和报告；不得倒置为入排、基线或安全性控制点": "pending_codex"
+      },
+      "frozen_excerpt": "如数据允许，根据建立的最终PopPK模型参数估计值，估算个体暴露参数，用于进一步的暴露-效应分析，包括暴露/疗效、暴露/安全性的相关性探索。这些分析将另行准备定量药理分析计划及报告。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1235",
+      "structure_unit_id": "su-e18e6f31a176a1a1d304310c"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cp-20260830",
+  "worker": "codex-parent"
+}

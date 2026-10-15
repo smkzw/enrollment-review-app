@@ -1,0 +1,12 @@
+This is optional continuation round 3 in the same session.
+
+Do not restart the task or open a new session. Codex has requested this continuation because the previous output needs additional quality work. Produce the corrected final pass for this role. Preserve useful evidence from the earlier rounds, resolve contradictions explicitly, state uncertainty, and make the recommendation actionable for Codex.
+
+Return the complete updated Markdown output for your role. Keep evidence, inference,
+recommendation, and uncertainty separate. Codex remains the final authority.
+
+Narrow final source pass: no tests/imports/probes, no app/model/DB/browser/network/delegation or edits. Do not repeat the whole previous review. Read actual changed definitions for:
+1. ObservationOrdering.window_order now explicit within_window / before_window_check / not_applicable / unresolved (None retained only for historical serialization). Official wire schema requires nonnull enum; prompt in both producers describes distinction and source support. Shared validator rejects mismatch with presence of time constraint; control require_explicit rejects absence, official deconstruction gate rejects absence. This is source/protocol-backed semantic selection, not a regex proof of meaning; publication/adoption evidence boundaries remain.
+2. Ordered helper requires known window_order, filters FALSE only for within_window; before_window_check keeps all for strict ordering then rejects FALSE/UNKNOWN selected record without choosing another. interval_condition still unresolved. DTO explicitly describes which order and whether selection succeeded.
+3. Consumerv11 literals+constant isolate previous method. selected_fact_ids serializer omits only when originally absent via model_fields_set, NOT when explicitly empty (raw current selection hash must stay equal). Legacy outcome/observation equality check only if original field present; current selection material consumer11 and control outcomev3 explicitly require field. Source history now also checks selected IDs in context. No old payload rewriting.
+4. Any overlooked decisive source bug in this delta, particularly hash symmetry, empty selection, temporal uncertainty. No DB query to prove old records; source-only backward omission is used instead. Full product tests remain deferred. Give PASS/FAIL/UNVERIFIED with specific source lines and limitations; no test output claimed.

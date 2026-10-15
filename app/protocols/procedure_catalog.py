@@ -1,0 +1,1865 @@
+"""Deterministic required-procedure catalog construction for Phase 3.
+
+This module is deliberately a sidecar to the phase graph and the existing
+ingestion contracts.  It does not infer study-phase ownership from procedure
+text, table numbers, or the legacy deconstructor.  A procedure table is
+considered only when its structure contains a table root, visit-like header
+rows, operation rows, and explicit ``X``/``(X)`` marks.
+
+The output is the existing :class:`FrozenProtocolCatalog` contract.  The
+contract has one free-text ``visit_instance`` field rather than a separate
+review-stage field.  We keep a display-safe header there and retain the exact
+source wording through its source spans.  Superscript footnote markers are not
+part of a visit or operation name, but scientific notation such as ``10^9``
+must remain intact.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from enum import Enum
+import hashlib
+import re
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, Literal
+
+from app.domain.contracts.enums import (
+    AlignmentStatus,
+    CatalogItemKind,
+    CatalogKind,
+    SourceLocatorPrecision,
+    StudyPhase,
+    ReviewStage,
+)
+from app.domain.contracts.protocol_ingestion import (
+    FrozenCatalogItem,
+    FrozenProtocolCatalog,
+    FrozenVisitColumn,
+    FrozenVisitTable,
+    ProtocolSourceSpan,
+    frozen_catalog_content_hash,
+    optional_source_excerpts_for_spans,
+)
+from app.domain.contracts.protocol_controls import ProtocolStructureUnit
+from app.domain.contracts.protocol_metadata import (
+    PhaseApplicabilityBlock,
+    PhaseApplicabilityGraph,
+    PhaseProjection,
+)
+from .docx_structure import BlockKind, StructureBlock
+from .phase_detection import project_single_phase
+from .section_index import formal_source_span_ids
+
+
+CATALOG_BUILDER_VERSION = "required-procedures/v6"
+"""Stable implementation marker used in IDs, not a project-specific rule."""
+
+_DEFAULT_FROZEN_AT = datetime(1970, 1, 1, tzinfo=timezone.utc)
+_DEFAULT_FROZEN_BY = CATALOG_BUILDER_VERSION
+
+_SCHEDULE_MARK_RE = re.compile(r"^\s*[\(（]?\s*[xX×]\s*[\)）]?(?P<notes>(?:\^\d+)*)\s*$")
+_CELL_REF_RE = re.compile(r"\.r(?P<row>\d+)\.c(?P<col>\d+)")
+_TRAILING_FOOTNOTE_RE = re.compile(r"(?<!\d)(?:\^\d+)+(?=\s*(?:[\uff09)\]\u3011(（]|$))")
+_DISPLAY_FOOTNOTE_NUMBER_RE = _TRAILING_FOOTNOTE_RE
+_FLOW_NOTE_PREFACE_RE = re.compile(r"^\s*(?:注(?:意)?|说明|备注)\s*[:：]")
+_FLOW_ABBREVIATION_PREFACE_RE = re.compile(r"^\s*(?:缩略语|缩写|abbreviations?)\s*[:：]", re.I)
+
+_PRE_SCREENING_RE = re.compile(r"(?:预筛|预筛选|pre[\s_-]*screen)", re.I)
+_SCREENING_RE = re.compile(r"(?:筛选|screen(?:ing)?|screening)", re.I)
+_RUN_IN_RE = re.compile(r"(?:导入|洗脱|run[\s_-]*in|runin|run-in|lead[\s_-]*in)", re.I)
+_BASELINE_RE = re.compile(r"(?:基线|随机(?:化)?|baseline|randomi[sz]ation)", re.I)
+_EXPLICIT_POST_BASELINE_RE = re.compile(
+    r"(?:提前(?:退出|终止)|早退|退出访视|末次给药后|安全性随访|随访期|"
+    r"\bEOS\b|\bEOT\b|early[\s_-]*(?:exit|termination)|"
+    r"end[\s_-]*of[\s_-]*(?:study|treatment)|safety[\s_-]*follow[\s_-]*up)",
+    re.I,
+)
+_POST_BASELINE_RE = re.compile(
+    r"(?:治疗期|给药期|用药期|维持期|随访|访视后|结束访视|"
+    r"treatment[\s_-]*(?:period|phase)?|follow[\s_-]*up|followup|"
+    r"post[\s_-]*baseline)",
+    re.I,
+)
+
+_STAGE_GROUP_RE = re.compile(
+    r"(?:预筛(?:选)?期|筛选期|导入期|洗脱期|基线期|治疗期|给药期|"
+    r"维持期|随访期|安全性随访|提前(?:退出|终止)|"
+    r"pre[\s_-]*screen(?:ing)?[\s_-]*(?:period|phase)|"
+    r"screen(?:ing)?[\s_-]*(?:period|phase)|run[\s_-]*in[\s_-]*(?:period|phase)|"
+    r"baseline[\s_-]*(?:period|phase)|treatment[\s_-]*(?:period|phase)|"
+    r"follow[\s_-]*up[\s_-]*(?:period|phase))",
+    re.I,
+)
+_VISIT_OR_DATE_RE = re.compile(
+    r"(?:^|[\s/（(])(?:V\s*\d+|W\s*[+-]?\d+|D\s*[+-]?\d+)|"
+    r"访视(?:点|时间)?|试验(?:周数|天数)|时间窗|time[\s_-]*window",
+    re.I,
+)
+
+_RANDOMIZATION_ACTION_RE = re.compile(
+    r"^(?:随机(?:化|分组|入组)?|randomi[sz](?:e|ed|ation))(?:\s*\d+)?$",
+    re.I,
+)
+_CONCOMITANT_THERAPY_RE = re.compile(
+    r"(?:合并(?:用药|治疗)|伴随(?:用药|治疗)|背景治疗|concomitant|"
+    r"background therapy)",
+    re.I,
+)
+_INVESTIGATIONAL_TREATMENT_RE = re.compile(
+    r"(?:(?:试验|研究|盲法|investigational|study)\s*(?:用)?"
+    r"(?:药物|药品|产品|drug|product).{0,80}"
+    r"(?:给药|服用|分发|发放|回收|退还|清点|administ|dos(?:e|ing)|"
+    r"dispens|return|accountab)|"
+    r"(?:给药|服用|分发|发放|回收|退还|清点).{0,80}"
+    r"(?:试验|研究|盲法|investigational|study)\s*(?:用)?"
+    r"(?:药物|药品|产品|drug|product))",
+    re.I,
+)
+_VISIT_LOGISTICS_RE = re.compile(
+    r"(?:(?:日记卡|日志卡|设备|器材).{0,8}(?:发放|分发|回收|退还)|"
+    r"(?:发放|分发|回收|退还).{0,8}(?:日记卡|日志卡|设备|器材)|"
+    r"预约(?:下次)?访视|visit[\s_-]*(?:scheduling|logistics)|"
+    r"diar(?:y|ies).{0,12}(?:dispens|distribut|return|collect))",
+    re.I,
+)
+_POST_DOSE_SAFETY_RE = re.compile(
+    r"(?:给药后.{0,12}(?:不良事件|AE|反应)|注射部位反应|post[\s_-]*dose.{0,12}"
+    r"(?:adverse|AE|reaction)|injection[\s_-]*site[\s_-]*reaction|"
+    r"^(?:不良事件|adverse events?)(?:\s*\d+)?$)",
+    re.I,
+)
+
+_GENERIC_HEADER_RE = re.compile(
+    r"^(?:项目|检查项目|操作|操作项目|研究项目|评估项目|检查/评估|"
+    r"访视|访视时间|访视点|时间点|研究流程|流程|procedure|procedures|"
+    r"assessment|assessments|visit|visits|timepoint|time point)$",
+    re.I,
+)
+_PLACEHOLDER_RE = re.compile(
+    r"^(?:[-—–_＿.。…]+|待定|待核对|待确认|占位|placeholder|tbd|todo|"
+    r"unknown|未说明|未确定|暂无|无)$",
+    re.I,
+)
+
+_STAGE_ORDER: dict[ReviewStage, int] = {
+    ReviewStage.PRE_SCREENING: 0,
+    ReviewStage.SCREENING: 1,
+    ReviewStage.RUN_IN: 2,
+    ReviewStage.BASELINE: 3,
+}
+
+
+class ProcedureCatalogError(ValueError):
+    """Stable deterministic rejection raised before an Agent may run."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        table_root: str | None = None,
+    ) -> None:
+        self.code = code
+        self.table_root = table_root
+        prefix = f"{code}"
+        if table_root:
+            prefix += f" [{table_root}]"
+        super().__init__(f"{prefix}: {message}")
+
+
+# A descriptive alias makes the failure boundary discoverable to callers that
+# use ``BuildError`` terminology while preserving one exception type.
+ProcedureCatalogBuildError = ProcedureCatalogError
+# Keep the validation-oriented name used by the sibling frozen-catalog
+# builder.  Both names deliberately resolve to the same stable exception.
+CatalogValidationError = ProcedureCatalogError
+RequiredProcedureCatalogError = ProcedureCatalogError
+RequiredProcedureCatalogBuildError = ProcedureCatalogError
+
+
+class _PostBaseline(Enum):
+    POST_BASELINE = "post_baseline"
+
+
+@dataclass(frozen=True)
+class _Cell:
+    root: str
+    row: int
+    col: int
+    blocks: tuple[StructureBlock, ...]
+
+    @property
+    def text(self) -> str:
+        return " ".join(
+            part.text.strip() for part in self.blocks if part.text.strip()
+        ).strip()
+
+    @property
+    def source_refs(self) -> tuple[str, ...]:
+        return tuple(block.source_ref for block in self.blocks)
+
+    @property
+    def block_order(self) -> int:
+        return min(block.block_order for block in self.blocks)
+
+    @property
+    def col_span(self) -> int | None:
+        return self.blocks[0].table_col_span
+
+
+@dataclass(frozen=True)
+class _VisitColumn:
+    column: int
+    stage: ReviewStage
+    original_text: str
+    header_refs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScheduleColumnScope:
+    structure_unit_id: str
+    cell_path: tuple[int, int]
+    cell_source_ref: str
+    column_index: int
+    header_text: str
+    header_source_refs: tuple[str, ...]
+    review_stage: ReviewStage | None
+    boundary_side: Literal["at_or_before_baseline", "after_baseline", "unresolved"]
+    visit_unresolved: bool
+    marker_footnotes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _ScheduleTextBlock:
+    text: str
+    source_ref: str
+    block_order: int
+    table_col_span: int | None = None
+
+
+@dataclass(frozen=True)
+class _OperationInstance:
+    root: str
+    row: int
+    operation: str
+    operation_refs: tuple[str, ...]
+    visit: _VisitColumn
+    source_span_ids: tuple[str, ...]
+    position_hint: tuple[int, int, int]
+    note_excerpt_overrides: tuple[tuple[str, str], ...] = ()
+
+
+def _short_digest(*parts: object) -> str:
+    payload = "\x1f".join(str(part) for part in parts)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
+
+
+def _root_for_cell(
+    block: StructureBlock,
+    table_roots: Sequence[StructureBlock],
+) -> StructureBlock | None:
+    """Find the narrowest table root owning a cell.
+
+    ``table_path`` is authoritative for nested tables.  The source-ref prefix
+    check is retained for synthetic fixtures and for old extracted snapshots
+    which did not preserve a table path on every cell.
+    """
+
+    candidates: list[StructureBlock] = []
+    for root in table_roots:
+        if not block.source_ref.startswith(root.source_ref + ".r"):
+            continue
+        root_path = root.table_path or ()
+        if block.table_path is None:
+            # Synthetic/older snapshots may omit the path while retaining the
+            # canonical ``.rN.cN`` source-ref shape.
+            candidates.append(root)
+            continue
+        if len(block.table_path) != len(root_path) + 2:
+            continue
+        if tuple(block.table_path[: len(root_path)]) != tuple(root_path):
+            continue
+        candidates.append(root)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: (len(item.source_ref), item.block_order))
+
+
+def _cell_coordinates(block: StructureBlock) -> tuple[int, int] | None:
+    if block.table_path is not None and len(block.table_path) >= 2:
+        return block.table_path[-2], block.table_path[-1]
+    matches = tuple(_CELL_REF_RE.finditer(block.source_ref))
+    if not matches:
+        return None
+    match = matches[-1]
+    return int(match.group("row")), int(match.group("col"))
+
+
+def _make_cells(
+    blocks: Sequence[StructureBlock],
+    root: StructureBlock,
+) -> dict[tuple[int, int], _Cell]:
+    grouped: dict[tuple[int, int], list[StructureBlock]] = {}
+    for block in blocks:
+        if block.kind != BlockKind.PARAGRAPH:
+            continue
+        if _root_for_cell(block, [root]) != root:
+            continue
+        coordinates = _cell_coordinates(block)
+        if coordinates is None:
+            continue
+        grouped.setdefault(coordinates, []).append(block)
+    return {
+        coordinates: _Cell(
+            root=root.source_ref,
+            row=coordinates[0],
+            col=coordinates[1],
+            blocks=tuple(
+                sorted(items, key=lambda item: (item.block_order, item.source_ref))
+            ),
+        )
+        for coordinates, items in sorted(grouped.items())
+    }
+
+
+def _is_mark(text: str) -> bool:
+    return bool(_SCHEDULE_MARK_RE.fullmatch(text.strip()))
+
+
+def _non_mark_text(cell: _Cell | None) -> str:
+    if cell is None:
+        return ""
+    text = cell.text
+    return "" if _is_mark(text) else text
+
+
+def _without_display_footnotes(value: str) -> str:
+    """Remove only trailing display footnotes from a semantic label.
+
+    DOCX superscript runs are represented as ``^N`` by the structure layer.
+    Footnotes may appear at the end of a label, in a closing parenthesis, or
+    as a sequence such as ``^2^6``.  A caret inside a unit or formula is left
+    untouched because it is followed by more semantic text.
+    """
+
+    cleaned = value
+    while True:
+        updated = _TRAILING_FOOTNOTE_RE.sub("", cleaned)
+        if updated == cleaned:
+            break
+        cleaned = updated
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _display_footnote_numbers(value: str) -> tuple[int, ...]:
+    """Return trailing display-note numbers without matching ``10^9`` units."""
+
+    return tuple(
+        dict.fromkeys(
+            int(number)
+            for match in _DISPLAY_FOOTNOTE_NUMBER_RE.finditer(value)
+            for number in re.findall(r"\^(\d+)", match.group())
+        )
+    )
+
+
+def _flow_footnote_refs(
+    blocks: Sequence[StructureBlock],
+    root: StructureBlock,
+) -> dict[int, tuple[str, ...]]:
+    """Map one flow table's numbered notes to their stable paragraph refs.
+
+    DOCX list numbering carries the note identity even when the visible list
+    number is not repeated in extracted text. Only the first level-zero list
+    immediately following the table is eligible, so later numbered protocol
+    sections cannot be mistaken for table notes.
+    """
+
+    table_orders = [
+        block.block_order
+        for block in blocks
+        if block.source_ref == root.source_ref
+        or block.source_ref.startswith(root.source_ref + ".")
+    ]
+    if not table_orders:
+        return {}
+    after_table = sorted(
+        (
+            block
+            for block in blocks
+            if block.document_part == root.document_part
+            and block.table_path is None
+            and block.block_order > max(table_orders)
+        ),
+        key=lambda block: (block.block_order, block.source_ref),
+    )
+    numbered: list[list[StructureBlock]] = []
+    numbering_id: int | None = None
+
+    def later_parent(
+        index: int, section_index: int | None, *, nested_list: bool = False,
+    ) -> bool:
+        for later in after_table[index + 1:]:
+            if (later.kind == BlockKind.TABLE or later.outline_level is not None
+                    or later.section_index != section_index):
+                break
+            if later.numbering is not None:
+                if later.numbering.level == 0:
+                    if later.numbering.num_id == numbering_id:
+                        return True
+                    if not nested_list or later.style_name != numbered[-1][0].style_name:
+                        break
+                elif (later.numbering.num_id != numbering_id
+                      and (not nested_list or later.style_name != numbered[-1][0].style_name)):
+                    break
+        return False
+
+    for index, block in enumerate(after_table):
+        if (block.kind == BlockKind.TABLE or block.outline_level is not None
+                or (root.section_index is not None
+                    and block.section_index != root.section_index)):
+            break
+        numbering = block.numbering
+        if not numbered:
+            if numbering is None or numbering.level != 0:
+                if block.text.strip() and not (
+                    _FLOW_NOTE_PREFACE_RE.match(block.text)
+                    or _FLOW_ABBREVIATION_PREFACE_RE.match(block.text)
+                ):
+                    return {}
+                continue
+            numbering_id = numbering.num_id
+        elif numbering is None:
+            if not block.text.strip():
+                continue
+            if ((block.style_name == numbered[-1][0].style_name and block.style_name)
+                    or later_parent(index, block.section_index)):
+                numbered[-1].append(block)
+                continue
+            break
+        elif numbering.level != 0 or numbering.num_id != numbering_id:
+            if numbering.level > 0 and numbering.num_id == numbering_id:
+                numbered[-1].append(block)
+                continue
+            if block.style_name == numbered[-1][0].style_name and later_parent(
+                index, block.section_index, nested_list=True,
+            ):
+                numbered[-1].append(block)
+                continue
+            break
+        numbered.append([block])
+    if not numbered:
+        return {}
+    first_numbering = numbered[0][0].numbering
+    assert first_numbering is not None
+    start = first_numbering.start or 1
+    return {
+        start + offset: tuple(block.source_ref for block in group)
+        for offset, group in enumerate(numbered)
+    }
+
+
+def table_footnote_context_links(
+    blocks: Sequence[StructureBlock],
+    units: Sequence[ProtocolStructureUnit],
+) -> dict[str, dict[str, list[str]]]:
+    """Resolve native table markers to read-only note units, not clinical scope."""
+    blocks_by_ref = {block.source_ref: block for block in blocks}
+    units_by_ref: dict[str, list[ProtocolStructureUnit]] = {}
+    for unit in units:
+        for ref in unit.member_source_refs or [unit.source_ref]:
+            units_by_ref.setdefault(ref, []).append(unit)
+    notes_by_table = {
+        block.source_ref: _flow_footnote_refs(blocks, block)
+        for block in blocks if block.kind == BlockKind.TABLE
+    }
+    links: dict[str, dict[str, list[str]]] = {}
+    for unit in units:
+        if unit.table_context is None:
+            continue
+        table_ref, marker, _ = unit.source_ref.rpartition(".r")
+        if not marker or table_ref not in notes_by_table:
+            continue
+        numbers = tuple(dict.fromkeys(
+            number for ref in unit.member_source_refs or [unit.source_ref]
+            if ref in blocks_by_ref
+            for number in _display_footnote_numbers(blocks_by_ref[ref].text)
+        ))
+        for number in numbers:
+            refs = notes_by_table[table_ref].get(number, ())
+            # A partial note would conceal a continuation or exception.
+            if not refs or any(not units_by_ref.get(ref) for ref in refs):
+                continue
+            linked = sorted({
+                item.structure_unit_id: item for ref in refs for item in units_by_ref[ref]
+            }.values(), key=lambda item: (item.source_order, item.structure_unit_id))
+            links.setdefault(unit.structure_unit_id, {})[str(number)] = [
+                item.structure_unit_id for item in linked
+            ]
+    return links
+
+
+def _operation_labels_named_by_note(
+    note_text: str,
+    operation_labels: Sequence[str],
+) -> frozenset[str]:
+    normalized_note = re.sub(r"\s+", "", note_text).casefold()
+    matches = {
+        label
+        for label in operation_labels
+        if len(normalized_label := re.sub(r"\s+", "", label).casefold()) >= 2
+        and not _is_generic_header(label)
+        and not _is_placeholder_operation(label)
+        and any(
+            len(stem := re.sub(r"(?:评分|评估|检查|测量)$", "", part)) >= 3
+            and stem in normalized_note
+            for part in (
+                normalized_label.split("/")
+                if re.fullmatch(r"[a-z0-9]+(?:/[a-z0-9]+)+(?:评分|评估|检查|测量)?", normalized_label)
+                else (normalized_label,)
+            )
+        )
+    }
+    return frozenset(
+        label for label in matches
+        if not any(
+            label != other
+            and re.sub(r"\s+", "", label).casefold()
+            in re.sub(r"\s+", "", other).casefold()
+            for other in matches
+        )
+    )
+
+
+def _scoped_visit_note_excerpt(
+    text: str, operation: str, operation_labels: Sequence[str], *, table_root: str,
+) -> str | None:
+    """Keep contiguous visit-wide and named-operation sentences from one source block."""
+
+    sentences = [
+        match for match in re.finditer(r"[^。；;\n]+[。；;\n]?", text)
+        if match.group().strip()
+    ]
+    named_by_sentence = [
+        _operation_labels_named_by_note(sentence.group(), operation_labels)
+        for sentence in sentences
+    ]
+    has_named_operation = any(named_by_sentence)
+    selected: list[int] = []
+    for index, sentence in enumerate(sentences):
+        value = sentence.group()
+        named = named_by_sentence[index]
+        if named and re.search(r"(?:所有|全部|各项)(?:检查|操作|项目)", value):
+            raise ProcedureCatalogError(
+                "note_scope_unresolved",
+                "同一句流程表注释同时涉及访视和具体操作，无法仅按结构确定适用范围",
+                table_root=table_root,
+            )
+        visit_wide = not named and (
+            not has_named_operation
+            or ("访视" in value and "检查" in value)
+        )
+        if visit_wide or operation in named:
+            selected.append(index)
+    if not selected:
+        return None
+    if selected != list(range(selected[0], selected[-1] + 1)):
+        if any(operation in named for named in named_by_sentence):
+            # One named operation may recur around another in the same note.
+            # Retain the complete literal source rather than splice quotations.
+            return text.strip()
+        raise ProcedureCatalogError(
+            "note_scope_unresolved",
+            "流程表注释中适用于同一操作的语句不连续，需按原文核对",
+            table_root=table_root,
+        )
+    return text[sentences[selected[0]].start():sentences[selected[-1]].end()].strip()
+
+
+def _normalized_header_key(value: str) -> str:
+    return _without_display_footnotes(value).casefold()
+
+
+def _is_generic_header(value: str) -> bool:
+    return bool(_GENERIC_HEADER_RE.fullmatch(value.strip()))
+
+
+def _derive_visit_stage(value: str) -> ReviewStage | _PostBaseline | None:
+    """Derive a review-stage label from the visit header, not study phase."""
+
+    value = _without_display_footnotes(value)
+    # An explicit end/exit/follow-up cue is terminal even if another header
+    # fragment happens to mention baseline.  Otherwise a concrete baseline or
+    # randomization cue wins over a broad parent such as ``treatment period``.
+    if _EXPLICIT_POST_BASELINE_RE.search(value):
+        return _PostBaseline.POST_BASELINE
+    if _BASELINE_RE.search(value):
+        return ReviewStage.BASELINE
+    if _RUN_IN_RE.search(value):
+        return ReviewStage.RUN_IN
+    if _PRE_SCREENING_RE.search(value):
+        return ReviewStage.PRE_SCREENING
+    if _SCREENING_RE.search(value):
+        return ReviewStage.SCREENING
+    if _POST_BASELINE_RE.search(value):
+        return _PostBaseline.POST_BASELINE
+    return None
+
+
+def derive_review_stage(value: str) -> ReviewStage | None:
+    """Public helper for callers that need the canonical visit label."""
+
+    stage = _derive_visit_stage(value)
+    return stage if isinstance(stage, ReviewStage) else None
+
+
+def _header_projection(
+    cells: Mapping[tuple[int, int], _Cell],
+    *,
+    first_mark_row: int,
+    max_columns: int,
+) -> dict[int, tuple[str, tuple[str, ...]]]:
+    """Project a conservative header hierarchy onto each visit column.
+
+    DOCX extraction emits one cell for a horizontally merged stage/group
+    heading, but sparse visit/date rows use the same blank-cell shape.  Only a
+    row containing an explicit period/phase group cue is therefore propagated
+    horizontally.  Visit, week, day, and time-window rows remain column-local.
+    """
+
+    # Keep both text and source refs while propagating a merged header.  A
+    # propagated value still points to the original source cell; no synthetic
+    # source span is manufactured for a merged blank cell.
+    effective: dict[tuple[int, int], tuple[str, tuple[str, ...]]] = {}
+    for row in range(first_mark_row):
+        row_cells = [
+            cell for (cell_row, _col), cell in cells.items() if cell_row == row
+        ]
+        explicit_geometry = bool(row_cells) and all(
+            cell.col_span is not None for cell in row_cells
+        )
+        row_values = [
+            _non_mark_text(cells.get((row, col))) for col in range(1, max_columns)
+        ]
+        propagate_group = any(
+            value
+            and _STAGE_GROUP_RE.search(value)
+            and not _VISIT_OR_DATE_RE.search(value)
+            for value in row_values
+        )
+        last: tuple[str, tuple[str, ...]] | None = None
+        last_end = 0
+        for col in range(max_columns):
+            cell = cells.get((row, col))
+            text = _non_mark_text(cell)
+            if text:
+                last = (text, cell.source_refs if cell else ())
+                last_end = col + (cell.col_span or 1) if cell else col + 1
+            elif propagate_group and last is not None and (
+                not explicit_geometry or col < last_end
+            ):
+                effective[(row, col)] = last
+                continue
+            effective[(row, col)] = (text, cell.source_refs if cell else ())
+
+    for col in range(max_columns):
+        last: tuple[str, tuple[str, ...]] | None = None
+        for row in range(first_mark_row):
+            value = effective.get((row, col), ("", ()))
+            if value[0]:
+                last = value
+            elif last is not None:
+                effective[(row, col)] = last
+
+    result: dict[int, tuple[str, tuple[str, ...]]] = {}
+    for col in range(max_columns):
+        values: list[str] = []
+        refs: list[str] = []
+        for row in range(first_mark_row):
+            value, value_refs = effective.get((row, col), ("", ()))
+            if not value:
+                continue
+            value = _without_display_footnotes(value)
+            if value not in values:
+                values.append(value)
+            for ref in value_refs:
+                if ref not in refs:
+                    refs.append(ref)
+        result[col] = (" / ".join(values), tuple(refs))
+    return result
+
+
+def _enrollment_boundary(
+    cells: Mapping[tuple[int, int], _Cell],
+    marks: Sequence[_Cell],
+    header: Mapping[int, tuple[str, tuple[str, ...]]],
+) -> tuple[int | None, int | None]:
+    randomization_columns: list[int] = []
+    for row in sorted({cell.row for cell in marks}):
+        row_marks = [cell for cell in marks if cell.row == row]
+        label = _operation_label(
+            cells, row=row, mark_columns=sorted({cell.col for cell in row_marks}),
+        )
+        if label and _RANDOMIZATION_ACTION_RE.fullmatch(
+            _without_display_footnotes(label[0])
+        ):
+            randomization_columns.extend(cell.col for cell in row_marks)
+    randomization_anchor = min(randomization_columns) if randomization_columns else None
+    explicit_baseline_columns = [
+        col for col, (text, _refs) in header.items()
+        if _derive_visit_stage(text) == ReviewStage.BASELINE
+    ]
+    boundary = (
+        randomization_anchor if randomization_anchor is not None
+        else max(explicit_baseline_columns) if explicit_baseline_columns else None
+    )
+    return randomization_anchor, boundary
+
+
+def _schedule_cells_from_units(
+    units: Sequence[ProtocolStructureUnit], table_root: str,
+) -> dict[tuple[int, int], _Cell]:
+    grouped_cells: dict[tuple[int, int], list[tuple[int, _ScheduleTextBlock]]] = {}
+    for unit in units:
+        prefix, marker, suffix = unit.source_ref.rpartition(".r")
+        context = unit.table_context
+        row_token = suffix.partition(".")[0]
+        if (not marker or prefix != table_root or not row_token.isdigit()
+                or context is None or int(row_token) != context.row_index):
+            continue
+        pieces = unit.member_texts
+        paths = context.member_cell_paths
+        spans = context.member_cell_col_spans
+        refs = unit.member_source_refs
+        if pieces is None or len(pieces) != len(refs):
+            raise ProcedureCatalogError("schedule_row_members_missing", "表格行缺少与来源逐项对应的原文，不能核对访视列", table_root=table_root)
+        grouped: dict[tuple[int, ...], list[tuple[int, _ScheduleTextBlock]]] = {}
+        display_members: list[tuple[tuple[int, ...], int, str]] = []
+        for piece, ref in zip(pieces, refs, strict=True):
+            matches = tuple(_CELL_REF_RE.finditer(ref))
+            paragraph = re.search(r"\.p(?P<index>\d+)$", ref)
+            if not matches or paragraph is None or not ref.startswith(table_root + ".r"):
+                raise ProcedureCatalogError("schedule_row_member_path_mismatch", "表格行成员缺少可核对的单元格位置", table_root=table_root)
+            path = tuple(
+                coordinate
+                for match in matches
+                for coordinate in (int(match.group("row")), int(match.group("col")))
+            )
+            if path not in paths or path[-2] != context.row_index:
+                raise ProcedureCatalogError("schedule_row_member_path_mismatch", "表格行成员与冻结单元格位置不一致", table_root=table_root)
+            grouped.setdefault(path, []).append(
+                (int(paragraph.group("index")), _ScheduleTextBlock(
+                    piece, ref, unit.source_order,
+                    spans[paths.index(path)] if spans is not None else None,
+                ))
+            )
+            display_members.append((path, int(paragraph.group("index")), piece))
+        numeric_display = " | ".join(item[2] for item in sorted(display_members) if item[2].strip())
+        lexical_display = " | ".join(
+            piece for _ref, piece in zip(refs, pieces, strict=True) if piece.strip()
+        )
+        if unit.excerpt not in {numeric_display, lexical_display}:
+            raise ProcedureCatalogError("schedule_row_display_mismatch", "表格展示文字与逐项来源原文不一致", table_root=table_root)
+        if set(grouped) != set(paths) or any(
+            len({index for index, _block in blocks}) != len(blocks)
+            for blocks in grouped.values()
+        ):
+            raise ProcedureCatalogError("schedule_row_member_path_mismatch", "表格行段落顺序与冻结单元格来源不一致", table_root=table_root)
+        for path, blocks in grouped.items():
+            row, col = path[-2:]
+            key = (row, col)
+            grouped_cells.setdefault(key, []).extend(blocks)
+    cells: dict[tuple[int, int], _Cell] = {}
+    for (row, col), blocks in grouped_cells.items():
+        if (len({index for index, _block in blocks}) != len(blocks)
+                or len({block.table_col_span for _index, block in blocks}) != 1):
+            raise ProcedureCatalogError("schedule_cell_conflict", "同一表格单元格有多条互相冲突的来源", table_root=table_root)
+        cells[(row, col)] = _Cell(
+            root=table_root, row=row, col=col,
+            blocks=tuple(block for _index, block in sorted(blocks)),
+        )
+    return cells
+
+
+def schedule_row_values(
+    unit: ProtocolStructureUnit,
+    context_units: Sequence[ProtocolStructureUnit] = (),
+) -> tuple[tuple[int, str, tuple[str, ...]], ...]:
+    """Return source-aligned row values; the display excerpt is never parsed."""
+
+    table_root, marker, suffix = unit.source_ref.rpartition(".r")
+    row_token = suffix.partition(".")[0]
+    if (not marker or not row_token.isdigit() or unit.table_context is None
+            or int(row_token) != unit.table_context.row_index):
+        return ()
+    same_row = [other for other in context_units
+                if other.structure_unit_id != unit.structure_unit_id
+                and other.source_ref.rpartition(".r")[0] == table_root
+                and other.table_context is not None
+                and other.table_context.row_index == unit.table_context.row_index]
+    cells = _schedule_cells_from_units([unit, *same_row], table_root)
+    return tuple(
+        (cell.col, cell.text, cell.source_refs)
+        for cell in sorted(cells.values(), key=lambda item: item.col)
+    )
+
+
+def schedule_column_scope(
+    unit: ProtocolStructureUnit,
+    context_units: Sequence[ProtocolStructureUnit],
+) -> tuple[ScheduleColumnScope, ...]:
+    """Resolve marked source cells using the procedure catalog's boundary."""
+
+    if unit.table_context is None:
+        return ()
+    table_root, marker, suffix = unit.source_ref.rpartition(".r")
+    row_token = suffix.partition(".")[0]
+    if (not marker or not row_token.isdigit()
+            or int(row_token) != unit.table_context.row_index):
+        return ()
+    cells = _schedule_cells_from_units([*context_units, unit], table_root)
+    marks = sorted(
+        (cell for cell in cells.values() if _SCHEDULE_MARK_RE.fullmatch(cell.text)),
+        key=lambda cell: (cell.row, cell.col),
+    )
+    row_marks = [cell for cell in marks if cell.row == unit.table_context.row_index]
+    if not row_marks:
+        return ()
+    header = _header_projection(
+        cells, first_mark_row=min(cell.row for cell in marks),
+        max_columns=max(cell.col for cell in cells.values()) + 1,
+    )
+    randomization_anchor, boundary = _enrollment_boundary(cells, marks, header)
+    result = []
+    for cell in row_marks:
+        header_text, header_refs = header.get(cell.col, ("", ()))
+        derived = (
+            ReviewStage.BASELINE if randomization_anchor == cell.col
+            else _derive_visit_stage(header_text)
+        )
+        side: Literal["at_or_before_baseline", "after_baseline", "unresolved"]
+        if boundary is None:
+            side = "unresolved"
+        elif cell.col > boundary:
+            side = "after_baseline"
+        elif isinstance(derived, ReviewStage) and header_text and header_refs:
+            side = "at_or_before_baseline"
+        else:
+            side = "unresolved"
+        result.append(ScheduleColumnScope(
+            structure_unit_id=unit.structure_unit_id,
+            cell_path=(cell.row, cell.col),
+            cell_source_ref=cell.source_refs[0],
+            column_index=cell.col,
+            header_text=header_text,
+            header_source_refs=header_refs,
+            review_stage=derived if isinstance(derived, ReviewStage) else None,
+            boundary_side=side,
+            visit_unresolved=not bool(_VISIT_OR_DATE_RE.search(header_text)),
+            marker_footnotes=tuple(re.findall(r"\^\d+", cell.text)),
+        ))
+    return tuple(result)
+
+
+def _is_non_enrollment_operation(
+    operation: str,
+    *,
+    visit_column: int,
+    randomization_anchor: int | None,
+) -> bool:
+    """Reject workflow/treatment roles that are not enrollment checks."""
+
+    value = operation.strip()
+    if _RANDOMIZATION_ACTION_RE.fullmatch(value):
+        return True
+    if not _CONCOMITANT_THERAPY_RE.search(value) and (
+        _INVESTIGATIONAL_TREATMENT_RE.search(value) or _VISIT_LOGISTICS_RE.search(value)
+    ):
+        return True
+    # A D1/randomization column can mix pre-randomization checks with
+    # post-dose safety collection.  The latter must not become an enrollment
+    # requirement merely because both share a physical table column.
+    return bool(
+        randomization_anchor is not None
+        and visit_column == randomization_anchor
+        and _POST_DOSE_SAFETY_RE.search(value)
+    )
+
+
+def _operation_label(
+    row_cells: Mapping[tuple[int, int], _Cell],
+    *,
+    row: int,
+    mark_columns: Sequence[int],
+) -> tuple[str, tuple[str, ...]] | None:
+    """Select the last meaningful label before the first marked column."""
+
+    first_mark = min(mark_columns)
+    candidates = [
+        cell
+        for (cell_row, cell_col), cell in row_cells.items()
+        if cell_row == row
+        and cell_col < first_mark
+        and _non_mark_text(cell)
+        and not _is_generic_header(_non_mark_text(cell))
+    ]
+    if not candidates:
+        candidates = [
+            cell
+            for (cell_row, _cell_col), cell in row_cells.items()
+            if cell_row == row
+            and _non_mark_text(cell)
+            and not _is_generic_header(_non_mark_text(cell))
+        ]
+    if not candidates:
+        return None
+    selected = max(candidates, key=lambda item: (item.col, item.block_order))
+    return _non_mark_text(selected), selected.source_refs
+
+
+def _is_placeholder_operation(value: str) -> bool:
+    return not value.strip() or bool(_PLACEHOLDER_RE.fullmatch(value.strip()))
+
+
+def _span_input_map(
+    source_spans: Sequence[ProtocolSourceSpan] | Mapping[str, ProtocolSourceSpan],
+) -> tuple[dict[str, ProtocolSourceSpan], dict[str, ProtocolSourceSpan]]:
+    if isinstance(source_spans, Mapping):
+        spans = list(source_spans.values())
+    else:
+        spans = list(source_spans)
+    by_ref: dict[str, ProtocolSourceSpan] = {}
+    by_id: dict[str, ProtocolSourceSpan] = {}
+    duplicate_refs: set[str] = set()
+    duplicate_ids: set[str] = set()
+    for span in spans:
+        if not isinstance(span, ProtocolSourceSpan):
+            raise TypeError("source_spans 必须包含 ProtocolSourceSpan")
+        if span.source_ref in by_ref:
+            duplicate_refs.add(span.source_ref)
+        else:
+            by_ref[span.source_ref] = span
+        if span.source_span_id in by_id:
+            duplicate_ids.add(span.source_span_id)
+        else:
+            by_id[span.source_span_id] = span
+    if duplicate_refs:
+        refs = "、".join(sorted(duplicate_refs))
+        raise ProcedureCatalogError(
+            "source_span_ambiguous", f"同一 source_ref 存在多个来源片段：{refs}"
+        )
+    if duplicate_ids:
+        ids = "、".join(sorted(duplicate_ids))
+        raise ProcedureCatalogError("source_span_ambiguous", f"来源片段 ID 重复：{ids}")
+    return by_ref, by_id
+
+
+def _resolve_context(
+    context_args: Sequence[object],
+    *,
+    phase_projection: PhaseProjection | None,
+    phase_graph: PhaseApplicabilityGraph | None,
+    source_spans: Sequence[ProtocolSourceSpan]
+    | Mapping[str, ProtocolSourceSpan]
+    | None,
+    selected_phase: StudyPhase | None,
+) -> tuple[
+    PhaseProjection | None,
+    PhaseApplicabilityGraph | None,
+    Sequence[ProtocolSourceSpan] | Mapping[str, ProtocolSourceSpan],
+    StudyPhase | None,
+]:
+    """Accept the two natural positional forms used by protocol callers."""
+
+    projection = phase_projection
+    graph = phase_graph
+    spans = source_spans
+    phase = selected_phase
+    for argument in context_args:
+        if isinstance(argument, PhaseProjection):
+            if projection is not None and projection != argument:
+                raise TypeError("不能同时提供两个不同的 PhaseProjection")
+            projection = argument
+        elif isinstance(argument, PhaseApplicabilityGraph):
+            if graph is not None and graph != argument:
+                raise TypeError("不能同时提供两个不同的 PhaseApplicabilityGraph")
+            graph = argument
+        elif isinstance(argument, StudyPhase):
+            if phase is not None and phase != argument:
+                raise TypeError("不能同时提供两个不同的 selected_phase")
+            phase = argument
+        else:
+            if spans is not None:
+                raise TypeError("source_spans 只能提供一次")
+            spans = argument  # validated below with a precise error
+    if spans is None:
+        raise ProcedureCatalogError(
+            "source_coverage_missing", "未提供 ProtocolSourceSpan 来源集合"
+        )
+    if not isinstance(spans, Mapping):
+        try:
+            spans = list(spans)  # type: ignore[arg-type]
+        except TypeError as exc:
+            raise TypeError(
+                "source_spans 必须是 ProtocolSourceSpan 序列或映射"
+            ) from exc
+    return projection, graph, spans, phase
+
+
+def _selected_refs(
+    projection: PhaseProjection,
+    *,
+    spans_by_id: Mapping[str, ProtocolSourceSpan],
+) -> set[str]:
+    refs: set[str] = set()
+    for block in projection.blocks:
+        refs.add(block.source_ref)
+        for span_id in block.source_span_ids:
+            refs.add(span_id)
+            span = spans_by_id.get(span_id)
+            if span is not None:
+                refs.add(span.source_ref)
+    return refs
+
+
+def _validate_phase_context(
+    *,
+    projection: PhaseProjection | None,
+    graph: PhaseApplicabilityGraph | None,
+    selected_phase: StudyPhase | None,
+) -> tuple[PhaseProjection, StudyPhase]:
+    if projection is None and graph is None:
+        raise ProcedureCatalogError(
+            "phase_context_missing",
+            "必须提供已建立的 PhaseProjection 或 PhaseApplicabilityGraph",
+        )
+    if (
+        projection is not None
+        and graph is not None
+        and projection.graph_id != graph.graph_id
+    ):
+        raise ProcedureCatalogError(
+            "phase_scope_mismatch", "PhaseProjection 不属于给定的期别适用图"
+        )
+    phase = selected_phase or (projection.selected_phase if projection else None)
+    if phase is None:
+        raise ProcedureCatalogError("phase_unresolved", "未提供已选研究期别")
+    if phase not in {
+        StudyPhase.PHASE_II,
+        StudyPhase.PHASE_III,
+        StudyPhase.SEAMLESS_II_III,
+    }:
+        raise ProcedureCatalogError(
+            "phase_unresolved", "研究期别必须是已确认的 II 期、III 期或无缝期别"
+        )
+    if projection is not None and projection.selected_phase != phase:
+        raise ProcedureCatalogError(
+            "phase_scope_mismatch", "投影期别与 selected_phase 不一致"
+        )
+    if projection is None:
+        try:
+            projection = project_single_phase(graph, phase)  # type: ignore[arg-type]
+        except ValueError as exc:
+            raise ProcedureCatalogError("phase_unresolved", str(exc)) from exc
+    return projection, phase
+
+
+def _required_note_span_id(
+    ref: str, spans_by_ref: Mapping[str, ProtocolSourceSpan], table_root: str,
+) -> str:
+    span = spans_by_ref.get(ref)
+    if span is None:
+        raise ProcedureCatalogError(
+            "source_coverage_missing", "流程表注释缺少正式来源定位：" + ref,
+            table_root=table_root,
+        )
+    return span.source_span_id
+
+
+def _formal_span_ids(
+    refs: Iterable[str],
+    *,
+    spans_by_ref: Mapping[str, ProtocolSourceSpan],
+    blocks_by_ref: Mapping[str, StructureBlock],
+    snapshot_id: str,
+    table_root: str,
+    role: str,
+    required: bool = True,
+) -> tuple[str, ...]:
+    """Return formal source anchors for one operation or visit range.
+
+    A range may be represented by several structural cells (for example a
+    vertically merged visit header).  At least one formal anchor is required
+    for a required range; degraded or missing sibling hints are not promoted
+    into authority.  Mark cells are optional anchors because repeated ``X``
+    glyphs commonly cannot be uniquely aligned in a rendered page.
+    """
+
+    ids: list[str] = []
+    missing: list[str] = []
+    formal_locator_ids = formal_source_span_ids(spans_by_ref.values())
+    for source_ref in dict.fromkeys(refs):
+        span = spans_by_ref.get(source_ref)
+        block = blocks_by_ref.get(source_ref)
+        if span is None or block is None:
+            missing.append(source_ref)
+            continue
+        if span.snapshot_id != snapshot_id:
+            raise ProcedureCatalogError(
+                "source_scope_mismatch",
+                f"{role} 来源不属于当前提取快照：{source_ref}",
+                table_root=table_root,
+            )
+        if (
+            span.alignment_status != AlignmentStatus.ALIGNED
+            or span.source_span_id not in formal_locator_ids
+        ):
+            continue
+        if span.precision == SourceLocatorPrecision.TEXT_RANGE:
+            if not span.excerpt or span.excerpt not in block.text:
+                continue
+        elif span.precision == SourceLocatorPrecision.PAGE_ONLY:
+            # The uniqueness check above prevents a shared page hint from
+            # satisfying the item-level source gate.
+            if span.render_artifact_id is None or span.render_page is None:
+                continue
+        else:
+            continue
+        ids.append(span.source_span_id)
+    if required and not ids:
+        details = (
+            f"缺少原始来源片段：{'、'.join(missing)}"
+            if missing
+            else "没有唯一 ALIGNED TEXT_RANGE 或 PAGE_ONLY 定位"
+        )
+        raise ProcedureCatalogError(
+            "source_coverage_missing",
+            f"{role} {details}",
+            table_root=table_root,
+        )
+    return tuple(ids)
+
+
+def _table_looks_like_flow(
+    root: StructureBlock,
+    cells: Mapping[tuple[int, int], _Cell],
+    *,
+    max_rows: int,
+    max_columns: int,
+) -> tuple[bool, list[_Cell], int | None]:
+    marks = sorted(
+        (cell for cell in cells.values() if _is_mark(cell.text)),
+        key=lambda item: (item.row, item.col, item.block_order, item.root),
+    )
+    if max_rows < 2 or max_columns < 2 or not marks:
+        return False, marks, None
+    first_mark_row = min(cell.row for cell in marks)
+    header_cells = [
+        cell
+        for cell in cells.values()
+        if cell.row < first_mark_row and _non_mark_text(cell)
+    ]
+    marked_columns = {cell.col for cell in marks}
+    header_columns = {cell.col for cell in header_cells}
+    marked_rows_with_labels = 0
+    for row in {cell.row for cell in marks}:
+        if any(
+            item.row == row
+            and item.col < min(cell.col for cell in marks if cell.row == row)
+            and _non_mark_text(item)
+            for item in cells.values()
+        ):
+            marked_rows_with_labels += 1
+    # A single keyword is never sufficient.  The root dimensions, explicit
+    # marks, header structure, and row labels are independent signals.
+    structural = bool(
+        (len(marked_columns) >= 2 or len(header_columns) >= 2)
+        and len(header_cells) >= 2
+        and marked_rows_with_labels >= 1
+    )
+    if structural:
+        header = _header_projection(
+            cells,
+            first_mark_row=first_mark_row,
+            max_columns=max_columns,
+        )
+        # An X matrix with visits down the rows and analytes across columns
+        # is not the enrollment schedule this catalog expects. Its marked
+        # columns need at least one source-labelled visit. A matrix whose
+        # visits are all after baseline remains a recognized but empty
+        # enrollment schedule, distinct from a missing flow table.
+        structural = any(
+            _derive_visit_stage(header.get(col, ("", ()))[0]) is not None
+            for col in marked_columns
+        )
+    return structural, marks, first_mark_row
+
+
+def _build_instances_for_table(
+    root: StructureBlock,
+    cells: Mapping[tuple[int, int], _Cell],
+    *,
+    all_marks: Sequence[_Cell],
+    selected_refs: set[str],
+    max_columns: int,
+    spans_by_ref: Mapping[str, ProtocolSourceSpan],
+    blocks_by_ref: Mapping[str, StructureBlock],
+    snapshot_id: str,
+    footnote_refs: Mapping[int, tuple[str, ...]],
+) -> list[_OperationInstance]:
+    first_mark_row = min(cell.row for cell in all_marks)
+    header = _header_projection(
+        cells,
+        first_mark_row=first_mark_row,
+        max_columns=max_columns,
+    )
+    selected_marks = sorted(
+        (
+            cell
+            for cell in all_marks
+            if any(ref in selected_refs for ref in cell.source_refs)
+        ),
+        key=lambda item: (item.row, item.col, item.block_order, item.root),
+    )
+    if not selected_marks:
+        return []
+
+    # The earliest marked randomization action is a structural timing anchor,
+    # not a catalog item.  It allows a D1/W0 column under a broad treatment
+    # group to be interpreted as baseline without reading clinical prose or a
+    # project-specific table number.
+    randomization_anchor, baseline_boundary = _enrollment_boundary(
+        cells, selected_marks, header,
+    )
+    selected_columns = sorted({cell.col for cell in selected_marks})
+
+    visits: dict[int, _VisitColumn] = {}
+    unresolved_columns: list[int] = []
+    for col in selected_columns:
+        if baseline_boundary is not None and col > baseline_boundary:
+            # Everything physically after the randomization/latest baseline
+            # anchor is outside the enrollment catalog.  It need not have a
+            # resolvable visit label (for example a sparse early-exit column).
+            continue
+        source_header_text, header_refs = header.get(col, ("", ()))
+        original_text = _without_display_footnotes(source_header_text)
+        derived = (
+            ReviewStage.BASELINE
+            if randomization_anchor is not None and col == randomization_anchor
+            else _derive_visit_stage(original_text)
+        )
+        if derived == _PostBaseline.POST_BASELINE:
+            # Treatment/follow-up is intentionally outside this catalog.
+            continue
+        if not isinstance(derived, ReviewStage) or not original_text or not header_refs:
+            unresolved_columns.append(col)
+            continue
+        visits[col] = _VisitColumn(
+            column=col,
+            stage=derived,
+            original_text=original_text,
+            header_refs=header_refs,
+        )
+    if unresolved_columns:
+        raise ProcedureCatalogError(
+            "visit_unresolved",
+            "流程表中的选定访视列无法确定预筛选/筛选/导入或基线访视，"
+            f"列：{','.join(str(item) for item in unresolved_columns)}",
+            table_root=root.source_ref,
+        )
+
+    baseline_columns = [
+        visit.column for visit in visits.values() if visit.stage == ReviewStage.BASELINE
+    ]
+    instances: list[_OperationInstance] = []
+    selected_rows = sorted({cell.row for cell in selected_marks})
+    table_operations = tuple(
+        dict.fromkeys(
+            _without_display_footnotes(label_result[0])
+            for row in selected_rows
+            if (label_result := _operation_label(
+                cells,
+                row=row,
+                mark_columns=sorted({cell.col for cell in selected_marks if cell.row == row}),
+            )) is not None
+            and not _is_placeholder_operation(_without_display_footnotes(label_result[0]))
+        )
+    )
+    for row in selected_rows:
+        row_marks = [cell for cell in selected_marks if cell.row == row]
+        all_label_result = _operation_label(
+            cells,
+            row=row,
+            mark_columns=sorted({cell.col for cell in row_marks}),
+        )
+        if all_label_result is None:
+            raise ProcedureCatalogError(
+                "operation_missing",
+                f"带有 X/(X) 标记的第 {row} 行没有可追溯操作名称",
+                table_root=root.source_ref,
+            )
+        all_operation = _without_display_footnotes(all_label_result[0])
+        if _is_placeholder_operation(all_operation):
+            raise ProcedureCatalogError(
+                "operation_placeholder",
+                f"第 {row} 行的操作名称是占位内容：{all_operation!r}",
+                table_root=root.source_ref,
+            )
+        row_visits = [visits[cell.col] for cell in row_marks if cell.col in visits]
+        if not row_visits:
+            continue
+        label_result = _operation_label(
+            cells,
+            row=row,
+            mark_columns=[visit.column for visit in row_visits],
+        )
+        if label_result is None:
+            raise ProcedureCatalogError(
+                "operation_missing",
+                f"带有 X/(X) 标记的第 {row} 行没有可追溯操作名称",
+                table_root=root.source_ref,
+            )
+        operation, operation_refs = label_result
+        operation = _without_display_footnotes(operation)
+        if _is_placeholder_operation(operation):
+            raise ProcedureCatalogError(
+                "operation_placeholder",
+                f"第 {row} 行的操作名称是占位内容：{operation!r}",
+                table_root=root.source_ref,
+            )
+
+        for visit in sorted(
+            row_visits,
+            key=lambda item: (
+                _STAGE_ORDER[item.stage],
+                item.column,
+                _normalized_header_key(item.original_text),
+            ),
+        ):
+            if _is_non_enrollment_operation(
+                operation,
+                visit_column=visit.column,
+                randomization_anchor=randomization_anchor,
+            ):
+                continue
+            if baseline_columns and visit.column > max(baseline_columns):
+                # A recognized pre-baseline label after the baseline column is
+                # a malformed matrix, not a reason to silently re-order it.
+                raise ProcedureCatalogError(
+                    "visit_order_invalid",
+                    f"访视列 {visit.original_text!r} 出现在基线之后",
+                    table_root=root.source_ref,
+                )
+            mark_cells = [cell for cell in row_marks if cell.col == visit.column]
+            mark_refs = tuple(ref for cell in mark_cells for ref in cell.source_refs)
+            # Formal coverage is checked separately for operation and visit
+            # ranges.  A repeated mark glyph is retained when it has a formal
+            # locator, but an unalignable/degraded mark cannot mask a missing
+            # operation or visit anchor.
+            operation_span_ids = _formal_span_ids(
+                operation_refs,
+                spans_by_ref=spans_by_ref,
+                blocks_by_ref=blocks_by_ref,
+                snapshot_id=snapshot_id,
+                table_root=root.source_ref,
+                role="操作",
+            )
+            visit_span_ids = _formal_span_ids(
+                # Short visit/date cells are commonly repeated throughout a
+                # protocol and therefore cannot claim a unique text range.
+                # The original table root is an eligible fallback only when
+                # alignment proved a unique ALIGNED PAGE_ONLY locator.  A
+                # degraded/interpolated table hint still fails this gate.
+                (*visit.header_refs, root.source_ref),
+                spans_by_ref=spans_by_ref,
+                blocks_by_ref=blocks_by_ref,
+                snapshot_id=snapshot_id,
+                table_root=root.source_ref,
+                role="访视",
+                required=False,
+            )
+            if not visit_span_ids:
+                table_span = spans_by_ref.get(root.source_ref)
+                # Some adjacent phase tables start on the same rendered page,
+                # making their PAGE_ONLY roots non-authoritative in isolation.
+                # In that narrow case, a table-specific, unique operation
+                # TEXT_RANGE is the formal combined operation/visit-row range;
+                # the aligned table root merely proves the structural context.
+                # A DEGRADED/interpolated root can never enable this fallback.
+                if not (
+                    table_span is not None
+                    and table_span.snapshot_id == snapshot_id
+                    and table_span.alignment_status == AlignmentStatus.ALIGNED
+                    and table_span.precision == SourceLocatorPrecision.PAGE_ONLY
+                    and table_span.render_artifact_id is not None
+                    and table_span.render_page is not None
+                    and operation_span_ids
+                ):
+                    raise ProcedureCatalogError(
+                        "source_coverage_missing",
+                        "访视 没有唯一 ALIGNED TEXT_RANGE 或 PAGE_ONLY 定位",
+                        table_root=root.source_ref,
+                    )
+                visit_span_ids = operation_span_ids
+            mark_span_ids = _formal_span_ids(
+                mark_refs,
+                spans_by_ref=spans_by_ref,
+                blocks_by_ref=blocks_by_ref,
+                snapshot_id=snapshot_id,
+                table_root=root.source_ref,
+                role="标记",
+                required=False,
+            )
+            operation_note_numbers = tuple(
+                dict.fromkeys(
+                    number
+                    for ref in operation_refs
+                    if (block := blocks_by_ref.get(ref)) is not None
+                    for number in _display_footnote_numbers(block.text)
+                )
+            )
+            mark_note_numbers = tuple(
+                dict.fromkeys(
+                    number
+                    for cell in mark_cells
+                    for number in _display_footnote_numbers(cell.text)
+                )
+            )
+            visit_note_refs: list[str] = []
+            note_excerpt_overrides: dict[str, str] = {}
+            for ref in visit.header_refs:
+                block = blocks_by_ref.get(ref)
+                if block is None:
+                    continue
+                for number in _display_footnote_numbers(block.text):
+                    note_refs = footnote_refs.get(number, ())
+                    if not note_refs:
+                        raise ProcedureCatalogError(
+                            "source_coverage_missing",
+                            f"访视表头引用的脚注 {number} 没有来源段落",
+                            table_root=root.source_ref,
+                        )
+                    for note_ref in note_refs:
+                        note_block = blocks_by_ref.get(note_ref)
+                        if note_block is None:
+                            raise ProcedureCatalogError(
+                                "source_coverage_missing",
+                                f"流程表注释缺少来源段落：{note_ref}",
+                                table_root=root.source_ref,
+                            )
+                        excerpt = _scoped_visit_note_excerpt(
+                            note_block.text, operation, table_operations,
+                            table_root=root.source_ref,
+                        )
+                        if excerpt is not None:
+                            visit_note_refs.append(note_ref)
+                            note_excerpt_overrides[note_ref] = excerpt
+            direct_note_numbers = tuple(
+                dict.fromkeys((*operation_note_numbers, *mark_note_numbers))
+            )
+            missing_numbers = tuple(
+                number for number in direct_note_numbers if not footnote_refs.get(number)
+            )
+            if missing_numbers:
+                raise ProcedureCatalogError(
+                    "source_coverage_missing",
+                    "流程表引用的脚注没有来源段落："
+                    + "、".join(str(number) for number in missing_numbers),
+                    table_root=root.source_ref,
+                )
+            note_refs = tuple(
+                dict.fromkeys(
+                    [
+                        *(ref for number in operation_note_numbers
+                          for ref in footnote_refs[number]),
+                        *visit_note_refs,
+                        *(ref for number in mark_note_numbers
+                          for ref in footnote_refs[number]),
+                    ]
+                )
+            )
+            direct_note_refs = {
+                ref for number in direct_note_numbers for ref in footnote_refs[number]
+            }
+            for ref in direct_note_refs:
+                note_excerpt_overrides.pop(ref, None)
+            note_span_ids = _formal_span_ids(
+                note_refs,
+                spans_by_ref=spans_by_ref,
+                blocks_by_ref=blocks_by_ref,
+                snapshot_id=snapshot_id,
+                table_root=root.source_ref,
+                role="流程表注释",
+                required=False,
+            )
+            formal_note_refs = {
+                span.source_ref
+                for ref in note_refs
+                if (span := spans_by_ref.get(ref)) is not None
+                and span.source_span_id in note_span_ids
+            }
+            if set(note_refs) != formal_note_refs:
+                raise ProcedureCatalogError(
+                    "source_coverage_missing",
+                    "流程表注释无法完整定位："
+                    + "、".join(ref for ref in note_refs if ref not in formal_note_refs),
+                    table_root=root.source_ref,
+                )
+            refs = tuple(
+                dict.fromkeys(
+                    (
+                        *operation_span_ids,
+                        *visit_span_ids,
+                        *mark_span_ids,
+                        *note_span_ids,
+                    )
+                )
+            )
+            instances.append(
+                _OperationInstance(
+                    root=root.source_ref,
+                    row=row,
+                    operation=operation,
+                    operation_refs=operation_refs,
+                    visit=visit,
+                    source_span_ids=refs,
+                    position_hint=(root.block_order, row, visit.column),
+                    note_excerpt_overrides=tuple(sorted(
+                        (_required_note_span_id(ref, spans_by_ref, root.source_ref), excerpt)
+                        for ref, excerpt in note_excerpt_overrides.items()
+                    )),
+                )
+            )
+    if not instances:
+        raise ProcedureCatalogError(
+            "flow_table_empty",
+            "结构上识别为研究流程表，但基线及以前没有必做操作",
+            table_root=root.source_ref,
+        )
+    return instances
+
+
+def _source_ids_for_instance(
+    instance: _OperationInstance,
+    *,
+    spans_by_ref: Mapping[str, ProtocolSourceSpan],
+    blocks_by_ref: Mapping[str, StructureBlock],
+    snapshot_id: str,
+) -> tuple[str, ...]:
+    operation_ids = _formal_span_ids(
+        instance.operation_refs,
+        spans_by_ref=spans_by_ref,
+        blocks_by_ref=blocks_by_ref,
+        snapshot_id=snapshot_id,
+        table_root=instance.root,
+        role="操作",
+    )
+    # The instance stores formal operation/visit anchors and any optional
+    # formal mark anchors found during matrix construction.
+    return tuple(dict.fromkeys((*operation_ids, *instance.source_span_ids)))
+
+
+def build_required_procedure_catalog(
+    blocks: Sequence[StructureBlock],
+    *context_args: object,
+    phase_projection: PhaseProjection | None = None,
+    phase_graph: PhaseApplicabilityGraph | None = None,
+    source_spans: Sequence[ProtocolSourceSpan]
+    | Mapping[str, ProtocolSourceSpan]
+    | None = None,
+    selected_phase: StudyPhase | None = None,
+    snapshot_id: str | None = None,
+    frozen_at: datetime | None = None,
+    frozen_by: str = _DEFAULT_FROZEN_BY,
+) -> FrozenProtocolCatalog:
+    """Freeze the selected phase's required pre-baseline procedure catalog.
+
+    Accepted positional forms are intentionally small and explicit:
+
+    ``(blocks, projection, spans)``
+        Use an already-built single-phase projection.
+    ``(blocks, graph, spans, selected_phase=...)``
+        Project the graph deterministically inside this function.
+
+    The keyword form may provide both ``phase_graph`` and
+    ``phase_projection`` for consistency checks.  ``snapshot_id`` is normally
+    derived from the graph or projection blocks; passing it explicitly is
+    useful when the projection contains only an aggregate block.
+    """
+
+    projection, graph, spans_input, phase_arg = _resolve_context(
+        context_args,
+        phase_projection=phase_projection,
+        phase_graph=phase_graph,
+        source_spans=source_spans,
+        selected_phase=selected_phase,
+    )
+    projection, phase = _validate_phase_context(
+        projection=projection,
+        graph=graph,
+        selected_phase=phase_arg,
+    )
+    spans_by_ref, spans_by_id = _span_input_map(spans_input)
+    if not blocks:
+        raise ProcedureCatalogError(
+            "flow_table_missing", "没有结构块，不能冻结必做项目录"
+        )
+
+    blocks_by_ref = {block.source_ref: block for block in blocks}
+    if len(blocks_by_ref) != len(blocks):
+        raise ProcedureCatalogError(
+            "source_ref_ambiguous", "结构块 source_ref 必须唯一"
+        )
+    if snapshot_id is None:
+        if graph is not None:
+            snapshot_id = graph.snapshot_id
+        else:
+            snapshot_candidates = {
+                block.snapshot_id
+                for block in projection.blocks
+                if isinstance(block, PhaseApplicabilityBlock)
+            }
+            # PhaseApplicabilityBlock guarantees a snapshot_id, and mixed
+            # snapshots cannot safely form one catalog.
+            if len(snapshot_candidates) == 1:
+                snapshot_id = next(iter(snapshot_candidates))
+    if not snapshot_id:
+        raise ProcedureCatalogError("snapshot_missing", "无法确定当前提取快照")
+    if graph is not None and graph.snapshot_id != snapshot_id:
+        raise ProcedureCatalogError(
+            "snapshot_scope_mismatch", "期别适用图与目录快照不一致"
+        )
+    if any(block.snapshot_id != snapshot_id for block in projection.blocks):
+        raise ProcedureCatalogError(
+            "snapshot_scope_mismatch", "期别投影与目录快照不一致"
+        )
+    for span in spans_by_ref.values():
+        if span.snapshot_id != snapshot_id:
+            raise ProcedureCatalogError(
+                "snapshot_scope_mismatch", "来源片段与目录快照不一致"
+            )
+
+    selected_refs = _selected_refs(projection, spans_by_id=spans_by_id)
+    roots = sorted(
+        (block for block in blocks if block.kind == BlockKind.TABLE),
+        key=lambda item: (item.block_order, item.source_ref),
+    )
+    all_instances: list[_OperationInstance] = []
+    visit_tables: list[FrozenVisitTable] = []
+    visit_context_complete = True
+    structural_roots = 0
+    for root in roots:
+        max_columns = root.table_cols or 0
+        cells = _make_cells(blocks, root)
+        if cells:
+            max_columns = max(max_columns, max(col for _row, col in cells) + 1)
+            max_rows = max(root.table_rows or 0, max(row for row, _col in cells) + 1)
+        else:
+            max_rows = root.table_rows or 0
+        looks_like_flow, all_marks, _first_mark_row = _table_looks_like_flow(
+            root,
+            cells,
+            max_rows=max_rows,
+            max_columns=max_columns,
+        )
+        if not looks_like_flow:
+            continue
+        selected_marks = [
+            cell
+            for cell in all_marks
+            if any(ref in selected_refs for ref in cell.source_refs)
+        ]
+        if not selected_marks:
+            # The table may belong exclusively to the other study phase.  The
+            # projection, not the table number or procedure wording, decides
+            # whether it is in scope.
+            continue
+        structural_roots += 1
+        header = _header_projection(cells, first_mark_row=min(cell.row for cell in all_marks),
+                                    max_columns=max_columns)
+        root_span = spans_by_ref.get(root.source_ref)
+        table_context_available = root_span is not None
+        columns = []
+        for column in range(1, max_columns):
+            text, refs = header.get(column, ("", ()))
+            if any(ref not in spans_by_ref or ref not in blocks_by_ref for ref in refs):
+                table_context_available = False
+                break
+            columns.append(FrozenVisitColumn(
+                column_index=column, visit_instance=text, review_stage=derive_review_stage(text),
+                source_span_ids=tuple(spans_by_ref[ref].source_span_id for ref in refs),
+                source_excerpts=tuple(blocks_by_ref[ref].text for ref in refs),
+            ))
+        if table_context_available:
+            visit_tables.append(FrozenVisitTable(table_source_span_id=root_span.source_span_id,
+                                                column_count=max_columns, columns=tuple(columns)))
+        else:
+            visit_context_complete = False
+        all_instances.extend(
+            _build_instances_for_table(
+                root,
+                cells,
+                all_marks=all_marks,
+                selected_refs=selected_refs,
+                max_columns=max_columns,
+                spans_by_ref=spans_by_ref,
+                blocks_by_ref=blocks_by_ref,
+                snapshot_id=snapshot_id,
+                footnote_refs=_flow_footnote_refs(blocks, root),
+            )
+        )
+    if structural_roots == 0 or not all_instances:
+        raise ProcedureCatalogError(
+            "flow_table_empty" if structural_roots else "flow_table_missing",
+            "未找到当前选定期别中结构完整且含基线及以前必做操作的研究流程表",
+        )
+
+    # Deduplication is structural: phase + original visit instance + source
+    # row (and table root to avoid merging equal rows from separate tables).
+    # Similar labels never participate in the key.
+    grouped: dict[tuple[str, str, str, str, int, int], _OperationInstance] = {}
+    for instance in all_instances:
+        key = (
+            phase.value,
+            instance.root,
+            instance.visit.stage.value,
+            _normalized_header_key(instance.visit.original_text),
+            instance.row,
+            instance.visit.column,
+        )
+        existing = grouped.get(key)
+        if existing is None:
+            grouped[key] = instance
+            continue
+        # A duplicated physical mark under the same merged visit is one
+        # instance, but both source ranges remain attached for auditability.
+        grouped[key] = _OperationInstance(
+            root=existing.root,
+            row=existing.row,
+            operation=existing.operation,
+            operation_refs=tuple(
+                dict.fromkeys((*existing.operation_refs, *instance.operation_refs))
+            ),
+            visit=existing.visit,
+            source_span_ids=tuple(
+                dict.fromkeys((*existing.source_span_ids, *instance.source_span_ids))
+            ),
+            position_hint=min(existing.position_hint, instance.position_hint),
+            note_excerpt_overrides=tuple(dict.fromkeys(
+                (*existing.note_excerpt_overrides, *instance.note_excerpt_overrides)
+            )),
+        )
+
+    ordered_instances = sorted(
+        grouped.values(),
+        key=lambda item: (
+            item.position_hint,
+            _STAGE_ORDER[item.visit.stage],
+            _normalized_header_key(item.visit.original_text),
+            item.operation,
+        ),
+    )
+    items: list[FrozenCatalogItem] = []
+    for position, instance in enumerate(ordered_instances):
+        source_ids = _source_ids_for_instance(
+            instance,
+            spans_by_ref=spans_by_ref,
+            blocks_by_ref=blocks_by_ref,
+            snapshot_id=snapshot_id,
+        )
+        item_key = (
+            CATALOG_BUILDER_VERSION,
+            snapshot_id,
+            phase.value,
+            instance.root,
+            instance.row,
+            instance.visit.column,
+            instance.visit.stage.value,
+            _normalized_header_key(instance.visit.original_text),
+            instance.operation,
+            instance.operation_refs,
+            source_ids,
+            instance.note_excerpt_overrides,
+        )
+        item_id = f"procedure:{_short_digest(*item_key)}"
+        source_excerpts = optional_source_excerpts_for_spans(
+            source_ids,
+            by_id=spans_by_id,
+            by_ref=spans_by_ref,
+            blocks_by_ref=blocks_by_ref,
+        )
+        excerpt_overrides = dict(instance.note_excerpt_overrides)
+        if source_excerpts:
+            source_excerpts = tuple(
+                excerpt_overrides.get(span_id, excerpt)
+                for span_id, excerpt in zip(source_ids, source_excerpts, strict=True)
+            )
+        items.append(
+            FrozenCatalogItem(
+                item_id=item_id,
+                kind=CatalogItemKind.REQUIRED_PROCEDURE,
+                label=instance.operation,
+                visit_instance=instance.visit.original_text,
+                review_stage=instance.visit.stage,
+                position=position,
+                source_span_ids=list(source_ids),
+                source_excerpts=source_excerpts,
+            )
+        )
+
+    catalog_signature = tuple(item.item_id for item in items)
+    catalog_id = (
+        f"catalog:{CatalogKind.REQUIRED_PROCEDURES.value}:"
+        f"{_short_digest(CATALOG_BUILDER_VERSION, snapshot_id, phase.value, catalog_signature)}"
+    )
+    frozen_timestamp = frozen_at or _DEFAULT_FROZEN_AT
+    if frozen_timestamp.tzinfo is None:
+        raise ProcedureCatalogError("timestamp_invalid", "frozen_at 必须带时区")
+    if not frozen_by.strip():
+        raise ProcedureCatalogError("freezer_invalid", "frozen_by 不能为空")
+    payload: dict[str, Any] = {
+        "catalog_id": catalog_id,
+        "snapshot_id": snapshot_id,
+        "catalog_kind": CatalogKind.REQUIRED_PROCEDURES,
+        "study_phase": phase,
+        "items": tuple(items),
+        "visit_tables": tuple(visit_tables) if visit_context_complete else (),
+        "frozen_at": frozen_timestamp,
+        "frozen_by": frozen_by,
+        "schema_version": "fixture/v1",
+    }
+    # The contract hashes the serialized model excluding catalog_sha256.  Use
+    # the same exact representation rather than hashing an ad-hoc item list.
+    payload["catalog_sha256"] = frozen_catalog_content_hash(
+        FrozenProtocolCatalog.model_construct(**payload)
+    )
+    return FrozenProtocolCatalog.model_validate(payload)
+
+
+freeze_required_procedure_catalog = build_required_procedure_catalog
+build_procedure_catalog = build_required_procedure_catalog
+build_required_procedures_catalog = build_required_procedure_catalog
+freeze_required_procedures_catalog = build_required_procedure_catalog
+freeze_procedure_catalog = build_required_procedure_catalog
+freeze_required_procedures = build_required_procedure_catalog
+CatalogBuildError = ProcedureCatalogError
+
+
+__all__ = [
+    "CATALOG_BUILDER_VERSION",
+    "CatalogBuildError",
+    "CatalogValidationError",
+    "ProcedureCatalogBuildError",
+    "ProcedureCatalogError",
+    "RequiredProcedureCatalogBuildError",
+    "RequiredProcedureCatalogError",
+    "build_procedure_catalog",
+    "build_required_procedure_catalog",
+    "build_required_procedures_catalog",
+    "derive_review_stage",
+    "freeze_procedure_catalog",
+    "freeze_required_procedure_catalog",
+    "freeze_required_procedures",
+    "freeze_required_procedures_catalog",
+]

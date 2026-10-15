@@ -3,7 +3,8 @@
 Backends
 --------
 1. oMLX  (local, OpenAI-compatible) – OCR / vision tasks
-2. DeepSeek (remote)               – review / reasoning tasks
+2. MTPLX (local, OpenAI-compatible) – review / reasoning tasks
+3. DeepSeek (remote, optional)       – explicit semantic fallback
 
 Both use ``openai.AsyncOpenAI`` since they expose an OpenAI-compatible API.
 """
@@ -26,6 +27,8 @@ from app.config import (
     OMLX_API_KEY,
     DEEPSEEK_BASE_URL,
     DEEPSEEK_API_KEY,
+    MTPLX_BASE_URL,
+    MTPLX_API_KEY,
     MINIMAX_BASE_URL,
     MINIMAX_API_KEY,
     MINIMAX_MODEL,
@@ -38,6 +41,8 @@ from app.config import (
     REVIEW_REASONING_EFFORT,
     DECONSTRUCT_BACKEND,
     DECONSTRUCT_MODEL,
+    DECONSTRUCT_REASONING_EFFORT,
+    DECONSTRUCT_MAX_TOKENS,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +58,7 @@ RETRY_BACKOFF = 1.5  # seconds, multiplied by attempt number
 # Client singletons (created lazily)
 # ---------------------------------------------------------------------------
 _omlx_client: Optional[AsyncOpenAI] = None
+_mtplx_client: Optional[AsyncOpenAI] = None
 _deepseek_client: Optional[AsyncOpenAI] = None
 _minimax_client: Optional[AsyncOpenAI] = None
 
@@ -62,11 +68,36 @@ def _get_omlx_client() -> AsyncOpenAI:
     global _omlx_client
     if _omlx_client is None:
         _omlx_client = AsyncOpenAI(
-            base_url=OMLX_BASE_URL.rstrip("/") + "/v1",
+            base_url=_with_v1_suffix(OMLX_BASE_URL),
             api_key=os.getenv("OMLX_API_KEY", OMLX_API_KEY),
             timeout=httpx.Timeout(120.0, connect=10.0),
         )
     return _omlx_client
+
+
+def _with_v1_suffix(base_url: str) -> str:
+    normalized = base_url.strip().rstrip("/")
+    if not normalized:
+        raise RuntimeError("模型服务 base URL is empty")
+    return normalized if normalized.endswith("/v1") else normalized + "/v1"
+
+
+def _get_mtplx_client() -> AsyncOpenAI:
+    """Return the local MTPLX OpenAI-compatible semantic client."""
+    global _mtplx_client
+    if _mtplx_client is None:
+        api_key = os.getenv("MTPLX_API_KEY", MTPLX_API_KEY) or "local-mtplx"
+        http_client = httpx.AsyncClient(
+            trust_env=False,
+            timeout=httpx.Timeout(600.0, connect=10.0),
+        )
+        _mtplx_client = AsyncOpenAI(
+            base_url=_with_v1_suffix(os.getenv("MTPLX_BASE_URL", MTPLX_BASE_URL)),
+            api_key=api_key,
+            http_client=http_client,
+            max_retries=0,
+        )
+    return _mtplx_client
 
 
 def _get_deepseek_client() -> AsyncOpenAI:
@@ -115,9 +146,13 @@ def _get_minimax_client() -> AsyncOpenAI:
 
 def _get_ocr_client() -> AsyncOpenAI:
     """Return the client selected by OCR_BACKEND."""
+    if OCR_BACKEND == "omlx":
+        return _get_omlx_client()
     if OCR_BACKEND == "minimax":
         return _get_minimax_client()
-    return _get_omlx_client()
+    raise RuntimeError(
+        f"Unsupported OCR_BACKEND={OCR_BACKEND!r}; OCR cannot use the semantic MTPLX route"
+    )
 
 
 def _get_ocr_model() -> str:
@@ -129,23 +164,37 @@ def _get_ocr_model() -> str:
 
 def _get_review_client() -> AsyncOpenAI:
     """Return the client selected by REVIEW_BACKEND."""
+    if REVIEW_BACKEND in {"mtplx", "mtplx-api"}:
+        return _get_mtplx_client()
     if REVIEW_BACKEND == "omlx":
         return _get_omlx_client()
-    return _get_deepseek_client()
+    if REVIEW_BACKEND == "deepseek":
+        return _get_deepseek_client()
+    raise RuntimeError(f"Unsupported REVIEW_BACKEND={REVIEW_BACKEND!r}")
 
 
 def _get_deconstruct_client() -> AsyncOpenAI:
     """Return the client selected by DECONSTRUCT_BACKEND."""
+    if DECONSTRUCT_BACKEND in {"mtplx", "mtplx-api"}:
+        return _get_mtplx_client()
     if DECONSTRUCT_BACKEND == "omlx":
         return _get_omlx_client()
-    return _get_deepseek_client()
+    if DECONSTRUCT_BACKEND == "deepseek":
+        return _get_deepseek_client()
+    raise RuntimeError(f"Unsupported DECONSTRUCT_BACKEND={DECONSTRUCT_BACKEND!r}")
 
 
 def _normalized_review_reasoning_effort() -> str | None:
-    """Return a supported DeepSeek thinking effort for formal review calls."""
+    """Return a supported standard reasoning effort for semantic review calls."""
     if REVIEW_REASONING_EFFORT in {"", "default", "auto"}:
         return None
-    if REVIEW_REASONING_EFFORT in {"high", "max"}:
+    if REVIEW_REASONING_EFFORT in {
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+    }:
         return REVIEW_REASONING_EFFORT
     logger.warning(
         "Unsupported REVIEW_REASONING_EFFORT=%s; using provider default",
@@ -157,6 +206,51 @@ def _normalized_review_reasoning_effort() -> str | None:
 def _uses_deepseek_thinking_for_review(model: str) -> bool:
     """DeepSeek V4 review models expose provider-native thinking controls."""
     return REVIEW_BACKEND == "deepseek" and model.startswith("deepseek-v4")
+
+
+def _uses_mtplx_reasoning_for_review() -> bool:
+    return REVIEW_BACKEND in {"mtplx", "mtplx-api"}
+
+
+def _normalized_deconstruct_reasoning_effort() -> str | None:
+    if DECONSTRUCT_REASONING_EFFORT in {"", "default", "auto"}:
+        return None
+    if DECONSTRUCT_REASONING_EFFORT in {
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+    }:
+        return DECONSTRUCT_REASONING_EFFORT
+    logger.warning(
+        "Unsupported DECONSTRUCT_REASONING_EFFORT=%s; using provider default",
+        DECONSTRUCT_REASONING_EFFORT,
+    )
+    return None
+
+
+def _deconstruct_completion_kwargs(
+    *, model: str, messages: list[dict], temperature: float, max_tokens: int
+) -> dict:
+    kwargs: dict = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+    }
+    if DECONSTRUCT_BACKEND == "deepseek" and model.startswith("deepseek-v4"):
+        effort = _normalized_deconstruct_reasoning_effort()
+        if effort:
+            kwargs["reasoning_effort"] = effort
+            kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+    elif DECONSTRUCT_BACKEND in {"mtplx", "mtplx-api"}:
+        effort = _normalized_deconstruct_reasoning_effort()
+        if effort:
+            kwargs["reasoning_effort"] = effort
+        kwargs["temperature"] = temperature
+    else:
+        kwargs["temperature"] = temperature
+    return kwargs
 
 
 def _review_completion_kwargs(
@@ -181,6 +275,11 @@ def _review_completion_kwargs(
         if effort:
             kwargs["reasoning_effort"] = effort
             kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+    elif _uses_mtplx_reasoning_for_review():
+        effort = _normalized_review_reasoning_effort()
+        if effort:
+            kwargs["reasoning_effort"] = effort
+        kwargs["temperature"] = temperature
     else:
         kwargs["temperature"] = temperature
     return kwargs
@@ -390,7 +489,7 @@ async def call_vision_ocr(
     Uses configured OCR backend with model selection based on document length.
     Actual models determined by OCR_MODEL_LONG / OCR_MODEL_SHORT config.
     """
-    client = _get_omlx_client()
+    client = _get_ocr_client()
     selected_model = model or _choose_ocr_model(total_pages)
     
     msg = {
@@ -448,6 +547,16 @@ async def check_deepseek() -> bool:
         return False
 
 
+async def check_mtplx() -> bool:
+    """Return True if the configured local MTPLX service is reachable."""
+    try:
+        client = _get_mtplx_client()
+        await client.models.list()
+        return True
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Protocol deconstruction (uses dedicated backend)
 # ---------------------------------------------------------------------------
@@ -457,7 +566,7 @@ async def deconstruct_chat(
     *,
     model: str | None = None,
     temperature: float = 0.3,
-    max_tokens: int = 8192,
+    max_tokens: int = DECONSTRUCT_MAX_TOKENS,
 ) -> str:
     """Send a chat completion using the deconstruction backend."""
     client = _get_deconstruct_client()
@@ -465,10 +574,12 @@ async def deconstruct_chat(
 
     async def _call():
         resp = await client.chat.completions.create(
-            model=use_model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
+            **_deconstruct_completion_kwargs(
+                model=use_model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
         )
         return resp.choices[0].message.content or ""
 

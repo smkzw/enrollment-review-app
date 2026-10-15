@@ -1,0 +1,114 @@
+/** 入排审核只读投影的网络契约。中文字段由服务端提供，前端不重新推导。 */
+
+export type EligibilityRuleKindWire =
+  | "inclusion"
+  | "exclusion"
+  | "medication"
+  | "required_procedure";
+
+export type EligibilityDecisionWire =
+  | "inclusion_met"
+  | "inclusion_not_met"
+  | "requirement_met"
+  | "requirement_not_met"
+  | "exclusion_triggered"
+  | "exclusion_not_triggered"
+  | "professional_judgment"
+  | "indeterminate"
+  | "conflict"
+  | "not_due"
+  | "not_applicable"
+  | "system_issue";
+
+export type EligibilityDeterminationModeWire =
+  | "deterministic"
+  | "semantic"
+  | "investigator_judgment"
+  | "restricted";
+
+export type EligibilityLimitationKindWire = "interpretation_unresolved" | "consumer_unavailable";
+
+export interface EligibilityFactRefWire {
+  excerpt: string | null;
+  source_document_version_id: string | null;
+  page_artifact_id: string | null;
+  fact_id: string;
+  locator_id: string | null;
+  page_number: number | null;
+}
+
+export interface EligibilitySourceReadRefWire {
+  source_document_version_id: string;
+  page_artifact_id: string;
+  page_number: number;
+  excerpt: string | null;
+  disposition: "mentioned" | "not_seen" | "unresolved";
+}
+
+export interface EligibilityClauseWire {
+  rule_component_id: string;
+  rule_code: string;
+  rule_kind: EligibilityRuleKindWire;
+  text_summary: string;
+  source_text?: string | null;
+  parent_rule_code: string | null;
+  decision: EligibilityDecisionWire;
+  confidence?: "high" | "low" | null;
+  confidence_reason?: string | null;
+  decision_label: string;
+  reason: string;
+  reason_parts?: Array<{ condition_id: string; condition_text: string; reason_text: string; requires_attention: boolean }>;
+  fact_refs: EligibilityFactRefWire[];
+  source_read_refs?: EligibilitySourceReadRefWire[];
+  gap_type: string | null;
+  determination_mode: EligibilityDeterminationModeWire;
+  limitation_kind?: EligibilityLimitationKindWire | null;
+}
+
+export type EligibilityControlStatusWire =
+  | "fulfilled"
+  | "unfulfilled"
+  | "unverified"
+  | "restricted"
+  | "not_applicable";
+
+export interface EligibilityControlObligationWire {
+  obligation_id: string;
+  obligation_group_id: string;
+  statement: string;
+  status: EligibilityControlStatusWire;
+  status_label: string;
+  limitation_kind?: EligibilityLimitationKindWire | null;
+  reason: string;
+  fact_refs: EligibilityFactRefWire[];
+  source_read_refs?: EligibilitySourceReadRefWire[];
+  continuing_note?: string | null;
+  action_owner?: "investigator" | "crc" | "cra" | "sponsor_medical_or_project" | null;
+  action_detail?: string | null;
+  action_evidence?: string | null;
+}
+
+export interface EligibilityControlWire {
+  protocol_control_id: string;
+  display_label: string;
+  title: string;
+  source_span_ids: string[];
+  obligations: EligibilityControlObligationWire[];
+}
+
+export interface EligibilityReviewWire {
+  verification_only?: boolean;
+  component_clauses?: EligibilityClauseWire[];
+  review_run_id?: string | null;
+  system_issues?: { kind: string; affected_codes: string[]; detail: string; alternative: string; page_artifact_id?: string | null; page_number?: number | null }[];
+  work_draft_state?: "not_started" | "current" | "source_changed" | "method_changed";
+  unassigned_conflicts?: { conflict_group_id: string; member_kind: "event" | "exposure"; member_ids: string[] }[];
+  subject_id: string;
+  review_episode_id: string;
+  rule_set_id: string;
+  rule_set_revision: number;
+  evidence_snapshot_v2_id: string;
+  complete_processing_revision_id: string;
+  clauses: EligibilityClauseWire[];
+  controls?: EligibilityControlWire[];
+}

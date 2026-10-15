@@ -1,0 +1,1 @@
+Connectivity probe only. No clinical inputs. Do not read or write files, use tools, browse, delegate, or change model. Return CONNECTIVITY_OK. Runtime receipt, not self-description, establishes identity.

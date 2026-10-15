@@ -1,0 +1,19 @@
+{
+  "attached_count": 9,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-7273ea04a4fe3ff87d7117f5",
+  "group_id": "d001-ii-package87-death-overdose-medication-error-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 1,
+    "frozen_plan_owned": 18
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package87-death-overdose-medication-error-boundary",
+  "owned_count": 10,
+  "prompt_char_count": 36076,
+  "prompt_sha256": "978f210b60daeebb30857f89edf4bc05092b0f4bad749ae6ed8f46d353629e5c",
+  "task_id": "phase5-slice61by-20260830",
+  "unit_count": 19,
+  "worker": "codebuddy-worker_02"
+}

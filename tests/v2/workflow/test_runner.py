@@ -1,0 +1,642 @@
+"""JobRunner 执行循环与故障注入：依赖顺序、退避重试、取消边界、进程死亡、重复 worker。"""
+from __future__ import annotations
+
+import time
+from datetime import timedelta
+
+import pytest
+
+from app.workflow.errors import ProcessDeath, StepFailure
+from app.workflow.jobstore import DEFAULT_LEASE_TTL, JobStore
+from app.workflow.runner import JobRunner, StepContext
+from tests.v2.workflow.conftest import (
+    create_job_with_steps,
+    expire_lease,
+    job_state,
+)
+
+TWO_STEPS = [
+    {"step_id": "s1", "name": "解析"},
+    {"step_id": "s2", "name": "审核", "depends_on": ("s1",)},
+]
+
+
+def _store(session_factory, clock):
+    class _T:
+        def __enter__(self):
+            self.session = session_factory()
+            self.tx = self.session.begin()
+            return JobStore(self.session, now=clock.now, lease_ttl=DEFAULT_LEASE_TTL)
+
+        def __exit__(self, *exc):
+            if exc[0] is None:
+                self.tx.commit()
+            else:
+                self.tx.rollback()
+            self.session.close()
+            return False
+
+    return _T()
+
+
+def _snapshot(session_factory, clock, job_id):
+    with _store(session_factory, clock) as store:
+        return store.snapshot(job_id)
+
+
+def _requeue_due(session_factory, clock):
+    with _store(session_factory, clock) as store:
+        return store.requeue_due_retries()
+
+
+def test_runner_completes_dependent_steps_in_order(session_factory, clock):
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=TWO_STEPS)
+    calls: list[str] = []
+
+    def executor(ctx: StepContext) -> dict:
+        calls.append(ctx.step_id)
+        return {"step": ctx.step_id, "attempt": ctx.attempt}
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1")
+    assert runner.run_job("job-1") is True
+    assert calls == ["s1", "s2"]  # 依赖顺序
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.state == "completed"
+    assert snap.progress_completed == 2
+    kinds = [row.event.event_type.value for row in snap.events]
+    assert kinds == [
+        "created", "step_started", "step_completed",
+        "step_started", "step_completed", "completed",
+    ]
+    seqs = [row.seq for row in snap.events]
+    assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
+
+
+def test_opted_in_fatal_read_preserves_independent_results_but_blocks_publication(
+    session_factory, clock,
+):
+    create_job_with_steps(
+        session_factory, clock, job_id="partial-reads",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}},
+        steps=[
+            {"step_id": "deep_0001", "name": "read one"},
+            {"step_id": "deep_0002", "name": "read two"},
+            {"step_id": "gate", "name": "publish", "depends_on": ("deep_0001", "deep_0002")},
+        ],
+    )
+    calls = []
+
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        if ctx.step_id == "deep_0001":
+            raise StepFailure(retryable=False, error_code="INVALID_READ")
+        return {"step": ctx.step_id}
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("partial-reads") is True
+    snap = _snapshot(session_factory, clock, "partial-reads")
+    assert calls == ["deep_0001", "deep_0002"]
+    assert snap.state == "failed_final"
+    assert {step.step_id: step.state for step in snap.steps} == {
+        "deep_0001": "failed_final", "deep_0002": "completed", "gate": "failed_final",
+    }
+    assert snap.progress_completed == 1
+    with _store(session_factory, clock) as store:
+        assert store.get_last_checkpoint("partial-reads", "deep_0002")[1]["step"] == "deep_0002"
+
+
+def test_unlisted_fatal_read_still_stops_before_independent_steps(session_factory, clock):
+    create_job_with_steps(
+        session_factory, clock, job_id="hard-failure",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}},
+        steps=[
+            {"step_id": "deep_0001", "name": "read one"},
+            {"step_id": "deep_0002", "name": "read two"},
+        ],
+    )
+    calls = []
+
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        raise StepFailure(retryable=False, error_code="IDENTITY_INVALID")
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("hard-failure") is True
+    assert calls == ["deep_0001"]
+    assert _snapshot(session_factory, clock, "hard-failure").state == "failed_final"
+
+
+def test_second_opted_in_failure_stops_before_more_model_reads(session_factory, clock):
+    create_job_with_steps(
+        session_factory, clock, job_id="bounded-failure",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}},
+        steps=[{"step_id": f"deep_{number:04d}", "name": "read"}
+               for number in range(1, 4)],
+    )
+    calls = []
+
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        raise StepFailure(retryable=False, error_code="INVALID_READ")
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("bounded-failure") is True
+    assert calls == ["deep_0001", "deep_0002"]
+    snap = _snapshot(session_factory, clock, "bounded-failure")
+    assert snap.state == "failed_final"
+    assert {step.step_id: step.state for step in snap.steps} == {
+        "deep_0001": "failed_final", "deep_0002": "failed_final", "deep_0003": "queued",
+    }
+
+
+@pytest.mark.parametrize("new_failures", [0, 1, 2])
+def test_retained_failures_do_not_spend_new_read_limit_and_never_allow_publication(
+    session_factory, clock, new_failures,
+):
+    reads = [f"deep_{number:04d}" for number in range(1, 6)]
+    create_job_with_steps(session_factory, clock, job_id="retained-reads",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}}, steps=[*[{"step_id": step, "name": "read"} for step in reads],
+                   {"step_id": "gate", "name": "publish", "depends_on": tuple(reads)}])
+    calls = []
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        if ctx.step_id in reads[:2]:
+            raise StepFailure(retryable=False, error_code="INVALID_READ", retained_failure=True,
+                              diagnostic_checkpoint={"revalidated_history": True, "new_model_calls": 0})
+        if ctx.step_id in reads[2:2 + new_failures]:
+            raise StepFailure(retryable=False, error_code="INVALID_READ", diagnostic_checkpoint={
+                # A copied marker is not executor authority to exempt a new read.
+                "_runner_failure_origin": "revalidated-retained-failure/v1"})
+        return {"step": ctx.step_id}
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("retained-reads") is True
+    assert calls == (reads[:4] if new_failures == 2 else reads)
+    snap = _snapshot(session_factory, clock, "retained-reads")
+    assert snap.state == "failed_final" and "gate" not in calls
+    assert all(step.state == "failed_final" for step in snap.steps if step.step_id in reads[:2])
+    with _store(session_factory, clock) as store:
+        assert store.get_last_checkpoint("retained-reads", reads[0])[1]["_runner_failure_origin"] == "revalidated-retained-failure/v1"
+        if new_failures:
+            assert store.get_last_checkpoint("retained-reads", reads[2])[1]["_runner_failure_origin"] == "new-failure/v1"
+
+
+def test_retained_failure_origin_is_preserved_across_worker_stop(session_factory, clock):
+    create_job_with_steps(session_factory, clock, job_id="retained-stop",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}}, steps=[{"step_id": f"deep_{number:04d}", "name": "read"} for number in range(1, 4)])
+    calls = []
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        if ctx.step_id == "deep_0001":
+            first.request_stop()
+            raise StepFailure(retryable=False, error_code="INVALID_READ", retained_failure=True,
+                              diagnostic_checkpoint={"revalidated_history": True})
+        if ctx.step_id == "deep_0002":
+            raise StepFailure(retryable=False, error_code="INVALID_READ")
+        return {"step": ctx.step_id}
+    first = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    first.run_job("retained-stop")
+    assert _snapshot(session_factory, clock, "retained-stop").state == "queued"
+    second = JobRunner(session_factory, {"demo": executor}, worker_id="w2", now=clock.now)
+    second.run_job("retained-stop")
+    assert calls == ["deep_0001", "deep_0002", "deep_0003"]
+    assert _snapshot(session_factory, clock, "retained-stop").state == "failed_final"
+
+
+def test_retained_failure_cannot_be_retryable_or_missing_diagnostic():
+    with pytest.raises(ValueError):
+        StepFailure(retryable=True, error_code="INVALID_READ", retained_failure=True, diagnostic_checkpoint={})
+    with pytest.raises(ValueError):
+        StepFailure(retryable=False, error_code="INVALID_READ", retained_failure=True)
+
+
+def test_opted_in_failure_continues_from_checkpoint_after_worker_stop(session_factory, clock):
+    create_job_with_steps(
+        session_factory, clock, job_id="resume-independent",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}},
+        steps=[
+            {"step_id": "deep_0001", "name": "read one"},
+            {"step_id": "deep_0002", "name": "read two"},
+            {"step_id": "gate", "name": "publish", "depends_on": ("deep_0001", "deep_0002")},
+        ],
+    )
+    calls = []
+
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        if ctx.step_id == "deep_0001":
+            first.request_stop()
+            raise StepFailure(retryable=False, error_code="INVALID_READ")
+        return {"step": ctx.step_id}
+
+    first = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert first.run_job("resume-independent") is True
+    assert _snapshot(session_factory, clock, "resume-independent").state == "queued"
+    second = JobRunner(session_factory, {"demo": executor}, worker_id="w2", now=clock.now)
+    assert second.run_job("resume-independent") is True
+    assert calls == ["deep_0001", "deep_0002"]
+    snap = _snapshot(session_factory, clock, "resume-independent")
+    assert snap.state == "failed_final"
+    assert {step.step_id: step.state for step in snap.steps} == {
+        "deep_0001": "failed_final", "deep_0002": "completed", "gate": "failed_final",
+    }
+
+
+def test_retry_of_partial_read_does_not_repeat_independent_success(session_factory, clock):
+    create_job_with_steps(
+        session_factory, clock, job_id="retry-partial-read",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}},
+        steps=[
+            {"step_id": "deep_0001", "name": "read one"},
+            {"step_id": "deep_0002", "name": "read two"},
+            {"step_id": "gate", "name": "publish", "depends_on": ("deep_0001", "deep_0002")},
+        ],
+    )
+    calls = []
+    armed = True
+
+    def executor(ctx):
+        nonlocal armed
+        calls.append(ctx.step_id)
+        if ctx.step_id == "deep_0001" and armed:
+            armed = False
+            raise StepFailure(retryable=False, error_code="INVALID_READ")
+        return {"step": ctx.step_id}
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("retry-partial-read") is True
+    assert _snapshot(session_factory, clock, "retry-partial-read").state == "failed_final"
+    with _store(session_factory, clock) as store:
+        store.retry_failed("retry-partial-read")
+    assert runner.run_job("retry-partial-read") is True
+    assert calls == ["deep_0001", "deep_0002", "deep_0001", "gate"]
+    assert _snapshot(session_factory, clock, "retry-partial-read").state == "completed"
+
+
+def test_retryable_failure_reruns_only_failed_step_after_backoff(session_factory, clock):
+    steps = [
+        {"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 3},
+        {"step_id": "s2", "name": "审核", "depends_on": ("s1",)},
+    ]
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=steps)
+    calls: list[str] = []
+    fail_once = {"armed": True}
+
+    def executor(ctx: StepContext) -> dict:
+        calls.append(ctx.step_id)
+        if ctx.step_id == "s1" and fail_once["armed"]:
+            fail_once["armed"] = False
+            raise StepFailure(retryable=True, error_code="E_TRANSIENT")
+        return {"step": ctx.step_id}
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("job-1") is True
+    assert job_state(session_factory, "job-1") == "failed_retryable"
+    assert calls == ["s1"]  # s2 未执行：依赖未满足，只失败范围等待重试
+
+    # 退避未到期：不可认领（任务不在 queued）
+    assert runner.run_job("job-1") is False
+    assert _requeue_due(session_factory, clock) == []
+
+    clock.advance(0.6)  # backoff(attempt=1) = 0.5s
+    assert _requeue_due(session_factory, clock) == ["job-1"]
+    assert runner.run_job("job-1") is True
+    assert calls == ["s1", "s1", "s2"]  # 只重跑失败步骤，s2 在 s1 成功后执行
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.state == "completed"
+    assert snap.steps[0].attempt == 2
+    kinds = [row.event.event_type.value for row in snap.events]
+    assert kinds.count("retry_scheduled") == 1
+    assert kinds.count("step_failed") == 1
+
+
+def test_retry_receives_persisted_failure_checkpoint_without_replaying_success(session_factory, clock):
+    create_job_with_steps(session_factory, clock, job_id="saved-partial", steps=[
+        {"step_id": "deep", "max_attempts": 2, "retryable": True},
+        {"step_id": "consume", "depends_on": ("deep",)},
+    ])
+    partial = {"stage": "deep_failure_diagnostic", "partial_wire": {"candidate_drafts": [{"id": "kept"}]},
+               "source_interpretation": {"frozen": "source"}, "remaining": ["missing"]}
+    read_calls = []
+    restored_ids = []
+
+    def executor(ctx):
+        if ctx.step_id == "consume":
+            return {"consumed": True}
+        if ctx.attempt == 1:
+            assert ctx.last_checkpoint is None
+            read_calls.extend(["kept", "missing"])
+            raise StepFailure(retryable=True, error_code="SOURCE_REQUIREMENT_TRANSPORT_FAILED",
+                              diagnostic_checkpoint=partial)
+        assert ctx.last_checkpoint == {"attempt": 1, **partial}
+        assert ctx.last_checkpoint_is_diagnostic is True
+        restored_ids.append(ctx.last_checkpoint_id)
+        read_calls.extend(ctx.last_checkpoint["remaining"])
+        return {"adopted": False, "source_checked": True}
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("saved-partial")
+    assert job_state(session_factory, "saved-partial") == "failed_retryable"
+    with _store(session_factory, clock) as store:
+        original_id, original_payload = store.get_last_checkpoint("saved-partial", "deep")
+    clock.advance(0.6)
+    assert _requeue_due(session_factory, clock) == ["saved-partial"]
+    assert runner.run_job("saved-partial")
+    assert read_calls == ["kept", "missing", "missing"]
+    assert restored_ids == [original_id]
+    assert job_state(session_factory, "saved-partial") == "completed"
+    with _store(session_factory, clock) as store:
+        checkpoints = store.list_checkpoints("saved-partial", "deep")
+    assert checkpoints[0] == (original_id, original_payload)
+    assert checkpoints[1][1]["source_checked"] is True
+    assert checkpoints[1][1]["adopted"] is False
+
+
+def test_runner_releases_abnormally_queued_deferred_step_without_running_it(
+    session_factory, clock
+):
+    """即使任务状态被异常回填，未到期步骤也不会执行或泄漏租约。"""
+    from sqlalchemy import update
+
+    from app.storage.models import JobRecord
+
+    steps = [{"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 2}]
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=steps)
+    with _store(session_factory, clock) as store:
+        lease = store.claim_job("job-1", "w1")
+        assert lease is not None
+        store.start_step(lease, "s1")
+    with _store(session_factory, clock) as store:
+        store.fail_step(lease, "s1", error_code="E_RETRY", retryable=True)
+    with session_factory() as session, session.begin():
+        session.execute(
+            update(JobRecord).where(JobRecord.job_id == "job-1").values(state="queued")
+        )
+
+    calls: list[str] = []
+    runner = JobRunner(
+        session_factory,
+        {"demo": lambda ctx: calls.append(ctx.step_id) or {}},
+        worker_id="w2",
+        now=clock.now,
+    )
+    assert runner.run_job("job-1") is True
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert calls == []
+    assert snap.state == "failed_retryable"
+    with session_factory() as session:
+        assert session.get(JobRecord, "job-1").lease_owner is None
+
+
+def test_final_failure_after_max_attempts(session_factory, clock):
+    steps = [{"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 2}]
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=steps)
+    calls: list[str] = []
+
+    def executor(ctx: StepContext) -> dict:
+        calls.append(ctx.step_id)
+        raise StepFailure(retryable=True, error_code="E_ALWAYS")
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("job-1") is True
+    assert job_state(session_factory, "job-1") == "failed_retryable"
+    clock.advance(0.6)
+    _requeue_due(session_factory, clock)
+    assert runner.run_job("job-1") is True
+    assert calls == ["s1", "s1"]  # 恰好 max_attempts 次，不无限重试
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.state == "failed_final"
+    failed = [row.event for row in snap.events if row.event.event_type.value == "step_failed"]
+    assert failed[-1].payload.get("attempt_exhausted") is True
+    assert job_state(session_factory, "job-1") != "running"
+
+
+def test_cancel_requested_between_steps_stops_before_next_step(session_factory, clock):
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=TWO_STEPS)
+    calls: list[str] = []
+    cancelled: list[str] = []
+
+    def executor(ctx: StepContext) -> dict:
+        calls.append(ctx.step_id)
+        if ctx.step_id == "s1":
+            # 用户在执行期间发起取消：持久请求，与 worker 解耦
+            with _store(session_factory, clock) as store:
+                store.request_cancel("job-1")
+        return {"step": ctx.step_id}
+
+    runner = JobRunner(
+        session_factory,
+        {"demo": executor},
+        worker_id="w1",
+        on_cancelled=cancelled.append,
+    )
+    assert runner.run_job("job-1") is True
+    assert calls == ["s1"]  # s2 未执行：取消在安全边界生效
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.state == "cancelled"
+    states = {step.step_id: step.state for step in snap.steps}
+    assert states["s1"] == "completed"  # 已完成步骤保留
+    assert states["s2"] == "cancelled"
+    assert cancelled == ["job-1"]
+    kinds = [row.event.event_type.value for row in snap.events]
+    assert "cancel_requested" in kinds
+    assert "cancelled" in kinds
+    assert "step_completed" in kinds  # 历史事件保留
+
+
+def test_maintenance_notifies_cancelled_after_expired_inflight_request(
+    session_factory, clock
+):
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=TWO_STEPS)
+    with _store(session_factory, clock) as store:
+        assert store.claim_job("job-1", "lost-worker") is not None
+        store.request_cancel("job-1")
+    expire_lease(
+        session_factory,
+        "job-1",
+        before=clock.now() - timedelta(seconds=1),
+    )
+    cancelled: list[str] = []
+    runner = JobRunner(
+        session_factory,
+        {"demo": lambda _ctx: {}},
+        now=clock.now,
+        on_cancelled=cancelled.append,
+    )
+
+    runner._maintenance()
+
+    assert job_state(session_factory, "job-1") == "cancelled"
+    assert cancelled == ["job-1"]
+
+
+def test_process_death_before_commit_leaves_job_for_recovery(session_factory, clock):
+    # 中断步骤必须有剩余尝试预算，恢复器才会重新排队（design.md §5）。
+    steps = [
+        {"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 3},
+        {"step_id": "s2", "name": "审核", "depends_on": ("s1",), "retryable": True, "max_attempts": 3},
+    ]
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=steps)
+
+    def dying_executor(ctx: StepContext) -> dict:
+        raise ProcessDeath()  # 提交前被强制终止
+
+    runner = JobRunner(session_factory, {"demo": dying_executor}, worker_id="w1", now=clock.now)
+    with pytest.raises(ProcessDeath):
+        runner.run_job("job-1")
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.state == "running"  # 没有清理：等价于真实死亡
+    assert snap.steps[0].state == "running"
+    assert snap.lease_generation == 1
+
+    # 租约过期 -> 恢复 -> 由新 worker 完成
+    expire_lease(session_factory, "job-1", before=clock.now() - timedelta(seconds=1))
+    from app.workflow.recovery import recover_expired_jobs
+    report = recover_expired_jobs(session_factory, now=clock.now)
+    assert report.recovered_jobs == ["job-1"]
+
+    calls: list[str] = []
+    def executor(ctx: StepContext) -> dict:
+        calls.append(ctx.step_id)
+        return {}
+    fresh_runner = JobRunner(session_factory, {"demo": executor}, worker_id="w2", now=clock.now)
+    assert fresh_runner.run_job("job-1") is True
+    assert calls == ["s1", "s2"]
+    assert job_state(session_factory, "job-1") == "completed"
+
+
+def test_duplicate_workers_only_one_claims(session_factory, clock):
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=TWO_STEPS)
+    calls: list[tuple[str, str]] = []
+
+    def executor(ctx: StepContext) -> dict:
+        calls.append((ctx.step_id, ctx.job_id))
+        return {}
+
+    runner_a = JobRunner(session_factory, {"demo": executor}, worker_id="wa")
+    runner_b = JobRunner(session_factory, {"demo": executor}, worker_id="wb")
+    assert runner_a.run_job("job-1") is True
+    assert runner_b.run_job("job-1") is False  # 任务已被认领完成，无从领取
+    assert job_state(session_factory, "job-1") == "completed"
+    assert len(calls) == 2  # 每个步骤恰好执行一次，无重复 worker 重复执行
+
+
+def test_long_running_step_renews_lease_during_executor(session_factory, clock):
+    """执行时长超过初始租约，恢复扫描仍不得接管或重复执行。"""
+    from app.workflow.recovery import recover_expired_jobs
+
+    steps = [{"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 3}]
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=steps)
+    reports = []
+
+    def executor(ctx: StepContext) -> dict:
+        time.sleep(0.45)
+        reports.append(recover_expired_jobs(session_factory))
+        time.sleep(0.2)
+        return {"step": ctx.step_id}
+
+    runner = JobRunner(
+        session_factory,
+        {"demo": executor},
+        worker_id="w1",
+        lease_ttl=timedelta(seconds=0.3),
+    )
+    assert runner.run_job("job-1") is True
+    assert reports[0].touched == 0
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.state == "completed"
+    assert snap.steps[0].attempt == 1
+
+
+def test_heartbeat_recovers_after_local_clock_jumps_past_lease(session_factory, clock):
+    """模拟 Mac 睡眠：没有恢复器接管时，唤醒后的原 worker 可继续提交。"""
+    steps = [{"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 3}]
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=steps)
+
+    def executor(ctx: StepContext) -> dict:
+        clock.advance(1.0)
+        time.sleep(0.15)
+        return {"step": ctx.step_id}
+
+    runner = JobRunner(
+        session_factory,
+        {"demo": executor},
+        worker_id="w1",
+        now=clock.now,
+        lease_ttl=timedelta(seconds=0.3),
+    )
+    assert runner.run_job("job-1") is True
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.state == "completed"
+    assert snap.steps[0].attempt == 1
+
+
+def test_heartbeat_lease_loss_does_not_mark_step_failed(
+    session_factory, clock, monkeypatch
+):
+    """执行权已经转移时只丢弃结果，不产生伪造的步骤失败事件。"""
+    create_job_with_steps(
+        session_factory,
+        clock,
+        job_id="job-lease-lost",
+        steps=[{"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 3}],
+    )
+    monkeypatch.setattr(JobStore, "renew_lease", lambda self, lease: False)
+
+    def executor(_ctx: StepContext) -> dict:
+        time.sleep(0.2)
+        return {"prepared": True}
+
+    runner = JobRunner(
+        session_factory,
+        {"demo": executor},
+        worker_id="w-lease-lost",
+        now=clock.now,
+        lease_ttl=timedelta(seconds=0.15),
+    )
+    assert runner.run_job("job-lease-lost") is True
+    snap = _snapshot(session_factory, clock, "job-lease-lost")
+    assert snap.state == "running"
+    assert snap.steps[0].state == "running"
+    assert all(
+        row.event.event_type.value != "step_failed" for row in snap.events
+    )
+
+
+def test_missing_executor_does_not_claim_unregistered_job(session_factory, clock):
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=TWO_STEPS)
+    runner = JobRunner(session_factory, {}, worker_id="w1", now=clock.now)  # 未注册任何执行器
+    assert runner.run_job("job-1") is False
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.state == "queued"
+    assert all(step.state == "queued" for step in snap.steps)
+    assert all(row.event.event_type.value != "step_failed" for row in snap.events)
+
+
+def test_unexpected_executor_exception_fails_fatal_without_retry(session_factory, clock):
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=TWO_STEPS)
+
+    def exploding_executor(ctx: StepContext) -> dict:
+        raise ValueError("模拟执行器缺陷")
+
+    runner = JobRunner(session_factory, {"demo": exploding_executor}, worker_id="w1")
+    assert runner.run_job("job-1") is True
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.state == "failed_final"
+    assert snap.steps[0].error_code == "EXECUTOR_ERROR"
+    assert snap.steps[0].attempt == 1  # 缺陷不触发自动重试循环
+    failed = [row.event for row in snap.events if row.event.event_type.value == "step_failed"]
+    assert "模拟执行器缺陷" not in failed[-1].payload.get("detail", "")

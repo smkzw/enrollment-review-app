@@ -1,0 +1,104 @@
+{
+  "package_version": "0929V1-EXEC-01",
+  "round_id": "0929V1",
+  "source_baseline_commit": "a1cf89028b9ef63aa725f5016d3f3fc2c7ab6b61",
+  "decision": "RV29-NATIVE-VISUAL finite validation approved; R1 inherited",
+  "product_claims_complete": false,
+  "files": [
+    {
+      "path": "00_START_HERE.md",
+      "bytes": 3132,
+      "sha256": "54947a2ef916cccbec08cb22ec8d65b21aece9ba2b40df4362a794fa52b2a954"
+    },
+    {
+      "path": "01_PASTE_TO_AGENT.md",
+      "bytes": 6049,
+      "sha256": "d0170367a285c63fd548a3335ad1763c7115e3c2773842cfa777a98874bc6f91"
+    },
+    {
+      "path": "02_DECISION.md",
+      "bytes": 2654,
+      "sha256": "8bed0f24d6b932a83bf8bc7396de4d1851a081710d06dfb2a151948a2ffb225d"
+    },
+    {
+      "path": "03_VISUAL_VALIDATION.md",
+      "bytes": 6161,
+      "sha256": "e512fc9e473d0bd38315fa2ce5fd34670f96af794b2dc71adf2d1884ca680200"
+    },
+    {
+      "path": "04_INTEGRATION_PLAN.md",
+      "bytes": 4776,
+      "sha256": "7efb29e1f8534028750ac9d40be701af1dcf9d674479245bb1975983597c7b49"
+    },
+    {
+      "path": "05_ACCEPTANCE.md",
+      "bytes": 5500,
+      "sha256": "6af52c47261d20f1609ec822b4957e009596adfd8e431e0b17cc223003eeeeca"
+    },
+    {
+      "path": "06_HANDOFF_STANDARD.md",
+      "bytes": 7726,
+      "sha256": "91aa0ab34689b6f3ca5592170ee32c1ce8ed9d04a0d0f18175c24bbdd0d8a724"
+    },
+    {
+      "path": "07_DOCS_SYNC.md",
+      "bytes": 3358,
+      "sha256": "054190275a9b7b7ed404508570cac114502457d415e90dde33e62ba18a6f231e"
+    },
+    {
+      "path": "08_EVIDENCE_AND_REVIEW_BOUNDARY.md",
+      "bytes": 2731,
+      "sha256": "950e72af40d4125561a9a0a08050d7dfe1c0afb5d8e435ee4917a20f8faa732e"
+    },
+    {
+      "path": "acceptance_cases.json",
+      "bytes": 5920,
+      "sha256": "2e862b159ee0c0d17a11ed007415a6486ff13b804c673b0fff370ab503b2427e"
+    },
+    {
+      "path": "templates/HANDOFF_TEMPLATE.md",
+      "bytes": 2916,
+      "sha256": "a37e8fab6630ed44e68ed9b8d7a84445d66b0dcdb478e9d8b5344ee270a34fd4"
+    },
+    {
+      "path": "templates/review_index.template.json",
+      "bytes": 683,
+      "sha256": "a3740442eced04a15b3bce20724dec44b69cc73849b5b9277442c0b0c93e060f"
+    },
+    {
+      "path": "templates/review_index_fields.md",
+      "bytes": 3905,
+      "sha256": "be672787d2b67faa382a82500508be66c61d06399b760d45cb2d615a1c2e2cdb"
+    },
+    {
+      "path": "tools/check_handoff.py",
+      "bytes": 13566,
+      "sha256": "d143af9b730ecd80312676196c786380831c6593b20e2fd98c6fba86eda58992"
+    },
+    {
+      "path": "tools/test_check_handoff.py",
+      "bytes": 5440,
+      "sha256": "bc68d4a148af2e4bc2aa23b9e5604281fc43aedc1df12b3f8687ffcef75d0b2d"
+    },
+    {
+      "path": "validation/README.md",
+      "bytes": 748,
+      "sha256": "225ae9ebd3edd083574913674262e8cd2f54d39868e075b820daa14f7d84ce0f"
+    },
+    {
+      "path": "validation/handoff_checker_tests.txt",
+      "bytes": 2277,
+      "sha256": "062a254a5a3ee80f38aa7a3e5ad067a0689170c02416c6cea64aeedaf1ee644c"
+    },
+    {
+      "path": "validation/package_integrity.json",
+      "bytes": 2683,
+      "sha256": "99c33b319456b82795a2dda1b09692551271bf554cf6ad8c0b3fb51367714b74"
+    },
+    {
+      "path": "validation/template_structure_check.json",
+      "bytes": 266,
+      "sha256": "3ff94c686f0f8e891b4e333682d44e6f3af7b90bde6396537684af5f342ef757"
+    }
+  ]
+}

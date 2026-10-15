@@ -1,0 +1,18 @@
+{
+  "attached_count": 4,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-18f8eb9ee956b073991d1dd4",
+  "group_id": "d001-ii-package98-ae-outcome-definition-end-time-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 12
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package98-ae-outcome-definition-end-time-boundary",
+  "owned_count": 8,
+  "prompt_char_count": 32452,
+  "prompt_sha256": "5067cf1b84f049224c6db2208a7db4fe123bed464dcd9f4dcba7b3e05f6c60fe",
+  "task_id": "phase5-slice61cj-20260830",
+  "unit_count": 12,
+  "worker": "cursor-worker_01"
+}

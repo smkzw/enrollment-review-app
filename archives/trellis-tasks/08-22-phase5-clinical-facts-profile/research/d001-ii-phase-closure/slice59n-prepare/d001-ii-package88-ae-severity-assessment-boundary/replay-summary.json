@@ -1,0 +1,18 @@
+{
+  "attached_count": 11,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-60703e43130594ab11f9775e",
+  "group_id": "d001-ii-package88-ae-severity-assessment-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 14
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package88-ae-severity-assessment-boundary",
+  "owned_count": 3,
+  "prompt_char_count": 34957,
+  "prompt_sha256": "6c2c34cf51295bbfb6f305ee6eb21a10eefc3902152b69fad568754bd7f9456c",
+  "task_id": "phase5-slice61bz-20260830",
+  "unit_count": 14,
+  "worker": "codebuddy-worker_02"
+}

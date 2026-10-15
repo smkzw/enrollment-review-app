@@ -1,0 +1,585 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package114-fertility-definition-evidence-boundary",
+  "task_id": "phase5-slice61da-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "expected_package_ordinal": 114,
+  "expected_package_id": "pap-cd76207b0f3d157c2eaa66d6",
+  "owned_source_refs": [
+    "body.p1310",
+    "body.p1311",
+    "body.p1312",
+    "body.p1313",
+    "body.p1314",
+    "body.p1315",
+    "body.p1316",
+    "body.p1317",
+    "body.p1318",
+    "body.p1319",
+    "body.p1320",
+    "body.p1321"
+  ],
+  "attached_source_refs": [
+    "body.p1322"
+  ],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1310",
+    "body.p1311",
+    "body.p1312",
+    "body.p1313",
+    "body.p1314",
+    "body.p1315",
+    "body.p1316",
+    "body.p1317",
+    "body.p1318",
+    "body.p1319",
+    "body.p1320",
+    "body.p1321"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1310",
+    "body.p1311",
+    "body.p1312"
+  ],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1313": "supporting_or_supplement",
+    "body.p1314": "supporting_or_supplement",
+    "body.p1315": "supporting_or_supplement",
+    "body.p1316": "supporting_or_supplement",
+    "body.p1317": "supporting_or_supplement",
+    "body.p1318": "supporting_or_supplement",
+    "body.p1319": "supporting_or_supplement",
+    "body.p1320": "supporting_or_supplement",
+    "body.p1321": "supporting_or_supplement"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "owned_visit_instances_by_source_ref": {},
+  "owned_procedure_semantic_families_by_source_ref": {},
+  "owned_required_action_kinds_by_source_ref": {},
+  "owned_required_procedure_target_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1310": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "附录标题决定受试者资格",
+      "附录标题误作入排控制"
+    ],
+    "body.p1311": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "避孕规定标题决定受试者资格",
+      "附录1标题误作避孕方法清单",
+      "吸收Package115避孕起始时点"
+    ],
+    "body.p1312": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "定义标题决定受试者资格",
+      "有生育能力女性定义标题误作入排结论"
+    ],
+    "body.p1313": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "月经初潮后至绝经前误作必须排除",
+      "月经初潮与绝经定义倒置",
+      "有生育能力时间窗误作避孕方法义务"
+    ],
+    "body.p1314": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "不视为有生育能力父条件压平为AND",
+      "并列OR分支必须同时满足",
+      "父条件误作入排排除标准"
+    ],
+    "body.p1315": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "尚未经历月经初潮必须同时满足手术史",
+      "月经初潮分支与绝经后分支倒置",
+      "月经初潮前误作必须避孕"
+    ],
+    "body.p1316": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "任一项手术史压平为全部同时满足",
+      "绝经前女性任一项误作AND",
+      "手术史父分支丢失任一项语义"
+    ],
+    "body.p1317": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "子宫切除术史必须同时有双侧输卵管切除",
+      "子宫切除术史必须同时有双侧卵巢切除",
+      "手术史OR分支压平为AND"
+    ],
+    "body.p1318": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "双侧条件丢失",
+      "单侧输卵管切除即可",
+      "输卵管切除必须同时满足卵巢切除"
+    ],
+    "body.p1319": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "双侧条件丢失",
+      "单侧卵巢切除即可",
+      "卵巢切除必须同时满足输卵管切除"
+    ],
+    "body.p1320": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "病历核查且医学检查且病史询问都必须执行",
+      "三种确认方式压平为AND",
+      "核查方式丢失",
+      "确认注记误作独立入排排除"
+    ],
+    "body.p1321": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "绝经后女性完整定义改写Package115所有权",
+      "吸收body.p1322绝经诊断条款并发布候选",
+      "吸收避孕起始时点或方法条款",
+      "绝经后与月经初潮定义倒置"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "先逐条读取第114包body.p1310-p1321原文并区分五类语义：附录/小节结构标题（p1310-p1312）；有生育能力时间窗定义（p1313：月经初潮后至绝经前）；“不视为有生育能力”父条件（p1314）及其并列OR分支（p1315尚未经历月经初潮；p1316满足以下任一项的绝经前女性；p1321绝经后女性）；p1316下手术史并列OR子分支（p1317子宫切除术史；p1318双侧输卵管切除术史；p1319双侧卵巢切除术史，必须保留双侧）；以及p1320并列确认方式（病历核查或医学检查或病史询问，不得臆造三种都必须执行）。不得把父子OR压平为AND，不得倒置月经初潮与绝经定义。p1321“绝经后女性”需结合Package115所有的p1322才完整；p1322仅以attached只读语境闭合定义，所有权、处置和候选发布仍归Package115。p1313-p1321不是新的独立动作控制点，但它们定义IN-06与妊娠/FSH控制的适用人群、分支逻辑和可接受确认证据，必须处置为supporting_or_supplement并关联既有目标，不能降为与入排无关。body.p1323-p1333避孕起始时点、方法、禁止项与给药后持续期不在本包冻结context中，不得吸收。required candidates为空，不得复制既有控制点。Package 113止于p1308；p1309无主空白分隔；Package 115从p1322起。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第114包位于Ⅱ期附录“避孕的规定与方法”中“有生育能力女性的定义”段。p1310-p1312仅为附录/定义结构标题；p1313-p1321定义IN-06与妊娠/FSH控制的适用人群、非生育能力分支及可接受确认证据，属于既有控制的支持来源，不是新的独立筛选或基线动作。父子OR必须保留：p1315与p1316与p1321是p1314下并列OR；p1317-p1319是p1316下并列OR；p1320三种确认方式为并列OR。p1321绝经后女性定义不完整，Package115拥有的p1322仅以attached只读语境闭合定义，不在本包处置或发布。Package 113止于p1308；Package 115拥有p1322-p1333且p1323-p1333避孕条款不得吸入。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "首次给药前复核",
+      "visit_instance": "首次给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-0555ca044760e4df3ef7e3c3",
+        "official_code": "IN-06",
+        "label": "生育计划限制与避孕义务",
+        "position": 6,
+        "source_span_ids": [
+          "span-29b8e3bdc286a06cba1455474402c004"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "pcm-row-18127a0dc9921364671ebb8c",
+        "label": "妊娠试验或卵泡刺激素（FSH）",
+        "visit_instance": "首次给药前",
+        "review_stage": "baseline",
+        "position": 48,
+        "source_span_ids": [
+          "span-15fa32ffb40385e4ab88ccf86b66462a",
+          "span-4ada40f46f347bdfd0dc32ff5aafd113",
+          "span-546f6512be56b354fe72bb2554734420",
+          "span-761bc18ae94f687575b4a90c1b141961",
+          "span-848273a89ac24be70490ba4b3fae89cc",
+          "span-a3581afb0d23910af48bf735f1adb67c",
+          "span-b92c9e967d4c2dcc2de1db4578476140",
+          "span-c6da936da3e233fa8e34b72fbf7c3430",
+          "span-e4fa1e71068426c0b58edeec51627061",
+          "span-fb63df5558004a5c2bb1aaef18fce384",
+          "span-fe29450e1c931ac5ed89315e91a82e33"
+        ]
+      }
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61da-package114-fertility-definition-evidence-boundary",
+    "catalog_id": "catalog:slice61da-package114-fertility-definition-evidence-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1310": [
+      "附录为结构标题",
+      "不得决定受试者资格或入排结论"
+    ],
+    "body.p1311": [
+      "附录1避孕的规定与方法为结构标题",
+      "不得提前吸收Package115避孕方法/时点条款"
+    ],
+    "body.p1312": [
+      "有生育能力女性的定义为小节标题",
+      "仅结构来源，不构成入排结论"
+    ],
+    "body.p1313": [
+      "定义：月经初潮后至绝经前有生育能力",
+      "不得倒置月经初潮与绝经",
+      "不得单独改写为避孕义务或入排排除"
+    ],
+    "body.p1314": [
+      "不视为有生育能力的父条件",
+      "下属分支为并列OR，不得压平为AND"
+    ],
+    "body.p1315": [
+      "OR分支：尚未经历月经初潮",
+      "不得要求同时满足手术史或绝经后条件"
+    ],
+    "body.p1316": [
+      "OR分支：满足以下任一项的绝经前女性",
+      "任一项语义必须保留，不得改为全部同时满足"
+    ],
+    "body.p1317": [
+      "p1316下OR子分支：子宫切除术史",
+      "不得要求同时满足输卵管/卵巢切除"
+    ],
+    "body.p1318": [
+      "p1316下OR子分支：双侧输卵管切除术史",
+      "必须保留双侧，不得降为单侧"
+    ],
+    "body.p1319": [
+      "p1316下OR子分支：双侧卵巢切除术史",
+      "必须保留双侧，不得降为单侧"
+    ],
+    "body.p1320": [
+      "并列确认方式：病历核查或医学检查或病史询问",
+      "不得臆造三种都必须执行",
+      "确认注记支持定义，不单独构成入排排除"
+    ],
+    "body.p1321": [
+      "OR分支：绝经后女性",
+      "完整绝经诊断依赖Package115的p1322只读语境",
+      "不得改写p1322所有权或吸收p1323-p1333避孕条款"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1310": {
+      "semantic_role": "appendix_structure_heading",
+      "base_rule": "附录",
+      "exception_rule": "该行仅为附录结构标题，不是受试者资格、入排排除或避孕执行条款。",
+      "preserve_keywords": [
+        "附录",
+        "结构标题"
+      ],
+      "forbidden_inversion": "不得把附录标题改写为筛选必做、不得入组、排除标准或发布控制点。"
+    },
+    "body.p1311": {
+      "semantic_role": "appendix_contraception_section_heading",
+      "base_rule": "附录1 避孕的规定与方法",
+      "exception_rule": "该行是附录1标题。Package114仅闭合有生育能力女性定义段；避孕起始时点、方法、禁止项与给药后持续期归Package115，不得在本包吸收或发布。",
+      "preserve_keywords": [
+        "附录1",
+        "避孕的规定与方法",
+        "结构标题",
+        "Package115"
+      ],
+      "forbidden_inversion": "不得把附录1标题改写为避孕方法清单、避孕起始义务、筛选必做或入排结论。"
+    },
+    "body.p1312": {
+      "semantic_role": "fertility_definition_section_heading",
+      "base_rule": "有生育能力女性的定义",
+      "exception_rule": "该行是定义小节标题，仅结构来源；真正定义内容在后续p1313-p1321，不得由标题直接导出受试者资格。",
+      "preserve_keywords": [
+        "有生育能力女性的定义",
+        "结构标题"
+      ],
+      "forbidden_inversion": "不得把定义标题改写为入排结论、排除标准或发布控制点。"
+    },
+    "body.p1313": {
+      "semantic_role": "childbearing_potential_time_window_definition",
+      "base_rule": "女性在月经初潮后至绝经前被认为是有生育能力的。",
+      "exception_rule": "该句定义有生育能力时间窗：月经初潮后至绝经前。不得倒置月经初潮与绝经；不得把该定义单独改写为避孕方法义务、筛选必做或入排排除。绝经的完整临床诊断不在本句，而在Package115所有的p1322。",
+      "preserve_keywords": [
+        "月经初潮后",
+        "绝经前",
+        "有生育能力",
+        "时间窗定义"
+      ],
+      "forbidden_inversion": "不得倒置月经初潮/绝经，不得把时间窗定义改写为必须避孕、不得入组或排除标准。"
+    },
+    "body.p1314": {
+      "semantic_role": "non_childbearing_parent_condition_or_root",
+      "base_rule": "具有以下情况的女性不被视为有生育能力：",
+      "exception_rule": "这是“不视为有生育能力”的父条件。下属p1315、p1316、p1321为并列OR分支；不得压平为全部同时满足的AND。父条件本身是定义逻辑，不是独立入排排除句。",
+      "preserve_keywords": [
+        "不被视为有生育能力",
+        "父条件",
+        "并列OR"
+      ],
+      "logic_tree": {
+        "operator": "OR",
+        "parent": "body.p1314",
+        "children": [
+          "body.p1315",
+          "body.p1316",
+          "body.p1321"
+        ]
+      },
+      "forbidden_inversion": "不得把父条件下并列OR压平为AND，不得改写为排除标准或发布控制点。"
+    },
+    "body.p1315": {
+      "semantic_role": "non_childbearing_or_branch_premenarche",
+      "base_rule": "尚未经历月经初潮",
+      "exception_rule": "这是p1314下的并列OR分支之一：尚未经历月经初潮。满足本分支即可落入“不视为有生育能力”，不得要求同时满足手术史或绝经后条件；也不得与绝经定义倒置。",
+      "preserve_keywords": [
+        "尚未经历月经初潮",
+        "并列OR",
+        "p1314"
+      ],
+      "forbidden_inversion": "不得要求本分支与手术史/绝经后同时满足，不得改写为必须避孕或入排排除。"
+    },
+    "body.p1316": {
+      "semantic_role": "non_childbearing_or_branch_premenopausal_any_surgery_parent",
+      "base_rule": "满足以下任一项的绝经前女性：",
+      "exception_rule": "这是p1314下的并列OR分支，并作为手术史子树的父节点。“任一项”表示p1317/p1318/p1319为并列OR，不得压平为AND。",
+      "preserve_keywords": [
+        "任一项",
+        "绝经前女性",
+        "并列OR",
+        "p1314"
+      ],
+      "logic_tree": {
+        "operator": "OR",
+        "parent": "body.p1316",
+        "children": [
+          "body.p1317",
+          "body.p1318",
+          "body.p1319"
+        ]
+      },
+      "forbidden_inversion": "不得把“任一项”改为全部同时满足，不得丢失手术史OR语义。"
+    },
+    "body.p1317": {
+      "semantic_role": "surgery_history_or_branch_hysterectomy",
+      "base_rule": "子宫切除术史",
+      "exception_rule": "这是p1316下的并列OR手术史分支。单独满足子宫切除术史即可满足该子树，不得要求同时具备双侧输卵管切除或双侧卵巢切除。",
+      "preserve_keywords": [
+        "子宫切除术史",
+        "并列OR",
+        "p1316"
+      ],
+      "forbidden_inversion": "不得把手术史OR压平为AND，不得改写为入排排除标准。"
+    },
+    "body.p1318": {
+      "semantic_role": "surgery_history_or_branch_bilateral_salpingectomy",
+      "base_rule": "双侧输卵管切除术史",
+      "exception_rule": "这是p1316下的并列OR手术史分支。必须保留“双侧”；不得降级为单侧输卵管切除，也不得要求同时满足其他手术史。",
+      "preserve_keywords": [
+        "双侧",
+        "输卵管切除术史",
+        "并列OR",
+        "p1316"
+      ],
+      "forbidden_inversion": "不得丢失双侧条件，不得把OR改为AND，不得改写为入排排除。"
+    },
+    "body.p1319": {
+      "semantic_role": "surgery_history_or_branch_bilateral_oophorectomy",
+      "base_rule": "双侧卵巢切除术史",
+      "exception_rule": "这是p1316下的并列OR手术史分支。必须保留“双侧”；不得降级为单侧卵巢切除，也不得要求同时满足其他手术史。",
+      "preserve_keywords": [
+        "双侧",
+        "卵巢切除术史",
+        "并列OR",
+        "p1316"
+      ],
+      "forbidden_inversion": "不得丢失双侧条件，不得把OR改为AND，不得改写为入排排除。"
+    },
+    "body.p1320": {
+      "semantic_role": "parallel_confirmation_methods_note",
+      "base_rule": "注：通过参与者病历核查或医学检查或病史询问进行确认。",
+      "exception_rule": "该注记给出并列确认方式：病历核查或医学检查或病史询问。作用域是对上文非生育能力条件（尤其p1316-p1319手术史）的确认支持，不是独立入排排除句；不得臆造三种方式都必须执行，也不得丢失任一确认方式。",
+      "preserve_keywords": [
+        "病历核查",
+        "医学检查",
+        "病史询问",
+        "或",
+        "并列确认方式"
+      ],
+      "logic_tree": {
+        "operator": "OR",
+        "parent": "body.p1320",
+        "children_methods": [
+          "病历核查",
+          "医学检查",
+          "病史询问"
+        ]
+      },
+      "forbidden_inversion": "不得把三种确认方式压平为AND，不得丢失核查方式，不得改写为筛选必做或入排不通过。"
+    },
+    "body.p1321": {
+      "semantic_role": "non_childbearing_or_branch_postmenopausal_incomplete_without_p1322",
+      "base_rule": "绝经后女性",
+      "exception_rule": "这是p1314下的并列OR分支标题“绝经后女性”。完整绝经临床诊断由Package115拥有的body.p1322给出；p1322仅以本包attached只读语境闭合定义，不得改写所有权、不得对其发布候选或处置。body.p1323-p1333避孕条款不在本包冻结context，不得吸收。",
+      "preserve_keywords": [
+        "绝经后女性",
+        "并列OR",
+        "p1314",
+        "Package115",
+        "body.p1322",
+        "只读"
+      ],
+      "forbidden_inversion": "不得把attached的p1322改为本包拥有来源或发布候选；不得吸收p1323-p1333；不得把绝经后与月经初潮定义倒置或改写为入排排除。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "Package 113严格拥有body.p1307-p1308并止于body.p1308；body.p1309空白分隔全局无主且不在冻结覆盖单元中，不得吸入。Package 114严格且仅拥有body.p1310-p1321。Package 115（pap-9fb70d121e089bc533c21255）拥有body.p1322-p1333。body.p1322出现在Package114冻结context_units中，因其完成p1321“绝经后女性”定义，本配置仅将其列为attached只读语境；所有权、处置和候选发布仍归Package115。body.p1323-p1333不在Package114冻结context中，不得吸收避孕起始时点、方法、禁止项或给药后持续期。其余37项context_units继续只读且不升格。必须保留父子OR逻辑、双侧条件、既有控制关联及可接受确认证据；不得调用临床语义模型或发布新控制点。",
+    "excluded_unowned_structure_refs": [
+      "body.p1309"
+    ],
+    "forbidden_next_package_refs": [
+      "body.p1322",
+      "body.p1323",
+      "body.p1324",
+      "body.p1325",
+      "body.p1326",
+      "body.p1327",
+      "body.p1328",
+      "body.p1329",
+      "body.p1330",
+      "body.p1331",
+      "body.p1332",
+      "body.p1333"
+    ],
+    "expected_owners_by_span": {
+      "body.p1308": 113,
+      "body.p1310": 114,
+      "body.p1311": 114,
+      "body.p1312": 114,
+      "body.p1313": 114,
+      "body.p1314": 114,
+      "body.p1315": 114,
+      "body.p1316": 114,
+      "body.p1317": 114,
+      "body.p1318": 114,
+      "body.p1319": 114,
+      "body.p1320": 114,
+      "body.p1321": 114,
+      "body.p1322": 115,
+      "body.p1323": 115,
+      "body.p515": 45,
+      "body.p575": 46,
+      "body.p584": 47,
+      "body.p594": 48,
+      "body.p618": 50,
+      "body.p838": 75
+    },
+    "unowned_context_source_refs": [
+      "body.t5.r0",
+      "body.t6.r0",
+      "body.p446",
+      "body.p455",
+      "body.p465",
+      "body.p483",
+      "body.p502",
+      "body.t7.r0",
+      "body.p839",
+      "body.p840",
+      "body.p869",
+      "body.p903",
+      "body.p915",
+      "body.p931",
+      "body.p935",
+      "body.p936",
+      "body.p938",
+      "body.p972",
+      "body.p976",
+      "body.p978",
+      "body.p1206",
+      "body.p1207",
+      "body.p1210",
+      "body.p1214",
+      "body.p1216",
+      "body.p1221"
+    ]
+  },
+  "notes": [
+    "模型外闭包：Package 114恰好拥有body.p1310-p1321共12个来源；仅attached body.p1322闭合绝经定义且所有权仍归Package115；structural-only为p1310-p1312标题三段；其余37项context_units保持只读且不升格。",
+    "五类语义必须分开：结构标题（p1310-p1312）；有生育能力时间窗定义（p1313）；不视为有生育能力父条件与并列OR（p1314+p1315/p1316/p1321）；p1316下手术史并列OR（p1317-p1319，保留双侧）；p1320并列确认方式（病历核查或医学检查或病史询问）。",
+    "父子OR不得压平为AND；不得丢失双侧条件；不得倒置月经初潮与绝经；不得臆造三种确认方式都必须执行。",
+    "候选判定不是预设零：逐项判断后确认本包没有新的独立参加研究前动作控制点；required_candidate_source_refs为空且有逐项原文依据。p1313-p1321必须作为IN-06与妊娠/FSH流程控制的支持来源，不能降为与入排无关，也不得用other_control_candidate复制既有控制点。",
+    "Package 113止于p1308；p1309无主空白分隔不吸收；Package 115拥有p1322-p1333。p1322仅attached只读理解p1321，不得改写所有权/处置/发布；p1323-p1333避孕条款不在冻结context，不得吸收。claims_complete=false；不调用临床语义模型、不发布新控制点、不进入受试者、OCR、Patient Profile或浏览器流程。"
+  ]
+}

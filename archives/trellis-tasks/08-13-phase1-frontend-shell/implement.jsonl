@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/index.md","reason":"医学监查员产品入口与中文信息架构"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"响应式、真实浏览器、可访问性和视觉验收"}
+{"file":"contracts/v1/interaction/DESIGN_CONTRACT.md","reason":"Phase 0.5 冻结的视觉与交互合同"}
+{"file":"contracts/v1/interaction/UAT_PHASE1.md","reason":"脚本化任务、阈值、错误分类和停止条件"}
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"产品与架构事实源"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"Phase 1 工作、退出门槛和禁止跨阶段"}
+{"file":"docs/v2/phase0/DEPENDENCY_DECISIONS.md","reason":"前端依赖版本、许可、替代与回滚依据"}

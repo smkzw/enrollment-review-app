@@ -1,0 +1,244 @@
+{
+  "attached_source_refs": [
+    "body.t5.r7",
+    "body.t5.r8",
+    "body.p316",
+    "body.p318",
+    "body.p319",
+    "body.p339",
+    "body.p632",
+    "body.p857",
+    "body.p870",
+    "body.p878",
+    "body.p879",
+    "body.p880",
+    "body.p885",
+    "body.p1023"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-history-treatment-collection-v6",
+  "notes": [
+    "v5技术绿色结果保持不可变；父级拒绝其把筛选或基线收集要求扩展到D1，并把基线复核同时绑定D1。",
+    "v6冻结p858在基线访视执行、p871在D1首次给药前执行；‘自筛选/上次访视以来’仅是回顾区间起点。",
+    "实际执行访视归属是通用结构合同，不包含D001特异医学答案；人工检查清单不进入Agent修订提示。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p772",
+    "body.p773",
+    "body.p858",
+    "body.p871"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "既往和现病史^4 | X | （X） | X",
+      "lookup": "coverage_manifest",
+      "role": "attached",
+      "source_ref": "body.t5.r7",
+      "structure_unit_id": "su-7d1d5177473a5713cf91f2f6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "治疗史^5 | X | （X） | X",
+      "lookup": "coverage_manifest",
+      "role": "attached",
+      "source_ref": "body.t5.r8",
+      "structure_unit_id": "su-09d2f9df96dada35734f5fdb"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "如果筛选访视和D1访视间隔≤7天，则筛选和基线访视可合并进行，两次访视中相同的评估事项可只进行一次。如果筛选访视和D1访视间隔＞7天，则需在D1天前7天内进行基线访视。以给药前最近一次评估结果作为基线值。生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p316",
+      "structure_unit_id": "su-97caf64d089af9677d378f82"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "既往和现病史收集：包括既往病史/伴随疾病、过敏史、个人史（吸烟史、饮酒史、药物滥用史）、家族史、月经史（女性）、生育史（女性）等。病史应包括尽可能过去2年内研究者认为具有临床意义的个人病史信息。银屑病病史应记录详细信息，包括诊断时间、相关疾病特征、病程等。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p318",
+      "structure_unit_id": "su-d1c5487718e8374f918c883e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "治疗史收集：包括药物治疗史、非药物治疗史及手术史等，尽可能收集银屑病相关的治疗史，其他疾病过去半年内的治疗史。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p319",
+      "structure_unit_id": "su-32cec98e1be3b1cdef20564f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "合并治疗：定义为自签署ICF开始至研究结束，在此期间使用的治疗药物或治疗方法。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p339",
+      "structure_unit_id": "su-0337a7d41fbcdbecc5596feb"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "筛选时，由研究者评估患有斑块状银屑病，病史≥6个月，且处于稳定期；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p632",
+      "structure_unit_id": "su-a0c6e82bce23ee2d1c7d3875"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "保留尽可能近两年的收集强度": "pending_codex",
+        "正式排除标准各自时间窗保持独立": "pending_codex",
+        "银屑病完整病程不得被两年截断": "pending_codex"
+      },
+      "frozen_excerpt": "在筛选和/或基线收集既往和现病史：包括既往病史/伴随疾病、过敏史、个人史（吸烟史、饮酒史、药物滥用史）、家族史、月经史（女性）、生育史（女性）等。病史应包括尽可能过去2年内研究者认为具有临床意义的个人病史信息。银屑病病史应记录详细信息，包括诊断时间、相关疾病特征、病程等。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p772",
+      "structure_unit_id": "su-e9207406320fe412783f44ff"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把半年窗口扩散至正式排除标准": "pending_codex",
+        "其他疾病治疗史为过去半年": "pending_codex",
+        "银屑病治疗史尽可能完整": "pending_codex"
+      },
+      "frozen_excerpt": "在筛选和/或基线收集治疗史：包括药物治疗史、非药物治疗史及手术史等，尽可能收集银屑病相关的治疗史，其他疾病过去半年内的治疗史。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p773",
+      "structure_unit_id": "su-bc320d1f0c3b2c2bc39a033e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "基线访视（D≤-7）",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p857",
+      "structure_unit_id": "su-35653a17c02366c19f46bc9c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "基线复核筛选访视以来的新增病史和诊治情况": "pending_codex"
+      },
+      "frozen_excerpt": "问询筛选访视以来的病史及诊治情况",
+      "lookup": "frozen_plan_context",
+      "role": "owned",
+      "source_ref": "body.p858",
+      "structure_unit_id": "su-bb5f5e52c7d8c4e1dc787b60"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "W0（D1）访视",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p870",
+      "structure_unit_id": "su-b939ad4febb4f55c0d5dea7c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "D1给药前复核上次访视以来的新增病史和诊治情况": "pending_codex"
+      },
+      "frozen_excerpt": "问询上次访视以来的病史及诊治情况",
+      "lookup": "frozen_plan_context",
+      "role": "owned",
+      "source_ref": "body.p871",
+      "structure_unit_id": "su-c25320780e6450cc4b4b239e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "审核入排标准",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p878",
+      "structure_unit_id": "su-48dfefee7b6a85ca5a3726eb"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "随机",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p879",
+      "structure_unit_id": "su-6493f8073b0ef4ce48be855f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "服用试验用药品",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p880",
+      "structure_unit_id": "su-9662e01c804c174640493145"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p885",
+      "structure_unit_id": "su-8c8a34eb18d0139b009c191d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "在签署知情同意书后到首次服用试验用药品之前，发生的临床不良医学事件作为病史/伴随疾病记录在原始病历中，不作为AE记录。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1023",
+      "structure_unit_id": "su-a4ee984ed31aa5fe26aa9401"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice60t-20260828",
+  "worker": "codex-parent"
+}

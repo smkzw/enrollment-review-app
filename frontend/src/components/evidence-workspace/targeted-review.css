@@ -1,0 +1,26 @@
+.targeted-review { color: #252525; background: #fff; padding: 0 1.25rem 1rem; }
+.targeted-review__head, .targeted-review__source > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 0; }
+.targeted-review h2 { font-size: 1.375rem; margin: 0 0 .5rem; }
+.targeted-review p { margin: .5rem 0; line-height: 1.65; }
+.targeted-review__notice { border-left: 3px solid #f90; padding: .5rem 1rem; }
+.targeted-review__columns { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 1.5rem; border-top: 1px solid #ddd; }
+.targeted-review__readings { min-width: 0; }
+.targeted-review__tabs { display: flex; gap: .25rem; padding: 1rem 0; border-bottom: 1px solid #ddd; }
+.targeted-review__tabs button { flex: 1; padding: .75rem; border: 0; background: #f5f5f5; color: #333; font: inherit; cursor: pointer; }
+.targeted-review__tabs button[aria-pressed="true"] { background: #fc0; font-weight: 700; box-shadow: inset 0 -3px #f90; }
+.targeted-review__tabs button:hover { background: #ffe599; }
+.targeted-review__reader { padding: 1rem 0; border-bottom: 1px solid #ddd; }
+.targeted-review h3 { font-size: 1.0625rem; margin: 0 0 1rem; }
+.targeted-review h4 { margin: 0; font-size: 1rem; }
+.targeted-review__excerpt { padding: .75rem 0; overflow-wrap: anywhere; }
+.targeted-review__value { font-weight: 650; }
+.targeted-review__context { color: #606060; }
+.targeted-review blockquote { margin: .75rem 0; padding-left: 1rem; border-left: 2px solid #bbb; line-height: 1.75; }
+.targeted-review__source { min-width: 0; border-left: 1px solid #ddd; padding-left: 1.5rem; }
+.targeted-review__source > header > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.targeted-review__source strong, .targeted-review__source > header span { display: block; }
+.targeted-review__zoom { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
+.targeted-review__zoom span { width: 3.25rem; text-align: center; }
+.targeted-review__image { overflow: auto; max-height: 75vh; background: #eee; border: 1px solid #ddd; }
+.targeted-review__image img { display: block; max-width: none; height: auto; }
+.targeted-review button:focus-visible { outline: 2px solid #a65f00; outline-offset: 2px; }

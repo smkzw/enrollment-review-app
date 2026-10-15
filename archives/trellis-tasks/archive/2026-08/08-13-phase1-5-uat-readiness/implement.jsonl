@@ -1,0 +1,6 @@
+{"file":"contracts/v1/interaction/UAT_PHASE1.md","reason":"14项正式UAT任务、量化门槛、错误分类和停止条件"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"Phase 1与Phase 1.5范围及不得进入Phase 2的硬门"}
+{"file":".trellis/spec/frontend/index.md","reason":"中文临床任务导向和证据可达性产品合同"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"工作台组件、布局和交互规范"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"URL、本地演示状态和服务端状态边界"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"真实浏览器、视觉和交互验收要求"}

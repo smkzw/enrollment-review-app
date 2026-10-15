@@ -1,0 +1,16 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_pregnancy_fsh_contract_v9.v1.json",
+  "artifact_dir_name": "phase5-slice60c-d001-pregnancy-fsh-control-replay-20260828",
+  "runner": {
+    "max_transport_retries": 1,
+    "max_schema_repairs": 6,
+    "timeout_seconds": 7200.0
+  },
+  "notes": [
+    "每个已水合输出必须在同一轮同时接受发布合同和临床增量完整性检查，修复范围包含两类问题的并集。",
+    "跨访视流程必做处置使用linked_procedure_catalog_item_ids完整列出筛选、基线和首次给药前实际覆盖目标；兼容单值字段为null。",
+    "筛选阳性与首次给药前阳性按各自最终判定节点拆分；治疗后可选复查不进入入排控制；初潮前女性豁免必须保留为筛选节点增量候选。",
+    "本轮最多六次同会话修复；若仍不收敛则转为需要核对，不以增加重试次数替代合同修正。"
+  ]
+}

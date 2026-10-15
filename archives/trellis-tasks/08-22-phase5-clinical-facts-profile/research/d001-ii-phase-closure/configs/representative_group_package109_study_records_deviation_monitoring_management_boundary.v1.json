@@ -1,0 +1,483 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package109-study-records-deviation-monitoring-management-boundary",
+  "task_id": "phase5-slice61cv-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "expected_package_ordinal": 109,
+  "expected_package_id": "pap-2101c87c43a5499476169b81",
+  "owned_source_refs": [
+    "body.p1270",
+    "body.p1271",
+    "body.p1272",
+    "body.p1273",
+    "body.p1274",
+    "body.p1275",
+    "body.p1276",
+    "body.p1277",
+    "body.p1278",
+    "body.p1279",
+    "body.p1280"
+  ],
+  "attached_source_refs": [],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1270",
+    "body.p1271",
+    "body.p1272",
+    "body.p1273",
+    "body.p1274",
+    "body.p1275",
+    "body.p1276",
+    "body.p1277",
+    "body.p1278",
+    "body.p1279",
+    "body.p1280"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1270",
+    "body.p1271",
+    "body.p1274",
+    "body.p1277",
+    "body.p1279"
+  ],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1272": "non_enrollment_execution",
+    "body.p1273": "non_enrollment_execution",
+    "body.p1275": "non_enrollment_execution",
+    "body.p1276": "non_enrollment_execution",
+    "body.p1278": "non_enrollment_execution",
+    "body.p1280": "non_enrollment_execution"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "owned_visit_instances_by_source_ref": {},
+  "owned_procedure_semantic_families_by_source_ref": {},
+  "owned_required_action_kinds_by_source_ref": {},
+  "owned_required_procedure_target_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1270": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "研究文件监查管理标题决定受试者资格",
+      "章节标题决定单例资格"
+    ],
+    "body.p1271": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "研究文件标题决定受试者资格",
+      "研究文件小节决定单例资格"
+    ],
+    "body.p1272": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "研究记录不足不得入组",
+      "稽查跟踪缺失不得入组",
+      "研究结束数据未获得不得入组",
+      "研究文件记录决定单例资格"
+    ],
+    "body.p1273": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "研究开始档案未建立不得入组",
+      "研究结束档案未审核不得入组",
+      "文件未保存不得入组",
+      "档案管理决定单例资格"
+    ],
+    "body.p1274": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "方案偏离标题决定受试者资格",
+      "方案偏离小节决定单例资格"
+    ],
+    "body.p1275": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "所有要求必须严格执行决定单例资格",
+      "方案要求未严格执行不得入组",
+      "偏离方案记录缺失不得入组",
+      "偏离未通报伦理不得入组",
+      "偏离未签字不得入组",
+      "偏离统计总结缺失不得入组",
+      "泛化方案遵从改写为入排控制"
+    ],
+    "body.p1276": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "严重方案偏离决定筛选排除",
+      "必要时退出研究误作入排排除",
+      "参与者需退出研究改写为不得入组",
+      "严重偏离评估缺失不得入组",
+      "偏离后在研退出倒置为参加研究前控制",
+      "伦理递交偏离缺失不得入组"
+    ],
+    "body.p1277": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "现场监查检查标题决定受试者资格",
+      "现场监查小节决定单例资格"
+    ],
+    "body.p1278": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "现场监查未完成不得入组",
+      "设施访问缺失不得入组",
+      "记录访问缺失不得入组",
+      "监查检查决定单例资格"
+    ],
+    "body.p1279": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "管理结构标题决定受试者资格",
+      "管理结构小节决定单例资格"
+    ],
+    "body.p1280": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "IWRS筛查能力决定单例资格",
+      "IWRS随机能力决定入排控制",
+      "IWRS未启用不得入组",
+      "药物物流管理决定单例资格",
+      "样品运输前保存缺失不得入组",
+      "eCRF记录缺失不得入组",
+      "EDC系统未使用不得入组",
+      "项目管理能力误作筛选资格",
+      "基础设施用途候选化为入排动作"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "先逐条读取第109包body.p1270-p1280原文并区分四类语义：章节/小节标题（p1270研究文件监查和管理；p1271研究文件；p1274方案偏离；p1277现场监查/检查；p1279管理结构）、研究文件与档案/稽查跟踪治理（p1272记录保存与研究结束稽查跟踪数据；p1273研究开始建立档案与研究结束监查审核保存）、方案偏离识别记录签字通报统计及严重偏离后在研退出处置（p1275严格执行与偏离记录治理，但“所有要求必须严格执行”不得脱离具体要求生成泛化单例入排；p1276源文件记录、伦理递交审查、严重偏离评估及“必要时参与者需退出研究”属偏离发生并评估后的在研处置，不是筛选/基线排除）、以及现场监查检查与管理基础设施用途（p1278设施与记录访问；p1280项目管理/IWRS筛查随机与药物物流/样品运输前保存/eCRF-EDC记录能力，等于管理结构与基础设施用途描述，不等于本段新建筛选、随机、给药、样本或资料资格动作）。逐项判断后确认这些均是研究执行/记录/监查/管理治理，不是单例筛选、基线或入排资格；真实参加研究前控制若存在须保留，但本包原文未形成独立筛选前受试者动作，故required candidates为空；不得以other_control_candidate强挂到受试者工作流，也不得回吸Package 108或提前吸收Package 110。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第109包位于Ⅱ期“研究文件、监查和管理”章节。p1272-p1273约束研究文件、稽查跟踪与档案建立/审核/保存；p1275-p1276约束方案偏离记录通报与严重偏离后在研退出处置；p1278约束现场监查/检查与设施记录访问；p1280描述申办者项目管理、IWRS筛查/随机/药物物流能力、样品运输前保存和eCRF/EDC记录能力。这些对象是研究中心/研究者/监查员/申办者执行与记录治理及管理基础设施用途，不是单例受试者人群、入排条件、频率或筛选/基线/D1给药前动作。Package 108止于p1269；Package 110从p1281起不得吸入。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61cv-package109-study-records-deviation-monitoring-management-boundary",
+    "catalog_id": "catalog:slice61cv-package109-study-records-deviation-monitoring-management-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1270": [
+      "研究文件、监查和管理标题仅提供章节结构，不独立生成候选、流程节点、官方规则或受试者控制点"
+    ],
+    "body.p1271": [
+      "研究文件标题仅提供小节结构，不独立生成候选或受试者控制点"
+    ],
+    "body.p1272": [
+      "研究者必须保存足够且准确的记录以完整记录研究执行过程，包括但不限于方案、方案修正案、知情同意书和IRB/EC与政府批准文件",
+      "研究结束时研究者可获得该中心参与者数据，包括含有所有数据变更完整记录的稽查跟踪数据",
+      "研究文件保存与稽查跟踪治理不得误成单例筛选、基线或入排资格"
+    ],
+    "body.p1273": [
+      "研究开始时研究中心、分析检测单位、申办者三方均应各自建立研究文件档案管理",
+      "研究结束时监查员必须审核确认各方文件，并妥善保存在各自临床研究档案卷宗内",
+      "档案建立、审核与保存治理不得误成单例资格"
+    ],
+    "body.p1274": [
+      "方案偏离标题仅提供小节结构，不独立生成候选或受试者控制点"
+    ],
+    "body.p1275": [
+      "研究方案中规定的所有要求必须严格执行；有意或无意偏离试验方案和GCP原则均可归类为偏离方案",
+      "临床监查员发现偏离时填写偏离方案记录，详细记录时间、过程、原因、处理措施等适用项，由研究者签字，并通报伦理委员会及申办者；统计总结中分析偏离对数据和结论的影响",
+      "“所有要求必须严格执行”不得脱离具体要求生成泛化单例入排控制；偏离识别/记录/签字/通报/统计总结是研究执行治理，不是筛选/基线资格"
+    ],
+    "body.p1276": [
+      "所有方案偏离必须记录在源文件中，并按伦理委员会规定递交审查；研究者须知悉并遵行伦理委员会相关规定",
+      "当发生严重方案偏离时应进行评估；必要时参与者需退出研究",
+      "“必要时，参与者需退出研究”是严重偏离发生并评估后的在研处置，不是筛选/基线排除标准，也不得凭“退出”二字倒置成参加研究前控制"
+    ],
+    "body.p1277": [
+      "现场监查/检查标题仅提供小节结构，不独立生成候选或受试者控制点"
+    ],
+    "body.p1278": [
+      "研究中心访视将由申办者或授权代表进行研究数据、参与者病历和eCRFs的监查",
+      "研究者将允许国家和地方卫生当局、申办者监查员、代表和合作者，以及IRB/EC检查与本研究相关的设施和记录",
+      "现场监查/检查与设施记录访问治理不得误成单例资格"
+    ],
+    "body.p1279": [
+      "管理结构标题仅提供小节结构，不独立生成候选或受试者控制点"
+    ],
+    "body.p1280": [
+      "申办者或其代理人将执行项目管理、研究管理、监查、供应商管理和统计编程",
+      "可使用IWRS进行参与者筛查和随机分组，以及研究药物申请和运输的管理；这是管理能力与基础设施用途，不等于本段新建筛选、随机或给药资格动作",
+      "研究中心负责生物样品运输至申办者或其指定分析单位之前的保存；数据使用eCRFs通过EDC系统记录或以电子方式转发",
+      "项目管理、IWRS用途、样品保存与EDC记录描述不得误成单例入排资格或发布控制点"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1270": {
+      "semantic_role": "study_records_monitoring_management_chapter_heading",
+      "base_rule": "研究文件、监查和管理",
+      "exception_rule": "这是章节标题，仅建立p1271-p1280研究文件、方案偏离、现场监查与管理结构治理的结构归属，不形成记录保存、偏离处置、监查检查、IWRS或单例资格。",
+      "preserve_keywords": [
+        "研究文件、监查和管理"
+      ],
+      "forbidden_inversion": "不得把章节标题改写为研究文件/监查/管理决定受试者资格、筛选必做、基线必做或发布控制点。"
+    },
+    "body.p1271": {
+      "semantic_role": "study_records_subsection_heading",
+      "base_rule": "研究文件",
+      "exception_rule": "这是小节标题，仅建立p1272-p1273研究文件与档案治理的结构归属，不形成单例资格。",
+      "preserve_keywords": [
+        "研究文件"
+      ],
+      "forbidden_inversion": "不得把研究文件标题改写为研究文件决定受试者资格或发布控制点。"
+    },
+    "body.p1272": {
+      "semantic_role": "study_recordkeeping_and_audit_trail_governance",
+      "base_rule": "研究者必须保存足够且准确的记录，以便完整记录研究的执行过程，包括但不限于方案、方案修正案、知情同意书和IRB/EC与政府批准文件。此外，在研究结束时，研究者可以获得该中心的参与者数据，包括含有所有数据变更完整记录的稽查跟踪数据。",
+      "exception_rule": "研究者必须保存足够且准确的研究执行记录（含方案、修正案、知情同意书、IRB/EC与政府批准文件）；研究结束时可获得含完整稽查跟踪的参与者数据。这是研究记录与稽查跟踪治理，不是单例筛选/入排资格。",
+      "preserve_keywords": [
+        "保存足够且准确的记录",
+        "完整记录研究的执行过程",
+        "方案、方案修正案、知情同意书",
+        "IRB/EC与政府批准文件",
+        "研究结束时",
+        "稽查跟踪数据"
+      ],
+      "forbidden_inversion": "不得把研究记录不足、稽查跟踪缺失或研究结束数据未获得改写为筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1273": {
+      "semantic_role": "study_archive_establishment_review_and_retention_governance",
+      "base_rule": "研究开始时，研究中心、分析检测单位、申办者三方均应各自建立研究文件的档案管理。研究结束时，监查员必须审核确认各研究中心、分析检测单位、申办者各自的文件，这些文件必须被妥善的保存在各自的临床研究档案卷宗内。",
+      "exception_rule": "研究开始时三方各自建立研究文件档案管理；研究结束时监查员审核确认各方文件并妥善保存在临床研究档案卷宗。这是档案建立、审核与保存治理，不是单例资格。",
+      "preserve_keywords": [
+        "研究开始时",
+        "建立研究文件的档案管理",
+        "研究结束时",
+        "监查员必须审核确认",
+        "妥善的保存在各自的临床研究档案卷宗内"
+      ],
+      "forbidden_inversion": "不得把研究开始档案未建立、研究结束档案未审核或文件未保存改写为筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1274": {
+      "semantic_role": "protocol_deviation_subsection_heading",
+      "base_rule": "方案偏离",
+      "exception_rule": "这是小节标题，仅建立p1275-p1276方案偏离记录与严重偏离后在研退出处置的结构归属，不形成单例资格。",
+      "preserve_keywords": [
+        "方案偏离"
+      ],
+      "forbidden_inversion": "不得把方案偏离标题改写为偏离决定受试者资格或发布控制点。"
+    },
+    "body.p1275": {
+      "semantic_role": "protocol_deviation_identification_recording_notification_and_summary_governance",
+      "base_rule": "研究方案中规定的所有要求，必须严格执行。任何有意或无意偏离试验方案和GCP原则的行为，均可归类为偏离方案。临床监查员在监查过程中，如果发现偏离方案时应填写偏离方案记录，详细记录事件发生的时间、过程、原因、相应的处理措施等适用项，由研究者签字，并通报伦理委员会及申办者。在数据统计和总结报告中，研究者对发生的方案偏离对最终数据和结论的影响进行分析和报告。",
+      "exception_rule": "方案要求必须严格执行，偏离须识别、记录、签字、通报伦理与申办者，并在统计总结中分析影响。这是研究执行与偏离记录治理；“所有要求必须严格执行”不得脱离具体要求生成一个泛化的单例入排控制，也不得把偏离记录缺口改写为筛选/基线资格。",
+      "preserve_keywords": [
+        "所有要求，必须严格执行",
+        "偏离方案",
+        "填写偏离方案记录",
+        "研究者签字",
+        "通报伦理委员会及申办者",
+        "数据统计和总结报告"
+      ],
+      "forbidden_inversion": "不得把“所有要求必须严格执行”、偏离记录缺失、未签字、未通报或未做统计总结改写为筛选必做、不得入组、排除标准、入排不通过或发布控制点；不得生成脱离具体要求的泛化入排控制。"
+    },
+    "body.p1276": {
+      "semantic_role": "serious_protocol_deviation_assessment_and_in_study_withdrawal_disposition",
+      "base_rule": "所有方案偏离情况必须记录在源文件中。所有方案偏离必须按照伦理委员会规定递交以供审查。研究者有责任知悉并遵行伦理委员会相关规定。当发生严重方案偏离时，应进行评估。必要时，参与者需退出研究。",
+      "exception_rule": "方案偏离须记入源文件并按伦理规定递交审查；严重方案偏离发生后应评估，必要时参与者退出研究。这是偏离后的在研处置与伦理递交治理，不是筛选/基线排除标准；不得凭“退出”二字倒置成参加研究前控制。",
+      "preserve_keywords": [
+        "记录在源文件中",
+        "按照伦理委员会规定递交以供审查",
+        "严重方案偏离",
+        "应进行评估",
+        "必要时，参与者需退出研究"
+      ],
+      "forbidden_inversion": "不得把严重方案偏离、偏离评估缺失或“必要时参与者需退出研究”改写为筛选排除、基线排除、不得入组、入排不通过或参加研究前控制。"
+    },
+    "body.p1277": {
+      "semantic_role": "onsite_monitoring_inspection_subsection_heading",
+      "base_rule": "现场监查/检查",
+      "exception_rule": "这是小节标题，仅建立p1278现场监查/检查与设施记录访问治理的结构归属，不形成单例资格。",
+      "preserve_keywords": [
+        "现场监查/检查"
+      ],
+      "forbidden_inversion": "不得把现场监查/检查标题改写为监查检查决定受试者资格或发布控制点。"
+    },
+    "body.p1278": {
+      "semantic_role": "onsite_monitoring_inspection_and_facility_record_access_governance",
+      "base_rule": "研究中心访视将由申办者或授权的代表进行研究数据、参与者病历和eCRFs的监查。研究者将允许国家和地方卫生当局、申办者监查员、代表和合作者，以及IRB/EC检查与本研究相关的设施和记录。",
+      "exception_rule": "申办者或授权代表对研究数据、病历和eCRFs进行监查；研究者允许卫生当局、监查员、代表、合作者及IRB/EC检查相关设施和记录。这是现场监查/检查与访问治理，不是单例入排条件。",
+      "preserve_keywords": [
+        "研究中心访视",
+        "研究数据、参与者病历和eCRFs的监查",
+        "国家和地方卫生当局",
+        "申办者监查员、代表和合作者",
+        "IRB/EC",
+        "检查与本研究相关的设施和记录"
+      ],
+      "forbidden_inversion": "不得把现场监查未完成、设施访问缺失或记录访问缺失改写为筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1279": {
+      "semantic_role": "management_structure_subsection_heading",
+      "base_rule": "管理结构",
+      "exception_rule": "这是小节标题，仅建立p1280项目管理、IWRS用途、样品保存与EDC记录能力描述的结构归属，不形成单例资格。",
+      "preserve_keywords": [
+        "管理结构"
+      ],
+      "forbidden_inversion": "不得把管理结构标题改写为管理结构决定受试者资格或发布控制点。"
+    },
+    "body.p1280": {
+      "semantic_role": "sponsor_management_iwrs_sample_storage_and_edc_infrastructure_capability",
+      "base_rule": "申办者或其代理人将执行项目管理、研究管理、监查、供应商管理和统计编程。可使用IWRS进行参与者筛查和随机分组，以及研究药物申请和运输的管理。研究中心将负责生物样品在运输至申办者或其指定分析单位之前的保存。数据将使用eCRFs通过EDC系统记录，或以电子方式转发给申办者（例如，药代动力学数据）。",
+      "exception_rule": "本段描述申办者项目管理能力、IWRS可用于筛查/随机/药物物流、样品运输前保存以及eCRF/EDC记录能力。这是管理结构与基础设施用途，不等于该段新建筛选、随机、给药、样本或资料资格动作；不得把IWRS“筛查和随机分组”措词候选化为入排控制。",
+      "preserve_keywords": [
+        "项目管理、研究管理、监查、供应商管理和统计编程",
+        "可使用IWRS进行参与者筛查和随机分组",
+        "研究药物申请和运输的管理",
+        "生物样品在运输至申办者或其指定分析单位之前的保存",
+        "eCRFs通过EDC系统记录"
+      ],
+      "forbidden_inversion": "不得把IWRS筛查/随机能力、药物物流、样品保存或eCRF/EDC记录改写为筛选必做、不得入组、排除标准、入排不通过、发布控制点，或把基础设施用途候选化为新建入排动作。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "Package 108严格拥有body.p1260-p1269并止于p1269；Package 109严格且仅拥有body.p1270-p1280。Package 110从body.p1281开始，p1281及其后内容不得吸入本包。冻结计划中的37项context_units仅只读，未经Codex另行授权不得升格为attached_source_refs。不得回吸Package 108的IRB/EC或保密治理，也不得把研究文件、方案偏离、现场监查、管理结构或IWRS用途误作单例资格；严重偏离后“必要时退出研究”不得倒置为参加研究前控制。",
+    "expected_owners_by_span": {
+      "body.p1269": 108,
+      "body.p1270": 109,
+      "body.p1271": 109,
+      "body.p1272": 109,
+      "body.p1273": 109,
+      "body.p1274": 109,
+      "body.p1275": 109,
+      "body.p1276": 109,
+      "body.p1277": 109,
+      "body.p1278": 109,
+      "body.p1279": 109,
+      "body.p1280": 109,
+      "body.p1281": 110,
+      "body.p515": 45,
+      "body.p575": 46,
+      "body.p584": 47,
+      "body.p594": 48,
+      "body.p618": 50,
+      "body.p838": 75
+    },
+    "unowned_context_source_refs": [
+      "body.t5.r0",
+      "body.t6.r0",
+      "body.p446",
+      "body.p455",
+      "body.p465",
+      "body.p483",
+      "body.p502",
+      "body.t7.r0",
+      "body.p839",
+      "body.p840",
+      "body.p869",
+      "body.p903",
+      "body.p915",
+      "body.p931",
+      "body.p935",
+      "body.p936",
+      "body.p938",
+      "body.p972",
+      "body.p976",
+      "body.p978",
+      "body.p1206",
+      "body.p1207",
+      "body.p1210",
+      "body.p1214",
+      "body.p1216",
+      "body.p1221"
+    ]
+  },
+  "notes": [
+    "模型外闭包：Package 109恰好拥有body.p1270-p1280共11个来源；无attached；37项context_units保持只读且不升格。",
+    "四类语义必须分开：章节/小节标题仅结构（p1270/p1271/p1274/p1277/p1279）；研究文件与档案/稽查跟踪治理（p1272-p1273）；方案偏离记录通报及严重偏离后在研退出处置（p1275-p1276）；现场监查检查与管理/IWRS/样品保存/EDC基础设施用途（p1278/p1280）。",
+    "候选判定不是预设零：逐项判断后确认本包无独立参加研究前受试者动作；required_candidate_source_refs为空且有逐项原文依据。不得把研究文件、偏离记录、监查检查、研究管理或IWRS用途误成单例资格，也不得丢失任何真实前置控制。",
+    "“所有要求必须严格执行”保留为执行治理语义，不得生成泛化入排控制；“必要时，参与者需退出研究”是严重偏离评估后的在研处置，不得倒置为筛选/基线排除；IWRS“筛查和随机分组”是管理能力描述，不等于本段新建资格动作。",
+    "Package 108止于p1269；Package 110从p1281起；claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程。"
+  ]
+}

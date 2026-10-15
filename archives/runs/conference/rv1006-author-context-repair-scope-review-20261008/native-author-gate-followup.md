@@ -1,0 +1,53 @@
+No Trellis task created — bounded read-only review per assignment. Locating the new symbols in the five changed files first.
+
+# C03 bounded review — uncommitted patch atop 21fce0f5 (native note-map projection + PROCEDURE_ROW_SOURCE_MISMATCH gate + source-only recovery)
+
+Read-only; 12 targeted Read/Grep ops exhausted; no shell/tests/writes. HEAD not re-verified. Observed constants: `CONTROL_AGENT_INPUT_VERSION = "phase5/control-agent-input/v1"` (`deconstructor.py:173`), `CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v47"` (`protocol_control_gate.py:65`) — whether this patch bumped v47 is **unverified** (no diff available).
+
+---
+
+## Q1 — Is the early native-row reuse correct and bounded?
+
+**Observations.** The gate runs inside author-output hydration, before any additive repair (`deconstructor.py:3640-3670`). It derives label sources from the owned unit's own row (`native_schedule_label_sources(batch, unit)`, `source_interpretation.py:807-821`, span-bound `(span, text)` pairs from `_schedule_label_sources`) and requires every linked procedure target to contain every label source at the same span (`_target_contains_row_label:798-804`, invoked at `3664-3665`). Failure raises `PROCEDURE_ROW_SOURCE_MISMATCH` with `allow_candidate_repartition=True` (`3666-3670`), so it is recoverable, not terminal.
+
+**Boundedness.** Gate is inert when the unit has no `table_context` (`809-810`, `values` empty check `816`) or when labels are empty; the check applies only to `REQUIRED_PROCEDURE` units; target ids are pre-validated (`3647-3655`). Same-label-another-row is defeated structurally by `span == target_span` in `_target_contains_row_label:800-802` — a different physical row cannot satisfy it. That is the correct, bounded use of the existing invariant; it does not turn physical identity into semantic equivalence.
+
+**Counterexample candidate (behavior, not proven wrong):** a mixed `REQUIRED_PROCEDURE` disposition whose `procedure_target_ids` legitimately include both a row-native target and an outside-table target; `3664` requires **all** targets to carry the row label line, so the outside target makes the whole disposition fail, forcing repartition even when the outside link is valid per the "references may point to another physical source" rule. Smallest containment if this pattern is legitimate: apply the label test to the row-native rule only when the target's `source_span_ids` intersect the row's spans, or make the error explicitly per-target (report which target failed) while keeping the same gate. Whether such mixed dispositions are a supported shape is a design question, not decidable from the code I read.
+
+**Untested here:** "same label another row" is not among the test variants (`test_protocol_control_execution.py:3956`); `same_row` (`3965-3967`) is the positive case. The prompt also includes procedure `source_span_ids` if **any** unit in the batch has `table_context` (`deconstructor.py:2969-2971`) — batch-level, not target-level; harmless read-only context, but not literally "only native-table inputs".
+
+## Q2 — Witnessed source-only recovery: strictness and a real counterexample
+
+Strictness observed:
+- **Tampering:** every consumed attempt's `raw_output_text` is re-hashed against `raw_output_sha256`; mismatch raises `"作者读取的实际原答摘要损坏"` (`execution.py:2581-2589`); the parametrized test pins the raise (`3956, 3997, 4011-4013`). Corrupted source attempt in the seed replay is likewise rejected (`3920-3953`, incl. `changed_snapshot`, `missing_raw`, `false_attempt`).
+- **Wrong scope:** batch identity via `_same_deep_batch_material` (`2664`), diagnostic schema `phase5/deep-failure-diagnostic/v3` and batch id (`2670-2674`), route identity vs frozen route (`2675-2683`), `validate_source_interpretation` on the recovered seed (`2756`), source snapshot equality (`2540`).
+- **Prior positive alignment:** detection refuses when alignment has no `incomplete`/`uncertain` item (`2572-2576`); negative alignment remains. Note the vocabulary is hardcoded to `{"incomplete","uncertain"}` — if production alignment uses other tokens for a negative/unaccepted result, the audit record silently never attaches (recovery would still run through the generic path; see below). **Unexecuted check.**
+- **Budget:** the proof pins the source job's `deep_max_schema_repairs` (`2641-2649`, `2549`, asserted at `4022`); it does not compare the current job's limit — acceptable only if the fresh authoring run applies current-job limits.
+
+**Decisive counterexample candidate:** in `_validated_deep_partial_source`, `obsolete_basis` is computed (`2704-2708`) but the full-reuse branch `2712-2727` **does not consult it**. That branch fires on a validator-only delta (it excludes `validator_version`/`compiler_versions` from the equality check) and returns the saved dict including `partial_wire`/`session_id` when `_preserved_temporal_restriction_proof(batch, saved) is not None` and the review state is `"reused"`. For a batch that qualifies as non-executable while still containing the retained native row link, the new gate never runs on that batch — the discard branch (`2728-2747`) is bypassed. This is one line from being closed: add `and obsolete_basis is None` (or `and not obsolete_basis`) to the `2712` condition; the value is already computed two lines earlier. I could not read `_preserved_temporal_restriction_proof` or `_resumable_saved_source_review` to prove the qualifying combination exists; this is a concrete candidate with an explicit, cheap check.
+
+**Test gaps in this patch:** the tail assertion for `corrected`, `same_row`, `same_gate`, `accepted`, `non_table` only checks direct detection (`4023-4025`) and never asserts what `_validated_deep_partial_source` returns/does for those variants; the comment admits "detection alone never authorizes recovery", but the guard against the `2712` bypass is untested. The `2712` full-reuse path has no test at all in this file. Non-mutation is checked (`4026`).
+
+## Q3 — Optional projection + validator-only identity: honest?
+
+**Observed.** `AgentInput` gains the closed note map (`deconstructor.py:343`), validated by the shared function (`368-370`), copied in `from_batch` (`385`), omitted from the prompt view when empty (`2942-2943`). Old saves remain immutable: the recovery path validates actual raw/hash and either re-validates (`2765+` hydrate with current code) or discards the author/reviews/session and returns a source-only seed (`2757-2763`, asserted at `4017-4021`). Component identity is `_deep_component_identity(payload, prompt_template)` and embeds `validator_version` (`1994`, test usage `3983, 3990`). So no code path I read claims the old author saw the new projection.
+
+**Remaining gap.** `CONTROL_AGENT_INPUT_VERSION` is still `/v1` despite the new field, and the diagnostic schema in this test records `prompt_template_sha256` + `component_identity` but no explicit request-body hash (`3988-3995`). If the runner genuinely saves/hash-binds the actual request body (owner's claim), the gap is only the input-version ambiguity; if not, a future projection-only change without a validator bump is undetectable by payload-keyed identity. Broader identity invalidation is **not** needed for this patch (the changed behavior is validator-scoped and the obsolete path is keyed on the validator delta), but the smallest honest correction is either bump the input version when the projection changes or include the projected-input body hash in the saved attempt record. **Unexecuted check:** runner-side request-body persistence.
+
+## Q4 — Shared validation/extraction: previous behavior?
+
+- `validate_table_footnote_context_links` (`protocol_controls.py:2538-2557`) enforces closure: keys ⊆ owned+context, `notes` non-empty only for table units, numeric unique ids ⊆ available, no self-reference, **no note→table-unit references** (`2556-2557`). The batch delegates at `2646-2648`; `AgentInput.validate_scope` newly enforces the same (`368-370`). Without a diff I cannot prove the pre-patch inline checks were identical; the added `AgentInput` enforcement is new failure surface for direct construction, and legacy frozen payloads without the field get `{}` (pass). Unverifiable equivalence — the main must-verify item for Q4.
+- `native_schedule_label_sources` extraction preserves the original statement gate: the `source_quote` condition is retained as a keyword argument (`807-818`) and the wrapper still passes `statement.quoted_text` (`823-828`). The wire caller intentionally omits the quote (`3662`). `_target_contains_row_label` unchanged. Behavior-preserving for the existing consumer.
+- Behavioral change by design: the new gate runs at hydration, hence on **all** replays of saved artifacts, not only new ones (`2765-2772` hydration path). Previously successful native-table `REQUIRED_PROCEDURE` results with a non-row-label target will now fail on replay. This is the intended tightening, but no test exercises a previously-successful artifact replay; the only new tests use the failure-diagnostic path. Must-fix? No — but it should be an explicit, acknowledged outcome change with one replay test.
+
+## Prioritized findings
+
+1. **P1 — must verify + one-line fix:** `_validated_deep_partial_source`: `2712` full-reuse branch ignores `obsolete_basis`; add `and obsolete_basis is None` if `_preserved_temporal_restriction_proof`/`_resumable_saved_source_review` can qualify on this batch shape.
+2. **P1 — verify:** request-body hash persistence (Q3); else projection-only changes are undetectable by payload-keyed identity.
+3. **P2 — verification/tests:** alignment decision vocabulary vs `{"incomplete","uncertain"}` (`2572-2576`); same-label-other-row and mixed outside-table disposition tests; `_validated_deep_partial_source` outcome assertions for the five else-branch variants; one legacy-successful replay test.
+4. **P2 — design confirmation:** mixed `REQUIRED_PROCEDURE` dispositions with a legitimate outside-table target (Q1 counterexample candidate); decide whether `3664` should be per-target or span-filtered.
+5. **P3:** input version string `/v1` ambiguity; batch-level `source_span_ids` exposure (`2969-2971`); per-iteration local import (`3658-3660`).
+
+## Limits / unexecuted checks
+
+No git diff, so delegation-equality of the shared validator and the gate-version bump are unverified; `_preserved_temporal_restriction_proof`, `_resumable_saved_source_review`, `_deep_component_identity` bodies and `_schedule_label_sources` were not read (budget); no runtime reproduction, no clinical judgment; the `2712` counterexample is a code-path candidate, not a reproduced failure.

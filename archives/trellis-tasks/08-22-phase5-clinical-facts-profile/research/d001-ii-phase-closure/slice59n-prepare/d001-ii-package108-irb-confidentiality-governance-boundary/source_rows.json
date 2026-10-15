@@ -1,0 +1,172 @@
+[
+  {
+    "excerpt": "机构审查委员会或伦理委员会",
+    "heading_path": [
+      "伦理考虑",
+      "机构审查委员会或伦理委员会"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-f3fa399755a65a5a57ba306c",
+    "package_ordinal": 108,
+    "role": "owned",
+    "source_ref": "body.p1260",
+    "source_span_ids": [
+      "body.p1260"
+    ],
+    "structure_unit_id": "su-874e4bf77d02fddc0c64ccd0",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "在研究启动前，本方案、知情同意书、提供给参与者的任何信息，以及相关支持信息必须提交给IRB/EC审查和批准。此外，任何参与者招募材料也必须经IRB/EC批准。",
+    "heading_path": [
+      "伦理考虑",
+      "机构审查委员会或伦理委员会"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-f3fa399755a65a5a57ba306c",
+    "package_ordinal": 108,
+    "role": "owned",
+    "source_ref": "body.p1261",
+    "source_span_ids": [
+      "body.p1261"
+    ],
+    "structure_unit_id": "su-725734c3341d9e190eaf0f89",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "根据IRB/EC要求或既定程序，主要研究者负责每年或更频繁地向IRB/EC提交书面的研究进展报告。研究者也负责及时通知IRB/EC任何方案修正案。",
+    "heading_path": [
+      "伦理考虑",
+      "机构审查委员会或伦理委员会"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-f3fa399755a65a5a57ba306c",
+    "package_ordinal": 108,
+    "role": "owned",
+    "source_ref": "body.p1262",
+    "source_span_ids": [
+      "body.p1262"
+    ],
+    "structure_unit_id": "su-2427a218a7b874424505a850",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "除向申办者报告SAE之外，适用时研究者还必须按要求向卫生主管部门和IRB/EC报告SAE。研究者可能会收到来自申办者的相关安全性报告或通信，研究者负责确保此类报告的审查和处理符合卫生主管部门要求及IRB/EC既定的政策和程序，并存档在研究中心的研究文件中。",
+    "heading_path": [
+      "伦理考虑",
+      "机构审查委员会或伦理委员会"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-f3fa399755a65a5a57ba306c",
+    "package_ordinal": 108,
+    "role": "owned",
+    "source_ref": "body.p1263",
+    "source_span_ids": [
+      "body.p1263"
+    ],
+    "structure_unit_id": "su-129643f9c353d3d7cc7ee44a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "保密",
+    "heading_path": [
+      "伦理考虑",
+      "保密"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-f3fa399755a65a5a57ba306c",
+    "package_ordinal": 108,
+    "role": "owned",
+    "source_ref": "body.p1264",
+    "source_span_ids": [
+      "body.p1264"
+    ],
+    "structure_unit_id": "su-0312189f00e9eba4f60711b6",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "研究中心将会对本次研究采集到的信息进行保密。参与者通过分配的唯一识别号参与研究，这意味着参与者姓名不会出现在传输至任何地方的数据集中。",
+    "heading_path": [
+      "伦理考虑",
+      "保密"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-f3fa399755a65a5a57ba306c",
+    "package_ordinal": 108,
+    "role": "owned",
+    "source_ref": "body.p1265",
+    "source_span_ids": [
+      "body.p1265"
+    ],
+    "structure_unit_id": "su-a40a929b9b62ca3f4ff32761",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "本研究获得的参与者医疗信息是保密的。除非法律允许或要求，否则，仅在参与者签署的知情同意书允许（或单独授权使用和披露个人健康信息）的情况下，可能会向第三方披露。",
+    "heading_path": [
+      "伦理考虑",
+      "保密"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-f3fa399755a65a5a57ba306c",
+    "package_ordinal": 108,
+    "role": "owned",
+    "source_ref": "body.p1266",
+    "source_span_ids": [
+      "body.p1266"
+    ],
+    "structure_unit_id": "su-aa27ffd7bf806a0f3b0811d5",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "研究期间向参与者收集的信息，将会得到妥善保管，只有研究者或授权的人员可以查看。参与者所有信息都会用数字、字母进行编号，而不使用参与者的姓名。只有研究者知道参与者对应的编号。在不违反保密原则和相关法规的情况下，研究者、申办者的相关人员（或代表）及法规机构和EC可能在研究相关的监查、稽查、EC/IRB审核过程中审查参与者的个人医疗记录。研究中心将会在法律允许范围内，全力保护参与者的隐私和健康信息。",
+    "heading_path": [
+      "伦理考虑",
+      "保密"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-f3fa399755a65a5a57ba306c",
+    "package_ordinal": 108,
+    "role": "owned",
+    "source_ref": "body.p1267",
+    "source_span_ids": [
+      "body.p1267"
+    ],
+    "structure_unit_id": "su-bb5777464f547f53003bfb0b",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "医疗信息可能向参与者的私人医生或负责参与者卫生福利或治疗目的的其他医疗人员提供。鉴于样品分析的复杂性和探究性，除非法律要求，否则通常不会向研究者或参与者提供来源于探究性生物标志物样本的数据。",
+    "heading_path": [
+      "伦理考虑",
+      "保密"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-f3fa399755a65a5a57ba306c",
+    "package_ordinal": 108,
+    "role": "owned",
+    "source_ref": "body.p1268",
+    "source_span_ids": [
+      "body.p1268"
+    ],
+    "structure_unit_id": "su-8f8e58d743d910b3c9416e4a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "本研究生成的数据必须接受国家和地方卫生监管机构的代表、申办者监查员、各研究中心的代表、合作者和IRB/EC（如适用）的检查。",
+    "heading_path": [
+      "伦理考虑",
+      "保密"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-f3fa399755a65a5a57ba306c",
+    "package_ordinal": 108,
+    "role": "owned",
+    "source_ref": "body.p1269",
+    "source_span_ids": [
+      "body.p1269"
+    ],
+    "structure_unit_id": "su-46c7eeba6f88142fd1d0c64b",
+    "unit_kind": "paragraph"
+  }
+]

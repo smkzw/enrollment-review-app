@@ -1,0 +1,11 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral.v1.json",
+  "artifact_dir_name": "phase5-slice59n-d001-viral-control-replay-contract-v6-20260828",
+  "runner": {
+    "max_schema_repairs": 4
+  },
+  "notes": [
+    "验证已知目标与来源枚举清单逐项对齐，保留流程目标未覆盖的检查项目，并继续验证后续锚点节点-证据闭包。"
+  ]
+}

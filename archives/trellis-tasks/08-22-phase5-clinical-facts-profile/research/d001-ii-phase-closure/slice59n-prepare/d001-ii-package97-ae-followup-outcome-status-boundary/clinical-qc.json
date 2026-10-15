@@ -1,0 +1,331 @@
+{
+  "attached_source_refs": [
+    "body.p1150",
+    "body.p1151",
+    "body.p1152",
+    "body.p1153",
+    "body.p1154",
+    "body.p1155",
+    "body.p1156"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package97-ae-followup-outcome-status-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第97包十二个拥有单元（body.p1138-p1149）中p1138/p1147保持结构处置；其余保持post_treatment_execution处置；required_candidate_source_refs显式为空。",
+    "模型外准备精确为12 owned / 7 attached / 19 total：owned=body.p1138-p1149；attached=body.p1150-p1156。",
+    "p1139必须保持无论因果关系的积极处理，且仅在确有必要使用禁用医疗措施并经申办者协商后退出；不得OR化或扩大退出路径。",
+    "p1140-p1144必须保持每例次AE一般随访与四类OR停止情形；不得AND化；不得把失访/撤回同意解释为事件恢复。",
+    "p1145不得反向限制一般随访，也不得把尽一切努力绝对化为保证取得结局。",
+    "p1146三组收集义务的条件、对象与应/应尽量强度不得互换。",
+    "p1148六类状态不得压缩；未知不得被推成持续/未恢复。",
+    "只读附加不得改写为拥有；第98包p1157与第99包body.p1158-p1167不进入本包提示、配置正向语义或测试正向语义。",
+    "官方入排与流程矩阵不含任何以body.p1138-p1149或只读附加来源为锚点的行，也不含不良事件随访/结果状态控制行；本包不合成任何IN/EX官方规则。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1138",
+    "body.p1139",
+    "body.p1140",
+    "body.p1141",
+    "body.p1142",
+    "body.p1143",
+    "body.p1144",
+    "body.p1145",
+    "body.p1146",
+    "body.p1147",
+    "body.p1148",
+    "body.p1149"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体义务由下属段落拥有，标题不义务化": "pending_codex",
+        "标题只闭合安全性评估下的不良事件随访章节层级，不独立形成处理、随访、资料收集或结果状态义务": "pending_codex",
+        "第97包拥有：不良事件的随访（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件的随访",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1138",
+      "structure_unit_id": "su-f33c5766d05bebea031db9d0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把“无论因果关系”改成仅相关事件；不得把积极处理改成必然停药或退出": "pending_codex",
+        "必要性、禁用措施、协商与退出不得拆散、OR化或扩大到任何治疗/合并用药": "pending_codex",
+        "第97包拥有：任何AE无论因果关系均应积极处理；可接受临床措施治疗；仅当确有必要使用禁用医疗措施时，经与申办者协商后应退出": "pending_codex",
+        "零候选；不得升格为预筛、筛选或基线入排门槛": "pending_codex"
+      },
+      "frozen_excerpt": "在临床试验期间，发生不良事件时，无论事件是否与试验用药品存在因果关系，均应做出积极处理。患者经历不良事件时应采用可接受的临床治疗措施进行治疗。如果一定有必要应用研究项目禁止的医疗措施，经与申办者协商后患者应退出本研究。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1139",
+      "structure_unit_id": "su-994a2301e062de6b53581c0b"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "作用于每例次AE，不得被p1145相关AE尽力随访反向缩成仅相关事件": "pending_codex",
+        "停止情形为OR不是AND": "pending_codex",
+        "第97包拥有：研究者应跟踪每例次不良事件，直至达到下列任何情况之一（OR引导）": "pending_codex",
+        "零候选；不得升格为预筛、筛选或基线入排门槛": "pending_codex"
+      },
+      "frozen_excerpt": "研究者应跟踪每例次不良事件，直至达到下列任何情况之一：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1140",
+      "structure_unit_id": "su-1db09a14c27daba97949a0af"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得改成与其他停止情形全部满足；不得解释为患者整体痊愈": "pending_codex",
+        "第97包拥有：一般随访OR停止情形——事件消退": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "事件消退；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1141",
+      "structure_unit_id": "su-bf224106a8e862a01afb4d4b"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "必须保留“或更好”；不得把基线等级升格为入排基线门槛": "pending_codex",
+        "第97包拥有：一般随访OR停止情形——事件返回至基线等级或更好": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "事件返回至基线等级或更好；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1142",
+      "structure_unit_id": "su-6cce067c0d0b3650438943ea"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得删除研究者判断；不得改成AND合取": "pending_codex",
+        "第97包拥有：一般随访OR停止情形——事件被研究者评估为稳定": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "事件被研究者评估为稳定；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1143",
+      "structure_unit_id": "su-e8da9da58c98a6511e6d1308"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得解释为事件恢复/痊愈；不得自动记录为因AE退出（只读p1156闭合该边界，所有权仍归第98包）": "pending_codex",
+        "第97包拥有：一般随访OR停止情形——参与者失访或撤回同意": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "参与者失访或撤回同意。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1144",
+      "structure_unit_id": "su-c6130304902b386e4440ba43"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "“尽一切努力”不得绝对化为保证取得结局": "pending_codex",
+        "不得反向限制p1140每例次AE一般随访；不得抹去p1144现实停止情形": "pending_codex",
+        "第97包拥有：对被认为与试验用药品或研究相关程序相关的AE，尽一切努力随访至最终结局": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "研究者应尽一切努力随访所有被认为与试验用药品或研究相关程序相关的不良事件，直至报告最终结局。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1145",
+      "structure_unit_id": "su-acded56ada60acbcde51aa28"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "条件、对象与“应/应尽量”强度不得互换或压平": "pending_codex",
+        "第97包拥有：随访资料收集三组条件义务（询问记录结果；有检查/合并用药则应收集记录；当地医院诊治则应尽量收集）": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "在随访时应询问及记录不良事件的结果；如有医疗检查或合并用药，应收集并记录检查结果或合并用药情况；如在当地医院进行诊治，应尽量收集当地医院处理记录和用药信息。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1146",
+      "structure_unit_id": "su-201eb6afd3fba1b31a3fb75b"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "六类状态由p1148拥有，标题不义务化": "pending_codex",
+        "标题只闭合结果类型层级，不独立形成六类状态或定义义务": "pending_codex",
+        "第97包拥有：不良事件的结果类型（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件的结果类型",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1147",
+      "structure_unit_id": "su-1136dccfa7006acc6274e89d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得压缩、互相替代；不得把未知推成持续/未恢复": "pending_codex",
+        "前五类定义细节由第98包只读p1150-p1154闭合，不得夺取其所有权": "pending_codex",
+        "第97包拥有：六类结果状态枚举——痊愈；好转/缓解；未好转/未缓解/持续；痊愈伴后遗症；致死；未知": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "根据2019年11月22日我国药监局正式发布的《个例安全性报告E2B（R3）区域实施指南》，不良事件的结果可有如下状态：①痊愈；②好转/缓解；③未好转/未缓解/持续；④痊愈伴后遗症；⑤致死；⑥未知。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1148",
+      "structure_unit_id": "su-54537c69350c6f73d5539567"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读附加p1150-p1154闭合前五类定义，p1156闭合失访/撤回同意不应自动记为因AE退出；不得吸收结束时间规则或把定义重复发布为本包拥有": "pending_codex",
+        "第97包拥有：结果针对AE本身状态而非医学意义上的状态（冒号引出后续定义）": "pending_codex",
+        "第98包p1157与第99包妊娠章节不得进入本包提示或正向语义": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件的“结果”针对的是不良事件本身的状态，而非不良事件在医学意义上的状态，因此：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1149",
+      "structure_unit_id": "su-a0a2d3b39e7b7fcc26d95a17"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第98包": "pending_codex",
+        "用于闭合p1149冒号引出的痊愈含义与基线恢复；不得转移第98包所有权或重复发布为本包拥有": "pending_codex",
+        "第98包拥有：痊愈定义（恢复至基线即为痊愈），只读": "pending_codex"
+      },
+      "frozen_excerpt": "痊愈：指不良事件消失。无论参与者的基线情况是否异常，当不良事件恢复至基线时，即为痊愈。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1150",
+      "structure_unit_id": "su-6514c434b7d574e83f69219c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第98包": "pending_codex",
+        "用于闭合p1148/p1149对应状态含义；不得转移所有权": "pending_codex",
+        "第98包拥有：好转/缓解定义，只读": "pending_codex"
+      },
+      "frozen_excerpt": "好转/缓解：指不良事件减轻或缓解，在报告时还未消失。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1151",
+      "structure_unit_id": "su-6fa336f8c64c45509f9c108f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第98包": "pending_codex",
+        "用于闭合对应状态含义；不得把未知状态推入本项；不得转移所有权": "pending_codex",
+        "第98包拥有：未好转/未缓解/持续定义，只读": "pending_codex"
+      },
+      "frozen_excerpt": "未好转/未缓解/持续：指不良事件在报告时仍未减轻或缓解。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1152",
+      "structure_unit_id": "su-89c01672102f771c1f8a3d0a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "保留原文“伴后遗症”表述及“不应将恢复期症状视为后遗症”；不得静默改写或转移所有权": "pending_codex",
+        "所有权与候选发射权归第98包": "pending_codex",
+        "第98包拥有：伴后遗症定义（对应本包p1148“痊愈伴后遗症”），只读": "pending_codex"
+      },
+      "frozen_excerpt": "伴后遗症：指不良事件导致长期的或永久的生理机能障碍。不应将恢复期或恢复阶段的某些症状视为后遗症。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1153",
+      "structure_unit_id": "su-1bfbb68fd2fe7829275b7c80"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第98包": "pending_codex",
+        "用于闭合致死状态含义；不得转移所有权": "pending_codex",
+        "第98包拥有：致死定义及多AE时仅导致死亡者可选死亡，只读": "pending_codex"
+      },
+      "frozen_excerpt": "致死：指参与者因该不良事件导致死亡。如果参与者同时报告有多个不良事件，其中仅一个不良事件导致死亡，其它未导致死亡的不良事件的结果不应选择死亡。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1154",
+      "structure_unit_id": "su-3d7ea99fd5234e40513482b7"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅作只读层级闭合，不得把结束时间章节吸收或重复发布为本包拥有": "pending_codex",
+        "所有权与候选发射权归第98包": "pending_codex",
+        "第98包拥有：不良事件的结束时间（结构标题），只读": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件的结束时间",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1155",
+      "structure_unit_id": "su-f69f9102268a40b8fda1b341"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第98包": "pending_codex",
+        "本包仅用其失访/撤回同意不等于因AE退出的边界闭合p1144/p1149；不得吸收结束时间规则为本包拥有": "pending_codex",
+        "第98包拥有：结束时间判定及失访/撤回知情同意不应作为“因AE导致退出”记录，只读": "pending_codex"
+      },
+      "frozen_excerpt": "应以不良事件解决（如痊愈、致死）、恢复到基线时状态或状态稳定并不能恢复得更好作为不良事件的结束时间。时间应尽量精确到年月日，如信息收集不全，也应具体到年月。若参与者失访或撤回知情同意，此情况不应作为“因AE导致退出”而记录；若明确因AE而退出，则必须跟踪随访具体的退出时间。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1156",
+      "structure_unit_id": "su-8d4e3c940b0b2546fb805ea9"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61ci-20260830",
+  "worker": "cursor-worker_01"
+}

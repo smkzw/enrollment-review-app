@@ -1,0 +1,223 @@
+{
+  "attached_source_refs": [
+    "body.p986",
+    "body.p996"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package99-pregnancy-reporting-followup-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第99包十个拥有单元（body.p1158-p1167）中p1158/p1159/p1164保持结构处置；其余保持post_treatment_execution处置；required_candidate_source_refs显式为空。",
+    "模型外准备精确为10 owned / 2 attached / 12 total：owned=body.p1158-p1167；attached=body.p986,body.p996。",
+    "p1160必须保留两类对象、末次给药后3个月时间窗、疑似妊娠触发、确认步骤、确认后24小时报告表及书面报告/伦理上报。",
+    "p1161必须保留女性停药与男性伴侣妊娠不要求男方停药的角色差异。",
+    "p1162单纯妊娠非AE；仅符合AE定义的并发症/结果才AE管理；例示不得反向穷尽。",
+    "p1163妊娠期间SAE须24小时报告；无并发症选择性流产不是AE。",
+    "p1165决策主体是参与者及其伴侣；研究者不得代替决定。",
+    "p1166随访较晚者终点、退出不停止、新生儿SAE 24小时、临床可能条件与已报告先天性异常例外必须保留。",
+    "p1167信息更新须立即提交试验妊娠报告表，不得改可选或重新初始报告。",
+    "只读附加不得改写为拥有；第98包body.p1150-p1157与第100包body.p1168起不进入本包提示、配置正向语义或测试正向语义。",
+    "官方入排与流程矩阵不含任何以body.p1158-p1167或只读附加来源为锚点的行，也不含妊娠报告/随访控制行；本包不合成任何IN/EX官方规则。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1158",
+    "body.p1159",
+    "body.p1160",
+    "body.p1161",
+    "body.p1162",
+    "body.p1163",
+    "body.p1164",
+    "body.p1165",
+    "body.p1166",
+    "body.p1167"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第77包": "pending_codex",
+        "用于闭合本包p1162“符合不良事件定义”分流；不得转移第77包所有权或重复发布为本包拥有": "pending_codex",
+        "第77包拥有：AE定义，只读": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件（AE）指临床试验参与者在接受试验用药品之后出现的所有不良医学事件，可以表现为症状体征、疾病和/或有临床意义的实验室检查异常，但不一定与试验用药品有因果关系。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p986",
+      "structure_unit_id": "su-25c54cb8c26bb63bc2ee981a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第78包": "pending_codex",
+        "用于闭合本包p1163/p1166 SAE报告分流；不得转移第78包所有权或重复发布为本包拥有": "pending_codex",
+        "第78包拥有：SAE定义，只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件，指参与者接受试验用药品后出现死亡、危及生命、永久或者严重的残疾或者功能丧失、参与者需要住院治疗或者延长住院时间，以及先天性异常或者出生缺陷等不良医学事件。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p996",
+      "structure_unit_id": "su-f5cd3f88b671362f6f8f4dc4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体规则由下属段落拥有，标题不义务化": "pending_codex",
+        "标题只闭合妊娠章节层级，不独立形成报告、处置、AE/SAE分流或随访义务": "pending_codex",
+        "第99包拥有：妊娠（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "妊娠",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1158",
+      "structure_unit_id": "su-e2468c662da1c67cd81673ab"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体规则由下属段落拥有，标题不义务化": "pending_codex",
+        "标题只闭合报告要求子节层级，不独立形成触发对象、时间窗、确认或24小时报告义务": "pending_codex",
+        "第99包拥有：妊娠事件的报告要求（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "妊娠事件的报告要求",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1159",
+      "structure_unit_id": "su-fc4dc7f5f5c1347412d6e6aa"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得删除疑似妊娠触发、确认步骤、书面报告或伦理上报；不得把末次给药后3个月改成研究结束后；不得混同确认前后报告次序": "pending_codex",
+        "第99包拥有：触发对象=女性参与者或男性参与者的女性伴侣；时间窗=研究期间或CMS-D001片末次给药后3个月内；怀孕或疑似妊娠均立即告知并尽快确认；确认后24小时内填写签名签日期的妊娠事件报告表，立即书面报告申办者/指定人员，并按中心伦理上报": "pending_codex",
+        "零候选；不得升格为预筛、筛选或基线入排门槛": "pending_codex"
+      },
+      "frozen_excerpt": "若女性参与者或男性参与者的女性伴侣在研究期间或CMS-D001片末次给药后3个月内怀孕或怀疑可能妊娠（如停经或经期推迟），应立即告知研究者，研究者必须尽快进行检查确认，确认发生妊娠的，研究者应在确认后24小时填写《妊娠事件报告表》，签名并签署日期，而后立即书面报告给申办者或其指定人员（即，获知事件后不超过24小时）。同时，研究者根据中心伦理的要求进行上报。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1160",
+      "structure_unit_id": "su-6c5dae7949c2e2a80f4ff809"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得统一成全部停药或全部继续用药；不得要求男方因伴侣妊娠停药": "pending_codex",
+        "第99包拥有：角色差异——女性参与者妊娠后立即停用研究药物并记录/报告/随访；男性参与者伴侣妊娠时不要求男性停药，但伴侣按女性参与者方式记录/报告/随访": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "女性参与者在CMS-D001片首次给药之后的研究期间发生妊娠后，应立即停用研究药物，并及时进行记录、报告及随访。男性参与者的女性伴侣发生妊娠后，不要求男性参与者停用试验用药品，但需要对其女性伴侣按照女性参与者发生妊娠的处理方式进行记录、报告及随访。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1161",
+      "structure_unit_id": "su-9be1df387e9b5f7c66654baa"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把所有妊娠或所有终止妊娠反向标记为AE/SAE；AE定义只读引用body.p986，不得在本包重新发布": "pending_codex",
+        "第99包拥有：单纯妊娠本身不是AE，不记入eCRF不良事件；妊娠相关并发症或妊娠结果符合AE定义时才同时按AE管理；自然流产/医学健康原因人工流产/死胎/新生儿SAE为例示": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "单纯的妊娠事件本身不属于不良事件，不应记录在eCRF不良事件上，但如果发生妊娠相关并发症或妊娠的结果符合不良事件定义，则还需按照不良事件进行管理，例如自然流产、因医学及健康原因导致的人工流产、死胎、新生儿严重不良事件（不限于新生儿死亡、先天性异常或者出生缺陷）等。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1162",
+      "structure_unit_id": "su-9f65151ba2e1b482fc150c1d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得因选择性流产默认AE；不得把任何妊娠事件当作SAE；SAE定义只读引用body.p996，不得在本包重新发布": "pending_codex",
+        "第99包拥有：妊娠期间经历的SAE以《SAE报告表》立即报告（获知后不超过24小时）；无妊娠相关并发症的选择性流产不视为AE": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "妊娠参与者在妊娠期间经历的SAE，要求以《SAE报告表》的方式立即报告（即，获知事件后不超过24小时）。没有妊娠相关并发症的选择性流产不视为不良事件。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1163",
+      "structure_unit_id": "su-448b44f51b041652ba03f4a2"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体规则由下属段落拥有，标题不义务化": "pending_codex",
+        "标题只闭合随访子节层级，不独立形成风险沟通、决策主体、随访终点或更新报告义务": "pending_codex",
+        "第99包拥有：妊娠事件的随访（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "妊娠事件的随访",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1164",
+      "structure_unit_id": "su-a76f2c60fa7700da4526db2d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得将风险沟通改写成研究者代替决定妊娠去留": "pending_codex",
+        "第99包拥有：研究者基于用药暴露做风险沟通；终止/继续妊娠由参与者及其伴侣自行决定；决定继续妊娠则每例跟踪至妊娠结局": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "研究者应该根据用药情况，严谨地与参与者交流，告知她/他试验用药品对于孕妇及胎儿可能的影响和风险，并由参与者及其伴侣自行决定是否终止妊娠或继续妊娠。如果参与者或其伴侣决定继续妊娠，则要求对每例妊娠跟踪随访，直到获得妊娠结局。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1165",
+      "structure_unit_id": "su-d41ad06aef84ddc9d8706cce"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把较晚者改较早者；不得删除临床可能条件或已报告先天性异常例外；不得因退出停止随访": "pending_codex",
+        "第99包拥有：覆盖妊娠过程/围产期/新生儿结局，不因退出研究停止；随访终点取健康婴儿第一次访视或法规规定时间与终止妊娠后下一次正常月经结束之较晚者；出生结果按个案追踪；同一表格记录并评估可能因果关系；新生儿SAE 24小时报告；终止原因须明确；胎儿结构完整性评估仅在临床可能时，术前已报告先天性异常则不再重复": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "所有妊娠的过程，包括围产期和新生儿结局，无论参与者是否已停止参与研究，将随访至结局，包括自发或自愿终止妊娠、分娩细节，以及是否存在任何出生缺陷、先天性异常或孕产妇和/或新生儿并发症，直至健康婴儿的第一次访视或法规规定的时间（或任何原因的终止妊娠后下一次正常月经结束），以较晚者为准。对出生结果的随访将根据个案情况进行处理（例如对早产儿进行随访，以确定是否存在发育迟缓）。妊娠随访信息应记录在同一表格上，并应包括对试验用药品与任何妊娠结果可能因果关系的评估。新生儿经历的SAE事件要求以SAE报告表的方式立即报告（即，获知事件后不超过24小时）。在终止妊娠的情况下，应明确终止的原因，如果临床可能，应通过肉眼检查评估终止妊娠时胎儿的结构完整性，除非术前检查显示先天性异常并已报告结果。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1166",
+      "structure_unit_id": "su-48c9cf6fe5bd8950993ea4ff"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得将“有更新时”弱化为可选报告；不得改成重新初始报告": "pending_codex",
+        "第99包拥有：妊娠过程或结局信息有更新时，研究者填写并立即向申办者提交试验妊娠报告表": "pending_codex",
+        "零候选": "pending_codex"
+      },
+      "frozen_excerpt": "当妊娠过程和结局信息有更新时，研究者应填写并立即向申办者提交试验妊娠报告表。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1167",
+      "structure_unit_id": "su-2dea247d4e68c2539276cec6"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61ck-20260830",
+  "worker": "cursor-worker_01"
+}

@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"检查 Agent/Gate 边界、泛化和测试"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"检查用户体验、响应式和可访问性"}
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"逐项核对冻结决定和设计门槛"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"检查阶段退出门槛和禁止跨阶段"}

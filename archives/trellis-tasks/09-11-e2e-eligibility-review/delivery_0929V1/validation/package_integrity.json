@@ -1,0 +1,110 @@
+{
+  "package_version": "0929V1-EXEC-01",
+  "scope": "Package content and review-index checker only; not product, runtime, or clinical validation.",
+  "executed_at_utc": "2026-09-29T02:54:55.734372+00:00",
+  "python": "3.13.5",
+  "checks": [
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "07_DOCS_SYNC.md",
+      "status": "passed"
+    },
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "06_HANDOFF_STANDARD.md",
+      "status": "passed"
+    },
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "05_ACCEPTANCE.md",
+      "status": "passed"
+    },
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "01_PASTE_TO_AGENT.md",
+      "status": "passed"
+    },
+    {
+      "kind": "json_parse",
+      "path": "acceptance_cases.json",
+      "status": "passed"
+    },
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "04_INTEGRATION_PLAN.md",
+      "status": "passed"
+    },
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "03_VISUAL_VALIDATION.md",
+      "status": "passed"
+    },
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "08_EVIDENCE_AND_REVIEW_BOUNDARY.md",
+      "status": "passed"
+    },
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "00_START_HERE.md",
+      "status": "passed"
+    },
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "02_DECISION.md",
+      "status": "passed"
+    },
+    {
+      "kind": "python_parse",
+      "path": "tools/check_handoff.py",
+      "status": "passed"
+    },
+    {
+      "kind": "python_parse",
+      "path": "tools/test_check_handoff.py",
+      "status": "passed"
+    },
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "validation/README.md",
+      "status": "passed"
+    },
+    {
+      "kind": "json_parse",
+      "path": "validation/template_structure_check.json",
+      "status": "passed"
+    },
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "templates/review_index_fields.md",
+      "status": "passed"
+    },
+    {
+      "kind": "json_parse",
+      "path": "templates/review_index.template.json",
+      "status": "passed"
+    },
+    {
+      "kind": "markdown_links_and_fences",
+      "path": "templates/HANDOFF_TEMPLATE.md",
+      "status": "passed"
+    },
+    {
+      "kind": "acceptance_ids_unique_and_pending",
+      "count": 20,
+      "status": "passed"
+    },
+    {
+      "kind": "handoff_checker_synthetic_tests",
+      "passed": 18,
+      "failed": 0,
+      "status": "passed"
+    }
+  ],
+  "errors": [],
+  "status": "passed",
+  "product_tests_run": false,
+  "model_calls_made": false,
+  "clinical_material_reviewed_this_execution": false,
+  "github_writes_made": false
+}

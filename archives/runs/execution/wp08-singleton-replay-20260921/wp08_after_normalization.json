@@ -1,0 +1,53 @@
+{
+ "captured_at": "2026-09-21T15:44:26.349007+00:00",
+ "subject_id": "e851520b052440abb8c6bdb01b7e6cab",
+ "review_episode_id": "6dbf65262bc54f959aaa0a07c783ba52",
+ "projection_clause_count": 69,
+ "projection_clauses_sha256": "f2ae071732e4bb59b78c76e17e1707823a6c870067c0cef2b9fe3b69073d1b80",
+ "decision_counts": {
+  "indeterminate": 69
+ },
+ "documents": [
+  {
+   "file_name": "31001-基线血常规.pdf",
+   "existing_version_id": null
+  },
+  {
+   "file_name": "31001筛选期检查报告单.pdf",
+   "existing_version_id": null
+  },
+  {
+   "file_name": "31001-病历.pdf",
+   "existing_version_id": null
+  },
+  {
+   "file_name": "乙肝DNA-31001.pdf",
+   "existing_version_id": null
+  },
+  {
+   "file_name": "邮件.pdf",
+   "existing_version_id": null
+  },
+  {
+   "file_name": "【Data Listing】RUX-03-002_列表_数据集_Excel_20250612_处理后.xlsx",
+   "existing_version_id": null
+  },
+  {
+   "file_name": "wp08_supplement.pdf",
+   "existing_version_id": null
+  }
+ ],
+ "active_snapshot_id": "742018b5f5274a148462228f1d2cc19d",
+ "active_revision_id": "complete-d648754274894cca82e63cbab86d6794",
+ "manifest_sha256": "e0a6eeb243eeb15d511575ba46aabab099bd5ac083f2e754e7267ec4ac1ab450",
+ "revision_status": "ready",
+ "revision_kind": "complete",
+ "manifest_page_count": 25,
+ "count_clinical_facts_v2": 143,
+ "count_evidence_expectations_v2": 420,
+ "count_fact_corrections": 2,
+ "count_fact_correction_commits": 2,
+ "count_source_document_metadata_revisions": 18,
+ "count_fact_rule_links_v2": 4,
+ "count_review_runs": 0
+}

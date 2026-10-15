@@ -1,0 +1,41 @@
+{
+  "attached_source_refs": [
+    "body.t5.r9",
+    "body.p320",
+    "body.p845"
+  ],
+  "claims_complete": false,
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/configs/representative_group_height_weight.v7.json",
+  "config_sha256": "55a78ad2ecd242c935d24ba2a66f7f8bbd962f7cf024b420c1ad52391c1254e9",
+  "control_batch_id": "pcb-dbc0823c6c8dbc8c9a9be8dd",
+  "control_plan_id": "pcp-ba8cecf5bc2367021126c1a8",
+  "coverage_manifest_id": "manifest:slice60zj-height-weight",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "coverage_manifest_sha256": "89c7f00a8ed2d7eda666fb62538b1941b10c59f4375b8c4491436f66ea0b51e6",
+  "created_at": "2026-08-28T03:08:27.181099+00:00",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "frozen_plan_sha256": "f0aa7e4bccad782ad5472c1f446f079e26343f694ad3ddca401bfbef89f38250",
+  "group_id": "d001-ii-height-weight-v7",
+  "mode": "dry_run_prepare",
+  "owned_source_refs": [
+    "body.p774",
+    "body.p775",
+    "body.p776",
+    "body.p777",
+    "body.p778",
+    "body.p779",
+    "body.p780",
+    "body.p781",
+    "body.p782",
+    "body.p783"
+  ],
+  "parent_phase_qc_path": null,
+  "parent_phase_qc_sha256": null,
+  "prompt_char_count": 31796,
+  "prompt_sha256": "61bfd050d37e1565fe03261fbe892722323b691dbd3ddb9dd893013428f9a88c",
+  "prompt_template_sha256": "22b9f3426b64211cfecd496e6a62c812fd4bd64f09cb84c0ac37f9f317683774",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "replay_mode": "product_protocol_control_agent_runner_mtplx",
+  "task_id": "phase5-slice60zj-20260828",
+  "worker": "codex-parent"
+}

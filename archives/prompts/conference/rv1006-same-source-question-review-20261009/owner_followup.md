@@ -1,0 +1,11 @@
+Follow-up in the same approved engineering review session. Read-only, no model calls, tests, writes, tmp/, .env, clinical originals or database. Reuse the original scope; add app/services/protocol_control_execution.py::_revalidated_source_seed_proof (question replay near 2545) and its synthetic test test_revalidated_source_question_proof_requires_current_original_context.
+
+Inspect the actual revised functions and tests, ideally at most 6 focused source/search calls. The artifact remains the current uncommitted patch against db2dec48, not a clinical result.
+
+Resolve your two actual findings, and challenge the remaining gaps rather than accept this account: source_question_official_context now requires exactly one owned source span and that position's complete matching excerpt; corrupt parallel arrays/duplicate source IDs raise explicit local corruption rather than silent cache misses. Multi-span units are not eligible for this new contextual path. Ordinary field permissions remain unresolved only. Context packet records known physical source orders, marks unknown order null and explicitly says the list is not reading order. No source-order inference from sorted IDs is permitted.
+
+Runner compares both identities including absent current context. If historical answer has cleared the question and context no longer matches, it rejects before any new request; a remaining question may be reread with changed context within the old paid-attempt budget. Source revalidation witness also compares current context before replay. No old source or terminal rewritten. Successful siblings still retain their identity.
+
+The owner window now 65 passed/1198 deselected/7.35s, including exact binding, multi-span, corruption, changed context after a cleared question, Runner fresh target review, preserved ambiguity/transport and actual revalidated-source-seed positive/negative cases. You did not execute these tests; do not call that your verification. Ordinary base source prompt/Schema and compiler identities are not modified.
+
+Return a concise complete review under the original Conference Output heading. Distinguish fixed findings, unresolved must-fix, suggestions and evidence limitations. Do not repeat clinical conclusions or claim publication approval. Where no decisive verification exists, name it.

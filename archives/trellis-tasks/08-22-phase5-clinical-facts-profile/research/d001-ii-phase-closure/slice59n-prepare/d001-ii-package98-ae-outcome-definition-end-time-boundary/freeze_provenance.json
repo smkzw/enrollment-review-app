@@ -1,0 +1,40 @@
+{
+  "attached_source_refs": [
+    "body.p1142",
+    "body.p1144",
+    "body.p1148",
+    "body.p1149"
+  ],
+  "claims_complete": false,
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/configs/representative_group_package98_ae_outcome_definition_end_time_boundary.v1.json",
+  "config_sha256": "e38ace154ab29dbd0d35b4291cab93a0ae909bf555a0d6e92418978d0a3cf306",
+  "control_batch_id": "pcb-18f8eb9ee956b073991d1dd4",
+  "control_plan_id": "pcp-68ea368bbb7a8b8fc0bf4ad4",
+  "coverage_manifest_id": "manifest:slice61cj-package98-ae-outcome-definition-end-time-boundary",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "coverage_manifest_sha256": "89c7f00a8ed2d7eda666fb62538b1941b10c59f4375b8c4491436f66ea0b51e6",
+  "created_at": "2026-08-30T04:11:42.845820+00:00",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "frozen_plan_sha256": "f0aa7e4bccad782ad5472c1f446f079e26343f694ad3ddca401bfbef89f38250",
+  "group_id": "d001-ii-package98-ae-outcome-definition-end-time-boundary",
+  "mode": "dry_run_prepare",
+  "owned_source_refs": [
+    "body.p1150",
+    "body.p1151",
+    "body.p1152",
+    "body.p1153",
+    "body.p1154",
+    "body.p1155",
+    "body.p1156",
+    "body.p1157"
+  ],
+  "parent_phase_qc_path": null,
+  "parent_phase_qc_sha256": null,
+  "prompt_char_count": 32452,
+  "prompt_sha256": "5067cf1b84f049224c6db2208a7db4fe123bed464dcd9f4dcba7b3e05f6c60fe",
+  "prompt_template_sha256": "88335a5f2c79ea12bec07eac832496529ead1b05fe359542873e5d54748c5650",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "replay_mode": "product_protocol_control_agent_runner_mtplx",
+  "task_id": "phase5-slice61cj-20260830",
+  "worker": "cursor-worker_01"
+}

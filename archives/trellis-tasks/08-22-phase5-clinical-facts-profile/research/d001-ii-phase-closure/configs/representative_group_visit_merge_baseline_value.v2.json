@@ -1,0 +1,121 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral_tb.v1.json",
+  "group_id": "d001-ii-visit-merge-baseline-value",
+  "task_id": "phase5-slice60f-20260828",
+  "artifact_dir_name": "phase5-slice60f-d001-visit-merge-baseline-value-open-bound-replay-20260828",
+  "owned_source_refs": [
+    "body.p316"
+  ],
+  "attached_source_refs": [
+    "body.p868",
+    "body.p885"
+  ],
+  "required_candidate_source_refs": [
+    "body.p316"
+  ],
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "仅处置流程表说明中的访视合并与基线取值规则；详细访视章节作为只读佐证，既有入排和检查目录作为只读边界。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-60a9e564dea57508635a69e8",
+        "official_code": "IN-04",
+        "label": "银屑病严重程度评分与体表面积",
+        "position": 3,
+        "source_span_ids": [
+          "span-338d599c9415eacfef3a9e6318d446f1",
+          "span-a0fba80e691dc5da40936864a532ef71",
+          "span-b84426277f77479652ce573f743c5828",
+          "span-f523b13921987a5b1a3987b620467a37"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "pcm-row-aee90bcadab30a320c395d48",
+        "label": "生命体征",
+        "visit_instance": "D1给药前",
+        "review_stage": "baseline",
+        "position": 41,
+        "source_span_ids": [
+          "span-dd40d4e40eb22061ead724a214e74b30"
+        ]
+      },
+      {
+        "catalog_item_id": "pcm-row-74c39766cfd3f147b7338c85",
+        "label": "PASI评分",
+        "visit_instance": "D1给药前",
+        "review_stage": "baseline",
+        "position": 53,
+        "source_span_ids": [
+          "span-cd10ed928b55a21cdd5ce0f818012766"
+        ]
+      },
+      {
+        "catalog_item_id": "pcm-row-13886b8199b8390b329abf16",
+        "label": "PGA评分",
+        "visit_instance": "D1给药前",
+        "review_stage": "baseline",
+        "position": 54,
+        "source_span_ids": [
+          "span-c219c15359e452665569c8bfd390d978"
+        ]
+      },
+      {
+        "catalog_item_id": "pcm-row-c600456b551eecbf3dd87644",
+        "label": "BSA评分",
+        "visit_instance": "D1给药前",
+        "review_stage": "baseline",
+        "position": 55,
+        "source_span_ids": [
+          "span-1c450213bfcd733a979e0b1a594f4b0f"
+        ]
+      },
+      {
+        "catalog_item_id": "pcm-row-f706d9b42eab4823b232df04",
+        "label": "入排标准审核",
+        "visit_instance": "D1给药前",
+        "review_stage": "baseline",
+        "position": 56,
+        "source_span_ids": [
+          "span-95152191c44012a3e06ff88e1605acc5"
+        ]
+      }
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60f-visit-merge-baseline-value",
+    "catalog_id": "catalog:slice60f-visit-merge-baseline-value"
+  },
+  "notes": [
+    "原始DOCX产品链直接提取，用户无需预处理方案文本。",
+    "本轮在通用时间合同支持开闭边界后重放，必须区分≤7天与＞7天。",
+    "本组验证条件性访视合并、基线时间窗、一般基线取值与D1给药前专用取值之间的层级关系。",
+    "只读既有目标用于阻止重复生成IN-04、评分项目、生命体征或入排复核。"
+  ]
+}

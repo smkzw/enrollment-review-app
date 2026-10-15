@@ -1,0 +1,16 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端分层与开发前检查"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "不可变资料、幂等写入、SQLite迁移与备份约束"}
+{"file": ".trellis/spec/backend/persistent-jobs.md", "reason": "持久任务、检查点、租约、恢复与SSE约束"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "分层错误和用户可处理反馈"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量与验证要求"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端分层与开发前检查"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "宽屏证据工作台组件约束"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "上传预览、任务和选择状态边界"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "API与领域类型安全"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端构建、测试和浏览器验收"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨合同、存储、API和界面的一致性检查"}
+{"file": ".trellis/tasks/08-19-phase4-evidence-ocr-v2/research/domain-storage-current-state.md", "reason": "现有领域合同、SQLite仓储和缺口审计"}
+{"file": ".trellis/tasks/08-19-phase4-evidence-ocr-v2/research/ocr-provenance-current-state.md", "reason": "旧OCR能力、缓存、定位和来源保真缺口审计"}
+{"file": ".trellis/tasks/08-19-phase4-evidence-ocr-v2/research/upload-frontend-current-state.md", "reason": "现有前端入口、上传流程和宽屏交互缺口审计"}
+{"file": ".trellis/tasks/08-19-phase4-evidence-ocr-v2/research/external-discovery.md", "reason": "PDF坐标、PaddleOCR-VL和许可证方案核查"}
+{"file": ".trellis/tasks/08-19-phase4-evidence-ocr-v2/research/slice44-detailed-contract-review.md", "reason": "Slice 4.4 定位、风险、校对、活动指针与引用资料详细冻结合同"}

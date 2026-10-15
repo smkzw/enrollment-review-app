@@ -1,0 +1,131 @@
+{
+  "attached_source_refs": [
+    "body.p1018",
+    "body.p1019"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package92-ae-expectedness-report-heading-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第92包四个拥有单元（body.p1098-p1101）：p1098'不良事件预期性评估'、p1100'不良事件的报告'、p1101'研究者向申办者报告不良事件等信息的要求与途径'仅作结构；p1099'本研究中，评估CMS-D001片不良事件预期性见CMS-D001片的《研究者手册》。'保持post_treatment_execution处置。required_candidate_source_refs显式为空，任何候选发射都构成越界。",
+    "p1099只确定预期性判断需参见CMS-D001片《研究者手册》，方案句子未提供手册版本、风险条目或个例结论；不得补写版本号/日期/条目、不得默认最新版本、不得凭常识判定预期/非预期、不得把缺少手册内容改成确定结论或证据缺口。",
+    "只读闭包（2）：第80包body.p1019（非预期不良反应定义，《研究者手册》作为主要文件提供安全性参考信息）按最小必要性只读附加，body.p1018（SUSAR定义）为分离SUSAR三维关系按需同时只读附加；所有权与候选发射权仍归第80包，不转移所有权、不吞并第80包其余来源（p1015-p1017、p1020-p1026）。",
+    "SUSAR三维合取必须保持：可疑（独立因果维度）+非预期+严重同时满足；单独非预期、单独严重或单独相关均不足以构成SUSAR，不得把三维AND弱化为任一维度单独满足。",
+    "已知性不等于预期性：第90/91包'是否符合已知作用机制、特性或已知不良反应'只是因果关系综合评价输入，不能替代预期性评估；因果关系、严重性、预期性不得互相推出。",
+    "p1100/p1101只闭合'不良事件的报告'章节层级，不独立产生报告对象、报告时限、表单、途径或新信息随访义务；报告标题不提前生成第93包具体义务。",
+    "第93包body.p1102-p1112拥有具体应报告事件、24小时期限及新信息类型，不进入本包拥有或附加提示，只保留所有权元数据以防吞并。",
+    "官方入排与流程矩阵不含任何以body.p1098-p1101或body.p1018-p1019为锚点的行，也不含不良事件/TEAE/SAE控制行；本包不合成任何IN/EX官方规则。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1098",
+    "body.p1099",
+    "body.p1100",
+    "body.p1101"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "三维合取必须保持：可疑（独立因果维度）+非预期+严重，任一维度单独满足均不构成SUSAR": "pending_codex",
+        "所有权与候选发射权归第80包，本包不转移所有权、不吞并第80包其他来源": "pending_codex",
+        "第80包拥有：SUSAR定义（临床表现的性质和严重程度超出试验药物《研究者手册》等已有资料信息的可疑并且非预期的严重不良反应），只读": "pending_codex"
+      },
+      "frozen_excerpt": "可疑且非预期严重不良反应（Suspected Unexpected Serious Adverse Reaction，SUSAR）指临床表现的性质和严重程度超出了试验药物《研究者手册》、已上市药品的说明书或者产品特性摘要等已有资料信息的可疑并且非预期的严重不良反应。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1018",
+      "structure_unit_id": "su-3a466b9df7a0012b972a2b3d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第80包，本包不转移所有权、不吞并第80包其他来源": "pending_codex",
+        "第80包拥有：非预期不良反应定义（性质、严重程度、后果或频率不同于试验药物当前相关资料所描述的预期风险），《研究者手册》作为主要文件提供安全性参考信息，只读": "pending_codex",
+        "预期性参照必须锚定《研究者手册》等权威资料，不得脱离参照单独判定非预期；四个比较属性（性质、严重程度、后果或频率）必须保留": "pending_codex"
+      },
+      "frozen_excerpt": "非预期不良反应指不良反应的性质、严重程度、后果或频率，不同于试验药物当前相关资料（如《研究者手册》等文件）所描述的预期风险。《研究者手册》作为主要文件提供用以判断某不良反应是否预期或非预期的安全性参考信息。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1019",
+      "structure_unit_id": "su-0230c1ca32146e5682365991"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "标题只闭合'不良事件的评估'下的预期性评估章节层级，不独立形成控制点；不得把标题本身解释为评价规则或判定门槛": "pending_codex",
+        "第92包拥有：不良事件预期性评估（结构标题），仅作结构": "pending_codex",
+        "预期性评估、因果关系判断、严重程度评估是不同章节维度，标题不得互换或合并": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件预期性评估",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1098",
+      "structure_unit_id": "su-1fd4a8ad830dcd959f819bce"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "《研究者手册》为主要参考文件（闭合第80包p1019）；预期性、因果关系、严重性为不同维度，不得互相推出": "pending_codex",
+        "不得把缺少手册内容改写成证据缺口、确定预期/非预期结论或入排门槛": "pending_codex",
+        "只确定预期性判断需参见CMS-D001片《研究者手册》；方案句子未提供手册版本、风险条目或个例结论，不得补写版本或把缺少手册内容改成确定结论": "pending_codex",
+        "第92包拥有：本研究评估CMS-D001片不良事件预期性见CMS-D001片的《研究者手册》": "pending_codex"
+      },
+      "frozen_excerpt": "本研究中，评估CMS-D001片不良事件预期性见CMS-D001片的《研究者手册》。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1099",
+      "structure_unit_id": "su-6b57b80847dd2f055eb7fe82"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体应报告事件与24小时时限归第93包，本包不提前吞并": "pending_codex",
+        "标题只闭合'不良事件的报告'章节层级入口，不独立产生报告对象、报告时限、表单、途径或随访义务": "pending_codex",
+        "第92包拥有：不良事件的报告（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件的报告",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1100",
+      "structure_unit_id": "su-c4b6d9bf33b41fee0f94b87b"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体报告要求与途径、新信息随访归第93包及后续内容，本包不提前生成": "pending_codex",
+        "标题只闭合报告要求与途径的章节层级入口，不生成具体报告义务": "pending_codex",
+        "第92包拥有：研究者向申办者报告不良事件等信息的要求与途径（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "研究者向申办者报告不良事件等信息的要求与途径",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1101",
+      "structure_unit_id": "su-854ccdfa2809a63a120228a1"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cd-20260830",
+  "worker": "codebuddy-worker_01"
+}

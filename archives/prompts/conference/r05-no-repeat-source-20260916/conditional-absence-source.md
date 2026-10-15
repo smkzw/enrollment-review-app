@@ -1,0 +1,13 @@
+# 条件性缺席与辅助原件：只读源码复核
+
+继续批准evidence_single_object角色；只读源码，禁止写文件、测试、应用导入、对象构造、服务/模型/数据库/浏览器或再派发。runner保存回复。不要把静态结论称运行验收。
+
+读取完整受影响定义：app/domain/contracts/repeat_scheme.py、evaluation_result.py；app/services/repeat_condition_selection.py、repeat_trigger_calculation.py、repeat_result_resolution.py、repeat_atom_calculation.py；app/projections/control_repeat_trigger_calculation.py、repeat_review_presentation.py；app/domain/repeat_result_selection.py。只为具体依赖读相邻服务/仓储/提示。
+
+新增源政策retain_initial_when_trigger_false：必须有完整触发条件引用。无已知复查、唯一初查时复用原条件选择，target_kind=initial_without_repeat、字段repeat_group_id携带真实初查组ID（不是伪造复查），仅核原触发条件，不核虚构许可。取证role initial_observation对应本初查，前次/本次复查角色不能挪用；external_context仍独立候选范围核实。条件选择v2和迭代器验证所有目标/条件/kind/源hash，两族计算带kind，resolution核原kind和范围。只有实际FALSE及原初查/全供给范围守卫通过时才采用初查；TRUE提示应有复查记录，UNKNOWN不当未触发。现有复查仍原逐次路线。官方wire13、控制wire18/prompt2.15、资格26、计算30/发布12。
+
+辅助原件：RepeatAtomEvaluation.evidence_fact_ids汇集原结果来源及repeat_checks/absence_trigger中实际用到的辅助事实；history和control仓储核其属于冻结context，报告加载对应定位。presentation将辅助且非结果源fact放入现有相关记录入口，明确“复查条件的核对依据，不作为检查结果值采用”；不加到最终结果fact_ids，不制造临床事实。控制原件弹窗标题改为相关原始记录。历史None新字段省略；只读存档不改写。
+
+重点检查：隐式NOT缺证据变FALSE、混合AND/OR被改写、初查被当已发生复查、目标集合或所有者/hash串用、source roles错误、纯条件真值是否仍无法到结果消费者、辅助原件是否缺失或冲突校验遗漏、历史内容hash是否改变。上轮O1经实际源码查明非风险：PartialDateRange校验完整日/月/年边界，DateValue保留precision，evaluate_time_constraint再展开_date_bounds，不是仅比较月首日。无须再重报。
+
+此次只核确定行为和必要修复，不扩展新功能；明确多次许可、复查聚合与排序、当前节点计数仍未声称已完成。输出文件行号与最小修正；无确定缺陷可直接说明，不凑数量。

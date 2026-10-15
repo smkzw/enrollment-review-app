@@ -1,0 +1,18 @@
+{
+  "attached_count": 0,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-930550f418be4ac62ff03db1",
+  "group_id": "d001-ii-package111-protocol-amendment-authority-version-table-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 4
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package111-protocol-amendment-authority-version-table-boundary",
+  "owned_count": 4,
+  "prompt_char_count": 29017,
+  "prompt_sha256": "6f735ea31dfe60a9806c6319548df38a545714f4fce7f14fbdd446b5112a37b1",
+  "task_id": "phase5-slice61cx-20260830",
+  "unit_count": 4,
+  "worker": "codex-parent"
+}

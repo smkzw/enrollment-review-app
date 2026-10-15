@@ -1,0 +1,5 @@
+from tests.v2.services.test_normalizer_text_accounting import _exercise_api_paginated_issues
+
+
+def test_api_returns_all_issues_paginated_with_frozen_source_and_history(client):
+    _exercise_api_paginated_issues(client)

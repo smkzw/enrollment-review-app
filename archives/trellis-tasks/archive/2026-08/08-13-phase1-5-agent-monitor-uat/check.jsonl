@@ -1,0 +1,5 @@
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"检查临床与产品不变量"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"检查未越过阶段边界"}
+{"file":"contracts/v1/interaction/UAT_PHASE1.md","reason":"核对 14 项任务覆盖与停止条件"}
+{"file":".trellis/spec/frontend/index.md","reason":"核对前端中文、响应式和状态合同"}
+{"file":"reviews/codex_conference_enrollment_phase1_visual_acceptance_review.md","reason":"避免重复既有视觉审评并验证残余问题"}

@@ -1,0 +1,18 @@
+{
+  "attached_count": 2,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-c8627c83e22739d703c7e2b7",
+  "group_id": "d001-ii-visit-merge-baseline-value",
+  "lookup_counts": {
+    "frozen_plan_context": 3
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-visit-merge-baseline-value",
+  "owned_count": 1,
+  "prompt_char_count": 22646,
+  "prompt_sha256": "a5da05b2c8a5a7b38c156131f233082ebf9a50561f5c4637573edcd50d65c4ad",
+  "task_id": "phase5-slice60f-20260828",
+  "unit_count": 3,
+  "worker": "worker_02"
+}

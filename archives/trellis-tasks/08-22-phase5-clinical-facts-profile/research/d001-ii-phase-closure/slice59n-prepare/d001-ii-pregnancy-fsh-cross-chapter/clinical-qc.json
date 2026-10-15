@@ -1,0 +1,151 @@
+{
+  "attached_source_refs": [
+    "body.t5.r16",
+    "body.p327",
+    "body.p638",
+    "body.p696",
+    "body.p874"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-pregnancy-fsh-cross-chapter",
+  "notes": [
+    "每个已水合输出必须在同一轮同时接受发布合同和临床增量完整性检查，修复范围包含两类问题的并集。",
+    "跨访视流程必做处置使用linked_procedure_catalog_item_ids完整列出筛选、基线和首次给药前实际覆盖目标；兼容单值字段为null。",
+    "筛选阳性与首次给药前阳性按各自最终判定节点拆分；治疗后可选复查不进入入排控制；初潮前女性豁免必须保留为筛选节点增量候选。",
+    "本轮最多六次同会话修复；若仍不收敛则转为需要核对，不以增加重试次数替代合同修正。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p815#atom-0-11",
+    "body.p815#atom-11-74",
+    "body.p815#atom-74-161",
+    "body.p816"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "phase_ii_flow_required": "pending_codex"
+      },
+      "frozen_excerpt": "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+      "lookup": "coverage_manifest",
+      "role": "attached",
+      "source_ref": "body.t5.r16",
+      "structure_unit_id": "su-81d6c327bcd12eaca0223418"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "flow_summary_population_and_threshold_closure": "pending_codex"
+      },
+      "frozen_excerpt": "妊娠试验或卵泡刺激素（FSH）：对有生育能力的女性（育龄女性）在筛选、基线和计划的时间点进行血/尿β-HCG检测，其中筛选、基线、W12(D85)、W16(113)或退出访视必须为血妊娠试验，筛选和/或基线检测结果需均为阴性，需要在访视当天用药前完成；对已绝经女性（一年及以上无月经且无其他医学原因）或永久性绝育（如双侧输卵管结扎、子宫切除或双侧输卵管切除等）的女性参与者视为不具有生育能力，无需进行妊娠试验，其中，对已绝经女性需在筛选时进行血清FSH检测，其结果应大于40 IU/L。若研究过程中出现停经也需进行额外的血清β-HCG检测。注意：对所有参与者，在每个访视做好避孕宣教：在试验期间及给药后3个月内严格遵循附录1避孕要求，且参与者或其伴侣在发现意外怀孕时及时联系研究者。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p327",
+      "structure_unit_id": "su-00f030fa4c1522f1774776f8"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "in06_source_closure": "pending_codex"
+      },
+      "frozen_excerpt": "有生育能力的参与者自签署知情同意书至研究末次给药后至少3个月无怀孕或捐精计划，必须遵守避孕的相关规定，采取高效或可接受的避孕方法避孕（见附录1）。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p638",
+      "structure_unit_id": "su-4bf0f0db5940a934141e0ffa"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "ex29_source_closure": "pending_codex"
+      },
+      "frozen_excerpt": "妊娠或哺乳期女性；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p696",
+      "structure_unit_id": "su-3502ccbcbfcce68b94f3b3e5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "仅限有生育能力的女性。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p815#atom-0-11",
+      "structure_unit_id": "su-4de1d8cc4eb21ba74513612a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "no_phase_iii_or_treatment_visit_pollution": "pending_codex",
+        "phase_ii_prebaseline_schedule_only": "pending_codex"
+      },
+      "frozen_excerpt": "必须在研究的筛选、基线、第12周（Ⅱ期临床研究阶段）、第16、52周访视（Ⅲ期临床研究阶段）和提前退出访视时进行血清妊娠试验。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p815#atom-11-74",
+      "structure_unit_id": "su-5a0dc427730a7091153e019b"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "optional_treatment_retesting_not_mandatory_eligibility": "pending_codex",
+        "screening_or_first_dose_positive_blocks_entry": "pending_codex"
+      },
+      "frozen_excerpt": "筛选时或研究药物首次给药前妊娠试验结果为阳性的参与者不允许进入研究（筛选失败）。研究期间根据研究者的判断可选择性进行尿妊娠试验或血清妊娠试验。可根据需要进行更频繁的妊娠试验。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p815#atom-74-161",
+      "structure_unit_id": "su-c8ab1d9b07ac375fb5632e9a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "non_childbearing_pregnancy_test_exception": "pending_codex",
+        "postmenopausal_screening_fsh_only": "pending_codex"
+      },
+      "frozen_excerpt": "对于绝经女性参与者仅在筛选期进行FSH检查。本研究将初潮前女性、已绝经妇女（一年及以上无月经且无其他医学原因）或永久性绝育（如输卵管结扎、子宫切除或双侧输卵管切除等）的女性参与者视为不具有生育能力，无需进行妊娠试验。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p816",
+      "structure_unit_id": "su-84bc1c61a86032078eac5b1a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "血/尿妊娠试验（有生育能力的女性）",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p874",
+      "structure_unit_id": "su-895b9df0760b93b493f11d46"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice59n-20260827",
+  "worker": "worker_02"
+}

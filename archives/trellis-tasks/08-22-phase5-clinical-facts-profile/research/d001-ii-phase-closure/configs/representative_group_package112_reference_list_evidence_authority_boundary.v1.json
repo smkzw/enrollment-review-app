@@ -1,0 +1,499 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package112-reference-list-evidence-authority-boundary",
+  "task_id": "phase5-slice61cy-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "expected_package_ordinal": 112,
+  "expected_package_id": "pap-fa6b2b871b90b62bbfe81775",
+  "owned_source_refs": [
+    "body.p1295",
+    "body.p1296",
+    "body.p1297",
+    "body.p1298",
+    "body.p1299",
+    "body.p1300",
+    "body.p1301",
+    "body.p1302",
+    "body.p1303",
+    "body.p1304",
+    "body.p1305",
+    "body.p1306"
+  ],
+  "attached_source_refs": [],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1295",
+    "body.p1296",
+    "body.p1297",
+    "body.p1298",
+    "body.p1299",
+    "body.p1300",
+    "body.p1301",
+    "body.p1302",
+    "body.p1303",
+    "body.p1304",
+    "body.p1305",
+    "body.p1306"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1295"
+  ],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1296": "non_enrollment_execution",
+    "body.p1297": "non_enrollment_execution",
+    "body.p1298": "non_enrollment_execution",
+    "body.p1299": "non_enrollment_execution",
+    "body.p1300": "non_enrollment_execution",
+    "body.p1301": "non_enrollment_execution",
+    "body.p1302": "non_enrollment_execution",
+    "body.p1303": "non_enrollment_execution",
+    "body.p1304": "non_enrollment_execution",
+    "body.p1305": "non_enrollment_execution",
+    "body.p1306": "non_enrollment_execution"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "owned_visit_instances_by_source_ref": {},
+  "owned_procedure_semantic_families_by_source_ref": {},
+  "owned_required_action_kinds_by_source_ref": {},
+  "owned_required_procedure_target_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1295": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "参考文献标题决定受试者资格",
+      "参考文献章节误作入排控制",
+      "参考文献标题反向生成评估程序"
+    ],
+    "body.p1296": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "中国银屑病诊疗指南反向生成诊断标准",
+      "指南题录误作入排阈值",
+      "参考文献题录改写为方案执行条款"
+    ],
+    "body.p1297": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "流行病学调查题录误作人群入排",
+      "参考文献题录改写为方案执行条款"
+    ],
+    "body.p1298": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "GBD负担分析题录误作入排阈值",
+      "参考文献题录改写为方案执行条款"
+    ],
+    "body.p1299": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "Lancet综述题录误作诊断标准",
+      "参考文献题录改写为方案执行条款"
+    ],
+    "body.p1300": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "JAMA综述题录误作治疗入排",
+      "参考文献题录改写为方案执行条款"
+    ],
+    "body.p1301": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "JAK/STAT题录反向生成抑制剂算法",
+      "信号通路题录误作给药前控制",
+      "参考文献题录改写为方案执行条款"
+    ],
+    "body.p1302": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "TYK2/JAK题录反向生成评分公式",
+      "斑块状银屑病题录误作入排阈值",
+      "参考文献题录改写为方案执行条款"
+    ],
+    "body.p1303": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "Deucravacitinib FDA审评题录误作受试者资格",
+      "FDA审评文献反向生成入排程序",
+      "参考文献题录改写为方案执行条款"
+    ],
+    "body.p1304": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "评估工具题录反向生成量表算法",
+      "临床试验评估工具题录误作方案阈值",
+      "参考文献题录改写为方案执行条款"
+    ],
+    "body.p1305": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "PASI题录反向生成评分阈值",
+      "BSA题录反向生成体表面积阈值",
+      "PGA题录反向生成医师总体评估阈值",
+      "参考文献题录改写为方案执行条款"
+    ],
+    "body.p1306": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "handprint题录反向生成1%BSA规则",
+      "掌面积题录误作方案执行程序",
+      "1%体表面积题录误作入排阈值",
+      "参考文献题录改写为方案执行条款"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "先逐条读取第112包body.p1295-p1306原文并区分两类语义：小节标题（p1295参考文献）仅结构；p1296-p1306均为参考文献题录（指南、流行病学、GBD负担、Lancet/JAMA综述、JAK/STAT、TYK2、Deucravacitinib FDA审评、评估工具、PASI/BSA/PGA可靠性、handprint约1%BSA），语义说明必须明确“参考文献题录、非方案执行条款”，处置使用既有non_enrollment_execution，不新增领域枚举。题录中的银屑病指南、JAK/STAT、TYK2、Deucravacitinib、PASI/BSA/PGA、handprint和1%均不能反向生成受试者阈值、评分公式、诊断标准或执行程序；方案正文仍是执行权威。逐项判断后确认这些均不是单例筛选、基线或入排资格；真实参加研究前控制若存在须保留，但本包原文未形成独立筛选前受试者动作，故required candidates为空；不得以other_control_candidate强挂到受试者工作流，也不得回吸Package 111或提前吸收Package 113的body.p1307-p1308，不得把body.p1293-p1294与body.p1309无主空白分隔吸入本包。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第112包位于Ⅱ期“参考文献”章节。p1295提供结构标题；p1296-p1306是逐条文献题录，属于支持性证据索引而非方案执行条款。题录中出现的PASI/BSA/PGA、handprint、1%、JAK/STAT、TYK2、Deucravacitinib或诊疗指南名称不得反向生成受试者阈值、量表算法或执行程序；方案正文仍是执行权威。这些对象不是单例受试者人群、入排条件、频率或筛选/基线/D1给药前动作。Package 111止于p1291/p1292/t15.r0-r1；body.p1293-p1294与body.p1309为无主空白分隔；Package 113从p1307起不得吸入。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61cy-package112-reference-list-evidence-authority-boundary",
+    "catalog_id": "catalog:slice61cy-package112-reference-list-evidence-authority-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1295": [
+      "小节标题“参考文献”仅提供结构",
+      "不授权从题录反向生成评估程序或入排控制"
+    ],
+    "body.p1296": [
+      "中国银屑病诊疗指南（2023版）仅为参考文献题录",
+      "非方案执行条款；方案正文仍是执行权威",
+      "不得反向生成诊断标准或入排阈值"
+    ],
+    "body.p1297": [
+      "流行病学调查进展仅为参考文献题录",
+      "非方案执行条款；不得误作人群入排"
+    ],
+    "body.p1298": [
+      "GBD负担分析仅为参考文献题录",
+      "非方案执行条款；不得反向生成入排阈值"
+    ],
+    "body.p1299": [
+      "Lancet综述仅为参考文献题录",
+      "非方案执行条款；不得误作诊断标准"
+    ],
+    "body.p1300": [
+      "JAMA综述仅为参考文献题录",
+      "非方案执行条款；不得反向生成治疗入排"
+    ],
+    "body.p1301": [
+      "JAK/STAT文献仅为参考文献题录",
+      "非方案执行条款；不得反向生成抑制剂算法"
+    ],
+    "body.p1302": [
+      "TYK2/JAK文献仅为参考文献题录",
+      "非方案执行条款；不得反向生成评分公式"
+    ],
+    "body.p1303": [
+      "Deucravacitinib FDA审评仅为参考文献题录",
+      "非方案执行条款；不得误作受试者资格"
+    ],
+    "body.p1304": [
+      "评估工具文献仅为参考文献题录",
+      "非方案执行条款；不得反向生成量表算法"
+    ],
+    "body.p1305": [
+      "PASI/BSA/PGA可靠性文献仅为参考文献题录",
+      "非方案执行条款；不得反向生成评分阈值"
+    ],
+    "body.p1306": [
+      "handprint约1%BSA文献仅为参考文献题录",
+      "非方案执行条款；不得反向生成方案BSA规则"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1295": {
+      "semantic_role": "reference_list_section_heading_structural_only",
+      "base_rule": "参考文献",
+      "exception_rule": "“参考文献”仅是章节标题，提供文献清单结构与语境，不产生单例筛选、基线或入排资格动作，也不授权从后续题录反向生成评估程序。",
+      "preserve_keywords": [
+        "参考文献"
+      ],
+      "forbidden_inversion": "不得把参考文献章节标题改写为筛选必做、不得入组、排除标准、入排不通过、发布控制点，或授权从题录反向生成评估程序。"
+    },
+    "body.p1296": {
+      "semantic_role": "bibliographic_citation_guideline_not_protocol_clause",
+      "base_rule": "中华医学会皮肤性病学分会银屑病专业委员会. 中国银屑病诊疗指南（2023版）[J]. 中华皮肤科杂志, 2023,56(7):573-625.",
+      "exception_rule": "该行是中国银屑病诊疗指南（2023版）的参考文献题录，属于支持性文献证据索引，不是方案执行条款；不得把指南题录反向生成为诊断标准、入排阈值或执行程序。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "中国银屑病诊疗指南（2023版）",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把指南题录改写为诊断标准、筛选必做、入排阈值、不得入组、排除标准或发布控制点。"
+    },
+    "body.p1297": {
+      "semantic_role": "bibliographic_citation_epidemiology_not_protocol_clause",
+      "base_rule": "黄丹,陈崑.银屑病相关流行病学调查进展[J].诊断学理论与实践,2021,20(01):48-52.",
+      "exception_rule": "该行是银屑病流行病学调查进展的参考文献题录，不是方案执行条款；不得把流行病学题录误作人群入排或受试者资格。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "流行病学调查进展",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把流行病学题录改写为人群入排、筛选必做、不得入组、排除标准或发布控制点。"
+    },
+    "body.p1298": {
+      "semantic_role": "bibliographic_citation_gbd_burden_not_protocol_clause",
+      "base_rule": "李慧贤,胡丽,郑焱,等.基于全球疾病负担(GBD)大数据的中国银屑病流行病学负担分析[J].中国皮肤性病学杂志,2021,35(04):386-392.",
+      "exception_rule": "该行是基于GBD大数据的中国银屑病流行病学负担分析题录，不是方案执行条款；不得反向生成入排阈值或程序。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "全球疾病负担",
+        "GBD",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把GBD负担题录改写为入排阈值、筛选必做、不得入组、排除标准或发布控制点。"
+    },
+    "body.p1299": {
+      "semantic_role": "bibliographic_citation_lancet_review_not_protocol_clause",
+      "base_rule": "Griffiths CEM, Armstrong AW, Gudjonsson JE, et al. Psoriasis. The Lancet. 2021;397:1301–15.",
+      "exception_rule": "该行是Lancet银屑病综述题录，不是方案执行条款；不得把综述题录误作诊断标准或入排控制。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "Psoriasis",
+        "The Lancet",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把Lancet综述题录改写为诊断标准、筛选必做、不得入组、排除标准或发布控制点。"
+    },
+    "body.p1300": {
+      "semantic_role": "bibliographic_citation_jama_review_not_protocol_clause",
+      "base_rule": "Armstrong AW, Read C. Pathophysiology, Clinical Presentation, and Treatment of Psoriasis: A Review. JAMA. 2020;323:1945–60.",
+      "exception_rule": "该行是JAMA银屑病病理生理/临床表现/治疗综述题录，不是方案执行条款；不得反向生成治疗入排或执行程序。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "JAMA",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把JAMA综述题录改写为治疗入排、筛选必做、不得入组、排除标准或发布控制点。"
+    },
+    "body.p1301": {
+      "semantic_role": "bibliographic_citation_jak_stat_not_protocol_clause",
+      "base_rule": "Xin P, Xu X, Deng C, et al. The role of JAK/STAT signaling pathway and its inhibitors in diseases. Int Immunopharmacol. 2020 Mar;80:106210.",
+      "exception_rule": "该行是JAK/STAT信号通路及其抑制剂文献题录，不是方案执行条款；不得从题录反向生成抑制剂算法、给药前控制或受试者阈值。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "JAK/STAT",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把JAK/STAT题录改写为抑制剂算法、给药前控制、筛选必做、不得入组或发布控制点。"
+    },
+    "body.p1302": {
+      "semantic_role": "bibliographic_citation_tyk2_jak_not_protocol_clause",
+      "base_rule": "Krueger JG, McInnes IB, Blauvelt A. Tyrosine kinase 2 and Janus kinase‒signal transducer and activator of transcription signaling and inhibition in plaque psoriasis. J Am Acad Dermatol. 2022;86:148–57.",
+      "exception_rule": "该行是TYK2与JAK-STAT信号及斑块状银屑病抑制相关文献题录，不是方案执行条款；不得反向生成评分公式、入排阈值或执行程序。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "Tyrosine kinase 2",
+        "Janus kinase",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把TYK2/JAK题录改写为评分公式、入排阈值、筛选必做、不得入组或发布控制点。"
+    },
+    "body.p1303": {
+      "semantic_role": "bibliographic_citation_fda_review_not_protocol_clause",
+      "base_rule": "Deucravacitinib. FDA Multi-Discipline Review. 2022.",
+      "exception_rule": "该行是Deucravacitinib FDA Multi-Discipline Review题录，不是方案执行条款；不得把FDA审评文献误作受试者资格或入排程序。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "Deucravacitinib",
+        "FDA Multi-Discipline Review",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把FDA审评题录改写为受试者资格、入排程序、筛选必做、不得入组或发布控制点。"
+    },
+    "body.p1304": {
+      "semantic_role": "bibliographic_citation_assessment_tools_not_protocol_clause",
+      "base_rule": "Feldman SR, Krueger GG. Psoriasis assessment tools in clinical trials. Ann Rheum Dis. 2005;64 Suppl 2:ii65-8; discussion ii69-73.",
+      "exception_rule": "该行是临床试验银屑病评估工具文献题录，不是方案执行条款；不得从题录反向生成量表算法、评分阈值或方案程序。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "Psoriasis assessment tools",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把评估工具题录改写为量表算法、评分阈值、筛选必做、不得入组或发布控制点。"
+    },
+    "body.p1305": {
+      "semantic_role": "bibliographic_citation_pasi_bsa_pga_not_protocol_clause",
+      "base_rule": "Bożek A, Reich A. The reliability of three psoriasis assessment tools: Psoriasis area and severity index, body surface area and physician global assessment. Adv Clin Exp Med. 2017;26:851–6.",
+      "exception_rule": "该行是PASI、BSA与PGA三项评估工具可靠性文献题录，不是方案执行条款；不得从题录反向生成PASI/BSA/PGA评分阈值、诊断标准或执行程序。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "Psoriasis area and severity index",
+        "body surface area",
+        "physician global assessment",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把PASI/BSA/PGA题录改写为评分阈值、诊断标准、筛选必做、不得入组或发布控制点。"
+    },
+    "body.p1306": {
+      "semantic_role": "bibliographic_citation_handprint_bsa_not_protocol_clause",
+      "base_rule": "Thomas CL, Finlay AY. The “handprint” approximates to 1% of the total body surface area whereas the “palm minus the fingers” does not. Br J Dermatol. 2007;157:1080–1.",
+      "exception_rule": "该行是handprint约等于1%体表面积的文献题录，不是方案执行条款；不得把handprint/1%题录反向生成方案BSA规则、入排阈值或执行程序。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "handprint",
+        "1%",
+        "total body surface area",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把handprint/1%题录改写为方案BSA规则、入排阈值、筛选必做、不得入组或发布控制点。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "Package 111严格拥有body.p1291、body.p1292、body.t15.r0、body.t15.r1并止于该四项；Package 112严格且仅拥有body.p1295-p1306。原始结构中body.p1293-p1294与body.p1309空白分隔均全局无主且不在冻结覆盖单元中，不得吸入本包。Package 113拥有body.p1307-p1308（含DLQI题录与药品注册管理办法），其中body.p1307仅作为本包前向只读语境出现，不得升格为Package112来源或候选。冻结计划中的38项context_units仅只读，未经Codex另行授权不得升格为attached_source_refs。必须保留方案正文为执行权威；不得从参考文献题录反向虚构评估阈值、量表算法或执行程序。",
+    "excluded_unowned_structure_refs": [
+      "body.p1293",
+      "body.p1294",
+      "body.p1309"
+    ],
+    "expected_owners_by_span": {
+      "body.t15.r1": 111,
+      "body.p1291": 111,
+      "body.p1292": 111,
+      "body.p1295": 112,
+      "body.p1306": 112,
+      "body.p1307": 113,
+      "body.p1308": 113,
+      "body.p515": 45,
+      "body.p575": 46,
+      "body.p584": 47,
+      "body.p594": 48,
+      "body.p618": 50,
+      "body.p838": 75
+    },
+    "unowned_context_source_refs": [
+      "body.t5.r0",
+      "body.t6.r0",
+      "body.p446",
+      "body.p455",
+      "body.p465",
+      "body.p483",
+      "body.p502",
+      "body.t7.r0",
+      "body.p839",
+      "body.p840",
+      "body.p869",
+      "body.p903",
+      "body.p915",
+      "body.p931",
+      "body.p935",
+      "body.p936",
+      "body.p938",
+      "body.p972",
+      "body.p976",
+      "body.p978",
+      "body.p1206",
+      "body.p1207",
+      "body.p1210",
+      "body.p1214",
+      "body.p1216",
+      "body.p1221"
+    ]
+  },
+  "notes": [
+    "模型外闭包：Package 112恰好拥有body.p1295-p1306共12个来源；无attached；38项context_units保持只读且不升格。",
+    "两类语义必须分开：小节标题仅结构（p1295）；参考文献题录非方案执行条款（p1296-p1306，使用既有non_enrollment_execution，不新增领域枚举）。",
+    "候选判定不是预设零：逐项判断后确认本包无独立参加研究前受试者动作；required_candidate_source_refs为空且有逐项原文依据。不得把题录中的PASI/BSA/PGA/handprint/1%/JAK/STAT/TYK2/Deucravacitinib/指南名称反向生成阈值、算法或程序，也不得丢失任何真实前置控制。",
+    "方案正文权威必须保留：执行控制以方案正文为准；参考文献题录仅为支持性证据索引。",
+    "Package 111止于p1291/p1292/t15.r0-r1；p1293-p1294与p1309无主空白分隔不吸收；Package 113从p1307起；claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程。"
+  ]
+}

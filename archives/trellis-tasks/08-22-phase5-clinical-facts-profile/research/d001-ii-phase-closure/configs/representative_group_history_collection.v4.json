@@ -1,0 +1,32 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_history_collection.v3.json",
+  "group_id": "d001-ii-history-treatment-collection-v4",
+  "task_id": "phase5-slice60r-20260828",
+  "artifact_dir_name": "phase5-slice60r-d001-history-treatment-collection-replay-visit-order-20260828",
+  "attached_source_refs": [
+    "body.t5.r7",
+    "body.t5.r8",
+    "body.p316",
+    "body.p318",
+    "body.p319",
+    "body.p339",
+    "body.p632",
+    "body.p857",
+    "body.p870",
+    "body.p878",
+    "body.p879",
+    "body.p880",
+    "body.p885",
+    "body.p1023"
+  ],
+  "ids": {
+    "manifest_id": "manifest:slice60r-history-treatment-reps",
+    "catalog_id": "catalog:slice60r-history-treatment-reps"
+  },
+  "notes": [
+    "v3技术绿色结果保持不可变；父级拒绝其把时间参照访视当成执行访视，并把D1给药前问询判为给药后事项。",
+    "v4补入同一D1访视内审核入排、随机、服药及访视说明的原始顺序，避免仅凭治疗期章节标题判断动作时点。",
+    "系统门禁已区分‘某访视以来’的回顾起点与实际执行访视；只读上下文仍不能成为候选来源。"
+  ]
+}

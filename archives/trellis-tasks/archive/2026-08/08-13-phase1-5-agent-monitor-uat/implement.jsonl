@@ -1,0 +1,5 @@
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"产品、临床、证据、工作流和多角色设计基线"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"Phase 1.5 与 Phase 2 的阶段边界和统一验证矩阵"}
+{"file":"contracts/v1/interaction/UAT_PHASE1.md","reason":"14 项正式界面任务、口径与停止条件"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端层总规范入口"}
+{"file":".trellis/spec/frontend/uat-recorder.md","reason":"记录工具与技术验收边界"}

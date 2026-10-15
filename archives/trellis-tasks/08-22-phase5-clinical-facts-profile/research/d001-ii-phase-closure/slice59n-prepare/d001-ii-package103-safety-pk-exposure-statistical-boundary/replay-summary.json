@@ -1,0 +1,19 @@
+{
+  "attached_count": 1,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-f9432d781641041b01749957",
+  "group_id": "d001-ii-package103-safety-pk-exposure-statistical-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 1,
+    "frozen_plan_owned": 11
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package103-safety-pk-exposure-statistical-boundary",
+  "owned_count": 11,
+  "prompt_char_count": 32853,
+  "prompt_sha256": "e3ac8b38cb87e421e6e5dc02248a4fe6df18e72cec8d4da06100ab4971e222a7",
+  "task_id": "phase5-slice61cp-20260830",
+  "unit_count": 12,
+  "worker": "codex-parent"
+}

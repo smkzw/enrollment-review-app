@@ -1,0 +1,20 @@
+{
+  "attached_count": 2,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-874bf7c2495e377ef5a654d4",
+  "group_id": "d001-ii-ct-result-validity",
+  "lookup_counts": {
+    "coverage_manifest": 1,
+    "frozen_plan_context": 1,
+    "frozen_plan_owned": 1
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-ct-result-validity",
+  "owned_count": 1,
+  "prompt_char_count": 21458,
+  "prompt_sha256": "ed0a879ac3ae4ba5b06ab0630d017c6d6f7cab370b76d8a91787667e671cf9fe",
+  "task_id": "phase5-slice60h-20260828",
+  "unit_count": 3,
+  "worker": "worker_02"
+}

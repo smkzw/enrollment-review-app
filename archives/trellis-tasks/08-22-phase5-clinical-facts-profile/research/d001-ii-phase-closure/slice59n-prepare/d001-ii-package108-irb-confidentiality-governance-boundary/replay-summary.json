@@ -1,0 +1,18 @@
+{
+  "attached_count": 0,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-65f4e493391ad468a66ffc53",
+  "group_id": "d001-ii-package108-irb-confidentiality-governance-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 10
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package108-irb-confidentiality-governance-boundary",
+  "owned_count": 10,
+  "prompt_char_count": 31660,
+  "prompt_sha256": "2502d6b70e4a82e615222d48f076cd5519c4f34d5aadd9376a3cc658859490f0",
+  "task_id": "phase5-slice61cu-20260830",
+  "unit_count": 10,
+  "worker": "codex-parent"
+}

@@ -1,0 +1,153 @@
+{
+  "attached_source_refs": [
+    "body.p767",
+    "body.p769",
+    "body.t5.r5",
+    "body.t5.r6",
+    "body.p315",
+    "body.p317",
+    "body.p630",
+    "body.p631"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-icf-demographics-v4",
+  "notes": [
+    "v3真实结果保留为不可变诊断证据；动作门禁已阻断语义压缩，但旧义务类型无法表达在命名节点前完成一般动作。",
+    "v4新增通用complete_before_anchor义务，仅允许保留原文命名锚点且direction=before。",
+    "该义务不表示访视安排或结果有效期，不改变已有时间窗、访视和结果有效性门禁。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p768",
+    "body.p770"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "签署知情同意书^1 | X",
+      "lookup": "coverage_manifest",
+      "role": "attached",
+      "source_ref": "body.t5.r5",
+      "structure_unit_id": "su-4b166a9e42dfc8a3727f77e1"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "采集人口学资料^3 | X",
+      "lookup": "coverage_manifest",
+      "role": "attached",
+      "source_ref": "body.t5.r6",
+      "structure_unit_id": "su-9b01197961da9751e30cb972"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "开始任何试验流程之前签署知情同意书。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p315",
+      "structure_unit_id": "su-800fd5fa2814682b74b23c69"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "人口学资料：包括出生日期、性别、民族、年龄等信息。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p317",
+      "structure_unit_id": "su-05e54f6b1892ae79ea2c9fe0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "自愿签署知情同意书（Informed Consent Form，ICF），能够和研究者进行良好的沟通，并且理解和遵守本研究的各项要求和限制条件；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p630",
+      "structure_unit_id": "su-7cecc83523216d739b7cef1e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "签署ICF时年龄≥18周岁且≤75周岁，性别不限；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p631",
+      "structure_unit_id": "su-6d2b5812ae0013752842efc3"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "签署知情同意书",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p767",
+      "structure_unit_id": "su-d47f4ab5043b8998d0041401"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把正文重复发布为新的入选标准": "pending_codex",
+        "签署事实不得替代沟通、理解和遵从能力判定": "pending_codex",
+        "解释发生在筛选前且知情同意为自愿签署": "pending_codex"
+      },
+      "frozen_excerpt": "研究者在筛选前向参与者解释所有的研究程序等信息，获得参与者自愿签署的ICF。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p768",
+      "structure_unit_id": "su-dce8b05405461354d06760c5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "采集人口学资料",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p769",
+      "structure_unit_id": "su-16f8c3846c2367f40b062fae"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "人口学资料只在筛选访视采集": "pending_codex",
+        "出生日期、性别、民族和年龄四项记录均保留": "pending_codex",
+        "性别不限不等于无需记录性别": "pending_codex",
+        "采集完成不得等同于IN-02年龄范围通过": "pending_codex"
+      },
+      "frozen_excerpt": "在筛选期获取参与者的人口学资料，包括出生日期、性别、民族、年龄等信息。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p770",
+      "structure_unit_id": "su-a9a2b3350561d48442cf1cba"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice60zb-20260828",
+  "worker": "codex-parent"
+}

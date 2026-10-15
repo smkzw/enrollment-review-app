@@ -1,0 +1,110 @@
+{
+  "contract_status": "design_example_not_current_app_configuration",
+  "version": "role-profiles/proposed-v1",
+  "note": "Map to current product config; resolve existing approved cloud endpoints/credentials and probe capabilities. Do not use null model values in actual calls.",
+  "scheduler": {
+    "pool_identity": [
+      "provider",
+      "endpoint",
+      "credential_scope",
+      "quota_group"
+    ],
+    "initial_concurrency_per_pool": 2,
+    "maximum_concurrency": "resolve_capabilities_and_benchmark",
+    "release_worker_during_backoff": true,
+    "fairness": "bounded_queue_across_documents_and_tasks"
+  },
+  "profiles": [
+    {
+      "role_id": "protocol_deconstructor",
+      "provider": null,
+      "model": null,
+      "endpoint_config_ref": null,
+      "credentials": "runtime_secret_reference_only",
+      "requires_configuration": true,
+      "needs_vision": false,
+      "generation_budget": "task_size_and_resolved_provider_limits",
+      "policy": "complete_or_explicit_split_not_truncate",
+      "request_identity_required": true
+    },
+    {
+      "role_id": "protocol_critic",
+      "provider": null,
+      "model": null,
+      "endpoint_config_ref": null,
+      "credentials": "runtime_secret_reference_only",
+      "requires_configuration": true,
+      "needs_vision": false,
+      "generation_budget": "task_size_and_resolved_provider_limits",
+      "policy": "complete_or_explicit_split_not_truncate",
+      "request_identity_required": true
+    },
+    {
+      "role_id": "evidence_primary_reader",
+      "provider": null,
+      "model": null,
+      "endpoint_config_ref": null,
+      "credentials": "runtime_secret_reference_only",
+      "requires_configuration": true,
+      "needs_vision": true,
+      "generation_budget": "task_size_and_resolved_provider_limits",
+      "policy": "complete_or_explicit_split_not_truncate",
+      "request_identity_required": true
+    },
+    {
+      "role_id": "visual_verifier",
+      "provider": null,
+      "model": null,
+      "endpoint_config_ref": null,
+      "credentials": "runtime_secret_reference_only",
+      "requires_configuration": true,
+      "needs_vision": true,
+      "generation_budget": "task_size_and_resolved_provider_limits",
+      "policy": "complete_or_explicit_split_not_truncate",
+      "request_identity_required": true
+    },
+    {
+      "role_id": "fact_normalizer",
+      "provider": null,
+      "model": null,
+      "endpoint_config_ref": null,
+      "credentials": "runtime_secret_reference_only",
+      "requires_configuration": true,
+      "needs_vision": false,
+      "generation_budget": "task_size_and_resolved_provider_limits",
+      "policy": "complete_or_explicit_split_not_truncate",
+      "request_identity_required": true
+    },
+    {
+      "role_id": "evidence_matcher",
+      "provider": null,
+      "model": null,
+      "endpoint_config_ref": null,
+      "credentials": "runtime_secret_reference_only",
+      "requires_configuration": true,
+      "needs_vision": false,
+      "generation_budget": "task_size_and_resolved_provider_limits",
+      "policy": "complete_or_explicit_split_not_truncate",
+      "request_identity_required": true
+    },
+    {
+      "role_id": "evidence_critic",
+      "provider": null,
+      "model": null,
+      "endpoint_config_ref": null,
+      "credentials": "runtime_secret_reference_only",
+      "requires_configuration": true,
+      "needs_vision": false,
+      "generation_budget": "task_size_and_resolved_provider_limits",
+      "policy": "complete_or_explicit_split_not_truncate",
+      "request_identity_required": true
+    }
+  ],
+  "loop_defaults": {
+    "format_repair_attempts": 1,
+    "targeted_verification_rounds": 1,
+    "additional_adjudication_rounds": 1,
+    "status": "tunable_engineering_starting_point_not_clinical_guarantee",
+    "no_progress_action": "persist_unresolved_with_scope"
+  }
+}

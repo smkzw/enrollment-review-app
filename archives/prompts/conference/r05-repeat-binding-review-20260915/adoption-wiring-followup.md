@@ -1,0 +1,17 @@
+# C03 bounded read-only followup
+
+Same approved session/route and boundaries. Only source reading. No edits, Python, runtime/in-memory construction, tests, models, browser, raw clinical documents, secrets or private histories. Do not expand into implementation. All acceptance remains source-only; clinical flags false; whole-product testing deferred by user.
+
+Review the new observation correspondence wiring end-to-end for material failures:
+
+- `app/domain/contracts/observation_method_evaluation.py` and `app/services/review_method_evidence.py`: distinct evaluation purpose, reuse existing persisted approval machinery, no generated approval.
+- `app/services/qualified_observation_relation.py`: completed job receipts reconstructed by existing verifier; candidate/context/frozen/comparison hashes and group-member pairs equal qualification input; method routes/prompt/consumer bound. Each cited fact+locator source must have an admissible qualification record. Multiple pair attributes at same location are kept as a list, not overwritten; at least one admitted source pair permits correspondence only, not field/result adoption. Qualified source pair IDs retained. Invalid/uncertain quotes and disputed links remain; filtered graph never declares completeness or replacement.
+- `app/domain/contracts/qualified_binding_selection.py`: consumer v17 in both Literals and historical selected_fact_ids rule preserves v16. Optional observation adoption/relations omitted when absent to preserve old serialization; old algorithms cannot carry new evidence; hash includes it when present.
+- `app/services/qualified_binding_selection.py`: authorization references observation job/evaluation; source/method verification and qualified graph retained in sealed material; still does NOT remove repeat_relation_unverified, choose results, or use graph to prove missing data absent.
+- `app/services/qualified_review_command.py`, `frozen_review_publication.py`: optional observation job map identity checks, approved evaluation kind and model config, frozen authorization hash/gate references, source revalidation in factory. Publication v7.
+- `app/services/prepared_review_workflow.py`: v6 adds one observation child per family, existing worker ownership/cancellation/receipts; zero relevant pairs should not call models. Old v5 still readable with its original expected proposition children; old tasks not resumed with current versions. `prepared_review_publication.py` forwards only relevant verified observation jobs. `app/api/v2/qualified_review.py` permits both families for propositions (previous max1 was stale) and observation IDs. Existing frontend task-kind display supports observation_relation already.
+- Adjacent source as necessary: `content_job_verification.py`, `judgment_content_job.py`, `review_runtime_ownership.py`, `observation_relation_job.py`, `observation_relation_input.py`, `observation_relation_receipts.py`.
+
+Newest prior K1 fix: ControlCalculationExperiment now explicit purpose auxiliary_repeat_trigger, default four_layer omitted during serialization; no need re-review unrelated old computation.
+
+Report defects severity with source:line, distinguish known pending result adoption/count/time scope from claimed implemented relation wiring. Focus empty path, tampering/identity mismatch as correctness (not security testing), historical byte compatibility, source ambiguity and orphan/duplicate child risks. Final eligibility remains UNKNOWN for repeats until actual source-qualified policy consumer is complete. No runtime/clinical PASS.

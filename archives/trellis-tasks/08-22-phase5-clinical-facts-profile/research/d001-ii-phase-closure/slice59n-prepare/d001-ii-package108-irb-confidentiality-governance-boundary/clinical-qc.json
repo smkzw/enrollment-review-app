@@ -1,0 +1,177 @@
+{
+  "attached_source_refs": [],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package108-irb-confidentiality-governance-boundary",
+  "notes": [
+    "模型外闭包：Package 108恰好拥有body.p1260-p1269共10个来源；无attached；37项context_units保持只读且不升格。",
+    "五类语义必须分开：IRB/EC标题与保密标题仅结构；研究启动及持续伦理治理（p1261-p1262）；SAE/安全通信治理（p1263）；隐私授权与信息访问/编码/监查稽查治理（p1265-p1267）；私人医生披露、探索性结果不返还与监管检查（p1268-p1269）。",
+    "候选判定不是预设零：逐项判断后确认本包无独立参加研究前受试者动作；required_candidate_source_refs为空且有逐项原文依据。不得把伦理报批、年度进展、SAE上报、资料保密、隐私授权、监查稽查、结果不返还或监管检查误成单例资格。",
+    "“研究启动前”“签署的知情同意书允许”“必须”等措词保留为治理语义，不得倒置为筛选/入排资格；知情签署权威仍在Package 67/107，本包不重复发布。",
+    "Package 107止于p1259；Package 109从p1270起；claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1260",
+    "body.p1261",
+    "body.p1262",
+    "body.p1263",
+    "body.p1264",
+    "body.p1265",
+    "body.p1266",
+    "body.p1267",
+    "body.p1268",
+    "body.p1269"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "机构审查委员会或伦理委员会标题仅提供小节结构，不独立生成候选、流程节点、官方规则或受试者控制点": "pending_codex"
+      },
+      "frozen_excerpt": "机构审查委员会或伦理委员会",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1260",
+      "structure_unit_id": "su-874e4bf77d02fddc0c64ccd0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "上述研究启动与招募材料审批属于研究级伦理治理，不得把“研究启动前”误读为单例筛选前资格或入排不通过": "pending_codex",
+        "不得与Package 107知情过程/签署控制混淆，也不得回吸p1251-p1259": "pending_codex",
+        "研究启动前须将方案、知情同意书、提供给参与者的任何信息及相关支持信息提交IRB/EC审查批准；参与者招募材料也必须经IRB/EC批准": "pending_codex"
+      },
+      "frozen_excerpt": "在研究启动前，本方案、知情同意书、提供给参与者的任何信息，以及相关支持信息必须提交给IRB/EC审查和批准。此外，任何参与者招募材料也必须经IRB/EC批准。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1261",
+      "structure_unit_id": "su-725734c3341d9e190eaf0f89"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "主要研究者按IRB/EC要求每年或更频繁提交书面研究进展报告，并及时通知方案修正案": "pending_codex",
+        "年度进展与修正案通知是持续伦理治理，不得误成单例资格": "pending_codex"
+      },
+      "frozen_excerpt": "根据IRB/EC要求或既定程序，主要研究者负责每年或更频繁地向IRB/EC提交书面的研究进展报告。研究者也负责及时通知IRB/EC任何方案修正案。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1262",
+      "structure_unit_id": "su-2427a218a7b874424505a850"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "SAE/安全通信治理不得误成单例筛选、基线或入排不通过条件": "pending_codex",
+        "申办者安全性报告或通信须按主管部门要求及IRB/EC政策审查处理并存档": "pending_codex",
+        "除向申办者报告SAE外，适用时还须向卫生主管部门和IRB/EC报告SAE": "pending_codex"
+      },
+      "frozen_excerpt": "除向申办者报告SAE之外，适用时研究者还必须按要求向卫生主管部门和IRB/EC报告SAE。研究者可能会收到来自申办者的相关安全性报告或通信，研究者负责确保此类报告的审查和处理符合卫生主管部门要求及IRB/EC既定的政策和程序，并存档在研究中心的研究文件中。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1263",
+      "structure_unit_id": "su-129643f9c353d3d7cc7ee44a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "保密标题仅提供小节结构，不独立生成候选或受试者控制点": "pending_codex"
+      },
+      "frozen_excerpt": "保密",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1264",
+      "structure_unit_id": "su-0312189f00e9eba4f60711b6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "研究中心对采集信息保密；参与者通过唯一识别号参与，姓名不出现在传输数据集": "pending_codex",
+        "编码化与资料保密是隐私治理，不得误成单例资格": "pending_codex"
+      },
+      "frozen_excerpt": "研究中心将会对本次研究采集到的信息进行保密。参与者通过分配的唯一识别号参与研究，这意味着参与者姓名不会出现在传输至任何地方的数据集中。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1265",
+      "structure_unit_id": "su-a40a929b9b62ca3f4ff32761"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "“签署的知情同意书允许”不得改写为单例入排资格句": "pending_codex",
+        "医疗信息保密；除非法律允许或要求，仅在签署的知情同意书允许或单独授权使用和披露个人健康信息时才可能向第三方披露": "pending_codex",
+        "这是隐私授权与第三方披露治理，不是新的筛选前签署动作，也不得重复第67/107包知情签署控制": "pending_codex"
+      },
+      "frozen_excerpt": "本研究获得的参与者医疗信息是保密的。除非法律允许或要求，否则，仅在参与者签署的知情同意书允许（或单独授权使用和披露个人健康信息）的情况下，可能会向第三方披露。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1266",
+      "structure_unit_id": "su-aa27ffd7bf806a0f3b0811d5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "信息妥善保管、仅研究者或授权人员可查看、数字字母编号、监查/稽查/EC/IRB审核可审查个人医疗记录": "pending_codex",
+        "编码化、受限访问与监查稽查访问治理不得误成单例资格": "pending_codex"
+      },
+      "frozen_excerpt": "研究期间向参与者收集的信息，将会得到妥善保管，只有研究者或授权的人员可以查看。参与者所有信息都会用数字、字母进行编号，而不使用参与者的姓名。只有研究者知道参与者对应的编号。在不违反保密原则和相关法规的情况下，研究者、申办者的相关人员（或代表）及法规机构和EC可能在研究相关的监查、稽查、EC/IRB审核过程中审查参与者的个人医疗记录。研究中心将会在法律允许范围内，全力保护参与者的隐私和健康信息。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1267",
+      "structure_unit_id": "su-bb5777464f547f53003bfb0b"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "医疗信息可能向私人医生或其他治疗相关医疗人员提供": "pending_codex",
+        "探究性生物标志物样本数据通常不向研究者或参与者返还（除非法律要求）": "pending_codex",
+        "私人医生披露与探索性结果不返还治理不得误成筛选/基线必做或入排不通过": "pending_codex"
+      },
+      "frozen_excerpt": "医疗信息可能向参与者的私人医生或负责参与者卫生福利或治疗目的的其他医疗人员提供。鉴于样品分析的复杂性和探究性，除非法律要求，否则通常不会向研究者或参与者提供来源于探究性生物标志物样本的数据。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1268",
+      "structure_unit_id": "su-8f8e58d743d910b3c9416e4a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "监管检查边界是研究治理，不得误成单例资格": "pending_codex",
+        "研究生成数据必须接受国家/地方卫生监管机构代表、申办者监查员、研究中心代表、合作者和IRB/EC（如适用）检查": "pending_codex"
+      },
+      "frozen_excerpt": "本研究生成的数据必须接受国家和地方卫生监管机构的代表、申办者监查员、各研究中心的代表、合作者和IRB/EC（如适用）的检查。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1269",
+      "structure_unit_id": "su-46c7eeba6f88142fd1d0c64b"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cu-20260830",
+  "worker": "codex-parent"
+}

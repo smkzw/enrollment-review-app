@@ -1,0 +1,1 @@
+I’ll re-inspect the current slice 1 files, run the protocol tests, and then say which former blockers are closed versus still blocking acceptance.I'll run the protocol tests and a few in-memory probes for the remaining unique-hit, cell-container, and blob-path gaps.

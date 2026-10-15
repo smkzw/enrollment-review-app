@@ -1,0 +1,21 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_height_weight.v3.json",
+  "group_id": "d001-ii-height-weight-v4",
+  "task_id": "phase5-slice60zg-20260828",
+  "artifact_dir_name": "phase5-slice60zg-d001-height-weight-replay-batch-action-closure-20260828",
+  "runner": {
+    "max_transport_retries": 1,
+    "max_schema_repairs": 5,
+    "timeout_seconds": 7200.0
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60zg-height-weight",
+    "catalog_id": "catalog:slice60zg-height-weight"
+  },
+  "notes": [
+    "v3真实失败结果保留为不可变诊断证据；逐个返回首个动作缺口导致修订预算耗尽。",
+    "v4在同一批次一次汇总全部被丢弃动作，使修订器能同时建立完整的身高和体重方法补充候选。",
+    "该组最多允许5次同会话结构修订，以处理多来源候选、受影响节点和DNF来源闭包，不触发新会话或模型替换。"
+  ]
+}

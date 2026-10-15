@@ -1,0 +1,9 @@
+# 同会话独立续审：正式表达的批次控制
+
+只读工程复核。不得编辑文件、调用任何临床模型、启动/停止服务、读取工作区外原始临床资料。不要递归派发。沿用同会话复核角色，不作临床签署。
+
+请检查当前 app/agents/protocol_deconstructor.py 的 protocol_output_response_format、_compact_transport_history、_configure_transport_output_scope 及其两个调用点；app/agents/protocol_semantic_transport.py 的 supports_bounded_batch_context、compact_session_history、configure_output_scope；tests/v2/protocols/test_deepseek_protocol_transport_slice3.py；scripts/qwen_protocol_measurement.py。
+
+本轮正式表达真实试验已终态失败：artifacts/qwen-three-platform-20260909-v3/diagnostic-formal-omlx-medium-protocol-d001/execute/execute_record.json（只读除code_sha256的大字段），原因第7批返回编号不齐。新修订将本地批次压缩及范围设置能力与compact表示方式分离；正式Schema限制本批数量和编号枚举，未要求通用语义组件数量上限，编号顺序与唯一仍由原校验处理。检查是否保留下一批所需冻结来源和系统提示，局部修复是否错误清除同批上下文，以及远端默认是否不变。1418协议回归通过不是正确性证明，请独立读代码挑战。
+
+指出任何阻塞问题、相邻调用遗漏、最小回归建议；若没有问题明确说明残余风险，不要扩展成整项目重构。不读取正在运行的新试验目录，不发运行指令。报告用中文，最多1200字，问题优先并列行号。

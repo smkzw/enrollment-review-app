@@ -1,0 +1,260 @@
+[
+  {
+    "excerpt": "既往和现病史^4 | X | （X） | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r7",
+    "source_span_ids": [
+      "body.t5.r7.c0.p0",
+      "body.t5.r7.c1.p0",
+      "body.t5.r7.c2.p0",
+      "body.t5.r7.c3.p0"
+    ],
+    "structure_unit_id": "su-7d1d5177473a5713cf91f2f6",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "治疗史^5 | X | （X） | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r8",
+    "source_span_ids": [
+      "body.t5.r8.c0.p0",
+      "body.t5.r8.c1.p0",
+      "body.t5.r8.c2.p0",
+      "body.t5.r8.c3.p0"
+    ],
+    "structure_unit_id": "su-09d2f9df96dada35734f5fdb",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "如果筛选访视和D1访视间隔≤7天，则筛选和基线访视可合并进行，两次访视中相同的评估事项可只进行一次。如果筛选访视和D1访视间隔＞7天，则需在D1天前7天内进行基线访视。以给药前最近一次评估结果作为基线值。生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p316",
+    "source_span_ids": [
+      "body.p316"
+    ],
+    "structure_unit_id": "su-97caf64d089af9677d378f82",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "既往和现病史收集：包括既往病史/伴随疾病、过敏史、个人史（吸烟史、饮酒史、药物滥用史）、家族史、月经史（女性）、生育史（女性）等。病史应包括尽可能过去2年内研究者认为具有临床意义的个人病史信息。银屑病病史应记录详细信息，包括诊断时间、相关疾病特征、病程等。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p318",
+    "source_span_ids": [
+      "body.p318"
+    ],
+    "structure_unit_id": "su-d1c5487718e8374f918c883e",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "治疗史收集：包括药物治疗史、非药物治疗史及手术史等，尽可能收集银屑病相关的治疗史，其他疾病过去半年内的治疗史。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p319",
+    "source_span_ids": [
+      "body.p319"
+    ],
+    "structure_unit_id": "su-32cec98e1be3b1cdef20564f",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "合并治疗：定义为自签署ICF开始至研究结束，在此期间使用的治疗药物或治疗方法。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p339",
+    "source_span_ids": [
+      "body.p339"
+    ],
+    "structure_unit_id": "su-0337a7d41fbcdbecc5596feb",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "筛选时，由研究者评估患有斑块状银屑病，病史≥6个月，且处于稳定期；",
+    "heading_path": [
+      "研究人群",
+      "入选标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-e19e628051039b5cf8bb4f8e",
+    "package_ordinal": 51,
+    "role": "attached",
+    "source_ref": "body.p632",
+    "source_span_ids": [
+      "body.p632"
+    ],
+    "structure_unit_id": "su-a0c6e82bce23ee2d1c7d3875",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "在筛选和/或基线收集既往和现病史：包括既往病史/伴随疾病、过敏史、个人史（吸烟史、饮酒史、药物滥用史）、家族史、月经史（女性）、生育史（女性）等。病史应包括尽可能过去2年内研究者认为具有临床意义的个人病史信息。银屑病病史应记录详细信息，包括诊断时间、相关疾病特征、病程等。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "既往和现病史、治疗史"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "owned",
+    "source_ref": "body.p772",
+    "source_span_ids": [
+      "body.p772"
+    ],
+    "structure_unit_id": "su-e9207406320fe412783f44ff",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "在筛选和/或基线收集治疗史：包括药物治疗史、非药物治疗史及手术史等，尽可能收集银屑病相关的治疗史，其他疾病过去半年内的治疗史。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "既往和现病史、治疗史"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "owned",
+    "source_ref": "body.p773",
+    "source_span_ids": [
+      "body.p773"
+    ],
+    "structure_unit_id": "su-bc320d1f0c3b2c2bc39a033e",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "基线访视（D≤-7）",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "筛选期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p857",
+    "source_span_ids": [
+      "body.p857"
+    ],
+    "structure_unit_id": "su-35653a17c02366c19f46bc9c",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "问询筛选访视以来的病史及诊治情况",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "筛选期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "owned",
+    "source_ref": "body.p858",
+    "source_span_ids": [
+      "body.p858"
+    ],
+    "structure_unit_id": "su-bb5f5e52c7d8c4e1dc787b60",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "W0（D1）访视",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "治疗期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p870",
+    "source_span_ids": [
+      "body.p870"
+    ],
+    "structure_unit_id": "su-b939ad4febb4f55c0d5dea7c",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "问询上次访视以来的病史及诊治情况",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "治疗期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "owned",
+    "source_ref": "body.p871",
+    "source_span_ids": [
+      "body.p871"
+    ],
+    "structure_unit_id": "su-c25320780e6450cc4b4b239e",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "在签署知情同意书后到首次服用试验用药品之前，发生的临床不良医学事件作为病史/伴随疾病记录在原始病历中，不作为AE记录。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的收集和记录",
+      "不良事件的收集"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1023",
+    "source_span_ids": [
+      "body.p1023"
+    ],
+    "structure_unit_id": "su-a4ee984ed31aa5fe26aa9401",
+    "unit_kind": "paragraph"
+  }
+]

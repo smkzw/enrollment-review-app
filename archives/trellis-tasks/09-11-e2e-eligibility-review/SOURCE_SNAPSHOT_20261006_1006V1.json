@@ -1,0 +1,103 @@
+{
+  "schema_version": "source-snapshot/1006v1/v1",
+  "worktree": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile",
+  "commit": "cc4048348f12afde4d3221415e884c7966e5bf4c",
+  "base_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
+  "source_files": [
+    {
+      "path": "app/agents/protocol_control_source_interpretation.py",
+      "sha256": "edeaa20a966f00971910b64c1f7a30d3a9c8e846b91022bcf101d291f6af524b",
+      "bytes": 129030
+    },
+    {
+      "path": "tests/v2/protocols/test_slice58c_control_deconstructor.py",
+      "sha256": "c5d688a12c8dab81c7dfad70a3ad26a63db36d87f684221b503e4c47a4226bcf",
+      "bytes": 545011
+    },
+    {
+      "path": "frontend/src/components/profile/ProfileItemCard.tsx",
+      "sha256": "d71d4c799f46c842bcc881016a9f51048a37da792f7683faafc96bff7f9cc7dd",
+      "bytes": 8190
+    },
+    {
+      "path": "frontend/src/components/profile/ProfileItemCard.test.tsx",
+      "sha256": "a0cdb8d6690e6c5602d0295ba690799e5bf825430e6a9c4e2828ee9fd8e13d68",
+      "bytes": 7352
+    }
+  ],
+  "dependency_files": [
+    {
+      "path": "pyproject.toml",
+      "sha256": "88fcc26870b8e678619662463fb11a11bcbb51f2ada10925e21b7f7ab7c14b96",
+      "bytes": 646
+    },
+    {
+      "path": "frontend/package.json",
+      "sha256": "50d96a31e62e333de77f8259517174dce2de6d6e01cf265a92d90e5f78414975",
+      "bytes": 1188
+    },
+    {
+      "path": "frontend/package-lock.json",
+      "sha256": "1f21ed58e7535dad4c103edcae4b55b5046c40a929d96d4182dc97355a835ed4",
+      "bytes": 90656
+    }
+  ],
+  "clinical_files_included": false,
+  "frontend_layout_commit": "0e9b9bb99643ad074b2033d408ed8b7fc3dd1936",
+  "frontend_layout_files": [
+    {"path": "frontend/src/pages/SubjectsPage.tsx", "sha256": "9b13d4737b03ad43037d7dfd531225354127fdf127c54d2c654bf96cf9d28110", "bytes": 33898},
+    {"path": "frontend/src/pages/SubjectsPage.test.tsx", "sha256": "9cdccfa107fb51134f0ccf2fe3b4df0c6672beea0c0b39249e190c0808647a00", "bytes": 20538},
+    {"path": "frontend/src/styles/profile.css", "sha256": "9b49cf2712de163f3ea3ccb631d7fa39cdcfdf8a3384315c819a51ec8030fc1b", "bytes": 36967}
+  ],
+  "clinical_display_commit": "0c6f40291e95eae6fce17467d02f75b4d14890ca",
+  "clinical_display_files": [
+    {"path": "frontend/src/features/patient-profile/model/patientProfileModel.ts", "sha256": "a9cdf99ab438a79348eaa14086b43aca6a2ce3d8df9f57b0844ac7d445f2b16a", "bytes": 8569},
+    {"path": "frontend/src/features/patient-profile/model/index.ts", "sha256": "f59a4f273b716562c1ec9548a6361bf3864e3220da35939ed6af6a19e13556b2", "bytes": 345},
+    {"path": "frontend/src/components/profile/ProfileLaneList.tsx", "sha256": "7ceadc6c3e5162588ef4df51d842f7494c2c931f922d6332502b363e2529024e", "bytes": 2043},
+    {"path": "frontend/src/components/profile/ProfileLaneList.test.tsx", "sha256": "190b037b99d955729f63e2de7966b646acf3b494fb66375290f2804c0a2e7a5e", "bytes": 5115},
+    {"path": "frontend/src/styles/profile.css", "sha256": "065bbe4650be72b6471198fd2bed4ddd9f1bc0f9a6646f87e2ee9d18addd78ca", "bytes": 37131}
+  ],
+  "clinical_annotation_commit": "09e00e63f528fe1db6cd8139f0c716c82c9926ad",
+  "clinical_annotation_files": [
+    {"path": "frontend/src/features/patient-profile/model/patientProfileModel.ts", "sha256": "0b832799b60c1c622151c4d4c8e8229cf3dabd89c2711972df4a2825c0f22ab5", "bytes": 8996},
+    {"path": "frontend/src/components/profile/ProfileLaneList.test.tsx", "sha256": "7986dfab176b7ef306e1d76dec62878e13014f2e9a69adf586b8c103c62362c4", "bytes": 5977}
+  ],
+  "candidate_field_repair_commit": "7a6132043813e65e93f125e9d0596dc5d006798c",
+  "candidate_field_repair_files": [
+    {"path": "app/agents/protocol_control_deconstructor.py", "sha256": "a6c6a4eae9d95475f80ef7679e968ce53c62ed3858b10c320f0d8a7a357c7c0b", "bytes": 564888},
+    {"path": "app/agents/protocol_control_agent_transport.py", "sha256": "a5838dcd7b451e66dc867df5c3ba4196c3572cec69ec0b88bbd716886dbe89a8", "bytes": 87450},
+    {"path": "tests/v2/protocols/test_slice58c_control_deconstructor.py", "sha256": "101d2ffbd4cfc2672c76b435e1ccba4bcf428b531abd650b3ac18633fba7330b", "bytes": 550355},
+    {"path": "tests/v2/protocols/test_protocol_control_agent_transport.py", "sha256": "4c4bf4f175c442329291b41582946addd862b4b6428ec24280d858a890c4143e", "bytes": 79251}
+  ],
+  "terminal_clause_commit": "3472fa2859277fd18fe98d39c5da34434b19a92d",
+  "terminal_clause_files": [
+    {"path": "app/agents/protocol_control_source_interpretation.py", "sha256": "2e945c3507424becaefb8715694d478a90e4c00c9796da15cba447c00c74198a", "bytes": 129215},
+    {"path": "tests/v2/protocols/test_slice58c_control_deconstructor.py", "sha256": "4c1d1edaada698c1e154a221577f5c2dd502a82d374f455e67ff003b924432f2", "bytes": 553243}
+  ],
+  "source_purpose_commit": "4c7ee2d15f5d1069654a65dc023e2c78773eaf9b",
+  "source_purpose_reviewed_commit": "c067ed220e85cc5fd1f50788fde8faf9f01c9f06",
+  "source_purpose_files": [
+    {"path": "app/agents/protocol_control_source_function.py", "sha256": "0c89eb5e1ac7c8061b8047c8e69724d09d12f5526545d69791ba59f5666e9df1", "bytes": 8346},
+    {"path": "app/agents/protocol_control_deconstructor.py", "sha256": "7df45ad6b08a0a94901ae801f6bb2b7a5f9b679d8b2a4f597219729337497716", "bytes": 573042},
+    {"path": "tests/v2/protocols/test_slice58c_control_deconstructor.py", "sha256": "982c4751ec3615f8f25058847e65edf1f5523b71698b87862705ec2b65762c2b", "bytes": 560009}
+  ],
+  "stage_header_commit": "6eadd2f2ff3bf3503e617f9f635aa607c8fa9bb6",
+  "stage_header_files": [
+    {"path": "app/agents/protocol_control_source_interpretation.py", "sha256": "5503bfc3fb84fefb8365c5d7c0c032f031ad06fb8b1f5ddb2a7576d3fde682c3", "bytes": 130128},
+    {"path": "app/domain/contracts/protocol_controls.py", "sha256": "41f8cb08d91eaa4cc8d7c34921b84b03080533341e0e7c0cdde631d94ee64088", "bytes": 178980},
+    {"path": "app/protocols/protocol_control_gate.py", "sha256": "cd4dd6a0fa67b48e9e23b08ed6fabda70059ace3f8a8f4c8e551cf95a80ceffb", "bytes": 235537},
+    {"path": "app/protocols/protocol_control_planning.py", "sha256": "28dc516871f29c36a20b544ed6cf0f7f66cbd62b78d1b6d2d17dba1d192d8523", "bytes": 54258},
+    {"path": "app/services/protocol_control_execution.py", "sha256": "b0a390b31d41428c075f1bbd72c7502d6cd542e29dfcdfc905ac46e4cb67fbcc", "bytes": 212076},
+    {"path": "tests/v2/protocols/test_slice58b_control_planning.py", "sha256": "afcc6f3de81fbdac9aaa82481543390b0f9ce1810946ce9cc2a026f29ffe15ae", "bytes": 45988}
+  ],
+  "notes": [
+    "S-08 stage-header context matches final923connected checks;initial11failures were fixture enum misuse. Actual read-only audit used base1c1780 plus these exact patched files:two stages,four anchors each,no full period definition in headers,zero calls/writes. Adviser reviewed base before implementation;no Job/adoption/report acceptance.",
+    "Backend two-module checks match this commit; frontend four-module checks match these two exact frontend files.",
+    "Real P1 trial ran the base backend before this identity-feedback patch; do not claim new live acceptance.",
+    "P2 recovery and UI correction used base backend and the same frontend display patch; not a complete clinical review chain.",
+    "Layout file hashes bind frontend_layout_commit,not the later clinical_display_commit. Current v2 P1 used S-02 backend,failed before target review. Clinical display tests bind the exact five files above;CSS sticky top was verified by final build/render.",
+    "S-05 final five-module822 checks and v3/v4 real runs use candidate_field_repair_commit. V3 reached source target review but did not trigger the new relationship-only branch; its absence of the former stage failure does not establish causal clinical improvement.",
+    "S-06 terminal-clause fix matches final three-module845 checks,zero-call saved-response revalidation and v5 runtime. Verbatim raw response and clinical content remain unchanged; no source/adoption policy or request material changed.",
+    "S-07 source-purpose v3 matches final four-module1103 checks. Conference frozen diff and two-call read-only product diagnostic used c067; heading-only guard added afterward by owner. No new joint publication or legal Job continuation claimed."
+  ]
+}

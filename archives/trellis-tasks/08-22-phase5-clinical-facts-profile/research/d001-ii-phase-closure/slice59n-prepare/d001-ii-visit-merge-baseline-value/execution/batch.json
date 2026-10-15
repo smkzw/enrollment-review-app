@@ -1,0 +1,167 @@
+{
+  "batch_id": "pcb-c8627c83e22739d703c7e2b7",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [],
+  "context_structure_unit_ids": [],
+  "context_units": [],
+  "coverage_manifest_id": "manifest:slice60f-visit-merge-baseline-value",
+  "known_official_targets": [
+    {
+      "catalog_item_id": "pcm-row-60a9e564dea57508635a69e8",
+      "label": "银屑病严重程度评分与体表面积",
+      "official_code": "IN-04",
+      "position": 3,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "筛选和基线时研究者评估斑块状银屑病病情满足以下要求：",
+        "受累的体表面积（BSA）≥10%；",
+        "银屑病面积与严重程度指数（PASI）评分≥12分；",
+        "医生整体评价（PGA）评分≥3分；"
+      ],
+      "source_span_ids": [
+        "span-338d599c9415eacfef3a9e6318d446f1",
+        "span-a0fba80e691dc5da40936864a532ef71",
+        "span-b84426277f77479652ce573f743c5828",
+        "span-f523b13921987a5b1a3987b620467a37"
+      ]
+    }
+  ],
+  "known_procedure_targets": [
+    {
+      "catalog_item_id": "pcm-row-aee90bcadab30a320c395d48",
+      "label": "生命体征",
+      "position": 41,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "生命体征：筛选期"
+      ],
+      "source_span_ids": [
+        "span-dd40d4e40eb22061ead724a214e74b30"
+      ],
+      "visit_instance": "D1给药前"
+    },
+    {
+      "catalog_item_id": "pcm-row-74c39766cfd3f147b7338c85",
+      "label": "PASI评分",
+      "position": 53,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "评估PASI、PGA、BSA"
+      ],
+      "source_span_ids": [
+        "span-cd10ed928b55a21cdd5ce0f818012766"
+      ],
+      "visit_instance": "D1给药前"
+    },
+    {
+      "catalog_item_id": "pcm-row-13886b8199b8390b329abf16",
+      "label": "PGA评分",
+      "position": 54,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "评估PASI、PGA、BSA"
+      ],
+      "source_span_ids": [
+        "span-c219c15359e452665569c8bfd390d978"
+      ],
+      "visit_instance": "D1给药前"
+    },
+    {
+      "catalog_item_id": "pcm-row-c600456b551eecbf3dd87644",
+      "label": "BSA评分",
+      "position": 55,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "BSA评分在0%-100%之间，分数越大表示皮损面积越大。"
+      ],
+      "source_span_ids": [
+        "span-1c450213bfcd733a979e0b1a594f4b0f"
+      ],
+      "visit_instance": "D1给药前"
+    },
+    {
+      "catalog_item_id": "pcm-row-f706d9b42eab4823b232df04",
+      "label": "入排标准审核",
+      "position": 56,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。"
+      ],
+      "source_span_ids": [
+        "span-95152191c44012a3e06ff88e1605acc5"
+      ],
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_source_span_ids": [
+    "body.p316"
+  ],
+  "owned_structure_unit_ids": [
+    "su-97caf64d089af9677d378f82"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "如果筛选访视和D1访视间隔≤7天，则筛选和基线访视可合并进行，两次访视中相同的评估事项可只进行一次。如果筛选访视和D1访视间隔＞7天，则需在D1天前7天内进行基线访视。以给药前最近一次评估结果作为基线值。生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p316"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13070,
+      "source_ref": "body.p316",
+      "source_span_ids": [
+        "body.p316"
+      ],
+      "structure_unit_id": "su-97caf64d089af9677d378f82",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "study_phase": "phase_ii"
+}

@@ -1,0 +1,13 @@
+# 有界差异复核：真实激活而非scope猜测
+
+沿批准会话继续只读。前轮“scope不达”建议不采用：真实来源scope_quote为空，且文字缺少scope不证明不适用。原作者的一次尝试标记仍保留，不重读/重置。
+
+实际未提交最小差异：candidate_alignment新增_independent_source_obligation_groups；同单元其他无未决陈述须逐个原子接地且不属于当前陈述。所有组须显式绑定已存在trigger，无例外；不同组绑定不能相同。另一组的每条路径，在当前逐字条件前缀成立时，必须由完全相同的条件原子包含关系证明本条组也会激活。只有严格逐字逗号前缀可加入条件，无语义推断或连接词改写。无scope无需猜，非条件无额外条件补入。默认/无绑定替代路仍旧拒绝；来源相同替代路仍按原合取完整检查。
+
+_conditioned_obligations_cover_source沿同一显式激活：所有绑定分支须带本条已选原文条件，每个带本条条件的分支必须蕴含一个绑定分支；部分分支映射不能丢失条件。哈希对多分支候选纳入同单元陈述+新validator版本，保存/复用不签旧proof。
+
+请完整读上述两函数、validate里的relevant_groups及numeric循环、_alignment_input_identity；实际compose_control_layers（app/domain/control_layer_evaluation.py）的激活算法与ControlObligationGroup合同。测试新增scoped_source_sibling、source_scoped_sibling、原distributed_source_condition与split_conjunction反例均集中核验，最新124pass/1738deselected/2.44秒；你不代跑。首窗120pass1fail为测试把去掉另一组冗余前提误当本条必须拒，已改为本条前提被改的危险反例，并收紧source_conditions只认逐字前缀。
+
+重点挑战：是否仍可被无条件替代、伪造前提、共享整段引句、坏兄弟或损坏保存proof绕过？实际消费者是逐组激活，不把义务组自由OR；不能仅读合同名推定。未变化数字、语气、时间与例外门，不会用本次修改放行允许/无需或未支持次数；若尚失败仍准确拒绝。
+
+最多9次定向只读，不读临床/私库/环境，不运行模型/测试/服务，不修改。输出确定必修及最小反例；其余标建议/未验。不要新建任务或要求更多框架，报告不是医学批准。

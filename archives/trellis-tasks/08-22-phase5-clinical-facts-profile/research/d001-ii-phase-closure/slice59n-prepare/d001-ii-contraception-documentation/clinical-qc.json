@@ -1,0 +1,79 @@
+{
+  "attached_source_refs": [
+    "body.p638"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-contraception-documentation",
+  "notes": [
+    "原始DOCX产品链直接提取，用户无需预处理方案文本。",
+    "计划访视的量词作用域必须映射到冻结目录中的每个访视节点，并在各节点分别判定，不得压缩为单一筛选节点。",
+    "每个决定阶段必须具备同阶段到期的最低证据；不得删除节点来绕过证据闭包。",
+    "父级临床验收继续核对body.p1325、body.p1326、IN-06去重、完整时间区间及筛选和基线节点，不以技术门绿色替代临床接受。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1325",
+    "body.p1326"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "in06_covered_obligation_not_duplicated": "pending_codex"
+      },
+      "frozen_excerpt": "有生育能力的参与者自签署知情同意书至研究末次给药后至少3个月无怀孕或捐精计划，必须遵守避孕的相关规定，采取高效或可接受的避孕方法避孕（见附录1）。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p638",
+      "structure_unit_id": "su-4bf0f0db5940a934141e0ffa"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "hormonal_contraception_prohibition_not_lost": "pending_codex",
+        "icf_to_last_dose_plus_three_months_retained": "pending_codex",
+        "method_selection_discussion_and_understanding_retained": "pending_codex"
+      },
+      "frozen_excerpt": "从签署知情同意书之日开始至研究药物末次给药后3个月为止，期间参与者必须同意持续和正确地使用一种高效或可接受的避孕方法进行避孕（禁止使用激素类避孕）。研究者或指定人员应与参与者讨论，确认参与者已从允许的避孕方法中选择了最适合其避孕的方法（下述），并确认参与者已知晓研究期间需持续并正确地使用该方法。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1325",
+      "structure_unit_id": "su-483ac0fde226a8fa5b9700b6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "participant_agreement_retained": "pending_codex",
+        "planned_visit_counselling_and_medical_record_requirement_retained": "pending_codex",
+        "prebaseline_scope_not_expanded_to_unbound_treatment_visits": "pending_codex",
+        "stop_method_or_suspected_pregnancy_contact_instruction_retained": "pending_codex"
+      },
+      "frozen_excerpt": "在研究流程中计划的访视点，研究者或指定人员将告知参与者需要持续使用高效或可接受的避孕方法，并在参与者病历中记录与之的对话和参与者的同意（参与者需要确认她同意将持续并正确使用至少1种选定的避孕方法）。此外，还应告知参与者，如果她已停用所选的避孕方法，或，已知或怀疑怀孕，需立即打电话给研究者或指定人员。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1326",
+      "structure_unit_id": "su-74ca6939e3bf37b4b4d9f8be"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice60m-20260828",
+  "worker": "worker_02"
+}

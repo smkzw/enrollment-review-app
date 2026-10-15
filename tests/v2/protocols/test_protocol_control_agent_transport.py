@@ -1,0 +1,2117 @@
+"""Regressions for the independent protocol-control Agent MTPLX transport.
+
+These tests exercise config identity, strict control Schema selection (never the
+official IN/EX Schema), same-session history restore/continue, length retries,
+and bounded error behavior.  They inject fake clients and never call a live
+model or write clinical artifacts.
+"""
+
+from __future__ import annotations
+
+import json
+from copy import deepcopy
+import os
+import subprocess
+import sys
+from contextlib import contextmanager
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+import httpx
+
+from app.agents import protocol_control_agent_transport as transport_module
+from app.agents import protocol_control_discovery_transport as discovery_module
+from app.agents.protocol_control_agent_transport import (
+    CONTROL_RESPONSE_FORMAT_NAME,
+    MTPLX_PROTOCOL_BATCH_MAX_TOKENS,
+    OMLX_PROTOCOL_BATCH_MAX_TOKENS,
+    OpenAICompatibleProtocolControlAgentTransport,
+    ProtocolControlAgentCallError,
+    ProtocolControlModelIdentityError,
+    protocol_control_transport_from_environment,
+    protocol_control_transport_from_model_config,
+)
+from app.agents.protocol_control_deconstructor import (
+    CONTROL_AGENT_WIRE_VERSION,
+    ProtocolControlAgentRunner,
+    ProtocolControlAgentWire,
+    ProtocolControlAgentWireCandidate,
+    ProtocolControlAgentWireConditionAtom,
+    ProtocolControlAgentWireConditionDnf,
+    ProtocolControlAgentWireConditionGroup,
+    ProtocolControlAgentWireDisposition,
+    ProtocolControlAgentWireEvidence,
+    ProtocolControlAgentWireExceptionDnf,
+    ProtocolControlAgentWireObligationAtom,
+    ProtocolControlAgentWireObligationDnf,
+    ProtocolControlAgentWireObligationGroup,
+    protocol_control_agent_response_format,
+    protocol_control_batch_response_format,
+)
+from app.agents.protocol_control_discovery_transport import (
+    protocol_control_discovery_transport_from_model_config,
+)
+from app.agents.protocol_deconstructor import protocol_output_response_format
+from app.domain.contracts.enums import PhaseScope, ReviewStage, StudyPhase
+from app.domain.contracts.protocol_controls import (
+    ControlObligationKind,
+    KnownOfficialRuleTarget,
+    KnownWorkflowStageTarget,
+    ProtocolControlDispositionBatch,
+    ProtocolStructureUnit,
+    ReviewNodeRole,
+    StructureUnitDispositionKind,
+)
+
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.fixture(autouse=True)
+def _fake_client_tests_do_not_require_a_running_mtplx(monkeypatch):
+    @contextmanager
+    def fake_model_session(*_args, **_kwargs):
+        yield None
+
+    monkeypatch.setattr(
+        "app.llm.mtplx_model_lifecycle.sync_mtplx_model_session", fake_model_session
+    )
+
+
+class _FakeOpenAI:
+    calls: list[dict[str, object]] = []
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        timeout: float,
+        max_retries: int,
+        http_client: object | None = None,
+    ):
+        self.calls.append(
+            {
+                "base_url": base_url,
+                "api_key": api_key,
+                "timeout": timeout,
+                "max_retries": max_retries,
+                "http_client": http_client,
+            }
+        )
+        # Real OpenAI-compatible clients answer /v1/models; the identity gate
+        # needs this capability when the transport builds its own client.
+        self.models = SimpleNamespace(
+            list=lambda: SimpleNamespace(data=[SimpleNamespace(id=None)])
+        )
+
+
+class _FakeHTTPClient:
+    calls: list[dict[str, object]] = []
+
+    def __init__(self, **kwargs):
+        self.calls.append(kwargs)
+
+
+class FakeCompletions:
+    def __init__(self, outputs):
+        self.outputs = iter(outputs)
+        self.calls: list[dict[str, object]] = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        output = next(self.outputs)
+        if isinstance(output, tuple):
+            content, finish_reason = output
+        else:
+            content, finish_reason = output, "stop"
+        if kwargs.get("stream"):
+            return iter([
+                SimpleNamespace(choices=[SimpleNamespace(
+                    finish_reason=finish_reason,
+                    delta=SimpleNamespace(content=content),
+                )])
+            ])
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    finish_reason=finish_reason,
+                    message=SimpleNamespace(content=content),
+                )
+            ]
+        )
+
+
+def _client(outputs):
+    completions = FakeCompletions(outputs)
+    return SimpleNamespace(chat=SimpleNamespace(completions=completions)), completions
+
+
+def test_all_control_readers_share_physical_request_budget():
+    from app.llm.logical_call_budget import LogicalCallBudget
+
+    client, completions = _client(['{}', '{}', '{}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        reasoning_effort="high", max_tokens=16384,
+    )
+    budget = LogicalCallBudget("isolated-source-task", max_requests=2, max_output_tokens=32768)
+    transport.bind_logical_call_budget(budget)
+    transport.start_source_target_review(prompt="冻结来源核对")
+    transport.read_stage_bound_requirement(prompt="同一任务的单项解释")
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.read_stage_bound_requirement(prompt="不得重置额度继续发送")
+    assert len(completions.calls) == 2
+    assert budget.snapshot()["requests_used"] == 2
+    receipts = transport.take_call_receipts()
+    assert receipts[0]["logical_call_budget"]["requests_used"] == 1
+    assert receipts[1]["logical_call_budget"]["requests_used"] == 2
+    assert receipts[1]["budget_request_sha256"] == budget.snapshot()["requests"][1]["request_sha256"]
+    assert receipts[-1]["budget_request_sha256"] is None
+    assert receipts[-1]["request_reserved"] is False
+
+
+def test_stream_option_downgrade_consumes_same_physical_budget():
+    from app.llm.logical_call_budget import LogicalCallBudget, LogicalCallBudgetExhausted
+
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        from openai import BadRequestError
+        raise BadRequestError("unsupported stream_options",
+                              response=httpx.Response(400, request=httpx.Request("POST", "https://example.invalid")),
+                              body=None)
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    budget = LogicalCallBudget("compatibility", max_requests=1, max_output_tokens=16384)
+
+    def reserve(kwargs):
+        budget.reserve(request_sha256="a" * 64, max_tokens=kwargs["max_tokens"])
+
+    with pytest.raises(LogicalCallBudgetExhausted):
+        OpenAICompatibleProtocolControlAgentTransport._stream_completion(
+            client, {"model": "test-model", "messages": [], "max_tokens": 16384},
+            reserve_request=reserve,
+        )
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("kind", ["timeout", "server", "interrupted", "identity", "budget"])
+def test_stream_option_text_is_not_permission_to_replay_failure(kind):
+    from app.llm.logical_call_budget import LogicalCallBudgetExhausted
+
+    cause = {
+        "timeout": TimeoutError("timeout mentioning stream_options"),
+        "server": SimpleNamespace(),
+        "interrupted": ProtocolControlAgentCallError("call", "stream_options failed", uncertain_completion=True),
+        "identity": ProtocolControlModelIdentityError("stream_options wrong identity",
+                                                     configured_model="expected", reason="mismatch"),
+        "budget": LogicalCallBudgetExhausted("stream_options exhausted"),
+    }[kind]
+    if kind == "server":
+        cause = RuntimeError("503 stream_options error")
+        cause.status_code = 503
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        raise cause
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    with pytest.raises(type(cause)):
+        OpenAICompatibleProtocolControlAgentTransport._stream_completion(client, {"max_tokens": 16384})
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("status, parameter_named, expected_calls", [
+    (400, True, 2), (422, True, 2), (400, False, 1),
+])
+def test_explicit_stream_parameter_rejection_preserves_budgeted_compatible_success(status, parameter_named, expected_calls):
+    from openai import BadRequestError
+    from app.llm.logical_call_budget import LogicalCallBudget
+
+    calls = []
+    budget = LogicalCallBudget("compatibility-success", max_requests=2, max_output_tokens=32768)
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise BadRequestError("unsupported stream_options" if parameter_named else "invalid other parameter",
+                                  response=httpx.Response(status, request=httpx.Request("POST", "https://example.invalid")),
+                                  body=None)
+        return iter([SimpleNamespace(id="reply", model="test-model", usage=None, choices=[
+            SimpleNamespace(delta=SimpleNamespace(content="{}", reasoning_content=None), finish_reason="stop"),
+        ])])
+
+    def reserve(kwargs):
+        budget.reserve(request_sha256=str(len(calls) + 1) * 64, max_tokens=kwargs["max_tokens"])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    if parameter_named:
+        result = OpenAICompatibleProtocolControlAgentTransport._stream_completion(
+            client, {"max_tokens": 16384}, reserve_request=reserve,
+        )
+        assert result.choices[0].message.content == "{}"
+        assert result.choices[0].finish_reason == "stop"
+        assert "stream_options" in calls[0] and "stream_options" not in calls[1]
+    else:
+        with pytest.raises(BadRequestError):
+            OpenAICompatibleProtocolControlAgentTransport._stream_completion(
+                client, {"max_tokens": 16384}, reserve_request=reserve,
+            )
+    assert len(calls) == budget.snapshot()["requests_used"] == expected_calls
+
+
+def test_identity_generation_probe_consumes_shared_budget_and_has_receipt():
+    from app.llm.logical_call_budget import LogicalCallBudget
+
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(model="deepseek-latest-cloud", id="identity-request", usage=None)
+
+    client = SimpleNamespace(
+        models=SimpleNamespace(list=lambda: SimpleNamespace(data=[SimpleNamespace(id="gateway-alias")])),
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+    )
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        model_identity_check=True, max_tokens=16384,
+    )
+    budget = LogicalCallBudget("probe-included", max_requests=1, max_output_tokens=16384)
+    transport.bind_logical_call_budget(budget)
+    assert transport.verify_model_identity() == "deepseek-latest-cloud"
+    assert budget.snapshot()["requests_used"] == 1
+    receipt = transport.take_call_receipts()[0]
+    assert receipt["call_role"] == "identity_probe" and receipt["usage"] is None
+    assert receipt["request_id"] == "identity-request" and receipt["request_reserved"] is True
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.start_source_target_review(prompt="探测不能获得一份额外生成额度")
+    assert len(calls) == 1
+
+
+def test_budget_binding_rejects_sdk_retries_and_can_release_previous_job():
+    from app.llm.logical_call_budget import LogicalCallBudget
+    client, completions = _client(['{}', '{}'])
+    options = dict(client=client, backend="cms-router", model="deepseek-latest-cloud",
+                   reasoning_effort="high", max_tokens=16384)
+    implicit_retry = OpenAICompatibleProtocolControlAgentTransport(**options, max_retries=1)
+    budget = LogicalCallBudget("job-one", max_requests=1, max_output_tokens=16384)
+    with pytest.raises(ValueError, match="SDK"):
+        implicit_retry.bind_logical_call_budget(budget)
+    assert completions.calls == [] and budget.snapshot()["requests_used"] == 0
+    transport = OpenAICompatibleProtocolControlAgentTransport(**options)
+    transport.bind_logical_call_budget(budget)
+    transport.start_source_target_review(prompt="第一个有界任务")
+    transport.bind_logical_call_budget(None)
+    transport.start_source_target_review(prompt="不同任务不继承前一任务额度")
+    assert len(completions.calls) == 2 and budget.snapshot()["requests_used"] == 1
+    receipt = transport.take_call_receipts()[-1]
+    assert "logical_call_budget" not in receipt
+    assert "budget_request_sha256" not in receipt
+
+
+def _config_probe(overrides: dict[str, str] | None = None) -> list[str]:
+    env = os.environ.copy()
+    for key in (
+        "PROTOCOL_CONTROL_BACKEND",
+        "PROTOCOL_CONTROL_MODEL",
+        "PROTOCOL_CONTROL_REASONING_EFFORT",
+        "PROTOCOL_CONTROL_MAX_TOKENS",
+        "DECONSTRUCT_BACKEND",
+        "DECONSTRUCT_MODEL",
+        "DECONSTRUCT_REASONING_EFFORT",
+        "MTPLX_PROTOCOL_BATCH_MAX_TOKENS",
+        "MTPLX_MODEL",
+        "MTPLX_REASONING_EFFORT",
+    ):
+        env.pop(key, None)
+    env.update(overrides or {})
+    script = (
+        "from app.config import ("
+        "PROTOCOL_CONTROL_BACKEND, PROTOCOL_CONTROL_MODEL, "
+        "PROTOCOL_CONTROL_REASONING_EFFORT, PROTOCOL_CONTROL_MAX_TOKENS, "
+        "DECONSTRUCT_BACKEND, DECONSTRUCT_MODEL, DECONSTRUCT_REASONING_EFFORT, "
+        "MTPLX_PROTOCOL_BATCH_MAX_TOKENS); "
+        "print('|'.join(("
+        "PROTOCOL_CONTROL_BACKEND, PROTOCOL_CONTROL_MODEL, "
+        "PROTOCOL_CONTROL_REASONING_EFFORT, str(PROTOCOL_CONTROL_MAX_TOKENS), "
+        "DECONSTRUCT_BACKEND, DECONSTRUCT_MODEL, DECONSTRUCT_REASONING_EFFORT, "
+        "str(MTPLX_PROTOCOL_BATCH_MAX_TOKENS))))"
+    )
+    output = subprocess.check_output(
+        [sys.executable, "-c", script], cwd=ROOT, env=env, text=True
+    )
+    return output.strip().split("|")
+
+
+def _unit(unit_id: str, order: int, span_id: str, excerpt: str) -> ProtocolStructureUnit:
+    return ProtocolStructureUnit(
+        structure_unit_id=unit_id,
+        source_ref=f"generic.body.p{order}",
+        member_source_refs=[f"generic.body.p{order}"],
+        source_span_ids=[span_id],
+        unit_kind="paragraph",
+        heading_path=["其他方案控制"],
+        source_order=order,
+        study_phase=StudyPhase.PHASE_II,
+        phase_scopes=[PhaseScope.SHARED],
+        excerpt=excerpt,
+    )
+
+
+def _batch() -> ProtocolControlDispositionBatch:
+    owned = [
+        _unit("su-01", 1, "span:01", "其他控制：年龄至少18岁"),
+        _unit("su-02", 2, "span:02", "其他控制：筛选时记录末次用药日期"),
+    ]
+    return ProtocolControlDispositionBatch(
+        batch_id="pcb-generic-01",
+        coverage_manifest_id="manifest:generic-01",
+        protocol_version_id="protocol:generic-01",
+        study_phase=StudyPhase.PHASE_II,
+        batch_number=1,
+        batch_total=1,
+        owned_units=owned,
+        context_units=[],
+        owned_structure_unit_ids=["su-01", "su-02"],
+        context_structure_unit_ids=[],
+        owned_source_span_ids=["span:01", "span:02"],
+        context_source_span_ids=[],
+        known_official_targets=[
+            KnownOfficialRuleTarget(
+                catalog_item_id="official-item-1",
+                official_code="EX-01",
+                label="既有官方排除标准",
+                position=0,
+                source_span_ids=["span:official"],
+            )
+        ],
+        known_workflow_stage_targets=[
+            KnownWorkflowStageTarget(
+                workflow_stage_id="stage:screening:one",
+                review_stage=ReviewStage.SCREENING,
+                display_name="筛选期审核一",
+                visit_instance="screening-1",
+            )
+        ],
+    )
+
+
+def _condition(
+    statement: str,
+    span_id: str,
+    excerpt: str,
+) -> ProtocolControlAgentWireConditionAtom:
+    return ProtocolControlAgentWireConditionAtom(
+        statement=statement,
+        evaluation=_evaluation(statement, span_id, excerpt),
+        source_span_ids=[span_id],
+        source_excerpts=[excerpt],
+        time_constraint=None,
+        requires_professional_judgment=False,
+    )
+
+
+def _evaluation(statement: str, span_id: str, excerpt: str) -> dict:
+    return {
+        "determination_mode": "semantic",
+        "proposition": statement,
+        "time_purpose": "not_applicable",
+        "repeat_scheme": None,
+        "observation_policy": {
+            "mode": "unresolved",
+            "scope": "样例未说明采用哪次记录",
+            "source_span_ids": [span_id],
+            "source_excerpts": [excerpt],
+        },
+        "source_span_ids": [span_id],
+        "source_excerpts": [excerpt],
+    }
+
+
+def _candidate() -> ProtocolControlAgentWireCandidate:
+    return ProtocolControlAgentWireCandidate(
+        title="年龄资料控制",
+        repeat_trigger_conditions=[],
+        applicable_population="拟入组受试者",
+        applicability_expression=ProtocolControlAgentWireConditionDnf(
+            groups=[
+                ProtocolControlAgentWireConditionGroup(
+                    atoms=[_condition("年龄条件", "span:01", "年龄至少18岁")]
+                )
+            ]
+        ),
+        trigger_expression=None,
+        obligation_expression=ProtocolControlAgentWireObligationDnf(
+            groups=[
+                ProtocolControlAgentWireObligationGroup(
+                    atoms=[
+                        ProtocolControlAgentWireObligationAtom(
+                            kind=ControlObligationKind.REACH_CONDITION,
+                            statement="年龄达到18岁",
+                            evaluation={
+                                **_evaluation("年龄达到18岁", "span:01", "年龄至少18岁"),
+                                "determination_mode": "deterministic",
+                                "operation": "value_comparison",
+                                "operand_attribute": "value",
+                                "predicate": {
+                                    "predicate_id": "age-threshold",
+                                    "subject": "受试者",
+                                    "attribute": "年龄",
+                                    "comparator": "gte",
+                                    "value": 18,
+                                    "unit": "岁",
+                                    "source_clause": "年龄至少18岁",
+                                },
+                            },
+                            time_constraint=None,
+                            prospective_period=None,
+                            source_span_ids=["span:01"],
+                            source_excerpts=["年龄至少18岁"],
+                            requires_professional_judgment=False,
+                        )
+                    ]
+                )
+            ]
+        ),
+        exception_expression=ProtocolControlAgentWireExceptionDnf(
+            groups=[
+                ProtocolControlAgentWireConditionGroup(
+                    atoms=[_condition("无例外", "span:01", "年龄至少18岁")]
+                )
+            ]
+        ),
+        review_node_bindings=[
+            {
+                "workflow_stage_id": "stage:screening:one",
+                "review_stage": ReviewStage.SCREENING,
+                "role": ReviewNodeRole.DECIDE_AT_NODE,
+                "guidance": None,
+            }
+        ],
+        minimum_evidence=[
+            ProtocolControlAgentWireEvidence(
+                fact_type="demographics",
+                description="核对年龄资料",
+                due_stage=ReviewStage.SCREENING,
+                required_source_types=["原始资料"],
+                workflow_stage_ids=["stage:screening:one"],
+                source_policy={
+                    "requires_contemporaneous_objective_source": None,
+                    "allows_screening_record_transcription": None,
+                    "result_validity_status": "not_specified",
+                    "result_validity_constraint": None,
+                    "source_span_ids": ["span:01"],
+                    "source_excerpts": ["年龄至少18岁"],
+                },
+                atom_refs=[{"layer": "obligation", "group_index": 0, "atom_index": 0}],
+            )
+        ],
+        source_structure_unit_ids=["su-01"],
+        source_span_ids=["span:01"],
+        cross_source_relations=[],
+    )
+
+
+def _valid_wire_text() -> str:
+    wire = ProtocolControlAgentWire(
+        wire_version=CONTROL_AGENT_WIRE_VERSION,
+        dispositions=[
+            ProtocolControlAgentWireDisposition(
+                structure_unit_id="su-01",
+                disposition=StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+                linked_official_code=None,
+                linked_procedure_catalog_item_id=None,
+                linked_procedure_catalog_item_ids=[],
+                notes=None,
+            ),
+            ProtocolControlAgentWireDisposition(
+                structure_unit_id="su-02",
+                disposition=StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+                linked_official_code=None,
+                linked_procedure_catalog_item_id=None,
+                linked_procedure_catalog_item_ids=[],
+                notes="仅作补充语境，不形成控制候选",
+            ),
+        ],
+        candidate_drafts=[_candidate()],
+    )
+    return wire.model_dump_json()
+
+
+@pytest.mark.parametrize("bad_field", [None, "disposition", "candidate_unit", "atom_span"])
+def test_batch_author_schema_rejects_context_write_but_keeps_normal_result(bad_field) -> None:
+    from jsonschema import ValidationError as SchemaError, validate
+
+    batch = _batch()
+    context = _unit("su-context", 3, "span:context", "另一段仅供阅读的参照文字")
+    batch = batch.model_copy(update={
+        "context_units": [context], "context_structure_unit_ids": [context.structure_unit_id],
+        "context_source_span_ids": context.source_span_ids,
+    })
+    global_schema = protocol_control_agent_response_format()
+    frozen_global = deepcopy(global_schema)
+    scoped = protocol_control_batch_response_format(batch)["json_schema"]["schema"]
+    wire = json.loads(_valid_wire_text())
+    # Domain serialization omits absent ordering; the provider's strict schema
+    # requires explicit null, independently of the new batch scope constraints.
+    def explicit_ordering(value):
+        if isinstance(value, dict):
+            if {"workflow_stage_id", "review_stage", "role", "guidance"}.issubset(value):
+                value.setdefault("scope_citation", None)
+            policy = value.get("observation_policy")
+            if isinstance(policy, dict):
+                policy.setdefault("selection", None)
+            if {"determination_mode", "time_purpose", "source_excerpts"}.issubset(value):
+                value.setdefault("record_semantics", None)
+            predicate = value.get("predicate")
+            if isinstance(predicate, dict):
+                for field in ("semantic_proposition", "observation_policy", "repeat_scheme", "source_computation", "record_semantics"):
+                    predicate.setdefault(field, None)
+            refs = value.get("atom_refs")
+            if isinstance(refs, list):
+                for ref in refs:
+                    ref.setdefault("condition_id", None)
+            for child in value.values():
+                explicit_ordering(child)
+        elif isinstance(value, list):
+            for child in value:
+                explicit_ordering(child)
+    explicit_ordering(wire)
+    validate(wire, global_schema["json_schema"]["schema"])
+    if bad_field == "disposition":
+        wire["dispositions"][0]["structure_unit_id"] = "su-context"
+    elif bad_field == "candidate_unit":
+        wire["candidate_drafts"][0]["source_structure_unit_ids"] = ["su-context"]
+    elif bad_field == "atom_span":
+        wire["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["source_span_ids"] = ["span:context"]
+    if bad_field is None:
+        validate(wire, scoped)
+    else:
+        with pytest.raises(SchemaError):
+            validate(wire, scoped)
+    assert protocol_control_agent_response_format() == frozen_global
+
+
+def test_batch_schema_survives_full_repair_and_separate_sessions() -> None:
+    client, calls = _client([_valid_wire_text(), _valid_wire_text(), _valid_wire_text()])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="ollama-cloud", model="deepseek-v4.1-flash",
+        api_key="test-only", response_format_mode="json_schema", model_identity_check=False,
+    )
+    batch = _batch()
+    first = transport.start_batch(prompt="冻结批次读取", batch=batch)
+    transport.continue_session(session_id=first.session_id, prompt="只修本批")
+    transport.start(prompt="普通独立读取")
+    scoped = protocol_control_batch_response_format(batch)
+    assert calls.calls[0]["response_format"] == scoped
+    assert calls.calls[1]["response_format"] == scoped
+    assert calls.calls[2]["response_format"] == protocol_control_agent_response_format()
+
+
+def test_protocol_control_defaults_use_current_independent_product_routes() -> None:
+    values = _config_probe()
+
+    assert values == [
+        "ollama-cloud",
+        "deepseek-v4.1-flash",
+        "high",
+        "65536",
+        "cms-router",
+        "glm-5.3-flash",
+        "high",
+        "131072",
+    ]
+
+
+def test_protocol_control_environment_is_independent_from_official_deconstruct() -> None:
+    values = _config_probe(
+        {
+            "DECONSTRUCT_BACKEND": "deepseek",
+            "DECONSTRUCT_MODEL": "deepseek-v4-flash",
+            "DECONSTRUCT_REASONING_EFFORT": "max",
+            "PROTOCOL_CONTROL_BACKEND": "mtplx",
+            "PROTOCOL_CONTROL_MODEL": "mtplx-qwen38-27b-optimized-quality",
+            "PROTOCOL_CONTROL_REASONING_EFFORT": "medium",
+            "PROTOCOL_CONTROL_MAX_TOKENS": "18432",
+        }
+    )
+
+    assert values[:4] == [
+        "mtplx",
+        "mtplx-qwen38-27b-optimized-quality",
+        "medium",
+        "18432",
+    ]
+    assert values[4:7] == ["deepseek", "deepseek-v4-flash", "max"]
+
+
+def test_mtplx_client_disables_proxy_inheritance_and_uses_control_schema(
+    monkeypatch,
+) -> None:
+    _FakeOpenAI.calls.clear()
+    _FakeHTTPClient.calls.clear()
+    monkeypatch.setattr(transport_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setattr(transport_module.httpx, "Client", _FakeHTTPClient)
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_BACKEND", "mtplx")
+    monkeypatch.setattr(
+        transport_module, "PROTOCOL_CONTROL_MODEL", "mtplx-qwen38-27b-optimized-quality"
+    )
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_REASONING_EFFORT", "medium")
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_MAX_TOKENS", 60000)
+    monkeypatch.setattr(transport_module, "MTPLX_BASE_URL", "http://127.0.0.1:8002")
+    monkeypatch.setattr(transport_module, "MTPLX_API_KEY", "")
+    monkeypatch.delenv("MTPLX_API_KEY", raising=False)
+    monkeypatch.delenv("OMLX_API_KEY", raising=False)
+
+    transport = protocol_control_transport_from_environment()
+    kwargs = transport._completion_kwargs([{"role": "user", "content": "控制批次"}])
+    official = protocol_output_response_format("semantic_candidate", compact=True)
+
+    assert _FakeOpenAI.calls == [
+        {
+            "base_url": "http://127.0.0.1:8002/v1",
+            "api_key": "local-mtplx",
+            "timeout": 600.0,
+            "max_retries": 0,
+            "http_client": _FakeOpenAI.calls[0]["http_client"],
+        }
+    ]
+    assert isinstance(_FakeOpenAI.calls[0]["http_client"], _FakeHTTPClient)
+    assert _FakeHTTPClient.calls == [{"trust_env": False}]
+    assert transport.backend == "mtplx"
+    assert transport.model == "mtplx-qwen38-27b-optimized-quality"
+    assert transport.reasoning_effort == "medium"
+    # env 继承预算 60000 在平台上限内原样生效，不被静默压缩。
+    assert transport.max_tokens == 60000
+    # 未显式配置 temperature 时保留供应商采样默认：不发送 temperature。
+    assert "temperature" not in kwargs
+    assert kwargs["reasoning_effort"] == "medium"
+    assert kwargs["extra_body"] == {"generation_mode": "ar"}
+    assert kwargs["response_format"]["json_schema"]["name"] == CONTROL_RESPONSE_FORMAT_NAME
+    assert kwargs["response_format"]["json_schema"]["strict"] is True
+    assert kwargs["response_format"] == protocol_control_agent_response_format()
+    assert kwargs["response_format"]["json_schema"]["name"] != (
+        official["json_schema"]["name"]
+    )
+    assert kwargs["response_format"]["json_schema"]["schema"] != (
+        official["json_schema"]["schema"]
+    )
+
+
+def test_mtplx_explicit_budget_within_cap_is_kept_not_clamped() -> None:
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=object(),
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=60000,
+    )
+
+    # 显式 60000 在平台上限内原样生效；不静默 min() 压缩，也不抬高。
+    assert transport.max_tokens == 60000
+
+
+def test_explicit_budget_above_platform_cap_fails_without_silent_shrink() -> None:
+    with pytest.raises(ValueError, match="不会静默压缩显式请求"):
+        OpenAICompatibleProtocolControlAgentTransport(
+            client=object(),
+            backend="mtplx",
+            model="mtplx-qwen38-27b-optimized-quality",
+            max_tokens=MTPLX_PROTOCOL_BATCH_MAX_TOKENS + 1,
+        )
+
+
+def test_control_transport_omits_temperature_unless_explicitly_configured() -> None:
+    def build_kwargs(temperature):
+        transport = OpenAICompatibleProtocolControlAgentTransport(
+            client=object(),
+            backend="mtplx",
+            model="mtplx-qwen38-27b-optimized-quality",
+            max_tokens=16384,
+            temperature=temperature,
+        )
+        return transport._completion_kwargs([{"role": "user", "content": "控制"}])
+
+    # 未配置 → 供应商采样默认（不发 temperature）；显式 0 与显式非零原样发送。
+    assert "temperature" not in build_kwargs(None)
+    assert build_kwargs(0.0)["temperature"] == 0.0
+    assert build_kwargs(0.7)["temperature"] == 0.7
+
+
+def test_opencode_control_transport_uses_json_object_wire_and_keeps_strict_contract() -> None:
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=object(),
+        backend="opencode-go",
+        model="deepseek-v4.1-flash",
+        reasoning_effort="high",
+        max_tokens=65536,
+    )
+
+    kwargs = transport._completion_kwargs([{"role": "user", "content": "控制"}])
+
+    assert transport.response_format_mode == "json_object"
+    assert kwargs["response_format"] == {"type": "json_object"}
+    assert transport.response_format_sha256 == (
+        OpenAICompatibleProtocolControlAgentTransport(
+            client=object(),
+            backend="cms-router",
+            model="glm-5.3-flash",
+            max_tokens=65536,
+        ).response_format_sha256
+    )
+
+
+def test_control_response_format_mode_can_be_explicitly_overridden() -> None:
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=object(),
+        backend="cms-router",
+        model="glm-5.3-flash",
+        max_tokens=65536,
+        response_format_mode="text",
+    )
+
+    kwargs = transport._completion_kwargs([{"role": "user", "content": "控制"}])
+
+    assert transport.response_format_mode == "text"
+    assert "response_format" not in kwargs
+
+
+def test_control_length_retry_budget_capped_at_131072() -> None:
+    client, completions = _client(
+        [
+            ('{"partial":true', "length"),
+            ('{"complete":true}', "stop"),
+        ]
+    )
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=100000,
+    )
+
+    transport.start(prompt="冻结控制输入")
+
+    budgets = [call["max_tokens"] for call in completions.calls]
+    # length 只重试一次：100000*2 封顶 131072，不静默翻倍到 200000。
+    assert budgets == [100000, 131072]
+
+
+def test_control_call_receipts_keep_missing_provider_usage_unknown() -> None:
+    client, _ = _client(['{"wire":1}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    transport.start(prompt="冻结控制输入")
+    receipts = transport.take_call_receipts()
+    assert len(receipts) == 1
+    assert receipts[0]["requested_model"] == "deepseek-latest-cloud"
+    assert receipts[0]["request_id"] is None
+    assert receipts[0]["usage"] is None
+    assert len(receipts[0]["request_sha256"]) == 64
+    assert len(receipts[0]["schema_sha256"]) == 64
+    assert "冻结控制输入" not in str(receipts)
+    assert transport.take_call_receipts() == []
+
+
+@pytest.mark.parametrize("mode", ["json_schema", "json_object", "text"])
+def test_call_metrics_measure_actual_format_without_retaining_source(mode, monkeypatch) -> None:
+    ticks = iter((10.0, 12.25))
+    monkeypatch.setattr(
+        "app.agents.protocol_control_agent_transport.monotonic", lambda: next(ticks),
+    )
+    client, completions = _client(['{"ok":true}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    source = "受控原文，不写入测量回执"
+    transport.start(prompt=source)
+    receipt = transport.take_call_receipts()[0]
+    assert receipt["elapsed_seconds"] == 2.25
+    assert receipt["response_format_mode"] == mode
+    assert receipt["message_count"] == 1
+    assert receipt["request_content_chars"] == len(source)
+    assert receipt["attempt_number"] == 1
+    sent_format = completions.calls[0].get("response_format")
+    expected_bytes = len(json.dumps(
+        sent_format, ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")) if sent_format is not None else 0
+    assert receipt["structured_format_bytes"] == expected_bytes
+    assert receipt["request_json_bytes"] > len(source.encode("utf-8"))
+    assert receipt["usage"] is None
+    assert source not in str(receipt)
+
+
+def test_length_retry_metrics_keep_attempt_costs_separate(monkeypatch) -> None:
+    ticks = iter((10.0, 11.0, 12.0, 15.5))
+    monkeypatch.setattr(
+        "app.agents.protocol_control_agent_transport.monotonic", lambda: next(ticks),
+    )
+    client, _ = _client([('{"partial":true', "length"), ('{"ok":true}', "stop")])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    transport.start(prompt="冻结来源")
+    first, second = transport.take_call_receipts()
+    assert [first["attempt_number"], second["attempt_number"]] == [1, 2]
+    assert [first["elapsed_seconds"], second["elapsed_seconds"]] == [1.0, 3.5]
+    assert second["request_content_chars"] > first["request_content_chars"]
+    assert second["request_json_bytes"] > first["request_json_bytes"]
+    assert second["requested_max_tokens"] == first["requested_max_tokens"] * 2
+    assert "partial" not in str((first, second))
+
+
+def test_interrupted_stream_keeps_partial_metadata_without_replaying_request() -> None:
+    class InterruptedCompletions:
+        calls = 0
+
+        def create(self, **kwargs):
+            self.calls += 1
+
+            def chunks():
+                yield SimpleNamespace(
+                    id="request-123", model="deepseek-latest-cloud",
+                    usage={"completion_tokens": 9},
+                    choices=[SimpleNamespace(
+                        finish_reason=None,
+                        delta=SimpleNamespace(content='{"private":"partial'),
+                    )],
+                )
+                raise ConnectionError("stream closed")
+
+            return chunks()
+
+    completions = InterruptedCompletions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    with pytest.raises(ProtocolControlAgentCallError) as error:
+        transport.start(prompt="冻结控制输入")
+    assert error.value.uncertain_completion is True
+    assert completions.calls == 1
+    receipts = transport.take_call_receipts()
+    assert receipts[0]["request_id"] == "request-123"
+    assert receipts[0]["reported_model"] == "deepseek-latest-cloud"
+    assert receipts[0]["usage"] == {"completion_tokens": 9}
+    assert receipts[0]["received_content_characters"] > 0
+    assert len(receipts[0]["partial_content_sha256"]) == 64
+    assert receipts[0]["elapsed_seconds"] >= 0
+    assert receipts[0]["request_content_chars"] == len("冻结控制输入")
+    assert "private" not in str(receipts)
+
+
+def test_stream_reported_model_mismatch_is_rejected_without_retry() -> None:
+    class SwitchedCompletions:
+        calls = 0
+
+        def create(self, **kwargs):
+            self.calls += 1
+            return iter([SimpleNamespace(
+                id="request-switched", model="another-model",
+                choices=[SimpleNamespace(
+                    finish_reason="stop", delta=SimpleNamespace(content='{"ok":true}'),
+                )],
+            )])
+
+    completions = SwitchedCompletions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    with pytest.raises(ProtocolControlAgentCallError, match="模型身份不一致"):
+        transport.start(prompt="冻结控制输入")
+    assert completions.calls == 1
+    receipts = transport.take_call_receipts()
+    assert receipts[0]["requested_model"] == "deepseek-latest-cloud"
+    assert receipts[0]["reported_model"] == "another-model"
+    assert receipts[0]["error_kind"] == "reported_model_mismatch"
+
+
+def test_control_stream_ignores_empty_keepalive_before_model_response() -> None:
+    frames = [
+        SimpleNamespace(id="chatcmpl-keepalive", model="keepalive", choices=[
+            SimpleNamespace(finish_reason=None, delta=SimpleNamespace(content=None)),
+        ]),
+        SimpleNamespace(id="real-request", model="deepseek-latest-cloud", choices=[
+            SimpleNamespace(finish_reason="stop", delta=SimpleNamespace(content='{"ok":true}')),
+        ]),
+    ]
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kwargs: iter(frames),
+    )))
+    response = OpenAICompatibleProtocolControlAgentTransport._stream_completion(
+        client, {"model": "deepseek-latest-cloud", "messages": []},
+    )
+    assert response.id == "real-request"
+    assert response.model == "deepseek-latest-cloud"
+    assert response.choices[0].message.content == '{"ok":true}'
+
+
+def test_control_stream_keeps_identity_from_reasoning_and_rejects_later_switch() -> None:
+    frames = [
+        SimpleNamespace(id="first", model="deepseek-latest-cloud", choices=[
+            SimpleNamespace(finish_reason=None, delta=SimpleNamespace(
+                content=None, reasoning_content="核对来源",
+            )),
+        ]),
+        SimpleNamespace(id="second", model="another-model", choices=[
+            SimpleNamespace(finish_reason="stop", delta=SimpleNamespace(content='{"ok":true}')),
+        ]),
+    ]
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kwargs: iter(frames),
+    )))
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud", max_tokens=16384,
+    )
+    with pytest.raises(ProtocolControlAgentCallError, match="模型流在有效内容之间变更了模型身份"):
+        transport.start(prompt="冻结控制输入")
+    receipt = transport.take_call_receipts()[0]
+    assert receipt["reported_model"] == "deepseek-latest-cloud"
+    assert receipt["request_id"] == "first"
+
+
+def test_filtered_completion_is_not_accepted_as_a_parsed_answer() -> None:
+    client, completions = _client([('{"looks":"complete"}', "content_filter")])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    with pytest.raises(ProtocolControlAgentCallError, match="未正常完成"):
+        transport.start(prompt="冻结控制输入")
+    assert len(completions.calls) == 1
+    assert transport.take_call_receipts()[0]["finish_reason"] == "content_filter"
+
+
+def test_injected_official_inex_schema_is_rejected_visibly() -> None:
+    official = protocol_output_response_format("semantic_candidate", compact=True)
+
+    with pytest.raises(ValueError, match="非控制 Schema"):
+        OpenAICompatibleProtocolControlAgentTransport(
+            client=object(),
+            backend="mtplx",
+            model="mtplx-qwen38-27b-optimized-quality",
+            response_format=official,
+        )
+
+
+def test_unsupported_backend_fails_instead_of_silent_semantic_fallback() -> None:
+    with pytest.raises(ValueError, match="不支持模型供应商"):
+        OpenAICompatibleProtocolControlAgentTransport(
+            client=object(),
+            backend="unknown-semantic",
+            model="must-not-run",
+        )
+
+
+def test_factory_preserves_frozen_model_identity_without_substitution() -> None:
+    transport = protocol_control_transport_from_model_config(
+        {
+            "provider": "mtplx",
+            "model": "mtplx-qwen38-27b-optimized-quality",
+            "reasoning_effort": "medium",
+            "parameters": {
+                "max_tokens": 60000,
+                "temperature": 0.0,
+                "base_url": "http://127.0.0.1:8002",
+            },
+        },
+        client=object(),
+    )
+
+    kwargs = transport._completion_kwargs([{"role": "user", "content": "控制"}])
+    assert transport.backend == "mtplx"
+    assert kwargs["model"] == "mtplx-qwen38-27b-optimized-quality"
+    assert kwargs["reasoning_effort"] == "medium"
+    # 冻结配置显式给出的 temperature=0 是真实请求值，原样发送。
+    assert kwargs["temperature"] == 0.0
+    assert kwargs["max_tokens"] == 60000
+    assert kwargs["response_format"]["json_schema"]["name"] == (
+        CONTROL_RESPONSE_FORMAT_NAME
+    )
+
+
+def test_alternate_provider_does_not_inherit_active_role_endpoint_or_key(
+    monkeypatch,
+) -> None:
+    _FakeOpenAI.calls.clear()
+    monkeypatch.setenv("PROTOCOL_CONTROL_BASE_URL", "https://active.example/v1")
+    monkeypatch.setenv("PROTOCOL_CONTROL_API_KEY", "active-only-key")
+    monkeypatch.setenv("PROTOCOL_CONTROL_DISCOVERY_BASE_URL", "https://active.example/v1")
+    monkeypatch.setenv("PROTOCOL_CONTROL_DISCOVERY_API_KEY", "active-only-key")
+    monkeypatch.setenv("CMS_ROUTER_BASE_URL", "http://127.0.0.1:20128/v1")
+    monkeypatch.setenv("CMS_ROUTER_API_KEY", "cms-only-key")
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_BACKEND", "opencode-go")
+    monkeypatch.setattr(discovery_module, "PROTOCOL_CONTROL_DISCOVERY_BACKEND", "opencode-go")
+    monkeypatch.setattr(discovery_module, "OpenAI", _FakeOpenAI)
+    frozen = {
+        "provider": "cms-router",
+        "model": "glm-5.3-flash",
+        "reasoning_effort": "high",
+        "parameters": {"max_tokens": 65536},
+    }
+
+    deep = protocol_control_transport_from_model_config(
+        frozen,
+        _client_factory=_FakeOpenAI,
+    )
+    discovery = protocol_control_discovery_transport_from_model_config(frozen)
+
+    assert deep.base_url == discovery.base_url == "http://127.0.0.1:20128/v1"
+    assert [call["api_key"] for call in _FakeOpenAI.calls] == [
+        "cms-only-key", "cms-only-key"
+    ]
+
+
+def test_ollama_control_and_discovery_ignore_previous_role_credentials(monkeypatch):
+    _FakeOpenAI.calls.clear()
+    monkeypatch.setenv("PROTOCOL_CONTROL_BASE_URL", "http://old-gateway.example/v1")
+    monkeypatch.setenv("PROTOCOL_CONTROL_API_KEY", "old-control-key")
+    monkeypatch.setenv("PROTOCOL_CONTROL_DISCOVERY_BASE_URL", "http://old-gateway.example/v1")
+    monkeypatch.setenv("PROTOCOL_CONTROL_DISCOVERY_API_KEY", "old-discovery-key")
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_BACKEND", "ollama-cloud")
+    monkeypatch.setattr(discovery_module, "PROTOCOL_CONTROL_DISCOVERY_BACKEND", "ollama-cloud")
+    monkeypatch.setattr(discovery_module, "OpenAI", _FakeOpenAI)
+    frozen = {
+        "provider": "ollama-cloud", "model": "deepseek-v4.1-flash",
+        "reasoning_effort": "high", "parameters": {"max_tokens": 65536},
+    }
+    with pytest.raises(ValueError, match="OLLAMA_API_KEY"):
+        protocol_control_transport_from_model_config(frozen, _client_factory=_FakeOpenAI)
+    monkeypatch.setenv("OLLAMA_API_KEY", "ollama-only-key")
+    deep = protocol_control_transport_from_model_config(frozen, _client_factory=_FakeOpenAI)
+    discovery = protocol_control_discovery_transport_from_model_config(frozen)
+    assert deep.base_url == discovery.base_url == "https://ollama.com/v1"
+    assert deep.response_format_mode == discovery.response_format_mode == "text"
+    assert "response_format" not in deep._completion_kwargs([{"role": "user", "content": "诊断"}])
+    assert "response_format" not in discovery._completion_kwargs([{"role": "user", "content": "诊断"}])
+    assert [call["api_key"] for call in _FakeOpenAI.calls] == [
+        "ollama-only-key", "ollama-only-key",
+    ]
+
+
+def test_candidate_repair_changes_only_response_schema_in_same_session() -> None:
+    client, completions = _client(['{"wire":1}', '{"candidate_draft":{}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="cms-router",
+        model="deepseek-latest-cloud",
+        reasoning_effort="high",
+        max_tokens=16384,
+    )
+    transport._stream_completion = lambda fake_client, kwargs: fake_client.chat.completions.create(**kwargs)
+
+    first = transport.start(prompt="冻结控制输入")
+    repaired = transport.continue_candidate(
+        session_id=first.session_id, prompt="只修一个候选"
+    )
+
+    assert repaired.session_id == first.session_id
+    assert completions.calls[0]["response_format"]["json_schema"]["name"] == CONTROL_RESPONSE_FORMAT_NAME
+    assert completions.calls[1]["response_format"]["json_schema"]["name"] == "protocol_control_candidate_repair_v1"
+    assert [item["role"] for item in completions.calls[1]["messages"]] == [
+        "user", "assistant", "user"
+    ]
+    assert len(transport.history(first.session_id)) == 4
+
+
+@pytest.mark.parametrize("mode", ["json_schema", "text"])
+def test_candidate_field_repair_sends_only_authorized_field_schema(mode: str) -> None:
+    client, completions = _client(['{"wire":1}', '{"candidate_draft":{"cross_source_relations":[]}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    transport._stream_completion = lambda fake_client, kwargs: fake_client.chat.completions.create(**kwargs)
+    first = transport.start(prompt="冻结输入")
+    response = transport.continue_candidate(
+        session_id=first.session_id, prompt="仅核对关联", fields=("cross_source_relations",),
+        relation_stage_ids=("frozen-decision-node",),
+    )
+    assert response.session_id == first.session_id
+    call = completions.calls[-1]
+    if mode == "json_schema":
+        candidate_schema = call["response_format"]["json_schema"]["schema"]["properties"]["candidate_draft"]
+        assert list(candidate_schema["properties"]) == ["cross_source_relations"]
+        assert call["response_format"]["json_schema"]["schema"]["$defs"]["ProtocolControlAgentWireRelation"]["properties"]["affected_workflow_stage_id"]["enum"] == ["frozen-decision-node"]
+    else:
+        assert "response_format" not in call
+        assert '"required":["cross_source_relations"]' in call["messages"][-1]["content"]
+        assert '"enum":["frozen-decision-node"]' in call["messages"][-1]["content"]
+    assert len(transport.history(first.session_id)) == 4
+
+
+def test_multi_candidate_repair_uses_selected_schema_in_same_session() -> None:
+    client, completions = _client(['{"wire":1}', '{"candidate_drafts":[]}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="cms-router",
+        model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+
+    first = transport.start(prompt="冻结控制输入")
+    repaired = transport.continue_candidates(
+        session_id=first.session_id, prompt="仅修订两个候选"
+    )
+
+    assert repaired.session_id == first.session_id
+    assert completions.calls[1]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_candidates_repair_v1"
+    )
+    assert [item["role"] for item in transport.history(first.session_id)] == [
+        "user", "assistant", "user", "assistant"
+    ]
+
+
+def test_saved_source_insert_starts_fresh_session_with_candidate_schema() -> None:
+    client, completions = _client(['{"candidate_draft":{}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    response = transport.start_source_insert(prompt="已核草稿及未闭合来源", multiple=False)
+    assert response.text == '{"candidate_draft":{}}'
+    assert completions.calls[0]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_candidate_repair_v1"
+    )
+    assert [item["role"] for item in completions.calls[0]["messages"]] == ["user"]
+    assert [item["role"] for item in transport.history(response.session_id)] == [
+        "user", "assistant"
+    ]
+
+
+@pytest.mark.parametrize("multiple", [False, True])
+def test_text_mode_source_insert_includes_actual_candidate_schema(multiple: bool) -> None:
+    client, completions = _client(['{"candidate_draft":{}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode="text",
+    )
+    transport.start_source_insert(prompt="有来源的未闭合要求", multiple=multiple)
+    call = completions.calls[0]
+    assert "response_format" not in call
+    prompt = call["messages"][0]["content"]
+    assert "完整 JSON Schema" in prompt
+    assert ('"candidate_drafts"' if multiple else '"candidate_draft"') in prompt
+    assert '"groups"' in prompt
+
+
+@pytest.mark.parametrize(
+    ("reader", "version"), [
+        ("read_stage_bound_requirement", "phase5/control-stage-bound-requirement/v10"),
+        ("read_relative_stage_requirement", "phase5/control-relative-stage-requirement/v9"),
+        ("read_shared_prohibition_requirement", "phase5/control-shared-prohibition-requirement/v4"),
+    ],
+)
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+def test_single_requirement_reader_receives_its_own_schema(
+    reader: str, version: str, mode: str,
+) -> None:
+    client, completions = _client(['{"version":"test"}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+
+    getattr(transport, reader)(prompt="冻结来源")
+
+    call = completions.calls[0]
+    prompt = call["messages"][0]["content"]
+    if mode == "json_schema":
+        assert prompt == "冻结来源"
+        assert call["response_format"]["json_schema"]["schema"]["properties"]["version"]["const"] == version
+    else:
+        assert "完整 JSON Schema" in prompt
+        assert version in prompt
+        assert "冻结来源" in prompt
+        assert call.get("response_format") == (
+            {"type": "json_object"} if mode == "json_object" else None
+        )
+
+
+@pytest.mark.parametrize("mode", ["text", "json_schema"])
+def test_future_prohibition_repair_receives_nested_schema(mode: str) -> None:
+    client, completions = _client(['{"wire":1}', '{"current_statement":"已核","current_proposition":"已核","continuing_obligation":null}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    first = transport.start(prompt="冻结批次")
+    transport.continue_future_prohibition_repair(
+        session_id=first.session_id, prompt="只修当前和后续禁止要求",
+    )
+    call = completions.calls[1]
+    prompt = call["messages"][0]["content"]
+    if mode == "text":
+        assert "完整 JSON Schema" in prompt
+        assert '"continuing_obligation"' in prompt
+        assert '"prospective_period"' in prompt
+        assert "response_format" not in call
+    else:
+        assert prompt == "只修当前和后续禁止要求"
+        assert "continuing_obligation" in call["response_format"]["json_schema"]["schema"]["properties"]
+
+
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+def test_target_review_transmits_frozen_identifiers_without_guessing(mode):
+    import jsonschema
+    from app.agents.protocol_control_source_interpretation import source_target_review_response_format
+
+    ids = ["IN-01", "procedure:abc", "su-context"]
+    client, completions = _client(['{"items":[]}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    transport.start_source_target_review(prompt="冻结陈述和目标", target_ids=ids)
+    call = completions.calls[0]
+    schema = source_target_review_response_format(target_ids=ids)["json_schema"]["schema"]
+    property_schema = schema["$defs"]["SourceTargetReviewItem"]["properties"]["target_id"]
+    for value in [None, *ids]:
+        jsonschema.validate(value, property_schema)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate("procedure:abcc", property_schema)
+    if mode == "json_schema":
+        assert call["response_format"]["json_schema"]["schema"] == schema
+    else:
+        prompt = call["messages"][0]["content"]
+        assert "完整 JSON Schema" in prompt
+        for value in ids:
+            assert value in prompt
+
+
+def test_empty_frozen_target_set_requires_null_not_an_invented_identifier():
+    import jsonschema
+    from app.agents.protocol_control_source_interpretation import source_target_review_response_format
+    prop = source_target_review_response_format(target_ids=[])["json_schema"]["schema"]["$defs"]["SourceTargetReviewItem"]["properties"]["target_id"]
+    jsonschema.validate(None, prop)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate("IN-01", prop)
+    with pytest.raises(ValueError):
+        source_target_review_response_format(target_ids=[""])
+
+
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+@pytest.mark.parametrize("repeat", [False, True])
+def test_numeric_field_patch_preserves_history_and_sends_only_authorized_schema(mode, repeat):
+    client, completions = _client(['{"wire":1}', '{"evaluation_patch":{}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    first = transport.start(prompt="完整冻结批次")
+    history = transport.history(first.session_id)
+    reader = transport.continue_repeat_scheme if repeat else transport.continue_numeric_predicate
+    response = reader(session_id=first.session_id, prompt="冻结求值字段")
+    assert response.session_id == first.session_id
+    assert transport.history(first.session_id) == history
+    call = completions.calls[1]
+    assert len(call["messages"]) == 1
+    if mode == "json_schema":
+        schema = call["response_format"]["json_schema"]
+        assert schema["name"] == ("protocol_control_repeat_evaluation_patch_v2" if repeat else "protocol_control_numeric_evaluation_patch_v1")
+        assert set(schema["schema"]["properties"]) == {"evaluation_patch"}
+        patch = schema["schema"]["$defs"]["RepeatEvaluationPatch" if repeat else "NumericEvaluationPatch"]
+        assert set(patch["properties"]) == ({"repeat_scheme"} if repeat else {
+            "determination_mode", "operation", "predicate", "operand_attribute"})
+        assert patch["additionalProperties"] is False
+        assert set(patch["required"]) == set(patch["properties"])
+        assert "ProtocolControlAgentWireObligationAtom" not in schema["schema"]["$defs"]
+        if repeat:
+            meaning = schema["schema"]["$defs"]["RepeatSchemeMeaning"]
+            assert not {"source_span_ids", "source_excerpts"} & set(meaning["properties"])
+            assert "RepeatScheme" not in schema["schema"]["$defs"]
+    else:
+        assert "完整 JSON Schema" in call["messages"][0]["content"]
+        assert '"evaluation_patch"' in call["messages"][0]["content"]
+        assert call.get("response_format") == ({"type": "json_object"} if mode == "json_object" else None)
+
+
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+def test_alignment_policy_scope_reaches_request_once_without_changing_history(mode):
+    client, completions = _client(['{"wire":1}', '{"items":[]}', '{"items":[]}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    first = transport.start(prompt="冻结作者内容")
+    history = transport.history(first.session_id)
+    transport.configure_source_candidate_alignment_scope(review_scope=[{
+        "statement_index": 7, "candidate_index": 2, "policy_check_keys": [],
+    }])
+    transport.start_source_candidate_alignment(prompt="只核本次范围")
+    assert transport.history(first.session_id) == history
+    call = completions.calls[1]
+    if mode == "json_schema":
+        response = call["response_format"]["json_schema"]
+        assert response["name"].endswith("scoped_v1")
+        item = response["schema"]["properties"]["items"]["items"]["anyOf"][0]
+        assert item["properties"]["statement_index"]["const"] == 7
+        assert item["properties"]["candidate_index"]["const"] == 2
+        assert item["properties"]["evidence_policy_checks"]["maxItems"] == 0
+    else:
+        body = call["messages"][0]["content"].replace(" ", "")
+        assert '"const":7' in body and '"maxItems":0' in body
+    transport.start_source_candidate_alignment(prompt="下个调用须重新限定")
+    second = completions.calls[2]
+    if mode == "json_schema":
+        assert not second["response_format"]["json_schema"]["name"].endswith("scoped_v1")
+    else:
+        assert '"const":7' not in second["messages"][0]["content"].replace(" ", "")
+
+
+def test_local_repairs_send_only_frozen_source_and_keep_fallback_history() -> None:
+    client, completions = _client([
+        '{"wire":1}', '{"atom":{}}', '{"items":[]}', '{"items":[]}', '{"candidate_draft":{}}',
+    ])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="cms-router",
+        model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    first = transport.start(prompt="完整冻结批次")
+    history = transport.history(first.session_id)
+    transport.continue_atom(session_id=first.session_id, prompt="冻结的原子及其来源")
+
+    assert completions.calls[1]["messages"] == [
+        {"role": "user", "content": "冻结的原子及其来源"}
+    ]
+    assert completions.calls[1]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_atom_repair_v1"
+    )
+    assert transport.history(first.session_id) == history
+
+    transport.continue_observation_policies(
+        session_id=first.session_id, prompt="冻结的义务原子观察选择"
+    )
+    assert completions.calls[2]["messages"] == [
+        {"role": "user", "content": "冻结的义务原子观察选择"}
+    ]
+    assert completions.calls[2]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_observation_repair_v2"
+    )
+    assert transport.history(first.session_id) == history
+
+    transport.continue_time_operands(
+        session_id=first.session_id, prompt="冻结原子及日期来源"
+    )
+    assert completions.calls[3]["messages"] == [
+        {"role": "user", "content": "冻结原子及日期来源"}
+    ]
+    assert completions.calls[3]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_time_operand_repair_v1"
+    )
+    assert transport.history(first.session_id) == history
+
+    transport.continue_candidate(session_id=first.session_id, prompt="候选级回退")
+    assert [item["content"] for item in completions.calls[4]["messages"]] == [
+        "完整冻结批次", '{"wire":1}', "候选级回退",
+    ]
+
+
+def test_text_mode_observation_repair_includes_exact_policy_schema() -> None:
+    client, completions = _client(['{"wire":1}', '{"items":[]}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode="text",
+    )
+    first = transport.start(prompt="冻结批次")
+    transport.continue_observation_policies(
+        session_id=first.session_id, prompt="仅核对观察采用规则",
+    )
+    call = completions.calls[1]
+    assert "完整 JSON Schema" in call["messages"][0]["content"]
+    assert '"source_excerpts"' in call["messages"][0]["content"]
+    assert '"items"' in call["messages"][0]["content"]
+    assert "response_format" not in call
+
+
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+@pytest.mark.parametrize(
+    ("method", "required_field"),
+    [
+        ("continue_candidate", "candidate_draft"),
+        ("continue_candidates", "candidate_drafts"),
+        ("continue_atom", "atom"),
+        ("continue_post_treatment_repair", None),
+        ("continue_calendar_bound_repair", None),
+        ("continue_time_operands", None),
+        ("continue_evidence_source_policy", None),
+        ("continue_evidence_source_types", None),
+    ],
+)
+def test_local_repair_receives_full_contract_in_non_strict_modes(
+    mode: str, method: str, required_field: str | None,
+) -> None:
+    client, completions = _client(['{"wire":1}', '{}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    first = transport.start(prompt="冻结批次")
+    getattr(transport, method)(session_id=first.session_id, prompt="只修指定内容")
+    call = completions.calls[1]
+    repair_prompt = call["messages"][-1]["content"]
+    if mode == "json_schema":
+        assert repair_prompt == "只修指定内容"
+        assert call["response_format"]["json_schema"]["schema"]
+    else:
+        assert "完整 JSON Schema" in repair_prompt
+        assert '"required"' in repair_prompt
+        assert call.get("response_format") == (
+            {"type": "json_object"} if mode == "json_object" else None
+        )
+        if required_field:
+            assert f'"{required_field}"' in repair_prompt
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["correct_source_quote", "correct_source_scope", "start_source_unit_comparison"],
+)
+def test_text_mode_source_corrections_receive_full_contract(method: str) -> None:
+    client, completions = _client(['{}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode="text",
+    )
+    getattr(transport, method)(prompt="冻结来源")
+    call = completions.calls[0]
+    assert "完整 JSON Schema" in call["messages"][0]["content"]
+    assert '"required"' in call["messages"][0]["content"]
+    assert "response_format" not in call
+
+
+def test_same_session_history_and_restore_continue_keep_one_session_id() -> None:
+    client, completions = _client(['{"first":1}', '{"second":2}', '{"third":3}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        reasoning_effort="medium",
+        max_tokens=16384,
+    )
+
+    first = transport.start(prompt="冻结控制输入")
+    second = transport.continue_session(
+        session_id=first.session_id,
+        prompt="同会话修复",
+    )
+
+    assert first.session_id.startswith("protocol-control-chat-")
+    assert second.session_id == first.session_id
+    assert completions.calls[0]["response_format"]["json_schema"]["name"] == (
+        CONTROL_RESPONSE_FORMAT_NAME
+    )
+    assert completions.calls[0]["reasoning_effort"] == "medium"
+    # 未显式配置 temperature：保留供应商采样默认，请求中不出现 temperature。
+    assert "temperature" not in completions.calls[0]
+    assert [item["role"] for item in completions.calls[1]["messages"]] == [
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert completions.calls[1]["messages"][1]["content"] == '{"first":1}'
+    assert len(transport.history(first.session_id)) == 4
+
+    restored_client, restored_completions = _client(['{"third":3}'])
+    restored = OpenAICompatibleProtocolControlAgentTransport(
+        client=restored_client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=16384,
+    )
+    restored.restore_history(
+        session_id=first.session_id,
+        messages=transport.history(first.session_id),
+    )
+    resumed = restored.continue_session(
+        session_id=first.session_id,
+        prompt="重启后继续修复",
+    )
+    assert resumed.session_id == first.session_id
+    assert len(restored_completions.calls[0]["messages"]) == 5
+    assert len(restored.history(first.session_id)) == 6
+
+
+def test_unknown_session_is_rejected_instead_of_starting_fresh() -> None:
+    client, _completions = _client([])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=16384,
+    )
+
+    with pytest.raises(ProtocolControlAgentCallError, match="找不到原协议控制 Agent 会话"):
+        transport.continue_session(session_id="missing", prompt="修复")
+
+
+@pytest.mark.parametrize(
+    "messages",
+    [
+        [],
+        [{"role": "assistant", "content": "无首轮请求"}],
+        [
+            {"role": "user", "content": "请求"},
+            {"role": "user", "content": "角色顺序错误"},
+        ],
+        [{"role": "user", "content": "尚无模型响应"}],
+    ],
+)
+def test_invalid_persisted_history_is_rejected(messages) -> None:
+    client, _completions = _client([])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=16384,
+    )
+    with pytest.raises(ValueError, match="持久会话|只能从"):
+        transport.restore_history(session_id="persisted-session", messages=messages)
+
+
+@pytest.mark.parametrize("method", ["continue_atom", "continue_observation_policies",
+    "continue_time_operands", "continue_evidence_source_policy", "continue_evidence_source_types"])
+def test_scoped_snapshot_resume_enables_only_self_contained_requests(method):
+    client, completions = _client(['{"items":[]}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(client=client,
+        backend="ollama-cloud", model="deepseek-v4.1-flash", model_identity_check=False)
+    scoped = getattr(transport, method)
+    with pytest.raises(ProtocolControlAgentCallError):
+        scoped(session_id="saved", prompt="仅核冻结指定字段")
+    assert not completions.calls
+    transport.restore_scoped_session(session_id="saved", context_sha256="a" * 64)
+    transport.restore_scoped_session(session_id="saved", context_sha256="a" * 64)
+    with pytest.raises(ValueError, match="不同上下文"):
+        transport.restore_scoped_session(session_id="saved", context_sha256="b" * 64)
+    for missing_id, digest in [("", "a" * 64), ("other", "short"), ("other", "z" * 64)]:
+        with pytest.raises(ValueError):
+            transport.restore_scoped_session(session_id=missing_id, context_sha256=digest)
+    answer = scoped(session_id="saved", prompt="仅核冻结指定字段")
+    assert answer.session_id == "saved"
+    assert [m["role"] for m in completions.calls[0]["messages"]] == ["user"]
+    assert transport._histories == {}  # No fictitious prior assistant answer.
+    for history_method in [transport.continue_session, transport.continue_candidates]:
+        with pytest.raises(ProtocolControlAgentCallError):
+            history_method(session_id="saved", prompt="不能恢复整包会话")
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.history("saved")
+    assert len(completions.calls) == 1
+
+
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+def test_scoped_snapshot_candidate_followup_is_local_and_does_not_restore_history(mode):
+    client, completions = _client(['{"candidate_draft":{}}', '{"candidate_draft":{}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(client=client,
+        backend="cms-router", model="test-independent-model", model_identity_check=False,
+        response_format_mode=mode)
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.continue_candidate(session_id="saved", prompt="尚无来源身份")
+    assert not completions.calls
+    transport.restore_scoped_session(session_id="saved", context_sha256="a" * 64)
+    for fields in [(), ("cross_source_relations",)]:
+        result = transport.continue_candidate(session_id="saved", prompt="冻结单一候选与授权范围", fields=fields)
+        assert result.session_id == "saved"
+        call = completions.calls[-1]
+        assert [message["role"] for message in call["messages"]] == ["user"]
+        if mode == "json_schema":
+            assert "candidate_draft" in call["response_format"]["json_schema"]["schema"]["properties"]
+        else:
+            assert "完整 JSON Schema" in call["messages"][0]["content"]
+        assert transport._histories == {}
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.continue_session(session_id="saved", prompt="禁止整包历史回退")
+    assert len(completions.calls) == 2
+
+
+@pytest.mark.parametrize("backend", ["mtplx", "ollama-cloud"])
+def test_scoped_unit_repair_uses_frozen_local_schema_and_does_not_invent_history(backend):
+    client, completions = _client(['{}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(client=client,
+        backend=backend, model="test-independent-model", model_identity_check=False)
+    batch = _batch()
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.continue_scoped_unit_repair(session_id="scope", prompt="只核授权来源", batch=batch)
+    assert not completions.calls
+    transport.restore_scoped_session(session_id="scope", context_sha256="a" * 64)
+    answer = transport.continue_scoped_unit_repair(session_id="scope", prompt="只核授权来源", batch=batch)
+    assert answer.session_id == "scope" and not transport._histories
+    request = completions.calls[0]
+    expected_format = protocol_control_batch_response_format(batch)
+    if "response_format" in request:
+        assert request["response_format"] == expected_format
+    else:
+        assert json.dumps(expected_format["json_schema"]["schema"], ensure_ascii=False,
+                          separators=(",", ":")) in request["messages"][0]["content"]
+    assert [x["role"] for x in request["messages"]] == ["user"]
+    with pytest.raises(ProtocolControlAgentCallError):
+        transport.continue_session(session_id="scope", prompt="不可恢复整组历史")
+    assert len(completions.calls) == 1
+
+
+def test_length_finish_reason_retries_once_then_succeeds_in_same_call() -> None:
+    client, completions = _client(
+        [
+            ('{"partial":true', "length"),
+            ('{"complete":true}', "stop"),
+        ]
+    )
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=16384,
+    )
+
+    response = transport.start(prompt="冻结控制输入")
+
+    assert response.text == '{"complete":true}'
+    assert len(completions.calls) == 2
+    # length 只重试一次：共享思考+正文预算 16384 → 32768。
+    assert [call["max_tokens"] for call in completions.calls] == [16384, 32768]
+    assert "长度上限" in completions.calls[1]["messages"][-1]["content"]
+    assert CONTROL_RESPONSE_FORMAT_NAME in completions.calls[1]["messages"][-1]["content"]
+    assert "不要重复分析" in completions.calls[1]["messages"][-1]["content"]
+    # In-call length retries are ephemeral; durable history stays user/assistant.
+    assert transport.history(response.session_id) == (
+        {"role": "user", "content": "冻结控制输入"},
+        {"role": "assistant", "content": '{"complete":true}'},
+    )
+    assert '{"partial":true' not in json.dumps(
+        transport.history(response.session_id), ensure_ascii=False
+    )
+
+    restored_client, restored_completions = _client(['{"continued":true}'])
+    restored = OpenAICompatibleProtocolControlAgentTransport(
+        client=restored_client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=16384,
+    )
+    restored.restore_history(
+        session_id=response.session_id,
+        messages=transport.history(response.session_id),
+    )
+    resumed = restored.continue_session(
+        session_id=response.session_id,
+        prompt="同会话继续修复",
+    )
+    assert resumed.session_id == response.session_id
+    assert resumed.text == '{"continued":true}'
+    assert restored.history(response.session_id) == (
+        {"role": "user", "content": "冻结控制输入"},
+        {"role": "assistant", "content": '{"complete":true}'},
+        {"role": "user", "content": "同会话继续修复"},
+        {"role": "assistant", "content": '{"continued":true}'},
+    )
+    assert restored_completions.calls[0]["messages"][:2] == list(
+        transport.history(response.session_id)
+    )
+
+
+@pytest.mark.parametrize("mode", ["json_object", "text"])
+def test_length_retry_without_provider_json_schema_keeps_wire_contract(mode: str) -> None:
+    client, completions = _client(
+        [('{"partial":true', "length"), ('{"complete":true}', "stop")]
+    )
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="cms-router",
+        model="deepseek-latest-cloud",
+        max_tokens=16384,
+        response_format_mode=mode,
+    )
+
+    response = transport.start(prompt="冻结控制输入")
+
+    assert response.text == '{"complete":true}'
+    assert [call["max_tokens"] for call in completions.calls] == [16384, 32768]
+    assert CONTROL_RESPONSE_FORMAT_NAME in completions.calls[1]["messages"][-1]["content"]
+    assert completions.calls[0].get("response_format") == (
+        {"type": "json_object"} if mode == "json_object" else None
+    )
+
+
+def test_two_length_failures_raise_visible_call_error_without_silent_fallback() -> None:
+    client, completions = _client(
+        [
+            ('{"truncated":1', "length"),
+            ('{"truncated":2', "length"),
+        ]
+    )
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=16384,
+    )
+
+    with pytest.raises(ProtocolControlAgentCallError, match="连续两次未返回可读取的 JSON") as exc:
+        transport.start(prompt="冻结控制输入")
+
+    assert len(completions.calls) == 2
+    assert "长度上限" in str(exc.value)
+    assert "truncated" not in str(exc.value)
+    assert exc.value.session_id.startswith("protocol-control-chat-")
+    with pytest.raises(ProtocolControlAgentCallError, match="找不到协议控制 Agent 会话"):
+        transport.history(exc.value.session_id)
+
+
+def test_empty_body_is_retried_once_with_control_schema_instruction() -> None:
+    client, completions = _client(
+        [
+            (None, "stop"),
+            ('{"ok":true}', "stop"),
+        ]
+    )
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=16384,
+    )
+
+    response = transport.start(prompt="冻结控制输入")
+
+    assert response.text == '{"ok":true}'
+    assert len(completions.calls) == 2
+    assert CONTROL_RESPONSE_FORMAT_NAME in completions.calls[1]["messages"][-1]["content"]
+    assert "不要重复分析" in completions.calls[1]["messages"][-1]["content"]
+    # Empty-body internal retry must not produce consecutive user turns.
+    assert transport.history(response.session_id) == (
+        {"role": "user", "content": "冻结控制输入"},
+        {"role": "assistant", "content": '{"ok":true}'},
+    )
+
+    restored_client, restored_completions = _client(['{"after-empty":true}'])
+    restored = OpenAICompatibleProtocolControlAgentTransport(
+        client=restored_client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=16384,
+    )
+    restored.restore_history(
+        session_id=response.session_id,
+        messages=transport.history(response.session_id),
+    )
+    resumed = restored.continue_session(
+        session_id=response.session_id,
+        prompt="空正文后继续修复",
+    )
+    assert resumed.session_id == response.session_id
+    assert resumed.text == '{"after-empty":true}'
+    assert [item["role"] for item in restored.history(response.session_id)] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert restored_completions.calls[0]["messages"][0]["content"] == "冻结控制输入"
+    assert restored_completions.calls[0]["messages"][1]["content"] == '{"ok":true}'
+    assert restored_completions.calls[0]["messages"][2]["content"] == "空正文后继续修复"
+
+
+def test_runner_uses_real_transport_same_session_repair_without_inex_schema() -> None:
+    invalid = json.dumps(
+        {"wire_version": CONTROL_AGENT_WIRE_VERSION, "dispositions": []},
+        ensure_ascii=False,
+    )
+    valid = _valid_wire_text()
+    client, completions = _client([invalid, valid])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        reasoning_effort="medium",
+        max_tokens=16384,
+    )
+    # This fixture isolates the full-wire retry; source inventory has its own tests.
+    transport.start_source_interpretation = None
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(_batch(), transport)
+
+    assert result.status == "已解析"
+    assert result.session_id is not None
+    assert len(result.attempts) == 2
+    assert result.attempts[0].outcome == "schema_invalid"
+    assert result.attempts[1].outcome == "parsed"
+    assert len(completions.calls) == 2
+    assert all(
+        call["response_format"]["json_schema"]["name"] == CONTROL_RESPONSE_FORMAT_NAME
+        for call in completions.calls
+    )
+    assert all(
+        call["response_format"]["json_schema"]["name"]
+        != protocol_output_response_format("semantic_candidate", compact=True)[
+            "json_schema"
+        ]["name"]
+        for call in completions.calls
+    )
+    # 未显式配置 temperature：两次调用都保留供应商采样默认。
+    assert all("temperature" not in call for call in completions.calls)
+    assert all(call["reasoning_effort"] == "medium" for call in completions.calls)
+    assert [item["role"] for item in completions.calls[1]["messages"]] == [
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert completions.calls[1]["messages"][0]["content"] == completions.calls[0][
+        "messages"
+    ][0]["content"]
+    assert "pcb-generic-01" in completions.calls[1]["messages"][-1]["content"]
+
+
+def test_source_target_review_uses_its_own_small_schema() -> None:
+    from app.agents.protocol_control_source_interpretation import SOURCE_TARGET_REVIEW_VERSION
+    client, completions = _client([json.dumps({"version": SOURCE_TARGET_REVIEW_VERSION, "items": []})])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        reasoning_effort="medium",
+        max_tokens=16384,
+    )
+    response = transport.start_source_target_review(prompt="核对冻结来源与目标")
+    assert response.text.startswith('{"version":')
+    assert completions.calls[0]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_source_target_review_" + SOURCE_TARGET_REVIEW_VERSION.rsplit("/", 1)[-1]
+    )
+    assert "temperature" not in completions.calls[0]
+
+
+def test_text_mode_source_reads_include_their_actual_schema() -> None:
+    from app.agents.protocol_control_source_interpretation import (
+        SOURCE_INTERPRETATION_VERSION, SOURCE_TARGET_REVIEW_VERSION,
+    )
+    client, completions = _client([
+        json.dumps({"version": SOURCE_INTERPRETATION_VERSION, "statements": [],
+                    "units_without_statement": []}),
+        json.dumps({"version": SOURCE_TARGET_REVIEW_VERSION, "items": []}),
+    ])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="ollama-cloud", model="deepseek-v4.1-flash",
+        reasoning_effort="high", max_tokens=16384, response_format_mode="text",
+    )
+    transport.start_source_interpretation(prompt="解释冻结来源")
+    transport.start_source_target_review(prompt="核对来源目标")
+    assert len(completions.calls) == 2
+    assert all("response_format" not in call for call in completions.calls)
+    assert "decision_functions" in completions.calls[0]["messages"][0]["content"]
+    assert "background_context" in completions.calls[1]["messages"][0]["content"]
+    assert all("完整 JSON Schema" in call["messages"][0]["content"]
+               for call in completions.calls)
+
+
+@pytest.mark.parametrize("mode", ["json_schema", "text"])
+def test_source_inventory_schema_uses_only_current_owned_ids_and_releases_scope(mode) -> None:
+    from app.agents.protocol_control_source_interpretation import SOURCE_INTERPRETATION_VERSION
+    batch = _batch()
+    client, completions = _client([json.dumps({"version": SOURCE_INTERPRETATION_VERSION,
+                                              "statements": [], "units_without_statement": []})] * 2)
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="ollama-cloud", model="deepseek-v4.1-flash",
+        reasoning_effort="high", max_tokens=16384, response_format_mode=mode)
+    transport.start_source_interpretation_batch(prompt="冻结本组来源", batch=batch)
+    if mode == "json_schema":
+        schema = completions.calls[0]["response_format"]["json_schema"]["schema"]
+        assert schema["$defs"]["SourceStatement"]["properties"]["structure_unit_id"]["enum"] == batch.owned_structure_unit_ids
+        assert schema["properties"]["units_without_statement"]["items"]["enum"] == batch.owned_structure_unit_ids
+    else:
+        schema = json.loads(completions.calls[0]["messages"][0]["content"].split("常量值：", 1)[1])
+        assert schema["properties"]["units_without_statement"]["items"]["enum"] == batch.owned_structure_unit_ids
+    assert getattr(transport._receipt_local, "source_batch", None) is None
+    transport.start_source_interpretation(prompt="旧接口无批次范围")
+    if mode == "json_schema":
+        schema = completions.calls[1]["response_format"]["json_schema"]["schema"]
+        assert "enum" not in schema["properties"]["units_without_statement"]["items"]
+
+
+def test_source_inventory_scope_is_released_after_overridden_reader_failure() -> None:
+    class FailingTransport(OpenAICompatibleProtocolControlAgentTransport):
+        def start_source_interpretation(self, *, prompt):
+            raise RuntimeError("synthetic reader failure")
+
+    client, _ = _client([])
+    transport = FailingTransport(client=client, backend="ollama-cloud", model="deepseek-v4.1-flash")
+    with pytest.raises(RuntimeError, match="synthetic reader failure"):
+        transport.start_source_interpretation_batch(prompt="冻结来源", batch=_batch())
+    assert getattr(transport._receipt_local, "source_batch", None) is None
+
+
+def test_source_scope_correction_uses_bounded_schema() -> None:
+    client, completions = _client(['{"version":"phase5/control-source-scope-correction/v1",'
+                                    '"structure_unit_id":"su-01","scope_quote":null,'
+                                    '"affected_stage":null,"time_words":[],"unresolved":null}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="mtplx", model="mtplx-qwen38-27b-optimized-quality",
+        reasoning_effort="medium", max_tokens=16384,
+    )
+    response = transport.correct_source_scope(prompt="核对单条冻结来源")
+    assert '"su-01"' in response.text
+    assert completions.calls[0]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_source_scope_correction_v1"
+    )
+
+
+def test_runner_bounds_transport_failures_without_switching_schema_or_model() -> None:
+    class _FailingTransport(OpenAICompatibleProtocolControlAgentTransport):
+        def start_source_interpretation(self, *, prompt: str):
+            raise ProtocolControlAgentCallError(
+                "protocol-control-chat-fail",
+                "协议控制模型请求失败：ConnectionError: refused",
+            )
+
+        def start(self, *, prompt: str):
+            raise ProtocolControlAgentCallError(
+                "protocol-control-chat-fail",
+                "协议控制模型请求失败：ConnectionError: refused",
+            )
+
+    transport = _FailingTransport(
+        client=object(),
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=16384,
+    )
+    result = ProtocolControlAgentRunner(max_transport_retries=0).run(_batch(), transport)
+
+    assert result.status == "需要核对"
+    assert result.attempts[0].outcome == "transport_failed"
+    assert "ConnectionError" in result.attempts[0].issues[0]
+    assert transport.uses_control_response_format is True
+    assert transport.response_format_sha256 == (
+        OpenAICompatibleProtocolControlAgentTransport(
+            client=object(),
+            backend="mtplx",
+            model="mtplx-qwen38-27b-optimized-quality",
+            max_tokens=16384,
+        ).response_format_sha256
+    )
+
+
+def test_runner_does_not_duplicate_request_after_uncertain_timeout() -> None:
+    class _TimedOutTransport:
+        calls = 0
+
+        def start(self, *, prompt: str):
+            self.calls += 1
+            raise ProtocolControlAgentCallError(
+                "protocol-control-chat-timeout",
+                "协议控制模型请求超时",
+                uncertain_completion=True,
+            )
+
+        def continue_session(self, *, session_id: str, prompt: str):
+            raise AssertionError("首次请求超时后不得盲目续提")
+
+    transport = _TimedOutTransport()
+    result = ProtocolControlAgentRunner(max_transport_retries=3).run(
+        _batch(), transport
+    )
+
+    assert transport.calls == 1
+    assert result.status == "需要核对"
+    assert len(result.attempts) == 1
+    assert result.attempts[0].outcome == "transport_failed"
+
+
+def test_transport_handles_server_500_internal_error_with_session_and_error_details() -> None:
+    class _FailingCompletions:
+        def create(self, **kwargs):
+            raise RuntimeError(
+                "InternalServerError: Error code: 500 - {'error': {'message': 'internal server error; see the MTPLX server log (request_id=e0c906e5d034)', 'type': 'server_error', 'code': 'internal_error'}}"
+            )
+
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=_FailingCompletions()))
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=fake_client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+    )
+    with pytest.raises(ProtocolControlAgentCallError) as exc_info:
+        transport.start(prompt="测试输入")
+
+    assert exc_info.value.session_id.startswith("protocol-control-chat-")
+    assert "internal server error" in str(exc_info.value)
+    assert "e0c906e5d034" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# GLM（zhipu-coding-plan）协议控制路由：连接档案、GLM 词表与采样默认
+# ---------------------------------------------------------------------------
+
+
+_BIGMODEL_CODING_PLAN_URL = "https://open.bigmodel.cn/api/coding/paas/v4"
+
+
+def test_control_glm_backend_uses_coding_plan_profile_and_glm_wire(monkeypatch) -> None:
+    _FakeOpenAI.calls.clear()
+    _FakeHTTPClient.calls.clear()
+    monkeypatch.setattr(transport_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setattr(transport_module.httpx, "Client", _FakeHTTPClient)
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_BACKEND", "zhipu-coding-plan")
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_MODEL", "glm-5.3-flash")
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_REASONING_EFFORT", "high")
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_MAX_TOKENS", 65536)
+    monkeypatch.setattr(
+        transport_module, "PROTOCOL_CONTROL_GLM_BASE_URL", f"{_BIGMODEL_CODING_PLAN_URL}/"
+    )
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_GLM_API_KEY", "glm-key")
+    _FakeHTTPClient.calls.clear()
+
+    transport = protocol_control_transport_from_environment()
+
+    # Coding Plan 的 .../paas/v4 路径原样保留，不追加 /v1；直连不走系统代理。
+    assert _FakeOpenAI.calls[0]["base_url"] == _BIGMODEL_CODING_PLAN_URL
+    assert _FakeOpenAI.calls[0]["api_key"] == "glm-key"
+    assert _FakeHTTPClient.calls == [{"trust_env": False}]
+    kwargs = transport._completion_kwargs([{"role": "user", "content": "控制"}])
+    assert kwargs["model"] == "glm-5.3-flash"
+    assert kwargs["reasoning_effort"] == "high"
+    assert kwargs["max_tokens"] == 65536
+    assert "temperature" not in kwargs
+    assert kwargs["extra_body"] == {
+        "thinking": {"type": "enabled", "clear_thinking": False}
+    }
+    assert kwargs["response_format"]["json_schema"]["name"] == CONTROL_RESPONSE_FORMAT_NAME
+    # GLM 路由不带 MTPLX 的 AR 兼容措施。
+    assert kwargs["extra_body"] != {"generation_mode": "ar"}
+
+
+def test_control_glm_backend_rejects_unsupported_effort_instead_of_mapping_down() -> None:
+    with pytest.raises(ValueError, match="low/high/max"):
+        OpenAICompatibleProtocolControlAgentTransport(
+            client=object(),
+            backend="zhipu-coding-plan",
+            model="glm-5.3-flash",
+            reasoning_effort="xhigh",
+            api_key="glm-key",
+        )
+
+
+def test_control_glm_backend_requires_credential_before_any_request(
+    monkeypatch,
+) -> None:
+    _FakeOpenAI.calls.clear()
+    monkeypatch.setattr(transport_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_BACKEND", "zhipu-coding-plan")
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_GLM_API_KEY", "")
+
+    with pytest.raises(ValueError, match="尚未配置 api_key"):
+        protocol_control_transport_from_environment()
+
+    assert _FakeOpenAI.calls == []

@@ -1,0 +1,19 @@
+{
+  "attached_count": 6,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-6edd2d693aff138b9c55b1ec",
+  "group_id": "d001-ii-package101-analysis-set-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 6,
+    "frozen_plan_owned": 12
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package101-analysis-set-boundary",
+  "owned_count": 12,
+  "prompt_char_count": 35938,
+  "prompt_sha256": "43682f6d9060872c300ded5d2fb674084e3ba433c32699703a98e2817fdddac7",
+  "task_id": "phase5-slice61cn-20260830",
+  "unit_count": 18,
+  "worker": "codex-parent"
+}

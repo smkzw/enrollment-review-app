@@ -1,0 +1,325 @@
+[
+  {
+    "excerpt": "可疑且非预期严重不良反应（Suspected Unexpected Serious Adverse Reaction，SUSAR）指临床表现的性质和严重程度超出了试验药物《研究者手册》、已上市药品的说明书或者产品特性摘要等已有资料信息的可疑并且非预期的严重不良反应。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "可疑且非预期严重不良反应（SUSAR）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1018",
+    "source_span_ids": [
+      "body.p1018"
+    ],
+    "structure_unit_id": "su-3a466b9df7a0012b972a2b3d",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "非预期不良反应指不良反应的性质、严重程度、后果或频率，不同于试验药物当前相关资料（如《研究者手册》等文件）所描述的预期风险。《研究者手册》作为主要文件提供用以判断某不良反应是否预期或非预期的安全性参考信息。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "可疑且非预期严重不良反应（SUSAR）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1019",
+    "source_span_ids": [
+      "body.p1019"
+    ],
+    "structure_unit_id": "su-0230c1ca32146e5682365991",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "严重不良事件（SAE）与试验用药品的因果关系由研究者和申办者双方共同判断。当双方意见不一致时，对研究者或/和申办者任意一方判断与试验用药品相关的严重不良事件，均属报告范围。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "attached",
+    "source_ref": "body.p1096",
+    "source_span_ids": [
+      "body.p1096"
+    ],
+    "structure_unit_id": "su-d41dd8a6ab4c85237c0b2e49",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "申办者的报告要求",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1124",
+    "source_span_ids": [
+      "body.p1124"
+    ],
+    "structure_unit_id": "su-79021ae623bcb6b31a8cd34a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "申办者收到任何来源的安全性相关信息后，均应当科学全面地分析评估，包括严重性、与试验用药品的相关性、预期性以及评估风险-获益比等。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1125",
+    "source_span_ids": [
+      "body.p1125"
+    ],
+    "structure_unit_id": "su-8cb002b5da53ffb63fd15d55",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "申办者应当将SUSAR快速报告给所有参加临床试验的研究者、临床试验机构及伦理委员会；申办者应当向药品监督管理部门和卫生健康主管部门报告SUSAR。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1126",
+    "source_span_ids": [
+      "body.p1126"
+    ],
+    "structure_unit_id": "su-1518dc0b91c86c76765673de",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "对于研究期间发生的所有与试验用药品肯定相关或可疑的非预期且严重的不良反应，申办者都应按照下述规定时限向国家药品监督管理总局药品审评中心进行快速报告：",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1127",
+    "source_span_ids": [
+      "body.p1127"
+    ],
+    "structure_unit_id": "su-8e1cfe3a7475acb38bf9851f",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "对于致死或危及生命的SUSAR，应在首次获知后7天内（含7天）尽快报告，并在随后的8天内报告、完善随访信息（首次获知当天为第0天）；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1128",
+    "source_span_ids": [
+      "body.p1128"
+    ],
+    "structure_unit_id": "su-ad001484e2bad323dd288136",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "对于非致死或危及生命的SUSAR，应在首次获知后15天内（含15天）尽快报告。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1129",
+    "source_span_ids": [
+      "body.p1129"
+    ],
+    "structure_unit_id": "su-ef45e8ae2585d607a1ad64a9",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "快速报告开始时间为临床试验批准日期或国家药品审评机构默示许可开始日期；结束时间为国内最后一例参与者随访结束日期。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1130",
+    "source_span_ids": [
+      "body.p1130"
+    ],
+    "structure_unit_id": "su-bd1b0b456693d93037bab527",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "在临床试验结束或随访结束后，研究者获知的任何严重不良事件研究者应报告申办者。若属于SUSAR，还应进行快速报告。申办者在首次报告后，应继续跟踪严重不良反应，以随访报告的形式及时报送有关更新的信息或对前次报告的更改信息等，报告时限为获得新信息起15天内。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1131",
+    "source_span_ids": [
+      "body.p1131"
+    ],
+    "structure_unit_id": "su-597067c477d314783bc08403",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "对于临床试验期间发生的所有与试验用药品肯定相关或可疑非预期的严重不良反应，即使申办者和研究者在不良事件与研究药物因果关系判断中不能达成一致时，只要其中任何一方判断不能排除与研究药物相关的，申办者也应向国家药品审评机构进行快速报告。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1132",
+    "source_span_ids": [
+      "body.p1132"
+    ],
+    "structure_unit_id": "su-2ef939e9c604aa8ea86b8098",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "以下情况一般不作为快速报告内容：",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1133",
+    "source_span_ids": [
+      "body.p1133"
+    ],
+    "structure_unit_id": "su-98140a88b2bec06fa03040e6",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "非严重不良事件；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1134",
+    "source_span_ids": [
+      "body.p1134"
+    ],
+    "structure_unit_id": "su-e90c66dfbc7f1ca0e2bf3a15",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "严重不良事件与试验用药品无关；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "owned",
+    "source_ref": "body.p1135",
+    "source_span_ids": [
+      "body.p1135"
+    ],
+    "structure_unit_id": "su-3805178b03c7b8cacabd6f96",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "严重但属预期的不良反应；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-8dd6a669bdee4e77cc1f0b63",
+    "package_ordinal": 96,
+    "role": "attached",
+    "source_ref": "body.p1136",
+    "source_span_ids": [
+      "body.p1136"
+    ],
+    "structure_unit_id": "su-b67409702cdd94eca252289a",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "当以严重不良事件为主要疗效终点时，不建议申请人以个例安全性报告形式向国家药品审评机构报告。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-8dd6a669bdee4e77cc1f0b63",
+    "package_ordinal": 96,
+    "role": "attached",
+    "source_ref": "body.p1137",
+    "source_span_ids": [
+      "body.p1137"
+    ],
+    "structure_unit_id": "su-9aefc1fcee2ad36efca4fd7b",
+    "unit_kind": "list_item"
+  }
+]

@@ -1,0 +1,284 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package111-protocol-amendment-authority-version-table-boundary",
+  "task_id": "phase5-slice61cx-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "expected_package_ordinal": 111,
+  "expected_package_id": "pap-214ce50fd89fb1998521c4c3",
+  "owned_source_refs": [
+    "body.p1291",
+    "body.p1292",
+    "body.t15.r0",
+    "body.t15.r1"
+  ],
+  "attached_source_refs": [],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1291",
+    "body.p1292",
+    "body.t15.r0",
+    "body.t15.r1"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1291",
+    "body.t15.r0"
+  ],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1292": "non_enrollment_execution",
+    "body.t15.r1": "non_enrollment_execution"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "owned_visit_instances_by_source_ref": {},
+  "owned_procedure_semantic_families_by_source_ref": {},
+  "owned_required_action_kinds_by_source_ref": {},
+  "owned_required_procedure_target_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1291": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "方案修订标题决定受试者资格",
+      "方案修订章节误作入排控制"
+    ],
+    "body.p1292": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "申办者签字同意决定单例资格",
+      "主要研究者签字决定入排",
+      "伦理委员会审批误作受试者资格",
+      "方案修订签字义务候选化为入排条件",
+      "未获伦理备案不得入组"
+    ],
+    "body.t15.r0": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "版本表头决定受试者资格",
+      "变更说明列误作入排控制",
+      "表头与数据行混淆为既往修订"
+    ],
+    "body.t15.r1": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "V1.0误读为既往修订",
+      "NA臆造变更说明",
+      "NA臆造简要理由",
+      "初始版本记录误作修订历史",
+      "版本日期决定单例资格"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "先逐条读取第111包body.p1291、body.p1292、body.t15.r0、body.t15.r1原文并区分四类语义：小节标题（p1291方案修订）仅结构；方案修订授权机制（p1292：任何必须改变均须以方案修订形式进行，并在申办者与主要研究者签字同意后提交伦理委员会审批或备案）是项目级方案权威变更治理，须保留为唯一授权标准变更形式；版本表头（t15.r0：版本/日期/变更说明/简要理由）仅表结构；版本表数据行（t15.r1：V1.0|2025年12月10日|NA|NA）只证明当前初始版本与日期，不证明存在历史修订、变更内容或修订理由，不得把V1.0/NA臆造为既往修订。逐项判断后确认这些均是方案/现行修订案权威与版本治理，不是单例筛选、基线或入排资格；真实参加研究前控制若存在须保留，但本包原文未形成独立筛选前受试者动作，故required candidates为空；不得以other_control_candidate强挂到受试者工作流，也不得回吸Package 110或提前吸收Package 112，不得把body.p1293-p1294无主空白分隔吸入本包。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第111包位于Ⅱ期“方案修订”章节。p1291提供结构标题；p1292确立方案任何必须改变均须以方案修订形式进行，并在申办者、主要研究者签字同意后提交伦理委员会审批或备案，这是项目级方案权威变更机制而非单例受试者资格；t15.r0是版本表表头；t15.r1记录V1.0初始版本与2025年12月10日及NA/NA，只证明初始版本记录，不构成修订历史。这些对象是方案权威/版本治理，不是单例受试者人群、入排条件、频率或筛选/基线/D1给药前动作。Package 110止于p1290；body.p1293-p1294为无主空白分隔；Package 112从p1295参考文献起不得吸入。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61cx-package111-protocol-amendment-authority-version-table-boundary",
+    "catalog_id": "catalog:slice61cx-package111-protocol-amendment-authority-version-table-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1291": [
+      "小节标题“方案修订”仅提供结构，不产生单例资格"
+    ],
+    "body.p1292": [
+      "方案任何必须改变均须以方案修订形式进行",
+      "须在申办者、主要研究者签字同意后提交伦理委员会审批或备案",
+      "方案修订是唯一授权标准变更形式，属于项目级权威治理",
+      "申办者/主要研究者/伦理委员会义务不得误成单例筛选、基线或入排资格"
+    ],
+    "body.t15.r0": [
+      "版本表表头由版本、日期、变更说明、简要理由组成",
+      "表头仅结构，不得与数据行混淆，也不得误作入排控制"
+    ],
+    "body.t15.r1": [
+      "数据行为V1.0、2025年12月10日、NA、NA",
+      "只证明当前初始版本及日期，不证明存在历史修订、变更内容或修订理由",
+      "不得把V1.0/NA臆造为既往修订或入排条件"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1291": {
+      "semantic_role": "protocol_amendment_section_heading",
+      "base_rule": "方案修订",
+      "exception_rule": "“方案修订”仅是章节标题，提供权威语境与结构，不产生单例筛选、基线或入排资格动作。",
+      "preserve_keywords": [
+        "方案修订"
+      ],
+      "forbidden_inversion": "不得把小节标题改写为筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1292": {
+      "semantic_role": "protocol_amendment_authority_sponsor_pi_ethics_governance",
+      "base_rule": "方案任何的必须的改变，都需以方案修订形式进行，并需在获得申办者、主要研究者签字同意后提交伦理委员会审批或备案。",
+      "exception_rule": "方案任何必须改变均须以方案修订形式进行，并在获得申办者、主要研究者签字同意后提交伦理委员会审批或备案。这是项目级方案/现行修订案的唯一授权标准变更机制，须保留为方案权威变更治理；申办者、主要研究者及伦理委员会义务不是受试者级入排条件。",
+      "preserve_keywords": [
+        "方案修订形式",
+        "申办者",
+        "主要研究者",
+        "签字同意",
+        "伦理委员会",
+        "审批或备案"
+      ],
+      "forbidden_inversion": "不得把申办者签字、主要研究者同意、伦理委员会审批/备案或方案修订程序改写为筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.t15.r0": {
+      "semantic_role": "protocol_version_table_header_structural_only",
+      "base_rule": "版本 | 日期 | 变更说明 | 简要理由",
+      "exception_rule": "版本表表头“版本、日期、变更说明、简要理由”仅提供表结构原子，不产生修订内容、入排条件或受试者动作；不得与数据行混淆。",
+      "preserve_keywords": [
+        "版本",
+        "日期",
+        "变更说明",
+        "简要理由"
+      ],
+      "forbidden_inversion": "不得把版本表头改写为筛选必做、不得入组、排除标准、入排不通过、发布控制点，或误读为既往修订记录。"
+    },
+    "body.t15.r1": {
+      "semantic_role": "protocol_initial_version_v1_record_not_historical_amendment",
+      "base_rule": "V1.0 | 2025年12月10日 | NA | NA",
+      "exception_rule": "版本表数据行记录V1.0与2025年12月10日，变更说明与简要理由均为NA。该行只证明当前初始版本及日期，不证明存在历史修订、变更内容或修订理由；不得把V1.0/NA臆造为既往修订，也不得误成单例资格。",
+      "preserve_keywords": [
+        "V1.0",
+        "2025年12月10日",
+        "NA"
+      ],
+      "forbidden_inversion": "不得把V1.0初始版本、NA变更说明/理由或版本日期改写为既往修订历史、筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "Package 110严格拥有body.p1281-p1290并止于p1290；Package 111严格且仅拥有body.p1291、body.p1292、body.t15.r0、body.t15.r1。原始结构中body.t15表容器、t15.r2-r7的24个空单元格段落以及body.p1293-p1294空白分隔均全局无主且不在冻结覆盖单元中，不得吸入本包、不得解释为未来修订槽位或臆造修订历史。Package 112从body.p1295“参考文献”开始，不得提前吸收。冻结计划中的37项context_units仅只读，未经Codex另行授权不得升格为attached_source_refs。必须保留方案修订作为唯一授权标准变更形式；不得把V1.0/NA臆造为既往修订；不得把申办者、主要研究者、伦理委员会义务候选化为受试者资格。",
+    "excluded_unowned_structure_refs": [
+      "body.t15",
+      "body.t15.r2.c0.p0",
+      "body.t15.r2.c1.p0",
+      "body.t15.r2.c2.p0",
+      "body.t15.r2.c3.p0",
+      "body.t15.r3.c0.p0",
+      "body.t15.r3.c1.p0",
+      "body.t15.r3.c2.p0",
+      "body.t15.r3.c3.p0",
+      "body.t15.r4.c0.p0",
+      "body.t15.r4.c1.p0",
+      "body.t15.r4.c2.p0",
+      "body.t15.r4.c3.p0",
+      "body.t15.r5.c0.p0",
+      "body.t15.r5.c1.p0",
+      "body.t15.r5.c2.p0",
+      "body.t15.r5.c3.p0",
+      "body.t15.r6.c0.p0",
+      "body.t15.r6.c1.p0",
+      "body.t15.r6.c2.p0",
+      "body.t15.r6.c3.p0",
+      "body.t15.r7.c0.p0",
+      "body.t15.r7.c1.p0",
+      "body.t15.r7.c2.p0",
+      "body.t15.r7.c3.p0",
+      "body.p1293",
+      "body.p1294"
+    ],
+    "expected_owners_by_span": {
+      "body.p1290": 110,
+      "body.p1291": 111,
+      "body.p1292": 111,
+      "body.t15.r0": 111,
+      "body.t15.r1": 111,
+      "body.p1295": 112,
+      "body.p515": 45,
+      "body.p575": 46,
+      "body.p584": 47,
+      "body.p594": 48,
+      "body.p618": 50,
+      "body.p838": 75
+    },
+    "unowned_context_source_refs": [
+      "body.t5.r0",
+      "body.t6.r0",
+      "body.p446",
+      "body.p455",
+      "body.p465",
+      "body.p483",
+      "body.p502",
+      "body.t7.r0",
+      "body.p839",
+      "body.p840",
+      "body.p869",
+      "body.p903",
+      "body.p915",
+      "body.p931",
+      "body.p935",
+      "body.p936",
+      "body.p938",
+      "body.p972",
+      "body.p976",
+      "body.p978",
+      "body.p1206",
+      "body.p1207",
+      "body.p1210",
+      "body.p1214",
+      "body.p1216",
+      "body.p1221"
+    ]
+  },
+  "notes": [
+    "模型外闭包：Package 111恰好拥有body.p1291、body.p1292、body.t15.r0、body.t15.r1共4个来源；无attached；37项context_units保持只读且不升格。",
+    "四类语义必须分开：小节标题仅结构（p1291）；方案修订唯一授权变更机制与申办者/主要研究者/伦理委员会治理（p1292）；版本表头仅结构（t15.r0）；V1.0初始版本记录而非既往修订（t15.r1）。",
+    "候选判定不是预设零：逐项判断后确认本包无独立参加研究前受试者动作；required_candidate_source_refs为空且有逐项原文依据。不得把治理义务或V1.0/NA误成单例资格，也不得丢失任何真实前置控制。",
+    "方案修订权威必须保留：任何必须改变都需以方案修订形式进行；不得降格或替换该权威变更机制。",
+    "Package 110止于p1290；p1293-p1294无主空白分隔不吸收；Package 112从p1295起；claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程。"
+  ]
+}

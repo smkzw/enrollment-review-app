@@ -1,0 +1,181 @@
+[
+  {
+    "model": "muse-spark-1.3-contributor",
+    "provider": "opencode-go",
+    "mode": "text",
+    "max_tokens": 65536,
+    "reasoning_effort": "high",
+    "transport": "app.llm.page_review_harness.direct_completion",
+    "image_sha256": null,
+    "synthetic_control_not_clinical_acceptance": true,
+    "isolated_header_override": {
+      "x-opencode-session": "enrollment-diagnostic-d5daae68-40e5-527d-a606-be56bac89905",
+      "User-Agent": "enrollment-review-connectivity-diagnostic/20260922"
+    },
+    "status": "error",
+    "error_type": "InternalServerError",
+    "http_status": 503,
+    "message": "Error code: 503 - {'error': {'type': 'server_error', 'message': 'Upstream request failed: Endpoint is unavailable.'}}",
+    "elapsed_seconds": 1.014
+  },
+  {
+    "model": "mimo-v2.6-flash",
+    "provider": "opencode-go",
+    "mode": "text",
+    "max_tokens": 65536,
+    "reasoning_effort": "high",
+    "transport": "app.llm.page_review_harness.direct_completion",
+    "image_sha256": null,
+    "synthetic_control_not_clinical_acceptance": true,
+    "isolated_header_override": {
+      "x-opencode-session": "enrollment-diagnostic-06f933a3-5edd-5ede-8c86-2f96307cdf10",
+      "User-Agent": "enrollment-review-connectivity-diagnostic/20260922"
+    },
+    "status": "response",
+    "finish_reason": "stop",
+    "response_model": "mimo-v2.6-flash",
+    "response_id": "91be9ede-b14e-4481-8c4b-d3a570c0f2e1_0fa57437195041d699350f8e93c07dc3",
+    "usage": {
+      "completion_tokens": 15,
+      "prompt_tokens": 12,
+      "total_tokens": 27,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": 12,
+        "rejected_prediction_tokens": null
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": null,
+        "cached_tokens": 0
+      }
+    },
+    "output": "OK",
+    "output_lengths": {
+      "content_characters": 2,
+      "reasoning_content_characters": 45
+    },
+    "elapsed_seconds": 1.916
+  },
+  {
+    "model": "mimo-v2.6-flash",
+    "provider": "opencode-go",
+    "mode": "image",
+    "max_tokens": 65536,
+    "reasoning_effort": "high",
+    "transport": "app.llm.page_review_harness.direct_completion",
+    "image_sha256": "7989bebc96a31c6fe3e26c77ee1f945459f20e0f0efbc056bb90344fe926e4de",
+    "synthetic_control_not_clinical_acceptance": true,
+    "isolated_header_override": {
+      "x-opencode-session": "enrollment-diagnostic-06f933a3-5edd-5ede-8c86-2f96307cdf10",
+      "User-Agent": "enrollment-review-connectivity-diagnostic/20260922"
+    },
+    "status": "response",
+    "finish_reason": "stop",
+    "response_model": "mimo-v2.6-flash",
+    "response_id": "3e3ae57e-93da-4da3-8235-d9b37e6d2693_bd029762eec4420ebf9641947e2a2fbf",
+    "usage": {
+      "completion_tokens": 78,
+      "prompt_tokens": 784,
+      "total_tokens": 862,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": 70,
+        "rejected_prediction_tokens": null
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": null,
+        "cached_tokens": 0
+      }
+    },
+    "output": "CONTROL 4729",
+    "output_lengths": {
+      "content_characters": 12,
+      "reasoning_content_characters": 235
+    },
+    "elapsed_seconds": 3.041
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "provider": "opencode-go",
+    "mode": "text",
+    "max_tokens": 65536,
+    "reasoning_effort": "high",
+    "transport": "app.llm.page_review_harness.direct_completion",
+    "image_sha256": null,
+    "synthetic_control_not_clinical_acceptance": true,
+    "isolated_header_override": {
+      "x-opencode-session": "enrollment-diagnostic-fd5028cf-d839-583c-9496-3732d1c9f14d",
+      "User-Agent": "enrollment-review-connectivity-diagnostic/20260922"
+    },
+    "status": "response",
+    "finish_reason": "stop",
+    "response_model": "deepseek-v4.1-flash",
+    "response_id": "a72a859550cd8185d70c900439f3b546",
+    "usage": {
+      "completion_tokens": 17,
+      "prompt_tokens": 35,
+      "total_tokens": 52,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 15,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_write_tokens": 0
+      }
+    },
+    "output": "OK",
+    "output_lengths": {
+      "content_characters": 2,
+      "reasoning_content_characters": 60
+    },
+    "elapsed_seconds": 1.856
+  },
+  {
+    "model": "deepseek-v4.1-flash",
+    "provider": "opencode-go",
+    "mode": "image",
+    "max_tokens": 65536,
+    "reasoning_effort": "high",
+    "transport": "app.llm.page_review_harness.direct_completion",
+    "image_sha256": "7989bebc96a31c6fe3e26c77ee1f945459f20e0f0efbc056bb90344fe926e4de",
+    "synthetic_control_not_clinical_acceptance": true,
+    "isolated_header_override": {
+      "x-opencode-session": "enrollment-diagnostic-fd5028cf-d839-583c-9496-3732d1c9f14d",
+      "User-Agent": "enrollment-review-connectivity-diagnostic/20260922"
+    },
+    "status": "response",
+    "finish_reason": "stop",
+    "response_model": "deepseek-v4.1-flash",
+    "response_id": "439297c2037e429c103944017282e0f9",
+    "usage": {
+      "completion_tokens": 101,
+      "prompt_tokens": 533,
+      "total_tokens": 634,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 95,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_write_tokens": 0
+      }
+    },
+    "output": "CONTROL 4729",
+    "output_lengths": {
+      "content_characters": 12,
+      "reasoning_content_characters": 447
+    },
+    "elapsed_seconds": 4.08
+  }
+]

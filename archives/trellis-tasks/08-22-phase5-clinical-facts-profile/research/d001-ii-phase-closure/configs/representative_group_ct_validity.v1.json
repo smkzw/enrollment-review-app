@@ -1,0 +1,75 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral_tb.v1.json",
+  "group_id": "d001-ii-ct-result-validity",
+  "task_id": "phase5-slice60h-20260828",
+  "artifact_dir_name": "phase5-slice60h-d001-ct-result-validity-replay-20260828",
+  "owned_source_refs": [
+    "body.p797"
+  ],
+  "attached_source_refs": [
+    "body.t5.r20",
+    "body.p330"
+  ],
+  "required_candidate_source_refs": [],
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "仅处置胸部CT专章中的既往结果有效期与复测裁量；流程表和摘要中的胸部CT必做项作为只读边界。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": [
+      {
+        "catalog_item_id": "pcm-row-02a2cd07e9ccaeb65c4d156c",
+        "label": "胸部CT平扫",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 52,
+        "source_span_ids": [
+          "span-05d531bcfe86b6cf45178aa92e58d973",
+          "span-72044b76a0d289810f4201306c5070d7",
+          "span-a6b0de37126369f1543204a778d3196e"
+        ]
+      }
+    ]
+  },
+  "runner": {
+    "max_transport_retries": 1,
+    "max_schema_repairs": 3,
+    "timeout_seconds": 7200.0
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60h-ct-validity",
+    "catalog_id": "catalog:slice60h-ct-validity"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p797": [
+      "icf_minus_one_calendar_month_validity",
+      "ct_assessment_requirement_retained",
+      "retest_is_discretionary",
+      "screening_decision_node_only"
+    ],
+    "body.t5.r20": [
+      "screening_ct_required_procedure_not_duplicated"
+    ],
+    "body.p330": [
+      "summary_ct_validity_boundary_not_republished"
+    ]
+  },
+  "notes": [
+    "原始DOCX产品链直接提取，用户无需预处理方案文本。",
+    "本组验证既往胸部CT结果有效期在冻结流程必做项中已完整保留，不应重复生成新控制点。",
+    "研究中心可酌情复测不是必须执行或必须记录的义务，不得强化为新的资料要求。",
+    "只读流程目标用于阻止重复生成筛选期胸部CT必做义务。"
+  ]
+}

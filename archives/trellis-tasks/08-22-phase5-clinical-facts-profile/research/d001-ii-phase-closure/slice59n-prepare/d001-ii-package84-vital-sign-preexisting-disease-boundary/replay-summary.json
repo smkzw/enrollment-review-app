@@ -1,0 +1,19 @@
+{
+  "attached_count": 19,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-b64f14c7d46ff4bf5786f787",
+  "group_id": "d001-ii-package84-vital-sign-preexisting-disease-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 2,
+    "frozen_plan_owned": 29
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package84-vital-sign-preexisting-disease-boundary",
+  "owned_count": 12,
+  "prompt_char_count": 41834,
+  "prompt_sha256": "de0a28fb60fb84e08759df352d6d5c73cce86835b1ad5cd6621dc8a9a2578688",
+  "task_id": "phase5-slice61bv-20260830",
+  "unit_count": 31,
+  "worker": "codebuddy-worker_02"
+}

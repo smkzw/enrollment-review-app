@@ -1,0 +1,3676 @@
+"""领域仓储：Pydantic 合同 <-> ORM 适配、scope 校验与组合写入。
+
+约定：
+
+- 写操作全部在调用方持有的短事务内完成（``with session.begin()`` 由服务层
+  持有边界）；本模块在 flush 处给出类型化错误（唯一冲突、引用缺失、跨 scope
+  违规），并在失败时回滚会话；
+- 不可变记录追加写；读取时校验 payload 哈希并交叉核对规范化列与 payload
+  （漂移即 :class:`PersistedContractInvalid`），绝不返回空对象；
+- 列表查询单条 SELECT，禁止按实体 N+1；
+- 关键跨项目/跨方案版本/跨审核节点关系除真实外键外，再经服务层 scope 校验
+  拒绝，杜绝只靠 JSON 内 ID 的“软引用”。
+"""
+from __future__ import annotations
+
+import json
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, cast
+
+from pydantic import BaseModel
+from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.domain.contracts import (
+    ActionRequest,
+    AgentCallContract,
+    AssessmentCandidate,
+    ClinicalFact,
+    DraftRevisionStatus,
+    EpisodeRollup,
+    EvidenceExpectation,
+    EvidenceExpectationTemplate,
+    EvidenceNormalizationCandidate,
+    EvidenceRequirement,
+    EvidenceSnapshot,
+    EvidenceSpan,
+    FinalAssessment,
+    FixtureV1,
+    JobEvent,
+    ModelConfigContract,
+    PatientProfile,
+    PhaseApplicabilityGraph,
+    PhaseProjection,
+    Project,
+    PromptVersion,
+    ProtocolAuthorityRecord,
+    ProtocolDraftRevision,
+    ProtocolIdentityDecision,
+    ProtocolIntegrityManifest,
+    ProtocolMetadataCandidate,
+    ProtocolMetadataConflict,
+    ReviewEpisode,
+    ReviewRun,
+    ReviewRunDiff,
+    Rule,
+    RuleComponent,
+    RuleSet,
+    StudyPhaseCandidate,
+    StudyPhaseSelection,
+    Subject,
+    WorkflowStage,
+)
+from app.domain.contracts.agents import CriticRun, GateResult
+from app.domain.contracts.context import ReviewContextSnapshot
+from app.domain.contracts.evidence import ConflictGroup, SourceDocumentVersion
+from app.domain.contracts.protocol_metadata import (
+    InterpretationConflict,
+    InterpretationSource,
+)
+from app.domain.contracts.review import ActionTransition, ProtocolDocumentVersion
+from app.domain.contracts.rules import (
+    ProtocolAuthorityConfirmation,
+    ProtocolSourceRecord,
+    ServiceCommandEvent,
+)
+from app.storage.codecs import (
+    PersistedContractInvalid,
+    check_column_mirrors,
+    decode_contract,
+    encode_contract,
+    encode_value,
+    parse_datetime_column,
+    payload_get,
+    to_utc_naive,
+    utc_now,
+)
+from app.storage.concurrency import apply_revisioned_update
+from app.storage.models import (
+    Base,
+    ActionRequestRecord,
+    ActionTransitionRecord,
+    AgentCallRecord,
+    AssessmentCandidateRecord,
+    ClinicalFactRecord,
+    ConflictGroupRecord,
+    CriticRunRecord,
+    EpisodeRollupRecord,
+    EvidenceExpectationRecord,
+    EvidenceExpectationTemplateRecord,
+    EvidenceNormalizationCandidateRecord,
+    EvidenceRequirementRecord,
+    EvidenceSnapshotRecord,
+    EvidenceSpanRecord,
+    FinalAssessmentRecord,
+    GateResultRecord,
+    InterpretationConflictRecord,
+    InterpretationSourceRecord,
+    JobCheckpointRecord,
+    JobEventRecord,
+    JobRecord,
+    JobStepRecord,
+    ModelConfigRecord,
+    PatientProfileRecord,
+    ProjectRecord,
+    PromptVersionRecord,
+    ProtocolAuthorityConfirmationRecord,
+    ProtocolAuthorityRecordRow,
+    ProtocolDocumentVersionRecord,
+    ProtocolDraftRevisionRecord,
+    ProtocolIdentityDecisionRecord,
+    ProtocolIntegrityManifestRecord,
+    ProtocolMetadataCandidateRecord,
+    ProtocolMetadataConflictRecord,
+    ProtocolPhaseApplicabilityGraphRecord,
+    ProtocolPhaseProjectionRecord,
+    ProtocolSourceRecordRow,
+    ReviewContextSnapshotRecord,
+    ReviewEpisodeRecord,
+    ReviewRunDiffRecord,
+    ReviewRunRecord,
+    RuleComponentRecord,
+    RuleRecord,
+    RuleSetRecord,
+    ServiceCommandEventRecord,
+    SourceDocumentVersionRecord,
+    StudyPhaseCandidateRecord,
+    StudyPhaseSelectionRecord,
+    SubjectRecord,
+    WorkflowStageRecord,
+    action_transition_spans,
+    action_transition_locators,
+    assessment_candidate_facts_v2,
+    assessment_candidate_locators,
+    agent_call_gate_results,
+    agent_call_sources,
+    clinical_fact_spans,
+    evidence_expectation_spans,
+    evidence_snapshot_documents,
+    final_assessment_facts,
+    final_assessment_facts_v2,
+    final_assessment_locators,
+    final_assessment_spans,
+    job_step_dependencies,
+    workflow_stage_requirements,
+)
+
+# ---------------------------------------------------------------------------
+# 错误类型
+# ---------------------------------------------------------------------------
+
+
+class RepositoryError(RuntimeError):
+    """存储层基础错误。"""
+
+
+class NotFoundError(RepositoryError):
+    """主键不存在。"""
+
+
+class DuplicateRecordError(RepositoryError):
+    """唯一键冲突：同 ID/同键记录已存在。"""
+
+
+class InvalidReferenceError(RepositoryError):
+    """外键引用不存在：关系被数据库拒绝。"""
+
+
+class ScopeViolationError(RepositoryError):
+    """跨项目/跨方案版本/跨审核节点 scope 不一致，被服务校验拒绝。"""
+
+
+def _flush_guarded(session: Session) -> None:
+    """Translate constraint errors, preserving an enclosing transaction's owner."""
+    savepoint = session.get_nested_transaction()
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        if savepoint is not None:
+            savepoint.rollback()
+        else:
+            session.rollback()
+        message = str(exc.orig) if exc.orig is not None else str(exc)
+        upper = message.upper()
+        if "UNIQUE" in upper:
+            raise DuplicateRecordError(f"唯一约束冲突：{message}") from exc
+        if "FOREIGN KEY" in upper:
+            raise InvalidReferenceError(f"引用缺失被数据库拒绝：{message}") from exc
+        raise RepositoryError(f"写入失败：{message}") from exc
+
+
+def _get_required(session: Session, record_cls: type, ident: Any, what: str) -> Any:
+    record = session.get(record_cls, ident)
+    if record is None:
+        raise InvalidReferenceError(f"{what} {ident!r} 不存在，无法建立该关系")
+    return record
+
+
+def _insert_revisioned(
+    session: Session,
+    record_cls: type,
+    payload_json: str,
+    payload_sha256: str,
+    columns: dict[str, Any],
+) -> Any:
+    now = utc_now()
+    row = record_cls(
+        payload_json=payload_json,
+        payload_sha256=payload_sha256,
+        revision=1,
+        created_at=now,
+        updated_at=now,
+        **columns,
+    )
+    session.add(row)
+    _flush_guarded(session)
+    return row
+
+
+# ---------------------------------------------------------------------------
+# 追加写仓储骨架
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AssocSpec:
+    """有序多值引用 ``(owner, ref, position)`` 关联表写入说明。"""
+
+    table: Any
+    owner_column: str
+    owner_value_key: str  # payload key（点路径）提供 owner id
+    refs_payload_key: str  # payload key 提供有序 ref 列表
+    schema_version: str | None = None
+
+
+def _verify_assoc(session: Session, assoc: AssocSpec, payload: dict[str, Any], entity_name: str) -> None:
+    expected = (
+        payload_get(payload, assoc.refs_payload_key) or []
+        if assoc.schema_version is None or payload.get("schema_version") == assoc.schema_version else []
+    )
+    table = assoc.table
+    ref_column = next(
+        column.name for column in table.c
+        if column.name not in {assoc.owner_column, "position"}
+    )
+    rows = session.execute(
+        select(table.c[ref_column], table.c.position)
+        .where(table.c[assoc.owner_column] == payload_get(payload, assoc.owner_value_key))
+        .order_by(table.c.position)
+    ).all()
+    if [(row[0], row[1]) for row in rows] != list(zip(expected, range(len(expected)))):
+        raise PersistedContractInvalid(f"{entity_name} 的资料引用与冻结内容不一致")
+
+
+@dataclass(frozen=True)
+class AppendConfig:
+    record_cls: type
+    contract_type: type[BaseModel]
+    entity_name: str
+    specs: dict[str, str]  # 列名 -> payload key（点路径）
+    datetime_cols: frozenset[str] = frozenset()
+    mirrors: dict[str, str] = field(default_factory=dict)  # 列名 -> payload key
+    assoc: tuple[AssocSpec, ...] = ()
+    created_at_key: str | None = None  # payload 内提供记录创建时间的字段
+    scope_check: Any = None  # callable(session, contract, payload) -> None
+
+
+class AppendRepository:
+    """追加写：payload JSON/hash + 规范化列；读取哈希校验 + 列/payload 交叉核对。"""
+
+    def __init__(self, session: Session, config: AppendConfig) -> None:
+        self.session = session
+        self.config = config
+
+    # -- 写 ---------------------------------------------------------------
+
+    def _build_columns(
+        self, payload: dict[str, Any], scope: dict[str, Any] | None
+    ) -> dict[str, Any]:
+        columns: dict[str, Any] = {}
+        for column, key in self.config.specs.items():
+            value = payload_get(payload, key)
+            if column in self.config.datetime_cols:
+                value = parse_datetime_column(value) if value is not None else None
+            columns[column] = value
+        if scope:
+            known = set(self.config.record_cls.__table__.c.keys())
+            columns.update({name: value for name, value in scope.items() if name in known})
+        return columns
+
+    def save(self, contract: BaseModel, *, scope: dict[str, Any] | None = None) -> BaseModel:
+        payload_json, payload_sha256 = encode_contract(contract)
+        payload = json.loads(payload_json)
+        if self.config.scope_check is not None:
+            self.config.scope_check(self.session, contract, payload)
+        columns = self._build_columns(payload, scope)
+        created_at_key = self.config.created_at_key
+        if created_at_key is not None and payload.get(created_at_key) is not None:
+            created_at = parse_datetime_column(payload[created_at_key])
+        else:
+            created_at = utc_now()
+        record = self.config.record_cls(
+            payload_json=payload_json,
+            payload_sha256=payload_sha256,
+            created_at=created_at,
+            **columns,
+        )
+        self.session.add(record)
+        _flush_guarded(self.session)
+        for assoc in self.config.assoc:
+            self._write_assoc(assoc, payload)
+            _flush_guarded(self.session)
+        return contract
+
+    def _write_assoc(self, assoc: AssocSpec, payload: dict[str, Any]) -> None:
+        if assoc.schema_version is not None and payload.get("schema_version") != assoc.schema_version:
+            return
+        owner_value = payload_get(payload, assoc.owner_value_key)
+        refs = payload_get(payload, assoc.refs_payload_key) or []
+        if not refs:
+            return
+        table = assoc.table
+        ref_column = next(
+            column.name
+            for column in table.c
+            if column.name not in {assoc.owner_column, "position"}
+        )
+        self.session.execute(
+            insert(table),
+            [
+                {
+                    assoc.owner_column: owner_value,
+                    ref_column: ref,
+                    "position": position,
+                }
+                for position, ref in enumerate(refs)
+            ],
+        )
+
+    # -- 读 ---------------------------------------------------------------
+
+    def get(self, *ident: str | int) -> BaseModel:
+        if not ident:
+            raise ValueError("至少需要一个主键值")
+        key: str | int | tuple[str | int, ...] = (
+            ident if len(ident) > 1 else next(iter(ident))
+        )
+        record = self.session.get(self.config.record_cls, key)
+        if record is None:
+            raise NotFoundError(f"{self.config.entity_name} {ident!r} 不存在")
+        return self._decode(record)
+
+    def get_or_none(self, *ident: str | int) -> BaseModel | None:
+        if not ident:
+            raise ValueError("至少需要一个主键值")
+        key: str | int | tuple[str | int, ...] = (
+            ident if len(ident) > 1 else next(iter(ident))
+        )
+        record = self.session.get(self.config.record_cls, key)
+        return self._decode(record) if record is not None else None
+
+    def _decode(self, record: Any) -> BaseModel:
+        contract = decode_contract(
+            self.config.contract_type, record.payload_json, record.payload_sha256
+        )
+        payload = json.loads(record.payload_json)
+        mirrors = dict(self.config.mirrors)
+        if self.config.created_at_key is not None:
+            mirrors["created_at"] = self.config.created_at_key
+        check_column_mirrors(self.config.entity_name, record, payload, mirrors)
+        for assoc in self.config.assoc:
+            if assoc.schema_version is None:
+                continue
+            _verify_assoc(self.session, assoc, payload, self.config.entity_name)
+        return contract
+
+
+# ---------------------------------------------------------------------------
+# scope 校验（外键之外的跨实体一致性）
+# ---------------------------------------------------------------------------
+
+
+def _check_snapshot_scope(session: Session, snapshot: EvidenceSnapshot) -> None:
+    episode = _get_required(
+        session, ReviewEpisodeRecord, snapshot.review_episode_id, "ReviewEpisode"
+    )
+    if episode.subject_id != snapshot.subject_id:
+        raise ScopeViolationError(
+            f"EvidenceSnapshot {snapshot.evidence_snapshot_id} 的 subject 超出其 episode"
+        )
+
+
+def _check_fact_scope(session: Session, fact: ClinicalFact) -> None:
+    episode = _get_required(
+        session, ReviewEpisodeRecord, fact.review_episode_id, "ReviewEpisode"
+    )
+    if episode.subject_id != fact.subject_id:
+        raise ScopeViolationError(f"ClinicalFact {fact.fact_id} 的 subject 超出其 episode")
+    if episode.project_id != fact.project_id:
+        raise ScopeViolationError(f"ClinicalFact {fact.fact_id} 的 project 超出其 episode")
+    snapshot = _get_required(
+        session, EvidenceSnapshotRecord, fact.evidence_snapshot_id, "EvidenceSnapshot"
+    )
+    if snapshot.review_episode_id != fact.review_episode_id:
+        raise ScopeViolationError(f"ClinicalFact {fact.fact_id} 的 snapshot 超出其 episode")
+    if snapshot.subject_id != fact.subject_id:
+        raise ScopeViolationError(f"ClinicalFact {fact.fact_id} 的 snapshot 超出其 subject")
+
+
+def _evidence_lineage(value: Any) -> tuple[str | None, str | None, str | None]:
+    return (
+        value.evidence_snapshot_id,
+        value.evidence_snapshot_v2_id,
+        value.complete_processing_revision_id,
+    )
+
+
+def _check_run_scope(session: Session, run: ReviewRun) -> None:
+    episode = EpisodeRepository(session).get(run.review_episode_id)
+    if episode.protocol_version_id != run.protocol_version_id:
+        raise ScopeViolationError(
+            f"ReviewRun {run.review_run_id} 的 protocol_version 与 episode 不一致"
+        )
+    if episode.rule_set_revision != run.rule_set_revision:
+        raise ScopeViolationError(
+            f"ReviewRun {run.review_run_id} 的 rule_set_revision 与 episode 不一致"
+        )
+    expected_lineage = (
+        (episode.evidence_snapshot_id, None, None)
+        if run.schema_version == "fixture/v1"
+        else (None, episode.active_evidence_snapshot_id, episode.active_evidence_processing_revision_id)
+    )
+    if expected_lineage != _evidence_lineage(run):
+        raise ScopeViolationError(
+            f"ReviewRun {run.review_run_id} 的 evidence_snapshot 与 episode 不一致"
+        )
+    if run.schema_version == "review/v2":
+        from app.domain.contracts.facts import FactAuthority
+        from app.storage.fact_authority import FactAuthorityValidator
+        from app.storage.review_context_repository import ReviewContextV2Repository
+
+        authority = FactAuthority(
+            project_id=episode.project_id,
+            subject_id=episode.subject_id,
+            review_episode_id=run.review_episode_id,
+            episode_revision=run.episode_revision,
+            protocol_version_id=run.protocol_version_id,
+            rule_set_id=episode.rule_set_id,
+            rule_set_revision=run.rule_set_revision,
+            evidence_snapshot_v2_id=run.evidence_snapshot_v2_id,
+            complete_processing_revision_id=run.complete_processing_revision_id,
+        )
+        FactAuthorityValidator(session).validate(authority)
+        context = ReviewContextV2Repository(session).get(run.context_id)
+        if (run.run_kind == "work_draft") != context.work_draft:
+            raise ScopeViolationError("工作稿与正式审核上下文不能互相替代")
+        if context.requirements_scope_version != "review-requirements-scope/v1":
+            raise ScopeViolationError("新审核须先核实方案要求是否齐全，不能沿用未完成该核实的历史输入")
+        if (
+            context.review_run_id != run.review_run_id
+            or context.authority != authority
+            or context.review_episode.model_dump(mode="json") != episode.model_dump(mode="json")
+        ):
+            raise ScopeViolationError("审核记录与冻结上下文、节点或资料版本不一致")
+
+
+def _check_component_exists(session: Session, rule_set_id: str, revision: int, component_id: str) -> None:
+    record = session.get(RuleComponentRecord, (rule_set_id, revision, component_id))
+    if record is None:
+        raise ScopeViolationError(
+            f"RuleComponent {component_id} 不属于 RuleSet {rule_set_id} revision {revision}"
+        )
+
+
+def _check_assessment_scope(session: Session, assessment: FinalAssessment) -> None:
+    episode = _get_required(
+        session, ReviewEpisodeRecord, assessment.review_episode_id, "ReviewEpisode"
+    )
+    if episode.project_id != assessment.project_id:
+        raise ScopeViolationError(
+            f"FinalAssessment {assessment.assessment_id} 的 project 超出其 episode"
+        )
+    if episode.subject_id != assessment.subject_id:
+        raise ScopeViolationError(
+            f"FinalAssessment {assessment.assessment_id} 的 subject 超出其 episode"
+        )
+    if episode.rule_set_id != assessment.rule_set_id:
+        raise ScopeViolationError(
+            f"FinalAssessment {assessment.assessment_id} 的 rule_set 与 episode 不一致"
+        )
+    if episode.rule_set_revision != assessment.rule_set_revision:
+        raise ScopeViolationError(
+            f"FinalAssessment {assessment.assessment_id} 的 rule_set_revision 与 episode 不一致"
+        )
+    run = AppendRepository(session, REVIEW_RUN_CONFIG).get(assessment.review_run_id)
+    if run.run_kind == "work_draft":
+        raise ScopeViolationError("工作稿不能写入正式签发结论")
+    if run.review_episode_id != assessment.review_episode_id:
+        raise ScopeViolationError(
+            f"FinalAssessment {assessment.assessment_id} 的 run 超出其 episode"
+        )
+    if _evidence_lineage(run) != _evidence_lineage(assessment):
+        raise ScopeViolationError(
+            f"FinalAssessment {assessment.assessment_id} 的 snapshot 超出其 run"
+        )
+    _check_component_exists(
+        session, assessment.rule_set_id, assessment.rule_set_revision, assessment.rule_component_id
+    )
+    if assessment.schema_version == "review/v2":
+        from app.storage.review_reference_validation import review_authority, validate_review_references
+
+        validate_review_references(
+            session,
+            authority=review_authority(run, EpisodeRepository(session).get(assessment.review_episode_id)),
+            fact_ids=assessment.used_fact_ids,
+            locator_ids=assessment.locator_ids,
+        )
+
+
+def _check_candidate_scope(session: Session, candidate: AssessmentCandidate) -> None:
+    run = AppendRepository(session, REVIEW_RUN_CONFIG).get(candidate.review_run_id)
+    call = AppendRepository(session, AGENT_CALL_CONFIG).get(candidate.agent_call_id)
+    if (
+        run.schema_version != candidate.schema_version
+        or run.review_episode_id != candidate.review_episode_id
+        or run.protocol_version_id != candidate.protocol_version_id
+        or run.rule_set_revision != candidate.rule_set_revision
+        or _evidence_lineage(run) != _evidence_lineage(candidate)
+        or any(getattr(call, key) != getattr(candidate, key) for key in (
+            "schema_version", "project_id", "protocol_version_id", "subject_id",
+            "rule_set_id", "rule_set_revision", "review_episode_id", "review_run_id",
+            "evidence_snapshot_id", "evidence_snapshot_v2_id", "complete_processing_revision_id",
+        ))
+    ):
+        raise ScopeViolationError("审核候选与原调用、本次审核的资料范围不一致")
+    _check_component_exists(session, candidate.rule_set_id, candidate.rule_set_revision, candidate.rule_component_id)
+    if candidate.schema_version == "review/v2":
+        from app.storage.review_reference_validation import review_authority, validate_review_references
+
+        episode = EpisodeRepository(session).get(candidate.review_episode_id)
+        if (episode.project_id, episode.subject_id, episode.rule_set_id) != (
+            candidate.project_id, candidate.subject_id, candidate.rule_set_id,
+        ):
+            raise ScopeViolationError("审核候选不属于当前受试者及方案")
+        validate_review_references(
+            session, authority=review_authority(run, episode),
+            fact_ids=candidate.used_fact_ids, locator_ids=candidate.locator_ids,
+        )
+
+
+def _check_action_scope(session: Session, action: ActionRequest) -> None:
+    episode = _get_required(
+        session, ReviewEpisodeRecord, action.review_episode_id, "ReviewEpisode"
+    )
+    if episode.project_id != action.project_id or episode.subject_id != action.subject_id:
+        raise ScopeViolationError(
+            f"ActionRequest {action.action_id} 的 subject/project 超出其 episode"
+        )
+    if action.schema_version == "fixture/v1" and episode.rule_set_id != action.rule_set_id:
+        raise ScopeViolationError(f"ActionRequest {action.action_id} 的 rule_set 与 episode 不一致")
+    if action.schema_version == "fixture/v1" and episode.rule_set_revision != action.rule_set_revision:
+        raise ScopeViolationError(
+            f"ActionRequest {action.action_id} 的 rule_set_revision 与 episode 不一致"
+        )
+    run = AppendRepository(session, REVIEW_RUN_CONFIG).get(action.review_run_id)
+    if run.review_episode_id != action.review_episode_id:
+        raise ScopeViolationError(f"ActionRequest {action.action_id} 的 run 超出其 episode")
+    if _evidence_lineage(run) != _evidence_lineage(action):
+        raise ScopeViolationError(f"ActionRequest {action.action_id} 的 snapshot 超出其 run")
+    if action.control_origin is not None:
+        from app.storage.control_action_validation import validate_control_action_origin
+        validate_control_action_origin(session, action)
+    else:
+        _check_component_exists(
+            session, action.rule_set_id, action.rule_set_revision, action.rule_component_id
+        )
+        assessment = AppendRepository(session, FINAL_ASSESSMENT_CONFIG).get(action.assessment_id)
+        if (
+            assessment.review_episode_id != action.review_episode_id
+            or assessment.review_run_id != action.review_run_id
+            or assessment.rule_component_id != action.rule_component_id
+            or _evidence_lineage(assessment) != _evidence_lineage(action)
+            or any(getattr(assessment, field) != getattr(action, field) for field in (
+                "schema_version", "project_id", "subject_id", "protocol_version_id", "rule_set_id", "rule_set_revision",
+            ))
+        ):
+            raise ScopeViolationError(
+                f"ActionRequest {action.action_id} 的 assessment 超出其 episode"
+            )
+    if action.schema_version == "review/v2":
+        from app.storage.review_reference_validation import validate_action_response, validate_review_references
+        from app.storage.review_context_repository import ReviewContextV2Repository
+
+        context = ReviewContextV2Repository(session).get(run.context_id)
+        if context.review_run_id != run.review_run_id or (
+            context.authority.project_id, context.authority.subject_id, context.authority.review_episode_id,
+            context.authority.rule_set_id, context.authority.rule_set_revision, context.authority.protocol_version_id,
+        ) != (
+            action.project_id, action.subject_id, action.review_episode_id,
+            action.rule_set_id, action.rule_set_revision, action.protocol_version_id,
+        ):
+            raise ScopeViolationError("办理事项与原审核范围不一致")
+        validate_review_references(
+            session, authority=context.authority,
+            fact_ids=[], locator_ids=[action.trigger_locator_id] if action.trigger_locator_id is not None else [],
+        )
+        for transition in action.transitions:
+            validate_action_response(session, action, transition)
+
+
+def _check_agent_call_scope(session: Session, call: AgentCallContract) -> None:
+    if call.review_episode_id is None:
+        return
+    episode = _get_required(
+        session, ReviewEpisodeRecord, call.review_episode_id, "ReviewEpisode"
+    )
+    if call.subject_id is not None and episode.subject_id != call.subject_id:
+        raise ScopeViolationError(f"AgentCall {call.agent_call_id} 的 subject 超出其 episode")
+    if call.rule_set_id is not None and episode.rule_set_id != call.rule_set_id:
+        raise ScopeViolationError(f"AgentCall {call.agent_call_id} 的 rule_set 与 episode 不一致")
+    if call.review_run_id is not None:
+        run = _get_required(session, ReviewRunRecord, call.review_run_id, "ReviewRun")
+        if run.review_episode_id != call.review_episode_id:
+            raise ScopeViolationError(f"AgentCall {call.agent_call_id} 的 run 超出其 episode")
+        if (
+            any(_evidence_lineage(call))
+            and _evidence_lineage(run) != _evidence_lineage(call)
+        ):
+            raise ScopeViolationError(f"AgentCall {call.agent_call_id} 的 snapshot 超出其 run")
+
+
+def _check_expectation_scope(
+    session: Session, expectation: EvidenceExpectation, payload: dict[str, Any]
+) -> None:
+    episode = _get_required(
+        session, ReviewEpisodeRecord, expectation.review_episode_id, "ReviewEpisode"
+    )
+    requirement = session.get(
+        EvidenceRequirementRecord,
+        (episode.rule_set_id, episode.rule_set_revision, expectation.requirement_id),
+    )
+    if requirement is None:
+        raise ScopeViolationError(
+            f"EvidenceExpectation {expectation.expectation_id} 的 requirement "
+            f"{expectation.requirement_id} 不属于 episode 的 RuleSet "
+            f"{episode.rule_set_id} revision {episode.rule_set_revision}"
+        )
+
+
+def _check_episode_scope(session: Session, episode: ReviewEpisode) -> None:
+    subject = _get_required(session, SubjectRecord, episode.subject_id, "Subject")
+    if subject.project_id != episode.project_id:
+        raise ScopeViolationError(
+            f"ReviewEpisode {episode.review_episode_id} 的 project 与 subject 不一致"
+        )
+    rule_set = session.get(RuleSetRecord, (episode.rule_set_id, episode.rule_set_revision))
+    if rule_set is None:
+        raise ScopeViolationError(
+            f"ReviewEpisode {episode.review_episode_id} 引用的 RuleSet "
+            f"{episode.rule_set_id} revision {episode.rule_set_revision} 不存在"
+        )
+    if rule_set.protocol_version_id != episode.protocol_version_id:
+        raise ScopeViolationError(
+            f"ReviewEpisode {episode.review_episode_id} 的 rule_set 与 protocol_version 不一致"
+        )
+
+
+def _check_project_scope(
+    session: Session, project: Project, payload: dict[str, Any], rule_set_revision: int
+) -> None:
+    _get_required(
+        session,
+        ProtocolDocumentVersionRecord,
+        project.protocol_version.protocol_version_id,
+        "ProtocolDocumentVersion",
+    )
+    rule_set = session.get(RuleSetRecord, (project.rule_set_id, rule_set_revision))
+    if rule_set is None:
+        raise ScopeViolationError(
+            f"Project {project.project_id} 引用的 RuleSet {project.rule_set_id} "
+            f"revision {rule_set_revision} 不存在"
+        )
+    if rule_set.protocol_version_id != project.protocol_version.protocol_version_id:
+        raise ScopeViolationError(
+            f"Project {project.project_id} 的 rule_set 与 protocol_version 不一致"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 追加写配置注册表
+# ---------------------------------------------------------------------------
+
+
+def _config(
+    record_cls: type,
+    contract_type: type[BaseModel],
+    specs: dict[str, str],
+    **kwargs: Any,
+) -> AppendConfig:
+    return AppendConfig(
+        record_cls=record_cls,
+        contract_type=contract_type,
+        entity_name=contract_type.__name__,
+        specs=specs,
+        **kwargs,
+    )
+
+
+PROTOCOL_DOC_CONFIG = _config(
+    ProtocolDocumentVersionRecord,
+    ProtocolDocumentVersion,
+    {
+        "protocol_version_id": "protocol_version_id",
+        "protocol_code": "protocol_code",
+        "official_version": "official_version",
+        "official_date_value": "official_date.value",
+        "official_date_precision": "official_date.precision",
+        "sha256": "sha256",
+        "integrity_manifest_sha256": "integrity_manifest_sha256",
+        "authority_record_sha256": "authority_record_sha256",
+        "authority_confirmation_id": "authority_confirmation_id",
+        "authority_gate_result_id": "authority_gate_result_id",
+        "integrity_gate_result_id": "integrity_gate_result_id",
+    },
+    datetime_cols=frozenset({"official_date_value"}),
+    mirrors={
+        "protocol_code": "protocol_code",
+        "official_version": "official_version",
+        "official_date_precision": "official_date.precision",
+        "sha256": "sha256",
+        "authority_confirmation_id": "authority_confirmation_id",
+        "authority_gate_result_id": "authority_gate_result_id",
+        "integrity_gate_result_id": "integrity_gate_result_id",
+    },
+)
+
+PROTOCOL_METADATA_CANDIDATE_CONFIG = _config(
+    ProtocolMetadataCandidateRecord,
+    ProtocolMetadataCandidate,
+    {
+        "candidate_id": "candidate_id",
+        "snapshot_id": "snapshot_id",
+        "field_category": "field_category",
+        "normalized_value": "normalized_value",
+        "source_ref": "source_ref",
+        "source_kind": "source_kind",
+        "identity_authority": "identity_authority",
+        "priority_rank": "priority_rank",
+        "conflict_group_id": "conflict_group_id",
+    },
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "field_category": "field_category",
+        "normalized_value": "normalized_value",
+        "source_ref": "source_ref",
+        "source_kind": "source_kind",
+        "identity_authority": "identity_authority",
+        "priority_rank": "priority_rank",
+        "conflict_group_id": "conflict_group_id",
+    },
+)
+
+PROTOCOL_METADATA_CONFLICT_CONFIG = _config(
+    ProtocolMetadataConflictRecord,
+    ProtocolMetadataConflict,
+    {
+        "conflict_id": "conflict_id",
+        "snapshot_id": "snapshot_id",
+        "field_category": "field_category",
+        "status": "status",
+        "selected_candidate_id": "selected_candidate_id",
+    },
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "field_category": "field_category",
+        "status": "status",
+        "selected_candidate_id": "selected_candidate_id",
+    },
+)
+
+PROTOCOL_IDENTITY_DECISION_CONFIG = _config(
+    ProtocolIdentityDecisionRecord,
+    ProtocolIdentityDecision,
+    {
+        "identity_decision_id": "identity_decision_id",
+        "snapshot_id": "snapshot_id",
+        "status": "status",
+        "project_name": "project_name",
+        "project_code": "project_code",
+        "protocol_code": "protocol_code",
+        "official_version": "official_version",
+        "official_date_value": "official_date.value",
+        "official_date_precision": "official_date.precision",
+        "study_phase": "study_phase",
+        "confirmed_at": "confirmed_at",
+    },
+    datetime_cols=frozenset({"official_date_value", "confirmed_at"}),
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "status": "status",
+        "project_name": "project_name",
+        "project_code": "project_code",
+        "protocol_code": "protocol_code",
+        "official_version": "official_version",
+        "official_date_value": "official_date.value",
+        "official_date_precision": "official_date.precision",
+        "study_phase": "study_phase",
+        "confirmed_at": "confirmed_at",
+    },
+)
+
+STUDY_PHASE_CANDIDATE_CONFIG = _config(
+    StudyPhaseCandidateRecord,
+    StudyPhaseCandidate,
+    {
+        "candidate_id": "candidate_id",
+        "snapshot_id": "snapshot_id",
+        "design_type": "design_type",
+        "source_ref": "source_ref",
+        "priority_rank": "priority_rank",
+    },
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "design_type": "design_type",
+        "source_ref": "source_ref",
+        "priority_rank": "priority_rank",
+    },
+)
+
+STUDY_PHASE_SELECTION_CONFIG = _config(
+    StudyPhaseSelectionRecord,
+    StudyPhaseSelection,
+    {
+        "selection_id": "selection_id",
+        "snapshot_id": "snapshot_id",
+        "selected_phase": "selected_phase",
+        "status": "status",
+        "confirmed_at": "confirmed_at",
+    },
+    datetime_cols=frozenset({"confirmed_at"}),
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "selected_phase": "selected_phase",
+        "status": "status",
+        "confirmed_at": "confirmed_at",
+    },
+)
+
+PROTOCOL_PHASE_GRAPH_CONFIG = _config(
+    ProtocolPhaseApplicabilityGraphRecord,
+    PhaseApplicabilityGraph,
+    {
+        "graph_id": "graph_id",
+        "snapshot_id": "snapshot_id",
+        "default_design_type": "default_design_type",
+    },
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "default_design_type": "default_design_type",
+    },
+)
+
+PROTOCOL_PHASE_PROJECTION_CONFIG = _config(
+    ProtocolPhaseProjectionRecord,
+    PhaseProjection,
+    {
+        "projection_id": "projection_id",
+        "graph_id": "graph_id",
+        "selected_phase": "selected_phase",
+    },
+    mirrors={
+        "graph_id": "graph_id",
+        "selected_phase": "selected_phase",
+    },
+)
+
+INTERPRETATION_SOURCE_CONFIG = _config(
+    InterpretationSourceRecord,
+    InterpretationSource,
+    {
+        "interpretation_source_id": "interpretation_source_id",
+        "protocol_version_id": "protocol_version_id",
+        "source_type": "source_type",
+        "file_sha256": "file_sha256",
+        "authority": "authority",
+        "source_ref": "source_ref",
+        "is_current_amendment": "is_current_amendment",
+    },
+    mirrors={
+        "protocol_version_id": "protocol_version_id",
+        "source_type": "source_type",
+        "file_sha256": "file_sha256",
+        "authority": "authority",
+        "source_ref": "source_ref",
+        "is_current_amendment": "is_current_amendment",
+    },
+)
+
+INTERPRETATION_CONFLICT_CONFIG = _config(
+    InterpretationConflictRecord,
+    InterpretationConflict,
+    {
+        "conflict_id": "conflict_id",
+        "protocol_version_id": "protocol_version_id",
+        "interpretation_source_id": "interpretation_source_id",
+        "status": "status",
+        "blocks_publication": "blocks_publication",
+    },
+    mirrors={
+        "protocol_version_id": "protocol_version_id",
+        "interpretation_source_id": "interpretation_source_id",
+        "status": "status",
+        "blocks_publication": "blocks_publication",
+    },
+)
+
+
+def save_interpretation_source(
+    session: Session, source: InterpretationSource
+) -> InterpretationSource:
+    """追加写一条解释来源；锚点解析随契约进入 payload_json，不改镜像列。"""
+
+    return AppendRepository(session, INTERPRETATION_SOURCE_CONFIG).save(source)
+
+
+def list_interpretation_sources(
+    session: Session, protocol_version_id: str
+) -> list[InterpretationSource]:
+    """按方案版本读取全部解释来源；旧记录缺锚点解析字段时按空列表读取。"""
+
+    repository = AppendRepository(session, INTERPRETATION_SOURCE_CONFIG)
+    rows = (
+        session.execute(
+            select(InterpretationSourceRecord)
+            .where(
+                InterpretationSourceRecord.protocol_version_id == protocol_version_id
+            )
+            .order_by(
+                InterpretationSourceRecord.created_at,
+                InterpretationSourceRecord.interpretation_source_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [repository._decode(row) for row in rows]
+
+
+def save_interpretation_conflict(
+    session: Session, conflict: InterpretationConflict
+) -> InterpretationConflict:
+    """追加写一条解释冲突记录（未解决冲突阻止发布）。"""
+
+    return AppendRepository(session, INTERPRETATION_CONFLICT_CONFIG).save(conflict)
+
+
+def list_interpretation_conflicts(
+    session: Session, protocol_version_id: str
+) -> list[InterpretationConflict]:
+    """按方案版本读取全部解释冲突记录。"""
+
+    repository = AppendRepository(session, INTERPRETATION_CONFLICT_CONFIG)
+    rows = (
+        session.execute(
+            select(InterpretationConflictRecord)
+            .where(
+                InterpretationConflictRecord.protocol_version_id == protocol_version_id
+            )
+            .order_by(
+                InterpretationConflictRecord.created_at,
+                InterpretationConflictRecord.conflict_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [repository._decode(row) for row in rows]
+
+AUTHORITY_RECORD_CONFIG = _config(
+    ProtocolAuthorityRecordRow,
+    ProtocolAuthorityRecord,
+    {
+        "authority_record_id": "authority_record_id",
+        "protocol_version_id": "protocol_version_id",
+        "study_phase": "study_phase",
+        "verified_at": "verified_at",
+    },
+    datetime_cols=frozenset({"verified_at"}),
+    mirrors={"protocol_version_id": "protocol_version_id", "study_phase": "study_phase"},
+)
+
+SOURCE_RECORD_CONFIG = _config(
+    ProtocolSourceRecordRow,
+    ProtocolSourceRecord,
+    {
+        "source_ref": "source_ref",
+        "protocol_version_id": "protocol_version_id",
+        "protocol_document_sha256": "protocol_document_sha256",
+    },
+    mirrors={
+        "protocol_version_id": "protocol_version_id",
+        "protocol_document_sha256": "protocol_document_sha256",
+    },
+)
+
+COMMAND_EVENT_CONFIG = _config(
+    ServiceCommandEventRecord,
+    ServiceCommandEvent,
+    {
+        "command_id": "command_id",
+        "protocol_version_id": "protocol_version_id",
+        "authority_record_id": "authority_record_id",
+        "occurred_at": "occurred_at",
+    },
+    datetime_cols=frozenset({"occurred_at"}),
+    mirrors={"protocol_version_id": "protocol_version_id", "authority_record_id": "authority_record_id"},
+)
+
+AUTHORITY_CONFIRMATION_CONFIG = _config(
+    ProtocolAuthorityConfirmationRecord,
+    ProtocolAuthorityConfirmation,
+    {
+        "confirmation_id": "confirmation_id",
+        "command_id": "command_id",
+        "protocol_version_id": "protocol_version_id",
+        "authority_record_id": "authority_record_id",
+        "confirmed_at": "confirmed_at",
+    },
+    datetime_cols=frozenset({"confirmed_at"}),
+    mirrors={
+        "command_id": "command_id",
+        "protocol_version_id": "protocol_version_id",
+        "authority_record_id": "authority_record_id",
+    },
+)
+
+INTEGRITY_MANIFEST_CONFIG = _config(
+    ProtocolIntegrityManifestRecord,
+    ProtocolIntegrityManifest,
+    {
+        "manifest_id": "manifest_id",
+        "protocol_version_id": "protocol_version_id",
+        "authority_record_id": "authority_record_id",
+    },
+    mirrors={
+        "protocol_version_id": "protocol_version_id",
+        "authority_record_id": "authority_record_id",
+    },
+)
+
+SOURCE_DOCUMENT_CONFIG = _config(
+    SourceDocumentVersionRecord,
+    SourceDocumentVersion,
+    {
+        "source_document_version_id": "source_document_version_id",
+        "sha256": "sha256",
+        "document_type": "document_type",
+        "source_party": "source_party",
+        "upload_mode": "upload_mode",
+        "review_stage": "review_stage",
+    },
+    mirrors={
+        "sha256": "sha256",
+        "document_type": "document_type",
+        "source_party": "source_party",
+        "upload_mode": "upload_mode",
+        "review_stage": "review_stage",
+    },
+)
+
+EVIDENCE_SPAN_CONFIG = _config(
+    EvidenceSpanRecord,
+    EvidenceSpan,
+    {
+        "evidence_span_id": "evidence_span_id",
+        "source_document_version_id": "source_document_version_id",
+        "page_number": "page_number",
+        "precision": "precision",
+    },
+    mirrors={
+        "source_document_version_id": "source_document_version_id",
+        "page_number": "page_number",
+        "precision": "precision",
+    },
+)
+
+SNAPSHOT_CONFIG = _config(
+    EvidenceSnapshotRecord,
+    EvidenceSnapshot,
+    {
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "upload_mode": "upload_mode",
+        "prior_snapshot_id": "prior_snapshot_id",
+    },
+    created_at_key="created_at",
+    assoc=(
+        AssocSpec(
+            evidence_snapshot_documents,
+            "evidence_snapshot_id",
+            "evidence_snapshot_id",
+            "source_document_version_ids",
+        ),
+    ),
+    scope_check=lambda session, contract, payload: _check_snapshot_scope(session, contract),
+    mirrors={
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "upload_mode": "upload_mode",
+        "prior_snapshot_id": "prior_snapshot_id",
+    },
+)
+
+CLINICAL_FACT_CONFIG = _config(
+    ClinicalFactRecord,
+    ClinicalFact,
+    {
+        "fact_id": "fact_id",
+        "project_id": "project_id",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "fact_type": "fact_type",
+        "polarity": "polarity",
+        "certainty": "certainty",
+        "value_json": "value",
+        "unit": "unit",
+        "effective_date_json": "effective_date",
+        "conflict_group_id": "conflict_group_id",
+    },
+    assoc=(AssocSpec(clinical_fact_spans, "fact_id", "fact_id", "evidence_span_ids"),),
+    scope_check=lambda session, contract, payload: _check_fact_scope(session, contract),
+    mirrors={
+        "project_id": "project_id",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "fact_type": "fact_type",
+        "polarity": "polarity",
+        "certainty": "certainty",
+        "value_json": "value",
+        "unit": "unit",
+        "conflict_group_id": "conflict_group_id",
+    },
+)
+
+EXPECTATION_CONFIG = _config(
+    EvidenceExpectationRecord,
+    EvidenceExpectation,
+    {
+        "expectation_id": "expectation_id",
+        "requirement_id": "requirement_id",
+        "review_episode_id": "review_episode_id",
+        "status": "status",
+        "gap_type": "gap_type",
+    },
+    assoc=(
+        AssocSpec(
+            evidence_expectation_spans,
+            "expectation_id",
+            "expectation_id",
+            "evidence_span_ids",
+        ),
+    ),
+    scope_check=lambda session, contract, payload: _check_expectation_scope(
+        session, contract, payload
+    ),
+    mirrors={
+        "requirement_id": "requirement_id",
+        "review_episode_id": "review_episode_id",
+        "status": "status",
+        "gap_type": "gap_type",
+    },
+)
+
+CONFLICT_GROUP_CONFIG = _config(
+    ConflictGroupRecord,
+    ConflictGroup,
+    {"conflict_group_id": "conflict_group_id"},
+)
+
+NORMALIZATION_CANDIDATE_CONFIG = _config(
+    EvidenceNormalizationCandidateRecord,
+    EvidenceNormalizationCandidate,
+    {
+        "candidate_id": "candidate_id",
+        "project_id": "project_id",
+        "protocol_version_id": "protocol_version_id",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "created_by_agent_call_id": "created_by_agent_call_id",
+    },
+    mirrors={
+        "project_id": "project_id",
+        "protocol_version_id": "protocol_version_id",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "created_by_agent_call_id": "created_by_agent_call_id",
+    },
+)
+
+PATIENT_PROFILE_CONFIG = _config(
+    PatientProfileRecord,
+    PatientProfile,
+    {
+        "patient_profile_id": "patient_profile_id",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "stale": "stale",
+    },
+    mirrors={
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "stale": "stale",
+    },
+)
+
+_REVIEW_V2_COLUMNS = {
+    "evidence_snapshot_v2_id": "evidence_snapshot_v2_id",
+    "complete_processing_revision_id": "complete_processing_revision_id",
+}
+
+REVIEW_RUN_CONFIG = _config(
+    ReviewRunRecord,
+    ReviewRun,
+    {
+        **_REVIEW_V2_COLUMNS,
+        "context_id": "context_id",
+        "review_run_id": "review_run_id",
+        "run_kind": "run_kind",
+        "system_issues": "system_issues",
+        "review_episode_id": "review_episode_id",
+        "protocol_version_id": "protocol_version_id",
+        "rule_set_revision": "rule_set_revision",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "started_at": "started_at",
+        "completed_at": "completed_at",
+        "supersedes_review_run_id": "supersedes_review_run_id",
+    },
+    datetime_cols=frozenset({"started_at", "completed_at"}),
+    scope_check=lambda session, contract, payload: _check_run_scope(session, contract),
+    mirrors={
+        **_REVIEW_V2_COLUMNS,
+        "run_kind": "run_kind",
+        "system_issues": "system_issues",
+        "context_id": "context_id",
+        "review_episode_id": "review_episode_id",
+        "protocol_version_id": "protocol_version_id",
+        "rule_set_revision": "rule_set_revision",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "supersedes_review_run_id": "supersedes_review_run_id",
+    },
+)
+
+ASSESSMENT_CANDIDATE_CONFIG = _config(
+    AssessmentCandidateRecord,
+    AssessmentCandidate,
+    {
+        **_REVIEW_V2_COLUMNS,
+        "assessment_candidate_id": "assessment_candidate_id",
+        "agent_call_id": "agent_call_id",
+        "project_id": "project_id",
+        "protocol_version_id": "protocol_version_id",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "review_run_id": "review_run_id",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "rule_set_id": "rule_set_id",
+        "rule_set_revision": "rule_set_revision",
+        "rule_component_id": "rule_component_id",
+    },
+    assoc=(
+        AssocSpec(assessment_candidate_facts_v2, "assessment_candidate_id", "assessment_candidate_id", "used_fact_ids", "review/v2"),
+        AssocSpec(assessment_candidate_locators, "assessment_candidate_id", "assessment_candidate_id", "locator_ids", "review/v2"),
+    ),
+    scope_check=lambda session, contract, payload: _check_candidate_scope(session, contract),
+    mirrors={
+        **_REVIEW_V2_COLUMNS,
+        "project_id": "project_id",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "review_run_id": "review_run_id",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "rule_set_id": "rule_set_id",
+        "rule_set_revision": "rule_set_revision",
+        "rule_component_id": "rule_component_id",
+    },
+)
+
+FINAL_ASSESSMENT_CONFIG = _config(
+    FinalAssessmentRecord,
+    FinalAssessment,
+    {
+        **_REVIEW_V2_COLUMNS,
+        "assessment_id": "assessment_id",
+        "project_id": "project_id",
+        "protocol_version_id": "protocol_version_id",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "review_run_id": "review_run_id",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "rule_set_id": "rule_set_id",
+        "rule_set_revision": "rule_set_revision",
+        "rule_component_id": "rule_component_id",
+        "decision": "decision",
+        "blocking_level": "blocking_level",
+        "gate_result_id": "gate_result_id",
+        "publication_fingerprint": "publication_fingerprint",
+    },
+    assoc=(
+        AssocSpec(final_assessment_facts, "assessment_id", "assessment_id", "used_fact_ids", "fixture/v1"),
+        AssocSpec(final_assessment_spans, "assessment_id", "assessment_id", "evidence_span_ids", "fixture/v1"),
+        AssocSpec(final_assessment_facts_v2, "assessment_id", "assessment_id", "used_fact_ids", "review/v2"),
+        AssocSpec(final_assessment_locators, "assessment_id", "assessment_id", "locator_ids", "review/v2"),
+    ),
+    scope_check=lambda session, contract, payload: _check_assessment_scope(session, contract),
+    mirrors={
+        **_REVIEW_V2_COLUMNS,
+        "project_id": "project_id",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "review_run_id": "review_run_id",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "rule_set_id": "rule_set_id",
+        "rule_set_revision": "rule_set_revision",
+        "rule_component_id": "rule_component_id",
+        "decision": "decision",
+        "blocking_level": "blocking_level",
+        "gate_result_id": "gate_result_id",
+        "publication_fingerprint": "publication_fingerprint",
+    },
+)
+
+REVIEW_RUN_DIFF_CONFIG = _config(
+    ReviewRunDiffRecord,
+    ReviewRunDiff,
+    {
+        "review_run_diff_id": "review_run_diff_id",
+        "prior_review_run_id": "prior_review_run_id",
+        "current_review_run_id": "current_review_run_id",
+    },
+    mirrors={
+        "prior_review_run_id": "prior_review_run_id",
+        "current_review_run_id": "current_review_run_id",
+    },
+)
+
+PROMPT_VERSION_CONFIG = _config(
+    PromptVersionRecord,
+    PromptVersion,
+    {
+        "prompt_version_id": "prompt_version_id",
+        "node": "node",
+        "template_sha256": "template_sha256",
+        "schema_version_id": "schema_version_id",
+    },
+    mirrors={
+        "node": "node",
+        "template_sha256": "template_sha256",
+        "schema_version_id": "schema_version_id",
+    },
+)
+
+MODEL_CONFIG_CONFIG = _config(
+    ModelConfigRecord,
+    ModelConfigContract,
+    {
+        "model_config_id": "model_config_id",
+        "provider": "provider",
+        "model": "model",
+        "reasoning_effort": "reasoning_effort",
+    },
+    mirrors={
+        "provider": "provider",
+        "model": "model",
+        "reasoning_effort": "reasoning_effort",
+    },
+)
+
+AGENT_CALL_CONFIG = _config(
+    AgentCallRecord,
+    AgentCallContract,
+    {
+        **_REVIEW_V2_COLUMNS,
+        "agent_call_id": "agent_call_id",
+        "node": "node",
+        "output_kind": "output_kind",
+        "write_scope": "write_scope",
+        "prompt_version_id": "prompt_version_id",
+        "model_config_id": "model_config_id",
+        "idempotency_key": "idempotency_key",
+        "attempt": "attempt",
+        "outcome": "outcome",
+        "started_at": "started_at",
+        "finished_at": "finished_at",
+        "project_id": "project_id",
+        "protocol_version_id": "protocol_version_id",
+        "rule_set_id": "rule_set_id",
+        "rule_set_revision": "rule_set_revision",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "review_run_id": "review_run_id",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+        "input_tokens": "input_tokens",
+        "output_tokens": "output_tokens",
+        "estimated_cost": "estimated_cost",
+    },
+    datetime_cols=frozenset({"started_at", "finished_at"}),
+    assoc=(
+        AssocSpec(agent_call_sources, "agent_call_id", "agent_call_id", "source_ids"),
+        AssocSpec(agent_call_gate_results, "agent_call_id", "agent_call_id", "gate_result_ids"),
+    ),
+    scope_check=lambda session, contract, payload: _check_agent_call_scope(session, contract),
+    mirrors={
+        **_REVIEW_V2_COLUMNS,
+        "node": "node",
+        "prompt_version_id": "prompt_version_id",
+        "model_config_id": "model_config_id",
+        "idempotency_key": "idempotency_key",
+        "attempt": "attempt",
+        "outcome": "outcome",
+        "project_id": "project_id",
+        "protocol_version_id": "protocol_version_id",
+        "rule_set_id": "rule_set_id",
+        "rule_set_revision": "rule_set_revision",
+        "subject_id": "subject_id",
+        "review_episode_id": "review_episode_id",
+        "review_run_id": "review_run_id",
+        "evidence_snapshot_id": "evidence_snapshot_id",
+    },
+)
+
+GATE_RESULT_CONFIG = _config(
+    GateResultRecord,
+    GateResult,
+    {
+        "gate_result_id": "gate_result_id",
+        "gate_name": "gate_name",
+        "code_version": "code_version",
+        "result": "result",
+        "input_scope_hash": "input_scope_hash",
+        "idempotency_key": "idempotency_key",
+        "output_hash": "output_hash",
+    },
+    created_at_key="created_at",
+    mirrors={
+        "gate_name": "gate_name",
+        "code_version": "code_version",
+        "result": "result",
+        "input_scope_hash": "input_scope_hash",
+        "idempotency_key": "idempotency_key",
+        "output_hash": "output_hash",
+    },
+)
+
+CRITIC_RUN_CONFIG = _config(
+    CriticRunRecord,
+    CriticRun,
+    {
+        "critic_run_id": "critic_run_id",
+        "assessment_candidate_id": "assessment_candidate_id",
+        "created_by_agent_call_id": "created_by_agent_call_id",
+        "critic_revision": "critic_revision",
+    },
+    mirrors={
+        "assessment_candidate_id": "assessment_candidate_id",
+        "created_by_agent_call_id": "created_by_agent_call_id",
+        "critic_revision": "critic_revision",
+    },
+)
+
+WORKFLOW_STAGE_CONFIG = _config(
+    WorkflowStageRecord,
+    WorkflowStage,
+    {
+        "workflow_stage_id": "workflow_stage_id",
+        "stage": "stage",
+    },
+    assoc=(
+        AssocSpec(
+            workflow_stage_requirements,
+            "workflow_stage_id",
+            "workflow_stage_id",
+            "due_requirement_ids",
+        ),
+    ),
+    mirrors={"stage": "stage"},
+)
+
+CONTEXT_SNAPSHOT_CONFIG = _config(
+    ReviewContextSnapshotRecord,
+    ReviewContextSnapshot,
+    {
+        "context_id": "context_id",
+        "review_episode_id": "review_episode_id",
+    },
+    mirrors={"review_episode_id": "review_episode_id"},
+)
+
+
+# ---------------------------------------------------------------------------
+# 规则集树：rule_sets/rules/rule_components/evidence_requirements 组合写入
+# ---------------------------------------------------------------------------
+
+
+def save_rule_set(
+    session: Session,
+    rule_set: RuleSet,
+    *,
+    procedure_requirements: Sequence[EvidenceRequirement] = (),
+) -> RuleSet:
+    """追加写入 RuleSet 及其规则树；新 revision 追加新行，不覆盖历史。
+
+    ``procedure_requirements`` 为流程必做项目录来源的资料要求（不绑定规则
+    组件）；它们与组件资料要求一起按 ``(rule_set_id, revision, requirement_id)``
+    落库，供 WorkflowStage 引用与后续 EvidenceExpectation 投影使用。
+    """
+    payload_json, payload_sha256 = encode_contract(rule_set)
+    created_at = utc_now()
+    session.add(
+        RuleSetRecord(
+            rule_set_id=rule_set.rule_set_id,
+            revision=rule_set.revision,
+            protocol_version_id=rule_set.protocol_version_id,
+            study_phase=rule_set.study_phase.value,
+            payload_json=payload_json,
+            payload_sha256=payload_sha256,
+            created_at=created_at,
+        )
+    )
+    _flush_guarded(session)
+    for rule in rule_set.rules:
+        rule_payload_json, rule_payload_sha256 = encode_contract(rule)
+        session.add(
+            RuleRecord(
+                rule_id=rule.rule_id,
+                rule_set_id=rule_set.rule_set_id,
+                rule_set_revision=rule_set.revision,
+                official_code=rule.official_code,
+                kind=rule.kind.value,
+                study_phase=rule.study_phase.value,
+                payload_json=rule_payload_json,
+                payload_sha256=rule_payload_sha256,
+                created_at=created_at,
+            )
+        )
+        _flush_guarded(session)
+        for component in rule.components:
+            _expression_text, expression_sha256 = encode_value(
+                component.expression.model_dump(mode="json")
+            )
+            exception_sha256 = None
+            if component.exception_expression is not None:
+                _exception_text, exception_sha256 = encode_value(
+                    component.exception_expression.model_dump(mode="json")
+                )
+            component_payload_json, component_payload_sha256 = encode_contract(component)
+            session.add(
+                RuleComponentRecord(
+                    rule_component_id=component.rule_component_id,
+                    rule_set_id=rule_set.rule_set_id,
+                    rule_set_revision=rule_set.revision,
+                    parent_rule_id=component.parent_rule_id,
+                    display_code=component.display_code,
+                    title=component.title,
+                    expression_json=component.expression.model_dump(mode="json"),
+                    expression_sha256=expression_sha256,
+                    exception_expression_json=(
+                        component.exception_expression.model_dump(mode="json")
+                        if component.exception_expression is not None
+                        else None
+                    ),
+                    exception_expression_sha256=exception_sha256,
+                    payload_json=component_payload_json,
+                    payload_sha256=component_payload_sha256,
+                    created_at=created_at,
+                )
+            )
+            _flush_guarded(session)
+            for requirement in component.evidence_requirements:
+                _save_requirement_row(
+                    session,
+                    requirement,
+                    rule_set=rule_set,
+                    created_at=created_at,
+                )
+    for requirement in procedure_requirements:
+        if requirement.rule_component_id is not None:
+            raise ScopeViolationError(
+                f"流程资料要求 {requirement.requirement_id} 不能绑定规则组件"
+            )
+        if not requirement.procedure_catalog_item_id:
+            raise ScopeViolationError(
+                f"流程资料要求 {requirement.requirement_id} 必须绑定必做项目录项"
+            )
+        _save_requirement_row(session, requirement, rule_set=rule_set, created_at=created_at)
+    return rule_set
+
+
+def _save_requirement_row(
+    session: Session,
+    requirement: EvidenceRequirement,
+    *,
+    rule_set: RuleSet,
+    created_at,
+) -> None:
+    """写入资料要求，保留三类互斥来源，不修改已发布审核节点。"""
+    if sum(value is not None for value in (
+        requirement.rule_component_id,
+        requirement.procedure_catalog_item_id,
+        requirement.control_origin,
+    )) != 1:
+        raise ScopeViolationError(
+            f"资料要求 {requirement.requirement_id} 必须且只能绑定一种来源"
+        )
+    if requirement.control_origin is not None:
+        _verify_control_requirement_origin(
+            session, requirement, rule_set.rule_set_id, rule_set.revision,
+        )
+    requirement_payload_json, requirement_payload_sha256 = encode_contract(requirement)
+    session.add(
+        EvidenceRequirementRecord(
+            requirement_id=requirement.requirement_id,
+            rule_set_id=rule_set.rule_set_id,
+            rule_set_revision=rule_set.revision,
+            rule_component_id=requirement.rule_component_id,
+            procedure_catalog_item_id=requirement.procedure_catalog_item_id,
+            control_publication_id=(
+                requirement.control_origin.publication_id
+                if requirement.control_origin is not None else None
+            ),
+            fact_type=requirement.fact_type,
+            due_stage=requirement.due_stage.value,
+            payload_json=requirement_payload_json,
+            payload_sha256=requirement_payload_sha256,
+            created_at=created_at,
+        )
+    )
+    _flush_guarded(session)
+
+
+def _verify_control_requirement_origin(
+    session: Session,
+    requirement: EvidenceRequirement,
+    rule_set_id: str,
+    revision: int,
+) -> None:
+    # Import locally: the catalog repository uses this module's shared codecs.
+    from app.projections.control_evidence_requirements import (
+        project_control_evidence_requirements,
+    )
+    from app.storage.control_catalog_repository import ControlCatalogPublicationRepository
+
+    origin = requirement.control_origin
+    if origin is None:
+        return
+    publication = ControlCatalogPublicationRepository(session).get(origin.publication_id)
+    if (publication.rule_set_id, publication.rule_set_revision) != (rule_set_id, revision):
+        raise ScopeViolationError("补充资料要求不属于当前正式规则修订")
+    projected = next((
+        item for item in project_control_evidence_requirements(publication)
+        if item.requirement_id == requirement.requirement_id
+    ), None)
+    if projected is None or (
+        projected.protocol_control_id != origin.protocol_control_id
+        or projected.evidence_key != origin.evidence_key
+        or projected.workflow_stage_id != origin.workflow_stage_id
+        or projected.fact_type != requirement.fact_type
+        or projected.due_stage != requirement.due_stage
+        or projected.description != requirement.description
+        or set(projected.required_source_types) != set(requirement.required_source_types)
+    ):
+        raise ScopeViolationError("补充资料要求与已发布控制及审核访视不一致")
+    policy = projected.source_policy
+    if (
+        requirement.requires_contemporaneous_objective_source
+        != policy.requires_contemporaneous_objective_source
+        or requirement.allows_screening_record_transcription
+        != policy.allows_screening_record_transcription
+        or requirement.source_validity_window is not None
+        or requirement.control_validity_status != policy.result_validity_status
+        or requirement.control_validity_constraint != policy.result_validity_constraint
+    ):
+        raise ScopeViolationError("补充资料的来源要求不能被默认值或其他时间窗替代")
+
+
+def get_rule_set(session: Session, rule_set_id: str, revision: int) -> RuleSet:
+    record = session.get(RuleSetRecord, (rule_set_id, revision))
+    if record is None:
+        raise NotFoundError(f"RuleSet {rule_set_id} revision {revision} 不存在")
+    contract = decode_contract(RuleSet, record.payload_json, record.payload_sha256)
+    payload = json.loads(record.payload_json)
+    check_column_mirrors(
+        "RuleSet", record, payload, {"protocol_version_id": "protocol_version_id", "study_phase": "study_phase"}
+    )
+    return contract
+
+
+def get_rule(
+    session: Session, rule_set_id: str, revision: int, rule_id: str
+) -> Rule:
+    record = session.get(RuleRecord, (rule_set_id, revision, rule_id))
+    if record is None:
+        raise NotFoundError(f"Rule {rule_id} 不在 RuleSet {rule_set_id} revision {revision}")
+    contract = decode_contract(Rule, record.payload_json, record.payload_sha256)
+    payload = json.loads(record.payload_json)
+    check_column_mirrors(
+        "Rule", record, payload, {"official_code": "official_code", "kind": "kind", "study_phase": "study_phase"}
+    )
+    return contract
+
+
+def get_rule_component(
+    session: Session, rule_set_id: str, revision: int, component_id: str
+) -> RuleComponent:
+    record = session.get(RuleComponentRecord, (rule_set_id, revision, component_id))
+    if record is None:
+        raise NotFoundError(
+            f"RuleComponent {component_id} 不在 RuleSet {rule_set_id} revision {revision}"
+        )
+    contract = decode_contract(RuleComponent, record.payload_json, record.payload_sha256)
+    # 表达式单独校验：canonical JSON 哈希必须与拆分列一致
+    _expression_text, expression_sha256 = encode_value(
+        contract.expression.model_dump(mode="json")
+    )
+    if expression_sha256 != record.expression_sha256:
+        raise PersistedContractInvalid(
+            f"RuleComponent {component_id} 的 expression 哈希与存储列不一致"
+        )
+    return contract
+
+
+def get_evidence_requirement(
+    session: Session, rule_set_id: str, revision: int, requirement_id: str
+) -> EvidenceRequirement:
+    record = session.get(EvidenceRequirementRecord, (rule_set_id, revision, requirement_id))
+    if record is None:
+        raise NotFoundError(
+            f"EvidenceRequirement {requirement_id} 不在 RuleSet {rule_set_id} revision {revision}"
+        )
+    contract = decode_contract(EvidenceRequirement, record.payload_json, record.payload_sha256)
+    payload = json.loads(record.payload_json)
+    check_column_mirrors(
+        "EvidenceRequirement",
+        record,
+        payload,
+        {
+            "rule_component_id": "rule_component_id",
+            "procedure_catalog_item_id": "procedure_catalog_item_id",
+            "fact_type": "fact_type",
+            "due_stage": "due_stage",
+        },
+    )
+    publication_id = (
+        contract.control_origin.publication_id
+        if contract.control_origin is not None else None
+    )
+    if record.control_publication_id != publication_id:
+        raise PersistedContractInvalid("资料要求的补充控制来源与存储列不一致")
+    if contract.control_origin is not None:
+        _verify_control_requirement_origin(session, contract, rule_set_id, revision)
+    return contract
+
+
+# ---------------------------------------------------------------------------
+# 可变根仓储
+# ---------------------------------------------------------------------------
+
+
+def _project_columns(payload: dict[str, Any], scope: dict[str, Any] | None) -> dict[str, Any]:
+    columns = {
+        "project_id": payload["project_id"],
+        "project_code": payload["project_code"],
+        "project_name": payload["project_name"],
+        "study_phase": payload["study_phase"],
+        "protocol_version_id": payload["protocol_version"]["protocol_version_id"],
+        "rule_set_id": payload["rule_set_id"],
+    }
+    if scope and "rule_set_revision" in scope:
+        columns["rule_set_revision"] = scope["rule_set_revision"]
+    return columns
+
+
+class ProjectRepository:
+    MUTABLE_FIELDS = frozenset(
+        {"project_code", "project_name", "study_phase", "protocol_version", "rule_set_id"}
+    )
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def save(self, project: Project, *, rule_set_revision: int) -> Project:
+        payload_json, payload_sha256 = encode_contract(project)
+        payload = json.loads(payload_json)
+        _check_project_scope(self.session, project, payload, rule_set_revision)
+        _insert_revisioned(
+            self.session,
+            ProjectRecord,
+            payload_json,
+            payload_sha256,
+            _project_columns(payload, {"rule_set_revision": rule_set_revision}),
+        )
+        return project
+
+    def get(self, project_id: str) -> Project:
+        record = _get_required(self.session, ProjectRecord, project_id, "Project")
+        contract = decode_contract(Project, record.payload_json, record.payload_sha256)
+        payload = json.loads(record.payload_json)
+        check_column_mirrors(
+            "Project",
+            record,
+            payload,
+            {
+                "project_id": "project_id",
+                "project_code": "project_code",
+                "project_name": "project_name",
+                "study_phase": "study_phase",
+                "protocol_version_id": "protocol_version.protocol_version_id",
+                "rule_set_id": "rule_set_id",
+            },
+        )
+        return contract
+
+    def update(
+        self,
+        project_id: str,
+        expected_revision: int,
+        changes: dict[str, Any],
+        *,
+        rule_set_revision: int | None = None,
+    ) -> Project:
+        scope = (
+            {"rule_set_revision": rule_set_revision} if rule_set_revision is not None else None
+        )
+        new_contract, record = apply_revisioned_update(
+            self.session,
+            ProjectRecord,
+            Project,
+            project_id,
+            expected_revision,
+            changes,
+            column_builder=_project_columns,
+            mutable_fields=set(self.MUTABLE_FIELDS),
+            entity_type="Project",
+            scope=scope,
+        )
+        rule_set = self.session.get(
+            RuleSetRecord, (record.rule_set_id, record.rule_set_revision)
+        )
+        if rule_set is None or rule_set.protocol_version_id != record.protocol_version_id:
+            raise ScopeViolationError(
+                f"Project {project_id} 更新后的 rule_set 与 protocol_version 不一致"
+            )
+        return cast(Project, new_contract)
+
+    def list(self) -> list[Project]:
+        rows = self.session.execute(
+            select(ProjectRecord).order_by(ProjectRecord.project_id)
+        ).scalars().all()
+        contracts = [
+            decode_contract(Project, row.payload_json, row.payload_sha256) for row in rows
+        ]
+        for row, payload in (
+            (row, json.loads(row.payload_json)) for row in rows
+        ):
+            check_column_mirrors(
+                "Project",
+                row,
+                payload,
+                {"project_id": "project_id", "rule_set_id": "rule_set_id"},
+            )
+        return contracts
+
+
+def _subject_columns(payload: dict[str, Any], scope: dict[str, Any] | None) -> dict[str, Any]:
+    return {
+        "subject_id": payload["subject_id"],
+        "subject_code": payload["subject_code"],
+        "project_id": payload["project_id"],
+        "center_code": payload.get("center_code"),
+        "center_name": payload.get("center_name"),
+        "sex": payload.get("sex"),
+        "age_years": payload.get("age_years"),
+    }
+
+
+class SubjectRepository:
+    MUTABLE_FIELDS = frozenset(
+        {"subject_code", "center_code", "center_name", "sex", "age_years"}
+    )
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    @staticmethod
+    def _decode_record(record: SubjectRecord) -> Subject:
+        contract = decode_contract(Subject, record.payload_json, record.payload_sha256)
+        payload = json.loads(record.payload_json)
+        check_column_mirrors(
+            "Subject",
+            record,
+            payload,
+            {
+                "subject_id": "subject_id",
+                "subject_code": "subject_code",
+                "project_id": "project_id",
+                "center_code": "center_code",
+                "center_name": "center_name",
+                "sex": "sex",
+                "age_years": "age_years",
+            },
+        )
+        return contract
+
+    def save(self, subject: Subject) -> Subject:
+        _get_required(self.session, ProjectRecord, subject.project_id, "Project")
+        existing_rows = self.session.execute(
+            select(SubjectRecord)
+        ).scalars().all()
+        for existing_row in existing_rows:
+            existing = self._decode_record(existing_row)
+            if (
+                existing.project_id == subject.project_id
+                and existing.subject_code == subject.subject_code
+            ):
+                raise DuplicateRecordError(
+                    f"项目 {subject.project_id} 已存在受试者代号 {subject.subject_code}"
+                )
+        payload_json, payload_sha256 = encode_contract(subject)
+        _insert_revisioned(
+            self.session,
+            SubjectRecord,
+            payload_json,
+            payload_sha256,
+            _subject_columns(json.loads(payload_json), None),
+        )
+        return subject
+
+    def get(self, subject_id: str) -> Subject:
+        record = _get_required(self.session, SubjectRecord, subject_id, "Subject")
+        return self._decode_record(record)
+
+    def update(
+        self, subject_id: str, expected_revision: int, changes: dict[str, Any]
+    ) -> Subject:
+        new_contract, _record = apply_revisioned_update(
+            self.session,
+            SubjectRecord,
+            Subject,
+            subject_id,
+            expected_revision,
+            changes,
+            column_builder=_subject_columns,
+            mutable_fields=set(self.MUTABLE_FIELDS),
+            entity_type="Subject",
+        )
+        return cast(Subject, new_contract)
+
+    def list_by_project(self, project_id: str) -> list[Subject]:
+        rows = self.session.execute(
+            select(SubjectRecord).order_by(SubjectRecord.subject_id)
+        ).scalars().all()
+        subjects = [self._decode_record(row) for row in rows]
+        return [subject for subject in subjects if subject.project_id == project_id]
+
+    def delete(self, subject_id: str, project_id: str) -> Subject:
+        """硬删除受试者主记录；仅当调用方已确认该受试者无任何审核节点/证据时调用。
+
+        跨项目引用一律视为不存在（404），不泄露受试者是否存在于其他项目。
+        """
+        subject = self.get(subject_id)
+        if subject.project_id != project_id:
+            raise NotFoundError(f"Subject {subject_id} 不属于项目 {project_id}")
+        record = _get_required(self.session, SubjectRecord, subject_id, "Subject")
+        self.session.delete(record)
+        return subject
+
+
+def _episode_columns(payload: dict[str, Any], scope: dict[str, Any] | None) -> dict[str, Any]:
+    return {
+        "review_episode_id": payload["review_episode_id"],
+        "subject_id": payload["subject_id"],
+        "project_id": payload["project_id"],
+        "rule_set_id": payload["rule_set_id"],
+        "rule_set_revision": payload["rule_set_revision"],
+        "study_phase": payload["study_phase"],
+        "stage": payload["stage"],
+        "protocol_version_id": payload["protocol_version_id"],
+        "evidence_snapshot_id": payload.get("evidence_snapshot_id"),
+        "workflow_stage_id": payload.get("workflow_stage_id"),
+        "active_evidence_snapshot_id": payload.get("active_evidence_snapshot_id"),
+        "active_evidence_processing_revision_id": payload.get(
+            "active_evidence_processing_revision_id"
+        ),
+        "anchor_dates_json": payload["anchor_dates"],
+        "due_at": (
+            parse_datetime_column(payload["due_at"]) if payload.get("due_at") else None
+        ),
+    }
+
+
+class EpisodeRepository:
+    MUTABLE_FIELDS = frozenset({"stage", "due_at", "evidence_snapshot_id", "anchor_dates", "evidence_cutoff_date"})
+
+    #: 活动版本成对指针只允许通过未来 WP-44B 的原子激活事务修改；
+    #: 通用 save/update 一律拒绝触碰，防止绕过激活门禁。
+    _ACTIVATION_ONLY_FIELDS = frozenset(
+        {"active_evidence_snapshot_id", "active_evidence_processing_revision_id"}
+    )
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    @staticmethod
+    def _decode_record(record: ReviewEpisodeRecord) -> ReviewEpisode:
+        contract = decode_contract(ReviewEpisode, record.payload_json, record.payload_sha256)
+        payload = json.loads(record.payload_json)
+        check_column_mirrors(
+            "ReviewEpisode",
+            record,
+            payload,
+            {
+                "review_episode_id": "review_episode_id",
+                "subject_id": "subject_id",
+                "project_id": "project_id",
+                "rule_set_id": "rule_set_id",
+                "rule_set_revision": "rule_set_revision",
+                "study_phase": "study_phase",
+                "stage": "stage",
+                "protocol_version_id": "protocol_version_id",
+                "evidence_snapshot_id": "evidence_snapshot_id",
+                "workflow_stage_id": "workflow_stage_id",
+                "active_evidence_snapshot_id": "active_evidence_snapshot_id",
+                "active_evidence_processing_revision_id": "active_evidence_processing_revision_id",
+                "anchor_dates_json": "anchor_dates",
+            },
+        )
+        return contract
+
+    def save(self, episode: ReviewEpisode) -> ReviewEpisode:
+        self._assert_activation_not_set(episode)
+        _check_episode_scope(self.session, episode)
+        payload_json, payload_sha256 = encode_contract(episode)
+        _insert_revisioned(
+            self.session,
+            ReviewEpisodeRecord,
+            payload_json,
+            payload_sha256,
+            _episode_columns(json.loads(payload_json), None),
+        )
+        return episode
+
+    @staticmethod
+    def _assert_activation_not_set(episode: ReviewEpisode) -> None:
+        """通用 save 不得建立非空活动指针对：激活只能由 WP-44B 原子事务完成。"""
+        if (
+            episode.active_evidence_snapshot_id is not None
+            or episode.active_evidence_processing_revision_id is not None
+        ):
+            raise RepositoryError(
+                "ReviewEpisode 通用保存不得建立活动版本指针；活动快照/处理修订"
+                "只能由专用激活事务按预期修订号原子切换"
+            )
+
+    def get(self, review_episode_id: str) -> ReviewEpisode:
+        record = _get_required(
+            self.session, ReviewEpisodeRecord, review_episode_id, "ReviewEpisode"
+        )
+        return self._decode_record(record)
+
+    def update(
+        self, review_episode_id: str, expected_revision: int, changes: dict[str, Any]
+    ) -> ReviewEpisode:
+        overlap = self._ACTIVATION_ONLY_FIELDS & set(changes)
+        if overlap:
+            raise RepositoryError(
+                "ReviewEpisode 通用更新不得修改活动版本指针 "
+                f"{sorted(overlap)}；活动快照/处理修订只能由专用激活事务切换"
+            )
+        new_contract, _record = apply_revisioned_update(
+            self.session,
+            ReviewEpisodeRecord,
+            ReviewEpisode,
+            review_episode_id,
+            expected_revision,
+            changes,
+            column_builder=_episode_columns,
+            mutable_fields=set(self.MUTABLE_FIELDS),
+            entity_type="ReviewEpisode",
+        )
+        return cast(ReviewEpisode, new_contract)
+
+    def adopt_published_rule_set(self, review_episode_id: str, expected_revision: int) -> ReviewEpisode:
+        """Move the current node only; frozen contexts and prior reports stay immutable."""
+        episode = self.get(review_episode_id)
+        project, revision = get_project_row(self.session, episode.project_id)
+        if (episode.rule_set_id, episode.rule_set_revision, episode.protocol_version_id) == (
+                project.rule_set_id, revision, project.protocol_version.protocol_version_id):
+            return episode
+        old_protocol = AppendRepository(self.session, PROTOCOL_DOC_CONFIG).get(episode.protocol_version_id)
+        if (old_protocol.sha256 != project.protocol_version.sha256
+                or episode.study_phase != project.study_phase or episode.rule_set_id != project.rule_set_id):
+            raise ScopeViolationError("方案原件或研究期别已变化，不能自动沿用原节点资料；请核对新的适用范围。")
+        old_stages = list_workflow_stages_for_rule_set(self.session, episode.rule_set_id, episode.rule_set_revision)
+        old_stage = next((item for item in old_stages if item.workflow_stage_id == episode.workflow_stage_id), None)
+        if old_stage is None:
+            raise ScopeViolationError("原节点缺少已发布的访视来源，暂不能更新规则。")
+        scope = old_stage.model_dump(exclude={"workflow_stage_id", "due_requirement_ids"})
+        matches = [item for item in list_workflow_stages_for_rule_set(self.session, project.rule_set_id, revision)
+            if item.model_dump(exclude={"workflow_stage_id", "due_requirement_ids"}) == scope]
+        if len(matches) != 1:
+            raise ScopeViolationError("新旧规则的审核节点不能唯一对应，请核对访视和时间范围；旧结果保留。")
+        changes = dict(rule_set_id=project.rule_set_id, rule_set_revision=revision,
+            protocol_version_id=project.protocol_version.protocol_version_id,
+            workflow_stage_id=matches[0].workflow_stage_id)
+        _check_episode_scope(self.session, episode.model_copy(update=changes))
+        new_contract, _ = apply_revisioned_update(self.session, ReviewEpisodeRecord, ReviewEpisode,
+            review_episode_id, expected_revision, changes, column_builder=_episode_columns,
+            mutable_fields=set(changes), entity_type="ReviewEpisode")
+        return cast(ReviewEpisode, new_contract)
+
+    def list_by_subject(
+        self, subject_id: str, *, project_id: str | None = None
+    ) -> list[ReviewEpisode]:
+        rows = self.session.execute(
+            select(ReviewEpisodeRecord).order_by(ReviewEpisodeRecord.review_episode_id)
+        ).scalars().all()
+        all_episodes = [self._decode_record(row) for row in rows]
+        episodes = [episode for episode in all_episodes if episode.subject_id == subject_id]
+        if project_id is not None and any(
+            episode.project_id != project_id for episode in episodes
+        ):
+            raise ScopeViolationError(
+                f"受试者 {subject_id} 的审核节点包含跨项目记录"
+            )
+        return episodes
+
+    def list_by_project(self, project_id: str) -> list[ReviewEpisode]:
+        rows = self.session.execute(
+            select(ReviewEpisodeRecord).order_by(ReviewEpisodeRecord.review_episode_id)
+        ).scalars().all()
+        episodes = [self._decode_record(row) for row in rows]
+        return [episode for episode in episodes if episode.project_id == project_id]
+
+    def delete(self, review_episode_id: str) -> ReviewEpisode:
+        """硬删除空审核节点：仅允许尚未承载任何不可变证据的节点。
+
+        防御性门禁：legacy 快照或成对活动指针任一非空即拒绝。其余子表依赖
+        （快照/候选/期望/运行等）由命令服务在同一事务内的依赖矩阵先行检查。
+        """
+        record = _get_required(
+            self.session, ReviewEpisodeRecord, review_episode_id, "ReviewEpisode"
+        )
+        if record.evidence_snapshot_id is not None:
+            raise RepositoryError(
+                f"审核节点 {review_episode_id} 已有 legacy 证据快照，禁止删除"
+            )
+        if (
+            record.active_evidence_snapshot_id is not None
+            or record.active_evidence_processing_revision_id is not None
+        ):
+            raise RepositoryError(
+                f"审核节点 {review_episode_id} 已有活动资料版本，禁止删除"
+            )
+        episode = self._decode_record(record)
+        self.session.delete(record)
+        return episode
+
+
+def _expectation_columns(
+    payload: dict[str, Any], scope: dict[str, Any] | None
+) -> dict[str, Any]:
+    columns = {
+        "expectation_id": payload["expectation_id"],
+        "requirement_id": payload["requirement_id"],
+        "review_episode_id": payload["review_episode_id"],
+        "status": payload["status"],
+        "gap_type": payload.get("gap_type"),
+    }
+    if scope:
+        columns["rule_set_id"] = scope["rule_set_id"]
+        columns["rule_set_revision"] = scope["rule_set_revision"]
+    return columns
+
+
+def _replace_assoc(
+    session: Session, table: Any, owner_column: str, owner_value: str, ordered_refs: list[str]
+) -> None:
+    session.execute(delete(table).where(table.c[owner_column] == owner_value))
+    if not ordered_refs:
+        return
+    ref_column = next(
+        column.name
+        for column in table.c
+        if column.name not in {owner_column, "position"}
+    )
+    session.execute(
+        insert(table),
+        [
+            {owner_column: owner_value, ref_column: ref, "position": position}
+            for position, ref in enumerate(ordered_refs)
+        ],
+    )
+
+
+class EvidenceExpectationRepository:
+    MUTABLE_FIELDS = frozenset({"status", "gap_type", "evidence_span_ids"})
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def save(self, expectation: EvidenceExpectation) -> EvidenceExpectation:
+        episode = _get_required(
+            self.session, ReviewEpisodeRecord, expectation.review_episode_id, "ReviewEpisode"
+        )
+        scope = {
+            "rule_set_id": episode.rule_set_id,
+            "rule_set_revision": episode.rule_set_revision,
+        }
+        payload_json, payload_sha256 = encode_contract(expectation)
+        payload = json.loads(payload_json)
+        _check_expectation_scope(self.session, expectation, payload)
+        _insert_revisioned(
+            self.session,
+            EvidenceExpectationRecord,
+            payload_json,
+            payload_sha256,
+            _expectation_columns(payload, scope),
+        )
+        _replace_assoc(
+            self.session,
+            evidence_expectation_spans,
+            "expectation_id",
+            expectation.expectation_id,
+            list(expectation.evidence_span_ids),
+        )
+        _flush_guarded(self.session)
+        return expectation
+
+    def get(self, expectation_id: str) -> EvidenceExpectation:
+        record = _get_required(
+            self.session, EvidenceExpectationRecord, expectation_id, "EvidenceExpectation"
+        )
+        contract = decode_contract(EvidenceExpectation, record.payload_json, record.payload_sha256)
+        payload = json.loads(record.payload_json)
+        check_column_mirrors(
+            "EvidenceExpectation",
+            record,
+            payload,
+            {
+                "requirement_id": "requirement_id",
+                "review_episode_id": "review_episode_id",
+                "status": "status",
+                "gap_type": "gap_type",
+            },
+        )
+        return contract
+
+    def update(
+        self, expectation_id: str, expected_revision: int, changes: dict[str, Any]
+    ) -> EvidenceExpectation:
+        new_contract, _record = apply_revisioned_update(
+            self.session,
+            EvidenceExpectationRecord,
+            EvidenceExpectation,
+            expectation_id,
+            expected_revision,
+            changes,
+            column_builder=_expectation_columns,
+            mutable_fields=set(self.MUTABLE_FIELDS),
+            entity_type="EvidenceExpectation",
+        )
+        typed_contract = cast(EvidenceExpectation, new_contract)
+        _replace_assoc(
+            self.session,
+            evidence_expectation_spans,
+            "expectation_id",
+            expectation_id,
+            list(typed_contract.evidence_span_ids),
+        )
+        _flush_guarded(self.session)
+        return typed_contract
+
+    def list_by_episode(self, review_episode_id: str) -> list[EvidenceExpectation]:
+        rows = self.session.execute(
+            select(EvidenceExpectationRecord)
+            .where(EvidenceExpectationRecord.review_episode_id == review_episode_id)
+            .order_by(EvidenceExpectationRecord.expectation_id)
+        ).scalars().all()
+        return [
+            decode_contract(EvidenceExpectation, row.payload_json, row.payload_sha256)
+            for row in rows
+        ]
+
+
+def _action_columns(payload: dict[str, Any], scope: dict[str, Any] | None) -> dict[str, Any]:
+    origin = payload.get("control_origin") or {}
+    return {
+        "action_id": payload["action_id"],
+        "control_snapshot_run_id": origin.get("review_run_id"),
+        "protocol_control_id": origin.get("protocol_control_id"),
+        "control_obligation_id": origin.get("obligation_id"),
+        "control_obligation_group_id": origin.get("obligation_group_id"),
+        "project_id": payload["project_id"],
+        "protocol_version_id": payload["protocol_version_id"],
+        "subject_id": payload["subject_id"],
+        "rule_set_id": payload["rule_set_id"],
+        "rule_set_revision": payload["rule_set_revision"],
+        "rule_component_id": payload["rule_component_id"],
+        "review_episode_id": payload["review_episode_id"],
+        "evidence_snapshot_id": payload.get("evidence_snapshot_id"),
+        "evidence_snapshot_v2_id": payload.get("evidence_snapshot_v2_id"),
+        "complete_processing_revision_id": payload.get("complete_processing_revision_id"),
+        "review_run_id": payload["review_run_id"],
+        "assessment_id": payload["assessment_id"],
+        "gap_type": payload["gap_type"],
+        "target_party": payload["target_party"],
+        "requested_action": payload["requested_action"],
+        "acceptable_evidence": payload["acceptable_evidence"],
+        "due_stage": payload["due_stage"],
+        "blocking_level": payload["blocking_level"],
+        "trigger_evidence_span_id": payload.get("trigger_evidence_span_id"),
+        "trigger_locator_id": payload.get("trigger_locator_id"),
+        "state": payload["state"],
+        "recompute_scope_json": payload["recompute_scope"],
+        "gate_result_id": payload["gate_result_id"],
+        "publication_fingerprint": payload["publication_fingerprint"],
+    }
+
+
+def _insert_transitions(
+    session: Session, action_id: str, transitions: list[ActionTransition]
+) -> None:
+    encoded = []
+    for transition in transitions:
+        payload_json, payload_sha256 = encode_contract(transition)
+        payload = json.loads(payload_json)
+        session.add(
+            ActionTransitionRecord(
+                transition_id=payload["transition_id"],
+                action_id=action_id,
+                from_state=payload["from_state"],
+                to_state=payload["to_state"],
+                occurred_at=parse_datetime_column(payload["occurred_at"]),
+                payload_json=payload_json,
+                payload_sha256=payload_sha256,
+                created_at=utc_now(),
+            )
+        )
+        encoded.append((payload, payload_json))
+    _flush_guarded(session)
+    for payload, _payload_json in encoded:
+        is_v2 = payload.get("schema_version") == "review/v2"
+        ref_key = "locator_id" if is_v2 else "evidence_span_id"
+        refs = payload.get("locator_ids" if is_v2 else "evidence_span_ids") or []
+        if not refs:
+            continue
+        session.execute(
+            insert(action_transition_locators if is_v2 else action_transition_spans),
+            [
+                {
+                    "transition_id": payload["transition_id"],
+                    ref_key: ref_id,
+                    "position": position,
+                }
+                for position, ref_id in enumerate(refs)
+            ],
+        )
+    _flush_guarded(session)
+
+
+class ActionRequestRepository:
+    MUTABLE_FIELDS = frozenset(
+        {
+            "state",
+            "recompute_scope",
+            "requested_action",
+            "acceptable_evidence",
+            "due_stage",
+            "blocking_level",
+            "trigger_evidence_span_id",
+            "trigger_locator_id",
+        }
+    )
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def save(self, action: ActionRequest) -> ActionRequest:
+        _check_action_scope(self.session, action)
+        payload_json, payload_sha256 = encode_contract(action)
+        payload = json.loads(payload_json)
+        _insert_revisioned(
+            self.session,
+            ActionRequestRecord,
+            payload_json,
+            payload_sha256,
+            _action_columns(payload, None),
+        )
+        _insert_transitions(self.session, action.action_id, list(action.transitions))
+        _flush_guarded(self.session)
+        return action
+
+    def get(self, action_id: str) -> ActionRequest:
+        record = _get_required(self.session, ActionRequestRecord, action_id, "ActionRequest")
+        contract = decode_contract(ActionRequest, record.payload_json, record.payload_sha256)
+        payload = json.loads(record.payload_json)
+        origin = payload.get("control_origin") or {}
+        if (record.control_snapshot_run_id, record.protocol_control_id, record.control_obligation_id, record.control_obligation_group_id) != (
+            origin.get("review_run_id"), origin.get("protocol_control_id"), origin.get("obligation_id"), origin.get("obligation_group_id"),
+        ):
+            raise PersistedContractInvalid("办理事项的补充要求归属与保存原文不一致")
+        check_column_mirrors(
+            "ActionRequest",
+            record,
+            payload,
+            {
+                "project_id": "project_id",
+                "subject_id": "subject_id",
+                "rule_set_id": "rule_set_id",
+                "rule_set_revision": "rule_set_revision",
+                "rule_component_id": "rule_component_id",
+                "review_episode_id": "review_episode_id",
+                "evidence_snapshot_id": "evidence_snapshot_id",
+                **_REVIEW_V2_COLUMNS,
+                "review_run_id": "review_run_id",
+                "assessment_id": "assessment_id",
+                "gap_type": "gap_type",
+                "due_stage": "due_stage",
+                "blocking_level": "blocking_level",
+                "trigger_evidence_span_id": "trigger_evidence_span_id",
+                "trigger_locator_id": "trigger_locator_id",
+                "state": "state",
+                "recompute_scope_json": "recompute_scope",
+                "gate_result_id": "gate_result_id",
+                "publication_fingerprint": "publication_fingerprint",
+            },
+        )
+        # 转换历史不得丢失：表内转换与 payload 转换必须一致
+        stored_transitions = self.session.execute(
+            select(ActionTransitionRecord).where(ActionTransitionRecord.action_id == action_id)
+        ).scalars().all()
+        stored_ids = {row.transition_id for row in stored_transitions}
+        payload_ids = {transition.transition_id for transition in contract.transitions}
+        if stored_ids != payload_ids:
+            raise PersistedContractInvalid(
+                f"ActionRequest {action_id} 的转换历史与 payload 不一致，拒绝还原合同"
+            )
+        transitions_by_id = {item.transition_id: item for item in contract.transitions}
+        for row in stored_transitions:
+            transition = decode_contract(ActionTransition, row.payload_json, row.payload_sha256)
+            value = transition.model_dump(mode="json")
+            if value != transitions_by_id[row.transition_id].model_dump(mode="json"):
+                raise PersistedContractInvalid("待办处理记录正文与冻结历史不一致")
+            check_column_mirrors("ActionTransition", row, value, {
+                "transition_id": "transition_id", "from_state": "from_state", "to_state": "to_state",
+            })
+            if row.occurred_at != parse_datetime_column(value["occurred_at"]):
+                raise PersistedContractInvalid("待办处理时间与冻结历史不一致")
+            for assoc in (
+                AssocSpec(action_transition_spans, "transition_id", "transition_id", "evidence_span_ids", "fixture/v1"),
+                AssocSpec(action_transition_locators, "transition_id", "transition_id", "locator_ids", "review/v2"),
+            ):
+                _verify_assoc(self.session, assoc, value, "ActionTransition")
+        return contract
+
+    def replace(self, action: ActionRequest, expected_revision: int) -> ActionRequest:
+        """整合同替换（携带 expected revision）；新增转换追加写入，历史保留。"""
+        previous = self.get(action.action_id)
+        if previous.schema_version == "review/v2":
+            old = previous.model_dump(mode="json")
+            new = action.model_dump(mode="json")
+            mutable = {"state", "transitions", "revision", "publication_fingerprint", "gate_result_id"}
+            if {key: value for key, value in old.items() if key not in mutable} != {
+                key: value for key, value in new.items() if key not in mutable
+            }:
+                raise ScopeViolationError("办理事项不得改写原审核要求和触发依据")
+            if new["transitions"][:len(old["transitions"])] != old["transitions"]:
+                raise ScopeViolationError("办理记录只能追加，不得删除或改写历史")
+            if len(new["transitions"]) != len(old["transitions"]) + 1:
+                raise ScopeViolationError("一次办理修订必须追加一条新的办理记录")
+        _check_action_scope(self.session, action)
+        existing_ids = set(
+            self.session.execute(
+                select(ActionTransitionRecord.transition_id).where(
+                    ActionTransitionRecord.action_id == action.action_id
+                )
+            ).scalars()
+        )
+        new_contract, _record = apply_revisioned_update(
+            self.session,
+            ActionRequestRecord,
+            ActionRequest,
+            action.action_id,
+            expected_revision,
+            action.model_dump(mode="json"),
+            column_builder=_action_columns,
+            mutable_fields=set(self.MUTABLE_FIELDS),
+            entity_type="ActionRequest",
+        )
+        typed_contract = cast(ActionRequest, new_contract)
+        new_transitions = [
+            transition
+            for transition in typed_contract.transitions
+            if transition.transition_id not in existing_ids
+        ]
+        _insert_transitions(self.session, action.action_id, new_transitions)
+        _flush_guarded(self.session)
+        return typed_contract
+
+
+# ---------------------------------------------------------------------------
+# 投影
+# ---------------------------------------------------------------------------
+
+
+def save_episode_rollup(session: Session, rollup: EpisodeRollup) -> None:
+    """追加写投影；同一 (episode, fingerprint) 的重建幂等跳过。"""
+    existing = session.execute(
+        select(EpisodeRollupRecord.id).where(
+            EpisodeRollupRecord.review_episode_id == rollup.review_episode_id,
+            EpisodeRollupRecord.publication_fingerprint == rollup.publication_fingerprint,
+        )
+    ).scalars().first()
+    if existing is not None:
+        return
+    payload_json, payload_sha256 = encode_contract(rollup)
+    payload = json.loads(payload_json)
+    session.add(
+        EpisodeRollupRecord(
+            review_episode_id=payload["review_episode_id"],
+            main_status=payload["main_status"],
+            gate_result_id=payload["gate_result_id"],
+            publication_fingerprint=payload["publication_fingerprint"],
+            payload_json=payload_json,
+            payload_sha256=payload_sha256,
+            created_at=utc_now(),
+        )
+    )
+    _flush_guarded(session)
+
+
+def get_latest_rollup(session: Session, review_episode_id: str) -> EpisodeRollup | None:
+    record = session.execute(
+        select(EpisodeRollupRecord)
+        .where(EpisodeRollupRecord.review_episode_id == review_episode_id)
+        .order_by(EpisodeRollupRecord.id.desc())
+        .limit(1)
+    ).scalars().first()
+    if record is None:
+        return None
+    contract = decode_contract(EpisodeRollup, record.payload_json, record.payload_sha256)
+    payload = json.loads(record.payload_json)
+    check_column_mirrors(
+        "EpisodeRollup",
+        record,
+        payload,
+        {
+            "review_episode_id": "review_episode_id",
+            "main_status": "main_status",
+            "gate_result_id": "gate_result_id",
+            "publication_fingerprint": "publication_fingerprint",
+        },
+    )
+    return contract
+
+
+# ---------------------------------------------------------------------------
+# 草稿 revision 历史（追加写，乐观并发由链头校验实现）
+# ---------------------------------------------------------------------------
+
+
+def _draft_revision_columns(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "revision_id": payload["revision_id"],
+        "draft_id": payload["draft_id"],
+        "revision_number": payload["revision_number"],
+        "previous_revision_id": payload.get("previous_revision_id"),
+        "project_id": payload["project_id"],
+        "protocol_version_id": payload["protocol_version_id"],
+        "study_phase": payload["study_phase"],
+        "status": payload["status"],
+        "reason": payload["reason"],
+        "feedback_kind": payload.get("feedback_kind"),
+        "actor": payload["actor"],
+        "content_sha256": payload["content_sha256"],
+    }
+
+
+class ProtocolDraftRevisionRepository:
+    """已保存草稿 revision 的追加写仓储；``draft_id`` 链头即当前版本。"""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def save(self, revision: ProtocolDraftRevision) -> ProtocolDraftRevision:
+        # 链完整性：后继必须引用同一草稿、紧邻的前序 revision；内层草稿链
+        # 必须与外层 revision 链一致（杜绝 ghost/断裂链与跨 revision 拼接）。
+        if revision.revision_number > 1:
+            if not revision.previous_revision_id:
+                raise InvalidReferenceError(
+                    f"草稿 revision {revision.revision_id} 缺少前序引用"
+                )
+            previous = self.get(revision.previous_revision_id)
+            if previous.draft_id != revision.draft_id:
+                raise ScopeViolationError(
+                    f"草稿 revision {revision.revision_id} 的前序 "
+                    f"{revision.previous_revision_id} 不属于同一草稿"
+                )
+            if previous.revision_number != revision.revision_number - 1:
+                raise ScopeViolationError(
+                    f"草稿 revision {revision.revision_id} 的前序 revision 号"
+                    f"{previous.revision_number} 不是紧邻前序"
+                )
+        if revision.content.draft_revision != revision.revision_number:
+            raise ScopeViolationError(
+                f"草稿 revision {revision.revision_id} 的内层 content.draft_revision"
+                f"（{revision.content.draft_revision}）与外层链号"
+                f"（{revision.revision_number}）不一致"
+            )
+        if (
+            revision.content.draft_id != revision.draft_id
+            or revision.content.project_id != revision.project_id
+            or revision.content.protocol_version_id != revision.protocol_version_id
+            or revision.content.selected_phase != revision.study_phase
+        ):
+            raise ScopeViolationError(
+                f"草稿 revision {revision.revision_id} 的内外层方案身份不一致"
+            )
+        if (
+            revision.revision_number > 1
+            and revision.content.previous_draft_id != revision.content.draft_id
+        ):
+            raise ScopeViolationError(
+                f"草稿 revision {revision.revision_id} 的内层 previous_draft_id"
+                "必须指向链头草稿，与外层链一致"
+            )
+        payload_json, payload_sha256 = encode_contract(revision)
+        payload = json.loads(payload_json)
+        self.session.add(
+            ProtocolDraftRevisionRecord(
+                payload_json=payload_json,
+                payload_sha256=payload_sha256,
+                created_at=revision.created_at,
+                **_draft_revision_columns(payload),
+            )
+        )
+        _flush_guarded(self.session)
+        return revision
+
+    def get(self, revision_id: str) -> ProtocolDraftRevision:
+        record = _get_required(
+            self.session, ProtocolDraftRevisionRecord, revision_id, "ProtocolDraftRevision"
+        )
+        return self._decode_record(record)
+
+    @staticmethod
+    def _decode_record(
+        record: ProtocolDraftRevisionRecord,
+    ) -> ProtocolDraftRevision:
+        contract = decode_contract(
+            ProtocolDraftRevision, record.payload_json, record.payload_sha256
+        )
+        payload = json.loads(record.payload_json)
+        check_column_mirrors(
+            "ProtocolDraftRevision",
+            record,
+            payload,
+            {
+                "draft_id": "draft_id",
+                "revision_number": "revision_number",
+                "previous_revision_id": "previous_revision_id",
+                "project_id": "project_id",
+                "protocol_version_id": "protocol_version_id",
+                "study_phase": "study_phase",
+                "status": "status",
+                "reason": "reason",
+                "feedback_kind": "feedback_kind",
+                "actor": "actor",
+                "content_sha256": "content_sha256",
+                "created_at": "created_at",
+            },
+        )
+        return contract
+
+    def update_status(self, revision: ProtocolDraftRevision) -> ProtocolDraftRevision:
+        """生命周期状态转移（内容不变）：payload 与 status 列同步重写。
+
+        只允许已存在 revision 行做状态转移；链头指向不受影响。
+        """
+        record = _get_required(
+            self.session,
+            ProtocolDraftRevisionRecord,
+            revision.revision_id,
+            "ProtocolDraftRevision",
+        )
+        existing = self._decode_record(record)
+        self._assert_existing_identity(record, revision, allow_status_change=True)
+        if existing.model_dump(mode="json", exclude={"status"}) != revision.model_dump(
+            mode="json", exclude={"status"}
+        ):
+            raise ScopeViolationError(
+                f"revision {revision.revision_id} 的状态转移只能改变 status，"
+                "不得改写差异、反馈说明、时间或其他审计内容"
+            )
+        payload_json, payload_sha256 = encode_contract(revision)
+        record.payload_json = payload_json
+        record.payload_sha256 = payload_sha256
+        record.status = revision.status.value
+        _flush_guarded(self.session)
+        return revision
+
+    def replace(self, revision: ProtocolDraftRevision) -> ProtocolDraftRevision:
+        """原地重写已存在 revision 行（payload 含 diff 变更）。
+
+        仅用于审计修正路径（如声明差异与实际结构差异不一致时的重建）；
+        链完整性校验与 save 一致，禁止跨草稿/跨号拼接。
+        """
+        record = _get_required(
+            self.session,
+            ProtocolDraftRevisionRecord,
+            revision.revision_id,
+            "ProtocolDraftRevision",
+        )
+        self._decode_record(record)
+        if record.draft_id != revision.draft_id:
+            raise ScopeViolationError(
+                f"revision {revision.revision_id} 的 draft_id 与已存在行不一致"
+            )
+        self._assert_existing_identity(record, revision, allow_status_change=False)
+        if record.revision_number != revision.revision_number:
+            raise ScopeViolationError(
+                f"revision {revision.revision_id} 的 revision_number 与已存在行不一致"
+            )
+        if revision.revision_number > 1:
+            if not revision.previous_revision_id:
+                raise InvalidReferenceError(
+                    f"草稿 revision {revision.revision_id} 缺少前序引用"
+                )
+            previous = self.get(revision.previous_revision_id)
+            if previous.draft_id != revision.draft_id:
+                raise ScopeViolationError(
+                    f"草稿 revision {revision.revision_id} 的前序不属于同一草稿"
+                )
+            if previous.revision_number != revision.revision_number - 1:
+                raise ScopeViolationError(
+                    f"草稿 revision {revision.revision_id} 的前序 revision 号"
+                    f"{previous.revision_number} 不是紧邻前序"
+                )
+        if revision.content.draft_revision != revision.revision_number:
+            raise ScopeViolationError(
+                f"草稿 revision {revision.revision_id} 的内层 draft_revision"
+                f"（{revision.content.draft_revision}）与外层链号不一致"
+            )
+        if (
+            revision.content.draft_id != revision.draft_id
+            or revision.content.project_id != revision.project_id
+            or revision.content.protocol_version_id != revision.protocol_version_id
+            or revision.content.selected_phase != revision.study_phase
+        ):
+            raise ScopeViolationError(
+                f"草稿 revision {revision.revision_id} 的内外层方案身份不一致"
+            )
+        payload_json, payload_sha256 = encode_contract(revision)
+        record.payload_json = payload_json
+        record.payload_sha256 = payload_sha256
+        record.content_sha256 = revision.content_sha256
+        _flush_guarded(self.session)
+        return revision
+
+    @staticmethod
+    def _assert_existing_identity(
+        record: ProtocolDraftRevisionRecord,
+        revision: ProtocolDraftRevision,
+        *,
+        allow_status_change: bool,
+    ) -> None:
+        """写前核对现有列镜像，禁止先提交不可读取的 payload/列分叉。"""
+        expected = {
+            "draft_id": revision.draft_id,
+            "revision_number": revision.revision_number,
+            "previous_revision_id": revision.previous_revision_id,
+            "project_id": revision.project_id,
+            "protocol_version_id": revision.protocol_version_id,
+            "study_phase": revision.study_phase.value,
+            "reason": revision.reason.value,
+            "feedback_kind": (
+                revision.feedback_kind.value if revision.feedback_kind else None
+            ),
+            "actor": revision.actor,
+        }
+        if not allow_status_change:
+            expected["status"] = revision.status.value
+        mismatches = [
+            name
+            for name, value in expected.items()
+            if getattr(record, name) != value
+        ]
+        if to_utc_naive(record.created_at) != to_utc_naive(revision.created_at):
+            mismatches.append("created_at")
+        if mismatches:
+            raise ScopeViolationError(
+                f"revision {revision.revision_id} 与已存在行的身份/审计列不一致："
+                + "、".join(mismatches)
+            )
+        if allow_status_change and record.content_sha256 != revision.content_sha256:
+            raise ScopeViolationError(
+                f"revision {revision.revision_id} 的状态转移不得改写草稿内容"
+            )
+
+    def list_by_draft(self, draft_id: str) -> list[ProtocolDraftRevision]:
+        # 先扫描并验证全部不可变 revision，再按 payload 真值筛选。若规范化列被
+        # 外部破坏，不能因 WHERE 命中不到而把坏行静默隐藏。
+        rows = self.session.execute(
+            select(ProtocolDraftRevisionRecord)
+            .order_by(
+                ProtocolDraftRevisionRecord.draft_id,
+                ProtocolDraftRevisionRecord.revision_number,
+            )
+        ).scalars().all()
+        contracts = [self._decode_record(row) for row in rows]
+        return [item for item in contracts if item.draft_id == draft_id]
+
+    def find_published_by_protocol_version(
+        self, protocol_version_id: str
+    ) -> list[ProtocolDraftRevision]:
+        """按正式方案版本返回全部已发布草稿 revision（只读，逐条哈希校验）。
+
+        重新解构必须把“当前正式草稿”作为新草稿的比较基线；正式版本 id 由
+        项目级 ``ProtocolDocumentVersion`` 提供，这里从已发布 revision 的
+        不可变链中定位承载该版本的草稿快照。若镜像/哈希被破坏，解码即抛
+        :class:`PersistedContractInvalid`，绝不返回坏基线。调用方负责处理
+        零条或内容不一致（fail-closed）的场景。
+        """
+        rows = self.session.execute(
+            select(ProtocolDraftRevisionRecord)
+            .where(
+                ProtocolDraftRevisionRecord.protocol_version_id
+                == protocol_version_id,
+                ProtocolDraftRevisionRecord.status
+                == DraftRevisionStatus.PUBLISHED.value,
+            )
+            .order_by(
+                ProtocolDraftRevisionRecord.created_at,
+                ProtocolDraftRevisionRecord.revision_number,
+            )
+        ).scalars().all()
+        return [self._decode_record(row) for row in rows]
+
+    def get_head(self, draft_id: str) -> ProtocolDraftRevision | None:
+        """返回 draft_id 的链头（revision_number 最大的已保存 revision）。"""
+        revisions = self.list_by_draft(draft_id)
+        if not revisions:
+            return None
+        return max(revisions, key=lambda item: item.revision_number)
+
+    def find_by_generation_scope(
+        self,
+        *,
+        project_id: str,
+        protocol_version_id: str,
+    ) -> list[ProtocolDraftRevision]:
+        """查找某次方案解构任务已持久化的草稿。
+
+        生成步骤会先保存不可变草稿，再提交工作流检查点。两者之间
+        中断时，重试必须恢复已保存的成果，不能重复调用模型。读取先
+        验证全部不可变记录，再按合同真值筛选，避免列漂移隐藏坏记录。
+        """
+        rows = self.session.execute(
+            select(ProtocolDraftRevisionRecord).order_by(
+                ProtocolDraftRevisionRecord.created_at,
+                ProtocolDraftRevisionRecord.revision_number,
+            )
+        ).scalars().all()
+        contracts = [self._decode_record(row) for row in rows]
+        return [
+            item
+            for item in contracts
+            if item.project_id == project_id
+            and item.protocol_version_id == protocol_version_id
+        ]
+
+    def count(self, draft_id: str) -> int:
+        return len(self.list_by_draft(draft_id))
+
+
+# ---------------------------------------------------------------------------
+# 无受试者 EvidenceExpectation 模板投影（追加写，可重建）
+# ---------------------------------------------------------------------------
+
+
+EVIDENCE_EXPECTATION_TEMPLATE_CONFIG = _config(
+    EvidenceExpectationTemplateRecord,
+    EvidenceExpectationTemplate,
+    {
+        "template_id": "template_id",
+        "rule_set_id": "rule_set_id",
+        "rule_set_revision": "rule_set_revision",
+        "requirement_id": "requirement_id",
+        "due_stage": "due_stage",
+        "study_phase": "study_phase",
+        "workflow_stage_id": "workflow_stage_id",
+        "fact_type": "fact_type",
+        "required_source_types": "required_source_types",
+        "projection_sha256": "projection_sha256",
+    },
+    created_at_key="created_at",
+    mirrors={
+        "rule_set_id": "rule_set_id",
+        "rule_set_revision": "rule_set_revision",
+        "requirement_id": "requirement_id",
+        "due_stage": "due_stage",
+        "study_phase": "study_phase",
+        "workflow_stage_id": "workflow_stage_id",
+        "fact_type": "fact_type",
+        "required_source_types": "required_source_types",
+        "projection_sha256": "projection_sha256",
+    },
+)
+
+
+def _decode_expectation_template_record(
+    record: EvidenceExpectationTemplateRecord,
+) -> EvidenceExpectationTemplate:
+    contract = decode_contract(
+        EvidenceExpectationTemplate, record.payload_json, record.payload_sha256
+    )
+    payload = json.loads(record.payload_json)
+    check_column_mirrors(
+        "EvidenceExpectationTemplate",
+        record,
+        payload,
+        {
+            "template_id": "template_id",
+            "rule_set_id": "rule_set_id",
+            "rule_set_revision": "rule_set_revision",
+            "requirement_id": "requirement_id",
+            "due_stage": "due_stage",
+            "study_phase": "study_phase",
+            "workflow_stage_id": "workflow_stage_id",
+            "fact_type": "fact_type",
+            "required_source_types": "required_source_types",
+            "projection_sha256": "projection_sha256",
+            "created_at": "created_at",
+        },
+    )
+    return contract
+
+
+def get_expectation_template(
+    session: Session, template_id: str
+) -> EvidenceExpectationTemplate:
+    record = session.get(EvidenceExpectationTemplateRecord, template_id)
+    if record is None:
+        raise NotFoundError(f"EvidenceExpectationTemplate {template_id} 不存在")
+    return _decode_expectation_template_record(record)
+
+
+def save_expectation_templates(
+    session: Session,
+    templates: Sequence[EvidenceExpectationTemplate],
+) -> None:
+    """追加写模板投影；同 (rule_set, revision, requirement) 幂等跳过。
+
+    落库前校验引用完整性：RuleSet revision、EvidenceRequirement 与
+    WorkflowStage 必须真实存在，杜绝孤儿模板（ghost）投影。
+    """
+    repo = AppendRepository(session, EVIDENCE_EXPECTATION_TEMPLATE_CONFIG)
+    for template in templates:
+        # 落库前重跑合同校验：模板 ID/投影哈希必须与稳定身份一致。
+        EvidenceExpectationTemplate.model_validate(
+            template.model_dump(mode="json")
+        )
+        rule_set = session.get(
+            RuleSetRecord,
+            (template.rule_set_id, template.rule_set_revision),
+        )
+        if rule_set is None:
+            raise InvalidReferenceError(
+                f"模板 {template.template_id} 引用的 RuleSet "
+                f"{template.rule_set_id} revision {template.rule_set_revision} 不存在"
+            )
+        if template.study_phase.value != rule_set.study_phase:
+            raise ScopeViolationError(
+                f"模板 {template.template_id} 的研究期别与 RuleSet 不一致"
+            )
+        requirement = session.get(
+            EvidenceRequirementRecord,
+            (
+                template.rule_set_id,
+                template.rule_set_revision,
+                template.requirement_id,
+            ),
+        )
+        if requirement is None:
+            raise InvalidReferenceError(
+                f"模板 {template.template_id} 引用的资料要求 "
+                f"{template.requirement_id} 不在 RuleSet "
+                f"{template.rule_set_id} revision {template.rule_set_revision} 中"
+            )
+        requirement_contract = get_evidence_requirement(
+            session, template.rule_set_id, template.rule_set_revision,
+            template.requirement_id,
+        )
+        expected_semantics = {
+            "due_stage": requirement_contract.due_stage,
+            "fact_type": requirement_contract.fact_type,
+            "required_source_types": sorted(
+                set(requirement_contract.required_source_types)
+            ),
+            "requires_contemporaneous_objective_source": (
+                requirement_contract.requires_contemporaneous_objective_source
+            ),
+            "allows_screening_record_transcription": (
+                requirement_contract.allows_screening_record_transcription
+            ),
+            "description": requirement_contract.description,
+            "source_validity_window": requirement_contract.source_validity_window,
+            "control_origin": requirement_contract.control_origin,
+            "control_validity_status": requirement_contract.control_validity_status,
+            "control_validity_constraint": requirement_contract.control_validity_constraint,
+        }
+        actual_semantics = {
+            "due_stage": template.due_stage,
+            "fact_type": template.fact_type,
+            "required_source_types": sorted(set(template.required_source_types)),
+            "requires_contemporaneous_objective_source": (
+                template.requires_contemporaneous_objective_source
+            ),
+            "allows_screening_record_transcription": (
+                template.allows_screening_record_transcription
+            ),
+            "description": template.description,
+            "source_validity_window": template.source_validity_window,
+            "control_origin": template.control_origin,
+            "control_validity_status": template.control_validity_status,
+            "control_validity_constraint": template.control_validity_constraint,
+        }
+        if actual_semantics != expected_semantics:
+            raise ScopeViolationError(
+                f"模板 {template.template_id} 的资料语义与 RuleSet 中的资料要求 "
+                f"{template.requirement_id} 不一致"
+            )
+        stage = session.get(WorkflowStageRecord, template.workflow_stage_id)
+        if stage is None:
+            raise InvalidReferenceError(
+                f"模板 {template.template_id} 引用的审核节点 "
+                f"{template.workflow_stage_id} 不存在"
+            )
+        if (
+            stage.protocol_version_id != rule_set.protocol_version_id
+            or stage.study_phase != rule_set.study_phase
+        ):
+            raise ScopeViolationError(
+                f"模板 {template.template_id} 的审核节点 "
+                f"{template.workflow_stage_id} 不属于该 RuleSet 的方案版本/期别"
+            )
+        stage_contract = decode_contract(
+            WorkflowStage, stage.payload_json, stage.payload_sha256
+        )
+        expected_prefix = f"{template.rule_set_id}:{template.rule_set_revision}:"
+        if not template.workflow_stage_id.startswith(expected_prefix):
+            raise ScopeViolationError(
+                f"模板 {template.template_id} 的审核节点不属于该 RuleSet revision"
+            )
+        origin = requirement_contract.control_origin
+        due_at_node = (
+            origin.workflow_stage_id == template.workflow_stage_id
+            if origin is not None
+            else template.requirement_id in stage_contract.due_requirement_ids
+        )
+        if not due_at_node or stage_contract.stage != template.due_stage:
+            raise ScopeViolationError(
+                f"模板 {template.template_id} 的资料要求未在所引审核节点按期到期"
+            )
+        existing_record = session.execute(
+            select(EvidenceExpectationTemplateRecord).where(
+                EvidenceExpectationTemplateRecord.rule_set_id
+                == template.rule_set_id,
+                EvidenceExpectationTemplateRecord.rule_set_revision
+                == template.rule_set_revision,
+                EvidenceExpectationTemplateRecord.requirement_id
+                == template.requirement_id,
+            )
+        ).scalars().first()
+        if existing_record is not None:
+            existing = _decode_expectation_template_record(existing_record)
+            if (
+                existing.template_id != template.template_id
+                or existing.projection_sha256 != template.projection_sha256
+            ):
+                raise ScopeViolationError(
+                    f"资料要求 {template.requirement_id} 已存在与当前 RuleSet 语义"
+                    "不一致的模板，拒绝静默跳过"
+                )
+            continue
+        repo.save(template)
+
+
+def list_expectation_templates(
+    session: Session, rule_set_id: str, revision: int
+) -> list[EvidenceExpectationTemplate]:
+    # 与 revision 列表相同：先验证全部镜像，再按 payload 真值筛选，避免被
+    # 篡改的规范化列让坏模板从列表中静默消失。
+    rows = session.execute(
+        select(EvidenceExpectationTemplateRecord).order_by(
+            EvidenceExpectationTemplateRecord.rule_set_id,
+            EvidenceExpectationTemplateRecord.rule_set_revision,
+            EvidenceExpectationTemplateRecord.requirement_id,
+        )
+    ).scalars().all()
+    contracts = [_decode_expectation_template_record(row) for row in rows]
+    return [
+        item
+        for item in contracts
+        if item.rule_set_id == rule_set_id and item.rule_set_revision == revision
+    ]
+
+
+# ---------------------------------------------------------------------------
+# 发布前项目查询（同方案谱系 + 研究期别）
+# ---------------------------------------------------------------------------
+
+
+def find_project_by_protocol_and_phase(
+    session: Session, protocol_code: str, study_phase: str
+) -> Project | None:
+    """返回同一方案编号与期别已有的正式项目（跨方案版本查谱系）。
+
+    同一方案编号的多个正式版本共享谱系；研究期别必须一致。用于首次解构
+    不得创建平行项目、重新解构必须保持同谱系同期别的校验。
+    """
+    row = session.execute(
+        select(ProjectRecord)
+        .join(
+            ProtocolDocumentVersionRecord,
+            ProjectRecord.protocol_version_id
+            == ProtocolDocumentVersionRecord.protocol_version_id,
+        )
+        .where(
+            ProtocolDocumentVersionRecord.protocol_code == protocol_code,
+            ProjectRecord.study_phase == study_phase,
+        )
+        .order_by(ProjectRecord.project_id)
+        .limit(1)
+    ).scalars().first()
+    if row is None:
+        return None
+    contract = decode_contract(Project, row.payload_json, row.payload_sha256)
+    return contract
+
+
+# ---------------------------------------------------------------------------
+# 项目正式版本读取（切片 6：重新解构选择项目 / 展示当前正式版本投影）
+# ---------------------------------------------------------------------------
+
+
+def list_workflow_stages_for_rule_set(
+    session: Session, rule_set_id: str, rule_set_revision: int
+) -> list[WorkflowStage]:
+    """读取该 RuleSet revision 已发布的全部流程节点（命名空间化 ID，单条 SELECT）。
+
+    发布时流程节点 ID 被改写为 ``{rule_set_id}:{revision}:{stage_id}``
+    （``protocol_publication_service``），本查询按此前缀还原该版本的权威节点清单。
+    """
+    prefix = f"{rule_set_id}:{rule_set_revision}:"
+    rows = session.execute(
+        select(WorkflowStageRecord).where(
+            WorkflowStageRecord.workflow_stage_id.like(f"{prefix}%")
+        )
+    ).scalars().all()
+    return [
+        decode_contract(WorkflowStage, row.payload_json, row.payload_sha256)
+        for row in rows
+    ]
+
+
+def get_workflow_stages_by_ids(
+    session: Session, workflow_stage_ids: Sequence[str]
+) -> dict[str, WorkflowStage]:
+    """按命名空间化 ID 批量读取流程节点（单条 SELECT，禁止 N+1）。"""
+    ids = list(dict.fromkeys(workflow_stage_ids))
+    if not ids:
+        return {}
+    rows = session.execute(
+        select(WorkflowStageRecord).where(
+            WorkflowStageRecord.workflow_stage_id.in_(ids)
+        )
+    ).scalars().all()
+    return {
+        row.workflow_stage_id: decode_contract(
+            WorkflowStage, row.payload_json, row.payload_sha256
+        )
+        for row in rows
+    }
+
+
+def _dependent_rows(
+    session: Session,
+    entity_id: str,
+    column_name: str,
+    exclude_tables: frozenset[str] = frozenset(),
+) -> dict[str, int]:
+    """统计引用该实体 ID 的全部子表行数（按表名），用于删除前的依赖矩阵。
+
+    遍历 ORM 注册的元数据表，凡含 ``column_name`` 列且存在指向 ``entity_id`` 的行
+    即计数；新增子表会自动纳入，未来依赖不会被漏检。
+    """
+    counts: dict[str, int] = {}
+    for table in Base.metadata.tables.values():
+        if table.name in exclude_tables or column_name not in table.columns:
+            continue
+        count = session.execute(
+            select(func.count())
+            .select_from(table)
+            .where(table.c[column_name] == entity_id)
+        ).scalar_one()
+        if count:
+            counts[table.name] = int(count)
+    return counts
+
+
+def episode_dependent_counts(session: Session, episode_id: str) -> dict[str, int]:
+    """审核节点的全部子表依赖（快照/候选/期望/运行/预览/修订等）。"""
+    return _dependent_rows(
+        session,
+        episode_id,
+        "review_episode_id",
+        exclude_tables=frozenset({"review_episodes"}),
+    )
+
+
+def subject_dependent_counts(session: Session, subject_id: str) -> dict[str, int]:
+    """受试者的全部子表依赖（临床事实/个人资料/证据跨度等，不含将删除的节点）。"""
+    return _dependent_rows(
+        session,
+        subject_id,
+        "subject_id",
+        exclude_tables=frozenset({"review_episodes", "subjects"}),
+    )
+
+
+def get_project_row(
+    session: Session, project_id: str
+) -> tuple[Project, int] | None:
+    """返回 (Project, 当前 rule_set_revision)；项目不存在时返回 None。"""
+    record = session.get(ProjectRecord, project_id)
+    if record is None:
+        return None
+    contract = decode_contract(Project, record.payload_json, record.payload_sha256)
+    payload = json.loads(record.payload_json)
+    check_column_mirrors(
+        "Project",
+        record,
+        payload,
+        {
+            "project_id": "project_id",
+            "project_code": "project_code",
+            "project_name": "project_name",
+            "study_phase": "study_phase",
+            "protocol_version_id": "protocol_version.protocol_version_id",
+            "rule_set_id": "rule_set_id",
+        },
+    )
+    return contract, int(record.rule_set_revision)
+
+
+def list_projects_with_revision(session: Session) -> list[tuple[Project, int]]:
+    """列出全部正式项目及其当前 rule_set_revision（单条 SELECT，禁止 N+1）。"""
+    rows = session.execute(
+        select(ProjectRecord).order_by(ProjectRecord.project_id)
+    ).scalars().all()
+    contracts = [
+        decode_contract(Project, row.payload_json, row.payload_sha256) for row in rows
+    ]
+    for row, payload in (
+        (row, json.loads(row.payload_json)) for row in rows
+    ):
+        check_column_mirrors(
+            "Project",
+            row,
+            payload,
+            {"project_id": "project_id", "rule_set_id": "rule_set_id"},
+        )
+    return list(zip(contracts, [int(row.rule_set_revision) for row in rows]))
+
+
+def list_rule_set_revisions(
+    session: Session, rule_set_id: str
+) -> list[tuple[int, ProtocolDocumentVersion, datetime]]:
+    """规则集的全部已发布 revision（升序）及其对应方案版本记录。
+
+    重新解构必须持久保留目标项目，并支持在同一项目中追加新的不可变规则
+    版本；历史 revision 全部保留供追溯。每条 revision 携带其绑定方案版本，
+    缺失或哈希校验失败的记录直接拒绝（不静默隐藏）。
+    """
+    rows = session.execute(
+        select(RuleSetRecord)
+        .where(RuleSetRecord.rule_set_id == rule_set_id)
+        .order_by(RuleSetRecord.revision)
+    ).scalars().all()
+    result: list[tuple[int, ProtocolDocumentVersion, datetime]] = []
+    for row in rows:
+        version = cast(
+            ProtocolDocumentVersion,
+            AppendRepository(session, PROTOCOL_DOC_CONFIG).get(row.protocol_version_id),
+        )
+        created_at = to_utc_naive(row.created_at)
+        assert created_at is not None
+        result.append(
+            (int(row.revision), version, created_at)
+        )
+    return result
+
+
+def count_rule_set_rules(
+    session: Session, rule_set_id: str, revision: int
+) -> int:
+    """返回 RuleSet 指定 revision 的正式规则条数（列表投影用）。"""
+    return int(
+        session.execute(
+            select(func.count())
+            .select_from(RuleRecord)
+            .where(
+                RuleRecord.rule_set_id == rule_set_id,
+                RuleRecord.rule_set_revision == revision,
+            )
+        ).scalar_one()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Job 存储原语（状态机/租约/恢复由 workflow 层实现）
+# ---------------------------------------------------------------------------
+
+
+def _job_payload(payload: dict[str, Any] | None) -> tuple[str, str]:
+    text, sha256 = encode_value(payload or {})
+    return text, sha256
+
+
+class JobRepository:
+    """Job/Step/Checkpoint/Event 的存储原语；单调事件序号在写入事务内分配。"""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def create_job(
+        self,
+        *,
+        job_id: str,
+        job_type: str,
+        state: str = "queued",
+        payload: dict[str, Any] | None = None,
+        progress_total: int = 0,
+    ) -> JobRecord:
+        payload_json, payload_sha256 = _job_payload(payload)
+        row = JobRecord(
+            job_id=job_id,
+            job_type=job_type,
+            state=state,
+            lease_generation=0,
+            cancel_requested=False,
+            progress_completed=0,
+            progress_total=progress_total,
+            last_event_seq=0,
+            payload_json=payload_json,
+            payload_sha256=payload_sha256,
+            revision=1,
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+        self.session.add(row)
+        _flush_guarded(self.session)
+        return row
+
+    def get_job(self, job_id: str) -> JobRecord:
+        return _get_required(self.session, JobRecord, job_id, "Job")
+
+    def create_step(
+        self,
+        *,
+        step_id: str,
+        job_id: str,
+        name: str,
+        state: str = "queued",
+        attempt: int = 0,
+        max_attempts: int = 1,
+        retryable: bool = False,
+        waiting_user_kind: str | None = None,
+        depends_on: list[str] | tuple[str, ...] = (),
+    ) -> JobStepRecord:
+        _get_required(self.session, JobRecord, job_id, "Job")
+        payload_json, payload_sha256 = _job_payload(None)
+        row = JobStepRecord(
+            step_id=step_id,
+            job_id=job_id,
+            name=name,
+            state=state,
+            attempt=attempt,
+            max_attempts=max_attempts,
+            retryable=retryable,
+            waiting_user_kind=waiting_user_kind,
+            progress_completed=0,
+            progress_total=0,
+            payload_json=payload_json,
+            payload_sha256=payload_sha256,
+            revision=1,
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+        self.session.add(row)
+        _flush_guarded(self.session)
+        self.add_step_dependencies(
+            job_id=job_id,
+            step_id=step_id,
+            depends_on=depends_on,
+        )
+        return row
+
+    def add_step_dependencies(
+        self,
+        *,
+        job_id: str,
+        step_id: str,
+        depends_on: list[str] | tuple[str, ...],
+    ) -> None:
+        """在同一任务范围内添加有序依赖；可在所有步骤落库后调用。"""
+        for position, depends_on_step in enumerate(depends_on):
+            self.session.execute(
+                insert(job_step_dependencies),
+                [
+                    {
+                        "job_id": job_id,
+                        "step_id": step_id,
+                        "depends_on_step_id": depends_on_step,
+                        "position": position,
+                    }
+                ],
+            )
+        _flush_guarded(self.session)
+
+    def get_step(self, job_id: str, step_id: str) -> JobStepRecord:
+        return _get_required(
+            self.session,
+            JobStepRecord,
+            {"job_id": job_id, "step_id": step_id},
+            "JobStep",
+        )
+
+    def create_checkpoint(
+        self,
+        *,
+        checkpoint_id: str,
+        job_id: str,
+        step_id: str,
+        payload: dict[str, Any],
+    ) -> JobCheckpointRecord:
+        _get_required(self.session, JobRecord, job_id, "Job")
+        _get_required(
+            self.session,
+            JobStepRecord,
+            {"job_id": job_id, "step_id": step_id},
+            "JobStep",
+        )
+        payload_json, payload_sha256 = encode_value(payload)
+        row = JobCheckpointRecord(
+            checkpoint_id=checkpoint_id,
+            job_id=job_id,
+            step_id=step_id,
+            payload_json=payload_json,
+            payload_sha256=payload_sha256,
+            created_at=utc_now(),
+        )
+        self.session.add(row)
+        _flush_guarded(self.session)
+        return row
+
+    def append_event(self, event: JobEvent) -> int:
+        """写入 JobEvent 并返回分配的 ``(job_id, seq)`` 序号；同事务更新 job 序号水位。"""
+        _get_required(self.session, JobRecord, event.job_id, "Job")
+        payload_json, payload_sha256 = encode_contract(event)
+        payload = json.loads(payload_json)
+        # SQLite 同一时刻只有一个写者。用 jobs 水位的单条 UPDATE 分配序号，
+        # 让并发会话在数据库写锁处排队；“查 max + 1”会让两个会话读到
+        # 相同旧值，导致唯一约束冲突或快照升级失败。
+        seq = self.session.execute(
+            update(JobRecord)
+            .where(JobRecord.job_id == event.job_id)
+            .values(last_event_seq=JobRecord.last_event_seq + 1)
+            .returning(JobRecord.last_event_seq)
+            .execution_options(synchronize_session=False)
+        ).scalar_one()
+        self.session.add(
+            JobEventRecord(
+                job_id=payload["job_id"],
+                event_seq=seq,
+                event_type=payload["event_type"],
+                step_id=payload.get("step_id"),
+                occurred_at=parse_datetime_column(payload["occurred_at"]),
+                attempt=payload["attempt"],
+                checkpoint_id=payload.get("checkpoint_id"),
+                retryable=payload["retryable"],
+                progress_completed=payload["progress_completed"],
+                progress_total=payload["progress_total"],
+                payload_json=payload_json,
+                payload_sha256=payload_sha256,
+                created_at=utc_now(),
+            )
+        )
+        _flush_guarded(self.session)
+        return int(seq)
+
+    def list_events(self, job_id: str, after_seq: int = 0) -> list[JobEvent]:
+        rows = self.session.execute(
+            select(JobEventRecord)
+            .where(JobEventRecord.job_id == job_id, JobEventRecord.event_seq > after_seq)
+            .order_by(JobEventRecord.event_seq)
+        ).scalars().all()
+        return [
+            decode_contract(JobEvent, row.payload_json, row.payload_sha256) for row in rows
+        ]
+
+    def list_event_rows(self, job_id: str, after_seq: int = 0) -> list[tuple[int, JobEvent]]:
+        """返回 ``(event_seq, JobEvent)`` 有序行；seq 供 SSE ``after_seq`` 续订。"""
+        rows = self.session.execute(
+            select(JobEventRecord)
+            .where(JobEventRecord.job_id == job_id, JobEventRecord.event_seq > after_seq)
+            .order_by(JobEventRecord.event_seq)
+        ).scalars().all()
+        return [
+            (row.event_seq, decode_contract(JobEvent, row.payload_json, row.payload_sha256))
+            for row in rows
+        ]
+
+    def seed_fixture_events(self, events: list[JobEvent]) -> None:
+        """为 UAT fixture 的 JobEvent 建立最小 Job/Step/Checkpoint 行后写入事件。"""
+        if not events:
+            return
+        for job_id in dict.fromkeys(event.job_id for event in events):
+            self.create_job(
+                job_id=job_id,
+                job_type="fixture_uat",
+                state="completed",
+                payload={"job_id": job_id},
+            )
+        for step_id, job_id in dict.fromkeys(
+            (event.step_id, event.job_id)
+            for event in events
+            if event.step_id is not None
+        ):
+            self.create_step(
+                step_id=step_id,
+                job_id=job_id,
+                name=step_id,
+                state="completed",
+                attempt=1,
+                max_attempts=1,
+            )
+        for event in events:
+            if event.checkpoint_id is None or event.step_id is None:
+                continue
+            self.create_checkpoint(
+                checkpoint_id=event.checkpoint_id,
+                job_id=event.job_id,
+                step_id=event.step_id,
+                payload={
+                    "checkpoint_id": event.checkpoint_id,
+                    "step_id": event.step_id,
+                },
+            )
+        for event in events:
+            self.append_event(event)
+
+
+# ---------------------------------------------------------------------------
+# Fixture 组合播种
+# ---------------------------------------------------------------------------
+
+
+def save_protocol_authority_chain(session: Session, fixture: FixtureV1) -> None:
+    """写入协议权威链：authority record -> command -> confirmation -> manifest ->
+    source records -> workflow stages。"""
+    authority = fixture.protocol_authority_record
+    AppendRepository(session, AUTHORITY_RECORD_CONFIG).save(authority)
+    AppendRepository(session, COMMAND_EVENT_CONFIG).save(fixture.protocol_authority_command)
+    AppendRepository(session, AUTHORITY_CONFIRMATION_CONFIG).save(
+        fixture.protocol_authority_confirmation
+    )
+    AppendRepository(session, INTEGRITY_MANIFEST_CONFIG).save(
+        fixture.protocol_integrity_manifest
+    )
+    for record in fixture.protocol_source_records:
+        AppendRepository(session, SOURCE_RECORD_CONFIG).save(record)
+    for stage in fixture.workflow_stages:
+        AppendRepository(session, WORKFLOW_STAGE_CONFIG).save(
+            stage,
+            scope={
+                "protocol_version_id": authority.protocol_version_id,
+                "study_phase": authority.study_phase.value,
+            },
+        )
+
+
+def persist_fixture(session: Session, fixture: FixtureV1) -> None:
+    """按外键依赖顺序播种一个完整 FixtureV1（合同内容已经过 Gate 校验）。"""
+    AppendRepository(session, PROTOCOL_DOC_CONFIG).save(fixture.project.protocol_version)
+    save_protocol_authority_chain(session, fixture)
+    save_rule_set(session, fixture.rule_set)
+    ProjectRepository(session).save(fixture.project, rule_set_revision=fixture.rule_set.revision)
+    SubjectRepository(session).save(fixture.subject)
+    EpisodeRepository(session).save(fixture.review_episode)
+    source_document_repo = AppendRepository(session, SOURCE_DOCUMENT_CONFIG)
+    for document in fixture.source_documents:
+        source_document_repo.save(document)
+    AppendRepository(session, SNAPSHOT_CONFIG).save(fixture.evidence_snapshot)
+    span_repo = AppendRepository(session, EVIDENCE_SPAN_CONFIG)
+    for span in fixture.evidence_spans:
+        span_repo.save(span)
+    group_repo = AppendRepository(session, CONFLICT_GROUP_CONFIG)
+    for group in fixture.conflict_groups:
+        group_repo.save(group)
+    fact_repo = AppendRepository(session, CLINICAL_FACT_CONFIG)
+    for fact in fixture.facts:
+        fact_repo.save(fact)
+    expectation_repo = EvidenceExpectationRepository(session)
+    for expectation in fixture.evidence_expectations:
+        expectation_repo.save(expectation)
+    prompt_repo = AppendRepository(session, PROMPT_VERSION_CONFIG)
+    for prompt_version in fixture.prompt_versions:
+        prompt_repo.save(prompt_version)
+    model_repo = AppendRepository(session, MODEL_CONFIG_CONFIG)
+    for model_config in fixture.model_configs:
+        model_repo.save(model_config)
+    gate_repo = AppendRepository(session, GATE_RESULT_CONFIG)
+    for gate in fixture.gate_results:
+        gate_repo.save(gate)
+    run_repo = AppendRepository(session, REVIEW_RUN_CONFIG)
+    for run in fixture.review_runs:
+        run_repo.save(run)
+    call_repo = AppendRepository(session, AGENT_CALL_CONFIG)
+    for call in fixture.agent_calls:
+        call_repo.save(call)
+    candidate_repo = AppendRepository(session, NORMALIZATION_CANDIDATE_CONFIG)
+    for candidate in fixture.evidence_normalization_candidates:
+        candidate_repo.save(candidate)
+    AppendRepository(session, PATIENT_PROFILE_CONFIG).save(fixture.patient_profile)
+    assessment_candidate_repo = AppendRepository(session, ASSESSMENT_CANDIDATE_CONFIG)
+    for candidate in fixture.assessment_candidates:
+        assessment_candidate_repo.save(candidate)
+    assessment_repo = AppendRepository(session, FINAL_ASSESSMENT_CONFIG)
+    for assessment in fixture.final_assessments:
+        assessment_repo.save(assessment)
+    action_repo = ActionRequestRepository(session)
+    for action in fixture.actions:
+        action_repo.save(action)
+    diff_repo = AppendRepository(session, REVIEW_RUN_DIFF_CONFIG)
+    for diff in fixture.review_run_diffs:
+        diff_repo.save(diff)
+    save_episode_rollup(session, fixture.episode_rollup)
+    JobRepository(session).seed_fixture_events(list(fixture.job_events))

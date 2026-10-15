@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/index.md","reason":"核对后端分层和质量检查清单"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"核对权威元组、不可变历史、迁移与事务"}
+{"file":".trellis/spec/backend/persistent-jobs.md","reason":"核对任务恢复、幂等、租约和迟到结果"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端全量和聚焦回归标准"}
+{"file":".trellis/spec/frontend/index.md","reason":"核对前端层边界和质量清单"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"核对 HTTP 严格解码和合同漂移拒绝"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"核对组件、构建、Playwright 与宽屏视觉"}
+{"file":".trellis/spec/frontend/uat-recorder.md","reason":"记录真实浏览器医学监查员端到端试用证据"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对数据库、服务、API、Profile 和证据查看器闭环"}
+{"file":".trellis/tasks/08-22-phase5-clinical-facts-profile/research/current-state-and-conference.md","reason":"复核已识别风险、会商采纳/延后/拒绝边界"}

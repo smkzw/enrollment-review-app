@@ -1,0 +1,29 @@
+{
+  "version": "0926v1/frozen-source-slices/v1",
+  "source_job_id": "9c651df26b6c4f5496c95294dde846c8",
+  "source_state": "failed_final",
+  "source_database": "/Users/smkzw/tmp/enrollment-review-w6-v142-relation-isolated-data/enrollment-review-v2.sqlite3",
+  "purpose": "隔离比较现行整批方案读取与逐条有源短读；不是金标或正式发布许可",
+  "cases": [
+    {"batch_number": 1, "structure_unit_id": "su-770b933958b607fa22dfc557", "dimension": "起始节点与持续背景治疗"},
+    {"batch_number": 3, "structure_unit_id": "su-231c8eb966dc996ef213dca6", "dimension": "既往病史时长"},
+    {"batch_number": 4, "structure_unit_id": "su-cc4f8ad4ea30bde506ddca43", "dimension": "复合评分阈值和或关系"},
+    {"batch_number": 6, "structure_unit_id": "su-d666c4378fe375ebab0d1540", "dimension": "操作性定义与频率"},
+    {"batch_number": 7, "structure_unit_id": "su-f771045b40cb8748ae2f5632", "dimension": "随机前用药洗脱时间"},
+    {"batch_number": 8, "structure_unit_id": "su-02584361e9e9536ea84590b2", "dimension": "两个回溯期限取较长者"},
+    {"batch_number": 11, "structure_unit_id": "su-30cefd2ff1a77984c8e2645a", "dimension": "主排除条件的有源例外"},
+    {"batch_number": 30, "structure_unit_id": "su-f653a4e69dab58d2bd3e5892", "dimension": "基线多次测量、均值与允许缺失"}
+  ],
+  "interpretation_and_response_status": "A 路线八个批次均已只读运行；第1和30批待核对，其余六批为文字解析，不代表可执行或临床通过。B 已读第1/4/7/8/11/30批的若干陈述；第4批三点有源但无计算消费者，第8批一条要求被重复拆成六点，第30批带X日程行不能安全退出。各版本仅能逐回执核验，不可拼成发布结果；C 未运行。",
+  "diagnostic_type_coverage": {
+    "descriptive_computation": "第30批有源均值和缺失原文，未有正式计算消费者",
+    "pure_background": "第30批两条带X日程行被模型称作背景但表头/当前阶段不清，均未决；第1批混合样本量与适用人群。纯背景安全退出的真实正反例仍未锁定",
+    "equivalent_expression": "第8批含复合回溯期限，但尚无等义变体和反事实",
+    "current_and_future": "第7批同时涉及随机前限制与研究期计划，尚未做当前/未来独立消费者对照",
+    "footnote_exception": "第11批含例外，但尚未核跨表注来源的反例",
+    "partial_target_coverage": "第4和8批有官方条款对应，但文字对应不证明均值或时间选择可执行",
+    "action_completion": "未锁定只要求完成操作的正例、明确未做及冲突病例；第35批妊娠检查来源同时带有效期，不可冒充此类纯操作正例",
+    "technical_vs_source_ambiguity": "第30批有结构及求值失败；尚未与真正原文歧义成对比较"
+  },
+  "claims_complete": false
+}

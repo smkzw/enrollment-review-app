@@ -1,0 +1,144 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-icf-demographics",
+  "task_id": "phase5-slice60y-20260828",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice60y-d001-icf-demographics-replay-20260828",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "parent_phase_qc_path": null,
+  "study_phase": "phase_ii",
+  "owned_source_refs": [
+    "body.p768",
+    "body.p770"
+  ],
+  "attached_source_refs": [
+    "body.p767",
+    "body.p769",
+    "body.t5.r5",
+    "body.t5.r6",
+    "body.p315",
+    "body.p317",
+    "body.p630",
+    "body.p631"
+  ],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [],
+  "candidate_forbidden_markers_by_source_ref": {},
+  "pre_enrollment_source_refs": [
+    "body.p768",
+    "body.p770"
+  ],
+  "owned_visit_instances_by_source_ref": {
+    "body.p770": "筛选访视"
+  },
+  "owned_procedure_semantic_families_by_source_ref": {
+    "body.p770": [
+      "demographics"
+    ]
+  },
+  "unit_lookup": [
+    "frozen_plan_owned",
+    "frozen_plan_context",
+    "coverage_manifest"
+  ],
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "只处置知情同意和人口学正文；章节标题、流程表、脚注及IN-01/IN-02仅作为只读权威上下文。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "当前冻结来源位于Ⅱ期研究流程及其对应检查和评估章节。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-5636e5cd4d58852a8620a6e2",
+        "official_code": "IN-01",
+        "label": "知情同意、沟通与遵从能力",
+        "position": 1,
+        "source_span_ids": [
+          "span-d17aa2eddcff6171d34f7977a1d36ad1"
+        ]
+      },
+      {
+        "catalog_item_id": "pcm-row-a8ec5d65b27db9afc70682d8",
+        "official_code": "IN-02",
+        "label": "签署知情同意时年龄范围",
+        "position": 2,
+        "source_span_ids": [
+          "span-db4562ed2d4bcfdc5af302a1246ed935"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "procedure:d001-icf-screening",
+        "label": "筛选前签署知情同意书",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 37,
+        "semantic_family": "informed_consent",
+        "source_span_ids": [
+          "span-256a4cdd18240eba234318556286eec1",
+          "span-413463d039fc6db079a2b7aa84dc65a7",
+          "span-96728348c04be6cf0d9812e3e5f4fa3e"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:d001-demographics-screening",
+        "label": "筛选访视采集人口学资料",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 38,
+        "semantic_family": "demographics",
+        "source_span_ids": [
+          "span-3ef1d50a4d1e02de59263a9e2738fa2c",
+          "span-7eae629b2bbdb070b807541676f2c8a8",
+          "span-93aa61df9bc1ade127778271638c611c"
+        ]
+      }
+    ]
+  },
+  "runner": {
+    "max_transport_retries": 1,
+    "max_schema_repairs": 3,
+    "timeout_seconds": 7200.0
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60y-icf-demographics",
+    "catalog_id": "catalog:slice60y-icf-demographics"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p768": [
+      "解释发生在筛选前且知情同意为自愿签署",
+      "签署事实不得替代沟通、理解和遵从能力判定",
+      "不得把正文重复发布为新的入选标准"
+    ],
+    "body.p770": [
+      "人口学资料只在筛选访视采集",
+      "出生日期、性别、民族和年龄四项记录均保留",
+      "采集完成不得等同于IN-02年龄范围通过",
+      "性别不限不等于无需记录性别"
+    ]
+  },
+  "notes": [
+    "活动来源为131包冻结计划papl-40b1237a22e538a278b4fd5e，第67包拥有body.p767至body.p770。",
+    "217包旧研究快照仅作历史诊断，不得解释本组包序号或来源身份。",
+    "人工临床检查清单只用于模型输出后的父级验收，不进入Agent首轮或修订提示。",
+    "p770的筛选执行节点和人口学资料家族来自冻结流程目录；p768不预先绑定目录答案，保留解释义务增量的盲态判断空间。",
+    "候选数量不是验收目标；允许正文被既有流程目录和官方规则完整覆盖，也允许模型提出确有语义增量的程序控制。"
+  ]
+}

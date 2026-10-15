@@ -1,0 +1,130 @@
+{
+  "attached_source_refs": [
+    "body.t5.r10",
+    "body.p321",
+    "body.p684",
+    "body.p885"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-vital-sign-modality",
+  "notes": [
+    "原始文档链直接提取，用户无需预处理方案文本。",
+    "本组用于验证必做、推荐与尽力遵循三档操作模态可分层表达。",
+    "排除标准为合取条件且需研究者风险判断；操作偏离本身不触发排除。",
+    "四项生命体征记录已由流程目录覆盖；新增准备与顺序要求仅作增量控制，不强化为入排门槛。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p784",
+    "body.p785",
+    "body.p786"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "流程表中筛选及条件性基线检查不得重复发布": "pending_codex"
+      },
+      "frozen_excerpt": "生命体征^7 | X | （X） | X | X | X | X | X | X | X",
+      "lookup": "coverage_manifest",
+      "role": "attached",
+      "source_ref": "body.t5.r10",
+      "structure_unit_id": "su-5dc2754ed81c0a3fa56130e7"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "摘要中筛选期及推荐静息不得重复发布": "pending_codex"
+      },
+      "frozen_excerpt": "生命体征：筛选期、D1/D15/D29/D57/D85（当天用药前）、D113或提前退出时进行测量。测量前建议静息至少5分钟后，进行体温、血压（坐位）、脉博（坐位）、呼吸频率测量，如有异常，根据研究者判断，可重复测量。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p321",
+      "structure_unit_id": "su-c6037f4e2da80e8557599e29"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "异常且有临床意义与研究者不可接受风险判断必须同时成立": "pending_codex",
+        "操作偏离或单纯异常不得触发EX-21": "pending_codex",
+        "筛选与基线两个审核节点均保留": "pending_codex"
+      },
+      "frozen_excerpt": "筛选或基线时，生命体征、体格检查、12-导联心电图、胸部CT（可接受1个月内的CT检查结果）异常且有临床意义，经研究者评估如果参与研究将可能对参与者构成不可接受的风险；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p684",
+      "structure_unit_id": "su-5c242dd0b4f85ea199512c80"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "章节标题仅结构定位不得作为独立候选": "pending_codex"
+      },
+      "frozen_excerpt": "生命体征检查",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p784",
+      "structure_unit_id": "su-391ac4874f8f0692ccbc3442"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "体温、坐位血压、坐位脉搏、呼吸频率四项记录为必做且不得重复流程表": "pending_codex",
+        "四项记录单位与精度完整保留": "pending_codex",
+        "测量前建议休息至少5分钟为推荐性准备不得硬化为排除": "pending_codex"
+      },
+      "frozen_excerpt": "生命体征检查包括坐位血压（收缩压和舒张压）（mmHg）、坐位脉博（次/分）、体温（℃）、呼吸频率（次/分）。测量前，建议参与者至少休息5分钟。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p785",
+      "structure_unit_id": "su-3edde2080d78436042ca1f50"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "与PK同点时尽量在PK前为尽力遵循顺序不得硬化为绝对先后": "pending_codex"
+      },
+      "frozen_excerpt": "如果生命体征的检查与PK采样时间一致，尽量在PK样本采集之前完成生命体征检查，最大限度地提高血样采集的准确性。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p786",
+      "structure_unit_id": "su-7a42e55b3912ac26c66747a5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "D1给药前结果作为基线值及基线资格复核": "pending_codex"
+      },
+      "frozen_excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p885",
+      "structure_unit_id": "su-8c8a34eb18d0139b009c191d"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61av-20260829",
+  "worker": "worker_03"
+}

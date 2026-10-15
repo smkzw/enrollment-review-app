@@ -1,0 +1,139 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-vital-sign-modality",
+  "task_id": "phase5-slice61av-20260829",
+  "worker": "worker_03",
+  "artifact_dir_name": "phase5-slice61av-d001-vital-sign-modality-20260829",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "parent_phase_qc_path": null,
+  "study_phase": "phase_ii",
+  "owned_source_refs": [
+    "body.p784",
+    "body.p785",
+    "body.p786"
+  ],
+  "attached_source_refs": [
+    "body.t5.r10",
+    "body.p321",
+    "body.p684",
+    "body.p885"
+  ],
+  "required_candidate_source_refs": [
+    "body.p785",
+    "body.p786"
+  ],
+  "forbidden_candidate_source_refs": [
+    "body.p784"
+  ],
+  "pre_enrollment_source_refs": [
+    "body.p785"
+  ],
+  "structural_only_source_refs": [
+    "body.p784"
+  ],
+  "owned_procedure_semantic_families_by_source_ref": {},
+  "owned_required_action_kinds_by_source_ref": {},
+  "unit_lookup": [
+    "frozen_plan_owned",
+    "frozen_plan_context",
+    "coverage_manifest"
+  ],
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "只处置生命体征检查专章p784-p786：标题、必做4项记录、建议休息与尽力顺序；流程表t5.r10/p321及EX-21/p885仅作只读权威上下文，不重复发布流程必做。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "当前冻结来源适用于Ⅱ期筛选和基线入排审核，并提供后续访视共用的生命体征操作要求；建议与尽力语气不得硬化为排除。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-dd9da8fd97941b8b7d8753e2",
+        "official_code": "EX-21",
+        "label": "检查异常、临床意义与不可接受风险",
+        "position": 27,
+        "source_span_ids": [
+          "span-b8dc988a09b4247d8fe2e581a5d983ad"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "pcm-row-aee90bcadab30a320c395d48",
+        "label": "生命体征",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 42,
+        "source_span_ids": [
+          "span-230f55c814800dae97a30be099d1e467",
+          "span-4b6860e28d3847e76698b5c815beb897",
+          "span-6b71f1dc163007fd8652a8bdbb80afa9",
+          "span-6e778c09071b86e56cd0b6759ab866f2",
+          "span-81d2346d801661a14b1255b48aad2db9",
+          "span-956cf919169e99845fee4c6a8aed73df",
+          "span-9ff3e5073388218f935d161176af0e5d",
+          "span-bf2694c46897202b4460d13756e384e3",
+          "span-db3a1ba26536ca62595d120992d1212b",
+          "span-e516fab67c0b6f23d50b7eab0ec95930"
+        ]
+      }
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61av-vital-sign-modality",
+    "catalog_id": "catalog:slice61av-vital-sign-modality"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p784": [
+      "章节标题仅结构定位不得作为独立候选"
+    ],
+    "body.p785": [
+      "体温、坐位血压、坐位脉搏、呼吸频率四项记录为必做且不得重复流程表",
+      "测量前建议休息至少5分钟为推荐性准备不得硬化为排除",
+      "四项记录单位与精度完整保留"
+    ],
+    "body.p786": [
+      "与PK同点时尽量在PK前为尽力遵循顺序不得硬化为绝对先后"
+    ],
+    "body.p684": [
+      "异常且有临床意义与研究者不可接受风险判断必须同时成立",
+      "操作偏离或单纯异常不得触发EX-21",
+      "筛选与基线两个审核节点均保留"
+    ],
+    "body.t5.r10": [
+      "流程表中筛选及条件性基线检查不得重复发布"
+    ],
+    "body.p321": [
+      "摘要中筛选期及推荐静息不得重复发布"
+    ],
+    "body.p885": [
+      "D1给药前结果作为基线值及基线资格复核"
+    ]
+  },
+  "notes": [
+    "原始文档链直接提取，用户无需预处理方案文本。",
+    "本组用于验证必做、推荐与尽力遵循三档操作模态可分层表达。",
+    "排除标准为合取条件且需研究者风险判断；操作偏离本身不触发排除。",
+    "四项生命体征记录已由流程目录覆盖；新增准备与顺序要求仅作增量控制，不强化为入排门槛。"
+  ]
+}

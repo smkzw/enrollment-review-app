@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "policy": "beijing-daily-peak-off-peak-v3",
+  "timezone": "Asia/Shanghai",
+  "peak_start": "12:00",
+  "peak_end": "19:00",
+  "days": "all",
+  "period_labels": {
+    "peak": "高峰",
+    "off_peak": "非高峰"
+  },
+  "packet_period": "off_peak",
+  "packet_evaluated_at": "2026-09-08T11:28:59.886588+08:00",
+  "variants": {
+    "peak": {
+      "agent": "pi",
+      "provider": "cursor",
+      "model": "default",
+      "effort": "",
+      "default_provider": "cursor",
+      "default_model": "default",
+      "default_effort": "",
+      "escalate_provider": "cursor",
+      "escalate_model": "default",
+      "escalate_effort": "",
+      "primary": {
+        "agent": "pi",
+        "provider": "cursor",
+        "model": "default",
+        "effort": "",
+        "dynamic_model": true
+      },
+      "fallbacks": [],
+      "execution_route": "pi/cursor/default; no packet fallback"
+    },
+    "off_peak": {
+      "agent": "zcode",
+      "provider": "zcode",
+      "model": "GLM-5.3-Flash",
+      "effort": "max",
+      "default_provider": "zcode",
+      "default_model": "GLM-5.3-Flash",
+      "default_effort": "max",
+      "escalate_provider": "zcode",
+      "escalate_model": "GLM-5.3-Flash",
+      "escalate_effort": "max",
+      "primary": {
+        "agent": "zcode",
+        "provider": "zcode",
+        "model": "GLM-5.3-Flash",
+        "effort": "max"
+      },
+      "fallbacks": [],
+      "execution_route": "zcode/zcode/GLM-5.3-Flash:max; no packet fallback"
+    }
+  }
+}

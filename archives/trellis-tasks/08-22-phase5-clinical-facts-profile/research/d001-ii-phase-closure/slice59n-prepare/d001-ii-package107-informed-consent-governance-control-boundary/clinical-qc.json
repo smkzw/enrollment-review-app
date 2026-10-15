@@ -1,0 +1,163 @@
+{
+  "attached_source_refs": [],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package107-informed-consent-governance-control-boundary",
+  "notes": [
+    "模型外闭包：Package 107恰好拥有body.p1251-p1259共9个来源；无attached；41项context_units保持只读且不升格。",
+    "四类语义必须分开：研究级伦理治理（p1253-p1254）、ICF文件治理（p1256）与ICF模板内容（p1258）、知情过程（p1257）、签署与重新同意控制（p1259）；标题p1251/p1252/p1255仅结构。",
+    "第67包权威去重：不得重复发布筛选前解释所有研究程序或自愿签署ICF/筛选前签署知情同意书通用控制；本包只保留口头书面、公正见证人、可理解解释、充分时间、分别签名日期、关系注明、双方留存、重要新资料后伦理批准与再次同意等源文细节。",
+    "严禁把伦理报批、ICF模板内容或持续告知全部误成单例资格；也不得把签署/日期/充分理解控制从模型外语义中丢失。",
+    "Package 106止于p1250；Package 108从p1260起；claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1251",
+    "body.p1252",
+    "body.p1253",
+    "body.p1254",
+    "body.p1255",
+    "body.p1256",
+    "body.p1257",
+    "body.p1258",
+    "body.p1259"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "伦理考虑标题仅提供章节结构，不独立生成候选、流程节点、官方规则或受试者控制点": "pending_codex"
+      },
+      "frozen_excerpt": "伦理考虑",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1251",
+      "structure_unit_id": "su-6a7523d0552d7252ab656d42"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "遵守法律法规标题仅提供小节结构，不独立生成候选或单例资格": "pending_codex"
+      },
+      "frozen_excerpt": "遵守法律法规",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1252",
+      "structure_unit_id": "su-7a8a6ff830ba5360e2886b21"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "研究须按ICH E6、我国GCP、赫尔辛基宣言、相关法律法规及伦理委员会审核意见执行，属于研究级伦理合规治理，不得改写为单例入排条件": "pending_codex"
+      },
+      "frozen_excerpt": "本研究将完全按照ICH E6和我国GCP指导原则、赫尔辛基宣言、相关法律法规及伦理委员会审核意见进行，以提供并加强对个人的保护。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1253",
+      "structure_unit_id": "su-6b34e705408952504dc14483"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "上述伦理报批与研究治理义务不得误成单例筛选/基线/入排不通过条件；与Package 108的IRB/EC专节边界不得混淆或提前吸收": "pending_codex",
+        "伦理委员会批准时须确认方案/研究标题、方案/研究编号、已评审方案文件及评审日期；研究期间方案/ICF新增修订须再次获得相关管理单位书面核准意见": "pending_codex",
+        "必须告知伦理委员会可能影响参与者安全和继续参加研究的后续方案增补件及试验过程严重不良事件；研究者报告进展并将与伦理委员会通讯副本交申办者": "pending_codex",
+        "研究开始之前须将方案、知情同意书及其他必需材料交伦理委员会审阅批准；申办者只有在接到伦理委员会批准件后才能提供研究药物": "pending_codex"
+      },
+      "frozen_excerpt": "在研究开始之前，研究者应将研究方案、知情同意书以及其他必需的材料交于伦理委员会供其审阅及批准。申办者只有在接到伦理委员会的批准件后才能提供研究药物。同时必须告知伦理委员会可能会影响参与者安全和继续参加研究的后续方案增补件和在试验过程中发生的严重不良事件。研究者有责任向伦理委员会报告有关研究的进展情况。此外，研究者必须及时将与伦理委员会之间的所有的通讯副本交于申办者。伦理委员会在审阅及批准研究方案时，必须确认方案/研究标题，方案/研究编号，并注明已评审的方案文件及评审日期。在研究进行期间，如果研究方案、知情同意书等有任何新增修订，都应根据法规再次获得相关管理单位的书面核准意见。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1254",
+      "structure_unit_id": "su-dc4e71188db6982381753f4a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "知情同意标题仅提供小节结构，不独立生成候选或重复第67包签署控制": "pending_codex"
+      },
+      "frozen_excerpt": "知情同意",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1255",
+      "structure_unit_id": "su-cd5e0b5234b76f2b92a304cf"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "ICF（和研究方案一起）必须经伦理委员会审查及批准，属于ICF文件治理，不得误成单例资格或替代第67包筛选前签署控制": "pending_codex"
+      },
+      "frozen_excerpt": "ICF（和研究方案一起）必须经伦理委员会审查及批准。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1256",
+      "structure_unit_id": "su-3a88a604091928e2361f1bb8"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得重复发布第67包已接受的筛选前解释所有研究程序或自愿签署ICF通用控制": "pending_codex",
+        "必须以口头和书面两种方式告知研究信息；无阅读能力时公正见证人须阅读ICF及其他书面资料并见证知情同意": "pending_codex",
+        "获得可能影响继续参加研究的新信息时及时告知并记录，属于持续告知过程义务，不得改写为单例入排不通过": "pending_codex",
+        "须用参与者可以理解的方式和措词解释ICF内容，使参与者或其监护人、见证人易于理解": "pending_codex"
+      },
+      "frozen_excerpt": "研究者必须以口头和书面两种方式告知有关本研究的信息。若参与者或者其监护人无阅读能力，公正见证人须阅读ICF和其他书面资料（如有），并见证知情同意。研究者或其指定人员有责任用参与者可以理解的方式和措词就ICF的内容向参与者（或其监护人、见证人）解释，使参与者或者其监护人、见证人易于理解。研究者获得可能影响参与者继续参加研究的新信息时，应及时告知参与者（或其监护人），并做相应记录。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1257",
+      "structure_unit_id": "su-0d7cb6b10c6bdc36f8a58b1f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "ICF模板内容清单是文件治理要求，不得误成单例资格、排除标准或入排不通过条件": "pending_codex",
+        "最终ICF文本及其他资料应包含研究概况、目的、过程与期限、研究步骤、义务、受益（含不获益可能）与风险、分组可能性、损害治疗与补偿、参加补偿、自愿参加、个人资料保密等模板内容": "pending_codex"
+      },
+      "frozen_excerpt": "最终的ICF文本和提供给参与者的其他资料应包含以下内容：研究概况、研究目的、研究的过程与期限、参与者需要遵守的研究步骤、参与者的义务、参与者预期可能的受益（包括不获益的可能性）和风险，告知参与者可能被分配到研究的不同组别及分配至各组的可能性；如发生与研究相关的损害时，参与者可以获得的治疗和相应的补偿；参与者参加临床研究可能获得的补偿；参与者自愿参加本研究；参与者个人资料的保密原则等。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1258",
+      "structure_unit_id": "su-6c8a4a1b41ed16bf9c2aa0c7"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "ICF应由研究者和参与者各保留1份": "pending_codex",
+        "上述签署/日期/充分理解/双方留存/重新同意控制必须保留为过程语义，不得压缩成第67包已覆盖的通用自愿签署或筛选前解释控制，也不得改写为笼统不得入组资格句": "pending_codex",
+        "参与者或其监护人以及执行知情同意的研究者须在ICF上分别签名并注明日期；若非参与者本人签署须注明关系": "pending_codex",
+        "涉及研究药物的重要新资料须将ICF作书面修改送伦理委员会批准后，再次取得参与者或其监护人同意": "pending_codex",
+        "签署ICF之前须给予充分的时间和机会了解临床研究详细情况；充分理解时间机会不得省略": "pending_codex"
+      },
+      "frozen_excerpt": "签署ICF之前，研究者或其指定研究人员应当给予参与者（或其监护人）充分的时间和机会了解临床研究的详细情况。参与者（或其监护人）以及执行知情同意的研究者应当在ICF上分别签名并注明日期（若非参与者本人签署，应当注明关系）。ICF应由研究者和参与者各保留1份。如发现涉及研究药物的重要新资料，则必须将ICF作书面修改送伦理委员会批准后，再次取得参与者（或其监护人）同意。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1259",
+      "structure_unit_id": "su-60dbe4b8dd44990f9435d144"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61ct-20260830",
+  "worker": "codex-parent"
+}

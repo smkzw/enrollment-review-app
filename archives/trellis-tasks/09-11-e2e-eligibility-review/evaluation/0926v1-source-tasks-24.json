@@ -1,0 +1,391 @@
+{
+  "claims_complete": false,
+  "purpose": "同源A/B/C对照的来源题，不含医学金标或正式发布许可",
+  "sources": {
+    "d001_ii": {
+      "docx_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+      "source_kind": "docx_structural_input",
+      "study_phase": "II"
+    },
+    "sar_iii": {
+      "docx_sha256": "075c93b45414dcb4bb33ef1cf623d295a9d8f029d7560ca484a0c0267c4fdabd",
+      "frozen_closure_sha256": "33d6644aeb60353b98f6b7a68bfd9d0bfcaadf66ef56441872fc0cb713faf0aa",
+      "source_content_sha256": "25c713e22af34e4aa21b4bbb5d16f86bdce6393a25abefd1bee9418f34ff7903",
+      "source_job_id": "9c651df26b6c4f5496c95294dde846c8",
+      "source_kind": "terminal_control_job"
+    }
+  },
+  "tasks": [
+    {
+      "batch_id": "pcb-6afb9176a36b398fdb7eadb2",
+      "batch_number": 1,
+      "dimension": "mixed_background",
+      "source_excerpt_sha256": "a545f2121abe9bd1357c39d81ea2cf8ea8bdd6d6851351078b015ff7971aab99",
+      "source_ref": "body.t2.r10.c1.p9",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.t2.r10.c1.p9"
+      ],
+      "structure_unit_id": "su-770b933958b607fa22dfc557",
+      "task_id": "SAR-01"
+    },
+    {
+      "batch_id": "pcb-34b2bc7dafeb0a70b4638327",
+      "batch_number": 3,
+      "dimension": "definition_and_condition",
+      "source_excerpt_sha256": "428e204e0bf74cb436aa673fcac4422b0568a26c7ab06e2f9a273ca761fd2b73",
+      "source_ref": "body.t2.r14.c1.p11",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.t2.r14.c1.p11"
+      ],
+      "structure_unit_id": "su-231c8eb966dc996ef213dca6",
+      "task_id": "SAR-02"
+    },
+    {
+      "batch_id": "pcb-e758f967f6d7f8465f68b909",
+      "batch_number": 4,
+      "dimension": "multi_stage_threshold",
+      "source_excerpt_sha256": "5db82451015d597499e4de15b199e3eebb8a23482f4cabf65e8bc6a33c57cf6b",
+      "source_ref": "body.t2.r14.c1.p14",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.t2.r14.c1.p14"
+      ],
+      "structure_unit_id": "su-cc4f8ad4ea30bde506ddca43",
+      "task_id": "SAR-03"
+    },
+    {
+      "batch_id": "pcb-4bb656c329cbc54ab9afe011",
+      "batch_number": 6,
+      "dimension": "operational_definition",
+      "source_excerpt_sha256": "16f3209483560b29f5a03ddbf12f76d762bffdf2eadb427f8648c812de9a8711",
+      "source_ref": "body.t2.r15.c1.p4",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.t2.r15.c1.p4"
+      ],
+      "structure_unit_id": "su-d666c4378fe375ebab0d1540",
+      "task_id": "SAR-04"
+    },
+    {
+      "batch_id": "pcb-e08b5b8eb5c3e06c58a6c14c",
+      "batch_number": 7,
+      "dimension": "current_and_future",
+      "source_excerpt_sha256": "7f845f7f8dc9d02491aa8e24c9eb1e836636e691a02c93c543ed90ca1c812b75",
+      "source_ref": "body.t2.r15.c1.p7",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.t2.r15.c1.p7"
+      ],
+      "structure_unit_id": "su-f771045b40cb8748ae2f5632",
+      "task_id": "SAR-05"
+    },
+    {
+      "batch_id": "pcb-d33dda8d06851f5f3043a9e0",
+      "batch_number": 8,
+      "dimension": "longer_of_windows",
+      "source_excerpt_sha256": "b1178de7b0dd4c522f5b4da6118773a80faac70737c279bd247553f35b433639",
+      "source_ref": "body.t2.r15.c1.p11",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.t2.r15.c1.p11"
+      ],
+      "structure_unit_id": "su-02584361e9e9536ea84590b2",
+      "task_id": "SAR-06"
+    },
+    {
+      "batch_id": "pcb-e286148e76403f8c647b8887",
+      "batch_number": 11,
+      "dimension": "exception_scope",
+      "source_excerpt_sha256": "69e5c84a8e32681846f2ec34b0d66be0dd9e404ab58e4c7c86b756905ac1d215",
+      "source_ref": "body.t2.r15.c1.p23",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.t2.r15.c1.p23"
+      ],
+      "structure_unit_id": "su-237284b17c804b438be7586a",
+      "task_id": "SAR-07"
+    },
+    {
+      "batch_id": "pcb-fa3ee6931f6da1d1da0ad5a2",
+      "batch_number": 30,
+      "dimension": "series_and_missingness",
+      "source_excerpt_sha256": "042f58ec0081002074c13dd9d18a362415b34c7dd46693e9e4cf72c3e3fe7d38",
+      "source_ref": "body.p279",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.p279"
+      ],
+      "structure_unit_id": "su-f653a4e69dab58d2bd3e5892",
+      "task_id": "SAR-08"
+    },
+    {
+      "batch_id": "pcb-1cdcce43aa406f3bf713e305",
+      "batch_number": 35,
+      "dimension": "procedure_validity",
+      "source_excerpt_sha256": "3dacb1c4df87fd5cf4dfb63b10eb4b0d3c6783b744625cc06ffa2cf9d7d9defd",
+      "source_ref": "body.p303",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.p303"
+      ],
+      "structure_unit_id": "su-2d96881749cb31499d441cc8",
+      "task_id": "SAR-09"
+    },
+    {
+      "batch_id": "pcb-625de98d84208e6b5fa7d935",
+      "batch_number": 42,
+      "dimension": "shared_calculation_definition",
+      "source_excerpt_sha256": "241189f7a63ed94ac4590f443febafe469cf3bf1a975b010fc2d78f7110269b4",
+      "source_ref": "body.p554",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.p554"
+      ],
+      "structure_unit_id": "su-206412f1fa9a87330e61b7d3",
+      "task_id": "SAR-10"
+    },
+    {
+      "batch_id": "pcb-406e71791e2f9d557297b5e8",
+      "batch_number": 55,
+      "dimension": "result_with_exception",
+      "source_excerpt_sha256": "f2bf268bebd333f7a9158b32f8f2c866c7e48f77897ff847e2fc93c9accce798",
+      "source_ref": "body.p607",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.p607"
+      ],
+      "structure_unit_id": "su-1357c621b904043818acc780",
+      "task_id": "SAR-11"
+    },
+    {
+      "batch_id": "pcb-b00a93651bbffcf6d24508c1",
+      "batch_number": 85,
+      "dimension": "study_procedure_scope",
+      "source_excerpt_sha256": "c75cf90401b4d9bb247994c29e2500be3b239d72949697df986dfb3a6ec90d3a",
+      "source_ref": "body.p888",
+      "source_span_ids": [
+        "f05217cc62924d4d9d2ce73968fdc8d5-snapshot::body.p888"
+      ],
+      "structure_unit_id": "su-6a37c9ffc8089a84d9b687f4",
+      "task_id": "SAR-12"
+    },
+    {
+      "catalog_code": "IN-03",
+      "dimension": "history_and_judgment",
+      "source_refs": [
+        "body.p632"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.p632"
+      ],
+      "source_text_sha256": [
+        "3b928069bdb39cdccdbc474e4b8ad172dadc585f1f9a292ddc5fb8b91a81e502"
+      ],
+      "task_id": "D001-01"
+    },
+    {
+      "catalog_code": "IN-04",
+      "dimension": "multi_stage_threshold",
+      "source_refs": [
+        "body.p633",
+        "body.p634",
+        "body.p635",
+        "body.p636"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.p633",
+        "phase3-acceptance-d001-ii-snapshot::body.p634",
+        "phase3-acceptance-d001-ii-snapshot::body.p635",
+        "phase3-acceptance-d001-ii-snapshot::body.p636"
+      ],
+      "source_text_sha256": [
+        "951be209cb383f2e600c9905817283166874826d147ba20b92156664d0f67123",
+        "ea1ab6ae313cbdb333fc2f54bbeb9b015bcfa2066a0623940b6796d50b26e49c",
+        "1e414676152c175d127755363be6418e708426fd0da587d738e086aae3a1e6b9",
+        "b4fa53b273b4316d9a7ff4a99ce95cb58cc0e5f85452bfb508b76d2597529e05"
+      ],
+      "task_id": "D001-02"
+    },
+    {
+      "catalog_code": "IN-06",
+      "dimension": "current_and_future",
+      "source_refs": [
+        "body.p638"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.p638"
+      ],
+      "source_text_sha256": [
+        "6f09bb67762658428698684b2fdba2bce4bccea20be35069f4f21db7647955c9"
+      ],
+      "task_id": "D001-03"
+    },
+    {
+      "catalog_code": "EX-01",
+      "dimension": "lookback_anchor",
+      "source_refs": [
+        "body.p641"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.p641"
+      ],
+      "source_text_sha256": [
+        "383693da786f2c33c0d535f56fd9f59a04de67897244e351cf4d0f20abf6c807"
+      ],
+      "task_id": "D001-04"
+    },
+    {
+      "catalog_code": "EX-02",
+      "dimension": "investigator_judgment",
+      "source_refs": [
+        "body.p642"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.p642"
+      ],
+      "source_text_sha256": [
+        "82cf7fedb2c41882cf740ea0d28cb27cfdec0ea20bb52fa50ea0e2d94a2bf2a4"
+      ],
+      "task_id": "D001-05"
+    },
+    {
+      "catalog_code": "EX-04",
+      "dimension": "nested_history_exception",
+      "source_refs": [
+        "body.p644"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.p644"
+      ],
+      "source_text_sha256": [
+        "a9442ab8f1c390ffccdc8c471c5d6904ed9d1fc78ef2c7835096bf1a93fba294"
+      ],
+      "task_id": "D001-06"
+    },
+    {
+      "catalog_code": "EX-10",
+      "dimension": "future_restriction",
+      "source_refs": [
+        "body.p657"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.p657"
+      ],
+      "source_text_sha256": [
+        "9a7597bf51c5fe5344489ec395af7fed59b7f7eff430282fb4d4c940ed2eeae4"
+      ],
+      "task_id": "D001-07"
+    },
+    {
+      "catalog_code": "EX-18",
+      "dimension": "treatment_washout_list",
+      "source_refs": [
+        "body.p665",
+        "body.p666",
+        "body.p667",
+        "body.p668",
+        "body.p669",
+        "body.p670",
+        "body.p671",
+        "body.p672",
+        "body.p673"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.p665",
+        "phase3-acceptance-d001-ii-snapshot::body.p666",
+        "phase3-acceptance-d001-ii-snapshot::body.p667",
+        "phase3-acceptance-d001-ii-snapshot::body.p668",
+        "phase3-acceptance-d001-ii-snapshot::body.p669",
+        "phase3-acceptance-d001-ii-snapshot::body.p670",
+        "phase3-acceptance-d001-ii-snapshot::body.p671",
+        "phase3-acceptance-d001-ii-snapshot::body.p672",
+        "phase3-acceptance-d001-ii-snapshot::body.p673"
+      ],
+      "source_text_sha256": [
+        "cd3701e00e5978a1a37681c070c2110d4a3b7dfbb4efe366ddabf320ac0e2363",
+        "9f96e0befb141bdb8f1e5f4f751d33ee240f6459ead96f097235c7fb7a446cc9",
+        "d8980be190de16d672ff92a19b2839afaf2dc04fbc6e64c44bb11c468aeedb82",
+        "e39c6936abd2d268a6649ee68c1309056251e6ee714166f0bafd99f57c4ac16d",
+        "4c33a182f789d371c0eb2f7b2a2accf25fb7aa74bb7de69226de976267b6bfbe",
+        "94871ccc141feb864782e84812147613f255e5bb2597bdaa301b4a9c6f888307",
+        "cd33d9f797d0abaeb6e2c51a82b8106778c11e74d9c26f8535a3015fae44b524",
+        "54f0b7931e5ac40bbebf763b9cf853ec0b3b66de1ed56ae6261d47581d66535a",
+        "5f9b512019bf48031c534704c67346212b1456926e6c812553c2d400c2051700"
+      ],
+      "task_id": "D001-08"
+    },
+    {
+      "catalog_code": "EX-19",
+      "dimension": "longer_of_windows",
+      "source_refs": [
+        "body.p674"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.p674"
+      ],
+      "source_text_sha256": [
+        "c841596e4ea7767699ef62895f84f6f6480b781c37d9fdd554a42890e7c9b8f8"
+      ],
+      "task_id": "D001-09"
+    },
+    {
+      "catalog_code": "EX-20",
+      "dimension": "lab_result_and_threshold",
+      "source_refs": [
+        "body.p675",
+        "body.p676",
+        "body.p677",
+        "body.p678",
+        "body.p679",
+        "body.p680",
+        "body.p681",
+        "body.p682",
+        "body.p683"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.p675",
+        "phase3-acceptance-d001-ii-snapshot::body.p676",
+        "phase3-acceptance-d001-ii-snapshot::body.p677",
+        "phase3-acceptance-d001-ii-snapshot::body.p678",
+        "phase3-acceptance-d001-ii-snapshot::body.p679",
+        "phase3-acceptance-d001-ii-snapshot::body.p680",
+        "phase3-acceptance-d001-ii-snapshot::body.p681",
+        "phase3-acceptance-d001-ii-snapshot::body.p682",
+        "phase3-acceptance-d001-ii-snapshot::body.p683"
+      ],
+      "source_text_sha256": [
+        "0ed254de3dd1a0bfe1d41f7017870a8f5cdfeca944bccd87b1e66b6bb0b059c9",
+        "ad13d4979173eeb47c83acfde1edbf8abd7317864024b601757192842d0b47dd",
+        "f534aba294490a6a3a3882fef5467fa1e3e361a4a6758c9fe25788f84785f59a",
+        "1a1a168bcac570ae655f6d05e1993d815f0efba02ec5a90e3a35e296addf3965",
+        "ff6c620a41f039b9bbdad588ea7a6e2eab67060e93fb4f5014b2393d03864158",
+        "e73d6cf827bff182a1ca44f41067a38d862ebe66299e8f6884b46c491f818e1c",
+        "908a6c4e55ee59a9f5e2573c8620b1182d7914525b7a70608ae2f851ed33d2ec",
+        "37334821d959290e974b50fbd8b41d449569d8d581378a9b0a2bc44d7a7b4d1f",
+        "0a2c560791a9398e8bb1f799c9c058cfe08e9a64ef0b90aae22c98c4d5d2f77e"
+      ],
+      "task_id": "D001-10"
+    },
+    {
+      "catalog_code": "EX-21",
+      "dimension": "source_validity_and_judgment",
+      "source_refs": [
+        "body.p684"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.p684"
+      ],
+      "source_text_sha256": [
+        "77622320c06c36c134352db74bf5cebacd7d4a2a2e74b10d89d54ee3c25c0ebf"
+      ],
+      "task_id": "D001-11"
+    },
+    {
+      "catalog_code": null,
+      "dimension": "procedure_schedule",
+      "source_refs": [
+        "body.t5.r27.c0.p0"
+      ],
+      "source_span_ids": [
+        "phase3-acceptance-d001-ii-snapshot::body.t5.r27.c0.p0"
+      ],
+      "source_text_sha256": [
+        "fe68a9760c2a1a112f22dddefa2d716a513a4acede915e57a2a6bd41fdcb5c78"
+      ],
+      "task_id": "D001-12"
+    }
+  ],
+  "variant_policy": "每题再冻结原文、同义、布局、改变医学含义四种输入；变体未构建",
+  "version": "0926v1/source-tasks/v1"
+}

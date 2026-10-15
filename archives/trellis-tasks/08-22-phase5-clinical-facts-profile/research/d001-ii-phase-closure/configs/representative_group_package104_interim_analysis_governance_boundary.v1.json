@@ -1,0 +1,235 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package104-interim-analysis-governance-boundary",
+  "task_id": "phase5-slice61cq-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "owned_source_refs": [
+    "body.p1236",
+    "body.p1237#atom-0-15",
+    "body.p1237#atom-15-100",
+    "body.p1237#atom-160-208"
+  ],
+  "attached_source_refs": [
+    "body.p537",
+    "body.p1237#atom-100-160"
+  ],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p537",
+    "body.p1236",
+    "body.p1237#atom-0-15",
+    "body.p1237#atom-15-100",
+    "body.p1237#atom-100-160",
+    "body.p1237#atom-160-208"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1236"
+  ],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1237#atom-0-15": "administrative_statistical_background",
+    "body.p1237#atom-15-100": "administrative_statistical_background",
+    "body.p1237#atom-160-208": "administrative_statistical_background"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p537": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "单个受试者必须完成第12周访视",
+      "单个参与者入组资格"
+    ],
+    "body.p1236": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1237#atom-0-15": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1237#atom-15-100": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "IDMC决定受试者资格",
+      "IDMC决定单例入排"
+    ],
+    "body.p1237#atom-100-160": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "单个受试者必须完成第12周访视",
+      "第12周访视决定受试者资格"
+    ],
+    "body.p1237#atom-160-208": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "独立统计分析计划决定受试者资格",
+      "独立统计分析计划决定单例入排"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "第104包六个声明来源完整保留预设期中分析、累积Ⅱ期数据、群体成熟度触发、独立统计团队、IDMC建议、申办方研究决策及独立期中统计分析计划，但这些均为研究级统计治理而非受试者级入排控制。当前候选合同要求绑定受试者审核节点，不能承载无受试者节点的研究治理事实，因此本包全部零候选；p537和p1237#atom-100-160仅作只读语境且不得转移所有权。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第104包属于Ⅱ期统计学考虑中的期中分析治理。拥有原子保留预设分析、累积Ⅱ期有效性/安全性数据、IDMC向申办方的正式建议、综合证据形成建议及独立期中统计分析计划；p537与p1237#atom-100-160只读补充Ⅱ期50%参与者完成第12周主要疗效评估后的启动语境和申办方最终决定。上述内容是研究级数据触发、独立分析、IDMC建议和申办方研究决策，不是单例受试者入排资格、筛选/基线/D1给药前义务或访视程序。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61cq-package104-interim-analysis-governance-boundary",
+    "catalog_id": "catalog:slice61cq-package104-interim-analysis-governance-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1236": [
+      "期中分析标题仅提供章节结构，不独立生成候选、流程节点、官方规则或受试者控制点"
+    ],
+    "body.p1237#atom-0-15": [
+      "预设期中分析是研究级计划事实；保留其预设性质，不改写为单例筛选、基线或入排义务",
+      "该拥有原子仅作已理解的研究级统计治理背景，不生成受试者审核候选、访视或D1给药前义务"
+    ],
+    "body.p1237#atom-15-100": [
+      "累积Ⅱ期有效性和安全性数据是研究级分析输入；IDMC向申办方提供的是正式研究建议",
+      "继续Ⅲ期与推荐Ⅲ期剂量是阶段/剂量研究决策语境，不是单例入排、筛选失败或受试者资格",
+      "完整语义必须保留IDMC、申办方、继续Ⅲ期和推荐剂量的主体与对象关系，但不得生成受试者候选或发布控制点"
+    ],
+    "body.p1237#atom-160-208": [
+      "IDMC综合所有疗效和安全性证据形成研究级建议；不是受试者级疗效/安全性阈值",
+      "独立期中统计分析计划是分析治理文件语境，不是受试者必须完成的检查、访视或资料要求",
+      "该拥有原子仅作研究级统计治理背景，不生成候选，也不绑定筛选、基线、随机或D1给药前工作流"
+    ],
+    "body.p537": [
+      "只读上下文完整保留Ⅱ期约50%参与者完成第12周访视后的启动条件、SSG分析、IDMC建议、可能停止某剂量组新参与者入组及申办方最终决定",
+      "p537不得转移所有权或作为本包candidate source；停止新参与者入组是研究级后续决策，不是既有或单例参与者资格结论"
+    ],
+    "body.p1237#atom-100-160": [
+      "无所有权原子只读保留50%参与者完成第12周主要疗效评估后启动和独立统计团队提交IDMC的完整触发语义",
+      "该原子不能进入owned_source_refs、candidate source、workflow binding或任何受试者访视义务"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1237#atom-0-15": {
+      "semantic_role": "preplanned_interim_analysis_governance",
+      "base_rule": "本研究包含一个预设的期中分析。",
+      "exception_rule": "预设分析的存在是研究级治理/统计计划事实，不是受试者资格条件、筛选动作或访视要求。",
+      "preserve_keywords": ["预设", "期中分析"],
+      "forbidden_inversion": "不得把预设期中分析改写为筛选必做、基线必做、受试者证据不足、不得入组或发布控制点。"
+    },
+    "body.p1237#atom-15-100": {
+      "semantic_role": "idmc_study_level_recommendation",
+      "base_rule": "该分析基于累积的II期研究有效性和安全性数据，由独立数据监查委员会向申办方提供关于继续Ⅲ期和推荐Ⅲ期剂量的正式建议。",
+      "exception_rule": "IDMC建议作用于申办方的Ⅲ期继续/剂量研究决策，不决定单例受试者入排、筛选、基线、随机或D1给药前资格。",
+      "preserve_keywords": ["累积的II期研究的有效性和安全性数据", "独立数据监查委员会（IDMC）", "向申办方提供正式建议", "继续进行Ⅲ期临床研究", "推荐Ⅲ期研究的剂量"],
+      "forbidden_inversion": "不得把IDMC研究建议、Ⅲ期继续与剂量推荐改写为受试者资格、筛选失败、排除标准、入排不通过或单例发布控制点。"
+    },
+    "body.p1237#atom-160-208": {
+      "semantic_role": "idmc_evidence_review_and_independent_sap",
+      "base_rule": "IDMC综合所有疗效和安全性证据形成建议，期中分析具体细节见独立期中统计分析计划。",
+      "exception_rule": "证据综合与独立统计分析计划约束研究级分析治理和IDMC建议形成，不产生受试者级疗效/安全性阈值、访视程序或入排结论。",
+      "preserve_keywords": ["综合评估所有疗效和安全性证据", "形成建议", "独立的期中统计分析计划"],
+      "forbidden_inversion": "不得把综合证据、分析计划或分析结果改写为单例受试者必须完成的访视、资料缺口、筛选失败、不得入组或控制点。"
+    },
+    "body.p537": {
+      "semantic_role": "study_level_trigger_and_sponsor_decision_context",
+      "base_rule": "Ⅱ期约50%参与者完成第12周访视后进行期中分析，由独立统计科学组分析，IDMC审查并提出Ⅲ期剂量/新参与者入组建议，最终决定取决于申办方。",
+      "exception_rule": "该只读上下文用于闭合研究级触发、IDMC建议与申办方最终研究决策；不属于Package 104所有权，不得作为candidate source或单例资格依据。",
+      "preserve_keywords": ["Ⅱ期约50%参与者完成第12周访视后", "独立统计科学组", "IDMC", "建议Ⅲ期研究的剂量", "不再入选新的参与者", "最终决定将取决于申办方"],
+      "forbidden_inversion": "不得把约50%总体触发、剂量组停止新参与者入组建议或申办方最终研究决定改写为某名受试者的入排、访视或给药义务。"
+    },
+    "body.p1237#atom-100-160": {
+      "semantic_role": "unowned_phase_ii_interim_trigger_context",
+      "base_rule": "Ⅱ期50%参与者完成第12周访视的主要疗效评估后，期中分析启动并由独立统计团队提交IDMC。",
+      "exception_rule": "该原子在冻结计划中无所有者，仅可作为只读触发上下文；其研究总体比例和第12周评估不得迁移为Owned candidate、单例访视义务或受试者资格。",
+      "preserve_keywords": ["II期的50%参与者", "第12周访视", "主要疗效评估", "独立的统计团队", "提交给IDMC"],
+      "forbidden_inversion": "不得以语义相关为由把无所有权原子加入owned_source_refs、candidate source、workflow binding、required procedure或受试者入排控制。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "第103包body.p1224及body.p1226-p1235保持所有权；body.p1210-p1223是无所有权的后续Ⅱ/Ⅲ期疗效统计语境，不进入本包。Package 104仅拥有body.p1236和body.p1237的三个原子；body.p1237#atom-100-160虽是期中分析启动条件，只能作为无所有权只读上下文。body.p537为更早研究设计章节的只读交叉来源，不能转移所有权；body.p1238起由第105包拥有。",
+    "expected_owners_by_span": {
+      "body.p1224": 103,
+      "body.p1235": 103,
+      "body.p1236": 104,
+      "body.p1237#atom-0-15": 104,
+      "body.p1237#atom-15-100": 104,
+      "body.p1237#atom-160-208": 104,
+      "body.p1238": 105
+    },
+    "unowned_context_source_refs": [
+      "body.p537",
+      "body.p1210",
+      "body.p1223",
+      "body.p1237#atom-100-160"
+    ]
+  },
+  "notes": [
+    "模型外闭包：4个拥有来源、2个只读附加来源；六个来源均完整保留研究级期中分析语义，但全部禁止生成受试者审核候选，p1236标题仅作结构来源。",
+    "研究级与受试者级严格分离：p537和body.p1237#atom-100-160闭合50%总体累计数据触发、SSG分析、IDMC建议及申办方最终研究决定；这些不等于某名受试者筛选、入排或访视义务。",
+    "当前候选合同要求至少一个受试者审核节点，不能承载无受试者节点的研究级治理事实；因此不以other_control_candidate绕过层级边界。",
+    "body.p537和body.p1237#atom-100-160没有Package 104冻结所有权，只读进入提示和来源回归，不进入owned_source_refs、required_candidate_source_refs、workflow bindings、official rules或required procedures。",
+    "独立期中统计分析计划是研究分析治理文件；不生成受试者资料缺口、疗效/安全性阈值或D1给药前控制点。",
+    "claims_complete=false；本配置不调用临床语义模型、不发布控制点、不宣称D001全量或受试者/Patient Profile验收完成。"
+  ]
+}

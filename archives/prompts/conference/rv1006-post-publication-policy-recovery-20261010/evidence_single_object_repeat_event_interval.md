@@ -1,0 +1,15 @@
+# 缺失字段与有源事件间隔：冻结窗口定向审阅
+
+沿批准C03同会话只读审阅，最多15次定向读取，基线28858ba。不读原件/私库/env，不改文件/测模型/运行测试，不递归会商；同产品模型家族程序分离，不是医学金标。git diff曾权限拒绝，若仍不可用直接核定义并说明边界，不反复尝试。
+
+最新产品合法运行e640...使用28858ba，4物理调用294.313331秒后失败，44成功零新调用复用。现在能发起缺失次数字段，但整atom回答把非combine的result_use与非空result_population混用，被现有RepeatScheme正确拒绝；另一原子确实已有event_date/before/date_range/semantic/interval_condition及完整逐字来源，source.time_words是某操作前，旧核对函数只识别固定访视日期关键词，因而拒绝。不要按这些说明推定含义已经临床验证。
+
+请读当前改动及相连消费者：
+1. app/agents/protocol_control_deconstructor.py：atom修订Schema可选repeat_scheme_only，evaluation_patch仅repeat_scheme；merge从冻结原子保留全部其余字段，旧完整atom兼容，Runner优先continue_repeat_scheme，原预算/路径/会话/完整门禁和基线回退保留。
+2. app/agents/protocol_control_agent_transport.py：continue_repeat_scheme复用现有单项调用/会话，不携带整批历史，只发该字段Schema；没有新模型/作业/框架。
+3. app/agents/protocol_control_candidate_alignment.py：_matches_time_anchor_direction。新例外只在无已命名固定锚点、非数值词、明确方向，已有EVENT_DATE、semantic+interval_condition、无任何时间界限、原句与命题都保留该词、原子与求值均有当前完整逐字来源时认可其有源时间表示。不是把EVENT_DATE改筛选/基线，也不自动提供事件日期或采用事实。
+4. app/projections/control_calculation_experiment.py：_proposition_observation/_conditional_observation的interval_condition仍强制UNKNOWN/interval_calculation_unsupported，不开发该算法或删除能力缺口保护。
+5. app/services/protocol_control_execution.py：validator身份追加字段补丁/事件间隔版本；对应proof只在事件候选身份加入新版本，旧proof重验。
+6. 原模块测试：字段补丁正反/兄弟未决回退、三种response_format的transport历史/紧凑Schema、来源时间对应正例及访视替换/反向/少词/错来源/数字窗口/可执行目的/模糊词反例，已绑定proof后消费者仍UNKNOWN。
+
+首集中窗95pass/2fail：新函数局部使用normalize_source_excerpt缺导入，已补局部导入（与模块既有循环依赖习惯一致），最终窗待跑。不删除或放宽测试。重点审查：是否误将来源表示完整当可求值/已采用，是否绕未知依赖，是否允许EVENT_DATE替换固定锚点，字段补丁能否改兄弟或混淆允许与必须，旧失败/来源身份/预算是否保留。指出有源码证据的必修/建议/未证，给最小反例及消费者，不另建目标事件库、通用恢复或第四流程，不要求为了过关重读整方案。临床原文不写报告。

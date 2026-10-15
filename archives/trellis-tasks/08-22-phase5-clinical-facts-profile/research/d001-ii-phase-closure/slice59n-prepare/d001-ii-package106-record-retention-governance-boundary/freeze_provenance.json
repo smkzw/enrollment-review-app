@@ -1,0 +1,32 @@
+{
+  "attached_source_refs": [
+    "body.p1247"
+  ],
+  "claims_complete": false,
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/configs/representative_group_package106_record_retention_governance_boundary.v1.json",
+  "config_sha256": "3aa36261e7d9a52019358d4f65c645a0740ba56eadd80c350e49d04e70cac2b4",
+  "control_batch_id": "pcb-5e09cf645ddca755c03af0ed",
+  "control_plan_id": "pcp-c6bd7b8b2f8e0b83b092235f",
+  "coverage_manifest_id": "manifest:slice61cs-package106-record-retention-governance-boundary",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "coverage_manifest_sha256": "affd0c907b47855914b72f09aa9f86e801a7a735b60ede923dcb991601a9aa75",
+  "created_at": "2026-08-30T14:35:24.845078+00:00",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "frozen_plan_sha256": "92c7d179428216cfd4c9a47f2636bc7d7cfa8311025100d72dcb299e2f977fa4",
+  "group_id": "d001-ii-package106-record-retention-governance-boundary",
+  "mode": "dry_run_prepare",
+  "owned_source_refs": [
+    "body.p1248",
+    "body.p1249",
+    "body.p1250"
+  ],
+  "parent_phase_qc_path": null,
+  "parent_phase_qc_sha256": null,
+  "prompt_char_count": 28802,
+  "prompt_sha256": "449ca94f1cb1f3d617862b46d903d37aa8b321edc52908831acaef8fcb86c86d",
+  "prompt_template_sha256": "88335a5f2c79ea12bec07eac832496529ead1b05fe359542873e5d54748c5650",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "replay_mode": "product_protocol_control_agent_runner_mtplx",
+  "task_id": "phase5-slice61cs-20260830",
+  "worker": "codex-parent"
+}

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>入排审核界面试用记录</title>
+    <link rel="stylesheet" href="./uat-recorder.css" />
+  </head>
+  <body>
+    <noscript>
+      <p class="rec-page-note">
+        当前页面无法正常使用，请关闭后重新打开；如仍未恢复，请联系系统维护人员。
+      </p>
+    </noscript>
+
+    <header class="rec-header">
+      <div class="rec-header-main">
+        <h1 class="rec-title">入排审核界面试用记录</h1>
+        <p class="rec-subtitle">
+          本页只用于记录正式界面试用过程；所有记录自动保存在本机浏览器内，
+          不发送到任何外部系统。参与者使用的界面与本页互相独立。
+        </p>
+      </div>
+      <dl class="rec-header-meta">
+        <div class="rec-header-meta-row">
+          <dt>记录表版本</dt>
+          <dd id="rec-tool-version">—</dd>
+        </div>
+        <div class="rec-header-meta-row">
+          <dt>参与者界面版本</dt>
+          <dd id="rec-page-version">读取中…</dd>
+        </div>
+        <div class="rec-header-meta-row rec-save-status">
+          <dt>保存状态</dt>
+          <dd aria-live="polite" id="rec-save-status">—</dd>
+        </div>
+      </dl>
+    </header>
+
+    <!-- 停止试用提示：出现错误结论等停止条件时持续显示，直至记录被明确修正 -->
+    <section
+      id="rec-stop-banner"
+      class="rec-stop-banner"
+      role="alert"
+      aria-live="assertive"
+      hidden
+    >
+      <h2 class="rec-stop-banner-title">停止试用提示</h2>
+      <ul id="rec-stop-banner-list" class="rec-stop-banner-list"></ul>
+      <p class="rec-stop-banner-foot">
+        按本轮试用要求，出现上述任一情况时应暂停试用并保留页面现场，
+        交由产品负责人复现处理；请勿删除或修改对应记录。
+      </p>
+    </section>
+
+    <main id="rec-app" class="rec-app">
+      <p class="rec-page-note" id="rec-loading">正在从本机恢复上次记录…</p>
+    </main>
+
+    <!-- 通用中文确认/提示对话框 -->
+    <dialog id="rec-dialog" class="rec-dialog">
+      <form method="dialog" id="rec-dialog-form" class="rec-dialog-form">
+        <h2 id="rec-dialog-title" class="rec-dialog-title"></h2>
+        <div id="rec-dialog-body" class="rec-dialog-body"></div>
+        <div class="rec-dialog-actions">
+          <button type="button" id="rec-dialog-cancel" class="rec-btn rec-btn-plain">
+            取消
+          </button>
+          <button type="submit" id="rec-dialog-confirm" class="rec-btn rec-btn-primary">
+            确认
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="./uat-recorder.js"></script>
+  </body>
+</html>

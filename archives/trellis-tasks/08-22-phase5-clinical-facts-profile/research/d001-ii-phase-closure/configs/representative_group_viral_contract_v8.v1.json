@@ -1,0 +1,11 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral.v1.json",
+  "artifact_dir_name": "phase5-slice59n-d001-viral-control-replay-contract-v8-20260828",
+  "runner": {
+    "max_schema_repairs": 4
+  },
+  "notes": [
+    "验证同一来源拆分出的筛选候选和基线候选可使用各自候选稳定身份独立发布。"
+  ]
+}

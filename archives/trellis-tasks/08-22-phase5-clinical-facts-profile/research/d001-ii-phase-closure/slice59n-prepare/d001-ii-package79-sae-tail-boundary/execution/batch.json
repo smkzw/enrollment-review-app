@@ -1,0 +1,1242 @@
+{
+  "batch_id": "pcb-1c0c7c6d50ecfc1a5a638911",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1000",
+    "body.p1001",
+    "body.p1002",
+    "body.p1003",
+    "body.p1004",
+    "body.p1005",
+    "body.p1006",
+    "body.p1015",
+    "body.p1016",
+    "body.p1017",
+    "body.p1018",
+    "body.p1019",
+    "body.p1020",
+    "body.p1021",
+    "body.p1022",
+    "body.p1023",
+    "body.p1024",
+    "body.p1025",
+    "body.p1026",
+    "body.p327",
+    "body.p340",
+    "body.p638",
+    "body.p645",
+    "body.p661",
+    "body.p696",
+    "body.p816",
+    "body.p835",
+    "body.p885",
+    "body.p996",
+    "body.p997",
+    "body.p998",
+    "body.p999"
+  ],
+  "context_structure_unit_ids": [
+    "su-00f030fa4c1522f1774776f8",
+    "su-d4ba75eb21a2e2944b6aa434",
+    "su-4bf0f0db5940a934141e0ffa",
+    "su-af20f2f6ffd7725d1c33926a",
+    "su-30ae270e19ad81e64d1d5816",
+    "su-3502ccbcbfcce68b94f3b3e5",
+    "su-84bc1c61a86032078eac5b1a",
+    "su-5a0bc3bdc6232946cd2522d4",
+    "su-8c8a34eb18d0139b009c191d",
+    "su-f5cd3f88b671362f6f8f4dc4",
+    "su-40348e74c63d71c5b6319be0",
+    "su-e2f80718a15f7b296906c055",
+    "su-b0f87a9a0d490bd216d0c969",
+    "su-c793fa7c755ac66919c14e7b",
+    "su-ea42820da3887b01efc1bab4",
+    "su-272eba9497a5796dbff5a64a",
+    "su-f931b55af50fac873cde8aa8",
+    "su-344e0a97f3b90882688ce470",
+    "su-8d12404b50702051e785d81e",
+    "su-aa446b1c310c7aab796ae2b5",
+    "su-180c41280dcf6cc53ea1efa4",
+    "su-5c3db876078a3e60f5b5017f",
+    "su-f59a09007b7f5f516b7d01eb",
+    "su-3a466b9df7a0012b972a2b3d",
+    "su-0230c1ca32146e5682365991",
+    "su-4dbd9434a4c5bb3bbf505b1d",
+    "su-ebb4aba58a5eee9f10138511",
+    "su-5c30706befa51335bc524ec6",
+    "su-a4ee984ed31aa5fe26aa9401",
+    "su-125f9fa39aa720039d48020e",
+    "su-98e7bd82275c8d4830a33bd1",
+    "su-371620980d69d405b05cb0a5"
+  ],
+  "context_units": [
+    {
+      "excerpt": "妊娠试验或卵泡刺激素（FSH）：对有生育能力的女性（育龄女性）在筛选、基线和计划的时间点进行血/尿β-HCG检测，其中筛选、基线、W12(D85)、W16(113)或退出访视必须为血妊娠试验，筛选和/或基线检测结果需均为阴性，需要在访视当天用药前完成；对已绝经女性（一年及以上无月经且无其他医学原因）或永久性绝育（如双侧输卵管结扎、子宫切除或双侧输卵管切除等）的女性参与者视为不具有生育能力，无需进行妊娠试验，其中，对已绝经女性需在筛选时进行血清FSH检测，其结果应大于40 IU/L。若研究过程中出现停经也需进行额外的血清β-HCG检测。注意：对所有参与者，在每个访视做好避孕宣教：在试验期间及给药后3个月内严格遵循附录1避孕要求，且参与者或其伴侣在发现意外怀孕时及时联系研究者。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p327"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13180,
+      "source_ref": "body.p327",
+      "source_span_ids": [
+        "body.p327"
+      ],
+      "structure_unit_id": "su-00f030fa4c1522f1774776f8",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "不良事件于D1启动给药后开始记录，直至末次安全性随访或者退出研究为止（以先发生时间为准）。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p340"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13310,
+      "source_ref": "body.p340",
+      "source_span_ids": [
+        "body.p340"
+      ],
+      "structure_unit_id": "su-d4ba75eb21a2e2944b6aa434",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "有生育能力的参与者自签署知情同意书至研究末次给药后至少3个月无怀孕或捐精计划，必须遵守避孕的相关规定，采取高效或可接受的避孕方法避孕（见附录1）。",
+      "heading_path": [
+        "研究人群",
+        "入选标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p638"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23250,
+      "source_ref": "body.p638",
+      "source_span_ids": [
+        "body.p638"
+      ],
+      "structure_unit_id": "su-4bf0f0db5940a934141e0ffa",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "首次给药前3个月内存在需住院或静脉抗感染治疗的严重细菌、真菌或病毒感染史；",
+      "heading_path": [
+        "研究人群",
+        "排除标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p645"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23320,
+      "source_ref": "body.p645",
+      "source_span_ids": [
+        "body.p645"
+      ],
+      "structure_unit_id": "su-af20f2f6ffd7725d1c33926a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "患有或疑似先天性或获得性免疫缺陷病史者，或研究者认为会损害参与者免疫状态的情况（如脾切除术史、原发性免疫缺陷）；",
+      "heading_path": [
+        "研究人群",
+        "排除标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p661"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23480,
+      "source_ref": "body.p661",
+      "source_span_ids": [
+        "body.p661"
+      ],
+      "structure_unit_id": "su-30ae270e19ad81e64d1d5816",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "妊娠或哺乳期女性；",
+      "heading_path": [
+        "研究人群",
+        "排除标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p696"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23830,
+      "source_ref": "body.p696",
+      "source_span_ids": [
+        "body.p696"
+      ],
+      "structure_unit_id": "su-3502ccbcbfcce68b94f3b3e5",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "对于绝经女性参与者仅在筛选期进行FSH检查。本研究将初潮前女性、已绝经妇女（一年及以上无月经且无其他医学原因）或永久性绝育（如输卵管结扎、子宫切除或双侧输卵管切除等）的女性参与者视为不具有生育能力，无需进行妊娠试验。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "妊娠试验或卵泡刺激素（Follicle-stimulating hormone，FSH）检测"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p816"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25820,
+      "source_ref": "body.p816",
+      "source_span_ids": [
+        "body.p816"
+      ],
+      "structure_unit_id": "su-84bc1c61a86032078eac5b1a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "整个研究过程要严密监测参与者的不良事件，直至研究者确认不良事件消退、返回至基线等级或更好、稳定，或参与者失访或撤回同意。不良事件的收集详见“7.3.3.不良事件的收集和记录”。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "记录不良事件"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p835"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 26010,
+      "source_ref": "body.p835",
+      "source_span_ids": [
+        "body.p835"
+      ],
+      "structure_unit_id": "su-5a0bc3bdc6232946cd2522d4",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。",
+      "heading_path": [
+        "研究评估和程序",
+        "访视安排",
+        "Ⅱ期临床研究阶段",
+        "治疗期"
+      ],
+      "is_footnote_or_note": true,
+      "member_source_refs": [
+        "body.p885"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 26510,
+      "source_ref": "body.p885",
+      "source_span_ids": [
+        "body.p885"
+      ],
+      "structure_unit_id": "su-8c8a34eb18d0139b009c191d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "footnote_or_annotation"
+    },
+    {
+      "excerpt": "严重不良事件，指参与者接受试验用药品后出现死亡、危及生命、永久或者严重的残疾或者功能丧失、参与者需要住院治疗或者延长住院时间，以及先天性异常或者出生缺陷等不良医学事件。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p996"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27620,
+      "source_ref": "body.p996",
+      "source_span_ids": [
+        "body.p996"
+      ],
+      "structure_unit_id": "su-f5cd3f88b671362f6f8f4dc4",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "严重不良事件（Serious Adverse Event，SAE）是指符合下列标准任何一项的不良事件：",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p997"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27630,
+      "source_ref": "body.p997",
+      "source_span_ids": [
+        "body.p997"
+      ],
+      "structure_unit_id": "su-40348e74c63d71c5b6319be0",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "导致死亡：当一个事件的结果为“死亡”，则可明确地作为严重不良事件进行记录和报告。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p998"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27640,
+      "source_ref": "body.p998",
+      "source_span_ids": [
+        "body.p998"
+      ],
+      "structure_unit_id": "su-e2f80718a15f7b296906c055",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "危及生命：在此是指在发生不良事件时参与者已经处于死亡的危险中，并不是指假设该不良事件如果更严重可能导致死亡。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p999"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27650,
+      "source_ref": "body.p999",
+      "source_span_ids": [
+        "body.p999"
+      ],
+      "structure_unit_id": "su-b0f87a9a0d490bd216d0c969",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "永久或者严重的残疾或者功能丧失：指不良事件结果可能对参与者正常生活和活动造成严重不便或干扰。相对较小医学意义的经历，如单纯的头痛、恶心、呕吐、腹泻、流感和意外创伤（如脚踝扭伤），这些经历可能干扰或阻碍日常生活功能，但不构成重大干扰。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1000"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27660,
+      "source_ref": "body.p1000",
+      "source_span_ids": [
+        "body.p1000"
+      ],
+      "structure_unit_id": "su-c793fa7c755ac66919c14e7b",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "需要住院治疗或延长住院时间^*：不良事件导致参与者不得不住院接受治疗或本来已经准备出院但由于发生了不良事件而导致住院时间延长；需明确导致该状况的原因是由于不良事件所致，而非因择期手术、非医疗原因等导致入院。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1001"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27670,
+      "source_ref": "body.p1001",
+      "source_span_ids": [
+        "body.p1001"
+      ],
+      "structure_unit_id": "su-ea42820da3887b01efc1bab4",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "*以下住院情况可根据研究者综合判断不作为SAE：",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1002"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27680,
+      "source_ref": "body.p1002",
+      "source_span_ids": [
+        "body.p1002"
+      ],
+      "structure_unit_id": "su-272eba9497a5796dbff5a64a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "24小时内出院的留院观察；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1003"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27690,
+      "source_ref": "body.p1003",
+      "source_span_ids": [
+        "body.p1003"
+      ],
+      "structure_unit_id": "su-f931b55af50fac873cde8aa8",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "住院进行门诊常规检查（住院时间少于24小时）；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1004"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27700,
+      "source_ref": "body.p1004",
+      "source_span_ids": [
+        "body.p1004"
+      ],
+      "structure_unit_id": "su-344e0a97f3b90882688ce470",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "社会原因住院：如患者因无人照料或医保报销等；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1005"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27710,
+      "source_ref": "body.p1005",
+      "source_span_ids": [
+        "body.p1005"
+      ],
+      "structure_unit_id": "su-8d12404b50702051e785d81e",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "在康复机构、疗养院住院；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1006"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27720,
+      "source_ref": "body.p1006",
+      "source_span_ids": [
+        "body.p1006"
+      ],
+      "structure_unit_id": "su-aa446b1c310c7aab796ae2b5",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "药物不良反应（ADR）",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "药物不良反应（ADR）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1015"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27810,
+      "source_ref": "body.p1015",
+      "source_span_ids": [
+        "body.p1015"
+      ],
+      "structure_unit_id": "su-180c41280dcf6cc53ea1efa4",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "药物不良反应（Adverse Drug Reaction，ADR）：指临床试验中发生的任何与研究药物可能有关的对人体有害或者非期望的反应。研究药物与AE之间的因果关系至少有一个合理的可能性，即不能排除相关性。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "药物不良反应（ADR）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1016"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27820,
+      "source_ref": "body.p1016",
+      "source_span_ids": [
+        "body.p1016"
+      ],
+      "structure_unit_id": "su-5c3db876078a3e60f5b5017f",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "可疑且非预期严重不良反应（SUSAR）",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "可疑且非预期严重不良反应（SUSAR）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1017"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27830,
+      "source_ref": "body.p1017",
+      "source_span_ids": [
+        "body.p1017"
+      ],
+      "structure_unit_id": "su-f59a09007b7f5f516b7d01eb",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "可疑且非预期严重不良反应（Suspected Unexpected Serious Adverse Reaction，SUSAR）指临床表现的性质和严重程度超出了试验药物《研究者手册》、已上市药品的说明书或者产品特性摘要等已有资料信息的可疑并且非预期的严重不良反应。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "可疑且非预期严重不良反应（SUSAR）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1018"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27840,
+      "source_ref": "body.p1018",
+      "source_span_ids": [
+        "body.p1018"
+      ],
+      "structure_unit_id": "su-3a466b9df7a0012b972a2b3d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "非预期不良反应指不良反应的性质、严重程度、后果或频率，不同于试验药物当前相关资料（如《研究者手册》等文件）所描述的预期风险。《研究者手册》作为主要文件提供用以判断某不良反应是否预期或非预期的安全性参考信息。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "可疑且非预期严重不良反应（SUSAR）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1019"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27850,
+      "source_ref": "body.p1019",
+      "source_span_ids": [
+        "body.p1019"
+      ],
+      "structure_unit_id": "su-0230c1ca32146e5682365991",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "不良事件的收集和记录",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的收集和记录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1020"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27860,
+      "source_ref": "body.p1020",
+      "source_span_ids": [
+        "body.p1020"
+      ],
+      "structure_unit_id": "su-4dbd9434a4c5bb3bbf505b1d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "不良事件的收集",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的收集和记录",
+        "不良事件的收集"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1021"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27870,
+      "source_ref": "body.p1021",
+      "source_span_ids": [
+        "body.p1021"
+      ],
+      "structure_unit_id": "su-ebb4aba58a5eee9f10138511",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "本试验中，不良事件收集期应从参与者首次服用试验用药品后至最后一次安全性随访或者退出研究为止（以先发生时间为准）。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的收集和记录",
+        "不良事件的收集"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1022"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27880,
+      "source_ref": "body.p1022",
+      "source_span_ids": [
+        "body.p1022"
+      ],
+      "structure_unit_id": "su-5c30706befa51335bc524ec6",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "在签署知情同意书后到首次服用试验用药品之前，发生的临床不良医学事件作为病史/伴随疾病记录在原始病历中，不作为AE记录。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的收集和记录",
+        "不良事件的收集"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1023"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27890,
+      "source_ref": "body.p1023",
+      "source_span_ids": [
+        "body.p1023"
+      ],
+      "structure_unit_id": "su-a4ee984ed31aa5fe26aa9401",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "从首次服用试验用药品至末次访视期间发生的所有AE均需记录在eCRF中。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的收集和记录",
+        "不良事件的收集"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1024"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27900,
+      "source_ref": "body.p1024",
+      "source_span_ids": [
+        "body.p1024"
+      ],
+      "structure_unit_id": "su-125f9fa39aa720039d48020e",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "不良事件的记录与规定",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的收集和记录",
+        "不良事件的记录与规定"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1025"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27910,
+      "source_ref": "body.p1025",
+      "source_span_ids": [
+        "body.p1025"
+      ],
+      "structure_unit_id": "su-98e7bd82275c8d4830a33bd1",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "研究者在记录不良事件时应使用正确的医学术语/概念，避免使用口语和缩略语，在eCRF不良事件页的单一事件项中应只记录一个不良事件术语。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的收集和记录",
+        "不良事件的记录与规定"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1026"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27920,
+      "source_ref": "body.p1026",
+      "source_span_ids": [
+        "body.p1026"
+      ],
+      "structure_unit_id": "su-371620980d69d405b05cb0a5",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61bq-package79-sae-tail-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1007",
+    "body.p1008",
+    "body.p1009",
+    "body.p1010",
+    "body.p1011",
+    "body.p1012",
+    "body.p1013",
+    "body.p1014"
+  ],
+  "owned_structure_unit_ids": [
+    "su-a20edc7c9daf038500a4ed58",
+    "su-2fb6d803498f5d19230d2eaf",
+    "su-96c5e0e17c2e1aac1905c314",
+    "su-a05b9b48b174529d500a5762",
+    "su-8ce06164cce01bc886808cf8",
+    "su-f4da86502b8291f23746a4a2",
+    "su-54913c6ad2ec34341d4487c7",
+    "su-7558abeb46e72593ce9f912c"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "因对现存疾病进行诊断或择期手术治疗而住院或延长住院；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1007"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27730,
+      "source_ref": "body.p1007",
+      "source_span_ids": [
+        "body.p1007"
+      ],
+      "structure_unit_id": "su-a20edc7c9daf038500a4ed58",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "因研究需要做疗效评价而住院或延长住院；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1008"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27740,
+      "source_ref": "body.p1008",
+      "source_span_ids": [
+        "body.p1008"
+      ],
+      "structure_unit_id": "su-2fb6d803498f5d19230d2eaf",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "因研究的目标疾病的规定疗程而住院或延长住院；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1009"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27750,
+      "source_ref": "body.p1009",
+      "source_span_ids": [
+        "body.p1009"
+      ],
+      "structure_unit_id": "su-96c5e0e17c2e1aac1905c314",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "方案规定的计划住院；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1010"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27760,
+      "source_ref": "body.p1010",
+      "source_span_ids": [
+        "body.p1010"
+      ],
+      "structure_unit_id": "su-a05b9b48b174529d500a5762",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "研究前计划的住院或非不良事件导致的择期手术；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1011"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27770,
+      "source_ref": "body.p1011",
+      "source_span_ids": [
+        "body.p1011"
+      ],
+      "structure_unit_id": "su-8ce06164cce01bc886808cf8",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "或全面体格检查而导致的入院。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1012"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27780,
+      "source_ref": "body.p1012",
+      "source_span_ids": [
+        "body.p1012"
+      ],
+      "structure_unit_id": "su-f4da86502b8291f23746a4a2",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "先天性异常或者出生缺陷：指参与者的后代出现畸形或先天的功能缺陷等。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1013"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27790,
+      "source_ref": "body.p1013",
+      "source_span_ids": [
+        "body.p1013"
+      ],
+      "structure_unit_id": "su-54913c6ad2ec34341d4487c7",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "其他有重要意义的医学事件：必须运用医学和科学的判断决定是否对其他的情况加速报告，如重要医学事件可能不会立即危及生命、死亡或住院，但如需要采取医学措施来预防如上情形之一的发生，也通常被视为是严重的。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1014"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27800,
+      "source_ref": "body.p1014",
+      "source_span_ids": [
+        "body.p1014"
+      ],
+      "structure_unit_id": "su-7558abeb46e72593ce9f912c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [],
+  "study_phase": "phase_ii"
+}

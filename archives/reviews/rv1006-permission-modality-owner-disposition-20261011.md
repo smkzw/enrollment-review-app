@@ -1,0 +1,31 @@
+# 1006V1 许可、豁免与实际消费｜所有者取舍
+
+## 实际状态与第一因果错误
+
+产品运行基础3c9a760e3976004a3e965cc8745c6b23db253d1e。a456df6d1dfb4011aae170b2cc81348e在0新模型调用下拒绝累计额度24；实际45组已有39次预约。该次154.012397792秒/exit3属于所有者准入配置错误，不是模型或医学失败。真实只读账本按产品分包到步骤映射取数；早先两个错误探针不作为证据。预约token不等于实际生成或费用。
+
+随后17d7208734384ea7b3b83f9dde0d153e累计上限47保留原39、新物理调用8次330.604505834秒/exit3，failed_final/PROTOCOL_CONTROL_LOGICAL_BUDGET_EXHAUSTED。44组实际完成、45失败、45仍排队；下游definition_scope/hydrate/gate为DEPENDENCY_FAILED。旧作业、原件、来源库和保护库保持；0共同发布/激活/签发，claims_complete=false。
+
+冻结诊断e42edce98ba14b499092c928fee3f5ad中，合法来源陈述仍在，尚无源目标核对或已通过的partial_wire。实际作者把许可及免予动作放入recommended，现有RECOMMENDED_MODALITY_UNSUPPORTED正确拒绝；过程中另有WIRE_SCHEMA_INVALID、CANDIDATE_REPAIR_INVALID与RESULT_VALIDITY_PROCEDURE_TARGET_MISSING。8次不是8次同类医学核查。旧人群范围错误此次尚未达到核对，不能宣布解决。只读诊断未改数据库或候选。
+
+## 决定与未采纳的捷径
+
+仅在既有定向修订的RECOMMENDED_MODALITY_UNSUPPORTED分支增加说明：建议、许可、条件豁免和必做分别表达。文本本身进入repair identity，不改变基础作者、Schema或编译器。许可复查使用已存在RepeatScheme，免予使用已存在有效期与免予状态组；不是新增另一真相库或疾病词表。
+
+不机械把recommended改为mandatory，不松生产门，不自动给可选操作补“已完成”。RepeatScheme.permission=optional并不授权没有复查时采用初查；未明确的no_repeat_result_use仍unresolved。对于不能准确装配的来源仍保留技术或来源未决，不能称研究者未判断。此次没有自动采用候选或改变事实资格。
+
+## 独立审阅及所有者反核
+
+旧C03 CodeBuddy续审收到429额度限制、exit3，未接受，未反复重派。同任务新工作边界按live manifest创建rv1006-permission-consumer-review-20261011；Grok/grok-build/grok-4.7/high实际完成exit0/no fallback，8个批准定义只读，fresh context。报告runs/conference/rv1006-permission-consumer-review-20261011/evidence_single_object.md；不读病例、数据库或凭据，不运行测试，不是医学批准。
+
+顾问指出现有结构足够表达许可/豁免，但明确未完整读取消费汇总。因此所有者继续查compose_control_layers、project_control_review_outcomes、工作稿投影、resolve_repeat_result_selection及select_repeat_result_groups：义务真假并不会因原文含“可”自动改变；复查许可与结果采用是不同条件。该反核支持禁止字段直接翻转，并不证明本次候选临床正确或完整UI已完成。
+
+相连功能窗75passed/1304deselected/2.24秒/exit0，5既有SWIG警告，artifacts/rv1006-permission-modality-connected-20261011-v2.xml。覆盖现有语气/豁免正反例、新增修订身份和实际初查选择消费者。v1的唯一失败是新测试未引用模块常量，修夹具、不松门；不与v2相加，不是全库或临床验收。
+
+## 配置、替代解释与接续
+
+官方仍OmniRouter cms-router/glm-5.3-flash/high；跨章仍ollama-cloud/deepseek-v4.1-flash/high。工程Grok审阅不替代产品读取。当前证据证明局部提示把许可当建议的恢复指引缺失；仍可能存在作者对许可命题或豁免关系的理解偏差、格式适配成本及尚未达到的源范围核对。不能据一次指导修订断言模型能力问题已经解决。
+
+最新只读复用预检：49reusable/2resume_partial/39refresh_required，0模型/0库写/全库hash保持，45/51只保留有据来源解释、不保留未采用作者。下一子作业预算审计v2以产品实际继承函数核45/51为47/4；v1仅计算17d720开始前的祖先39/4，不拿它作下一子作业总账。相同来源范围和历史预约均保留，当前有限配置55=47+8，不清零旧账。仅本次修订指引提供了新因果变化，尚未证明真实采用成功。
+
+下一实际运行从现有合法入口创建并重验全部90步；没有新因果变化不再只加额度重试。不重读已相容49组、不改旧失败或预算历史。完整共同发布、5PDF24页新要求下的工作稿、正式UI更正与关联重算、新旧报告及Q3均未达。私有原答/库/驱动仅本机可读，外部审阅可获得本源码和合成用例，不随本记录提交临床全文。

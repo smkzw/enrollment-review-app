@@ -1,0 +1,222 @@
+[
+  {
+    "excerpt": "应报告的事件类型",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径",
+      "应报告的事件类型"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2815c9e5b343ac6d7663ae21",
+    "package_ordinal": 93,
+    "role": "owned",
+    "source_ref": "body.p1102",
+    "source_span_ids": [
+      "body.p1102"
+    ],
+    "structure_unit_id": "su-dbeb8cab9a2507dcc96e1bf9",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "以下是研究者必须在获知后24小时（含）内向申办者报告的事件类型，无论事件与试验用药品的关系如何：",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径",
+      "应报告的事件类型"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2815c9e5b343ac6d7663ae21",
+    "package_ordinal": 93,
+    "role": "owned",
+    "source_ref": "body.p1103",
+    "source_span_ids": [
+      "body.p1103"
+    ],
+    "structure_unit_id": "su-9885c453d8356d0ca4e91fb5",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "死亡事件",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径",
+      "应报告的事件类型"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2815c9e5b343ac6d7663ae21",
+    "package_ordinal": 93,
+    "role": "owned",
+    "source_ref": "body.p1104",
+    "source_span_ids": [
+      "body.p1104"
+    ],
+    "structure_unit_id": "su-84df72afb742beeb8f47b4b9",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "严重不良事件",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径",
+      "应报告的事件类型"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2815c9e5b343ac6d7663ae21",
+    "package_ordinal": 93,
+    "role": "owned",
+    "source_ref": "body.p1105",
+    "source_span_ids": [
+      "body.p1105"
+    ],
+    "structure_unit_id": "su-126276b0cc57955e9212a055",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "妊娠事件",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径",
+      "应报告的事件类型"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2815c9e5b343ac6d7663ae21",
+    "package_ordinal": 93,
+    "role": "owned",
+    "source_ref": "body.p1106",
+    "source_span_ids": [
+      "body.p1106"
+    ],
+    "structure_unit_id": "su-27b411319ef4c56cc38cee23",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "研究者必须立即向申办者报告这些事件的新的重要信息（在获知信息后24小时内），包括：",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径",
+      "应报告的事件类型"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2815c9e5b343ac6d7663ae21",
+    "package_ordinal": 93,
+    "role": "owned",
+    "source_ref": "body.p1107",
+    "source_span_ids": [
+      "body.p1107"
+    ],
+    "structure_unit_id": "su-437d5b150cc22348e71e340a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "新的体征或症状，或诊断改变",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径",
+      "应报告的事件类型"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2815c9e5b343ac6d7663ae21",
+    "package_ordinal": 93,
+    "role": "owned",
+    "source_ref": "body.p1108",
+    "source_span_ids": [
+      "body.p1108"
+    ],
+    "structure_unit_id": "su-049a5285ef6c19fdef039c00",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "重要的新诊断检查结果",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径",
+      "应报告的事件类型"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2815c9e5b343ac6d7663ae21",
+    "package_ordinal": 93,
+    "role": "owned",
+    "source_ref": "body.p1109",
+    "source_span_ids": [
+      "body.p1109"
+    ],
+    "structure_unit_id": "su-56b4d2122a537d750b29a3c0",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "基于新信息的因果关系变化",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径",
+      "应报告的事件类型"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2815c9e5b343ac6d7663ae21",
+    "package_ordinal": 93,
+    "role": "owned",
+    "source_ref": "body.p1110",
+    "source_span_ids": [
+      "body.p1110"
+    ],
+    "structure_unit_id": "su-4b84e150cc7fced2a1322ec8",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "事件结果的变化，包括恢复",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径",
+      "应报告的事件类型"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2815c9e5b343ac6d7663ae21",
+    "package_ordinal": 93,
+    "role": "owned",
+    "source_ref": "body.p1111",
+    "source_span_ids": [
+      "body.p1111"
+    ],
+    "structure_unit_id": "su-1847ee1b8b80e59fbf93deb9",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "关于事件临床过程的其他描述信息",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径",
+      "应报告的事件类型"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2815c9e5b343ac6d7663ae21",
+    "package_ordinal": 93,
+    "role": "owned",
+    "source_ref": "body.p1112",
+    "source_span_ids": [
+      "body.p1112"
+    ],
+    "structure_unit_id": "su-a6c0b36dfffc4a65710677df",
+    "unit_kind": "list_item"
+  }
+]

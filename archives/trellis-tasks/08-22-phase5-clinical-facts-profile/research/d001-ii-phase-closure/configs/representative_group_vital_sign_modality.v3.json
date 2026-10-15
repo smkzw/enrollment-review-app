@@ -1,0 +1,40 @@
+{
+  "extends": "representative_group_vital_sign_modality.v1.json",
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-vital-sign-modality-v3",
+  "task_id": "phase5-slice61ax-20260829",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice61ax-d001-vital-sign-stage-repair-20260829",
+  "required_candidate_source_refs": [
+    "body.p785"
+  ],
+  "expected_disposition_by_source_ref": {
+    "body.p786": "post_treatment_execution"
+  },
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "只处置生命体征专章p784-p786：筛选和基线阶段保留四项记录及建议休息；PK同点的尽力顺序按方案访视表保留为治疗期执行，不强绑入排节点。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "专章同时包含入排阶段生命体征要求与治疗期PK同点操作顺序；两类内容分别按真实发生阶段处置，建议与尽力语气均不得强化。"
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61ax-vital-sign-modality",
+    "catalog_id": "catalog:slice61ax-vital-sign-modality"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p786": [
+      "PK采样自W2或D15起出现，该顺序要求保留为治疗期执行",
+      "尽量在PK采样前完成生命体征不得硬化为绝对先后",
+      "不得绑定筛选或基线审核节点"
+    ]
+  },
+  "notes": [
+    "原始文档链直接提取，用户无需预处理方案文本。",
+    "本组验证动作是否保留与是否属于入排控制是两个独立判断。",
+    "筛选和基线保留生命体征项目与建议休息；治疗期PK同点顺序不进入入排判定。",
+    "排除标准仍须同时满足异常、临床意义及研究者不可接受风险判断。"
+  ]
+}

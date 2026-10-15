@@ -1,0 +1,3 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"独立验证 legacy 隔离和回归证据"}
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"检查未越过冻结架构边界"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"逐项检查 Phase 0 退出门槛"}

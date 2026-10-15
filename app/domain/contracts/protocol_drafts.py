@@ -1,0 +1,299 @@
+"""Phase 3 slice 4: immutable draft revision history contracts.
+
+``ProtocolDraftRevision`` 记录每一次已保存的方案草稿版本：初始保存、手工编辑、
+原文理解纠错反馈、解释性澄清反馈、恢复后继版本。历史只追加，取消与发布均不
+物理删除任何已保存 revision；乐观并发通过「后继必须指向当前链头」保证，过期
+编辑不能覆盖新状态。
+
+结构化差异 ``ProtocolDraftRevisionDiff`` 由确定性算法生成（设计书 §10），
+展示层只消费该结构，不解析自由文本摘要。
+"""
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Literal
+from pydantic import Field, model_serializer, model_validator
+
+from .agent_io import ProtocolDeconstructionDraft
+from .common import ContractModel, VersionedModel
+from .enums import StableEnum, StudyPhase
+
+
+def _legacy_content_payload_without_source_validity_window(
+    value: Any,
+) -> Any:
+    """重建资料时效字段加入前的草稿哈希载荷。
+
+    旧 revision 的原始 JSON 和整行哈希仍保持不变；合同升级后，仅当新增字段
+    ``source_validity_window`` 为空时，允许用升级前的精确载荷复核内容哈希。
+    非空资料时效和任何其他字段变化均不能走该兼容路径。
+    """
+
+    if isinstance(value, dict):
+        return {
+            key: _legacy_content_payload_without_source_validity_window(item)
+            for key, item in value.items()
+            if not (key == "source_validity_window" and item is None)
+        }
+    if isinstance(value, list):
+        return [
+            _legacy_content_payload_without_source_validity_window(item)
+            for item in value
+        ]
+    return value
+
+
+class DraftRevisionStatus(StableEnum):
+    """已保存草稿 revision 的生命周期状态（机器值，中文标签由投影词汇表提供）。"""
+
+    DRAFT = "draft"
+    SAVED = "saved"
+    CANCELLED = "cancelled"
+    PUBLISHED = "published"
+    RESTORED_FROM = "restored_from"
+
+
+class DraftRevisionReason(StableEnum):
+    """形成本 revision 的原因类别。"""
+
+    INITIAL_SAVE = "initial_save"
+    MANUAL_EDIT = "manual_edit"
+    SOURCE_ERROR_FEEDBACK = "source_error_feedback"
+    CLARIFICATION_FEEDBACK = "clarification_feedback"
+    RESTORE = "restore"
+
+
+class DraftFeedbackKind(StableEnum):
+    """用户反馈的分类：「指出原文理解错误」或「补充解释」。
+
+    ``SOURCE_ERROR`` 必须关联当前方案来源片段（来源忠实纠错）；
+    ``CLARIFICATION`` 只能进入解释说明层，不得改变阈值或布尔逻辑。
+    """
+
+    SOURCE_ERROR = "source_error"
+    CLARIFICATION = "clarification"
+
+
+class DiffCategory(StableEnum):
+    """八类结构化差异的机器类别（中文标签由投影词汇表提供，展示层不解析自由文本）。
+
+    ``ADDED``/``REMOVED`` 在规则与子组件两个粒度分别表达；其余六类是同一稳定子组件
+    在前后稿中该维度的变化。
+    """
+
+    ADDED = "added"                     # 新增
+    REMOVED = "removed"                 # 删除
+    ORIGINAL_TEXT = "original_text"     # 原文
+    LOGIC = "logic"                     # 逻辑
+    TIME_WINDOW = "time_window"         # 时间窗
+    EXCEPTION = "exception"             # 例外
+    EVIDENCE = "evidence"               # 证据要求
+    DUE_STAGE = "due_stage"             # 应完成阶段
+
+
+class CategoryChange(VersionedModel):
+    """某个稳定项在单个类别的前后结构化快照（确定性比较输出）。
+
+    ``stable_ref`` 为稳定引用：父规则使用官方编号，子组件使用其展示编号（如
+    ``IN-04a``），资料要求使用 ``<组件引用>#req[序号]``。``previous``/``current``
+    为该类别在前后稿上的结构化快照；一边缺失（首稿或该项前稿不存在）时为 None。
+    """
+
+    stable_ref: str = Field(min_length=1)
+    kind: Literal["rule", "component", "requirement"] = "component"
+    previous: Any | None = None
+    current: Any | None = None
+
+
+class ParentRuleDiff(VersionedModel):
+    """一条官方父规则相对前序稿的八类结构化差异（按 ``official_code`` 对齐）。
+
+    新增/删除在父规则与稳定子组件两个粒度列出；其余六类（原文、逻辑、时间窗、例外、
+    证据要求、应完成阶段）以稳定子组件引用的前后快照分列，供展示层逐条并列显示。
+    """
+
+    official_code: str = Field(min_length=1)
+    added: bool = False
+    removed: bool = False
+    added_component_refs: list[str] = Field(default_factory=list)
+    removed_component_refs: list[str] = Field(default_factory=list)
+    original_text_changes: list[CategoryChange] = Field(default_factory=list)
+    logic_changes: list[CategoryChange] = Field(default_factory=list)
+    time_window_changes: list[CategoryChange] = Field(default_factory=list)
+    exception_changes: list[CategoryChange] = Field(default_factory=list)
+    evidence_changes: list[CategoryChange] = Field(default_factory=list)
+    due_stage_changes: list[CategoryChange] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_exclusivity(self) -> "ParentRuleDiff":
+        if self.added and self.removed:
+            raise ValueError("同一父规则不能同时为新增和删除")
+        return self
+
+
+class ProtocolDraftRevisionDiff(VersionedModel):
+    """一次 revision 相对其前序的结构化差异（设计书 §10 差异算法输出）。"""
+
+    added_rule_codes: list[str] = Field(default_factory=list)
+    removed_rule_codes: list[str] = Field(default_factory=list)
+    modified_rule_codes: list[str] = Field(default_factory=list)
+    added_workflow_stage_ids: list[str] = Field(default_factory=list)
+    removed_workflow_stage_ids: list[str] = Field(default_factory=list)
+    modified_workflow_stage_ids: list[str] = Field(default_factory=list)
+    changed_component_ids: list[str] = Field(default_factory=list)
+    changed_requirement_ids: list[str] = Field(default_factory=list)
+    changed_procedure_mapping_ids: list[str] = Field(default_factory=list)
+    source_scope_changed: bool = False
+    workflow_visit_rewritten: bool = False
+    clarification_semantics_changed: bool = False
+    # 切片 6：按官方父规则编号对齐的八类结构化详情（新增/删除/原文/逻辑/时间窗/例外/
+    # 证据要求/应完成阶段）。粗粒度字段保留以兼容前序调用方；展示层应优先消费本字段。
+    rule_diffs: list[ParentRuleDiff] = Field(default_factory=list)
+
+
+class ReviewScopeExclusion(ContractModel):
+    candidate_key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reason: str = Field(min_length=1)
+
+
+class ReviewScopeAddition(ContractModel):
+    scope_kind: Literal["referenced_source", "medication_section"]
+    source_span_ids: list[str] = Field(min_length=1)
+    official_codes: list[str] = Field(default_factory=list)
+    resolves_references: list[str] = Field(default_factory=list)
+    reason: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_sources(self):
+        if (len(set(self.source_span_ids)) != len(self.source_span_ids)
+                or any(not value.strip() for value in self.source_span_ids)
+                or len(set(self.official_codes)) != len(self.official_codes)
+                or len(set(self.resolves_references)) != len(self.resolves_references)
+                or not self.reason.strip()):
+            raise ValueError("新增范围的来源、关联条款或理由不完整或重复")
+        if self.scope_kind == "referenced_source" and not self.official_codes:
+            raise ValueError("引用说明需选择其对应的入排条款")
+        if self.resolves_references and self.scope_kind != "referenced_source":
+            raise ValueError("待定位引用只能由对应的引用说明指定")
+        return self
+
+
+class ReviewScopeProposal(ContractModel):
+    scope_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    included_candidate_keys: list[str]
+    exclusions: list[ReviewScopeExclusion] = Field(default_factory=list)
+    additions: list[ReviewScopeAddition] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_choices(self):
+        keys = self.included_candidate_keys
+        removed = [item.candidate_key for item in self.exclusions]
+        if len(set(keys)) != len(keys) or len(set(removed)) != len(removed) or set(keys) & set(removed):
+            raise ValueError("范围选择或排除不得重复或相互冲突")
+        if any(not item.reason.strip() for item in self.exclusions):
+            raise ValueError("移除范围需说明理由")
+        additions = [(item.scope_kind, tuple(item.source_span_ids), tuple(item.official_codes)) for item in self.additions]
+        if len(set(additions)) != len(additions):
+            raise ValueError("新增范围不得重复")
+        return self
+
+
+class ReviewScopeSelection(ReviewScopeProposal):
+    snapshot_id: str = Field(min_length=1)
+    saved_by: str = Field(min_length=1)
+    saved_at: datetime
+
+
+class ProtocolDraftRevision(VersionedModel):
+    """一份已保存草稿的不可变历史版本。
+
+    ``content`` 为该 revision 时刻完整的 :class:`ProtocolDeconstructionDraft`
+    快照；``content_sha256`` 为快照的规范哈希，读取时交叉核验。``diff`` 相对
+    ``previous_revision_id`` 指向的 revision 计算；首稿 diff 为空结构。
+    """
+
+    revision_id: str = Field(min_length=1)
+    draft_id: str = Field(min_length=1)
+    revision_number: int = Field(ge=1)
+    previous_revision_id: str | None = None
+    project_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    study_phase: StudyPhase
+    status: DraftRevisionStatus
+    reason: DraftRevisionReason
+    feedback_kind: DraftFeedbackKind | None = None
+    feedback_note: str | None = None
+    actor: str = Field(min_length=1)
+    content: ProtocolDeconstructionDraft
+    content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    diff: ProtocolDraftRevisionDiff = Field(default_factory=ProtocolDraftRevisionDiff)
+    created_at: datetime
+    review_scope_selection: ReviewScopeSelection | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_historical_scope_payloads(self, handler):
+        payload = handler(self)
+        if self.review_scope_selection is None:
+            payload.pop("review_scope_selection", None)
+        return payload
+
+    @model_validator(mode="after")
+    def validate_chain(self) -> "ProtocolDraftRevision":
+        from app.domain.publication import canonical_hash
+
+        if self.content.draft_id != self.draft_id:
+            raise ValueError("ProtocolDraftRevision 内外层 draft_id 不一致")
+        if self.content.project_id != self.project_id:
+            raise ValueError("ProtocolDraftRevision 内外层 project_id 不一致")
+        if self.content.protocol_version_id != self.protocol_version_id:
+            raise ValueError("ProtocolDraftRevision 内外层 protocol_version_id 不一致")
+        if self.content.selected_phase != self.study_phase:
+            raise ValueError("ProtocolDraftRevision 内外层研究期别不一致")
+        if self.content.draft_revision != self.revision_number:
+            raise ValueError("ProtocolDraftRevision 内外层 revision 号不一致")
+        content_payload = self.content.model_dump(mode="json")
+        accepted_hashes = {
+            canonical_hash(content_payload),
+            canonical_hash(
+                _legacy_content_payload_without_source_validity_window(
+                    content_payload
+                )
+            ),
+        }
+        if self.content_sha256 not in accepted_hashes:
+            raise ValueError("ProtocolDraftRevision 内容哈希与草稿快照不一致")
+        if self.revision_number == 1:
+            if self.previous_revision_id is not None:
+                raise ValueError("首稿 revision 不能引用前序 revision")
+            if self.reason != DraftRevisionReason.INITIAL_SAVE:
+                raise ValueError("首稿 revision 必须由初始保存形成")
+        else:
+            if not self.previous_revision_id:
+                raise ValueError("后继 revision 必须引用前序 revision")
+            if self.reason == DraftRevisionReason.INITIAL_SAVE:
+                raise ValueError("初始保存只能形成首稿 revision")
+        if self.reason == DraftRevisionReason.CLARIFICATION_FEEDBACK:
+            if self.feedback_kind != DraftFeedbackKind.CLARIFICATION:
+                raise ValueError("澄清反馈 revision 必须声明澄清反馈分类")
+        if self.reason == DraftRevisionReason.SOURCE_ERROR_FEEDBACK:
+            if self.feedback_kind != DraftFeedbackKind.SOURCE_ERROR:
+                raise ValueError("原文理解纠错 revision 必须声明纠错反馈分类")
+        if self.status == DraftRevisionStatus.RESTORED_FROM:
+            if self.reason != DraftRevisionReason.RESTORE:
+                raise ValueError("restored_from 状态只能由恢复后继 revision 使用")
+        if self.reason == DraftRevisionReason.CLARIFICATION_FEEDBACK:
+            if self.diff.clarification_semantics_changed:
+                raise ValueError("澄清反馈不得改变方案阈值或布尔逻辑")
+        return self
+
+
+__all__ = [
+    "CategoryChange",
+    "DiffCategory",
+    "DraftFeedbackKind",
+    "DraftRevisionReason",
+    "DraftRevisionStatus",
+    "ParentRuleDiff",
+    "ProtocolDraftRevision",
+    "ProtocolDraftRevisionDiff",
+]

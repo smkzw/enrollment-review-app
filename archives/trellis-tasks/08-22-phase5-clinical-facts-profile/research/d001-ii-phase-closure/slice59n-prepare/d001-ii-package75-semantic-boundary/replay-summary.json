@@ -1,0 +1,20 @@
+{
+  "attached_count": 17,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-b7e4835e520560f1df04e42c",
+  "group_id": "d001-ii-package75-semantic-boundary",
+  "lookup_counts": {
+    "coverage_manifest": 4,
+    "frozen_plan_context": 12,
+    "frozen_plan_owned": 10
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package75-semantic-boundary",
+  "owned_count": 9,
+  "prompt_char_count": 40787,
+  "prompt_sha256": "6ec2eaa5d77d32c3c7a8f5399a26f9bad6d9c334211566020eff471ba4f5b7cb",
+  "task_id": "phase5-slice61bm-20260829",
+  "unit_count": 26,
+  "worker": "codex-parent"
+}

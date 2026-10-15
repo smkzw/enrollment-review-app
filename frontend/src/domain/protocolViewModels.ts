@@ -1,0 +1,54 @@
+/**
+ * 方案解构工作台 ViewModel。
+ */
+
+import type { ProtocolSourcePrecision, RuleKind } from "./enums";
+import type { RuleComponentId, RuleId } from "./ids";
+import type { ExpressionNodeView } from "./viewModels";
+
+export interface ProtocolDraftComponentView {
+  componentId: RuleComponentId;
+  parentRuleId: RuleId;
+  displayCode: string;
+  title: string;
+  expression: ExpressionNodeView;
+  exceptionExpression: ExpressionNodeView | null;
+  sourceRefs: string[];
+  sourceExcerpts: string[];
+}
+
+export interface ProtocolDraftRestrictedComponentView {
+  componentId: RuleComponentId;
+  parentRuleId: RuleId;
+  displayCode: string;
+  title: string;
+  sourceRefs: string[];
+  sourceExcerpts: string[];
+  unresolvedDimensions: string[];
+  limitationKind: "interpretation_unresolved" | "consumer_unavailable";
+}
+
+export type ProtocolDraftItemView =
+  | ProtocolDraftComponentView
+  | ProtocolDraftRestrictedComponentView;
+
+export interface ProtocolDraftRuleView {
+  ruleId: RuleId;
+  officialCode: string;
+  kind: RuleKind;
+  kindLabel: string;
+  sourceText: string;
+  sourceRefs: string[];
+  components: ProtocolDraftComponentView[];
+  restrictedComponents: ProtocolDraftRestrictedComponentView[];
+}
+
+export interface ProtocolSourceLocatorView {
+  sourceSpanId: string;
+  sourceRef: string;
+  pageLabel: string | null;
+  excerpt: string;
+  precision: ProtocolSourcePrecision;
+  precisionLabel: string;
+  degradationReason: string | null;
+}

@@ -1,0 +1,853 @@
+[
+  {
+    "excerpt": "不良事件于D1启动给药后开始记录，直至末次安全性随访或者退出研究为止（以先发生时间为准）。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p340",
+    "source_span_ids": [
+      "body.p340"
+    ],
+    "structure_unit_id": "su-d4ba75eb21a2e2944b6aa434",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "整个研究过程要严密监测参与者的不良事件，直至研究者确认不良事件消退、返回至基线等级或更好、稳定，或参与者失访或撤回同意。不良事件的收集详见“7.3.3.不良事件的收集和记录”。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "记录不良事件"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-9519680f4eac0c124ea342b6",
+    "package_ordinal": 75,
+    "role": "attached",
+    "source_ref": "body.p835",
+    "source_span_ids": [
+      "body.p835"
+    ],
+    "structure_unit_id": "su-5a0bc3bdc6232946cd2522d4",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "治疗期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p885",
+    "source_span_ids": [
+      "body.p885"
+    ],
+    "structure_unit_id": "su-8c8a34eb18d0139b009c191d",
+    "unit_kind": "footnote_or_annotation"
+  },
+  {
+    "excerpt": "不良事件（AE）",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "不良事件（AE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-11233226bef34c28a4a2e05c",
+    "package_ordinal": 77,
+    "role": "attached",
+    "source_ref": "body.p985",
+    "source_span_ids": [
+      "body.p985"
+    ],
+    "structure_unit_id": "su-a79ed8d27cd380a461295a8f",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "不良事件（AE）指临床试验参与者在接受试验用药品之后出现的所有不良医学事件，可以表现为症状体征、疾病和/或有临床意义的实验室检查异常，但不一定与试验用药品有因果关系。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "不良事件（AE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-11233226bef34c28a4a2e05c",
+    "package_ordinal": 77,
+    "role": "attached",
+    "source_ref": "body.p986",
+    "source_span_ids": [
+      "body.p986"
+    ],
+    "structure_unit_id": "su-25c54cb8c26bb63bc2ee981a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "但下列情况不应作为AE记录：",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "不良事件（AE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-11233226bef34c28a4a2e05c",
+    "package_ordinal": 77,
+    "role": "attached",
+    "source_ref": "body.p987",
+    "source_span_ids": [
+      "body.p987"
+    ],
+    "structure_unit_id": "su-817da941f30c4b93962ccdd0",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "筛选时发现的已存在的情况（例如筛选时实验室检查、心电图检查、生命体征、体格检查等结果显示具有临床意义的异常，但经由研究者判断该异常在参与者知情同意前已存在）；该种情况应作为病史/伴随疾病进行记录。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "不良事件（AE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-11233226bef34c28a4a2e05c",
+    "package_ordinal": 77,
+    "role": "attached",
+    "source_ref": "body.p988",
+    "source_span_ids": [
+      "body.p988"
+    ],
+    "structure_unit_id": "su-37c9d17909babcfeb6751355",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "计划的住院/手术；除非计划住院/手术的情况较原有情况加重。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "不良事件（AE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-11233226bef34c28a4a2e05c",
+    "package_ordinal": 77,
+    "role": "attached",
+    "source_ref": "body.p989",
+    "source_span_ids": [
+      "body.p989"
+    ],
+    "structure_unit_id": "su-c66377676c62953521c632dd",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "内科和外科侵入性检查（如肝脏活检、内镜检查等）；但导致需实施这些检查的疾病可能为不良事件。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "不良事件（AE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-11233226bef34c28a4a2e05c",
+    "package_ordinal": 77,
+    "role": "attached",
+    "source_ref": "body.p990",
+    "source_span_ids": [
+      "body.p990"
+    ],
+    "structure_unit_id": "su-a225716c2306617235504444",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "研究的疾病预期进展和/或研究疾病的症状与体征出现预期进展；除非严重程度或发生频率高于预期。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "不良事件（AE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-11233226bef34c28a4a2e05c",
+    "package_ordinal": 77,
+    "role": "attached",
+    "source_ref": "body.p991",
+    "source_span_ids": [
+      "body.p991"
+    ],
+    "structure_unit_id": "su-43d93af855d2fae5096669d4",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "筛选时已存在的伴随疾病或原有症状、体征等出现预期的周期性波动，但并未恶化。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "不良事件（AE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-11233226bef34c28a4a2e05c",
+    "package_ordinal": 77,
+    "role": "attached",
+    "source_ref": "body.p992",
+    "source_span_ids": [
+      "body.p992"
+    ],
+    "structure_unit_id": "su-43906ce0d2aa6018a246e97d",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "治疗期出现的不良事件（TEAE）",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "治疗期出现的不良事件（TEAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-11233226bef34c28a4a2e05c",
+    "package_ordinal": 77,
+    "role": "attached",
+    "source_ref": "body.p993",
+    "source_span_ids": [
+      "body.p993"
+    ],
+    "structure_unit_id": "su-d8626e03738b112c04ee4913",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "治疗期出现的不良事件（TEAE）是指在给药后出现的任何不利的医学事件。ICH E9 指南“临床试验统计原则”将“治疗期不良事件”定义为：“在治疗过程中出现的事件，在治疗前并未出现或相对于治疗前发生恶化”。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "治疗期出现的不良事件（TEAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-11233226bef34c28a4a2e05c",
+    "package_ordinal": 77,
+    "role": "attached",
+    "source_ref": "body.p994",
+    "source_span_ids": [
+      "body.p994"
+    ],
+    "structure_unit_id": "su-a81269fb1e97dc5bf5083168",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "严重不良事件（SAE）",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p995",
+    "source_span_ids": [
+      "body.p995"
+    ],
+    "structure_unit_id": "su-684d5b1213112070366962ed",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "严重不良事件，指参与者接受试验用药品后出现死亡、危及生命、永久或者严重的残疾或者功能丧失、参与者需要住院治疗或者延长住院时间，以及先天性异常或者出生缺陷等不良医学事件。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p996",
+    "source_span_ids": [
+      "body.p996"
+    ],
+    "structure_unit_id": "su-f5cd3f88b671362f6f8f4dc4",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "严重不良事件（Serious Adverse Event，SAE）是指符合下列标准任何一项的不良事件：",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p997",
+    "source_span_ids": [
+      "body.p997"
+    ],
+    "structure_unit_id": "su-40348e74c63d71c5b6319be0",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "导致死亡：当一个事件的结果为“死亡”，则可明确地作为严重不良事件进行记录和报告。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p998",
+    "source_span_ids": [
+      "body.p998"
+    ],
+    "structure_unit_id": "su-e2f80718a15f7b296906c055",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "危及生命：在此是指在发生不良事件时参与者已经处于死亡的危险中，并不是指假设该不良事件如果更严重可能导致死亡。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p999",
+    "source_span_ids": [
+      "body.p999"
+    ],
+    "structure_unit_id": "su-b0f87a9a0d490bd216d0c969",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "永久或者严重的残疾或者功能丧失：指不良事件结果可能对参与者正常生活和活动造成严重不便或干扰。相对较小医学意义的经历，如单纯的头痛、恶心、呕吐、腹泻、流感和意外创伤（如脚踝扭伤），这些经历可能干扰或阻碍日常生活功能，但不构成重大干扰。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p1000",
+    "source_span_ids": [
+      "body.p1000"
+    ],
+    "structure_unit_id": "su-c793fa7c755ac66919c14e7b",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "需要住院治疗或延长住院时间^*：不良事件导致参与者不得不住院接受治疗或本来已经准备出院但由于发生了不良事件而导致住院时间延长；需明确导致该状况的原因是由于不良事件所致，而非因择期手术、非医疗原因等导致入院。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p1001",
+    "source_span_ids": [
+      "body.p1001"
+    ],
+    "structure_unit_id": "su-ea42820da3887b01efc1bab4",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "*以下住院情况可根据研究者综合判断不作为SAE：",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p1002",
+    "source_span_ids": [
+      "body.p1002"
+    ],
+    "structure_unit_id": "su-272eba9497a5796dbff5a64a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "24小时内出院的留院观察；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p1003",
+    "source_span_ids": [
+      "body.p1003"
+    ],
+    "structure_unit_id": "su-f931b55af50fac873cde8aa8",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "住院进行门诊常规检查（住院时间少于24小时）；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p1004",
+    "source_span_ids": [
+      "body.p1004"
+    ],
+    "structure_unit_id": "su-344e0a97f3b90882688ce470",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "社会原因住院：如患者因无人照料或医保报销等；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p1005",
+    "source_span_ids": [
+      "body.p1005"
+    ],
+    "structure_unit_id": "su-8d12404b50702051e785d81e",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "在康复机构、疗养院住院；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "owned",
+    "source_ref": "body.p1006",
+    "source_span_ids": [
+      "body.p1006"
+    ],
+    "structure_unit_id": "su-aa446b1c310c7aab796ae2b5",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "因对现存疾病进行诊断或择期手术治疗而住院或延长住院；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5fbec1c2327b345382aa22d6",
+    "package_ordinal": 79,
+    "role": "attached",
+    "source_ref": "body.p1007",
+    "source_span_ids": [
+      "body.p1007"
+    ],
+    "structure_unit_id": "su-a20edc7c9daf038500a4ed58",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "因研究需要做疗效评价而住院或延长住院；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5fbec1c2327b345382aa22d6",
+    "package_ordinal": 79,
+    "role": "attached",
+    "source_ref": "body.p1008",
+    "source_span_ids": [
+      "body.p1008"
+    ],
+    "structure_unit_id": "su-2fb6d803498f5d19230d2eaf",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "因研究的目标疾病的规定疗程而住院或延长住院；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5fbec1c2327b345382aa22d6",
+    "package_ordinal": 79,
+    "role": "attached",
+    "source_ref": "body.p1009",
+    "source_span_ids": [
+      "body.p1009"
+    ],
+    "structure_unit_id": "su-96c5e0e17c2e1aac1905c314",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "方案规定的计划住院；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5fbec1c2327b345382aa22d6",
+    "package_ordinal": 79,
+    "role": "attached",
+    "source_ref": "body.p1010",
+    "source_span_ids": [
+      "body.p1010"
+    ],
+    "structure_unit_id": "su-a05b9b48b174529d500a5762",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "研究前计划的住院或非不良事件导致的择期手术；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5fbec1c2327b345382aa22d6",
+    "package_ordinal": 79,
+    "role": "attached",
+    "source_ref": "body.p1011",
+    "source_span_ids": [
+      "body.p1011"
+    ],
+    "structure_unit_id": "su-8ce06164cce01bc886808cf8",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "或全面体格检查而导致的入院。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5fbec1c2327b345382aa22d6",
+    "package_ordinal": 79,
+    "role": "attached",
+    "source_ref": "body.p1012",
+    "source_span_ids": [
+      "body.p1012"
+    ],
+    "structure_unit_id": "su-f4da86502b8291f23746a4a2",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "先天性异常或者出生缺陷：指参与者的后代出现畸形或先天的功能缺陷等。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5fbec1c2327b345382aa22d6",
+    "package_ordinal": 79,
+    "role": "attached",
+    "source_ref": "body.p1013",
+    "source_span_ids": [
+      "body.p1013"
+    ],
+    "structure_unit_id": "su-54913c6ad2ec34341d4487c7",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "其他有重要意义的医学事件：必须运用医学和科学的判断决定是否对其他的情况加速报告，如重要医学事件可能不会立即危及生命、死亡或住院，但如需要采取医学措施来预防如上情形之一的发生，也通常被视为是严重的。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5fbec1c2327b345382aa22d6",
+    "package_ordinal": 79,
+    "role": "attached",
+    "source_ref": "body.p1014",
+    "source_span_ids": [
+      "body.p1014"
+    ],
+    "structure_unit_id": "su-7558abeb46e72593ce9f912c",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "药物不良反应（ADR）",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "药物不良反应（ADR）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1015",
+    "source_span_ids": [
+      "body.p1015"
+    ],
+    "structure_unit_id": "su-180c41280dcf6cc53ea1efa4",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "药物不良反应（Adverse Drug Reaction，ADR）：指临床试验中发生的任何与研究药物可能有关的对人体有害或者非期望的反应。研究药物与AE之间的因果关系至少有一个合理的可能性，即不能排除相关性。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "药物不良反应（ADR）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1016",
+    "source_span_ids": [
+      "body.p1016"
+    ],
+    "structure_unit_id": "su-5c3db876078a3e60f5b5017f",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "可疑且非预期严重不良反应（SUSAR）",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "可疑且非预期严重不良反应（SUSAR）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1017",
+    "source_span_ids": [
+      "body.p1017"
+    ],
+    "structure_unit_id": "su-f59a09007b7f5f516b7d01eb",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "可疑且非预期严重不良反应（Suspected Unexpected Serious Adverse Reaction，SUSAR）指临床表现的性质和严重程度超出了试验药物《研究者手册》、已上市药品的说明书或者产品特性摘要等已有资料信息的可疑并且非预期的严重不良反应。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "可疑且非预期严重不良反应（SUSAR）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1018",
+    "source_span_ids": [
+      "body.p1018"
+    ],
+    "structure_unit_id": "su-3a466b9df7a0012b972a2b3d",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "非预期不良反应指不良反应的性质、严重程度、后果或频率，不同于试验药物当前相关资料（如《研究者手册》等文件）所描述的预期风险。《研究者手册》作为主要文件提供用以判断某不良反应是否预期或非预期的安全性参考信息。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "可疑且非预期严重不良反应（SUSAR）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1019",
+    "source_span_ids": [
+      "body.p1019"
+    ],
+    "structure_unit_id": "su-0230c1ca32146e5682365991",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "不良事件的收集和记录",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的收集和记录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1020",
+    "source_span_ids": [
+      "body.p1020"
+    ],
+    "structure_unit_id": "su-4dbd9434a4c5bb3bbf505b1d",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "不良事件的收集",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的收集和记录",
+      "不良事件的收集"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1021",
+    "source_span_ids": [
+      "body.p1021"
+    ],
+    "structure_unit_id": "su-ebb4aba58a5eee9f10138511",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "本试验中，不良事件收集期应从参与者首次服用试验用药品后至最后一次安全性随访或者退出研究为止（以先发生时间为准）。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的收集和记录",
+      "不良事件的收集"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1022",
+    "source_span_ids": [
+      "body.p1022"
+    ],
+    "structure_unit_id": "su-5c30706befa51335bc524ec6",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "在签署知情同意书后到首次服用试验用药品之前，发生的临床不良医学事件作为病史/伴随疾病记录在原始病历中，不作为AE记录。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的收集和记录",
+      "不良事件的收集"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1023",
+    "source_span_ids": [
+      "body.p1023"
+    ],
+    "structure_unit_id": "su-a4ee984ed31aa5fe26aa9401",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "从首次服用试验用药品至末次访视期间发生的所有AE均需记录在eCRF中。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的收集和记录",
+      "不良事件的收集"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1024",
+    "source_span_ids": [
+      "body.p1024"
+    ],
+    "structure_unit_id": "su-125f9fa39aa720039d48020e",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "不良事件的记录与规定",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的收集和记录",
+      "不良事件的记录与规定"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1025",
+    "source_span_ids": [
+      "body.p1025"
+    ],
+    "structure_unit_id": "su-98e7bd82275c8d4830a33bd1",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "研究者在记录不良事件时应使用正确的医学术语/概念，避免使用口语和缩略语，在eCRF不良事件页的单一事件项中应只记录一个不良事件术语。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的收集和记录",
+      "不良事件的记录与规定"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1026",
+    "source_span_ids": [
+      "body.p1026"
+    ],
+    "structure_unit_id": "su-371620980d69d405b05cb0a5",
+    "unit_kind": "paragraph"
+  }
+]

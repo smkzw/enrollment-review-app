@@ -1,0 +1,171 @@
+[
+  {
+    "excerpt": "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r16",
+    "source_span_ids": [
+      "body.t5.r16.c0.p0",
+      "body.t5.r16.c1.p0",
+      "body.t5.r16.c2.p0",
+      "body.t5.r16.c3.p0",
+      "body.t5.r16.c4.p0",
+      "body.t5.r16.c5.p0",
+      "body.t5.r16.c6.p0",
+      "body.t5.r16.c7.p0",
+      "body.t5.r16.c8.p0",
+      "body.t5.r16.c9.p0"
+    ],
+    "structure_unit_id": "su-81d6c327bcd12eaca0223418",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "妊娠试验或卵泡刺激素（FSH）：对有生育能力的女性（育龄女性）在筛选、基线和计划的时间点进行血/尿β-HCG检测，其中筛选、基线、W12(D85)、W16(113)或退出访视必须为血妊娠试验，筛选和/或基线检测结果需均为阴性，需要在访视当天用药前完成；对已绝经女性（一年及以上无月经且无其他医学原因）或永久性绝育（如双侧输卵管结扎、子宫切除或双侧输卵管切除等）的女性参与者视为不具有生育能力，无需进行妊娠试验，其中，对已绝经女性需在筛选时进行血清FSH检测，其结果应大于40 IU/L。若研究过程中出现停经也需进行额外的血清β-HCG检测。注意：对所有参与者，在每个访视做好避孕宣教：在试验期间及给药后3个月内严格遵循附录1避孕要求，且参与者或其伴侣在发现意外怀孕时及时联系研究者。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p327",
+    "source_span_ids": [
+      "body.p327"
+    ],
+    "structure_unit_id": "su-00f030fa4c1522f1774776f8",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "有生育能力的参与者自签署知情同意书至研究末次给药后至少3个月无怀孕或捐精计划，必须遵守避孕的相关规定，采取高效或可接受的避孕方法避孕（见附录1）。",
+    "heading_path": [
+      "研究人群",
+      "入选标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-e19e628051039b5cf8bb4f8e",
+    "package_ordinal": 51,
+    "role": "attached",
+    "source_ref": "body.p638",
+    "source_span_ids": [
+      "body.p638"
+    ],
+    "structure_unit_id": "su-4bf0f0db5940a934141e0ffa",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "妊娠或哺乳期女性；",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-0c3ec9c9a142752490de8a8f",
+    "package_ordinal": 56,
+    "role": "attached",
+    "source_ref": "body.p696",
+    "source_span_ids": [
+      "body.p696"
+    ],
+    "structure_unit_id": "su-3502ccbcbfcce68b94f3b3e5",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "仅限有生育能力的女性。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "妊娠试验或卵泡刺激素（Follicle-stimulating hormone，FSH）检测"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2eb4be5ffa51ff07d52b5548",
+    "package_ordinal": 73,
+    "role": "owned",
+    "source_ref": "body.p815#atom-0-11",
+    "source_span_ids": [
+      "body.p815"
+    ],
+    "structure_unit_id": "su-4de1d8cc4eb21ba74513612a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "必须在研究的筛选、基线、第12周（Ⅱ期临床研究阶段）、第16、52周访视（Ⅲ期临床研究阶段）和提前退出访视时进行血清妊娠试验。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "妊娠试验或卵泡刺激素（Follicle-stimulating hormone，FSH）检测"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2eb4be5ffa51ff07d52b5548",
+    "package_ordinal": 73,
+    "role": "owned",
+    "source_ref": "body.p815#atom-11-74",
+    "source_span_ids": [
+      "body.p815"
+    ],
+    "structure_unit_id": "su-5a0dc427730a7091153e019b",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "筛选时或研究药物首次给药前妊娠试验结果为阳性的参与者不允许进入研究（筛选失败）。研究期间根据研究者的判断可选择性进行尿妊娠试验或血清妊娠试验。可根据需要进行更频繁的妊娠试验。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "妊娠试验或卵泡刺激素（Follicle-stimulating hormone，FSH）检测"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2eb4be5ffa51ff07d52b5548",
+    "package_ordinal": 73,
+    "role": "owned",
+    "source_ref": "body.p815#atom-74-161",
+    "source_span_ids": [
+      "body.p815"
+    ],
+    "structure_unit_id": "su-c8ab1d9b07ac375fb5632e9a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "对于绝经女性参与者仅在筛选期进行FSH检查。本研究将初潮前女性、已绝经妇女（一年及以上无月经且无其他医学原因）或永久性绝育（如输卵管结扎、子宫切除或双侧输卵管切除等）的女性参与者视为不具有生育能力，无需进行妊娠试验。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "妊娠试验或卵泡刺激素（Follicle-stimulating hormone，FSH）检测"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2eb4be5ffa51ff07d52b5548",
+    "package_ordinal": 73,
+    "role": "owned",
+    "source_ref": "body.p816",
+    "source_span_ids": [
+      "body.p816"
+    ],
+    "structure_unit_id": "su-84bc1c61a86032078eac5b1a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "血/尿妊娠试验（有生育能力的女性）",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "治疗期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p874",
+    "source_span_ids": [
+      "body.p874"
+    ],
+    "structure_unit_id": "su-895b9df0760b93b493f11d46",
+    "unit_kind": "list_item"
+  }
+]

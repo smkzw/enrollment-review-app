@@ -1,0 +1,2017 @@
+"""证据规范化持久任务执行器。
+
+模型调用只在事务外形成结构化候选；候选、门禁、运行状态与任务检查点由
+``PreparedStepResult`` 在同一租约写栅栏事务中提交。步骤检查点缺失而已有
+同身份成功调用时，从持久记录重建并复核检查点直接复用，不重复调用模型。
+执行器不得制造替代文本，不得把读取失败转成成功，也不得在失租结果被丢弃
+前先提交临床领域副作用。
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass
+import logging
+from app.evidence.artifacts import ArtifactStore
+from datetime import UTC, datetime
+from typing import Any, Callable
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.agents.evidence_normalizer import (
+    DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE,
+    EvidenceNormalizerInput,
+    EvidenceNormalizerOutput,
+    EvidenceNormalizerRunner,
+    EvidenceNormalizerTransport,
+    evidence_normalizer_prompt_template_sha256,
+    validate_evidence_normalizer_model_config,
+    validate_evidence_normalizer_output,
+)
+from app.agents.deepseek_evidence_normalizer_transport import (
+    evidence_normalizer_transport_from_model_config,
+)
+from app.services.fact_normalization_response_recovery import (
+    RESPONSE_RECOVERY_POLICY, SavedResponseRecovery, revalidate_saved_response,
+)
+from app.domain.contracts.agents import ModelConfigContract, PromptVersion
+from app.domain.contracts.evidence_normalizer import (
+    EvidenceNormalizerUnresolvedItem,
+    PersistedEvidenceNormalizerUnresolvedItem,
+)
+from app.domain.contracts.evidence_expectations_v2 import CoverageGapSignal
+from app.domain.contracts.enums import (
+    AgentNode,
+    FactCallStatus,
+    FactGate,
+    FactNormalizationRunStatus,
+    GateOutcome,
+    ProfileLane,
+)
+from app.domain.contracts.facts import (
+    ClinicalEventCandidateV2,
+    ClinicalFactCandidateV2,
+    FactAuthority,
+    FactGateResult,
+    FactNormalizationCall,
+    MedicationExposureCandidateV2,
+    clinical_event_stable_identity,
+    clinical_fact_stable_identity,
+)
+from app.domain.contracts.selective_vision_observation import (
+    SelectiveVisionObservationAttachment,
+)
+from app.domain.gates.fact_batch_orchestration import (
+    orchestrate_run_gates,
+    run_gate_results_to_fact_gate_results,
+)
+from app.domain.gates.fact_evidence_closure import validate_page_coverage
+from app.projections.evidence_expectations import ProjectionInputError
+from app.domain.publication import canonical_hash
+from app.services.fact_expectation_gaps import (
+    EXPECTATION_INPUT_INCOMPLETE_CODE as _EXPECTATION_INPUT_INCOMPLETE_CODE,
+)
+from app.services.fact_expectation_gaps import (
+    _prior_unreconfirmed_signals,
+    expectation_gap_signals,
+)
+from app.services.fact_normalization_source_adapter import (
+    FactPlanningSourceError,
+    build_doc_version_to_logical_map,
+    build_evidence_normalizer_input,
+    collect_visual_observation_attachments,
+    select_call_visual_observation_attachments,
+    visual_observation_run_scope,
+)
+from app.services.fact_publication_service import (
+    FactPublicationError,
+    FactPublicationService,
+)
+from app.services.evidence_expectation_projection_service import (
+    EvidenceExpectationProjectionError,
+    EvidenceExpectationProjectionService,
+)
+from app.services.patient_profile_service import (
+    PatientProfileProjectionError,
+    PatientProfileService,
+)
+from app.domain.contracts.patient_profile_v2 import ProfileStatus
+from app.storage.evidence_locator_repositories import CompleteEvidenceProcessingRevisionRepository
+from app.storage.fact_authority import FactAuthorityError, FactAuthorityValidator
+from app.storage.fact_correction_repository import FactCorrectionRepository
+from app.storage.judgment_search_repository import JudgmentSearchSummaryRepository
+from app.storage.fact_repositories import (
+    ClinicalEventV2Repository,
+    ClinicalFactV2Repository,
+    FactGateResultRepository,
+    FactNormalizationCallRepository,
+    FactNormalizationCandidateRepository,
+    FactNormalizationRunRepository,
+    FactNormalizationUnresolvedItemRepository,
+)
+from app.storage.fact_rule_link_repository import (
+    FactRuleIndexError,
+    FactRuleLinkV2Repository,
+)
+from app.storage.evidence_locator_models import EvidenceLocatorArtifactRecord
+from app.storage.facts_models import (
+    FactNormalizationCallRecord,
+    FactNormalizationCandidateRecord,
+    FactNormalizationUnresolvedItemRecord,
+)
+from app.storage.repositories import (
+    MODEL_CONFIG_CONFIG,
+    PROMPT_VERSION_CONFIG,
+    AppendRepository,
+    EpisodeRepository,
+    InvalidReferenceError,
+    list_expectation_templates,
+)
+from app.workflow.errors import StepFailure
+from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
+
+from .fact_normalization_job_service import (
+    EMPTY_OUTPUT_CODE,
+    FACT_NORMALIZATION_FINALIZE_STEP_ID,
+    PARTIAL_OUTPUT_CODE,
+    STALE_AUTHORITY_CODE,
+)
+
+TransportFn = Callable[[EvidenceNormalizerInput], EvidenceNormalizerOutput]
+TransportFactory = Callable[[ModelConfigContract], EvidenceNormalizerTransport]
+_FACT_NORMALIZATION_CONTRACT_VERSION = "phase5/facts/v1"
+
+
+def _expectation_gap_signals(
+    session: Session,
+    authority: FactAuthority,
+    unresolved_items: list[PersistedEvidenceNormalizerUnresolvedItem],
+    *,
+    fact_candidates: list[ClinicalFactCandidateV2] | None = None,
+    gate_results: list[FactGateResult] | None = None,
+) -> list[CoverageGapSignal]:
+    """兼容别名：信号推导唯一实现在 ``fact_expectation_gaps.expectation_gap_signals``。
+
+    模板清单与审核节点依赖经由本模块全局注入，保持既有针对本模块
+    monkeypatch 这两个名字的单测语义不变。书面判断检索摘要以 callable 惰性
+    加载：仅当研究者判断类到期模板走到兜底分支才查询；未检索/覆盖不完整
+    维持原兜底，双读完整未见候选才升级专业判断缺口。
+    """
+    return expectation_gap_signals(
+        session,
+        authority,
+        unresolved_items,
+        fact_candidates=fact_candidates,
+        gate_results=gate_results,
+        judgment_search_summaries=lambda: (
+            JudgmentSearchSummaryRepository(session).latest_for_authority(authority)
+            if isinstance(session, Session) else None
+        ),
+        _templates_lookup=list_expectation_templates,
+        _episode_lookup=EpisodeRepository,
+    )
+
+
+def _profile_lane_conflict_reasons(
+    session: Session,
+    authority: FactAuthority,
+    fact_candidates: list[ClinicalFactCandidateV2],
+    event_candidates: list[ClinicalEventCandidateV2] | None = None,
+) -> dict[str, list[str]]:
+    """Reject rerun lane drift per candidate instead of rolling back the batch."""
+
+    def identity(item, *, value):
+        return clinical_fact_stable_identity(
+            authority=authority,
+            fact_type=item.fact_type,
+            profile_lane=ProfileLane.EVIDENCE_QUALITY,
+            asserted_object=item.asserted_object,
+            polarity=item.polarity,
+            value=value,
+            unit=item.unit,
+            date_range=item.date_range,
+            assertion_basis=item.assertion_basis,
+        )
+
+    superseded = {
+        item.target_id
+        for item in FactCorrectionRepository(session).list_by_authority(authority)
+    }
+    lanes_by_identity: dict[str, set[ProfileLane]] = {}
+    for fact in ClinicalFactV2Repository(session).list_by_episode(
+        authority.review_episode_id
+    ):
+        if fact.authority != authority or fact.fact_id in superseded:
+            continue
+        lanes_by_identity.setdefault(identity(fact, value=fact.value), set()).add(
+            fact.profile_lane
+        )
+    for candidate in fact_candidates:
+        lanes_by_identity.setdefault(
+            identity(candidate, value=candidate.canonical_value), set()
+        ).add(candidate.profile_lane)
+
+    fact_reason = (
+        "同一临床事实在当前审核节点已有不同主题归属，当前候选未发布；"
+        "请核对主题归属。"
+    )
+    reasons = {
+        candidate.candidate_id: [fact_reason]
+        for candidate in fact_candidates
+        if len(
+            lanes_by_identity[identity(candidate, value=candidate.canonical_value)]
+        )
+        > 1
+    }
+    events = event_candidates or []
+    if not events:
+        return reasons
+
+    facts_by_id = {candidate.candidate_id: candidate for candidate in fact_candidates}
+
+    def event_identity(item, referenced_fact_objects):
+        return clinical_event_stable_identity(
+            authority=authority,
+            event_type=item.event_type,
+            profile_lane=ProfileLane.EVIDENCE_QUALITY,
+            referenced_fact_objects=referenced_fact_objects,
+            start_range=item.start_range,
+            end_range=item.end_range,
+            duration_status=item.duration_status,
+        )
+
+    event_lanes_by_identity: dict[str, set[ProfileLane]] = {}
+    for event in ClinicalEventV2Repository(session).list_by_episode(
+        authority.review_episode_id
+    ):
+        if event.authority != authority or event.event_id in superseded:
+            continue
+        event_lanes_by_identity.setdefault(
+            event_identity(event, event.referenced_fact_objects), set()
+        ).add(event.profile_lane)
+    candidate_event_identities: dict[str, str] = {}
+    for event in events:
+        referenced_objects = sorted(
+            {
+                f"{facts_by_id[fact_id].fact_type}:"
+                f"{facts_by_id[fact_id].asserted_object}"
+                for fact_id in event.fact_candidate_ids
+            }
+        )
+        semantic_identity = event_identity(event, referenced_objects)
+        candidate_event_identities[event.candidate_id] = semantic_identity
+        event_lanes_by_identity.setdefault(semantic_identity, set()).add(
+            event.profile_lane
+        )
+
+    event_reason = (
+        "同一临床事件在当前审核节点已有不同主题归属，当前候选未发布；"
+        "请核对主题归属。"
+    )
+    reasons.update(
+        {
+            event.candidate_id: [event_reason]
+            for event in events
+            if len(event_lanes_by_identity[candidate_event_identities[event.candidate_id]])
+            > 1
+        }
+    )
+    return reasons
+
+
+def _transactional_gate_results(
+    run_result,
+    candidates,
+    created_at,
+    *,
+    profile_lane_conflicts: dict[str, list[str]] | None = None,
+):
+    """以全部先行门禁与事实引用闭包生成最终发布门禁。"""
+    verdicts_by_candidate = {}
+    for verdict in run_result.gate_results:
+        verdicts_by_candidate.setdefault(verdict.candidate_id, []).append(verdict)
+    outcome_by_candidate = {}
+    reasons_by_candidate = {}
+    for candidate in candidates:
+        verdicts = verdicts_by_candidate.get(candidate.candidate_id, [])
+        failures = [item for item in verdicts if item.outcome != GateOutcome.ACCEPTED]
+        outcome = GateOutcome.ACCEPTED
+        if any(item.outcome == GateOutcome.BLOCKED for item in failures):
+            outcome = GateOutcome.BLOCKED
+        elif failures:
+            outcome = GateOutcome.REJECTED
+        outcome_by_candidate[candidate.candidate_id] = outcome
+        reasons_by_candidate[candidate.candidate_id] = sorted(
+            {reason for item in failures for reason in item.reasons}
+        )
+
+    for candidate_id, reasons in (profile_lane_conflicts or {}).items():
+        if outcome_by_candidate.get(candidate_id) == GateOutcome.ACCEPTED:
+            outcome_by_candidate[candidate_id] = GateOutcome.REJECTED
+            reasons_by_candidate[candidate_id] = list(reasons)
+
+    linked = [
+        candidate
+        for candidate in candidates
+        if isinstance(candidate, (ClinicalEventCandidateV2, MedicationExposureCandidateV2))
+    ]
+    for candidate in linked:
+        unavailable = sorted(
+            fact_id
+            for fact_id in candidate.fact_candidate_ids
+            if outcome_by_candidate.get(fact_id) != GateOutcome.ACCEPTED
+        )
+        if unavailable and outcome_by_candidate[candidate.candidate_id] == GateOutcome.ACCEPTED:
+            outcome_by_candidate[candidate.candidate_id] = GateOutcome.REJECTED
+            reasons_by_candidate[candidate.candidate_id] = [
+                "引用的事实候选未通过最终发布门禁："
+                + "、".join(unavailable)
+            ]
+
+    return [
+        FactGateResult(
+            gate_result_id=(
+                f"fact-gate-{run_result.run_id}-{candidate.candidate_id}-"
+                f"{FactGate.TRANSACTIONAL_PUBLISH.value}"
+            ),
+            run_id=run_result.run_id,
+            call_id=run_result.candidate_call_ids[candidate.candidate_id],
+            candidate_id=candidate.candidate_id,
+            gate=FactGate.TRANSACTIONAL_PUBLISH,
+            outcome=outcome_by_candidate[candidate.candidate_id],
+            reasons=reasons_by_candidate[candidate.candidate_id],
+            created_at=created_at,
+        )
+        for candidate in sorted(candidates, key=lambda item: item.candidate_id)
+    ]
+
+
+def _now_utc() -> datetime:
+    return datetime.now(UTC)
+
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class FactNormalizationExecutorConfig:
+    session_factory: sessionmaker[Session]
+    transport: EvidenceNormalizerTransport | None = None
+    transport_fn: TransportFn | None = None
+    transport_factory: TransportFactory | None = None
+    prompt_template: str = DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE
+    # A page call is already a retryable persisted job step. Retrying again
+    # inside the model runner hides failures and multiplies the per-page wait.
+    max_transport_retries: int = 0
+    max_schema_repairs: int = 1
+    artifact_store: ArtifactStore | None = None
+    # Explicit owner-selected same-call failures; absent by default. No answer search.
+    saved_response_recovery: dict[str, SavedResponseRecovery] | None = None
+
+
+def _get_call_for_step(payload: dict[str, Any], step_id: str) -> dict[str, Any]:
+    if step_id == FACT_NORMALIZATION_FINALIZE_STEP_ID:
+        raise StepFailure(retryable=False, error_code="INVALID_STEP", detail="汇总步骤不对应单次模型调用。")
+    try:
+        index = int(step_id.split("_")[1])
+    except (IndexError, ValueError) as exc:
+        raise StepFailure(retryable=False, error_code="INVALID_STEP", detail=f"无法识别任务步骤 {step_id}。") from exc
+    calls = sorted(
+        list(payload.get("calls") or []),
+        key=lambda item: (item["logical_document_id"], item["page_numbers"]),
+    )
+    if index < 0 or index >= len(calls):
+        raise StepFailure(retryable=False, error_code="INVALID_STEP", detail=f"任务步骤 {step_id} 超出调用范围。")
+    return calls[index]
+
+
+def _load_authority(payload: dict[str, Any]) -> FactAuthority:
+    try:
+        return FactAuthority.model_validate(payload["authority"])
+    except Exception as exc:
+        raise StepFailure(retryable=False, error_code="INVALID_AUTHORITY", detail="任务缺少可验证的证据权威范围。") from exc
+
+
+def _validate_authority(session: Session, authority: FactAuthority) -> None:
+    try:
+        FactAuthorityValidator(session).validate(authority)
+    except FactAuthorityError as exc:
+        raise StepFailure(retryable=False, error_code=STALE_AUTHORITY_CODE, detail=str(exc)) from exc
+
+
+def _load_frozen_agent_config(
+    session: Session,
+    *,
+    payload: dict[str, Any],
+    run_id: str,
+    authority: FactAuthority,
+    prompt_template: str,
+) -> ModelConfigContract:
+    """确保审计记录中的冻结配置就是本次实际执行配置。"""
+    run = FactNormalizationRunRepository(session).get(run_id)
+    chain_scope = run.input_scope_sha256
+    if payload.get("source_revalidation") is not None:
+        selection = payload["source_revalidation"]
+        source_run = FactNormalizationRunRepository(session).get(selection["source_run_id"])
+        frozen_selection = {key: value for key, value in selection.items() if key != "calls"}
+        from app.services.fact_normalization_revalidation import qualification_identity
+        if (source_run.authority != authority or selection.get("qualification_sha256") != qualification_identity()
+                or canonical_hash({"input_scope_sha256": source_run.input_scope_sha256,
+                    "source_revalidation": frozen_selection}) != chain_scope
+                or set(selection.get("calls", {})) != {item["call_id"] for item in payload["calls"]}
+                or sorted(selection["calls"].values(), key=lambda row: row["source_call_id"])
+                    != sorted(selection.get("source_calls", {}).values(), key=lambda row: row["source_call_id"])):
+            raise StepFailure(retryable=False, error_code="INVALID_AUTHORITY", detail="已读记录核验的来源或实现身份不一致。")
+        chain_scope = source_run.input_scope_sha256
+    if payload.get("retained_reads") is not None:
+        precondition = payload.get("retained_read_precondition_sha256")
+        if (not isinstance(precondition, str) or not payload.get("targeted_extraction")
+                or canonical_hash({"input_scope_sha256": precondition, "retained_reads": payload["retained_reads"]}) != chain_scope):
+            raise StepFailure(retryable=False, error_code="INVALID_AUTHORITY", detail="保留的旧读取与本次冻结身份不一致。")
+        chain_scope = precondition
+    if payload.get("retry_failed_from_run_id") is not None:
+        precondition = payload.get("retry_failed_precondition_sha256")
+        if (not isinstance(precondition, str) or canonical_hash({"input_scope_sha256": precondition,
+                "retry_failed_from_run_id": payload["retry_failed_from_run_id"],
+                **({"retry_pages": payload["retry_pages"]} if "retry_pages" in payload else {})}) != chain_scope):
+            raise StepFailure(retryable=False, error_code="INVALID_AUTHORITY", detail="失败页续读来源与冻结身份不一致。")
+        chain_scope = precondition
+    if payload.get("targeted_extraction"):
+        precondition = payload.get("targeted_extraction_precondition_sha256")
+        if (not isinstance(precondition, str)
+                or canonical_hash({"input_scope_sha256": precondition,
+                                   "targeted_extraction": True}) != chain_scope):
+            raise StepFailure(retryable=False, error_code="INVALID_AUTHORITY",
+                              detail="定向抽取方式与冻结运行身份不一致。")
+        chain_scope = precondition
+    if payload.get("question_classification_repair_policy") is not None:
+        from app.agents.evidence_question_repair import QUESTION_REPAIR_POLICY
+        precondition = payload.get("question_classification_precondition_scope_sha256")
+        next_scope = payload.get("candidate_partition_precondition_scope_sha256", chain_scope)
+        if (payload["question_classification_repair_policy"] != QUESTION_REPAIR_POLICY
+                or not isinstance(precondition, str) or len(precondition) != 64
+                or canonical_hash({"input_scope_sha256": precondition,
+                    "question_classification_repair_policy": QUESTION_REPAIR_POLICY}) != next_scope):
+            raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                              detail="限定疑问恢复未进入冻结身份，不能改作旧任务的读取方式。")
+    if payload.get("candidate_partition_policy") is not None:
+        from app.agents.evidence_candidate_partition import CANDIDATE_PARTITION_POLICY
+        precondition = payload.get("candidate_partition_precondition_scope_sha256")
+        if (payload["candidate_partition_policy"] != CANDIDATE_PARTITION_POLICY
+                or not isinstance(precondition, str) or len(precondition) != 64
+                or canonical_hash({"input_scope_sha256": precondition,
+                    "candidate_partition_policy": CANDIDATE_PARTITION_POLICY}) != chain_scope):
+            raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                              detail="局部保留方式未进入本次冻结身份，不能将旧作业改作新读取。")
+    if run.authority != authority:
+        raise StepFailure(
+            retryable=False,
+            error_code=STALE_AUTHORITY_CODE,
+            detail="规范化运行与当前证据权威范围不一致。",
+        )
+    prompt_version_id = str(payload.get("prompt_version_id") or "")
+    model_config_id = str(payload.get("model_config_id") or "")
+    if (
+        prompt_version_id != run.prompt_version_id
+        or model_config_id != run.model_config_id
+        or payload.get("input_scope_sha256") != run.input_scope_sha256
+    ):
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="任务载荷与规范化运行冻结的模型配置不一致。",
+        )
+    try:
+        prompt = AppendRepository(session, PROMPT_VERSION_CONFIG).get(
+            prompt_version_id
+        )
+        model_config = AppendRepository(session, MODEL_CONFIG_CONFIG).get(
+            model_config_id
+        )
+    except Exception as exc:
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail=f"无法读取冻结的证据规范化配置：{exc}",
+        ) from exc
+    if not isinstance(prompt, PromptVersion) or not isinstance(
+        model_config, ModelConfigContract
+    ):
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="冻结的证据规范化配置类型不正确。",
+        )
+    if prompt.node is not AgentNode.EVIDENCE_NORMALIZER:
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="冻结提示词不属于证据规范化任务。",
+        )
+    if prompt.schema_version_id != _FACT_NORMALIZATION_CONTRACT_VERSION:
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="冻结提示词与当前证据规范化输出结构版本不一致。",
+        )
+    if prompt.template_sha256 != evidence_normalizer_prompt_template_sha256(
+        prompt_template
+    ):
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="冻结提示词内容与当前证据规范化模板不一致。",
+        )
+    try:
+        validate_evidence_normalizer_model_config(model_config)
+    except ValueError as exc:
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail=f"冻结的个例档案整理模型设置无效：{exc}",
+        ) from exc
+    return model_config
+
+
+def _build_input(
+    session: Session,
+    authority: FactAuthority,
+    run_id: str,
+    call: dict[str, Any],
+    *,
+    max_pages_per_call: int,
+    created_at: datetime,
+    page_review_coverage_id: str | None = None,
+    include_visual_sources: bool = False,
+) -> EvidenceNormalizerInput:
+    try:
+        return build_evidence_normalizer_input(
+            session,
+            authority=authority,
+            run_id=run_id,
+            call_id=str(call["call_id"]),
+            logical_document_id=str(call["logical_document_id"]),
+            page_numbers=list(call["page_numbers"]),
+            expected_input_sha256=str(call["input_sha256"]),
+            max_pages_per_call=max_pages_per_call,
+            created_at=created_at,
+            page_review_coverage_id=page_review_coverage_id,
+            include_visual_sources=include_visual_sources,
+        )
+    except FactPlanningSourceError as exc:
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail=str(exc)) from exc
+    except Exception as exc:
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail=f"无法从活动证据修订重建本次调用输入：{exc}") from exc
+
+
+def _build_frozen_visual_observations(
+    session: Session,
+    *,
+    authority: FactAuthority,
+    call: dict[str, Any],
+    payload: dict[str, Any],
+) -> tuple[SelectiveVisionObservationAttachment, ...]:
+    """按任务冻结的视觉观察范围重建本次调用的观察附件（失效关闭）。
+
+    - 任务载荷没有 ``visual_observation_scope_sha256``：任务冻结于视觉通道
+      之前，观察永不进入本次输入（不静默追加新观察）；
+    - 载荷携带冻结范围：重建时全修订重新收集并复核范围哈希，任一漂移
+      （新增/丢失/OCR 漂移/篡改）即硬失败，不允许冻结后静默丢弃或追加。
+    """
+    frozen_scope = payload.get("visual_observation_scope_sha256")
+    if frozen_scope is None:
+        return ()
+    try:
+        from app.services.selective_vision_postprocess_job_service import (
+            SelectiveVisionPostprocessJobService,
+        )
+
+        verified_vision_scope = SelectiveVisionPostprocessJobService(
+            sessionmaker(bind=session.get_bind())
+        ).verified_observation_scope(authority.complete_processing_revision_id)
+        revision = CompleteEvidenceProcessingRevisionRepository(session).get(
+            authority.complete_processing_revision_id
+        )
+        doc_version_to_logical, _ = build_doc_version_to_logical_map(session, revision)
+        attachments = collect_visual_observation_attachments(
+            session,
+            revision=revision,
+            doc_version_to_logical=doc_version_to_logical,
+            required_scope=verified_vision_scope,
+        )
+    except Exception as exc:
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail=f"无法按冻结范围重建视觉观察清单：{exc}",
+        ) from exc
+    run_scope = visual_observation_run_scope(attachments)
+    if run_scope != str(frozen_scope):
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="当前视觉观察清单与任务冻结范围不一致，拒绝在冻结后追加或丢弃观察。",
+        )
+    selected = select_call_visual_observation_attachments(
+        attachments,
+        doc_version_to_logical=doc_version_to_logical,
+        logical_document_id=str(call["logical_document_id"]),
+        page_numbers=list(call["page_numbers"]),
+    )
+    return selected
+
+
+def _candidate_identity(kind: str, call_id: str, index: int, payload: dict[str, Any]) -> str:
+    material = dict(payload)
+    material.pop("candidate_id", None)
+    material.pop("created_at", None)
+    digest = canonical_hash({"kind": kind, "call_id": call_id, "position": index, "candidate": material})
+    return f"{kind}_{digest[:40]}"
+
+
+def _hydrate_candidate_ids(output: EvidenceNormalizerOutput, created_at: datetime):
+    """候选主键由系统派生，模型 ID 只在本次响应内用于建立引用。"""
+    fact_id_map: dict[str, str] = {}
+    facts: list[ClinicalFactCandidateV2] = []
+    for index, candidate in enumerate(output.fact_candidates):
+        payload = candidate.model_dump(mode="json")
+        candidate_id = _candidate_identity("fact", output.call_id, index, payload)
+        fact_id_map[candidate.candidate_id] = candidate_id
+        payload.update(candidate_id=candidate_id, created_at=created_at)
+        facts.append(ClinicalFactCandidateV2.model_validate(payload))
+    events: list[ClinicalEventCandidateV2] = []
+    for index, candidate in enumerate(output.event_candidates):
+        payload = candidate.model_dump(mode="json")
+        payload["fact_candidate_ids"] = sorted(fact_id_map[item] for item in candidate.fact_candidate_ids)
+        payload["candidate_id"] = _candidate_identity("event", output.call_id, index, payload)
+        payload["created_at"] = created_at
+        events.append(ClinicalEventCandidateV2.model_validate(payload))
+    exposures: list[MedicationExposureCandidateV2] = []
+    for index, candidate in enumerate(output.exposure_candidates):
+        payload = candidate.model_dump(mode="json")
+        payload["fact_candidate_ids"] = sorted(fact_id_map[item] for item in candidate.fact_candidate_ids)
+        payload["candidate_id"] = _candidate_identity("exposure", output.call_id, index, payload)
+        payload["created_at"] = created_at
+        exposures.append(MedicationExposureCandidateV2.model_validate(payload))
+    return facts, events, exposures
+
+
+def _unresolved_payload(output: EvidenceNormalizerOutput) -> tuple[list[dict[str, Any]], str]:
+    items = [item.model_dump(mode="json") for item in output.unresolved_items]
+    canonical = json.dumps(items, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return items, _sha256(canonical)
+
+
+def _persisted_unresolved_items(
+    output: EvidenceNormalizerOutput,
+    *,
+    created_at: datetime,
+) -> list[PersistedEvidenceNormalizerUnresolvedItem]:
+    persisted: list[PersistedEvidenceNormalizerUnresolvedItem] = []
+    for position, item in enumerate(output.unresolved_items):
+        identity = canonical_hash(
+            {
+                "call_id": output.call_id,
+                "logical_document_id": output.logical_document_id,
+                "position": position,
+                "item": item.model_dump(mode="json"),
+            }
+        )
+        persisted.append(
+            PersistedEvidenceNormalizerUnresolvedItem(
+                unresolved_item_id=f"unresolved_{identity[:40]}",
+                run_id=output.run_id,
+                call_id=output.call_id,
+                logical_document_id=output.logical_document_id,
+                position=position,
+                item=item,
+                created_at=created_at,
+            )
+        )
+    return persisted
+
+
+def _validate_persisted_page_closure(
+    session: Session,
+    *,
+    calls: list[FactNormalizationCall],
+    candidates: list[
+        ClinicalFactCandidateV2
+        | ClinicalEventCandidateV2
+        | MedicationExposureCandidateV2
+    ],
+    unresolved_items: list[PersistedEvidenceNormalizerUnresolvedItem],
+) -> None:
+    locator_ids = {
+        locator_id
+        for candidate in candidates
+        for locator_id in candidate.locator_ids
+    } | {
+        locator_id
+        for unresolved in unresolved_items
+        for locator_id in unresolved.item.affected_locator_ids
+    }
+    locator_pages: dict[str, int] = {}
+    if locator_ids:
+        rows = session.execute(
+            select(EvidenceLocatorArtifactRecord).where(
+                EvidenceLocatorArtifactRecord.locator_id.in_(sorted(locator_ids))
+            )
+        ).scalars().all()
+        locator_pages = {row.locator_id: row.page_number for row in rows}
+
+    missing_by_call: dict[str, list[int]] = {}
+    for call in calls:
+        covered: set[int] = set()
+        for candidate in candidates:
+            if candidate.call_id == call.call_id:
+                covered.update(
+                    locator_pages[locator_id]
+                    for locator_id in candidate.locator_ids
+                    if locator_id in locator_pages
+                )
+        for unresolved in unresolved_items:
+            if unresolved.call_id != call.call_id:
+                continue
+            covered.update(unresolved.item.affected_pages)
+            covered.update(
+                locator_pages[locator_id]
+                for locator_id in unresolved.item.affected_locator_ids
+                if locator_id in locator_pages
+            )
+        missing = sorted(set(call.page_numbers) - covered)
+        if missing:
+            missing_by_call[call.call_id] = missing
+    if missing_by_call:
+        detail = "；".join(
+            f"调用 {call_id} 缺少逐页候选或未解决说明：{pages}"
+            for call_id, pages in sorted(missing_by_call.items())
+        )
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail=detail,
+        )
+
+
+def _load_run_candidates(session: Session, run_id: str):
+    rows = session.execute(
+        select(FactNormalizationCandidateRecord).where(FactNormalizationCandidateRecord.run_id == run_id)
+    ).scalars().all()
+    repository = FactNormalizationCandidateRepository(session)
+    facts: list[ClinicalFactCandidateV2] = []
+    events: list[ClinicalEventCandidateV2] = []
+    exposures: list[MedicationExposureCandidateV2] = []
+    for row in rows:
+        candidate = repository.get(row.candidate_id)
+        if isinstance(candidate, ClinicalFactCandidateV2):
+            facts.append(candidate)
+        elif isinstance(candidate, ClinicalEventCandidateV2):
+            events.append(candidate)
+        else:
+            exposures.append(candidate)
+    return facts, events, exposures
+
+
+def _validate_call_checkpoint_replay(
+    session: Session,
+    *,
+    authority: FactAuthority,
+    run_id: str,
+    call: dict[str, Any],
+    checkpoint: dict[str, Any],
+    payload: dict[str, Any],
+    artifact_store: ArtifactStore | None = None,
+    prompt_template: str = DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE,
+) -> None:
+    """检查点只能复用已由同一租约事务提交且仍处于活动权威下的结果。"""
+    _validate_authority(session, authority)
+    run = FactNormalizationRunRepository(session).get(run_id)
+    if run.authority != authority:
+        raise StepFailure(
+            retryable=False,
+            error_code=STALE_AUTHORITY_CODE,
+            detail="规范化运行与当前证据权威范围不一致。",
+        )
+    persisted_call = FactNormalizationCallRepository(session).get(str(call["call_id"]))
+    expected_call = (
+        run_id,
+        str(call["logical_document_id"]),
+        list(call["page_numbers"]),
+        str(call["input_sha256"]),
+    )
+    actual_call = (
+        persisted_call.run_id,
+        persisted_call.logical_document_id,
+        persisted_call.page_numbers,
+        persisted_call.input_sha256,
+    )
+    if actual_call != expected_call:
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="任务检查点与已持久化的规范化调用不一致。",
+        )
+    if (checkpoint.get("reading_method") != persisted_call.reading_method
+            or checkpoint.get("raw_output_sha256") != persisted_call.raw_output_sha256
+            or checkpoint.get("candidate_partition_sha256") != persisted_call.candidate_partition_sha256
+            or checkpoint.get("question_classification_sha256") != persisted_call.question_classification_sha256
+            or checkpoint.get("response_recovery_sha256") != persisted_call.response_recovery_sha256):
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                          detail="读取方式或原答身份与持久记录不一致，不能复用为已读资料依据。")
+    if checkpoint.get("source_revalidation_sha256") != persisted_call.source_revalidation_sha256:
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail="已读记录核验的证明不一致。")
+    persisted_candidate_ids = sorted(
+        session.execute(
+            select(FactNormalizationCandidateRecord.candidate_id).where(
+                FactNormalizationCandidateRecord.call_id == str(call["call_id"])
+            )
+        ).scalars().all()
+    )
+    persisted_unresolved_ids = sorted(
+        session.execute(
+            select(FactNormalizationUnresolvedItemRecord.unresolved_item_id).where(
+                FactNormalizationUnresolvedItemRecord.call_id == str(call["call_id"])
+            )
+        ).scalars().all()
+    )
+    if persisted_candidate_ids != sorted(checkpoint.get("candidate_ids") or []):
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="任务检查点中的候选清单与持久记录不一致。",
+        )
+    if persisted_unresolved_ids != sorted(
+        checkpoint.get("unresolved_item_ids") or []
+    ):
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="任务检查点中的未解决项清单与持久记录不一致。",
+        )
+    if persisted_call.status == FactCallStatus.FAILED:
+        if not payload.get("targeted_extraction") or persisted_candidate_ids:
+            raise StepFailure(retryable=False, error_code="CALL_IDENTITY_CONFLICT",
+                              detail="失败读取不能复用为已核实候选。")
+        _build_input(session, authority, run_id, call,
+                     max_pages_per_call=int(payload.get("max_pages_per_call", 20)),
+                     created_at=run.created_at)
+        return
+    from app.services.fact_normalization_replay_sources import validate_replayed_sources
+    try:
+        validate_replayed_sources(session, payload=payload, authority=authority, run=run,
+                                  call=call, candidate_ids=persisted_candidate_ids)
+    except Exception as exc:
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                          detail=f"已保存候选的来源未通过复验：{exc}") from exc
+    _validate_saved_text_accounting(session, payload, authority, run_id, [persisted_call])
+    if persisted_call.source_revalidation_sha256 is not None:
+        _validate_source_revalidation_replay(session, payload, authority, run, persisted_call,
+            artifact_store, prompt_template=prompt_template)
+    if persisted_call.response_recovery_sha256 is not None:
+        _validate_response_recovery_replay(session, payload, authority, run, persisted_call, artifact_store,
+                                          prompt_template=prompt_template)
+    if persisted_call.question_classification_sha256 is not None:
+        _validate_question_classification_replay(session, payload, authority, run, persisted_call, artifact_store)
+    elif persisted_call.candidate_partition_sha256 is not None:
+        _validate_partition_replay(session, payload, authority, run, persisted_call, artifact_store)
+
+
+def _validate_source_revalidation_replay(session, payload, authority, run, call, artifact_store, *, prompt_template):
+    from app.services.fact_normalization_revalidation import revalidated_output
+    try:
+        spec = next(item for item in payload["calls"] if item["call_id"] == call.call_id)
+        output, proof = revalidated_output(session, payload=payload, call=spec, authority=authority,
+            artifacts=artifact_store, prompt_template=prompt_template)
+        if json.loads(artifact_store.read_by_sha("evaluation_manifest", call.source_revalidation_sha256)) != proof:
+            raise ValueError("重新核验证明与原来实际读取不一致")
+        evidence = _build_input(session, authority, run.run_id, spec,
+            max_pages_per_call=payload["max_pages_per_call"], created_at=run.created_at)
+        _validate_saved_output_matches(session, payload, run, call, evidence, output)
+    except Exception as exc:
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail=f"已读记录核验不能复用：{exc}") from exc
+
+
+def _validate_question_classification_replay(session, payload, authority, run, call, artifact_store):
+    from app.agents.evidence_question_repair import QUESTION_REPAIR_POLICY, replay_question_repair
+    from app.agents.evidence_normalizer import evidence_normalizer_reference_aliases
+    from app.services.page_review_visual_sources import VISUAL_SOURCE_POLICY
+
+    try:
+        if artifact_store is None or payload.get("question_classification_repair_policy") != QUESTION_REPAIR_POLICY:
+            raise ValueError("限定疑问恢复的工件或版本缺失")
+        receipt = json.loads(artifact_store.read_by_sha("evaluation_manifest", call.question_classification_sha256))
+        if (receipt.get("call_id") != call.call_id or receipt.get("run_id") != run.run_id
+                or receipt.get("raw_output_sha256") != call.raw_output_sha256):
+            raise ValueError("限定疑问恢复与持久原答身份不一致")
+        evidence_input = _build_input(session, authority, run.run_id, {
+            "call_id": call.call_id, "logical_document_id": call.logical_document_id,
+            "page_numbers": call.page_numbers, "input_sha256": call.input_sha256,
+        }, max_pages_per_call=int(payload.get("max_pages_per_call", 20)), created_at=run.created_at,
+            page_review_coverage_id=payload.get("page_review_coverage_id"),
+            include_visual_sources=payload.get("visual_source_policy") == VISUAL_SOURCE_POLICY)
+        aliases = None
+        if payload.get("verified_evidence_strategy") is not None or payload.get("text_reference_strategy") is not None:
+            aliases = evidence_normalizer_reference_aliases(evidence_input,
+                pending_details_retained=payload.get("verified_evidence_strategy") is not None)
+        partition_receipt = None
+        if call.candidate_partition_sha256 is not None:
+            from app.agents.evidence_candidate_partition import CANDIDATE_PARTITION_POLICY
+            if payload.get("candidate_partition_policy") != CANDIDATE_PARTITION_POLICY:
+                raise ValueError("本次任务未授权分类恢复后的局部保留")
+            partition_receipt = json.loads(artifact_store.read_by_sha("evaluation_manifest", call.candidate_partition_sha256))
+            if (partition_receipt.get("call_id"), partition_receipt.get("run_id")) != (call.call_id, run.run_id):
+                raise ValueError("分类恢复后的局部保留不是同一次原答")
+        output = replay_question_repair(receipt, evidence_input, reference_aliases=aliases,
+            partition_receipt=partition_receipt)
+        _validate_saved_output_matches(session, payload, run, call, evidence_input, output)
+    except Exception as exc:
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                          detail=f"限定疑问恢复结果不能复用：{exc}") from exc
+
+
+def _validate_saved_output_matches(session, payload, run, call, evidence_input, expected_output):
+    facts, events, exposures = _hydrate_candidate_ids(expected_output, call.created_at)
+    expected_candidates = {item.candidate_id: item for item in [*facts, *events, *exposures]}
+    stored_candidates = {item.candidate_id: item for item in
+        FactNormalizationCandidateRepository(session).list_by_run(run.run_id) if item.call_id == call.call_id}
+    if expected_candidates != stored_candidates:
+        raise ValueError("保存的候选与冻结原答重建内容不一致")
+    from app.projections.page_review_pending_normalization import PENDING_NORMALIZATION_POLICY
+    if payload.get("pending_normalization_policy") == PENDING_NORMALIZATION_POLICY:
+        from app.projections.pending_observations_report import pending_retention_items
+        expected_output = expected_output.model_copy(update={"unresolved_items": [
+            *expected_output.unresolved_items, *pending_retention_items(evidence_input)]})
+    if payload.get("text_accounting_policy") is not None:
+        from app.projections.normalizer_text_accounting import unaccounted_source_text
+        expected_output = expected_output.model_copy(update={"unresolved_items": [
+            *expected_output.unresolved_items, *unaccounted_source_text(evidence_input, expected_output)]})
+    expected_questions = {item.unresolved_item_id: item for item in
+        _persisted_unresolved_items(expected_output, created_at=call.created_at)}
+    stored_questions = {item.unresolved_item_id: item for item in
+        FactNormalizationUnresolvedItemRepository(session).list_by_run(run.run_id) if item.call_id == call.call_id}
+    if expected_questions != stored_questions:
+        raise ValueError("保存的疑问与冻结原答重建内容不一致")
+
+
+def _prepare_response_revalidation(payload, evidence_input, model_config, prompt_template, visual_observations):
+    from app.agents.evidence_normalizer import build_evidence_normalizer_prompt, evidence_normalizer_reference_aliases
+    strategy = payload.get("verified_evidence_strategy") is not None
+    compact = strategy or payload.get("text_reference_strategy") is not None
+    aliases = evidence_normalizer_reference_aliases(evidence_input,
+        pending_details_retained=strategy) if compact else None
+    # Inject a non-network client into the SAME provider factory; credentials are not needed.
+    transport = evidence_normalizer_transport_from_model_config(model_config, client=object())
+    prompt = build_evidence_normalizer_prompt(evidence_input, prompt_template=prompt_template,
+        visual_observations=visual_observations or None,
+        include_output_schema=not transport.enforces_output_json_schema,
+        pending_details_retained=strategy, reference_aliases=aliases, verified_scope_prompt=strategy,
+        include_source_categories=transport.include_source_categories)
+    return transport.initial_request_body(prompt=prompt), aliases
+
+
+def _validate_response_recovery_replay(session, payload, authority, run, call, artifact_store,
+                                     *, prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE):
+    try:
+        if artifact_store is None:
+            raise ValueError("保存原答恢复的证明缺失")
+        proof = json.loads(artifact_store.read_by_sha("evaluation_manifest", call.response_recovery_sha256))
+        if proof.get("policy") != RESPONSE_RECOVERY_POLICY or proof.get("raw_output_sha256") != call.raw_output_sha256:
+            raise ValueError("保存原答恢复身份与持久结果不一致")
+        frozen_call = next(item for item in payload["calls"] if item["call_id"] == call.call_id)
+        model_config = _load_frozen_agent_config(session, payload=payload, run_id=run.run_id,
+            authority=authority, prompt_template=prompt_template)
+        evidence_input = _build_input(session, authority, run.run_id, frozen_call,
+            max_pages_per_call=int(payload.get("max_pages_per_call", 20)), created_at=run.created_at,
+            page_review_coverage_id=payload.get("page_review_coverage_id"),
+            include_visual_sources=payload.get("visual_source_policy") is not None)
+        visual = _build_frozen_visual_observations(session, authority=authority, call=frozen_call, payload=payload)
+        expected_request, aliases = _prepare_response_revalidation(payload, evidence_input, model_config,
+            prompt_template, visual)
+        rebuilt = revalidate_saved_response(artifact_store,
+            SavedResponseRecovery(proof["failure_manifest_sha256"], proof["transport_receipt_sha256"]),
+            bindings={"job_id": proof["job_id"], "step_id": proof["step_id"],
+                "run_id": run.run_id, "call_id": call.call_id}, input_sha256=call.input_sha256,
+            evidence_input=evidence_input, expected_request=expected_request,
+            provider=model_config.provider, reference_aliases=aliases,
+            allow_partition=payload.get("candidate_partition_policy") is not None)
+        # Bind the proof back to the actual frozen job, not just its self-reported identifiers.
+        from app.workflow.jobstore import JobStore
+        from app.storage.codecs import verify_payload_sha256
+        job = JobStore(session).get_job(proof["job_id"])
+        if verify_payload_sha256(job.payload_json, job.payload_sha256) != payload:
+            raise ValueError("保存原答恢复不属于当前冻结任务")
+        if _get_call_for_step(payload, proof["step_id"]) != frozen_call or rebuilt.proof != proof:
+            raise ValueError("保存原答恢复范围与重建证明不同")
+        if rebuilt.proof["partitioned"] != (call.candidate_partition_sha256 is not None):
+            raise ValueError("保存原答局部处置证明缺失")
+        _validate_saved_output_matches(session, payload, run, call, evidence_input, rebuilt.output)
+    except Exception as exc:
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                          detail=f"保存原答恢复不能复用：{exc}") from exc
+
+
+def _validate_partition_replay(session, payload, authority, run, call, artifact_store):
+    if call.question_classification_sha256 is not None:
+        return _validate_question_classification_replay(session, payload, authority, run, call, artifact_store)
+    from app.agents.evidence_candidate_partition import (
+        CANDIDATE_PARTITION_POLICY, recover_source_local_candidates,
+    )
+    from app.agents.evidence_normalizer import evidence_normalizer_reference_aliases
+    from app.services.page_review_visual_sources import VISUAL_SOURCE_POLICY
+
+    try:
+        if artifact_store is None or payload.get("candidate_partition_policy") != CANDIDATE_PARTITION_POLICY:
+            raise ValueError("局部保留的工件或执行身份缺失")
+        receipt = json.loads(artifact_store.read_by_sha("evaluation_manifest", call.candidate_partition_sha256))
+        if (receipt.get("call_id") != call.call_id or receipt.get("run_id") != run.run_id
+                or receipt.get("raw_output_sha256") != call.raw_output_sha256):
+            raise ValueError("局部保留证明与持久调用身份不一致")
+        evidence_input = _build_input(session, authority, run.run_id, {
+            "call_id": call.call_id, "logical_document_id": call.logical_document_id,
+            "page_numbers": call.page_numbers, "input_sha256": call.input_sha256,
+        }, max_pages_per_call=int(payload.get("max_pages_per_call", 20)), created_at=run.created_at,
+            page_review_coverage_id=payload.get("page_review_coverage_id"),
+            include_visual_sources=payload.get("visual_source_policy") == VISUAL_SOURCE_POLICY)
+        aliases = None
+        if payload.get("verified_evidence_strategy") is not None or payload.get("text_reference_strategy") is not None:
+            aliases = evidence_normalizer_reference_aliases(evidence_input,
+                pending_details_retained=payload.get("verified_evidence_strategy") is not None)
+        rebuilt = recover_source_local_candidates(receipt["original_response"], evidence_input,
+            reference_aliases=aliases)
+        if any(receipt.get(key) != value for key, value in rebuilt.receipt.items()):
+            raise ValueError("局部保留范围、原答、来源或处置与重建证明不一致")
+        _validate_saved_output_matches(session, payload, run, call, evidence_input, rebuilt.output)
+    except Exception as exc:
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                          detail=f"局部保留结果不能复用：{exc}") from exc
+
+
+def _validate_saved_text_accounting(session, payload, authority, run_id, calls):
+    if payload.get("text_accounting_policy") is None:
+        return []
+    from app.projections.normalizer_text_accounting import (
+        UNACCOUNTED_TEXT_CODE, unaccounted_source_text, validate_text_accounting_items,
+    )
+    candidates = FactNormalizationCandidateRepository(session).list_by_run(run_id)
+    unresolved = FactNormalizationUnresolvedItemRepository(session).list_by_run(run_id)
+    diagnostics = []
+    for call in calls:
+        if call.status == FactCallStatus.FAILED and payload.get("targeted_extraction"):
+            continue  # A failed reading retains its scope, not a claim to have accounted for its text.
+        evidence_input = _build_input(
+            session, authority, run_id, {
+                "call_id": call.call_id, "logical_document_id": call.logical_document_id,
+                "page_numbers": call.page_numbers, "input_sha256": call.input_sha256,
+            }, max_pages_per_call=int(payload.get("max_pages_per_call", 20)),
+            created_at=FactNormalizationRunRepository(session).get(run_id).created_at,
+        )
+        items = [saved.item for saved in unresolved if saved.call_id == call.call_id]
+        output = EvidenceNormalizerOutput(
+            run_id=run_id, call_id=call.call_id,
+            logical_document_id=call.logical_document_id, page_numbers=call.page_numbers,
+            fact_candidates=[item for item in candidates
+                             if isinstance(item, ClinicalFactCandidateV2) and item.call_id == call.call_id],
+            unresolved_items=[item for item in items if item.code != UNACCOUNTED_TEXT_CODE],
+        )
+        try:
+            validate_text_accounting_items(evidence_input, items)
+            expected = unaccounted_source_text(evidence_input, output)
+            actual = [item for item in items if item.code == UNACCOUNTED_TEXT_CODE]
+            if canonical_hash([item.model_dump(mode="json") for item in actual]) != canonical_hash(
+                    [item.model_dump(mode="json") for item in expected]):
+                if payload.get("targeted_extraction"):
+                    diagnostics.append(call)
+                else:
+                    raise ValueError("已保存的来源文字核对范围不完整或与当前方法不一致")
+        except ValueError as exc:
+            raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                              detail=f"已保存来源文字核对未通过复验：{exc}") from exc
+    return diagnostics
+
+
+
+def _rebuild_call_checkpoint_from_persisted(
+    session: Session,
+    *,
+    run_id: str,
+    call: dict[str, Any],
+    allow_failed: bool = False,
+) -> dict[str, Any] | None:
+    """步骤检查点缺失但成功调用结果已持久化时，从持久记录重建检查点。
+
+    中断、修复或历史写入可能让 ``fact_normalization_calls``/候选先于步骤
+    检查点存在。持久化的成功调用是唯一事实：不得为同一调用再次消耗模型，
+    也不得让重放落入 ``CALL_IDENTITY_CONFLICT``。身份不一致、非成功状态或
+    内容不完整的持久调用一律失效关闭，交由人工核对。
+    """
+    call_id = str(call["call_id"])
+    call_row = session.execute(
+        select(FactNormalizationCallRecord).where(
+            FactNormalizationCallRecord.call_id == call_id
+        )
+    ).scalars().first()
+    if call_row is None:
+        return None
+    persisted_call = FactNormalizationCallRepository(session).get(call_id)
+    expected_call = (
+        run_id,
+        str(call["logical_document_id"]),
+        list(call["page_numbers"]),
+        str(call["input_sha256"]),
+    )
+    actual_call = (
+        persisted_call.run_id,
+        persisted_call.logical_document_id,
+        persisted_call.page_numbers,
+        persisted_call.input_sha256,
+    )
+    if actual_call != expected_call:
+        raise StepFailure(
+            retryable=False,
+            error_code="CALL_IDENTITY_CONFLICT",
+            detail="已持久化的规范化调用与任务步骤身份不一致，拒绝复用或重放。",
+        )
+    if persisted_call.status != FactCallStatus.SUCCEEDED and not (
+        allow_failed and persisted_call.status == FactCallStatus.FAILED
+    ):
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="已持久化的规范化调用不是成功状态，不能作为步骤结果复用。",
+        )
+    candidate_ids = sorted(
+        session.execute(
+            select(FactNormalizationCandidateRecord.candidate_id).where(
+                FactNormalizationCandidateRecord.call_id == call_id
+            )
+        ).scalars().all()
+    )
+    unresolved_rows = session.execute(
+        select(FactNormalizationUnresolvedItemRecord)
+        .where(FactNormalizationUnresolvedItemRecord.call_id == call_id)
+        .order_by(FactNormalizationUnresolvedItemRecord.position)
+    ).scalars().all()
+    if not candidate_ids and not unresolved_rows:
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="已持久化的成功调用缺少候选与未解决项记录，无法重建可验证检查点。",
+        )
+    unresolved_repository = FactNormalizationUnresolvedItemRepository(session)
+    unresolved_items = [
+        unresolved_repository.get(row.unresolved_item_id).item.model_dump(mode="json")
+        for row in unresolved_rows
+    ]
+    canonical = json.dumps(
+        unresolved_items, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    checkpoint = {
+        "call_id": call_id,
+        "logical_document_id": str(call["logical_document_id"]),
+        "page_numbers": list(call["page_numbers"]),
+        "candidate_ids": candidate_ids,
+        "unresolved_items": unresolved_items,
+        "unresolved_item_ids": [row.unresolved_item_id for row in unresolved_rows],
+        "unresolved_items_sha256": _sha256(canonical),
+        "input_sha256": str(call["input_sha256"]),
+        "raw_output_sha256": persisted_call.raw_output_sha256,
+        "completed_at": persisted_call.created_at.isoformat(),
+    }
+    if persisted_call.reading_method is not None:
+        checkpoint["reading_method"] = persisted_call.reading_method
+    if persisted_call.source_revalidation_sha256 is not None:
+        checkpoint["source_revalidation_sha256"] = persisted_call.source_revalidation_sha256
+        checkpoint["model_called"] = False
+    if persisted_call.candidate_partition_sha256 is not None:
+        checkpoint["candidate_partition_sha256"] = persisted_call.candidate_partition_sha256
+    if persisted_call.response_recovery_sha256 is not None:
+        checkpoint["response_recovery_sha256"] = persisted_call.response_recovery_sha256
+        checkpoint["model_called"] = False
+    if persisted_call.question_classification_sha256 is not None:
+        checkpoint["question_classification_sha256"] = persisted_call.question_classification_sha256
+    if persisted_call.status == FactCallStatus.FAILED:
+        if candidate_ids or not unresolved_rows:
+            raise StepFailure(retryable=False, error_code="CALL_IDENTITY_CONFLICT",
+                              detail="失败读取的候选或失败范围记录不一致。")
+        checkpoint["call_status"] = "failed"
+    return checkpoint
+
+
+def _verify_finalize_checkpoint_profile(
+    session: Session,
+    *,
+    authority: FactAuthority,
+    checkpoint: dict[str, Any],
+) -> None:
+    """重放汇总检查点时，核对已持久化个例档案身份与内容，不得返回未证实检查点。"""
+    profile_id = checkpoint.get("patient_profile_revision_id")
+    published_counts = (
+        int(checkpoint.get("published_fact_count") or 0)
+        + int(checkpoint.get("published_event_count") or 0)
+        + int(checkpoint.get("published_exposure_count") or 0)
+        + int(checkpoint.get("fact_rule_link_count") or 0)
+        + int(checkpoint.get("evidence_expectation_count") or 0)
+    )
+    if profile_id is None:
+        if published_counts > 0 or "patient_profile_revision" in checkpoint:
+            raise StepFailure(
+                retryable=False,
+                error_code=PARTIAL_OUTPUT_CODE,
+                detail="汇总检查点声称已发布派生结果，但缺少可验证的个例档案身份。",
+            )
+        return
+    profile = PatientProfileService().get(session, str(profile_id))
+    if profile.authority != authority:
+        raise StepFailure(
+            retryable=False,
+            error_code=STALE_AUTHORITY_CODE,
+            detail="汇总检查点中的个例档案权威范围与当前证据权威不一致。",
+        )
+    if profile.status != ProfileStatus.SUCCEEDED:
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="汇总检查点引用的个例档案不是成功状态。",
+        )
+    expected_revision = checkpoint.get("patient_profile_revision")
+    if expected_revision is not None and profile.revision != expected_revision:
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="汇总检查点中的个例档案版本与持久记录不一致。",
+        )
+    expected_pending = checkpoint.get("patient_profile_pending_review_count")
+    if (
+        expected_pending is not None
+        and profile.pending_review_count != expected_pending
+    ):
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="汇总检查点中的个例档案待核对数与持久记录不一致。",
+        )
+    expected_status = checkpoint.get("patient_profile_status")
+    if expected_status is not None and profile.status.value != expected_status:
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="汇总检查点中的个例档案状态与持久记录不一致。",
+        )
+
+
+def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) -> StepExecutor:
+    model_runner = EvidenceNormalizerRunner(
+        max_transport_retries=config.max_transport_retries,
+        max_schema_repairs=config.max_schema_repairs,
+    )
+
+    def execute_call(context: StepContext):
+        payload = dict(context.job_payload or {})
+        strategy = payload.get("verified_evidence_strategy")
+        text_strategy = payload.get("text_reference_strategy")
+        from app.projections.normalizer_text_accounting import (
+            TEXT_ACCOUNTING_POLICY, unaccounted_source_text, validate_text_accounting_items,
+        )
+        accounting_policy = payload.get("text_accounting_policy")
+        from app.agents.evidence_candidate_partition import CANDIDATE_PARTITION_POLICY
+        partition_policy = payload.get("candidate_partition_policy")
+        if partition_policy not in (None, CANDIDATE_PARTITION_POLICY):
+            raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                              detail="本次局部保留方式无法识别，不能借用旧结果。")
+        if partition_policy is not None and config.artifact_store is None:
+            raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                              detail="局部保留须保存原答与处置证明，当前工件存储未配置。")
+        from app.agents.evidence_question_repair import QUESTION_REPAIR_POLICY
+        question_policy = payload.get("question_classification_repair_policy")
+        if question_policy not in (None, QUESTION_REPAIR_POLICY) or (question_policy is not None and config.artifact_store is None):
+            raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                              detail="限定疑问恢复的方式或原答存储无法核实。")
+        if accounting_policy not in (None, TEXT_ACCOUNTING_POLICY):
+            raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                              detail="本次来源文字核对方式不受支持，不能借用旧结果。")
+        if accounting_policy is not None and payload.get("page_review_coverage_id") is not None:
+            raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                              detail="文字核对不能替代原件观察核对。")
+        call = _get_call_for_step(payload, context.step_id)
+        run_id = str(payload.get("run_id") or "")
+        if not run_id:
+            raise StepFailure(retryable=False, error_code="MISSING_RUN", detail="任务缺少规范化运行编号。")
+        authority = _load_authority(payload)
+        if context.last_checkpoint is not None:
+            if (
+                context.last_checkpoint.get("call_id") != call.get("call_id")
+                or context.last_checkpoint.get("input_sha256")
+                != call.get("input_sha256")
+            ):
+                raise StepFailure(
+                    retryable=False,
+                    error_code=PARTIAL_OUTPUT_CODE,
+                    detail="任务检查点与当前规范化调用不一致。",
+                )
+            with config.session_factory() as session:
+                _load_frozen_agent_config(
+                    session,
+                    payload=payload,
+                    run_id=run_id,
+                    authority=authority,
+                    prompt_template=config.prompt_template,
+                )
+                _validate_call_checkpoint_replay(
+                    session,
+                    authority=authority,
+                    run_id=run_id,
+                    call=call,
+                    checkpoint=context.last_checkpoint,
+                    payload=payload,
+                    artifact_store=config.artifact_store,
+                    prompt_template=config.prompt_template,
+                )
+            return dict(context.last_checkpoint)
+        recovered_checkpoint = None
+        with config.session_factory() as session:
+            recovered_checkpoint = _rebuild_call_checkpoint_from_persisted(
+                session, run_id=run_id, call=call,
+                allow_failed=bool(payload.get("targeted_extraction")),
+            )
+            if recovered_checkpoint is not None:
+                _load_frozen_agent_config(
+                    session,
+                    payload=payload,
+                    run_id=run_id,
+                    authority=authority,
+                    prompt_template=config.prompt_template,
+                )
+                _validate_call_checkpoint_replay(
+                    session,
+                    authority=authority,
+                    run_id=run_id,
+                    call=call,
+                    checkpoint=recovered_checkpoint,
+                    payload=payload,
+                    artifact_store=config.artifact_store,
+                    prompt_template=config.prompt_template,
+                )
+        if recovered_checkpoint is not None:
+            return dict(recovered_checkpoint)
+        with config.session_factory() as session:
+            _validate_authority(session, authority)
+            model_config = _load_frozen_agent_config(
+                session,
+                payload=payload,
+                run_id=run_id,
+                authority=authority,
+                prompt_template=config.prompt_template,
+            )
+            run_created_at = FactNormalizationRunRepository(session).get(run_id).created_at
+            from app.services.page_review_visual_sources import VISUAL_SOURCE_POLICY
+            if payload.get("visual_source_policy") not in (None, VISUAL_SOURCE_POLICY):
+                raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                                  detail="视觉来源处理版本不受支持")
+            evidence_input = _build_input(
+                session,
+                authority,
+                run_id,
+                call,
+                max_pages_per_call=int(payload.get("max_pages_per_call", 20)),
+                created_at=run_created_at,
+                page_review_coverage_id=payload.get("page_review_coverage_id"),
+                include_visual_sources=payload.get("visual_source_policy") == VISUAL_SOURCE_POLICY,
+            )
+            visual_observations = _build_frozen_visual_observations(
+                session,
+                authority=authority,
+                call=call,
+                payload=payload,
+            )
+
+        receipt_hashes = []
+        partition_sha = None
+        question_sha = None
+        recovery_sha = None
+        revalidation_sha = None
+        reference_aliases = None
+        if strategy is not None or text_strategy is not None:
+            from app.agents.evidence_normalizer import evidence_normalizer_reference_aliases
+            reference_aliases = evidence_normalizer_reference_aliases(
+                evidence_input, pending_details_retained=strategy is not None,
+            )
+
+        def record_request(body):
+            envelope = {"request_receipt_version": "normalizer-request/v1",
+                        "job_id": context.job_id, "step_id": context.step_id,
+                        "call_id": call["call_id"], "run_id": run_id,
+                        "provider": model_config.provider, "request_body": body}
+            return config.artifact_store.put("raw_request", json.dumps(
+                envelope, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"), allow_nan=False).encode("utf-8")).sha256
+
+        def record_completion(receipt):
+            if config.artifact_store is None:
+                return
+            envelope = {"job_id": context.job_id, "step_id": context.step_id,
+                        "call_id": call["call_id"], "run_id": run_id, **receipt}
+            if reference_aliases is not None:
+                envelope["reference_aliases"] = reference_aliases.aliases
+            if text_strategy is not None:
+                envelope["text_reference_strategy"] = text_strategy
+            artifact = config.artifact_store.put("raw_response", json.dumps(
+                envelope, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+            receipt_hashes.append(artifact.sha256)
+            logging.getLogger(__name__).info("Normalizer receipt job=%s call=%s sha256=%s",
+                context.job_id, call["call_id"], artifact.sha256)
+
+        from app.projections.page_review_pending_normalization import (
+            LEGACY_PENDING_NORMALIZATION_POLICY, PENDING_NORMALIZATION_POLICY, pending_only_output,
+        )
+        policy = payload.get("pending_normalization_policy")
+        if policy not in (None, LEGACY_PENDING_NORMALIZATION_POLICY, PENDING_NORMALIZATION_POLICY):
+            raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                              detail="本次资料整理方式无法识别，请保留作业并检查版本。")
+        pending_output = pending_only_output(evidence_input) if policy is not None else None
+        if payload.get("source_revalidation") is not None:
+            from app.services.fact_normalization_revalidation import revalidated_output
+            try:
+                with config.session_factory() as session:
+                    output, proof = revalidated_output(session, payload=payload, call=call, authority=authority,
+                        artifacts=config.artifact_store, prompt_template=config.prompt_template)
+                reading_method = "saved_source_revalidation"
+                raw_sha = proof["raw_output_sha256"]
+                revalidation_sha = config.artifact_store.put("evaluation_manifest", json.dumps(
+                    proof, ensure_ascii=False, sort_keys=True).encode()).sha256
+            except Exception as exc:
+                raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                                  detail=f"已读记录不能重新核验：{exc}") from exc
+        elif pending_output is not None:
+            reading_method = "retained_pending"
+            output = validate_evidence_normalizer_output(pending_output, evidence_input)
+            raw_sha = _sha256(json.dumps(output.model_dump(mode="json"), ensure_ascii=False, sort_keys=True))
+        elif config.saved_response_recovery and call["call_id"] in config.saved_response_recovery:
+            if context.attempt <= 1 or config.artifact_store is None or config.transport_fn is not None:
+                raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                                  detail="保存原答恢复只可用于已有失败且有实际请求依据的步骤")
+            try:
+                expected_request, aliases = _prepare_response_revalidation(payload, evidence_input,
+                    model_config, config.prompt_template, visual_observations)
+                recovered = revalidate_saved_response(config.artifact_store,
+                    config.saved_response_recovery[call["call_id"]],
+                    bindings={"job_id": context.job_id, "step_id": context.step_id,
+                        "call_id": call["call_id"], "run_id": run_id}, input_sha256=call["input_sha256"],
+                    evidence_input=evidence_input, expected_request=expected_request,
+                    provider=model_config.provider, reference_aliases=aliases,
+                    allow_partition=partition_policy is not None)
+                recovery_sha = config.artifact_store.put("evaluation_manifest", json.dumps(
+                    recovered.proof, ensure_ascii=False, sort_keys=True).encode()).sha256
+                output, reading_method = recovered.output, "model_response"
+                raw_sha = recovered.proof["raw_output_sha256"]
+                receipt_hashes.append(recovered.proof["transport_receipt_sha256"])
+                if recovered.partition is not None:
+                    partition_sha = config.artifact_store.put("evaluation_manifest", json.dumps({
+                        "job_id": context.job_id, "step_id": context.step_id, "run_id": run_id,
+                        "call_id": call["call_id"], **recovered.partition},
+                        ensure_ascii=False, sort_keys=True).encode()).sha256
+            except Exception as exc:
+                raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                                  detail=f"保存原答未通过当前复核：{exc}") from exc
+        elif config.transport_fn is not None:
+            reading_method = "adapter_response"
+            try:
+                raw_output = config.transport_fn(evidence_input)
+                if not (
+                    raw_output.fact_candidates
+                    or raw_output.event_candidates
+                    or raw_output.exposure_candidates
+                    or raw_output.unresolved_items
+                ):
+                    raise StepFailure(
+                        retryable=False,
+                        error_code=EMPTY_OUTPUT_CODE,
+                        detail="模型未返回候选，也未逐页说明无可提取内容。",
+                    )
+                output = validate_evidence_normalizer_output(raw_output, evidence_input)
+                raw_sha = _sha256(json.dumps(raw_output.model_dump(mode="json"), ensure_ascii=False, sort_keys=True))
+            except StepFailure:
+                raise
+            except (ValueError, TypeError) as exc:
+                raise StepFailure(retryable=False,
+                                  error_code="NORMALIZER_OUTPUT_INVALID" if payload.get("targeted_extraction") else PARTIAL_OUTPUT_CODE,
+                                  detail=f"模型输出未通过完整性校验：{exc}") from exc
+            except Exception as exc:
+                raise StepFailure(retryable=True, error_code="TRANSPORT_FAILED", detail=f"模型调用失败：{exc}") from exc
+        else:
+            reading_method = "model_response"
+            transport = config.transport
+            if transport is None:
+                transport_factory = (
+                    config.transport_factory
+                    or evidence_normalizer_transport_from_model_config
+                )
+                try:
+                    transport = (transport_factory(model_config)
+                                 if config.transport_factory is not None
+                                 else transport_factory(model_config, receipt_callback=record_completion,
+                                     request_callback=record_request if config.artifact_store is not None else None))
+                except Exception as exc:
+                    raise StepFailure(
+                        retryable=True,
+                        error_code="TRANSPORT_FAILED",
+                        detail=f"无法按冻结配置启动证据规范化模型：{exc}",
+                    ) from exc
+            result = model_runner.run(
+                evidence_input,
+                transport,
+                prompt_template=config.prompt_template,
+                visual_observations=visual_observations or None,
+                require_current_draft=True,
+                allow_candidate_partition=partition_policy is not None,
+                allow_question_classification_repair=question_policy is not None,
+                **({"pending_details_retained": True, "compact_references": True,
+                    "verified_scope_prompt": True} if strategy is not None else {}),
+                **({"compact_references": True} if text_strategy is not None else {}),
+            )
+            if result.final_output is None:
+                if config.artifact_store is not None:
+                    failure = {"job_id": context.job_id, "step_id": context.step_id,
+                        "run_id": run_id, "call_id": call["call_id"],
+                        "input_sha256": call["input_sha256"], "transport_receipt_sha256": receipt_hashes,
+                        "attempts": [item.model_dump(mode="json") for item in result.attempts],
+                        "candidate_partition_failure": result.candidate_partition_failure}
+                    saved = config.artifact_store.put("evaluation_manifest", json.dumps(
+                        failure, ensure_ascii=False, sort_keys=True).encode())
+                    logging.getLogger(__name__).info("Normalizer failure job=%s call=%s sha256=%s",
+                        context.job_id, call["call_id"], saved.sha256)
+                last_attempt = result.attempts[-1] if result.attempts else None
+                issues = last_attempt.issues if last_attempt is not None else ["未返回结果"]
+                if len(result.attempts) > 1 and result.attempts[0].issues != issues:
+                    issues = ["最初未通过核对：" + "；".join(result.attempts[0].issues),
+                              "随后仍未解决：" + "；".join(issues)]
+                if result.candidate_partition_failure is not None:
+                    issues = [*issues, "独立内容也未能保留：" + result.candidate_partition_failure["detail"]]
+                error_code = (
+                    last_attempt.error_code
+                    if last_attempt is not None and last_attempt.error_code is not None
+                    else PARTIAL_OUTPUT_CODE
+                )
+                raise StepFailure(
+                    retryable=error_code == "TRANSPORT_FAILED",
+                    error_code=("NORMALIZER_OUTPUT_INVALID" if payload.get("targeted_extraction")
+                                and error_code != "TRANSPORT_FAILED" else error_code),
+                    detail="；".join(issues),
+                )
+            output = result.final_output
+            raw_sha = result.attempts[-1].raw_output_sha256
+            if result.candidate_partition_receipt is not None:
+                receipt = {"job_id": context.job_id, "step_id": context.step_id,
+                           "call_id": call["call_id"], "run_id": run_id,
+                           **result.candidate_partition_receipt}
+                partition_sha = config.artifact_store.put("evaluation_manifest", json.dumps(
+                    receipt, ensure_ascii=False, sort_keys=True).encode()).sha256
+            if result.question_classification_receipt is not None:
+                receipt = {"job_id": context.job_id, "step_id": context.step_id,
+                    "call_id": call["call_id"], "run_id": run_id, **result.question_classification_receipt}
+                raw_sha = receipt["raw_output_sha256"]  # Initial model response, never the host composition.
+                question_sha = config.artifact_store.put("evaluation_manifest", json.dumps(
+                    receipt, ensure_ascii=False, sort_keys=True).encode()).sha256
+
+        if policy == PENDING_NORMALIZATION_POLICY:
+            from app.projections.pending_observations_report import pending_retention_items
+            retained = pending_retention_items(evidence_input)
+            if retained:
+                output = output.model_copy(update={
+                    "unresolved_items": [*output.unresolved_items, *retained],
+                })
+                output = validate_evidence_normalizer_output(output, evidence_input)
+
+        candidate_count = len(output.fact_candidates) + len(output.event_candidates) + len(output.exposure_candidates)
+        if candidate_count == 0 and not output.unresolved_items:
+            raise StepFailure(retryable=False, error_code=EMPTY_OUTPUT_CODE, detail="模型未返回候选，也未逐页说明无可提取内容。")
+        if accounting_policy is not None:
+            try:
+                # Source normalization may narrow a candidate. Compute the text
+                # ledger from that final representation, never before another pass.
+                output = validate_evidence_normalizer_output(output, evidence_input)
+                remainders = unaccounted_source_text(evidence_input, output)
+                output = output.model_copy(update={
+                    "unresolved_items": [*output.unresolved_items, *remainders],
+                })
+                validate_text_accounting_items(evidence_input, output.unresolved_items)
+            except ValueError as exc:
+                raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                                  detail=f"来源文字核对未通过：{exc}") from exc
+        completed_at = run_created_at
+        facts, events, exposures = _hydrate_candidate_ids(output, completed_at)
+        candidates = [*facts, *events, *exposures]
+        unresolved_items, unresolved_sha256 = _unresolved_payload(output)
+        persisted_unresolved = _persisted_unresolved_items(
+            output, created_at=completed_at
+        )
+        checkpoint = {
+            "call_id": call["call_id"],
+            "logical_document_id": call["logical_document_id"],
+            "page_numbers": list(call["page_numbers"]),
+            "candidate_ids": sorted(candidate.candidate_id for candidate in candidates),
+            "unresolved_items": unresolved_items,
+            "unresolved_item_ids": [
+                item.unresolved_item_id for item in persisted_unresolved
+            ],
+            "unresolved_items_sha256": unresolved_sha256,
+            "input_sha256": call["input_sha256"],
+            "raw_output_sha256": raw_sha,
+            "reading_method": reading_method,
+            "completed_at": completed_at.isoformat(),
+        }
+        if receipt_hashes:
+            checkpoint["transport_receipt_sha256"] = receipt_hashes
+        if partition_sha is not None:
+            checkpoint["candidate_partition_sha256"] = partition_sha
+        if question_sha is not None:
+            checkpoint["question_classification_sha256"] = question_sha
+        if recovery_sha is not None:
+            checkpoint["response_recovery_sha256"] = recovery_sha
+            checkpoint["model_called"] = False
+        if revalidation_sha is not None:
+            checkpoint["source_revalidation_sha256"] = revalidation_sha
+            checkpoint["model_called"] = False
+        if pending_output is not None:
+            checkpoint["normalization_method"] = policy
+            checkpoint["model_called"] = False
+
+        def apply(session: Session) -> None:
+            _validate_authority(session, authority)
+            call_contract = FactNormalizationCall(
+                call_id=str(call["call_id"]), run_id=run_id,
+                logical_document_id=str(call["logical_document_id"]),
+                page_numbers=list(call["page_numbers"]), status=FactCallStatus.SUCCEEDED,
+                input_sha256=str(call["input_sha256"]), raw_output_sha256=raw_sha,
+                reading_method=reading_method,
+                candidate_partition_sha256=partition_sha,
+                question_classification_sha256=question_sha,
+                response_recovery_sha256=recovery_sha,
+                source_revalidation_sha256=revalidation_sha,
+                created_at=completed_at,
+            )
+            call_repository = FactNormalizationCallRepository(session)
+            call_row = session.get(FactNormalizationCallRecord, call_contract.call_id)
+            if call_row is None:
+                call_repository.create(call_contract)
+            elif call_repository.get(call_contract.call_id) != call_contract:
+                raise StepFailure(retryable=False, error_code="CALL_IDENTITY_CONFLICT", detail="同一调用编号对应不同规范化结果。")
+            candidate_repository = FactNormalizationCandidateRepository(session)
+            for candidate in candidates:
+                row = session.get(FactNormalizationCandidateRecord, candidate.candidate_id)
+                if row is None:
+                    candidate_repository.create(call_contract.call_id, candidate)
+                elif candidate_repository.get(candidate.candidate_id) != candidate:
+                    raise StepFailure(retryable=False, error_code="CANDIDATE_IDENTITY_CONFLICT", detail="同一候选编号对应不同临床内容。")
+            unresolved_repository = FactNormalizationUnresolvedItemRepository(session)
+            for unresolved in persisted_unresolved:
+                row = session.get(
+                    FactNormalizationUnresolvedItemRecord,
+                    unresolved.unresolved_item_id,
+                )
+                if row is None:
+                    unresolved_repository.create(unresolved)
+                elif unresolved_repository.get(unresolved.unresolved_item_id) != unresolved:
+                    raise StepFailure(
+                        retryable=False,
+                        error_code="UNRESOLVED_IDENTITY_CONFLICT",
+                        detail="同一未解决项编号对应不同逐页内容。",
+                    )
+
+        return PreparedStepResult(checkpoint=checkpoint, apply=apply)
+
+    def execute_finalize(context: StepContext):
+        payload = dict(context.job_payload or {})
+        run_id = str(payload.get("run_id") or "")
+        authority = _load_authority(payload)
+        if context.last_checkpoint is not None:
+            with config.session_factory() as session:
+                _validate_authority(session, authority)
+                _load_frozen_agent_config(
+                    session,
+                    payload=payload,
+                    run_id=run_id,
+                    authority=authority,
+                    prompt_template=config.prompt_template,
+                )
+                run = FactNormalizationRunRepository(session).get(run_id)
+                if (
+                    run.authority != authority
+                    or run.status.value != context.last_checkpoint.get("status")
+                ):
+                    raise StepFailure(
+                        retryable=False,
+                        error_code=PARTIAL_OUTPUT_CODE,
+                        detail="汇总检查点与已持久化运行状态不一致。",
+                    )
+                for saved_call in FactNormalizationCallRepository(session).list_by_run(run_id):
+                    if saved_call.source_revalidation_sha256 is not None:
+                        _validate_source_revalidation_replay(session, payload, authority, run, saved_call,
+                            config.artifact_store, prompt_template=config.prompt_template)
+                    if saved_call.response_recovery_sha256 is not None:
+                        _validate_response_recovery_replay(session, payload, authority, run, saved_call,
+                            config.artifact_store, prompt_template=config.prompt_template)
+                    if saved_call.question_classification_sha256 is not None:
+                        _validate_question_classification_replay(session, payload, authority, run,
+                            saved_call, config.artifact_store)
+                    elif saved_call.candidate_partition_sha256 is not None:
+                        _validate_partition_replay(session, payload, authority, run,
+                            saved_call, config.artifact_store)
+                from app.services.fact_normalization_source_adapter import validated_retained_normalization_calls
+                validated_retained_normalization_calls(session, payload,
+                    prompt_template=config.prompt_template, artifact_store=config.artifact_store)
+                _verify_finalize_checkpoint_profile(
+                    session,
+                    authority=authority,
+                    checkpoint=context.last_checkpoint,
+                )
+            return dict(context.last_checkpoint)
+        expected_calls = list(payload.get("calls") or [])
+        finalized_at = _now_utc()
+        checkpoint = {"run_id": run_id, "call_count": len(expected_calls), "status": "running", "finalized_at": finalized_at.isoformat()}
+
+        def apply(session: Session) -> None:
+            _validate_authority(session, authority)
+            _load_frozen_agent_config(
+                session,
+                payload=payload,
+                run_id=run_id,
+                authority=authority,
+                prompt_template=config.prompt_template,
+            )
+            revision = CompleteEvidenceProcessingRevisionRepository(session).get(authority.complete_processing_revision_id)
+            calls = FactNormalizationCallRepository(session).list_by_run(run_id)
+            if {call.call_id for call in calls} != {str(call["call_id"]) for call in expected_calls}:
+                raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail="规范化调用未全部形成可验证结果。")
+            for saved_call in calls:
+                if saved_call.source_revalidation_sha256 is not None:
+                    _validate_source_revalidation_replay(session, payload, authority,
+                        FactNormalizationRunRepository(session).get(run_id), saved_call,
+                        config.artifact_store, prompt_template=config.prompt_template)
+                if saved_call.response_recovery_sha256 is not None:
+                    _validate_response_recovery_replay(session, payload, authority,
+                        FactNormalizationRunRepository(session).get(run_id), saved_call, config.artifact_store,
+                        prompt_template=config.prompt_template)
+                if saved_call.question_classification_sha256 is not None:
+                    _validate_question_classification_replay(session, payload, authority,
+                        FactNormalizationRunRepository(session).get(run_id), saved_call, config.artifact_store)
+                elif saved_call.candidate_partition_sha256 is not None:
+                    _validate_partition_replay(session, payload, authority,
+                        FactNormalizationRunRepository(session).get(run_id), saved_call, config.artifact_store)
+            from app.services.fact_normalization_source_adapter import validated_retained_normalization_calls
+            retained_calls = validated_retained_normalization_calls(session, payload,
+                prompt_template=config.prompt_template, artifact_store=config.artifact_store)
+            readable_calls = [call for call in calls if call.status == FactCallStatus.SUCCEEDED]
+            coverage_calls = readable_calls if payload.get("targeted_extraction") else calls
+            outcome, reasons, affected_pages = validate_page_coverage(revision, [*coverage_calls, *retained_calls], session=session)
+            if outcome.value != "accepted" and not payload.get("targeted_extraction"):
+                raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail="；".join(reasons))
+            checkpoint["unread_page_refs"] = affected_pages
+            facts, events, exposures = _load_run_candidates(session, run_id)
+            unresolved_items = FactNormalizationUnresolvedItemRepository(
+                session
+            ).list_by_run(run_id)
+            all_candidates = [*facts, *events, *exposures]
+            _validate_persisted_page_closure(
+                session,
+                calls=calls,
+                candidates=all_candidates,
+                unresolved_items=unresolved_items,
+            )
+            accounting_issues = _validate_saved_text_accounting(session, payload, authority, run_id, calls)
+            checkpoint["accounting_issue_call_ids"] = [call.call_id for call in accounting_issues]
+            final_status = FactNormalizationRunStatus.SUCCEEDED
+            if payload.get("source_revalidation") and FactNormalizationRunRepository(session).get(
+                    payload["source_revalidation"]["source_run_id"]).status == FactNormalizationRunStatus.PARTIAL:
+                final_status = FactNormalizationRunStatus.PARTIAL
+            if any(FactNormalizationRunRepository(session).get(call.run_id).status == FactNormalizationRunStatus.PARTIAL
+                    for call in retained_calls):
+                final_status = FactNormalizationRunStatus.PARTIAL
+            has_partitioned_calls = any(call.candidate_partition_sha256 is not None for call in calls)
+            if facts or events or exposures:
+                run_result = orchestrate_run_gates(
+                    authority=authority, run_id=run_id, calls=coverage_calls,
+                    fact_candidates=facts, event_candidates=events,
+                    exposure_candidates=exposures, revision=revision, session=session,
+                )
+                gate_repository = FactGateResultRepository(session)
+                gate_results = run_gate_results_to_fact_gate_results(run_result, created_at=finalized_at, id_prefix="fact-gate")
+                transactional_results = _transactional_gate_results(
+                    run_result,
+                    all_candidates,
+                    finalized_at,
+                    profile_lane_conflicts=_profile_lane_conflict_reasons(
+                        session, authority, facts, events
+                    ),
+                )
+                gate_repository.create_many([*gate_results, *transactional_results])
+                try:
+                    publication = FactPublicationService().publish(session, run_id)
+                except FactPublicationError as exc:
+                    raise StepFailure(
+                        retryable=False,
+                        error_code=PARTIAL_OUTPUT_CODE,
+                        detail=f"事实发布未能完整提交：{exc}",
+                    ) from exc
+                try:
+                    FactAuthorityValidator(session).validate(publication.authority)
+                    rule_links = []
+                    if publication.fact_ids:
+                        rule_links = FactRuleLinkV2Repository(
+                            session
+                        ).rebuild_for_authority(
+                            publication.authority, run_id=publication.run_id
+                        )
+                    gap_signals = _expectation_gap_signals(
+                        session,
+                        publication.authority,
+                        unresolved_items,
+                        fact_candidates=facts,
+                        gate_results=transactional_results,
+                    )
+                    # A new batch is not proof that an earlier concrete issue was resolved.
+                    gap_signals.extend(_prior_unreconfirmed_signals(
+                        session,
+                        authority=publication.authority,
+                        concrete_signals=gap_signals,
+                    ))
+                    expectations = EvidenceExpectationProjectionService().project(
+                        session,
+                        authority=publication.authority,
+                        gap_signals=gap_signals,
+                        created_at=finalized_at,
+                        run_id=publication.run_id,
+                        include_rule_revision_sources=bool(payload.get("targeted_extraction")),
+                    )
+                    FactAuthorityValidator(session).validate(publication.authority)
+                    profile = PatientProfileService().generate(
+                        session,
+                        authority=publication.authority,
+                        created_at=finalized_at,
+                        generated_at=finalized_at,
+                        run_id=publication.run_id,
+                        include_rule_revision_sources=bool(payload.get("targeted_extraction")),
+                    )
+                    if profile.status != ProfileStatus.SUCCEEDED:
+                        raise StepFailure(
+                            retryable=False,
+                            error_code=PARTIAL_OUTPUT_CODE,
+                            detail="个例档案未能生成成功状态的不可变版本。",
+                        )
+                    checkpoint["patient_profile_revision_id"] = (
+                        profile.patient_profile_revision_id
+                    )
+                    checkpoint["patient_profile_revision"] = profile.revision
+                    checkpoint["patient_profile_pending_review_count"] = (
+                        profile.pending_review_count
+                    )
+                    checkpoint["patient_profile_status"] = profile.status.value
+                except ProjectionInputError as exc:
+                    raise StepFailure(
+                        retryable=False,
+                        error_code=_EXPECTATION_INPUT_INCOMPLETE_CODE,
+                        detail=f"资料期望缺少可验证的结构化缺口输入：{exc}",
+                    ) from exc
+                except (
+                    EvidenceExpectationProjectionError,
+                    FactRuleIndexError,
+                    FactAuthorityError,
+                    PatientProfileProjectionError,
+                    InvalidReferenceError,
+                ) as exc:
+                    raise StepFailure(
+                        retryable=False,
+                        error_code=PARTIAL_OUTPUT_CODE,
+                        detail=f"规则索引、资料期望或个例档案未能完整生成：{exc}",
+                    ) from exc
+                checkpoint["gate_result_count"] = len(gate_results) + len(
+                    transactional_results
+                )
+                checkpoint["conflict_group_count"] = len(run_result.conflict_groups)
+                checkpoint["published_fact_count"] = len(publication.fact_ids)
+                checkpoint["published_event_count"] = len(publication.event_ids)
+                checkpoint["published_exposure_count"] = len(publication.exposure_ids)
+                checkpoint["fact_rule_link_count"] = len(rule_links)
+                checkpoint["evidence_expectation_count"] = len(expectations)
+                checkpoint["rejected_candidate_count"] = len(
+                    {
+                        result.candidate_id
+                        for result in transactional_results
+                        if result.outcome != GateOutcome.ACCEPTED
+                    }
+                )
+                if any(
+                    result.outcome != GateOutcome.ACCEPTED
+                    for result in transactional_results
+                ):
+                    final_status = FactNormalizationRunStatus.PARTIAL
+            else:
+                checkpoint.update(gate_result_count=0, conflict_group_count=0, rejected_candidate_count=0)
+                final_status = FactNormalizationRunStatus.PARTIAL
+                if retained_calls:
+                    EvidenceExpectationProjectionService().project(session, authority=authority,
+                        gap_signals=[], created_at=finalized_at, include_rule_revision_sources=True)
+                    profile = PatientProfileService().generate(session, authority=authority,
+                        created_at=finalized_at, generated_at=finalized_at, include_rule_revision_sources=True)
+                    checkpoint.update(patient_profile_revision_id=profile.patient_profile_revision_id,
+                        patient_profile_revision=profile.revision, patient_profile_pending_review_count=profile.pending_review_count,
+                        patient_profile_status=profile.status.value, published_fact_count=0,
+                        published_event_count=0, published_exposure_count=0)
+                    if not calls and not affected_pages and all(FactNormalizationRunRepository(session).get(call.run_id).status
+                            == FactNormalizationRunStatus.SUCCEEDED for call in retained_calls):
+                        final_status = FactNormalizationRunStatus.SUCCEEDED
+            checkpoint["unresolved_item_count"] = len(unresolved_items)
+            if has_partitioned_calls or any(call.question_classification_sha256 is not None for call in calls):
+                final_status = FactNormalizationRunStatus.PARTIAL
+            if payload.get("text_accounting_policy") is not None and unresolved_items:
+                final_status = FactNormalizationRunStatus.PARTIAL
+            if affected_pages:
+                final_status = FactNormalizationRunStatus.PARTIAL
+            if accounting_issues:
+                final_status = FactNormalizationRunStatus.PARTIAL
+            checkpoint["status"] = final_status.value
+            FactNormalizationRunRepository(session).set_status(run_id, final_status)
+            if payload.get("targeted_extraction") and config.artifact_store is not None:
+                from app.services.work_draft_review import enqueue_normalized_work_draft
+                working = enqueue_normalized_work_draft(session, authority=authority, run_id=run_id)
+                checkpoint["work_draft_job_id"] = working["job_id"]
+
+        return PreparedStepResult(checkpoint=checkpoint, apply=apply)
+
+    def execute(context: StepContext):
+        payload = dict(context.job_payload or {})
+        from app.projections.normalizer_text_accounting import TEXT_ACCOUNTING_POLICY
+        if (payload.get("text_accounting_policy") not in (None, TEXT_ACCOUNTING_POLICY)
+                or (payload.get("text_accounting_policy") is not None
+                    and payload.get("page_review_coverage_id") is not None)):
+            raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                              detail="本次来源文字核对方式与冻结范围不一致，请保留已有记录。")
+        if payload.get("text_reference_strategy") is not None:
+            from app.projections.normalizer_reference_aliases import text_reference_strategy
+            if (payload["text_reference_strategy"] != text_reference_strategy()
+                or any(payload.get(key) is not None for key in (
+                    "verified_evidence_strategy", "page_review_coverage_id",
+                    "pending_normalization_policy", "visual_source_policy",
+                ))):
+                raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                                  detail="文字主读的引用配置与冻结版本不一致，请保留已有记录。")
+        if payload.get("verified_evidence_strategy") is not None:
+            from app.agents.verified_evidence_prompt import verified_evidence_strategy
+            from app.projections.page_review_pending_normalization import PENDING_NORMALIZATION_POLICY
+            from app.services.page_review_visual_sources import VISUAL_SOURCE_POLICY
+            if (payload["verified_evidence_strategy"] != verified_evidence_strategy()
+                or payload.get("pending_normalization_policy") != PENDING_NORMALIZATION_POLICY
+                or payload.get("visual_source_policy") != VISUAL_SOURCE_POLICY):
+                raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
+                                  detail="本次整理提示与冻结版本不一致，请保留已有记录。")
+        if context.step_id == FACT_NORMALIZATION_FINALIZE_STEP_ID:
+            return execute_finalize(context)
+        try:
+            return execute_call(context)
+        except StepFailure as exc:
+            if not payload.get("targeted_extraction") or exc.error_code not in {
+                "TRANSPORT_FAILED", "NORMALIZER_OUTPUT_INVALID", EMPTY_OUTPUT_CODE,
+            }:
+                raise
+            if exc.error_code in {"TRANSPORT_FAILED", EMPTY_OUTPUT_CODE} and context.attempt < 2:
+                raise StepFailure(retryable=True, error_code=exc.error_code, detail=exc.detail) from exc
+            authority = _load_authority(payload)
+            call = _get_call_for_step(payload, context.step_id)
+            run_id = str(payload["run_id"])
+            with config.session_factory() as session:
+                _validate_authority(session, authority)
+                created_at = FactNormalizationRunRepository(session).get(run_id).created_at
+            output = EvidenceNormalizerOutput(
+                run_id=run_id, call_id=call["call_id"],
+                logical_document_id=call["logical_document_id"], page_numbers=call["page_numbers"],
+                unresolved_items=[EvidenceNormalizerUnresolvedItem(
+                    code="extraction_failed", message="系统暂未能整理这些页面，其余资料继续处理。",
+                    affected_pages=call["page_numbers"],
+                    reason=f"{exc.error_code}：{exc.detail}",
+                )],
+            )
+            unresolved = _persisted_unresolved_items(output, created_at=created_at)
+            items, items_sha = _unresolved_payload(output)
+            checkpoint = {**call, "call_status": "failed", "candidate_ids": [],
+                          "unresolved_items": items, "unresolved_items_sha256": items_sha,
+                          "unresolved_item_ids": [item.unresolved_item_id for item in unresolved],
+                          "completed_at": created_at.isoformat()}
+
+            def apply(session):
+                _validate_authority(session, authority)
+                _load_frozen_agent_config(session, payload=payload, run_id=run_id,
+                                          authority=authority, prompt_template=config.prompt_template)
+                FactNormalizationCallRepository(session).create(FactNormalizationCall(
+                    call_id=call["call_id"], run_id=run_id,
+                    logical_document_id=call["logical_document_id"],
+                    page_numbers=call["page_numbers"], input_sha256=call["input_sha256"],
+                    status=FactCallStatus.FAILED, created_at=created_at,
+                ))
+                for item in unresolved:
+                    FactNormalizationUnresolvedItemRepository(session).create(item)
+
+            return PreparedStepResult(checkpoint=checkpoint, apply=apply)
+
+    return execute

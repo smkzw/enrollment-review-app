@@ -1,0 +1,364 @@
+"""Slice 5.7 人工事实修订 HTTP 合同。"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+from app.services.fact_correction_job_service import FACT_CORRECTION_JOB_TYPE
+from app.services.patient_profile_service import PatientProfileService
+from app.storage.models import ReviewEpisodeRecord
+from tests.v2.storage.test_fact_correction_repository import (
+    _create_fact_with_candidate,
+    _seed_valid_chain,
+)
+from tests.v2.storage.test_fact_repositories import _update_episode
+
+NOW = datetime(2026, 8, 23, 8, 0, 0, tzinfo=UTC)
+
+
+def test_variable_correction_options_preview_persistence_history_and_consumer(client):
+    """Synthetic source, real API/publication; not a real-patient or M2 acceptance claim."""
+    from app.domain.variables.dictionary import VariableDef
+    from app.storage.repositories import get_rule_set, save_rule_set
+    from app.storage.fact_repositories import ClinicalFactV2Repository
+    from app.storage.active_facts import current_fact_heads
+    from app.workflow.runner import JobRunner
+    from app.domain.contracts.enums import Comparator, ReviewStage
+    from app.domain.contracts.rules import AtomicExpression, AtomicPredicate, EvidenceRequirement, RuleComponent
+    from app.domain.variables.dictionary import load_dictionary
+    from app.services.work_draft_calculation import select_by_variable
+    factory = client.app.state.session_factory
+    with factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "variable-correction")
+        rules = get_rule_set(session, chain["authority"].rule_set_id, 1)
+        save_rule_set(session, rules.model_copy(update={"revision": 2, "variable_definitions": [
+            VariableDef(variable_id="pressure_record", label_zh="血压记录", value_type="category", domain="vital")]}))
+        _update_episode(session, session.get(ReviewEpisodeRecord, chain["review_episode_id"]), revision=2, rule_set_revision=2)
+        chain["authority"] = chain["authority"].model_copy(update={"episode_revision": 2, "rule_set_revision": 2})
+        fact = _create_fact_with_candidate(session, chain, fact_id="variable-target", run_id="variable-source",
+            call_id="variable-call", gate_id="variable-gate", cand_id="variable-candidate", include_source_candidates=True)
+        original = PatientProfileService().generate(session, authority=chain["authority"], created_at=NOW, generated_at=NOW)
+    base = f"/api/v2/subjects/{chain['subject_id']}/review-episodes/{chain['review_episode_id']}/fact-corrections"
+    options = client.get(base + f"/facts/{fact.fact_id}/options")
+    assert options.status_code == 200, options.text
+    assert options.json()["variable_id"] is None
+    assert any(item["variable_id"] == "pressure_record" for item in options.json()["variables"])
+    assert not any(item.get("reference_ratio_of") for item in options.json()["variables"])
+    body = {"target_kind": "fact", "target_id": fact.fact_id, "locator_ids": list(fact.locator_ids),
+            "variable_id": "pressure_record", "reason": "为原血压读数关联正确数据项目"}
+    preview = client.post(base + "/preview", json=body)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["old_snapshot"]["variable_id"] is None
+    assert preview.json()["new_snapshot"]["variable_id"] == "pressure_record"
+    assert preview.json()["variable_labels"] == {"pressure_record": "血压记录"}
+    assert preview.json()["old_snapshot"]["value"] == preview.json()["new_snapshot"]["value"] == "120/80"
+    # This fixture checks publication, not the separately covered automatic child-job graph.
+    client.app.state.fact_correction_job_service.work_draft_enabled = False
+    submit = client.post(base, json=body)
+    assert submit.status_code == 201, submit.text
+    assert JobRunner(factory, client.app.state.job_executors, worker_id="variable-correction").run_job(submit.json()["job_id"])
+    history = client.get(base)
+    assert history.status_code == 200, history.text
+    record = history.json()["items"][0]
+    assert record["new_snapshot"]["variable_id"] == "pressure_record"
+    assert record["variable_labels"] == {"pressure_record": "血压记录"}
+    with factory() as session:
+        updated = ClinicalFactV2Repository(session).get(record["new_entity_id"])
+        assert updated.variable_id == "pressure_record"
+        assert updated.locator_ids == fact.locator_ids and updated.value == fact.value
+        assert ClinicalFactV2Repository(session).get(fact.fact_id) == fact
+        active = current_fact_heads(session, chain["authority"])
+        assert fact.fact_id not in {item.fact_id for item in active}
+        component = RuleComponent(rule_component_id="record-component", parent_rule_id="record-rule",
+            display_code="IN-TEST-a", title="合成记录消费者",
+            expression=AtomicExpression(predicate=AtomicPredicate(predicate_id="record-reading", subject="受试者",
+                attribute="血压记录", comparator=Comparator.EQ, value="120/80")),
+            evidence_requirements=[EvidenceRequirement(requirement_id="record-requirement", rule_component_id="record-component",
+                fact_type="vital_sign", description="合成记录核对", variable_id="pressure_record", predicate_ids=["record-reading"],
+                due_stage=ReviewStage.SCREENING, allows_screening_record_transcription=True,
+                requires_contemporaneous_objective_source=False)])
+        definitions = load_dictionary(rules.model_copy(update={"variable_definitions": [VariableDef(
+            variable_id="pressure_record", label_zh="血压记录", value_type="category", domain="vital")]}).variable_definitions)
+        assert not select_by_variable(component, [fact], {}, authority=chain["authority"],
+                                      definitions=definitions)["record-reading"].fact_ids
+        assert select_by_variable(component, active, {}, authority=chain["authority"],
+                                  definitions=definitions)["record-reading"].fact_ids == (updated.fact_id,)
+        old = PatientProfileService().get(session, original.patient_profile_revision_id)
+        assert old == original
+    assert client.get(base + f"/facts/{fact.fact_id}/options").status_code == 422
+
+
+def test_variable_correction_rejects_unknown_type_units_and_wrong_scope_without_write(client):
+    from sqlalchemy import func, select
+    from app.storage.models import JobRecord
+    from app.storage.fact_repositories import ClinicalFactV2Repository
+    with client.app.state.session_factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "variable-rejection")
+        fact = _create_fact_with_candidate(session, chain, fact_id="variable-reject-target", run_id="variable-reject-run",
+            call_id="variable-reject-call", gate_id="variable-reject-gate", cand_id="variable-reject-candidate")
+        count = session.scalar(select(func.count()).select_from(JobRecord))
+    base = f"/api/v2/subjects/{chain['subject_id']}/review-episodes/{chain['review_episode_id']}/fact-corrections"
+    body = {"target_kind": "fact", "target_id": fact.fact_id, "locator_ids": list(fact.locator_ids), "reason": "合成反例"}
+    for updates in [{"variable_id": "not_published"}, {"variable_id": "age"},
+                    {"variable_id": "age", "value": 50, "unit": "kg"},
+                    {"variable_id": "icf_signed"}, {"variable_id": "alt_uln_ratio", "value": 2, "unit": "×ULN"}]:
+        result = client.post(base + "/preview", json={**body, **updates})
+        assert result.status_code == 422, result.text
+    wrong = f"/api/v2/subjects/not-this-subject/review-episodes/{chain['review_episode_id']}/fact-corrections"
+    assert client.get(wrong + f"/facts/{fact.fact_id}/options").status_code in {404, 422}
+    with client.app.state.session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(JobRecord)) == count
+        assert ClinicalFactV2Repository(session).get(fact.fact_id) == fact
+
+
+def test_v2_app_registers_fact_correction_executor(client):
+    assert FACT_CORRECTION_JOB_TYPE in client.app.state.job_executors
+
+
+def test_unknown_correction_clears_assertion_but_preserves_source_and_history(client):
+    from app.workflow.runner import JobRunner
+
+    factory = client.app.state.session_factory
+    with factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "api-corr-unknown")
+        fact = _create_fact_with_candidate(
+            session, chain, fact_id=f"{chain['run_id']}-fact",
+            run_id=f"{chain['run_id']}-source", call_id=f"{chain['call_id']}-source",
+            gate_id=f"{chain['run_id']}-gate", cand_id=f"{chain['run_id']}-candidate",
+        )
+        original = PatientProfileService().generate(
+            session, authority=chain["authority"], created_at=NOW, generated_at=NOW,
+        )
+        subject, episode = chain["subject_id"], chain["review_episode_id"]
+        target, locator = fact.fact_id, chain["locator_id"]
+    profile_path = f"/api/v2/subjects/{subject}/patient-profile-revisions/"
+    old_response = client.get(profile_path + original.patient_profile_revision_id)
+    assert old_response.status_code == 200
+    old_profile = old_response.json()
+    base = f"/api/v2/subjects/{subject}/review-episodes/{episode}/fact-corrections"
+    body = {
+        "target_kind": "fact", "target_id": target, "locator_ids": [locator],
+        "polarity": "unknown", "value": None, "unit": None,
+        "supported_requirement_ids": [], "reason": "原记录不足以证明该断言",
+        "operator_id": "隔离核对人员",
+    }
+    preview = client.post(base + "/preview", json=body)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["new_snapshot"]["polarity"] == "unknown"
+    assert preview.json()["new_snapshot"]["value"] is None
+    assert preview.json()["new_snapshot"]["unit"] is None
+    submit = client.post(base, json=body)
+    assert submit.status_code == 201, submit.text
+    runner = JobRunner(factory, client.app.state.job_executors, worker_id="unknown-correction")
+    assert runner.run_job(submit.json()["job_id"])
+    history = client.get(base)
+    assert history.status_code == 200, history.text
+    correction = history.json()["items"][0]
+    assert correction["old_snapshot"]["value"] == "120/80"
+    assert correction["new_snapshot"]["value"] is None
+    assert correction["locator_ids"] == [locator]
+    current = client.get(profile_path + correction["patient_profile_revision_id"])
+    assert current.status_code == 200, current.text
+    items = [item for lane in current.json()["lanes"] for item in lane["items"]]
+    updated = next(item for item in items if item["source_id"] == correction["new_entity_id"])
+    assert updated["polarity"] == "unknown" and updated["value"] is None
+    assert updated["locator_ids"] == [locator] and updated["requirement_ids"] == []
+    assert not any(item["source_id"] == target for item in items)
+    assert client.get(profile_path + original.patient_profile_revision_id).json() == old_profile
+
+
+def test_preview_and_submit_and_history_are_chinese_and_idempotent(client):
+    factory = client.app.state.session_factory
+    with factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "api-corr")
+        fact = _create_fact_with_candidate(
+            session,
+            chain,
+            fact_id=f"{chain['run_id']}-fact-api",
+            run_id=f"{chain['run_id']}-api",
+            call_id=f"{chain['call_id']}-api",
+            gate_id=f"{chain['run_id']}-gate-api",
+            cand_id=f"{chain['run_id']}-cand-api",
+        )
+        PatientProfileService().generate(
+            session, authority=chain["authority"], created_at=NOW, generated_at=NOW
+        )
+        subject_id = chain["subject_id"]
+        episode_id = chain["review_episode_id"]
+        fact_id = fact.fact_id
+        locator_id = chain["locator_id"]
+
+    base = (
+        f"/api/v2/subjects/{subject_id}/review-episodes/{episode_id}/fact-corrections"
+    )
+    body = {
+        "target_kind": "fact",
+        "target_id": fact_id,
+        "locator_ids": [locator_id],
+        "value": "130/80",
+        "reason": "核对原文后更正血压值",
+        "operator_id": "监查员甲",
+    }
+    preview = client.post(f"{base}/preview", json=body)
+    assert preview.status_code == 200, preview.text
+    payload = preview.json()
+    assert payload["target_kind_label"] == "事实记录"
+    assert payload["old_snapshot"]["value"] == "120/80"
+    assert payload["new_snapshot"]["value"] == "130/80"
+    assert payload["impact"]["scope_kind_label"]
+    assert "affected_conflict_group_ids" in payload["impact"]
+    raw = preview.text
+    for forbidden in ("inclusion_met", "exclusion_triggered", "verdict", "enrollment"):
+        assert forbidden not in raw
+
+    created = client.post(base, json=body)
+    assert created.status_code == 201, created.text
+    created_body = created.json()
+    assert created_body["created"] is True
+    assert created_body["state_label"]
+    assert "无需操作" in created_body["recovery_action"] or created_body["recovery_action"]
+
+    reused = client.post(base, json=body)
+    assert reused.status_code == 200, reused.text
+    assert reused.json()["job_id"] == created_body["job_id"]
+    assert reused.json()["created"] is False
+
+    from app.workflow.runner import JobRunner
+
+    runner = JobRunner(
+        factory,
+        client.app.state.job_executors,
+        worker_id="api-w1",
+    )
+    assert runner.run_job(created_body["job_id"]) is True
+    history = client.get(base)
+    assert history.status_code == 200, history.text
+    items = history.json()["items"]
+    assert len(items) == 1
+    assert items[0]["reason"] == "核对原文后更正血压值"
+    assert items[0]["target_kind_label"] == "事实记录"
+    assert items[0]["patient_profile_revision_id"]
+    assert items[0]["patient_profile_revision"] == 2
+    assert "affected_conflict_group_ids" in items[0]["impact"]
+    assert "verdict" not in history.text
+    # F6/Q3：历史存档必须是与预览一致的完整语义快照，不能只剩展示片段。
+    for key in (
+        "fact_type",
+        "profile_lane",
+        "polarity",
+        "asserted_object",
+        "value",
+        "unit",
+        "date_range",
+        "source_strength",
+        "supported_requirement_ids",
+    ):
+        assert key in items[0]["old_snapshot"]
+        assert key in items[0]["new_snapshot"]
+        assert items[0]["old_snapshot"][key] == payload["old_snapshot"][key]
+        assert items[0]["new_snapshot"][key] == payload["new_snapshot"][key]
+    assert items[0]["old_snapshot"]["value"] == "120/80"
+    assert items[0]["new_snapshot"]["value"] == "130/80"
+
+    # F1/Q1：patient_profile_revision_id 绑定本次修订生成的档案（含新值），不是修订前档案。
+    generated_profile = client.get(
+        f"/api/v2/subjects/{subject_id}/patient-profile-revisions/"
+        f"{items[0]['patient_profile_revision_id']}"
+    )
+    assert generated_profile.status_code == 200, generated_profile.text
+    generated_body = generated_profile.json()
+    assert generated_body["revision"] == 2
+    fact_items = [
+        item
+        for lane in generated_body["lanes"]
+        for item in lane["items"]
+        if item["kind"] == "fact" and item["source_id"] == items[0]["new_entity_id"]
+    ]
+    assert len(fact_items) == 1
+    assert fact_items[0]["value"] == "130/80"
+    assert set(items[0]["locator_ids"]).issubset(set(fact_items[0]["locator_ids"]))
+    locator_by_id = {
+        loc["locator_id"]: loc for loc in generated_body["evidence_locators"]
+    }
+    for locator_id in items[0]["locator_ids"]:
+        loc = locator_by_id[locator_id]
+        assert loc["page_number"] >= 1
+        assert loc["page_artifact_id"]
+        assert loc["source_document_version_id"]
+
+    missing_reason = dict(body)
+    missing_reason.pop("reason")
+    rejected = client.post(base, json=missing_reason)
+    assert rejected.status_code in {422, 409}
+    assert "error" in rejected.json()
+    assert rejected.json()["error"]["title"]
+    assert "sqlalchemy" not in rejected.text.lower()
+
+    # 完成后再次提交相同请求：复用已完成 Job，不新建。
+    after_done = client.post(base, json=body)
+    assert after_done.status_code == 200, after_done.text
+    assert after_done.json()["job_id"] == created_body["job_id"]
+    assert after_done.json()["created"] is False
+    assert after_done.json()["state"] == "completed"
+
+    frozen_profile_id = items[0]["patient_profile_revision_id"]
+    frozen_profile_revision = items[0]["patient_profile_revision"]
+    with factory() as session, session.begin():
+        episode = session.get(ReviewEpisodeRecord, episode_id)
+        _update_episode(session, episode, revision=2)
+
+    history_after_bump = client.get(base)
+    assert history_after_bump.status_code == 200, history_after_bump.text
+    bumped_items = history_after_bump.json()["items"]
+    assert len(bumped_items) == 1
+    assert bumped_items[0]["patient_profile_revision_id"] == frozen_profile_id
+    assert bumped_items[0]["patient_profile_revision"] == frozen_profile_revision
+
+
+def test_unknown_nested_date_range_keys_are_rejected(client):
+    factory = client.app.state.session_factory
+    with factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "api-strict-date")
+        fact = _create_fact_with_candidate(
+            session,
+            chain,
+            fact_id=f"{chain['run_id']}-fact-strict",
+            run_id=f"{chain['run_id']}-strict",
+            call_id=f"{chain['call_id']}-strict",
+            gate_id=f"{chain['run_id']}-gate-strict",
+            cand_id=f"{chain['run_id']}-cand-strict",
+        )
+        PatientProfileService().generate(
+            session, authority=chain["authority"], created_at=NOW, generated_at=NOW
+        )
+        subject_id = chain["subject_id"]
+        episode_id = chain["review_episode_id"]
+        fact_id = fact.fact_id
+        locator_id = chain["locator_id"]
+
+    base = (
+        f"/api/v2/subjects/{subject_id}/review-episodes/{episode_id}/fact-corrections"
+    )
+    for field in ("date_range", "start_range", "end_range"):
+        body = {
+            "target_kind": "fact",
+            "target_id": fact_id,
+            "locator_ids": [locator_id],
+            "reason": "核对日期",
+            "operator_id": "监查员甲",
+            field: {
+                "source_text": "2026-03-01",
+                "precision": "day",
+                "lower_bound": "2026-03-01",
+                "upper_bound": "2026-03-01",
+                "unexpected_anchor": "smuggled",
+            },
+        }
+        for endpoint in (f"{base}/preview", base):
+            response = client.post(endpoint, json=body)
+            assert response.status_code == 422, response.text
+            envelope = response.json()["error"]
+            assert envelope["code"] == "INVALID_REQUEST"
+            assert envelope["title"]
+            assert "unexpected_anchor" in response.text or "不识别" in response.text
+            assert "sqlalchemy" not in response.text.lower()

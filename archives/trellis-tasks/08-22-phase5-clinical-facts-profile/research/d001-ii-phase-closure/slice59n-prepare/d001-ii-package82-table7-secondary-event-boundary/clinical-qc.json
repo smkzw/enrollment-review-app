@@ -1,0 +1,440 @@
+{
+  "attached_source_refs": [
+    "body.p1030",
+    "body.p1031",
+    "body.p1032",
+    "body.p1033",
+    "body.p1034",
+    "body.p1035",
+    "body.p1036",
+    "body.p1037",
+    "body.p1038",
+    "body.p1039",
+    "body.p1040",
+    "body.p1041",
+    "body.p1042",
+    "body.p986",
+    "body.p994",
+    "body.p996",
+    "body.p997",
+    "body.p1022",
+    "body.p1024",
+    "body.p1026",
+    "body.p340",
+    "body.p835",
+    "body.p885"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package82-table7-secondary-event-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第82包五个拥有单元全部为表7（body.t12.r0-r4）：r0表头仅作结构（structural_only_source_refs）；r1-r4四行是条件分支的继发事件记录规则，保持post_treatment_execution处置。required_candidate_source_refs显式为空，任何候选发射都构成越界。",
+    "四行规则是并列条件分支，不得压成'一律独立'或'一律合并'：r1保持类型列、示例列与仅报告事件A结果列的对应关系，示例细节不得提升为通用条件；r2重度或严重继发性事件分别单独报告，示例不是新增的通用病种门槛；r3保留'在时间上分离'与'具有重要医学意义'的合取限定；r4仅在事件关系无法确定时全部单独记录，不得误写为证据不足或入排待补证。",
+    "表号防混同采用最小提示原则：p1032题注与相邻结构关系标识本处表7即body.t12；无关的Ⅲ期疗效body.t7及其引导语不进入提示，避免为了说明差异反而扩大语义污染面。",
+    "表格列关系：表7列为序列/继发事件的类型/示例/应记录的AE，r0为表头；四行按行自左至右为条件分支的类型、示例与应记录的AE，列关系不得被拆散或串行错配。",
+    "前接只读闭包（23）：第81包引导语与表题（p1030-p1032）；第83包A/B记法说明与持续/复发/实验室异常相邻规则（p1033-p1042）；AE/TEAE/SAE定义与严重性总纲（p986/p994/p996/p997）；AE收集期、全量记录义务与单一事件项一术语（p1022/p1024/p1026）；流程/监测/D1给药前锚点（p340/p835/p885）。全部只读，不改变所有权与候选发射权。",
+    "官方入排与流程矩阵不含任何以body.t12或p985-p1100为锚点的行，也不含不良事件/TEAE/SAE控制行；本包不合成任何IN/EX官方规则。",
+    "后续包不得被本包提前吞并：第83包A/B记法与持续/复发/实验室异常规则（p1033-p1042）作为直接引用或防混同的只读上下文进入提示，但不改变其所有权且不得发射第82包候选；第84包及更后章节（第85-99包）仅保留所有权边界。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.t12.r0",
+    "body.t12.r1",
+    "body.t12.r2",
+    "body.t12.r3",
+    "body.t12.r4"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期流程表注记：不良事件于D1启动给药后开始记录，直至末次安全性随访或者退出研究为止（以先发生时间为准），只读": "pending_codex",
+        "只读：AE（含表7继发事件）记录始于D1给药后；不构成筛选/基线入排门槛": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件于D1启动给药后开始记录，直至末次安全性随访或者退出研究为止（以先发生时间为准）。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p340",
+      "structure_unit_id": "su-d4ba75eb21a2e2944b6aa434"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：持续监测义务覆盖AE含SAE；表7是监测到的事件如何记录的细则": "pending_codex",
+        "第75包拥有：整个研究过程严密监测不良事件直至消退、返回基线或更好、稳定、失访或撤回同意，只读": "pending_codex"
+      },
+      "frozen_excerpt": "整个研究过程要严密监测参与者的不良事件，直至研究者确认不良事件消退、返回至基线等级或更好、稳定，或参与者失访或撤回同意。不良事件的收集详见“7.3.3.不良事件的收集和记录”。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p835",
+      "structure_unit_id": "su-5a0bc3bdc6232946cd2522d4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期流程表注记：D1给药前结果作为基线值，基线再次审查入排标准，同时记录合并用药及不良事件，只读": "pending_codex",
+        "只读：D1给药前入排复核与给药后AE记录在同一访视相邻但职责不同；表7行不得被改写为D1给药前或基线入排门槛": "pending_codex"
+      },
+      "frozen_excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p885",
+      "structure_unit_id": "su-8c8a34eb18d0139b009c191d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：表7行是对AE定义下继发事件如何记录的细化；AE与因果关系无关": "pending_codex",
+        "第77包拥有：AE定义（接受试验用药品之后出现的所有不良医学事件，可以表现为症状体征、疾病和/或有临床意义的实验室检查异常，但不一定与试验用药品有因果关系），只读": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件（AE）指临床试验参与者在接受试验用药品之后出现的所有不良医学事件，可以表现为症状体征、疾病和/或有临床意义的实验室检查异常，但不一定与试验用药品有因果关系。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p986",
+      "structure_unit_id": "su-25c54cb8c26bb63bc2ee981a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：表7规则属于治疗期AE记录规范，锚定'给药后'": "pending_codex",
+        "第77包拥有：TEAE定义（给药后出现的任何不利医学事件；ICH E9治疗前并未出现或相对治疗前恶化），只读": "pending_codex"
+      },
+      "frozen_excerpt": "治疗期出现的不良事件（TEAE）是指在给药后出现的任何不利的医学事件。ICH E9 指南“临床试验统计原则”将“治疗期不良事件”定义为：“在治疗过程中出现的事件，在治疗前并未出现或相对于治疗前发生恶化”。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p994",
+      "structure_unit_id": "su-a81269fb1e97dc5bf5083168"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：p996提供相邻SAE定义语境，但表7未明示交叉引用；不得自动把r2的'严重继发性事件'等同于SAE，也不得由本包补写SAE判定条件": "pending_codex",
+        "第78包拥有：SAE定义（死亡、危及生命、永久或严重残疾或功能丧失、需要住院治疗或延长住院时间、先天性异常或出生缺陷），只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件，指参与者接受试验用药品后出现死亡、危及生命、永久或者严重的残疾或者功能丧失、参与者需要住院治疗或者延长住院时间，以及先天性异常或者出生缺陷等不良医学事件。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p996",
+      "structure_unit_id": "su-f5cd3f88b671362f6f8f4dc4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：严重性判定归第78-79包；表7不改变严重性判定": "pending_codex",
+        "第78包拥有：SAE是符合下列标准任何一项的不良事件（OR总纲），只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件（Serious Adverse Event，SAE）是指符合下列标准任何一项的不良事件：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p997",
+      "structure_unit_id": "su-40348e74c63d71c5b6319be0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：表7记录规则适用于该收集期窗口；与p340一致": "pending_codex",
+        "第80包拥有：AE收集期（首次服用试验用药品后至最后一次安全性随访或者退出研究，以先发生时间为准），只读": "pending_codex"
+      },
+      "frozen_excerpt": "本试验中，不良事件收集期应从参与者首次服用试验用药品后至最后一次安全性随访或者退出研究为止（以先发生时间为准）。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1022",
+      "structure_unit_id": "su-5c30706befa51335bc524ec6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：全量记录义务归第80包；表7仅规定各条件分支下应记录哪些继发事件，不得从p1024反推出额外的拆分、合并条件": "pending_codex",
+        "第80包拥有：首次服药至末次访视期间所有AE均需记录在eCRF，只读": "pending_codex"
+      },
+      "frozen_excerpt": "从首次服用试验用药品至末次访视期间发生的所有AE均需记录在eCRF中。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1024",
+      "structure_unit_id": "su-125f9fa39aa720039d48020e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：单一事件项只记录一个不良事件术语是第80包独立规范；不得把p1026当作表7各行判定的逻辑前提，也不得用表7改写该独立规范": "pending_codex",
+        "第80包拥有：eCRF单一事件项中应只记录一个不良事件术语，只读": "pending_codex"
+      },
+      "frozen_excerpt": "研究者在记录不良事件时应使用正确的医学术语/概念，避免使用口语和缩略语，在eCRF不良事件页的单一事件项中应只记录一个不良事件术语。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1026",
+      "structure_unit_id": "su-371620980d69d405b05cb0a5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：p1030是表7所在章节标题，为表格提供章节归属；本包不重复发布": "pending_codex",
+        "第81包拥有：继发于其它事件的不良事件事件标题，只读": "pending_codex"
+      },
+      "frozen_excerpt": "继发于其它事件的不良事件事件",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1030",
+      "structure_unit_id": "su-4ca9c91ca62f0cfb3a0538b9"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：'根据主要原因判断'是判定逻辑，表7四行给出条件分支示例；不得把表7规则反写为'一律独立'或'一律合并'": "pending_codex",
+        "只读：p1031是表7的引导语与直接引用来源（'具体示例见表7'），是表7存在的上文；表7四行具体规则归第82包": "pending_codex",
+        "第81包拥有：继发于其他事件的不良事件应根据其主要原因确定是否应记录为独立不良事件，具体示例见表7，只读": "pending_codex"
+      },
+      "frozen_excerpt": "继发于其他事件的不良事件（例如，级联事件或临床后遗症）应根据其主要原因确定是否应记录为独立不良事件，具体示例见表7。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1031",
+      "structure_unit_id": "su-6858787f7953e40643fcee9c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：表题与相邻结构关系唯一标识本处表7为body.t12；不得按结构编号猜测表号，也不得引入其它表格语义": "pending_codex",
+        "第81包拥有：表 7 应记录的继发于其它事件的不良事件（表题），只读": "pending_codex"
+      },
+      "frozen_excerpt": "表 7 应记录的继发于其它事件的不良事件",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1032",
+      "structure_unit_id": "su-012f4dd8714bf9f41f65cc21"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第82包拥有：表7表头（序列/继发事件的类型/示例/应记录的AE），仅提供表格列结构，不独立形成控制点": "pending_codex",
+        "表7列结构：序列、继发事件的类型、示例、应记录的AE；不得把示例列内容串行写入类型列或应记录列": "pending_codex"
+      },
+      "frozen_excerpt": "序列 | 继发事件的类型 | 示例 | 应记录的AE",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t12.r0",
+      "structure_unit_id": "su-0ff5877fe9553cdef0fc90d6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "'无需额外治疗'必须作为示例原文保留；不得把'仅报告事件A'改写为'一律只记录初始事件'": "pending_codex",
+        "r1必须保持类型、示例和结果三列关系，不得把示例中的'无需额外治疗'再提升为整行额外合取条件，也不得外推到所有继发事件": "pending_codex",
+        "不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "第82包拥有：行1类型列为轻度/中度/非严重/无需干预治疗的继发事件；示例列为呕吐导致健康成人轻度脱水且无需额外治疗；结果列为仅报告事件A（呕吐）": "pending_codex"
+      },
+      "frozen_excerpt": "1 | 轻度/中度/非严重/无需干预治疗的 | 如果呕吐（事件A）导致健康成人轻度脱水（事件B），无需额外治疗，在eCRF上应仅报告呕吐。 | 事件A",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t12.r1",
+      "structure_unit_id": "su-6e31e4d266c789fab8555029"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "r2覆盖'重度或严重继发性事件'，事件A与事件B分别单独报告；示例（严重脱水、肾衰竭）是重度/严重继发事件的举例，不是新增的通用病种门槛": "pending_codex",
+        "不得把'重度'与'严重'混为一谈，也不得把表7中的'严重'自动等同于SAE定义；p996/p997仅提供相邻SAE定义语境，表7未明示交叉引用时不得据此补写判定条件": "pending_codex",
+        "不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "第82包拥有：行2 重度或严重继发性事件分别单独报告（呕吐导致严重脱水；重度胃肠道出血导致肾衰竭，两个事件均单独报告）": "pending_codex"
+      },
+      "frozen_excerpt": "2 | 重度或严重继发性事件 | 如果呕吐（事件A）导致严重脱水（事件B），则应在eCRF上分别单独报告这两个事件。 | 如果重度胃肠道出血（事件A）导致肾衰竭（事件B），两个事件均应在eCRF上单独报告。 | 事件A、事件B",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t12.r2",
+      "structure_unit_id": "su-e637e41a64f76aa5d1d2ed5f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "r3必须保留'在时间上分离'与'具有重要医学意义'的合取限定；仅凭先后发生不得拆分事件": "pending_codex",
+        "不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "示例（跌倒/继发性骨折、中性粒细胞减少伴发感染）用于说明合取判定，不得改写为'时间上分离即分别记录'": "pending_codex",
+        "第82包拥有：行3 在时间上从与初始事件中分离出来的具有重要医学意义的次级不良事件分别单独报告（头晕导致跌倒和继发性骨折；中性粒细胞减少伴发感染）": "pending_codex"
+      },
+      "frozen_excerpt": "3 | 在时间上从与初始事件中分离出来的具有重要医学意义的次级不良事件 | 如果头晕（事件A）导致跌倒（事件B1）和继发性骨折（事件B2），所有三个事件均应在eCRF上单独报告。 | 如果中性粒细胞减少（事件A）伴发感染（事件B），两个事件均应在eCRF上单独报告。 | 事件A、事件B",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t12.r3",
+      "structure_unit_id": "su-4b047a4cdc47196bc587944b"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "r4仅在'不清楚事件之间是否有关联'时全部单独记录；不得改写为'证据不足'或'入排待补证'": "pending_codex",
+        "不得把r4扩写为'所有继发事件一律单独记录'；r1-r4是并列条件分支，不得压成一律独立或一律合并": "pending_codex",
+        "不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "第82包拥有：行4 无法确定事件之间是否有关联时，在eCRF上单独记录所有不良事件（事件A、事件B）": "pending_codex"
+      },
+      "frozen_excerpt": "4 | 无法确定的 | 如果不清楚事件之间是否有关联，应在eCRF上单独记录所有不良事件。 | 事件A、事件B",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t12.r4",
+      "structure_unit_id": "su-fbbe3714f896f4eaa17a3237"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：表内A/B记法说明，解释事件A/事件B符号；不改变第83包所有权": "pending_codex",
+        "第83包拥有：注：以上示例将初始事件记为事件A，继发事件记为事件B，只读": "pending_codex"
+      },
+      "frozen_excerpt": "注：以上示例将初始事件记为事件A，继发事件记为事件B。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1033",
+      "structure_unit_id": "su-ec9665a579ca5059795942ad"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：持续性/复发性事件记录规则（p1035/p1036）与表7四行继发事件规则相邻，不得混同": "pending_codex",
+        "第83包拥有：持续性或复发性不良事件标题，只读": "pending_codex"
+      },
+      "frozen_excerpt": "持续性或复发性不良事件",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1034",
+      "structure_unit_id": "su-fdf7c88809b27f5dacca9a14"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：'持续性事件仅记录一次'与r1'仅报告事件A'是不同规则（持续不消失 vs 轻度继发不治疗），不得互相替换": "pending_codex",
+        "第83包拥有：持续性不良事件在eCRF应仅记录一次，只读": "pending_codex"
+      },
+      "frozen_excerpt": "持续性不良事件是指在评估时点之间持续延伸而不消失的不良事件，此类事件在eCRF不良事件页中应仅记录一次。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1035",
+      "structure_unit_id": "su-e2e655a16acd1d1ae8a5f58f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：'复发每次单独记录'与r2/r3'重度或严重/时间分离重要医学意义分别单独报告'是不同规则，不得混同": "pending_codex",
+        "第83包拥有：复发性不良事件每次复发在eCRF记录成单独事件，只读": "pending_codex"
+      },
+      "frozen_excerpt": "复发性不良事件是指在评估时点之间消失的事件随后复发。不良事件的每次复发应在eCRF不良事件页上记录成单独的事件。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1036",
+      "structure_unit_id": "su-054822360d7b6e66e4ee3391"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：实验室异常记录规则（p1038-p1042）与表7示例中的实验室异常（中性粒细胞减少）是相邻语义，不得把p1039-p1042报告阈值写入表7行": "pending_codex",
+        "第83包拥有：实验室检查值异常标题，只读": "pending_codex"
+      },
+      "frozen_excerpt": "实验室检查值异常",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1037",
+      "structure_unit_id": "su-48b20235b83c20bf9eff2a5c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：研究者判断实验室异常归类是第83包职责；表7行不重复该判断规则": "pending_codex",
+        "第83包拥有：研究者通过医学和科学判断孤立的实验室检查值异常是否应归类为不良事件，只读": "pending_codex"
+      },
+      "frozen_excerpt": "研究者负责审查所有实验室检查结果，通过医学和科学判断一个孤立的实验室检查值异常是否应归类为不良事件。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1038",
+      "structure_unit_id": "su-177c9bb78f3bef944dbfe948"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：p1039-p1042实验室异常必须报告标准归第83包，本包不得把其阈值写入表7": "pending_codex",
+        "第83包拥有：实验室检查值异常符合任一标准时必须报告为不良事件总纲，只读": "pending_codex"
+      },
+      "frozen_excerpt": "当实验室检查值异常符合以下任一标准时，则必须报告为不良事件：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1039",
+      "structure_unit_id": "su-e6c56e6fb918d828bd028ea4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：保持第83包所有权，本包不重复发布": "pending_codex",
+        "第83包拥有：实验室异常伴有临床症状或体征标准，只读": "pending_codex"
+      },
+      "frozen_excerpt": "伴有临床症状或体征",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1040",
+      "structure_unit_id": "su-99eb892351dbc751558dc6d9"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：保持第83包所有权，本包不重复发布": "pending_codex",
+        "第83包拥有：实验室异常导致研究治疗变化标准，只读": "pending_codex"
+      },
+      "frozen_excerpt": "导致研究治疗发生变化（例如治疗暂停或治疗终止）",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1041",
+      "structure_unit_id": "su-c3f02731d98876982dbe697a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：保持第83包所有权，本包不重复发布": "pending_codex",
+        "第83包拥有：实验室异常导致医学干预或合并用药/治疗改变标准，只读": "pending_codex"
+      },
+      "frozen_excerpt": "导致医学干预或合并用药/治疗改变",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1042",
+      "structure_unit_id": "su-7688dabcfc8b660fba74ff57"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61bt-20260830",
+  "worker": "codebuddy-worker_02"
+}

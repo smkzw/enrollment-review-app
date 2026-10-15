@@ -1,0 +1,670 @@
+{
+  "attached_source_refs": [
+    "body.p980",
+    "body.p981",
+    "body.p982",
+    "body.p983",
+    "body.p984",
+    "body.p318",
+    "body.p340",
+    "body.p835",
+    "body.p885",
+    "body.p995",
+    "body.p996",
+    "body.p997",
+    "body.p998",
+    "body.p999",
+    "body.p1000",
+    "body.p1001",
+    "body.p1002",
+    "body.p1003",
+    "body.p1004",
+    "body.p1005",
+    "body.p1006",
+    "body.p1007",
+    "body.p1008",
+    "body.p1009",
+    "body.p1010",
+    "body.p1011",
+    "body.p1012",
+    "body.p1013",
+    "body.p1014",
+    "body.p1015",
+    "body.p1016",
+    "body.p1017",
+    "body.p1018",
+    "body.p1019",
+    "body.p1020",
+    "body.p1021",
+    "body.p1022",
+    "body.p1023",
+    "body.p1024",
+    "body.p1025",
+    "body.p1026"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package77-ae-teae-history-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第77包十个拥有单元全部为AE/TEAE定义或AE记录除外情形（body.p985-p994）；required_candidate_source_refs显式为空，任何候选发射都构成越界。",
+    "AE定义（p986）锚定'接受试验用药品之后'，TEAE定义（p994）锚定'给药后'，与流程表注记p340、第75包p835持续监测义务、Ⅱ期治疗期注记p885及第80包p1022收集窗口共同闭合；p885的D1给药前入排复核不得覆盖p340/p1022的给药后AE记录起点。给药前事件（p1023）与知情同意前已存在情况（p988）记录为病史/伴随疾病，不作为AE。",
+    "五类AE记录除外情形（p987-p992）是AE记录范围规则，不是筛选/基线入排门槛；计划住院（p989）、侵入检查（p990）、疾病预期进展（p991）、既存波动（p992）的'除非/但/并未'例外条款必须逐条保留。",
+    "官方入排与流程矩阵不含任何以p985-p1026为锚点的行，也不含不良事件/TEAE/SAE控制行；既往和现病史收集由流程表r7/p318与流程目录'既往和现病史'节点（筛选+基线）单独发布；本包不合成任何IN/EX官方规则。",
+    "后续包只读边界覆盖body.p995-p1026（第78-80包）；该范围由本包当前解释需要与冻结计划实际所有权共同确定，不反推其他已验收包必须采用同样附加范围。SAE住院除外（p1002-p1012）与AE记录除外（p989计划住院）语义层次不同，不得混同。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p985",
+    "body.p986",
+    "body.p987",
+    "body.p988",
+    "body.p989",
+    "body.p990",
+    "body.p991",
+    "body.p992",
+    "body.p993",
+    "body.p994"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期流程表注记：既往和现病史收集（既往病史/伴随疾病、过敏史、个人史、家族史、月经史等；病史应覆盖排除标准规定的时间范围），只读": "pending_codex",
+        "只读：既往和现病史收集义务由流程表与流程目录发布，p988/p992'记录为病史/伴随疾病'是记录归属规则，不是新增收集义务": "pending_codex"
+      },
+      "frozen_excerpt": "既往和现病史收集：包括既往病史/伴随疾病、过敏史、个人史（吸烟史、饮酒史、药物滥用史）、家族史、月经史（女性）、生育史（女性）等。病史应包括尽可能过去2年内研究者认为具有临床意义的个人病史信息。银屑病病史应记录详细信息，包括诊断时间、相关疾病特征、病程等。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p318",
+      "structure_unit_id": "su-d1c5487718e8374f918c883e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期流程表注记：不良事件于D1启动给药后开始记录，直至末次安全性随访或者退出研究为止（以先发生时间为准），只读": "pending_codex",
+        "只读：AE记录始于D1给药后，与AE定义'接受试验用药品之后'、TEAE'给药后'及p1022收集窗口一致，是治疗期锚点": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件于D1启动给药后开始记录，直至末次安全性随访或者退出研究为止（以先发生时间为准）。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p340",
+      "structure_unit_id": "su-d4ba75eb21a2e2944b6aa434"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：持续监测义务不能覆盖p340/p1022明确的给药后AE记录起点，也不构成筛选或基线入排门槛": "pending_codex",
+        "第75包拥有：整个研究过程严密监测不良事件，直至消退、返回基线或更好、稳定、失访或撤回同意；收集详见7.3.3，只读": "pending_codex"
+      },
+      "frozen_excerpt": "整个研究过程要严密监测参与者的不良事件，直至研究者确认不良事件消退、返回至基线等级或更好、稳定，或参与者失访或撤回同意。不良事件的收集详见“7.3.3.不良事件的收集和记录”。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p835",
+      "structure_unit_id": "su-5a0bc3bdc6232946cd2522d4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期治疗期注记：D1给药前结果作为基线值，基线再次审查入排标准，并同时记录合并用药及不良事件，只读": "pending_codex",
+        "只读：D1给药前入排复核与给药后AE记录在同一访视相邻但职责不同；不得把记录不良事件误写为给药前资格证据": "pending_codex"
+      },
+      "frozen_excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p885",
+      "structure_unit_id": "su-8c8a34eb18d0139b009c191d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：证明AE/TEAE发生率是安全性评估章节的分析终点摘要，不发射入排候选": "pending_codex",
+        "第76包拥有：安全性评估章节标题，只读": "pending_codex"
+      },
+      "frozen_excerpt": "安全性评估",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p980",
+      "structure_unit_id": "su-ef0639503b6fdd54aae6d8cd"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：指标摘要与定义章节分离，不重复发布": "pending_codex",
+        "第76包拥有：安全性指标章节标题，只读": "pending_codex"
+      },
+      "frozen_excerpt": "安全性指标",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p981",
+      "structure_unit_id": "su-ac024f95cf9053f64d265572"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：AE/TEAE/SAE发生率是治疗期安全性分析终点摘要，不是筛选/基线执行义务，也不约束第77包定义处置": "pending_codex",
+        "第76包拥有：安全性指标第一条（不良事件、治疗期出现的不良事件和严重不良事件的发生率），只读": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件、治疗期出现的不良事件和严重不良事件的发生率；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p982",
+      "structure_unit_id": "su-20843bb66c6434f37ee921f1"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：p988提及的实验室检查/心电图/生命体征/体格检查异常以流程表及其目录节点为准": "pending_codex",
+        "第76包拥有：常规安全性参数枚举，只读": "pending_codex"
+      },
+      "frozen_excerpt": "常规安全性参数，包括实验室检查、生命体征测量、12导联心电图（ECG）和体格检查等。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p983",
+      "structure_unit_id": "su-dfbabd6477decd652d305026"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：定义正文由第77-80包拥有，第76包不提前吞并": "pending_codex",
+        "第76包拥有：术语定义章节标题，只读": "pending_codex"
+      },
+      "frozen_excerpt": "术语定义",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p984",
+      "structure_unit_id": "su-48b22904ca69e7b8e87c69df"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "AE定义章节标题（不良事件（AE）），仅提供结构归属，不独立形成控制点": "pending_codex",
+        "不得把'不良事件（AE）'章节改写为筛选/基线必做或入排资格门槛": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件（AE）",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p985",
+      "structure_unit_id": "su-a79ed8d27cd380a461295a8f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "AE定义：临床试验参与者在接受试验用药品之后出现的所有不良医学事件，可以表现为症状体征、疾病和/或有临床意义的实验室检查异常，但不一定与试验用药品有因果关系": "pending_codex",
+        "AE是治疗期安全性记录概念（锚定'接受试验用药品之后'），不是筛选/基线资格判据；不得改写为'筛选时异常即为AE并导致不得入组'": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件（AE）指临床试验参与者在接受试验用药品之后出现的所有不良医学事件，可以表现为症状体征、疾病和/或有临床意义的实验室检查异常，但不一定与试验用药品有因果关系。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p986",
+      "structure_unit_id": "su-25c54cb8c26bb63bc2ee981a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "AE记录除外情形的引导句：但下列情况不应作为AE记录": "pending_codex",
+        "五条除外情形整体是AE记录范围规则（记录为病史/伴随疾病），不是新增入排条件；引导句本身不发射候选": "pending_codex"
+      },
+      "frozen_excerpt": "但下列情况不应作为AE记录：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p987",
+      "structure_unit_id": "su-817da941f30c4b93962ccdd0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "知情同意前已存在的异常→病史/伴随疾病，不是AE，也不构成入排不通过条件；病史收集义务由流程表r7/p318与流程目录'既往和现病史'节点单独发布，本包不重复发布": "pending_codex",
+        "除外情形一：筛选时发现的已存在的情况（研究者判断该异常在参与者知情同意前已存在，如实验室/心电图/生命体征/体格检查的临床意义异常）应作为病史/伴随疾病进行记录": "pending_codex"
+      },
+      "frozen_excerpt": "筛选时发现的已存在的情况（例如筛选时实验室检查、心电图检查、生命体征、体格检查等结果显示具有临床意义的异常，但经由研究者判断该异常在参与者知情同意前已存在）；该种情况应作为病史/伴随疾病进行记录。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p988",
+      "structure_unit_id": "su-37c9d17909babcfeb6751355"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "例外条款必须保留：'计划的住院/手术'是基础规则（不记录为AE），'较原有情况加重'是例外（此时按AE处理）；不得丢失例外条款或把计划住院改写为入排门槛": "pending_codex",
+        "除外情形二：计划的住院/手术不作为AE记录；例外：除非计划住院/手术的情况较原有情况加重": "pending_codex"
+      },
+      "frozen_excerpt": "计划的住院/手术；除非计划住院/手术的情况较原有情况加重。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p989",
+      "structure_unit_id": "su-c66377676c62953521c632dd"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "例外条款必须保留：侵入检查本身不记录为AE，但导致需实施检查的疾病可能为AE；不得把侵入检查改写为筛选/基线必做检查或入排条件": "pending_codex",
+        "除外情形三：内科和外科侵入性检查（如肝脏活检、内镜检查等）不作为AE记录；例外：但导致需实施这些检查的疾病可能为不良事件": "pending_codex"
+      },
+      "frozen_excerpt": "内科和外科侵入性检查（如肝脏活检、内镜检查等）；但导致需实施这些检查的疾病可能为不良事件。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p990",
+      "structure_unit_id": "su-a225716c2306617235504444"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "例外条款必须保留：疾病预期进展不记录为AE，但严重程度或发生频率高于预期时按AE处理；不得把'预期进展'与'异常恶化'混同": "pending_codex",
+        "除外情形四：研究的疾病预期进展和/或研究疾病的症状与体征出现预期进展不作为AE记录；例外：除非严重程度或发生频率高于预期": "pending_codex"
+      },
+      "frozen_excerpt": "研究的疾病预期进展和/或研究疾病的症状与体征出现预期进展；除非严重程度或发生频率高于预期。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p991",
+      "structure_unit_id": "su-43d93af855d2fae5096669d4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "合取语义必须保留：'预期周期性波动'且'并未恶化'才不作为AE记录；恶化情形不落入本除外，不得丢失'并未恶化'的限定": "pending_codex",
+        "除外情形五：筛选时已存在的伴随疾病或原有症状、体征等出现预期的周期性波动，但并未恶化，不作为AE记录": "pending_codex"
+      },
+      "frozen_excerpt": "筛选时已存在的伴随疾病或原有症状、体征等出现预期的周期性波动，但并未恶化。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p992",
+      "structure_unit_id": "su-43906ce0d2aa6018a246e97d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "TEAE定义章节标题（治疗期出现的不良事件（TEAE）），仅提供结构归属，不独立形成控制点": "pending_codex",
+        "不得把TEAE标题改写为筛选/基线必做或给药前资格门槛": "pending_codex"
+      },
+      "frozen_excerpt": "治疗期出现的不良事件（TEAE）",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p993",
+      "structure_unit_id": "su-d8626e03738b112c04ee4913"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "TEAE定义：在给药后出现的任何不利的医学事件；ICH E9：在治疗过程中出现的事件，在治疗前并未出现或相对于治疗前发生恶化": "pending_codex",
+        "TEAE锚定'给药后'，给药前事件不构成TEAE；不得把TEAE定义改写为'给药前事件不得入组/给药前任何异常即排除'等新门槛": "pending_codex"
+      },
+      "frozen_excerpt": "治疗期出现的不良事件（TEAE）是指在给药后出现的任何不利的医学事件。ICH E9 指南“临床试验统计原则”将“治疗期不良事件”定义为：“在治疗过程中出现的事件，在治疗前并未出现或相对于治疗前发生恶化”。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p994",
+      "structure_unit_id": "su-a81269fb1e97dc5bf5083168"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：SAE定义归第78包，本包不提前吞并": "pending_codex",
+        "第78包拥有：严重不良事件（SAE）标题，只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件（SAE）",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p995",
+      "structure_unit_id": "su-684d5b1213112070366962ed"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "严重不良事件，指参与者接受试验用药品后出现死亡、危及生命、永久或者严重的残疾或者功能丧失、参与者需要住院治疗或者延长住院时间，以及先天性异常或者出生缺陷等不良医学事件。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p996",
+      "structure_unit_id": "su-f5cd3f88b671362f6f8f4dc4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "严重不良事件（Serious Adverse Event，SAE）是指符合下列标准任何一项的不良事件：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p997",
+      "structure_unit_id": "su-40348e74c63d71c5b6319be0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "导致死亡：当一个事件的结果为“死亡”，则可明确地作为严重不良事件进行记录和报告。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p998",
+      "structure_unit_id": "su-e2f80718a15f7b296906c055"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "危及生命：在此是指在发生不良事件时参与者已经处于死亡的危险中，并不是指假设该不良事件如果更严重可能导致死亡。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p999",
+      "structure_unit_id": "su-b0f87a9a0d490bd216d0c969"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "永久或者严重的残疾或者功能丧失：指不良事件结果可能对参与者正常生活和活动造成严重不便或干扰。相对较小医学意义的经历，如单纯的头痛、恶心、呕吐、腹泻、流感和意外创伤（如脚踝扭伤），这些经历可能干扰或阻碍日常生活功能，但不构成重大干扰。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1000",
+      "structure_unit_id": "su-c793fa7c755ac66919c14e7b"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "需要住院治疗或延长住院时间^*：不良事件导致参与者不得不住院接受治疗或本来已经准备出院但由于发生了不良事件而导致住院时间延长；需明确导致该状况的原因是由于不良事件所致，而非因择期手术、非医疗原因等导致入院。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1001",
+      "structure_unit_id": "su-ea42820da3887b01efc1bab4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：SAE住院除外与第77包AE记录除外（p989计划住院）语义层次不同（AE记录 vs SAE判定），不得混同": "pending_codex",
+        "第78包拥有：住院不作为SAE的除外列表引导句，只读": "pending_codex"
+      },
+      "frozen_excerpt": "*以下住院情况可根据研究者综合判断不作为SAE：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1002",
+      "structure_unit_id": "su-272eba9497a5796dbff5a64a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "24小时内出院的留院观察；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1003",
+      "structure_unit_id": "su-f931b55af50fac873cde8aa8"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "住院进行门诊常规检查（住院时间少于24小时）；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1004",
+      "structure_unit_id": "su-344e0a97f3b90882688ce470"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "社会原因住院：如患者因无人照料或医保报销等；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1005",
+      "structure_unit_id": "su-8d12404b50702051e785d81e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "在康复机构、疗养院住院；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1006",
+      "structure_unit_id": "su-aa446b1c310c7aab796ae2b5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "因对现存疾病进行诊断或择期手术治疗而住院或延长住院；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1007",
+      "structure_unit_id": "su-a20edc7c9daf038500a4ed58"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "因研究需要做疗效评价而住院或延长住院；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1008",
+      "structure_unit_id": "su-2fb6d803498f5d19230d2eaf"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "因研究的目标疾病的规定疗程而住院或延长住院；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1009",
+      "structure_unit_id": "su-96c5e0e17c2e1aac1905c314"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "方案规定的计划住院；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1010",
+      "structure_unit_id": "su-a05b9b48b174529d500a5762"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "研究前计划的住院或非不良事件导致的择期手术；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1011",
+      "structure_unit_id": "su-8ce06164cce01bc886808cf8"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "或全面体格检查而导致的入院。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1012",
+      "structure_unit_id": "su-f4da86502b8291f23746a4a2"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "先天性异常或者出生缺陷：指参与者的后代出现畸形或先天的功能缺陷等。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1013",
+      "structure_unit_id": "su-54913c6ad2ec34341d4487c7"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "其他有重要意义的医学事件：必须运用医学和科学的判断决定是否对其他的情况加速报告，如重要医学事件可能不会立即危及生命、死亡或住院，但如需要采取医学措施来预防如上情形之一的发生，也通常被视为是严重的。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1014",
+      "structure_unit_id": "su-7558abeb46e72593ce9f912c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "药物不良反应（ADR）",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1015",
+      "structure_unit_id": "su-180c41280dcf6cc53ea1efa4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "药物不良反应（Adverse Drug Reaction，ADR）：指临床试验中发生的任何与研究药物可能有关的对人体有害或者非期望的反应。研究药物与AE之间的因果关系至少有一个合理的可能性，即不能排除相关性。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1016",
+      "structure_unit_id": "su-5c3db876078a3e60f5b5017f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "可疑且非预期严重不良反应（SUSAR）",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1017",
+      "structure_unit_id": "su-f59a09007b7f5f516b7d01eb"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "可疑且非预期严重不良反应（Suspected Unexpected Serious Adverse Reaction，SUSAR）指临床表现的性质和严重程度超出了试验药物《研究者手册》、已上市药品的说明书或者产品特性摘要等已有资料信息的可疑并且非预期的严重不良反应。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1018",
+      "structure_unit_id": "su-3a466b9df7a0012b972a2b3d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "非预期不良反应指不良反应的性质、严重程度、后果或频率，不同于试验药物当前相关资料（如《研究者手册》等文件）所描述的预期风险。《研究者手册》作为主要文件提供用以判断某不良反应是否预期或非预期的安全性参考信息。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1019",
+      "structure_unit_id": "su-0230c1ca32146e5682365991"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "不良事件的收集和记录",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1020",
+      "structure_unit_id": "su-4dbd9434a4c5bb3bbf505b1d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "不良事件的收集",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1021",
+      "structure_unit_id": "su-ebb4aba58a5eee9f10138511"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：AE收集窗口锚定首次给药后，与TEAE'给药后'定义一致，是本包TEAE锚点的交叉验证": "pending_codex",
+        "第80包拥有：不良事件收集期从参与者首次服用试验用药品后至最后一次安全性随访或者退出研究为止（以先发生时间为准），只读": "pending_codex"
+      },
+      "frozen_excerpt": "本试验中，不良事件收集期应从参与者首次服用试验用药品后至最后一次安全性随访或者退出研究为止（以先发生时间为准）。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1022",
+      "structure_unit_id": "su-5c30706befa51335bc524ec6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：知情同意后-首次给药前的窗口事件记录为病史/伴随疾病；与p988（知情同意前已存在）共同构成给药前病史边界，不构成筛选/基线入排门槛": "pending_codex",
+        "第80包拥有：签署知情同意书后到首次服用试验用药品之前发生的临床不良医学事件作为病史/伴随疾病记录在原始病历中，不作为AE记录，只读": "pending_codex"
+      },
+      "frozen_excerpt": "在签署知情同意书后到首次服用试验用药品之前，发生的临床不良医学事件作为病史/伴随疾病记录在原始病历中，不作为AE记录。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1023",
+      "structure_unit_id": "su-a4ee984ed31aa5fe26aa9401"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：给药后所有AE记录在eCRF；AE记录执行义务由第80包及流程表发布，本包不重复发布": "pending_codex",
+        "第80包拥有：从首次服用试验用药品至末次访视期间发生的所有AE均需记录在eCRF中，只读": "pending_codex"
+      },
+      "frozen_excerpt": "从首次服用试验用药品至末次访视期间发生的所有AE均需记录在eCRF中。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1024",
+      "structure_unit_id": "su-125f9fa39aa720039d48020e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "不良事件的记录与规定",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1025",
+      "structure_unit_id": "su-98e7bd82275c8d4830a33bd1"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "研究者在记录不良事件时应使用正确的医学术语/概念，避免使用口语和缩略语，在eCRF不良事件页的单一事件项中应只记录一个不良事件术语。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1026",
+      "structure_unit_id": "su-371620980d69d405b05cb0a5"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61bo-20260830",
+  "worker": "codebuddy-worker_02"
+}

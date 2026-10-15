@@ -1,0 +1,210 @@
+[
+  {
+    "excerpt": "附录",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1310",
+    "source_span_ids": [
+      "body.p1310"
+    ],
+    "structure_unit_id": "su-02a9295b603442428eb7ec15",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "附录1 避孕的规定与方法",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1311",
+    "source_span_ids": [
+      "body.p1311"
+    ],
+    "structure_unit_id": "su-94deef1b0bab78eea18a466c",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "有生育能力女性的定义",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1312",
+    "source_span_ids": [
+      "body.p1312"
+    ],
+    "structure_unit_id": "su-a3d2e42056b8ee95e69e3b63",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "女性在月经初潮后至绝经前被认为是有生育能力的。",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1313",
+    "source_span_ids": [
+      "body.p1313"
+    ],
+    "structure_unit_id": "su-767a53b9670153205a717a6d",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "具有以下情况的女性不被视为有生育能力：",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1314",
+    "source_span_ids": [
+      "body.p1314"
+    ],
+    "structure_unit_id": "su-12a3d44ab47dbddcd2bd0e19",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "尚未经历月经初潮",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1315",
+    "source_span_ids": [
+      "body.p1315"
+    ],
+    "structure_unit_id": "su-455cf98905c09aa97a680a50",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "满足以下任一项的绝经前女性：",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1316",
+    "source_span_ids": [
+      "body.p1316"
+    ],
+    "structure_unit_id": "su-50beac7c655b92a4f8cd8041",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "子宫切除术史",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1317",
+    "source_span_ids": [
+      "body.p1317"
+    ],
+    "structure_unit_id": "su-22f41b216060622ca728b067",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "双侧输卵管切除术史",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1318",
+    "source_span_ids": [
+      "body.p1318"
+    ],
+    "structure_unit_id": "su-01fea45fec56e35255a6a1d5",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "双侧卵巢切除术史",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1319",
+    "source_span_ids": [
+      "body.p1319"
+    ],
+    "structure_unit_id": "su-bf0ff92189b3ffdf36894023",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "注：通过参与者病历核查或医学检查或病史询问进行确认。",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1320",
+    "source_span_ids": [
+      "body.p1320"
+    ],
+    "structure_unit_id": "su-708d2847d3892f71dace2861",
+    "unit_kind": "footnote_or_annotation"
+  },
+  {
+    "excerpt": "绝经后女性",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-cd76207b0f3d157c2eaa66d6",
+    "package_ordinal": 114,
+    "role": "owned",
+    "source_ref": "body.p1321",
+    "source_span_ids": [
+      "body.p1321"
+    ],
+    "structure_unit_id": "su-5dea096879f632d4303389ad",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "女性连续停经12个月，并排除妊娠及其他可能导致闭经的医疗原因后，即可临床诊断为绝经。",
+    "heading_path": [
+      "附录"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-9fb70d121e089bc533c21255",
+    "package_ordinal": 115,
+    "role": "attached",
+    "source_ref": "body.p1322",
+    "source_span_ids": [
+      "body.p1322"
+    ],
+    "structure_unit_id": "su-fb4a937e370e44796477cece",
+    "unit_kind": "list_item"
+  }
+]

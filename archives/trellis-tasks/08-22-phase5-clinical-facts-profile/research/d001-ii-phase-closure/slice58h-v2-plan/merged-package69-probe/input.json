@@ -1,0 +1,2771 @@
+{
+  "context_is_read_only": true,
+  "context_packets": [
+    {
+      "kind": "heading_chain",
+      "source_span_indexes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88
+      ],
+      "source_unit_indexes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62
+      ]
+    },
+    {
+      "kind": "table_title_and_headers",
+      "source_span_indexes": [
+        10,
+        31,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88
+      ],
+      "source_unit_indexes": [
+        10,
+        11,
+        12,
+        17,
+        18,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41
+      ]
+    },
+    {
+      "kind": "study_design_phase",
+      "source_span_indexes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88
+      ],
+      "source_unit_indexes": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62
+      ]
+    },
+    {
+      "kind": "phase_protocol",
+      "source_span_indexes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        32,
+        33,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88
+      ],
+      "source_unit_indexes": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        42,
+        43,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62
+      ]
+    },
+    {
+      "kind": "visit_flow",
+      "source_span_indexes": [
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46
+      ],
+      "source_unit_indexes": [
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56
+      ]
+    },
+    {
+      "kind": "cross_reference",
+      "source_span_indexes": [
+        30,
+        51,
+        52
+      ],
+      "source_unit_indexes": [
+        9,
+        39
+      ]
+    }
+  ],
+  "frozen_package": {
+    "context_units": [
+      {
+        "excerpt": "项目 | 筛选期(D-28~D-1) | 治疗期^26 | 安全性随访 | 提前退出^26",
+        "heading_path": [
+          "方案摘要",
+          "研究流程表",
+          "表 1 Ⅱ期临床研究阶段流程表"
+        ],
+        "is_footnote_or_note": true,
+        "member_source_refs": [
+          "body.t5.r0.c0.p0",
+          "body.t5.r0.c1.p0",
+          "body.t5.r0.c3.p0",
+          "body.t5.r0.c8.p0",
+          "body.t5.r0.c9.p0"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [
+          "筛选"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 9411,
+        "source_ref": "body.t5.r0",
+        "source_span_ids": [
+          "body.t5.r0.c0.p0",
+          "body.t5.r0.c1.p0",
+          "body.t5.r0.c3.p0",
+          "body.t5.r0.c8.p0",
+          "body.t5.r0.c9.p0"
+        ],
+        "structure_unit_id": "su-7cdff18e9c2bb7b899d7ff2d",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "项目"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              3
+            ],
+            [
+              0,
+              8
+            ],
+            [
+              0,
+              9
+            ]
+          ],
+          "row_headers": [
+            "项目"
+          ],
+          "row_index": 0,
+          "table_path": [
+            0,
+            0
+          ]
+        },
+        "unit_kind": "table_note"
+      },
+      {
+        "excerpt": "项目 | 筛选期 | 基础期 | 扩展期 | 安全性 | 随访期 | （电话随访） | 提前退出^26",
+        "heading_path": [
+          "方案摘要",
+          "研究流程表",
+          "表 2 Ⅲ期临床研究阶段流程表"
+        ],
+        "is_footnote_or_note": true,
+        "member_source_refs": [
+          "body.t6.r0.c0.p0",
+          "body.t6.r0.c1.p0",
+          "body.t6.r0.c18.p0",
+          "body.t6.r0.c18.p1",
+          "body.t6.r0.c18.p2",
+          "body.t6.r0.c19.p0",
+          "body.t6.r0.c3.p0",
+          "body.t6.r0.c9.p0"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [
+          "筛选"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 13361,
+        "source_ref": "body.t6.r0",
+        "source_span_ids": [
+          "body.t6.r0.c0.p0",
+          "body.t6.r0.c1.p0",
+          "body.t6.r0.c18.p0",
+          "body.t6.r0.c18.p1",
+          "body.t6.r0.c18.p2",
+          "body.t6.r0.c19.p0",
+          "body.t6.r0.c3.p0",
+          "body.t6.r0.c9.p0"
+        ],
+        "structure_unit_id": "su-a83321ed14831f8317798fd9",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "项目"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              3
+            ],
+            [
+              0,
+              9
+            ],
+            [
+              0,
+              18
+            ],
+            [
+              0,
+              19
+            ]
+          ],
+          "row_headers": [
+            "项目"
+          ],
+          "row_index": 0,
+          "table_path": [
+            0,
+            0
+          ]
+        },
+        "unit_kind": "table_note"
+      },
+      {
+        "excerpt": "Ⅱ期临床研究阶段",
+        "heading_path": [
+          "研究目的与终点",
+          "研究目的",
+          "Ⅱ期临床研究阶段"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p446"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 21170,
+        "source_ref": "body.p446",
+        "source_span_ids": [
+          "body.p446"
+        ],
+        "structure_unit_id": "su-f268a080b645d529895271c3",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "Ⅲ期临床研究阶段",
+        "heading_path": [
+          "研究目的与终点",
+          "研究目的",
+          "Ⅲ期临床研究阶段"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p455"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 21260,
+        "source_ref": "body.p455",
+        "source_span_ids": [
+          "body.p455"
+        ],
+        "structure_unit_id": "su-745c5ba183747890fede0a68",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "Ⅱ期临床研究阶段",
+        "heading_path": [
+          "研究目的与终点",
+          "研究终点",
+          "Ⅱ期临床研究阶段"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p465"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 21360,
+        "source_ref": "body.p465",
+        "source_span_ids": [
+          "body.p465"
+        ],
+        "structure_unit_id": "su-94a4e57f947f5abbc5899d3b",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "Ⅲ期临床研究阶段",
+        "heading_path": [
+          "研究目的与终点",
+          "研究终点",
+          "Ⅲ期临床研究阶段"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p483"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 21540,
+        "source_ref": "body.p483",
+        "source_span_ids": [
+          "body.p483"
+        ],
+        "structure_unit_id": "su-9081a76e7586a92fb96f84fa",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "Ⅲ期临床研究阶段主要估计目标",
+        "heading_path": [
+          "研究目的与终点",
+          "Ⅲ期临床研究阶段主要估计目标"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p502"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 21730,
+        "source_ref": "body.p502",
+        "source_span_ids": [
+          "body.p502"
+        ],
+        "structure_unit_id": "su-ca49d8c3085f5bc11711d255",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "伴发事件 | 处理策略 | 备注",
+        "heading_path": [
+          "研究目的与终点",
+          "Ⅲ期临床研究阶段主要估计目标"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t7.r0.c0.p0",
+          "body.t7.r0.c1.p0",
+          "body.t7.r0.c2.p0"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 21801,
+        "source_ref": "body.t7.r0",
+        "source_span_ids": [
+          "body.t7.r0.c0.p0",
+          "body.t7.r0.c1.p0",
+          "body.t7.r0.c2.p0"
+        ],
+        "structure_unit_id": "su-fe14d8b65b013a05b37ba829",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "伴发事件"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ]
+          ],
+          "row_headers": [
+            "伴发事件"
+          ],
+          "row_index": 0,
+          "table_path": [
+            0,
+            0
+          ]
+        },
+        "unit_kind": "table_header"
+      },
+      {
+        "excerpt": "研究设计",
+        "heading_path": [
+          "研究设计"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p515"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 22020,
+        "source_ref": "body.p515",
+        "source_span_ids": [
+          "body.p515"
+        ],
+        "structure_unit_id": "su-f98da1e9978cc143057a002f",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "总体设计",
+        "heading_path": [
+          "研究设计",
+          "总体设计"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p516"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 22030,
+        "source_ref": "body.p516",
+        "source_span_ids": [
+          "body.p516"
+        ],
+        "structure_unit_id": "su-2200506d71393ce5d08baf9f",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "研究设计的科学依据",
+        "heading_path": [
+          "研究设计",
+          "研究设计的科学依据"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p567"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 22540,
+        "source_ref": "body.p567",
+        "source_span_ids": [
+          "body.p567"
+        ],
+        "structure_unit_id": "su-31e21c0ecbf67f479a3820ca",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "剂量选择依据",
+        "heading_path": [
+          "研究设计",
+          "剂量选择依据"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p575"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 22620,
+        "source_ref": "body.p575",
+        "source_span_ids": [
+          "body.p575"
+        ],
+        "structure_unit_id": "su-80f1fd7203c64b003cff050f",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "研究结束的定义",
+        "heading_path": [
+          "研究设计",
+          "研究结束的定义"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p581"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 22680,
+        "source_ref": "body.p581",
+        "source_span_ids": [
+          "body.p581"
+        ],
+        "structure_unit_id": "su-e70c305b368b9aace2646ed8",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "研究终止或参与者退出/终止研究",
+        "heading_path": [
+          "研究设计",
+          "研究终止或参与者退出/终止研究"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p583"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 22700,
+        "source_ref": "body.p583",
+        "source_span_ids": [
+          "body.p583"
+        ],
+        "structure_unit_id": "su-e1ccb60897ce3d59e7609ec5",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "研究终止标准",
+        "heading_path": [
+          "研究设计",
+          "研究终止或参与者退出/终止研究",
+          "研究终止标准"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p584"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 22710,
+        "source_ref": "body.p584",
+        "source_span_ids": [
+          "body.p584"
+        ],
+        "structure_unit_id": "su-8f6019810a5663af4e74680c",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "参与者中止/退出研究",
+        "heading_path": [
+          "研究设计",
+          "研究终止或参与者退出/终止研究",
+          "参与者中止/退出研究"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p594"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 22810,
+        "source_ref": "body.p594",
+        "source_span_ids": [
+          "body.p594"
+        ],
+        "structure_unit_id": "su-32d9665a6207beadc272c6ca",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "失访",
+        "heading_path": [
+          "研究设计",
+          "研究终止或参与者退出/终止研究",
+          "失访"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p618"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 23050,
+        "source_ref": "body.p618",
+        "source_span_ids": [
+          "body.p618"
+        ],
+        "structure_unit_id": "su-889741261b877a852e20cb87",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "独立数据监查委员会（Independent Data Monitoring Committee，IDMC）",
+        "heading_path": [
+          "研究设计",
+          "独立数据监查委员会（Independent Data Monitoring Committee，IDMC）"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p623"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 23100,
+        "source_ref": "body.p623",
+        "source_span_ids": [
+          "body.p623"
+        ],
+        "structure_unit_id": "su-df7ef7193e029ba9e8be09c0",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "时间 | 禁止使用药物",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r0.c0.p0",
+          "body.t10.r0.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 24901,
+        "source_ref": "body.t10.r0",
+        "source_span_ids": [
+          "body.t10.r0.c0.p0",
+          "body.t10.r0.c1.p0"
+        ],
+        "structure_unit_id": "su-58132caf3c80e8b0a7d9f4a4",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "row_headers": [
+            "时间"
+          ],
+          "row_index": 0,
+          "table_path": [
+            0,
+            0
+          ]
+        },
+        "unit_kind": "table_header"
+      },
+      {
+        "excerpt": "首次给药前6个月至试验结束 | 靶向IL-12、IL-17和/或IL-23的生物制剂",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r1.c0.p0",
+          "body.t10.r1.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 24921,
+        "source_ref": "body.t10.r1",
+        "source_span_ids": [
+          "body.t10.r1.c0.p0",
+          "body.t10.r1.c1.p0"
+        ],
+        "structure_unit_id": "su-bc603cfe2fa2cb7ad4d26623",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前6个月至试验结束"
+          ],
+          "row_index": 1,
+          "table_path": [
+            1,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "首次给药前6个月至试验结束 | 利妥昔单抗或其它免疫细胞耗竭治疗",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r2.c0.p0",
+          "body.t10.r2.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 24941,
+        "source_ref": "body.t10.r2",
+        "source_span_ids": [
+          "body.t10.r2.c0.p0",
+          "body.t10.r2.c1.p0"
+        ],
+        "structure_unit_id": "su-74aba9c698c886a1b2b1b6c6",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              2,
+              0
+            ],
+            [
+              2,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前6个月至试验结束"
+          ],
+          "row_index": 2,
+          "table_path": [
+            2,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "首次给药前24个月至试验结束，若经过药物清除剂进行洗脱可缩短至首次给药前6个月 | 来氟米特",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r3.c0.p0",
+          "body.t10.r3.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药",
+          "洗脱"
+        ],
+        "priority_rank": 2,
+        "schema_version": "phase5/v1",
+        "source_order": 24961,
+        "source_ref": "body.t10.r3",
+        "source_span_ids": [
+          "body.t10.r3.c0.p0",
+          "body.t10.r3.c1.p0"
+        ],
+        "structure_unit_id": "su-184be475f9a138762a4ae397",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              3,
+              0
+            ],
+            [
+              3,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前24个月至试验结束，若经过药物清除剂进行洗脱可缩短至首次给药前6个月"
+          ],
+          "row_index": 3,
+          "table_path": [
+            3,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "首次给药前3个月或5个半衰期（以时间较长者为准）至试验结束 | 除靶向IL-12、IL-17和/或IL-23外的其他生物制剂",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r4.c0.p0",
+          "body.t10.r4.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 24981,
+        "source_ref": "body.t10.r4",
+        "source_span_ids": [
+          "body.t10.r4.c0.p0",
+          "body.t10.r4.c1.p0"
+        ],
+        "structure_unit_id": "su-b04fd15fba3f660d163bbd32",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              4,
+              0
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前3个月或5个半衰期（以时间较长者为准）至试验结束"
+          ],
+          "row_index": 4,
+          "table_path": [
+            4,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "首次给药前3个月或5个半衰期（以时间较长者为准）至试验结束 | 其它临床试验药物",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r5.c0.p0",
+          "body.t10.r5.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 25001,
+        "source_ref": "body.t10.r5",
+        "source_span_ids": [
+          "body.t10.r5.c0.p0",
+          "body.t10.r5.c1.p0"
+        ],
+        "structure_unit_id": "su-6cac7f360883d212807d6643",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              5,
+              0
+            ],
+            [
+              5,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前3个月或5个半衰期（以时间较长者为准）至试验结束"
+          ],
+          "row_index": 5,
+          "table_path": [
+            5,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "首次给药前4周至试验结束后8周 | 接种减毒活疫苗",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r6.c0.p0",
+          "body.t10.r6.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 25021,
+        "source_ref": "body.t10.r6",
+        "source_span_ids": [
+          "body.t10.r6.c0.p0",
+          "body.t10.r6.c1.p0"
+        ],
+        "structure_unit_id": "su-a81e48c4e5acc6af46028f1c",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              6,
+              0
+            ],
+            [
+              6,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前4周至试验结束后8周"
+          ],
+          "row_index": 6,
+          "table_path": [
+            6,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "首次给药前4周至试验结束 | 影响银屑病病情的非生物制剂系统治疗，包括但不限于 JAKs抑制剂、糖皮质激素、维A酸类、环孢素、甲氨蝶呤、黄芪、雷公藤、苦参、复方甘草酸铵、硫唑嘌呤、吗替麦考酚酯、中成药及传统中草药（对于无明确临床证据可能改善银屑病病情的中成药或传统中草药，禁用时间可缩短至给药前2周至试验结束）、抗疟药、干扰素或锂制剂等",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r7.c0.p0",
+          "body.t10.r7.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 25041,
+        "source_ref": "body.t10.r7",
+        "source_span_ids": [
+          "body.t10.r7.c0.p0",
+          "body.t10.r7.c1.p0"
+        ],
+        "structure_unit_id": "su-cdabd77985e360528548e52f",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              7,
+              0
+            ],
+            [
+              7,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前4周至试验结束"
+          ],
+          "row_index": 7,
+          "table_path": [
+            7,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "首次给药前4周至试验结束 | 肝药酶调节相关的中药治疗（如甘草、五味子等）",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r8.c0.p0",
+          "body.t10.r8.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 25061,
+        "source_ref": "body.t10.r8",
+        "source_span_ids": [
+          "body.t10.r8.c0.p0",
+          "body.t10.r8.c1.p0"
+        ],
+        "structure_unit_id": "su-128f8e8db83a0a1a05ca766c",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              8,
+              0
+            ],
+            [
+              8,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前4周至试验结束"
+          ],
+          "row_index": 8,
+          "table_path": [
+            8,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "首次给药前4周至试验结束 | 物理治疗，包括但不限于：紫外线疗法、光化学疗法、采用日光浴床自我治疗等",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r9.c0.p0",
+          "body.t10.r9.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 25081,
+        "source_ref": "body.t10.r9",
+        "source_span_ids": [
+          "body.t10.r9.c0.p0",
+          "body.t10.r9.c1.p0"
+        ],
+        "structure_unit_id": "su-0169fa2ac8ec34b55bb84046",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              9,
+              0
+            ],
+            [
+              9,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前4周至试验结束"
+          ],
+          "row_index": 9,
+          "table_path": [
+            9,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "首次给药前4周或5个半衰期（以时间较长者为准）至试验结束 | 任何影响研究评估的治疗，包括但不限于CYP3A强诱导剂或抑制剂的药物（见附录3）",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r10.c0.p0",
+          "body.t10.r10.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 25101,
+        "source_ref": "body.t10.r10",
+        "source_span_ids": [
+          "body.t10.r10.c0.p0",
+          "body.t10.r10.c1.p0"
+        ],
+        "structure_unit_id": "su-ffe84af13f283b2155231ca7",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              10,
+              0
+            ],
+            [
+              10,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前4周或5个半衰期（以时间较长者为准）至试验结束"
+          ],
+          "row_index": 10,
+          "table_path": [
+            10,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "首次给药前2周至试验结束 | 可能影响银屑病病情的局部用药/治疗（包括但不限于：糖皮质激素、维A酸类、维生素D3衍生物、钙调磷酸酶抑制剂、本维莫德、抗人IL-8单克隆抗体乳膏、焦油、水杨酸、地蒽酚等）或含有上述成分的洗浴产品，或可能影响银屑病病情的中成药外用剂、中医非药物疗法；",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r11.c0.p0",
+          "body.t10.r11.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 25121,
+        "source_ref": "body.t10.r11",
+        "source_span_ids": [
+          "body.t10.r11.c0.p0",
+          "body.t10.r11.c1.p0"
+        ],
+        "structure_unit_id": "su-b8e4de54e40eb452f668a250",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              11,
+              0
+            ],
+            [
+              11,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前2周至试验结束"
+          ],
+          "row_index": 11,
+          "table_path": [
+            11,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "首次给药前7天至试验结束 | 圣·约翰草（贯叶连翘）制品、葡萄柚或葡萄柚汁",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗",
+          "表 5 禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.t10.r12.c0.p0",
+          "body.t10.r12.c1.p0"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "首次给药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 25141,
+        "source_ref": "body.t10.r12",
+        "source_span_ids": [
+          "body.t10.r12.c0.p0",
+          "body.t10.r12.c1.p0"
+        ],
+        "structure_unit_id": "su-d7b9da3ea4a0ddd3a8c3a1a0",
+        "study_phase": "phase_ii",
+        "table_context": {
+          "column_headers": [
+            "时间"
+          ],
+          "column_index": 0,
+          "member_cell_paths": [
+            [
+              12,
+              0
+            ],
+            [
+              12,
+              1
+            ]
+          ],
+          "row_headers": [
+            "首次给药前7天至试验结束"
+          ],
+          "row_index": 12,
+          "table_path": [
+            12,
+            0
+          ]
+        },
+        "unit_kind": "table_row"
+      },
+      {
+        "excerpt": "Ⅱ期临床研究阶段不设置补救治疗。",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "补救治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p761"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 25180,
+        "source_ref": "body.p761",
+        "source_span_ids": [
+          "body.p761"
+        ],
+        "structure_unit_id": "su-9e4d8cbc355964226ba99ee4",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "Ⅲ期期临床研究阶段，如果研究者评估需要（即，为了控制无法耐受的斑块状银屑病症状），可以根据判断使用原本禁止的药物向受试者提供补救治疗，但不建议早于第24周访视。",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "补救治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p762"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 25190,
+        "source_ref": "body.p762",
+        "source_span_ids": [
+          "body.p762"
+        ],
+        "structure_unit_id": "su-3377bccf5ad83b977f6a78e2",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "访视安排",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p838"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 26040,
+        "source_ref": "body.p838",
+        "source_span_ids": [
+          "body.p838"
+        ],
+        "structure_unit_id": "su-43f6d60350ab9cfc1aa39364",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "Ⅱ期临床研究阶段",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅱ期临床研究阶段"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p839"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 26050,
+        "source_ref": "body.p839",
+        "source_span_ids": [
+          "body.p839"
+        ],
+        "structure_unit_id": "su-3da79372a614430c8c9fbcb5",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "筛选期",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅱ期临床研究阶段",
+          "筛选期"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p840"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [
+          "筛选"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 26060,
+        "source_ref": "body.p840",
+        "source_span_ids": [
+          "body.p840"
+        ],
+        "structure_unit_id": "su-019c806d5c597b399cf35e95",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "治疗期",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅱ期临床研究阶段",
+          "治疗期"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p869"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 26350,
+        "source_ref": "body.p869",
+        "source_span_ids": [
+          "body.p869"
+        ],
+        "structure_unit_id": "su-25351f8cc2d7234f3441339d",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "随访期（W16）",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅱ期临床研究阶段",
+          "随访期（W16）"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p903"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 26690,
+        "source_ref": "body.p903",
+        "source_span_ids": [
+          "body.p903"
+        ],
+        "structure_unit_id": "su-86dbbcf10fdb59a8f18d9ead",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "提前退出访视（末次给药后7天内）",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅱ期临床研究阶段",
+          "提前退出访视（末次给药后7天内）"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p915"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 26810,
+        "source_ref": "body.p915",
+        "source_span_ids": [
+          "body.p915"
+        ],
+        "structure_unit_id": "su-31dc8acb2c386a0e5175308c",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "计划外访视/检查",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅱ期临床研究阶段",
+          "计划外访视/检查"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p931"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 26970,
+        "source_ref": "body.p931",
+        "source_span_ids": [
+          "body.p931"
+        ],
+        "structure_unit_id": "su-a1c30e64c7ceae977cb100d0",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "Ⅲ期临床研究阶段",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅲ期临床研究阶段"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p935"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 27010,
+        "source_ref": "body.p935",
+        "source_span_ids": [
+          "body.p935"
+        ],
+        "structure_unit_id": "su-717dbc4b0ed03d1b2550e5a2",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "筛选期",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅲ期临床研究阶段",
+          "筛选期"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p936"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [
+          "筛选"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 27020,
+        "source_ref": "body.p936",
+        "source_span_ids": [
+          "body.p936"
+        ],
+        "structure_unit_id": "su-90d45f57486229959f8ffa75",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "治疗期",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅲ期临床研究阶段",
+          "治疗期"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p938"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 27040,
+        "source_ref": "body.p938",
+        "source_span_ids": [
+          "body.p938"
+        ],
+        "structure_unit_id": "su-63fe0f2b478d0470391a3cc7",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "安全性随访（W56）",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅲ期临床研究阶段",
+          "安全性随访（W56）"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p972"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 27380,
+        "source_ref": "body.p972",
+        "source_span_ids": [
+          "body.p972"
+        ],
+        "structure_unit_id": "su-ea9bc6e32b897d350f7a8d14",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "提前退出访视（末次给药后7天内）",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅲ期临床研究阶段",
+          "提前退出访视（末次给药后7天内）"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p976"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 27420,
+        "source_ref": "body.p976",
+        "source_span_ids": [
+          "body.p976"
+        ],
+        "structure_unit_id": "su-51061ee2670a27dee17fff01",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "计划外访视/检查",
+        "heading_path": [
+          "研究评估和程序",
+          "访视安排",
+          "Ⅲ期临床研究阶段",
+          "计划外访视/检查"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p978"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 27440,
+        "source_ref": "body.p978",
+        "source_span_ids": [
+          "body.p978"
+        ],
+        "structure_unit_id": "su-bdfb76540c27baf7a54d0e45",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "Ⅱ期临床研究阶段",
+        "heading_path": [
+          "统计学考虑",
+          "统计分析",
+          "疗效分析",
+          "Ⅱ期临床研究阶段"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p1206"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 30690,
+        "source_ref": "body.p1206",
+        "source_span_ids": [
+          "body.p1206"
+        ],
+        "structure_unit_id": "su-725445c7457d0eaf1feb43aa",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "主要疗效指标分析",
+        "heading_path": [
+          "统计学考虑",
+          "统计分析",
+          "疗效分析",
+          "Ⅱ期临床研究阶段",
+          "主要疗效指标分析"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p1207"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 30700,
+        "source_ref": "body.p1207",
+        "source_span_ids": [
+          "body.p1207"
+        ],
+        "structure_unit_id": "su-fb7909ae9d90e7e29de867ca",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "次要疗效指标分析",
+        "heading_path": [
+          "统计学考虑",
+          "统计分析",
+          "疗效分析",
+          "Ⅱ期临床研究阶段",
+          "次要疗效指标分析"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p1210"
+        ],
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 30730,
+        "source_ref": "body.p1210",
+        "source_span_ids": [
+          "body.p1210"
+        ],
+        "structure_unit_id": "su-eb985a02366fd4c619d49941",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "Ⅲ期临床研究阶段",
+        "heading_path": [
+          "统计学考虑",
+          "统计分析",
+          "疗效分析",
+          "Ⅲ期临床研究阶段"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p1214"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 30770,
+        "source_ref": "body.p1214",
+        "source_span_ids": [
+          "body.p1214"
+        ],
+        "structure_unit_id": "su-24dc95abb625a0c2e7f85d3b",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "主要估计目标分析",
+        "heading_path": [
+          "统计学考虑",
+          "统计分析",
+          "疗效分析",
+          "Ⅲ期临床研究阶段",
+          "主要估计目标分析"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p1216"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 30790,
+        "source_ref": "body.p1216",
+        "source_span_ids": [
+          "body.p1216"
+        ],
+        "structure_unit_id": "su-03326c1e17587bc1938d6330",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "次要疗效指标分析",
+        "heading_path": [
+          "统计学考虑",
+          "统计分析",
+          "疗效分析",
+          "Ⅲ期临床研究阶段",
+          "次要疗效指标分析"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p1221"
+        ],
+        "phase_scopes": [
+          "phase_iii"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 30840,
+        "source_ref": "body.p1221",
+        "source_span_ids": [
+          "body.p1221"
+        ],
+        "structure_unit_id": "su-72e76f39ecb1f9698723a497",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      }
+    ],
+    "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+    "frozen_source_span_ids": [
+      "body.p1206",
+      "body.p1207",
+      "body.p1210",
+      "body.p1214",
+      "body.p1216",
+      "body.p1221",
+      "body.p446",
+      "body.p455",
+      "body.p465",
+      "body.p483",
+      "body.p502",
+      "body.p515",
+      "body.p516",
+      "body.p567",
+      "body.p575",
+      "body.p581",
+      "body.p583",
+      "body.p584",
+      "body.p594",
+      "body.p618",
+      "body.p623",
+      "body.p748",
+      "body.p749",
+      "body.p750",
+      "body.p751",
+      "body.p752",
+      "body.p753",
+      "body.p754",
+      "body.p755",
+      "body.p756",
+      "body.p757",
+      "body.p758",
+      "body.p761",
+      "body.p762",
+      "body.p838",
+      "body.p839",
+      "body.p840",
+      "body.p869",
+      "body.p903",
+      "body.p915",
+      "body.p931",
+      "body.p935",
+      "body.p936",
+      "body.p938",
+      "body.p972",
+      "body.p976",
+      "body.p978",
+      "body.t10.r0.c0.p0",
+      "body.t10.r0.c1.p0",
+      "body.t10.r1.c0.p0",
+      "body.t10.r1.c1.p0",
+      "body.t10.r10.c0.p0",
+      "body.t10.r10.c1.p0",
+      "body.t10.r11.c0.p0",
+      "body.t10.r11.c1.p0",
+      "body.t10.r12.c0.p0",
+      "body.t10.r12.c1.p0",
+      "body.t10.r2.c0.p0",
+      "body.t10.r2.c1.p0",
+      "body.t10.r3.c0.p0",
+      "body.t10.r3.c1.p0",
+      "body.t10.r4.c0.p0",
+      "body.t10.r4.c1.p0",
+      "body.t10.r5.c0.p0",
+      "body.t10.r5.c1.p0",
+      "body.t10.r6.c0.p0",
+      "body.t10.r6.c1.p0",
+      "body.t10.r7.c0.p0",
+      "body.t10.r7.c1.p0",
+      "body.t10.r8.c0.p0",
+      "body.t10.r8.c1.p0",
+      "body.t10.r9.c0.p0",
+      "body.t10.r9.c1.p0",
+      "body.t5.r0.c0.p0",
+      "body.t5.r0.c1.p0",
+      "body.t5.r0.c3.p0",
+      "body.t5.r0.c8.p0",
+      "body.t5.r0.c9.p0",
+      "body.t6.r0.c0.p0",
+      "body.t6.r0.c1.p0",
+      "body.t6.r0.c18.p0",
+      "body.t6.r0.c18.p1",
+      "body.t6.r0.c18.p2",
+      "body.t6.r0.c19.p0",
+      "body.t6.r0.c3.p0",
+      "body.t6.r0.c9.p0",
+      "body.t7.r0.c0.p0",
+      "body.t7.r0.c1.p0",
+      "body.t7.r0.c2.p0"
+    ],
+    "opposite_phase": "phase_iii",
+    "owned_units": [
+      {
+        "excerpt": "合并用药/治疗",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p748"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "合并用药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 24780,
+        "source_ref": "body.p748",
+        "source_span_ids": [
+          "body.p748"
+        ],
+        "structure_unit_id": "su-d845a112f869c5334c65fdd8",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "合并治疗为合并药物/非药物治疗，包括参与者自签署ICF开始至研究结束使用的任何药物、治疗，应详细记录在eCRF中，并注明用药/治疗原因、给药/治疗方法及起止时间等。",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p749"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 24790,
+        "source_ref": "body.p749",
+        "source_span_ids": [
+          "body.p749"
+        ],
+        "structure_unit_id": "su-256df82ad8f103fea4136561",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "允许的合并用药/治疗",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "允许的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p750"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "合并用药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 24800,
+        "source_ref": "body.p750",
+        "source_span_ids": [
+          "body.p750"
+        ],
+        "structure_unit_id": "su-f0aa4a3510f3be9cd68b34e8",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "参与者在研究期间，除方案禁止的合并用药外，允许的合并治疗如下：",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "允许的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p751"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "合并用药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 24810,
+        "source_ref": "body.p751",
+        "source_span_ids": [
+          "body.p751"
+        ],
+        "structure_unit_id": "su-f082f00b4ee093ce794e2b47",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "允许对合并疾病（如高血压、糖尿病等）的伴随用药，但研究期间尽量保持剂量不变，除非存在临床病情需要，如发生剂量调整，需记录在eCRF中。",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "允许的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p752"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 24820,
+        "source_ref": "body.p752",
+        "source_span_ids": [
+          "body.p752"
+        ],
+        "structure_unit_id": "su-b1030761a3662323f1d308c9",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "list_item"
+      },
+      {
+        "excerpt": "允许局部使用温和润肤剂（不含药理活性成分）。参与者在研究之前已规律使用温和润肤剂（经研究者确认），研究期间可以原使用方案继续使用该润肤剂；如在研究开始前未使用润肤剂，研究期间不建议使用润肤剂。在整个研究过程中，应尽一切努力保持使用相同的润肤剂和使用习惯。日记卡记录每日是否有使用润肤剂。请注意，每次访视前24小时内不得使用润肤剂。",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "允许的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p753"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 24830,
+        "source_ref": "body.p753",
+        "source_span_ids": [
+          "body.p753"
+        ],
+        "structure_unit_id": "su-dce893c13dfad1aebfe16f46",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "list_item"
+      },
+      {
+        "excerpt": "允许使用鼻内用皮质类固醇制剂及吸入用皮质类固醇。",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "允许的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p754"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 24840,
+        "source_ref": "body.p754",
+        "source_span_ids": [
+          "body.p754"
+        ],
+        "structure_unit_id": "su-616027f162d776475a2882a4",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "list_item"
+      },
+      {
+        "excerpt": "经研究者评估，认为必要的用于治疗不良事件的药物/治疗。",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "允许的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p755"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [],
+        "priority_rank": 0,
+        "schema_version": "phase5/v1",
+        "source_order": 24850,
+        "source_ref": "body.p755",
+        "source_span_ids": [
+          "body.p755"
+        ],
+        "structure_unit_id": "su-d0b1c7d16e60b250b133e792",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "list_item"
+      },
+      {
+        "excerpt": "禁止的合并用药/治疗",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p756"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "合并用药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 24860,
+        "source_ref": "body.p756",
+        "source_span_ids": [
+          "body.p756"
+        ],
+        "structure_unit_id": "su-e0c9c55ccee73ec3cb53ecd2",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "基线前的指定时间内至试验结束期间，不得接受以下药物，见表5，若接受禁用药物经研究者或申办者评估必要时需要退出试验。",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p757"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "基线"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 24870,
+        "source_ref": "body.p757",
+        "source_span_ids": [
+          "body.p757"
+        ],
+        "structure_unit_id": "su-982550089ac464b79da21905",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      },
+      {
+        "excerpt": "表 5 禁止的合并用药/治疗",
+        "heading_path": [
+          "研究治疗",
+          "合并用药/治疗",
+          "禁止的合并用药/治疗"
+        ],
+        "is_footnote_or_note": false,
+        "member_source_refs": [
+          "body.p758"
+        ],
+        "phase_scopes": [
+          "unknown"
+        ],
+        "priority_keyword_hits": [
+          "合并用药"
+        ],
+        "priority_rank": 1,
+        "schema_version": "phase5/v1",
+        "source_order": 24880,
+        "source_ref": "body.p758",
+        "source_span_ids": [
+          "body.p758"
+        ],
+        "structure_unit_id": "su-00742fef29e2f40170885472",
+        "study_phase": "phase_ii",
+        "table_context": null,
+        "unit_kind": "paragraph"
+      }
+    ],
+    "package_id": "pap-e2ecad607cf61c1757ebc571",
+    "package_ordinal": 69,
+    "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+    "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+    "schema_version": "phase5/v1",
+    "selected_phase": "phase_ii",
+    "snapshot_id": "d001-ii-phase-closure-20260825-slice58e-snapshot"
+  },
+  "schema_version": "phase5/phase-applicability-agent-input/v1"
+}

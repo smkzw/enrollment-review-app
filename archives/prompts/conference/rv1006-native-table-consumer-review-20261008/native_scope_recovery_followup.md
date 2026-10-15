@@ -1,0 +1,15 @@
+# 同一来源接线包：表头时间遗漏的原因分流
+
+只读工程差异审阅；不执行修改、不调用产品模型、不读tmp、数据库、真实方案、环境或临床原答。不递归派发。基础9d91bbd4及当前五文件明确补丁，以源码为准。
+
+实际首错线索：新合法产品Job42e547…7物理调用/199.182秒后失败；第17组第5条逐字动作的来源解释scope/stage/time_words全空。只读原生定位证明本行只有一个标记列，具有四层真实表头/位置及基线边界；reviewer读出时点后SOURCE_TIME_UNGROUNDED正确拒绝。此前schedule_column_links返回空是因为没有匹配已有目标，不代表没有表头。没有降低来源核对门，不能让reviewer直接写入来源含义。
+
+本修订：native_schedule_time_excerpt_is_grounded仅选择旧correct_source_scope入口。要求整行逐字摘录、所有标记列的有源明确表头均支持同一摘录、无访视未决/标记脚注，不借别列或同单元另一陈述。旧源码已有scope_quote可引用全标记列共同标题的来源门。本次复用这个门由模型提出单条范围/阶段/时间修订，宿主拒无共同scope、无时间或借新context ID；原句/用途/例外/兄弟由现有SourceScopeCorrection装配保持。然后重建coverage，重新核目标；正确范围不自动变成已覆盖，也不产生患者满足结论。结构/来源/完整发布门不变。
+
+同条最多一次来源修正及一次目标复核，沿原repaired_review_indexes保护，并计入既有source_repairs；transport/budget/identity原分类保持。明确预算耗尽、同条重复错误、错误范围、空时间保留失败/草稿，不能重置次数。源修订记录现存attempt中保存原前置hash/来源/实际原答hash。真实调用由product transport保留全部请求与回执，不拿工程会商替代产品。
+
+版本取舍待挑战：不改变基础作者/来源解读/核对Schema和既有范围核对prompt；新增局部路由和提示后缀从未在旧结果执行。仅validator_version追加native-table-scope-recovery/v1，当前门仍重验全部复用结果，旧来源/模型/编译/Schema变化继续拒绝；repair历史摘要不反算，不改旧记录。是否这个局部接线确实不改变旧合格含义？若有具体反例给出，不用全量重读作默认答案。
+
+允许读取五文件受影响完整定义：app/agents/protocol_control_source_interpretation.py的native_schedule_time_excerpt_is_grounded、build_source_scope_correction_prompt、apply_source_scope_correction、validate_source_interpretation、validate_source_target_review；app/agents/protocol_control_deconstructor.py的Runner来源/目标核对及build_result恢复片段；app/services/protocol_control_execution.py的组件/当前门复用及已保存scope修订重放；tests/v2/protocols/test_slice58c_control_deconstructor.py新native_time_recheck测试及相邻故障测试；tests/v2/services/test_protocol_control_execution.py validator-only正反例。必要时app/protocols/procedure_catalog.py的schedule_column_scope。最多10次有界读取，不扫全文日志。不运行测试。
+
+输出必须修/残余/反证，指出第一因果错误或具体越界方式；重点检查恢复重放、预算、兄弟依赖、资料范围及真实共同标题，不将模型判断视为批准。给精确落点，约1200中文字符。明确未测试/未临床核实。

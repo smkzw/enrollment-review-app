@@ -1,0 +1,19 @@
+{
+  "attached_count": 62,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-fee4a2a68764936d87c0d83b",
+  "group_id": "d001-ii-package81-ae-diagnosis-secondary-event-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 4,
+    "frozen_plan_owned": 64
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package81-ae-diagnosis-secondary-event-boundary",
+  "owned_count": 6,
+  "prompt_char_count": 61555,
+  "prompt_sha256": "721eed73cd0f14e77306cb6739cd9673d463a9accba85faa512aa6a19d691483",
+  "task_id": "phase5-slice61bs-20260830",
+  "unit_count": 68,
+  "worker": "codebuddy-worker_02"
+}

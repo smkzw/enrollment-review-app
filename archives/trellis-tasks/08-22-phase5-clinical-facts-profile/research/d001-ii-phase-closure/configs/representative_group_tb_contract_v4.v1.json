@@ -1,0 +1,11 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_tb.v1.json",
+  "artifact_dir_name": "phase5-slice59n-d001-tb-control-replay-contract-v4-20260828",
+  "runner": {
+    "max_schema_repairs": 6
+  },
+  "notes": [
+    "验证单条件触发、显式例外分层及已覆盖重述不重复建候选。"
+  ]
+}

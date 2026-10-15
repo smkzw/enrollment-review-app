@@ -1,0 +1,20 @@
+{
+  "attached_count": 4,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-1b500118704447959f5e1565",
+  "group_id": "d001-ii-vital-sign-modality-v4",
+  "lookup_counts": {
+    "coverage_manifest": 1,
+    "frozen_plan_context": 2,
+    "frozen_plan_owned": 4
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-vital-sign-modality-v4",
+  "owned_count": 3,
+  "prompt_char_count": 30753,
+  "prompt_sha256": "92365be053baf729c9f570a2b16ec6dc3ba85b926f569149694c931bf170a5f7",
+  "task_id": "phase5-slice61ay-20260829",
+  "unit_count": 7,
+  "worker": "codex-parent"
+}

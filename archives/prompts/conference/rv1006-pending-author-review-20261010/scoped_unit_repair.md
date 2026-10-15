@@ -1,0 +1,15 @@
+# 同批准角色增量：来源闭包的局部修订
+
+工程只读审阅；批准既有C03/evidence_single_object同会话增量。禁止写文件/shell/网络/临床原件/DB/env/原答/测试执行/递归派发；源码只读最多20次。基础c8c90050后当前三源码、三原模块测试增量，以实际源码为准，不重复全部历史。
+
+请核完整新增_merge_scoped_unit_repair、_restore_bounded_wire_repair闭包分支、_parse_repartition_with_checked_time、Runner的局部parse/授权范围选择/调用/旧预算/完整后置校验。核transport.continue_scoped_unit_repair、restore_scoped_session与完整历史continue_session的区别；核Service._pending_author_resume及当前组成身份只增加validator版本、不改变来源/作者/编译/线路资格。
+
+真实新Job在旧44基础保存3组，但49作者将一表行关联到无该行来源的目录目标，随后改为supporting说明且没有候选，原闭包门拒绝正确。没有医学金标，也没有证明该行应该如何归类。待核作者提案已合法保存；现仅scoped绑定，不具备真实历史continue_session能力，盲续跑会在发送前失败。新增路径按现有error.allow_candidate_repartition及原候选传递闭包选择写域，提供原有只读上下文/来源解释/局部未核提案，缩小已有wire Schema到授权owned units。模型只回此闭包的dispositions和候选；宿主原样保留其他兄弟，再走原restore/hydrate/full source/gate/reviewer，不弱化supporting删除要求的拒绝。来源/行为、临床值、历史和发布权限不扩。
+
+transport仅接受已有真实history或已核scoped绑定；本次self-contained请求不伪造旧assistant，也不保存为全会话。全包continue_session仍需要真实history。无该可选方法的老替身/传输仍旧路径，不宣称全部恢复通道兼容。记录请求仍既有适配器/Job，累计作者修订数仍原Runner；旧回执不改，新validator进入身份。
+
+风险重点：闭包是否能借同来源扩越授权？外部候选/空处置/候选来源跨域是否可注入？之前同源兄弟/已核时间是否被覆盖？没有候选的非法支持说明能否因merge而通过？局部上下文保留是否不全/重复？新method是否错误提供全包历史权限、丢预算或重置会话？局部可读Schema和程序实际接受域是否一致？新路径会否改变有源未决或伪造来源对应？请以真实可达的第一处因果错误和最小修复报告，不要求全面重构或更多模型。
+
+测试是合成输入，原模块scoped_unit_repair覆盖extra/missing/cross-source/删除要求、普通及已保存提案Runner消费、局部/云端适配器真实请求形态。不代表规则采用或临床验收；实际后续Job未运行。前置首窗8失败是新夹具用空候选_wire默认值，以及云端native JSON无response_format时的错误断言；已改为显式候选并核真正prompt Schema，不改产品门。
+
+输出已读范围、按严重度发现、可否有界使用和未证边界。只有同家族程序/context分离，不叫独立模型金标/临床批准。不输出临床原文。

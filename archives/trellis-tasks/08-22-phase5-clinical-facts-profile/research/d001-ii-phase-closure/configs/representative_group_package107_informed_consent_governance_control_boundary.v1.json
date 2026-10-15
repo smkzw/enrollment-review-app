@@ -1,0 +1,513 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package107-informed-consent-governance-control-boundary",
+  "task_id": "phase5-slice61ct-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "expected_package_ordinal": 107,
+  "expected_package_id": "pap-b119517783facd407b628e1e",
+  "owned_source_refs": [
+    "body.p1251",
+    "body.p1252",
+    "body.p1253",
+    "body.p1254",
+    "body.p1255",
+    "body.p1256",
+    "body.p1257",
+    "body.p1258",
+    "body.p1259"
+  ],
+  "attached_source_refs": [],
+  "required_candidate_source_refs": [
+    "body.p1257",
+    "body.p1259"
+  ],
+  "forbidden_candidate_source_refs": [
+    "body.p1251",
+    "body.p1252",
+    "body.p1253",
+    "body.p1254",
+    "body.p1255",
+    "body.p1256",
+    "body.p1258"
+  ],
+  "pre_enrollment_source_refs": [
+    "body.p1257",
+    "body.p1259"
+  ],
+  "structural_only_source_refs": [
+    "body.p1251",
+    "body.p1252",
+    "body.p1255"
+  ],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1253": "non_enrollment_execution",
+    "body.p1254": "non_enrollment_execution",
+    "body.p1256": "non_enrollment_execution",
+    "body.p1257": "other_control_candidate",
+    "body.p1258": "non_enrollment_execution",
+    "body.p1259": "other_control_candidate"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {
+    "body.p1257": [
+      "flow-screening"
+    ],
+    "body.p1259": [
+      "flow-screening"
+    ]
+  },
+  "owned_visit_instances_by_source_ref": {
+    "body.p1257": "筛选访视",
+    "body.p1259": "筛选访视"
+  },
+  "owned_procedure_semantic_families_by_source_ref": {
+    "body.p1257": [
+      "informed_consent"
+    ],
+    "body.p1259": [
+      "informed_consent"
+    ]
+  },
+  "owned_required_action_kinds_by_source_ref": {
+    "body.p1257": [
+      "communicate_with_participant",
+      "explain_information",
+      "witness_consent"
+    ],
+    "body.p1259": [
+      "allow_informed_decision_time",
+      "obtain_signature",
+      "record_signature_date",
+      "record_signer_relationship"
+    ]
+  },
+  "owned_required_procedure_target_ids_by_source_ref": {
+    "body.p1257": [
+      "procedure:d001-icf-screening"
+    ],
+    "body.p1259": [
+      "procedure:d001-icf-screening"
+    ]
+  },
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1251": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "伦理考虑决定受试者资格"
+    ],
+    "body.p1252": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "遵守法律法规决定受试者资格"
+    ],
+    "body.p1253": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "未按ICH E6执行不得入组",
+      "未按GCP执行不得入组",
+      "未按赫尔辛基宣言执行不得入组",
+      "伦理委员会审核意见决定单例资格"
+    ],
+    "body.p1254": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "伦理未批准不得入组",
+      "研究药物未提供不得入组",
+      "方案增补未告知伦理不得入组",
+      "进展报告缺失不得入组",
+      "通讯副本未交申办者不得入组",
+      "书面核准意见缺失即入排不通过",
+      "伦理报批决定单例资格"
+    ],
+    "body.p1255": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "知情同意标题决定受试者资格"
+    ],
+    "body.p1256": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "ICF未经伦理批准不得入组",
+      "ICF文件治理决定单例资格",
+      "ICF模板未批准即入排不通过"
+    ],
+    "body.p1257": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "筛选前解释所有研究程序",
+      "获得参与者自愿签署的ICF",
+      "筛选前签署知情同意书",
+      "持续告知缺失不得入组",
+      "新信息未告知即入排不通过",
+      "公正见证人缺失不得入组",
+      "口头或书面告知缺失不得入组",
+      "持续告知决定单例资格"
+    ],
+    "body.p1258": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "ICF模板缺项不得入组",
+      "ICF内容清单决定单例资格",
+      "受益风险表述缺失即入排不通过",
+      "ICF模板内容误作单例资格"
+    ],
+    "body.p1259": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "筛选前解释所有研究程序",
+      "获得参与者自愿签署的ICF",
+      "筛选前签署知情同意书",
+      "签署即可无需注明日期",
+      "仅参与者签名即可",
+      "充分时间可省略",
+      "非本人签署无需注明关系",
+      "ICF只需一方留存",
+      "重要新资料后无需再次同意",
+      "重要新资料后无需伦理批准即可再次同意",
+      "通用ICF签署控制重复发布"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {
+    "body.p1257": [
+      "口头和书面",
+      "公正见证人",
+      "可以理解"
+    ],
+    "body.p1259": [
+      "充分的时间和机会",
+      "分别签名并注明日期",
+      "注明关系"
+    ]
+  },
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "先逐条读取第107包body.p1251-p1259原文并区分四类语义：研究级伦理治理（p1253-p1254及标题p1251/p1252）、ICF文件治理（p1256）与ICF模板内容清单（p1258）、知情过程（p1257口头/书面告知、公正见证人、可理解解释、持续新信息告知）、签署与重新同意控制（p1259充分时间、参与者或监护人与执行知情同意研究者分别签名并注明日期、非本人签署关系、双方各留存1份、重要新资料书面修改经伦理批准后再次同意）。第67包已接受的筛选前解释所有研究程序与自愿签署ICF控制不得重复发布；伦理报批、ICF模板内容、持续告知、双方留存和后续重新同意仍是研究治理。p1257的口头与书面告知、条件性公正见证、可理解解释，以及p1259的充分考虑时间、双方签名日期和代签关系，是参加研究前可核验的独立过程增量，必须作为筛选期补充候选关联既有ICF流程。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第107包位于Ⅱ期伦理考虑章节，覆盖遵守法律法规与知情同意两小节。p1253-p1254属于研究级伦理治理；p1256和p1258属于ICF文件/模板治理，均不是单例资格。p1257与p1259同时含有参加研究前的知情过程增量和研究进行期治理：前者的口头与书面告知、条件性公正见证、可理解解释，以及后者的充分考虑时间、双方签名日期和代签关系，适用于筛选期并关联既有ICF流程；持续告知、双方留存和重要新资料后的伦理批准与再次同意仍按签署/重新同意研究进行期治理，不改写为筛选期资格。不得重复第67包通用解释与自愿签署控制；Package 106止于p1250，Package 108从p1260起不得吸入。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": [
+      {
+        "catalog_item_id": "procedure:d001-icf-screening",
+        "label": "筛选前签署知情同意书",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 37,
+        "semantic_family": "informed_consent",
+        "covered_action_kinds": [
+          "obtain_signature"
+        ],
+        "source_span_ids": [
+          "span-256a4cdd18240eba234318556286eec1",
+          "span-413463d039fc6db079a2b7aa84dc65a7",
+          "span-96728348c04be6cf0d9812e3e5f4fa3e"
+        ]
+      }
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61ct-package107-informed-consent-governance-control-boundary",
+    "catalog_id": "catalog:slice61ct-package107-informed-consent-governance-control-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1251": [
+      "伦理考虑标题仅提供章节结构，不独立生成候选、流程节点、官方规则或受试者控制点"
+    ],
+    "body.p1252": [
+      "遵守法律法规标题仅提供小节结构，不独立生成候选或单例资格"
+    ],
+    "body.p1253": [
+      "研究须按ICH E6、我国GCP、赫尔辛基宣言、相关法律法规及伦理委员会审核意见执行，属于研究级伦理合规治理，不得改写为单例入排条件"
+    ],
+    "body.p1254": [
+      "研究开始之前须将方案、知情同意书及其他必需材料交伦理委员会审阅批准；申办者只有在接到伦理委员会批准件后才能提供研究药物",
+      "必须告知伦理委员会可能影响参与者安全和继续参加研究的后续方案增补件及试验过程严重不良事件；研究者报告进展并将与伦理委员会通讯副本交申办者",
+      "伦理委员会批准时须确认方案/研究标题、方案/研究编号、已评审方案文件及评审日期；研究期间方案/ICF新增修订须再次获得相关管理单位书面核准意见",
+      "上述伦理报批与研究治理义务不得误成单例筛选/基线/入排不通过条件；与Package 108的IRB/EC专节边界不得混淆或提前吸收"
+    ],
+    "body.p1255": [
+      "知情同意标题仅提供小节结构，不独立生成候选或重复第67包签署控制"
+    ],
+    "body.p1256": [
+      "ICF（和研究方案一起）必须经伦理委员会审查及批准，属于ICF文件治理，不得误成单例资格或替代第67包筛选前签署控制"
+    ],
+    "body.p1257": [
+      "必须以口头和书面两种方式告知研究信息；无阅读能力时公正见证人须阅读ICF及其他书面资料并见证知情同意",
+      "须用参与者可以理解的方式和措词解释ICF内容，使参与者或其监护人、见证人易于理解",
+      "获得可能影响继续参加研究的新信息时及时告知并记录，属于持续告知过程义务，不得改写为单例入排不通过",
+      "不得重复发布第67包已接受的筛选前解释所有研究程序或自愿签署ICF通用控制"
+    ],
+    "body.p1258": [
+      "最终ICF文本及其他资料应包含研究概况、目的、过程与期限、研究步骤、义务、受益（含不获益可能）与风险、分组可能性、损害治疗与补偿、参加补偿、自愿参加、个人资料保密等模板内容",
+      "ICF模板内容清单是文件治理要求，不得误成单例资格、排除标准或入排不通过条件"
+    ],
+    "body.p1259": [
+      "签署ICF之前须给予充分的时间和机会了解临床研究详细情况；充分理解时间机会不得省略",
+      "参与者或其监护人以及执行知情同意的研究者须在ICF上分别签名并注明日期；若非参与者本人签署须注明关系",
+      "ICF应由研究者和参与者各保留1份",
+      "涉及研究药物的重要新资料须将ICF作书面修改送伦理委员会批准后，再次取得参与者或其监护人同意",
+      "上述签署/日期/充分理解/双方留存/重新同意控制必须保留为过程语义，不得压缩成第67包已覆盖的通用自愿签署或筛选前解释控制，也不得改写为笼统不得入组资格句"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1251": {
+      "semantic_role": "ethics_considerations_section_heading",
+      "base_rule": "伦理考虑",
+      "exception_rule": "这是章节标题，仅建立遵守法律法规与知情同意小节的结构归属，不形成伦理批准、知情过程、签署或入排控制。",
+      "preserve_keywords": [
+        "伦理考虑"
+      ],
+      "forbidden_inversion": "不得把章节标题改写为伦理考虑决定受试者资格、筛选必做、基线必做或发布控制点。"
+    },
+    "body.p1252": {
+      "semantic_role": "regulatory_compliance_subsection_heading",
+      "base_rule": "遵守法律法规",
+      "exception_rule": "这是小节标题，仅建立p1253-p1254研究级伦理治理的结构归属，不形成单例资格或入排条件。",
+      "preserve_keywords": [
+        "遵守法律法规"
+      ],
+      "forbidden_inversion": "不得把小节标题改写为遵守法律法规决定受试者资格或入排不通过。"
+    },
+    "body.p1253": {
+      "semantic_role": "study_level_ethics_legal_compliance_governance",
+      "base_rule": "本研究将完全按照ICH E6和我国GCP指导原则、赫尔辛基宣言、相关法律法规及伦理委员会审核意见进行，以提供并加强对个人的保护。",
+      "exception_rule": "本条是研究级伦理与法规合规治理，用于约束整项研究的执行框架和对个人的保护；不是单例受试者筛选、基线或入排资格条件。",
+      "preserve_keywords": [
+        "ICH E6",
+        "我国GCP指导原则",
+        "赫尔辛基宣言",
+        "相关法律法规",
+        "伦理委员会审核意见",
+        "加强对个人的保护"
+      ],
+      "forbidden_inversion": "不得把ICH E6/GCP/赫尔辛基宣言/伦理委员会审核意见改写为某名受试者不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1254": {
+      "semantic_role": "pre_study_and_ongoing_ethics_committee_governance",
+      "base_rule": "在研究开始之前，研究者应将研究方案、知情同意书以及其他必需的材料交于伦理委员会供其审阅及批准。申办者只有在接到伦理委员会的批准件后才能提供研究药物。同时必须告知伦理委员会可能会影响参与者安全和继续参加研究的后续方案增补件和在试验过程中发生的严重不良事件。研究者有责任向伦理委员会报告有关研究的进展情况。此外，研究者必须及时将与伦理委员会之间的所有的通讯副本交于申办者。伦理委员会在审阅及批准研究方案时，必须确认方案/研究标题，方案/研究编号，并注明已评审的方案文件及评审日期。在研究进行期间，如果研究方案、知情同意书等有任何新增修订，都应根据法规再次获得相关管理单位的书面核准意见。",
+      "exception_rule": "研究开始前伦理材料审阅批准、批准件后方可提供研究药物、增补/SAE告知、进展报告、通讯副本、批准确认项与修订书面核准均属研究级伦理治理；不得把伦理报批状态误成单例资格。Package 108从body.p1260开始的IRB/EC专节不得提前吸收。",
+      "preserve_keywords": [
+        "在研究开始之前",
+        "研究方案、知情同意书以及其他必需的材料",
+        "伦理委员会供其审阅及批准",
+        "接到伦理委员会的批准件后才能提供研究药物",
+        "后续方案增补件",
+        "严重不良事件",
+        "报告有关研究的进展情况",
+        "通讯副本交于申办者",
+        "方案/研究标题",
+        "方案/研究编号",
+        "已评审的方案文件及评审日期",
+        "再次获得相关管理单位的书面核准意见"
+      ],
+      "forbidden_inversion": "不得把伦理未批准、研究药物未提供、增补/SAE未告知、进展报告或书面核准缺失改写为单例筛选必做、不得入组、排除标准、入排不通过或发布控制点；也不得把Package 108的IRB/EC专节吸入本包。"
+    },
+    "body.p1255": {
+      "semantic_role": "informed_consent_subsection_heading",
+      "base_rule": "知情同意",
+      "exception_rule": "这是小节标题，仅建立p1256-p1259的结构归属；不重复第67包筛选前解释与自愿签署控制，也不独立形成入排候选。",
+      "preserve_keywords": [
+        "知情同意"
+      ],
+      "forbidden_inversion": "不得把标题改写为知情同意决定受试者资格，或重复发布筛选前签署知情同意书通用控制。"
+    },
+    "body.p1256": {
+      "semantic_role": "icf_file_ethics_review_governance",
+      "base_rule": "ICF（和研究方案一起）必须经伦理委员会审查及批准。",
+      "exception_rule": "本条是ICF文件与研究方案一并提交伦理审查批准的文件治理要求，不是单例受试者资格，也不替代第67包已接受的筛选前签署流程控制。",
+      "preserve_keywords": [
+        "ICF",
+        "和研究方案一起",
+        "伦理委员会审查及批准"
+      ],
+      "forbidden_inversion": "不得把ICF未经伦理批准改写为单例不得入组、排除标准、入排不通过，或重复发布通用自愿签署控制。"
+    },
+    "body.p1257": {
+      "semantic_role": "informed_consent_process_and_ongoing_disclosure",
+      "base_rule": "研究者必须以口头和书面两种方式告知有关本研究的信息。若参与者或者其监护人无阅读能力，公正见证人须阅读ICF和其他书面资料（如有），并见证知情同意。研究者或其指定人员有责任用参与者可以理解的方式和措词就ICF的内容向参与者（或其监护人、见证人）解释，使参与者或者其监护人、见证人易于理解。研究者获得可能影响参与者继续参加研究的新信息时，应及时告知参与者（或其监护人），并做相应记录。",
+      "exception_rule": "口头与书面告知、无阅读能力时公正见证人、可理解解释属于知情过程控制，必须保留；持续新信息告知是研究进行中的过程义务，不得误成单例入排资格。本条不得重复第67包已接受的“筛选前向参与者解释所有研究程序”或“获得参与者自愿签署的ICF”通用控制。",
+      "preserve_keywords": [
+        "口头和书面两种方式",
+        "无阅读能力",
+        "公正见证人",
+        "阅读ICF和其他书面资料",
+        "见证知情同意",
+        "可以理解的方式和措词",
+        "易于理解",
+        "可能影响参与者继续参加研究的新信息",
+        "及时告知",
+        "做相应记录"
+      ],
+      "forbidden_inversion": "不得把口头/书面告知、公正见证人、可理解解释或持续告知改写为筛选必做、不得入组、排除标准或入排不通过；不得重复发布第67包筛选前解释所有研究程序或自愿签署ICF控制。"
+    },
+    "body.p1258": {
+      "semantic_role": "icf_template_required_content_governance",
+      "base_rule": "最终的ICF文本和提供给参与者的其他资料应包含以下内容：研究概况、研究目的、研究的过程与期限、参与者需要遵守的研究步骤、参与者的义务、参与者预期可能的受益（包括不获益的可能性）和风险，告知参与者可能被分配到研究的不同组别及分配至各组的可能性；如发生与研究相关的损害时，参与者可以获得的治疗和相应的补偿；参与者参加临床研究可能获得的补偿；参与者自愿参加本研究；参与者个人资料的保密原则等。",
+      "exception_rule": "本条是最终ICF文本及其他资料的模板内容治理清单，用于约束文件应包含的信息类别；不得把任一模板缺项误成单例资格、排除标准或入排不通过。",
+      "preserve_keywords": [
+        "最终的ICF文本",
+        "研究概况",
+        "研究目的",
+        "研究的过程与期限",
+        "研究步骤",
+        "参与者的义务",
+        "受益（包括不获益的可能性）和风险",
+        "不同组别及分配至各组的可能性",
+        "治疗和相应的补偿",
+        "参加临床研究可能获得的补偿",
+        "自愿参加本研究",
+        "个人资料的保密原则"
+      ],
+      "forbidden_inversion": "不得把ICF模板内容缺项改写为筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1259": {
+      "semantic_role": "pre_participation_signature_date_understanding_and_reconsent_controls",
+      "base_rule": "签署ICF之前，研究者或其指定研究人员应当给予参与者（或其监护人）充分的时间和机会了解临床研究的详细情况。参与者（或其监护人）以及执行知情同意的研究者应当在ICF上分别签名并注明日期（若非参与者本人签署，应当注明关系）。ICF应由研究者和参与者各保留1份。如发现涉及研究药物的重要新资料，则必须将ICF作书面修改送伦理委员会批准后，再次取得参与者（或其监护人）同意。",
+      "exception_rule": "充分时间与机会、参与者或监护人与执行知情同意研究者分别签名并注明日期、非本人签署须注明关系、双方各留存1份、重要新资料书面修改经伦理批准后再次同意，均须作为签署与重新同意过程控制完整保留，不得丢失。这些细节不得压缩或重复为第67包已接受的筛选前解释所有研究程序或自愿签署ICF通用控制，也不得改写为笼统单例不得入组资格句。",
+      "preserve_keywords": [
+        "签署ICF之前",
+        "充分的时间和机会",
+        "了解临床研究的详细情况",
+        "分别签名并注明日期",
+        "若非参与者本人签署，应当注明关系",
+        "研究者和参与者各保留1份",
+        "重要新资料",
+        "书面修改送伦理委员会批准后",
+        "再次取得参与者（或其监护人）同意"
+      ],
+      "forbidden_inversion": "不得省略充分时间、分别签名日期、非本人签署关系、双方留存或重要新资料后的伦理批准与再次同意；不得重复发布第67包筛选前解释/自愿签署通用控制；不得把上述过程控制改写为笼统排除标准或入排不通过。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "Package 106严格拥有body.p1248-p1250并止于p1250；Package 107严格且仅拥有body.p1251-p1259。Package 108从body.p1260机构审查委员会或伦理委员会开始，p1260及其后内容不得吸入本包。第67包拥有筛选前知情同意动作相关来源（含body.p768：筛选前解释所有研究程序并获得自愿签署ICF），本包只对照去重、不转移所有权、不重复发布通用签署/解释控制。冻结计划中的41项context_units仅只读，未经Codex另行授权不得升格为attached_source_refs。",
+    "expected_owners_by_span": {
+      "body.p768": 67,
+      "body.p1248": 106,
+      "body.p1249": 106,
+      "body.p1250": 106,
+      "body.p1251": 107,
+      "body.p1252": 107,
+      "body.p1253": 107,
+      "body.p1254": 107,
+      "body.p1255": 107,
+      "body.p1256": 107,
+      "body.p1257": 107,
+      "body.p1258": 107,
+      "body.p1259": 107,
+      "body.p1260": 108
+    },
+    "unowned_context_source_refs": [
+      "body.t5.r0",
+      "body.t6.r0",
+      "body.p446",
+      "body.p455",
+      "body.p465",
+      "body.p483",
+      "body.p502",
+      "body.t7.r0",
+      "body.p519",
+      "body.p526",
+      "body.p548",
+      "body.p555",
+      "body.p839",
+      "body.p840",
+      "body.p869",
+      "body.p903",
+      "body.p915",
+      "body.p931",
+      "body.p935",
+      "body.p936",
+      "body.p938",
+      "body.p972",
+      "body.p976",
+      "body.p978",
+      "body.p1206",
+      "body.p1207",
+      "body.p1210",
+      "body.p1214",
+      "body.p1216",
+      "body.p1221"
+    ]
+  },
+  "notes": [
+    "模型外闭包：Package 107恰好拥有body.p1251-p1259共9个来源；无attached；41项context_units保持只读且不升格。",
+    "四类语义必须分开：研究级伦理治理（p1253-p1254）、ICF文件治理（p1256）与ICF模板内容（p1258）、知情过程（p1257）、签署与重新同意控制（p1259）；标题p1251/p1252/p1255仅结构。",
+    "第67包权威去重：不得重复发布筛选前解释所有研究程序或自愿签署ICF/筛选前签署知情同意书通用控制；本包只保留口头书面、公正见证人、可理解解释、充分时间、分别签名日期、关系注明、双方留存、重要新资料后伦理批准与再次同意等源文细节。",
+    "严禁把伦理报批、ICF模板内容或持续告知全部误成单例资格；也不得把签署/日期/充分理解控制从模型外语义中丢失。",
+    "Package 106止于p1250；Package 108从p1260起；claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程。"
+  ]
+}

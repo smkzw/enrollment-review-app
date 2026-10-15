@@ -1,0 +1,19 @@
+{
+  "attached_count": 6,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-ae6445779530de5f67ee058a",
+  "group_id": "d001-ii-package102-enrollment-baseline-statistical-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 6,
+    "frozen_plan_owned": 7
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package102-enrollment-baseline-statistical-boundary",
+  "owned_count": 7,
+  "prompt_char_count": 32869,
+  "prompt_sha256": "74841bea2d9d44b449c81918d0cc22110ebad3682fa64ae6ec1c868f9dbbdaf9",
+  "task_id": "phase5-slice61co-20260830",
+  "unit_count": 13,
+  "worker": "codex-parent"
+}

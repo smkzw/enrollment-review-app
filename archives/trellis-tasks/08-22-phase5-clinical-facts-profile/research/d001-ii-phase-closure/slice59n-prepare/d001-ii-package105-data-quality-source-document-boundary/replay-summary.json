@@ -1,0 +1,18 @@
+{
+  "attached_count": 0,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-8488f844d1298b90d4a45bbf",
+  "group_id": "d001-ii-package105-data-quality-source-document-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 10
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package105-data-quality-source-document-boundary",
+  "owned_count": 10,
+  "prompt_char_count": 32094,
+  "prompt_sha256": "71150f7d857973ec3e32e450f0ab9d6c3bbdc7e692856a21551d8488c8007f7b",
+  "task_id": "phase5-slice61cr-20260830",
+  "unit_count": 10,
+  "worker": "codex-parent"
+}

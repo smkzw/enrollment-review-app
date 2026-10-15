@@ -1,0 +1,12 @@
+{
+  "attempt_count": 1,
+  "context_unit_count": 192,
+  "duration_seconds": 463.702,
+  "has_final_output": true,
+  "owned_unit_count": 12,
+  "package_id": "pap-ee7e41c64baddeffd4a6d726",
+  "package_ordinal": 32,
+  "prompt_chars": 117464,
+  "session_id": "phase-applicability-chat-d595b11a1c8c4f12b6f30f748253d287",
+  "status": "已解析"
+}

@@ -1,0 +1,29 @@
+{
+  "attached_source_refs": [],
+  "claims_complete": false,
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/configs/representative_group_package113_reference_tail_evidence_authority_boundary.v1.json",
+  "config_sha256": "55226da87c7828b3c187e6f522b8d821f815efc1ff2aa3eae145de8444f5c3c8",
+  "control_batch_id": "pcb-cfce086c808a2b7b74a280c4",
+  "control_plan_id": "pcp-fbf4290dd5ce3c21d6a3ab3d",
+  "coverage_manifest_id": "manifest:slice61cz-package113-reference-tail-evidence-authority-boundary",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "coverage_manifest_sha256": "affd0c907b47855914b72f09aa9f86e801a7a735b60ede923dcb991601a9aa75",
+  "created_at": "2026-08-30T14:35:38.721969+00:00",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "frozen_plan_sha256": "92c7d179428216cfd4c9a47f2636bc7d7cfa8311025100d72dcb299e2f977fa4",
+  "group_id": "d001-ii-package113-reference-tail-evidence-authority-boundary",
+  "mode": "dry_run_prepare",
+  "owned_source_refs": [
+    "body.p1307",
+    "body.p1308"
+  ],
+  "parent_phase_qc_path": null,
+  "parent_phase_qc_sha256": null,
+  "prompt_char_count": 27710,
+  "prompt_sha256": "17990d90e8ccc52cad30f59256ac6c613d839ae523b1e7d7be53c6c8aed10ebb",
+  "prompt_template_sha256": "88335a5f2c79ea12bec07eac832496529ead1b05fe359542873e5d54748c5650",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "replay_mode": "product_protocol_control_agent_runner_mtplx",
+  "task_id": "phase5-slice61cz-20260830",
+  "worker": "codex-parent"
+}

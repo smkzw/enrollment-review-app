@@ -1,0 +1,461 @@
+{
+  "batch_id": "pcb-b9de21f97afc59d8e43903b6",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p331",
+    "body.p684",
+    "body.t5.r21.c0.p0",
+    "body.t5.r21.c1.p0",
+    "body.t5.r21.c2.p0",
+    "body.t5.r21.c4.p0",
+    "body.t5.r21.c5.p0",
+    "body.t5.r21.c6.p0",
+    "body.t5.r21.c7.p0",
+    "body.t5.r21.c8.p0",
+    "body.t5.r21.c9.p0"
+  ],
+  "context_structure_unit_ids": [
+    "su-059c0a67707ffc88c28e8f2f",
+    "su-1fc39833648b9c018804b3a3",
+    "su-5c242dd0b4f85ea199512c80"
+  ],
+  "context_units": [
+    {
+      "excerpt": "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表",
+        "表 1 Ⅱ期临床研究阶段流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t5.r21.c0.p0",
+        "body.t5.r21.c1.p0",
+        "body.t5.r21.c2.p0",
+        "body.t5.r21.c4.p0",
+        "body.t5.r21.c5.p0",
+        "body.t5.r21.c6.p0",
+        "body.t5.r21.c7.p0",
+        "body.t5.r21.c8.p0",
+        "body.t5.r21.c9.p0"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 11411,
+      "source_ref": "body.t5.r21",
+      "source_span_ids": [
+        "body.t5.r21.c0.p0",
+        "body.t5.r21.c1.p0",
+        "body.t5.r21.c2.p0",
+        "body.t5.r21.c4.p0",
+        "body.t5.r21.c5.p0",
+        "body.t5.r21.c6.p0",
+        "body.t5.r21.c7.p0",
+        "body.t5.r21.c8.p0",
+        "body.t5.r21.c9.p0"
+      ],
+      "structure_unit_id": "su-059c0a67707ffc88c28e8f2f",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "项目"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            21,
+            0
+          ],
+          [
+            21,
+            1
+          ],
+          [
+            21,
+            2
+          ],
+          [
+            21,
+            4
+          ],
+          [
+            21,
+            5
+          ],
+          [
+            21,
+            6
+          ],
+          [
+            21,
+            7
+          ],
+          [
+            21,
+            8
+          ],
+          [
+            21,
+            9
+          ]
+        ],
+        "row_headers": [
+          "12-导联心电图^17"
+        ],
+        "row_index": 21,
+        "table_path": [
+          21,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "12导联心电图：筛选期/D15/D29/D57/D85（当天用药前）、D113或提前退出时进行检测。参与者需要至少安静休息10min之后进行测量，记录心率、PR间期、RR间期、QRS、QT间期（包括根据Fridericia公式校正后的QT间期[QTcF]），和心电图诊断结果。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p331"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13220,
+      "source_ref": "body.p331",
+      "source_span_ids": [
+        "body.p331"
+      ],
+      "structure_unit_id": "su-1fc39833648b9c018804b3a3",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "筛选或基线时，生命体征、体格检查、12-导联心电图、胸部CT（可接受1个月内的CT检查结果）异常且有临床意义，经研究者评估如果参与研究将可能对参与者构成不可接受的风险；",
+      "heading_path": [
+        "研究人群",
+        "排除标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p684"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23710,
+      "source_ref": "body.p684",
+      "source_span_ids": [
+        "body.p684"
+      ],
+      "structure_unit_id": "su-5c242dd0b4f85ea199512c80",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61as-ecg-screening",
+  "known_official_targets": [
+    {
+      "catalog_item_id": "pcm-row-dd9da8fd97941b8b7d8753e2",
+      "label": "检查异常、临床意义与不可接受风险",
+      "official_code": "EX-21",
+      "position": 27,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "筛选或基线时，生命体征、体格检查、12-导联心电图、胸部CT（可接受1个月内的CT检查结果）异常且有临床意义，经研究者评估如果参与研究将可能对参与者构成不可接受的风险；"
+      ],
+      "source_span_ids": [
+        "span-b8dc988a09b4247d8fe2e581a5d983ad"
+      ]
+    }
+  ],
+  "known_procedure_targets": [
+    {
+      "catalog_item_id": "procedure:d001-ecg-screening",
+      "covered_action_kinds": [
+        "perform_ecg",
+        "record_ecg_measurements"
+      ],
+      "label": "筛选访视12-导联心电图",
+      "position": 53,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "semantic_family": "electrocardiography",
+      "source_excerpts": [
+        "记录心率、PR间期、RR间期、QRS、QT间期（包括根据Fridericia公式校正后的QT间期[QTcF]），和心电图诊断结果。",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X"
+      ],
+      "source_span_ids": [
+        "span-5b5271ad0ad6efc866127c5fffce2e42",
+        "span-7568269371001b4827ebe55092eff7ec",
+        "span-7ff19f011e1b0b59c3e7b5b5c22d0856",
+        "span-8e7d7d106126cd8ccb2a7be3b1ffcbb1",
+        "span-a200d89636c6992d8cd3751fa11a5730",
+        "span-b0a31571f842394a48c8085ad1991513",
+        "span-b0d61da470293d65cf7423b7aa136cfb",
+        "span-b333a0da0c1f99f9cfb465903772fb31",
+        "span-ca36b7416e915bd967b3dc8e65570c59",
+        "span-ed9a431c2bd075d4bf39133daeb971e9"
+      ],
+      "visit_instance": "筛选访视"
+    },
+    {
+      "catalog_item_id": "procedure:d001-ecg-baseline",
+      "covered_action_kinds": [
+        "perform_ecg",
+        "record_ecg_measurements"
+      ],
+      "label": "基线访视12-导联心电图",
+      "position": 54,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": "electrocardiography",
+      "source_excerpts": [
+        "记录心率、PR间期、RR间期、QRS、QT间期（包括根据Fridericia公式校正后的QT间期[QTcF]），和心电图诊断结果。",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+        "12-导联心电图^17 | X | （X） | X | X | X | X | X | X"
+      ],
+      "source_span_ids": [
+        "span-5b5271ad0ad6efc866127c5fffce2e42",
+        "span-7568269371001b4827ebe55092eff7ec",
+        "span-7ff19f011e1b0b59c3e7b5b5c22d0856",
+        "span-8e7d7d106126cd8ccb2a7be3b1ffcbb1",
+        "span-a200d89636c6992d8cd3751fa11a5730",
+        "span-b0a31571f842394a48c8085ad1991513",
+        "span-b0d61da470293d65cf7423b7aa136cfb",
+        "span-b333a0da0c1f99f9cfb465903772fb31",
+        "span-ca36b7416e915bd967b3dc8e65570c59",
+        "span-ed9a431c2bd075d4bf39133daeb971e9"
+      ],
+      "visit_instance": "基线访视"
+    }
+  ],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {
+    "su-0243e41eeccb20107f2720f8": [
+      "electrocardiography"
+    ]
+  },
+  "owned_required_action_kinds_by_structure_unit_id": {
+    "su-0243e41eeccb20107f2720f8": [
+      "calculate_qtcf",
+      "perform_ecg",
+      "prepare_participant",
+      "record_ecg_measurements"
+    ]
+  },
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p789",
+    "body.p790",
+    "body.p792",
+    "body.p793",
+    "body.p794"
+  ],
+  "owned_structure_unit_ids": [
+    "su-c012b84fe7fe1a25bfd9ecbe",
+    "su-0243e41eeccb20107f2720f8",
+    "su-46f8b918f4d955d2355e6e51",
+    "su-112af01a4021cf50946c692f",
+    "su-35be652589e0f7c39cff05c7"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "12导联心电图检查",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "12导联心电图检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p789"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25460,
+      "source_ref": "body.p789",
+      "source_span_ids": [
+        "body.p789"
+      ],
+      "structure_unit_id": "su-c012b84fe7fe1a25bfd9ecbe",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "12导联心电图检查前参与者至少静息10 min。记录12导联心电图诊断结果、心率、PR间期、RR间期、QRS、QT间期，并应用Fridericia’s公式计算心率校正计算QTcF。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "12导联心电图检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p790"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25470,
+      "source_ref": "body.p790",
+      "source_span_ids": [
+        "body.p790"
+      ],
+      "structure_unit_id": "su-0243e41eeccb20107f2720f8",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "注：",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "12导联心电图检查"
+      ],
+      "is_footnote_or_note": true,
+      "member_source_refs": [
+        "body.p792"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25490,
+      "source_ref": "body.p792",
+      "source_span_ids": [
+        "body.p792"
+      ],
+      "structure_unit_id": "su-46f8b918f4d955d2355e6e51",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "footnote_or_annotation"
+    },
+    {
+      "excerpt": "QT是指Q波开始至T波结束之间的间期；",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "12导联心电图检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p793"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25500,
+      "source_ref": "body.p793",
+      "source_span_ids": [
+        "body.p793"
+      ],
+      "structure_unit_id": "su-112af01a4021cf50946c692f",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "RR为标准化心率，计算方法：60除以心率（正常的窦性心律为60~100次/分）。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "12导联心电图检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p794"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25510,
+      "source_ref": "body.p794",
+      "source_span_ids": [
+        "body.p794"
+      ],
+      "structure_unit_id": "su-35be652589e0f7c39cff05c7",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [
+    "su-0243e41eeccb20107f2720f8",
+    "su-112af01a4021cf50946c692f",
+    "su-35be652589e0f7c39cff05c7"
+  ],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-c012b84fe7fe1a25bfd9ecbe",
+    "su-46f8b918f4d955d2355e6e51"
+  ],
+  "study_phase": "phase_ii"
+}

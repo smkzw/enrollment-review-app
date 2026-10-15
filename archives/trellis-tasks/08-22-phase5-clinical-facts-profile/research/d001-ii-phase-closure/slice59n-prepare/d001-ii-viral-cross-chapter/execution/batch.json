@@ -1,0 +1,197 @@
+{
+  "batch_id": "pcb-d14c9b713d0a87d87f57a28a",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [],
+  "context_structure_unit_ids": [],
+  "context_units": [],
+  "coverage_manifest_id": "manifest:slice59n-viral-reps",
+  "known_official_targets": [
+    {
+      "catalog_item_id": "pcm-row-759cd0638a6a427a10a3bceb",
+      "label": "乙肝、丙肝、HIV及梅毒感染筛查",
+      "official_code": "EX-22",
+      "position": 28,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "梅毒特异性抗体试验阳性（梅毒非特异性抗体结果为阴性，并经研究者判断为过去曾感染梅毒但已治愈的参与者除外）；",
+        "人类免疫缺陷病毒抗体（Hepatitis C Virus Ribonucleic Acid，HIV Ab）阳性；",
+        "丙型肝炎（Hepatitis C Virus，HCV）抗体阳性，且HCV-RNA拷贝数阳性（定义为超过研究中心检测值正常范围上限）；",
+        "乙型肝炎：表面抗原（Hepatitis B surface antigen，HBsAg）阳性，或核心抗体（Hepatitis B surface antibody，HBcAb）阳性且乙型肝炎病毒脱氧核糖核酸（Hepatitis B virus Deoxyribonucleic acid，HBV-DNA）拷贝数阳性（定义为超过研究中心检测值正常范围上限）；",
+        "筛选访视时存在下列任一感染者："
+      ],
+      "source_span_ids": [
+        "span-5f5d0986b69d1f617cc18deeda05e9ee",
+        "span-6599014fccd0daa2c6a77da3b03001af",
+        "span-8f24d0acc9d39811c6fcbfaad01f7903",
+        "span-bd8cefa0f20536359005270bca4c1850",
+        "span-e945e18722fe7a6b21c22815fdbea783"
+      ]
+    }
+  ],
+  "known_procedure_targets": [
+    {
+      "catalog_item_id": "pcm-row-2a4db6b98190f7f0c22da3b3",
+      "label": "病毒学检查",
+      "position": 50,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "病毒学检查：乙型肝炎表面抗原（HBsAg）、乙型肝炎核心抗体（HBcAb）、丙型肝炎抗体（HCVAb）、人体免疫缺陷病毒抗体（HIVAb）、梅毒特异性抗体检查。如乙肝表面抗原阴性但乙肝核心抗体阳性，则进行乙肝病毒DNA定量检测。若丙型肝炎（HCV）抗体阳性，则进行HCV-RNA定量检测。若梅毒特异性抗体检查阳性，则进行梅毒非特异性抗体检查，并由研究者判断为是否为过去曾感染梅毒但已治愈的参与者。",
+        "病毒学检查^14 | X",
+        "病毒学检查^14 | X"
+      ],
+      "source_span_ids": [
+        "span-08bee5e666e8f0ae3c7cc0437d7c4aa1",
+        "span-53ec4e9bb6ae525aa997ce9e0bffbb30",
+        "span-f300202c24ed5467ad851795abb9b475"
+      ],
+      "visit_instance": "筛选访视"
+    }
+  ],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线及随机前复核",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线及随机前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    }
+  ],
+  "owned_source_span_ids": [
+    "body.p802",
+    "body.p803",
+    "body.p804",
+    "body.p805"
+  ],
+  "owned_structure_unit_ids": [
+    "su-6b20196a3cc48412f22fbace",
+    "su-b67affac91182c7f62884569",
+    "su-86389bb90acd044a0835089c",
+    "su-3de4633dd1cb5721547f0bb2"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "②根据新出现的安全性数据，经研究者和申办者同意，可能需要进行其他检测。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "实验室检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p802"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25680,
+      "source_ref": "body.p802",
+      "source_span_ids": [
+        "body.p802"
+      ],
+      "structure_unit_id": "su-6b20196a3cc48412f22fbace",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "病毒学检查",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "病毒学检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p803"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25690,
+      "source_ref": "body.p803",
+      "source_span_ids": [
+        "body.p803"
+      ],
+      "structure_unit_id": "su-b67affac91182c7f62884569",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "将根据标准实验室程序进行包括乙肝表面抗原、乙肝表面抗体、乙肝e抗原、乙肝e抗体、乙肝核心抗体、丙型肝炎病毒抗体、人类免疫缺陷病毒抗体、梅毒特异性抗体检查。可接受在首次给药前28天内的结果，筛选期/基线期无需再次检查。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "病毒学检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p804"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25700,
+      "source_ref": "body.p804",
+      "source_span_ids": [
+        "body.p804"
+      ],
+      "structure_unit_id": "su-86389bb90acd044a0835089c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "乙型肝炎表面抗原阴性且乙型肝炎核心抗体阳性的参与者，需要进行HBV-DNA检测；丙型肝炎病毒抗体阳性的参与者，需要进行HCV-RNA检测。若梅毒特异性抗体检查阳性，则进行梅毒非特异性抗体检查。可接受在首次给药前28天内的结果，无需再次检查。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "病毒学检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p805"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25710,
+      "source_ref": "body.p805",
+      "source_span_ids": [
+        "body.p805"
+      ],
+      "structure_unit_id": "su-3de4633dd1cb5721547f0bb2",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "study_phase": "phase_ii"
+}

@@ -1,0 +1,267 @@
+{
+  "batch_id": "pcb-3dab4691b54f3459827308b4",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1018",
+    "body.p1019",
+    "body.p1133",
+    "body.p1134",
+    "body.p1135"
+  ],
+  "context_structure_unit_ids": [
+    "su-3a466b9df7a0012b972a2b3d",
+    "su-0230c1ca32146e5682365991",
+    "su-98140a88b2bec06fa03040e6",
+    "su-e90c66dfbc7f1ca0e2bf3a15",
+    "su-3805178b03c7b8cacabd6f96"
+  ],
+  "context_units": [
+    {
+      "excerpt": "可疑且非预期严重不良反应（Suspected Unexpected Serious Adverse Reaction，SUSAR）指临床表现的性质和严重程度超出了试验药物《研究者手册》、已上市药品的说明书或者产品特性摘要等已有资料信息的可疑并且非预期的严重不良反应。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "可疑且非预期严重不良反应（SUSAR）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1018"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27840,
+      "source_ref": "body.p1018",
+      "source_span_ids": [
+        "body.p1018"
+      ],
+      "structure_unit_id": "su-3a466b9df7a0012b972a2b3d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "非预期不良反应指不良反应的性质、严重程度、后果或频率，不同于试验药物当前相关资料（如《研究者手册》等文件）所描述的预期风险。《研究者手册》作为主要文件提供用以判断某不良反应是否预期或非预期的安全性参考信息。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "可疑且非预期严重不良反应（SUSAR）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1019"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27850,
+      "source_ref": "body.p1019",
+      "source_span_ids": [
+        "body.p1019"
+      ],
+      "structure_unit_id": "su-0230c1ca32146e5682365991",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "以下情况一般不作为快速报告内容：",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "申办者的报告要求"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1133"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29960,
+      "source_ref": "body.p1133",
+      "source_span_ids": [
+        "body.p1133"
+      ],
+      "structure_unit_id": "su-98140a88b2bec06fa03040e6",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "非严重不良事件；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "申办者的报告要求"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1134"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29970,
+      "source_ref": "body.p1134",
+      "source_span_ids": [
+        "body.p1134"
+      ],
+      "structure_unit_id": "su-e90c66dfbc7f1ca0e2bf3a15",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "严重不良事件与试验用药品无关；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "申办者的报告要求"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1135"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29980,
+      "source_ref": "body.p1135",
+      "source_span_ids": [
+        "body.p1135"
+      ],
+      "structure_unit_id": "su-3805178b03c7b8cacabd6f96",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61ch-package96-expected-serious-primary-endpoint-reporting-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1136",
+    "body.p1137"
+  ],
+  "owned_structure_unit_ids": [
+    "su-b67409702cdd94eca252289a",
+    "su-9aefc1fcee2ad36efca4fd7b"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "严重但属预期的不良反应；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "申办者的报告要求"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1136"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29990,
+      "source_ref": "body.p1136",
+      "source_span_ids": [
+        "body.p1136"
+      ],
+      "structure_unit_id": "su-b67409702cdd94eca252289a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "当以严重不良事件为主要疗效终点时，不建议申请人以个例安全性报告形式向国家药品审评机构报告。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "申办者的报告要求"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1137"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30000,
+      "source_ref": "body.p1137",
+      "source_span_ids": [
+        "body.p1137"
+      ],
+      "structure_unit_id": "su-9aefc1fcee2ad36efca4fd7b",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [],
+  "study_phase": "phase_ii"
+}

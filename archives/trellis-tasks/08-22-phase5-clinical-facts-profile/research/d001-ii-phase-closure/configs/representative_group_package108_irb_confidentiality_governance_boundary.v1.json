@@ -1,0 +1,460 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package108-irb-confidentiality-governance-boundary",
+  "task_id": "phase5-slice61cu-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "expected_package_ordinal": 108,
+  "expected_package_id": "pap-f3fa399755a65a5a57ba306c",
+  "owned_source_refs": [
+    "body.p1260",
+    "body.p1261",
+    "body.p1262",
+    "body.p1263",
+    "body.p1264",
+    "body.p1265",
+    "body.p1266",
+    "body.p1267",
+    "body.p1268",
+    "body.p1269"
+  ],
+  "attached_source_refs": [],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1260",
+    "body.p1261",
+    "body.p1262",
+    "body.p1263",
+    "body.p1264",
+    "body.p1265",
+    "body.p1266",
+    "body.p1267",
+    "body.p1268",
+    "body.p1269"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1260",
+    "body.p1264"
+  ],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1261": "non_enrollment_execution",
+    "body.p1262": "non_enrollment_execution",
+    "body.p1263": "non_enrollment_execution",
+    "body.p1265": "non_enrollment_execution",
+    "body.p1266": "non_enrollment_execution",
+    "body.p1267": "non_enrollment_execution",
+    "body.p1268": "non_enrollment_execution",
+    "body.p1269": "non_enrollment_execution"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "owned_visit_instances_by_source_ref": {},
+  "owned_procedure_semantic_families_by_source_ref": {},
+  "owned_required_action_kinds_by_source_ref": {},
+  "owned_required_procedure_target_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1260": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "IRB/EC标题决定受试者资格",
+      "机构审查委员会决定单例资格"
+    ],
+    "body.p1261": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "研究启动前未获IRB/EC批准不得入组",
+      "方案未交IRB/EC批准不得入组",
+      "知情同意书未交IRB/EC批准不得入组",
+      "参与者信息材料未批准不得入组",
+      "招募材料未批准不得入组",
+      "伦理报批决定单例资格",
+      "研究启动前误作筛选前资格"
+    ],
+    "body.p1262": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "年度进展报告缺失不得入组",
+      "研究进展报告未提交不得入组",
+      "方案修正案未通知IRB/EC不得入组",
+      "年度进展决定单例资格"
+    ],
+    "body.p1263": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "SAE未报IRB/EC不得入组",
+      "SAE未报卫生主管部门不得入组",
+      "安全性报告未审查不得入组",
+      "安全性通信未存档不得入组",
+      "SAE上报决定单例资格"
+    ],
+    "body.p1264": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "保密标题决定受试者资格",
+      "保密小节决定单例资格"
+    ],
+    "body.p1265": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "未分配唯一识别号不得入组",
+      "姓名出现在数据集不得入组",
+      "编码缺失不得入组",
+      "资料保密决定单例资格"
+    ],
+    "body.p1266": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "未签署知情同意书不得向第三方披露改写为不得入组",
+      "单独授权缺失不得入组",
+      "个人健康信息未授权不得入组",
+      "隐私授权决定单例资格",
+      "ICF允许披露误作筛选资格"
+    ],
+    "body.p1267": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "未编号不得入组",
+      "非授权人员查看不得入组",
+      "监查访问缺失不得入组",
+      "稽查访问缺失不得入组",
+      "编码化与受限访问决定单例资格"
+    ],
+    "body.p1268": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "未向私人医生披露不得入组",
+      "探究性生物标志物结果未返还不得入组",
+      "结果不返还决定单例资格",
+      "私人医生披露决定单例资格"
+    ],
+    "body.p1269": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "监管检查未完成不得入组",
+      "监查员检查缺失不得入组",
+      "IRB/EC检查缺失不得入组",
+      "监管检查决定单例资格"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "先逐条读取第108包body.p1260-p1269原文并区分五类语义：小节标题（p1260 IRB/EC；p1264 保密）、研究启动及持续伦理治理（p1261启动前方案/ICF/参与者信息与支持信息IRB/EC批准，以及参与者招募材料批准；p1262年度或更频繁进展报告与方案修正案通知）、SAE/安全通信治理（p1263向卫生主管部门和IRB/EC报告SAE并审查存档申办者安全性通信）、隐私授权与信息访问治理（p1265唯一识别号与传输数据集去名；p1266仅在法律允许/要求或ICF/单独PHI授权下向第三方披露；p1267编码化、授权查看、监查/稽查/EC/IRB审核访问）、以及私人医生披露、探索性样本结果不返还和监管检查边界（p1268-p1269）。逐项判断后确认这些均是研究/资料/隐私治理，不是单例筛选、基线或入排资格；“研究启动前”“签署的知情同意书允许”“必须”均不得倒置为受试者资格。真实参加研究前控制若存在须保留，但本包原文未形成独立筛选前受试者动作，故required candidates为空；不得以other_control_candidate强挂到受试者工作流，也不得回吸Package 107或提前吸收Package 109。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第108包位于Ⅱ期伦理考虑章节的IRB/EC与保密两小节。p1261-p1263约束研究启动与持续伦理治理及SAE/安全通信；p1265-p1269约束编码保密、隐私授权、受限访问、监查稽查、私人医生披露、探索性结果不返还和监管检查。这些对象是研究中心/研究者/申办者治理义务与资料边界，不是单例受试者人群、入排条件、频率或筛选/基线/D1给药前动作。Package 107止于p1259；Package 109从p1270起不得吸入。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61cu-package108-irb-confidentiality-governance-boundary",
+    "catalog_id": "catalog:slice61cu-package108-irb-confidentiality-governance-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1260": [
+      "机构审查委员会或伦理委员会标题仅提供小节结构，不独立生成候选、流程节点、官方规则或受试者控制点"
+    ],
+    "body.p1261": [
+      "研究启动前须将方案、知情同意书、提供给参与者的任何信息及相关支持信息提交IRB/EC审查批准；参与者招募材料也必须经IRB/EC批准",
+      "上述研究启动与招募材料审批属于研究级伦理治理，不得把“研究启动前”误读为单例筛选前资格或入排不通过",
+      "不得与Package 107知情过程/签署控制混淆，也不得回吸p1251-p1259"
+    ],
+    "body.p1262": [
+      "主要研究者按IRB/EC要求每年或更频繁提交书面研究进展报告，并及时通知方案修正案",
+      "年度进展与修正案通知是持续伦理治理，不得误成单例资格"
+    ],
+    "body.p1263": [
+      "除向申办者报告SAE外，适用时还须向卫生主管部门和IRB/EC报告SAE",
+      "申办者安全性报告或通信须按主管部门要求及IRB/EC政策审查处理并存档",
+      "SAE/安全通信治理不得误成单例筛选、基线或入排不通过条件"
+    ],
+    "body.p1264": [
+      "保密标题仅提供小节结构，不独立生成候选或受试者控制点"
+    ],
+    "body.p1265": [
+      "研究中心对采集信息保密；参与者通过唯一识别号参与，姓名不出现在传输数据集",
+      "编码化与资料保密是隐私治理，不得误成单例资格"
+    ],
+    "body.p1266": [
+      "医疗信息保密；除非法律允许或要求，仅在签署的知情同意书允许或单独授权使用和披露个人健康信息时才可能向第三方披露",
+      "这是隐私授权与第三方披露治理，不是新的筛选前签署动作，也不得重复第67/107包知情签署控制",
+      "“签署的知情同意书允许”不得改写为单例入排资格句"
+    ],
+    "body.p1267": [
+      "信息妥善保管、仅研究者或授权人员可查看、数字字母编号、监查/稽查/EC/IRB审核可审查个人医疗记录",
+      "编码化、受限访问与监查稽查访问治理不得误成单例资格"
+    ],
+    "body.p1268": [
+      "医疗信息可能向私人医生或其他治疗相关医疗人员提供",
+      "探究性生物标志物样本数据通常不向研究者或参与者返还（除非法律要求）",
+      "私人医生披露与探索性结果不返还治理不得误成筛选/基线必做或入排不通过"
+    ],
+    "body.p1269": [
+      "研究生成数据必须接受国家/地方卫生监管机构代表、申办者监查员、研究中心代表、合作者和IRB/EC（如适用）检查",
+      "监管检查边界是研究治理，不得误成单例资格"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1260": {
+      "semantic_role": "irb_ec_subsection_heading",
+      "base_rule": "机构审查委员会或伦理委员会",
+      "exception_rule": "这是小节标题，仅建立p1261-p1263研究启动及持续IRB/EC治理的结构归属，不形成伦理批准、招募材料审批、SAE上报或单例资格。",
+      "preserve_keywords": [
+        "机构审查委员会或伦理委员会"
+      ],
+      "forbidden_inversion": "不得把小节标题改写为IRB/EC决定受试者资格、筛选必做、基线必做或发布控制点。"
+    },
+    "body.p1261": {
+      "semantic_role": "study_startup_irb_ec_and_recruitment_material_approval_governance",
+      "base_rule": "在研究启动前，本方案、知情同意书、提供给参与者的任何信息，以及相关支持信息必须提交给IRB/EC审查和批准。此外，任何参与者招募材料也必须经IRB/EC批准。",
+      "exception_rule": "“研究启动前”是研究级启动门槛：方案、知情同意书、提供给参与者的任何信息及支持信息须提交IRB/EC审查批准；参与者招募材料亦须经IRB/EC批准。这是研究启动与资料审批治理，不是单例筛选/入排资格；不得与Package 107的知情过程/签署控制混淆，也不得把启动前误读为受试者参加研究前资格。",
+      "preserve_keywords": [
+        "在研究启动前",
+        "本方案、知情同意书",
+        "提供给参与者的任何信息",
+        "相关支持信息",
+        "提交给IRB/EC审查和批准",
+        "参与者招募材料",
+        "经IRB/EC批准"
+      ],
+      "forbidden_inversion": "不得把研究启动前IRB/EC未批准、ICF/参与者信息材料或招募材料未批准改写为单例筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1262": {
+      "semantic_role": "ongoing_irb_ec_progress_and_amendment_reporting_governance",
+      "base_rule": "根据IRB/EC要求或既定程序，主要研究者负责每年或更频繁地向IRB/EC提交书面的研究进展报告。研究者也负责及时通知IRB/EC任何方案修正案。",
+      "exception_rule": "主要研究者按IRB/EC要求每年或更频繁提交书面研究进展报告，并及时通知方案修正案，属于持续伦理治理义务；不是单例受试者资格或访视控制。",
+      "preserve_keywords": [
+        "每年或更频繁",
+        "书面的研究进展报告",
+        "及时通知IRB/EC任何方案修正案"
+      ],
+      "forbidden_inversion": "不得把年度进展报告缺失或方案修正案未通知改写为筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1263": {
+      "semantic_role": "sae_and_safety_communication_irb_ec_governance",
+      "base_rule": "除向申办者报告SAE之外，适用时研究者还必须按要求向卫生主管部门和IRB/EC报告SAE。研究者可能会收到来自申办者的相关安全性报告或通信，研究者负责确保此类报告的审查和处理符合卫生主管部门要求及IRB/EC既定的政策和程序，并存档在研究中心的研究文件中。",
+      "exception_rule": "除向申办者报告SAE外，适用时还须向卫生主管部门和IRB/EC报告SAE；研究者须按主管部门要求及IRB/EC政策审查处理申办者安全性报告或通信并存档。这是SAE/安全通信治理，不是单例入排条件。",
+      "preserve_keywords": [
+        "向申办者报告SAE",
+        "向卫生主管部门和IRB/EC报告SAE",
+        "相关安全性报告或通信",
+        "审查和处理",
+        "存档在研究中心的研究文件中"
+      ],
+      "forbidden_inversion": "不得把SAE上报、安全性报告审查或存档缺口改写为筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1264": {
+      "semantic_role": "confidentiality_subsection_heading",
+      "base_rule": "保密",
+      "exception_rule": "这是小节标题，仅建立p1265-p1269保密、授权披露、编码访问、私人医生披露、探究性结果不返还和监管检查治理的结构归属，不形成单例资格。",
+      "preserve_keywords": [
+        "保密"
+      ],
+      "forbidden_inversion": "不得把保密标题改写为保密决定受试者资格或发布控制点。"
+    },
+    "body.p1265": {
+      "semantic_role": "participant_coding_and_dataset_confidentiality_governance",
+      "base_rule": "研究中心将会对本次研究采集到的信息进行保密。参与者通过分配的唯一识别号参与研究，这意味着参与者姓名不会出现在传输至任何地方的数据集中。",
+      "exception_rule": "研究中心对采集信息保密，参与者通过唯一识别号参与且姓名不出现在传输数据集，属于编码化与资料保密治理；不是筛选/基线资格或必做控制。",
+      "preserve_keywords": [
+        "对本次研究采集到的信息进行保密",
+        "唯一识别号",
+        "姓名不会出现在传输至任何地方的数据集中"
+      ],
+      "forbidden_inversion": "不得把唯一识别号缺失、姓名出现在数据集或资料保密缺口改写为单例不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1266": {
+      "semantic_role": "phi_disclosure_authorization_and_third_party_access_governance",
+      "base_rule": "本研究获得的参与者医疗信息是保密的。除非法律允许或要求，否则，仅在参与者签署的知情同意书允许（或单独授权使用和披露个人健康信息）的情况下，可能会向第三方披露。",
+      "exception_rule": "参与者医疗信息保密；除非法律允许或要求，仅在签署的知情同意书允许或单独授权使用和披露个人健康信息时才可能向第三方披露。这是隐私授权与信息访问治理，不是新的筛选前签署/授权动作，也不得重复Package 67/107的知情签署控制；“签署的知情同意书允许”不得误读为单例入排资格句。",
+      "preserve_keywords": [
+        "参与者医疗信息是保密的",
+        "除非法律允许或要求",
+        "签署的知情同意书允许",
+        "单独授权使用和披露个人健康信息",
+        "向第三方披露"
+      ],
+      "forbidden_inversion": "不得把ICF允许披露、单独PHI授权或法律允许/要求改写为筛选必做、不得入组、排除标准、入排不通过；不得重复发布筛选前签署知情同意书通用控制。"
+    },
+    "body.p1267": {
+      "semantic_role": "coded_restricted_access_and_monitor_audit_review_governance",
+      "base_rule": "研究期间向参与者收集的信息，将会得到妥善保管，只有研究者或授权的人员可以查看。参与者所有信息都会用数字、字母进行编号，而不使用参与者的姓名。只有研究者知道参与者对应的编号。在不违反保密原则和相关法规的情况下，研究者、申办者的相关人员（或代表）及法规机构和EC可能在研究相关的监查、稽查、EC/IRB审核过程中审查参与者的个人医疗记录。研究中心将会在法律允许范围内，全力保护参与者的隐私和健康信息。",
+      "exception_rule": "信息妥善保管、仅研究者或授权人员可查看、数字字母编号、监查/稽查/EC/IRB审核时可审查个人医疗记录，以及法律允许范围内保护隐私，均属编码化、受限访问与监查稽查访问治理；不是单例资格。",
+      "preserve_keywords": [
+        "只有研究者或授权的人员可以查看",
+        "用数字、字母进行编号",
+        "监查、稽查、EC/IRB审核",
+        "审查参与者的个人医疗记录",
+        "保护参与者的隐私和健康信息"
+      ],
+      "forbidden_inversion": "不得把编号缺失、非授权查看、监查/稽查访问或隐私保护缺口改写为筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1268": {
+      "semantic_role": "private_physician_disclosure_and_exploratory_result_nonreturn_governance",
+      "base_rule": "医疗信息可能向参与者的私人医生或负责参与者卫生福利或治疗目的的其他医疗人员提供。鉴于样品分析的复杂性和探究性，除非法律要求，否则通常不会向研究者或参与者提供来源于探究性生物标志物样本的数据。",
+      "exception_rule": "医疗信息可能向私人医生或其他治疗相关医疗人员提供；探究性生物标志物样本数据通常不向研究者或参与者返还（除非法律要求）。这是披露路径与探索性结果不返还治理，不是筛选/基线必做或结果返还资格条件。",
+      "preserve_keywords": [
+        "私人医生",
+        "卫生福利或治疗目的的其他医疗人员",
+        "探究性生物标志物样本",
+        "通常不会向研究者或参与者提供",
+        "除非法律要求"
+      ],
+      "forbidden_inversion": "不得把未向私人医生披露或探究性结果未返还改写为不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1269": {
+      "semantic_role": "regulatory_and_irb_ec_inspection_access_governance",
+      "base_rule": "本研究生成的数据必须接受国家和地方卫生监管机构的代表、申办者监查员、各研究中心的代表、合作者和IRB/EC（如适用）的检查。",
+      "exception_rule": "研究生成数据必须接受国家/地方卫生监管机构代表、申办者监查员、研究中心代表、合作者和IRB/EC（如适用）检查，属于监管检查与监查访问治理；不是单例入排条件。",
+      "preserve_keywords": [
+        "国家和地方卫生监管机构的代表",
+        "申办者监查员",
+        "各研究中心的代表",
+        "合作者",
+        "IRB/EC（如适用）",
+        "检查"
+      ],
+      "forbidden_inversion": "不得把监管检查、监查员检查或IRB/EC检查状态改写为筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "Package 107严格拥有body.p1251-p1259并止于p1259；Package 108严格且仅拥有body.p1260-p1269。Package 109从body.p1270开始，p1270及其后内容不得吸入本包。冻结计划中的37项context_units仅只读，未经Codex另行授权不得升格为attached_source_refs。不得回吸Package 107知情过程/签署控制，也不得把IRB/EC治理或保密治理误作单例资格。",
+    "expected_owners_by_span": {
+      "body.p1251": 107,
+      "body.p1259": 107,
+      "body.p1260": 108,
+      "body.p1261": 108,
+      "body.p1262": 108,
+      "body.p1263": 108,
+      "body.p1264": 108,
+      "body.p1265": 108,
+      "body.p1266": 108,
+      "body.p1267": 108,
+      "body.p1268": 108,
+      "body.p1269": 108,
+      "body.p1270": 109,
+      "body.p515": 45,
+      "body.p575": 46,
+      "body.p584": 47,
+      "body.p594": 48,
+      "body.p618": 50,
+      "body.p838": 75
+    },
+    "unowned_context_source_refs": [
+      "body.t5.r0",
+      "body.t6.r0",
+      "body.p446",
+      "body.p455",
+      "body.p465",
+      "body.p483",
+      "body.p502",
+      "body.t7.r0",
+      "body.p839",
+      "body.p840",
+      "body.p869",
+      "body.p903",
+      "body.p915",
+      "body.p931",
+      "body.p935",
+      "body.p936",
+      "body.p938",
+      "body.p972",
+      "body.p976",
+      "body.p978",
+      "body.p1206",
+      "body.p1207",
+      "body.p1210",
+      "body.p1214",
+      "body.p1216",
+      "body.p1221"
+    ]
+  },
+  "notes": [
+    "模型外闭包：Package 108恰好拥有body.p1260-p1269共10个来源；无attached；37项context_units保持只读且不升格。",
+    "五类语义必须分开：IRB/EC标题与保密标题仅结构；研究启动及持续伦理治理（p1261-p1262）；SAE/安全通信治理（p1263）；隐私授权与信息访问/编码/监查稽查治理（p1265-p1267）；私人医生披露、探索性结果不返还与监管检查（p1268-p1269）。",
+    "候选判定不是预设零：逐项判断后确认本包无独立参加研究前受试者动作；required_candidate_source_refs为空且有逐项原文依据。不得把伦理报批、年度进展、SAE上报、资料保密、隐私授权、监查稽查、结果不返还或监管检查误成单例资格。",
+    "“研究启动前”“签署的知情同意书允许”“必须”等措词保留为治理语义，不得倒置为筛选/入排资格；知情签署权威仍在Package 67/107，本包不重复发布。",
+    "Package 107止于p1259；Package 109从p1270起；claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程。"
+  ]
+}

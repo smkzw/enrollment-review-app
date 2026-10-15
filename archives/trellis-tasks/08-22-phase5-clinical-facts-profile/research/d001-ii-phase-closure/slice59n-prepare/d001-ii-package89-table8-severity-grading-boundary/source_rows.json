@@ -1,0 +1,303 @@
+[
+  {
+    "excerpt": "严重不良事件（Serious Adverse Event，SAE）是指符合下列标准任何一项的不良事件：",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "attached",
+    "source_ref": "body.p997",
+    "source_span_ids": [
+      "body.p997"
+    ],
+    "structure_unit_id": "su-40348e74c63d71c5b6319be0",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "导致死亡：当一个事件的结果为“死亡”，则可明确地作为严重不良事件进行记录和报告。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "attached",
+    "source_ref": "body.p998",
+    "source_span_ids": [
+      "body.p998"
+    ],
+    "structure_unit_id": "su-e2f80718a15f7b296906c055",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "危及生命：在此是指在发生不良事件时参与者已经处于死亡的危险中，并不是指假设该不良事件如果更严重可能导致死亡。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "attached",
+    "source_ref": "body.p999",
+    "source_span_ids": [
+      "body.p999"
+    ],
+    "structure_unit_id": "su-b0f87a9a0d490bd216d0c969",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "永久或者严重的残疾或者功能丧失：指不良事件结果可能对参与者正常生活和活动造成严重不便或干扰。相对较小医学意义的经历，如单纯的头痛、恶心、呕吐、腹泻、流感和意外创伤（如脚踝扭伤），这些经历可能干扰或阻碍日常生活功能，但不构成重大干扰。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "attached",
+    "source_ref": "body.p1000",
+    "source_span_ids": [
+      "body.p1000"
+    ],
+    "structure_unit_id": "su-c793fa7c755ac66919c14e7b",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "需要住院治疗或延长住院时间^*：不良事件导致参与者不得不住院接受治疗或本来已经准备出院但由于发生了不良事件而导致住院时间延长；需明确导致该状况的原因是由于不良事件所致，而非因择期手术、非医疗原因等导致入院。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d01122f016611fda097bbad0",
+    "package_ordinal": 78,
+    "role": "attached",
+    "source_ref": "body.p1001",
+    "source_span_ids": [
+      "body.p1001"
+    ],
+    "structure_unit_id": "su-ea42820da3887b01efc1bab4",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "其他有重要意义的医学事件：必须运用医学和科学的判断决定是否对其他的情况加速报告，如重要医学事件可能不会立即危及生命、死亡或住院，但如需要采取医学措施来预防如上情形之一的发生，也通常被视为是严重的。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "严重不良事件（SAE）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5fbec1c2327b345382aa22d6",
+    "package_ordinal": 79,
+    "role": "attached",
+    "source_ref": "body.p1014",
+    "source_span_ids": [
+      "body.p1014"
+    ],
+    "structure_unit_id": "su-7558abeb46e72593ce9f912c",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "不良事件的严重程度评估",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件的严重程度评估"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-c83571533332e92881f82dd1",
+    "package_ordinal": 88,
+    "role": "attached",
+    "source_ref": "body.p1084",
+    "source_span_ids": [
+      "body.p1084"
+    ],
+    "structure_unit_id": "su-6f2fa269778fdc0ed80b1dac",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "研究者可参考美国国家癌症研究所发布的“不良事件通用术语标准”（CTCAE，版本6.0）评估AE严重程度。CTCAE基于以下基本准则对每个收录的不良事件的严重程度从1级至5级作了特定的描述。对于未收录至CTCAE中的不良事件，如果方案有具体定义，则按相关定义进行评估；如果方案没有具体定义，则使用下列准则对严重程度进行评估：",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件的严重程度评估"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-c83571533332e92881f82dd1",
+    "package_ordinal": 88,
+    "role": "attached",
+    "source_ref": "body.p1085",
+    "source_span_ids": [
+      "body.p1085"
+    ],
+    "structure_unit_id": "su-a58a1b920fb0b98aa8324f1c",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "表 8 不良事件严重程度分级",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件的严重程度评估"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-c83571533332e92881f82dd1",
+    "package_ordinal": 88,
+    "role": "attached",
+    "source_ref": "body.p1086",
+    "source_span_ids": [
+      "body.p1086"
+    ],
+    "structure_unit_id": "su-b383dd1755bfd733fc89f743",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "分级 | 类型 | 定义（满足列举的任一情况）",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件的严重程度评估",
+      "表 8 不良事件严重程度分级"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2a23364a794edb74a0db5e2b",
+    "package_ordinal": 89,
+    "role": "owned",
+    "source_ref": "body.t13.r0",
+    "source_span_ids": [
+      "body.t13.r0.c0.p0",
+      "body.t13.r0.c1.p0",
+      "body.t13.r0.c2.p0"
+    ],
+    "structure_unit_id": "su-a43976bf1f0f5616eef0f8f3",
+    "unit_kind": "table_header"
+  },
+  {
+    "excerpt": "1级 | 轻度 | 无症状或轻微；仅为临床或诊断所见；无需治疗。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件的严重程度评估",
+      "表 8 不良事件严重程度分级"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2a23364a794edb74a0db5e2b",
+    "package_ordinal": 89,
+    "role": "owned",
+    "source_ref": "body.t13.r1",
+    "source_span_ids": [
+      "body.t13.r1.c0.p0",
+      "body.t13.r1.c1.p0",
+      "body.t13.r1.c2.p0"
+    ],
+    "structure_unit_id": "su-ff87596f185809977f360493",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "2级 | 中度 | 需要较小、局部或非侵入性治疗；与年龄相当的工具性日常生活活动受限（指做饭、购买衣物、使用电话、理财等。）",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件的严重程度评估",
+      "表 8 不良事件严重程度分级"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2a23364a794edb74a0db5e2b",
+    "package_ordinal": 89,
+    "role": "owned",
+    "source_ref": "body.t13.r2",
+    "source_span_ids": [
+      "body.t13.r2.c0.p0",
+      "body.t13.r2.c1.p0",
+      "body.t13.r2.c2.p0"
+    ],
+    "structure_unit_id": "su-ac0301376c37d8b831a3e4e5",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "3级 | 重度 | 严重或者具有重要医学意义但不会立即危及生命；导致住院或者延长住院时间；致残；自理性日常生活活动受限（指洗澡、穿脱衣、吃饭、盥洗、服药等，并未卧床不起。）",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件的严重程度评估",
+      "表 8 不良事件严重程度分级"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2a23364a794edb74a0db5e2b",
+    "package_ordinal": 89,
+    "role": "owned",
+    "source_ref": "body.t13.r3",
+    "source_span_ids": [
+      "body.t13.r3.c0.p0",
+      "body.t13.r3.c1.p0",
+      "body.t13.r3.c2.p0"
+    ],
+    "structure_unit_id": "su-877730c146d38d5244004250",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "4级 | 危及生命；需要紧急治疗。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件的严重程度评估",
+      "表 8 不良事件严重程度分级"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2a23364a794edb74a0db5e2b",
+    "package_ordinal": 89,
+    "role": "owned",
+    "source_ref": "body.t13.r4",
+    "source_span_ids": [
+      "body.t13.r4.c0.p0",
+      "body.t13.r4.c2.p0"
+    ],
+    "structure_unit_id": "su-092a2c63a4b74f16a8175d26",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "5级 | 与不良事件相关的死亡。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件的严重程度评估",
+      "表 8 不良事件严重程度分级"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-2a23364a794edb74a0db5e2b",
+    "package_ordinal": 89,
+    "role": "owned",
+    "source_ref": "body.t13.r5",
+    "source_span_ids": [
+      "body.t13.r5.c0.p0",
+      "body.t13.r5.c2.p0"
+    ],
+    "structure_unit_id": "su-f358febe8073d0027587ed4c",
+    "unit_kind": "table_row"
+  }
+]

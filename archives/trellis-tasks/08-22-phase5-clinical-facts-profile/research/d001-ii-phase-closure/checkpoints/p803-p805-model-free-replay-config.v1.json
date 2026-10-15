@@ -1,0 +1,33 @@
+{
+  "schema_version": "phase5/protocol-replay-harness-config/v1",
+  "protocol_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/source-input/blobs/protocol_sources/362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98.docx",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "study_phase": "phase_ii",
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "source_artifact_id": "psa-harness-d001-ii-v8",
+  "owned_source_refs": [
+    "body.p803",
+    "body.p804",
+    "body.p805"
+  ],
+  "attached_source_refs": [
+    "body.t5.r18",
+    "body.p328",
+    "body.p685",
+    "body.p686",
+    "body.p687",
+    "body.p688",
+    "body.p689"
+  ],
+  "out_dir": "artifacts/phase5-slice61ao-p803-p805-model-free-replay",
+  "base_dir": ".",
+  "manifest_id": null,
+  "snapshot_id": null,
+  "pinned_created_at": "2026-08-29T00:00:00+00:00",
+  "workflow_stages": [],
+  "official_targets": [],
+  "procedure_targets": [],
+  "notes": [
+    "D001 II p803-p805 模型无关只读回归锚点；不调用模型，不包含人工控制矩阵，不代表临床验收。"
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "attached_source_refs": [
+    "body.p537",
+    "body.p1237#atom-100-160"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package104-interim-analysis-governance-boundary",
+  "notes": [
+    "模型外闭包：4个拥有来源、2个只读附加来源；六个来源均完整保留研究级期中分析语义，但全部禁止生成受试者审核候选，p1236标题仅作结构来源。",
+    "研究级与受试者级严格分离：p537和body.p1237#atom-100-160闭合50%总体累计数据触发、SSG分析、IDMC建议及申办方最终研究决定；这些不等于某名受试者筛选、入排或访视义务。",
+    "当前候选合同要求至少一个受试者审核节点，不能承载无受试者节点的研究级治理事实；因此不以other_control_candidate绕过层级边界。",
+    "body.p537和body.p1237#atom-100-160没有Package 104冻结所有权，只读进入提示和来源回归，不进入owned_source_refs、required_candidate_source_refs、workflow bindings、official rules或required procedures。",
+    "独立期中统计分析计划是研究分析治理文件；不生成受试者资料缺口、疗效/安全性阈值或D1给药前控制点。",
+    "claims_complete=false；本配置不调用临床语义模型、不发布控制点、不宣称D001全量或受试者/Patient Profile验收完成。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1236",
+    "body.p1237#atom-0-15",
+    "body.p1237#atom-15-100",
+    "body.p1237#atom-160-208"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "p537不得转移所有权或作为本包candidate source；停止新参与者入组是研究级后续决策，不是既有或单例参与者资格结论": "pending_codex",
+        "只读上下文完整保留Ⅱ期约50%参与者完成第12周访视后的启动条件、SSG分析、IDMC建议、可能停止某剂量组新参与者入组及申办方最终决定": "pending_codex"
+      },
+      "frozen_excerpt": "期中分析将在Ⅱ期约50%参与者完成第12周访视后进行，在有效性和安全性评估的基础上，对Ⅱ期研究数据进行评估。数据将由独立统计科学组（Statistical Sciences Group，SSG）分析。分析结果将由独立数据监查委员会（Independent Data Monitoring Committee，IDMC）进行审查。IDMC基于期中分析结果（包括主要疗效终点、关键安全性事件等），建议Ⅲ期研究的剂量；可能基于安全性和或有效性原因而建议某剂量组不再入选新的参与者。最终决定将取决于申办方。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p537",
+      "structure_unit_id": "su-b15c1936995c6ef048ab64fc"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "期中分析标题仅提供章节结构，不独立生成候选、流程节点、官方规则或受试者控制点": "pending_codex"
+      },
+      "frozen_excerpt": "期中分析",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1236",
+      "structure_unit_id": "su-100ada1f8cee126deaf2aaa0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "该拥有原子仅作已理解的研究级统计治理背景，不生成受试者审核候选、访视或D1给药前义务": "pending_codex",
+        "预设期中分析是研究级计划事实；保留其预设性质，不改写为单例筛选、基线或入排义务": "pending_codex"
+      },
+      "frozen_excerpt": "本研究包含一个预设的期中分析。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1237#atom-0-15",
+      "structure_unit_id": "su-4445874e1017109760f43067"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "完整语义必须保留IDMC、申办方、继续Ⅲ期和推荐剂量的主体与对象关系，但不得生成受试者候选或发布控制点": "pending_codex",
+        "累积Ⅱ期有效性和安全性数据是研究级分析输入；IDMC向申办方提供的是正式研究建议": "pending_codex",
+        "继续Ⅲ期与推荐Ⅲ期剂量是阶段/剂量研究决策语境，不是单例入排、筛选失败或受试者资格": "pending_codex"
+      },
+      "frozen_excerpt": "该分析的主要目的是基于累积的II期研究的有效性和安全性数据，由独立数据监查委员会（IDMC）向申办方提供正式建议：包括能否继续进行Ⅲ期临床研究，以及推荐Ⅲ期研究的剂量等。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1237#atom-15-100",
+      "structure_unit_id": "su-b79645182d8e0f091f50ee4b"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "无所有权原子只读保留50%参与者完成第12周主要疗效评估后启动和独立统计团队提交IDMC的完整触发语义": "pending_codex",
+        "该原子不能进入owned_source_refs、candidate source、workflow binding或任何受试者访视义务": "pending_codex"
+      },
+      "frozen_excerpt": "期中分析将在II期的50%参与者完成第12周访视的主要疗效评估后启动，将由独立的统计团队进行分析并将结果提交给IDMC。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1237#atom-100-160",
+      "structure_unit_id": "su-25675e8b43f094c9114e7d35"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "IDMC综合所有疗效和安全性证据形成研究级建议；不是受试者级疗效/安全性阈值": "pending_codex",
+        "独立期中统计分析计划是分析治理文件语境，不是受试者必须完成的检查、访视或资料要求": "pending_codex",
+        "该拥有原子仅作研究级统计治理背景，不生成候选，也不绑定筛选、基线、随机或D1给药前工作流": "pending_codex"
+      },
+      "frozen_excerpt": "IDMC将综合评估所有疗效和安全性证据来形成建议。期中分析的具体细节可见独立的期中统计分析计划。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1237#atom-160-208",
+      "structure_unit_id": "su-9d7db783c0feb9e1977f02ab"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cq-20260830",
+  "worker": "codex-parent"
+}

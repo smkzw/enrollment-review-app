@@ -1,0 +1,19 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_icf_demographics.v1.json",
+  "group_id": "d001-ii-icf-demographics-v2",
+  "task_id": "phase5-slice60z-20260828",
+  "artifact_dir_name": "phase5-slice60z-d001-icf-demographics-replay-action-predicate-20260828",
+  "required_candidate_source_refs": [
+    "body.p768"
+  ],
+  "ids": {
+    "manifest_id": "manifest:slice60z-icf-demographics",
+    "catalog_id": "catalog:slice60z-icf-demographics"
+  },
+  "notes": [
+    "v1真实结果保留为不可变诊断证据；父级拒绝其把解释研究程序与获得签署合并为一个已覆盖动作。",
+    "v2只增强通用动作谓词逐项比对；p768增量候选期望仅进入父级最终验收，不进入Agent首轮或修订提示。",
+    "人口学p770仍须由筛选访视流程目标完整覆盖，不得混入IN-02年龄判定。"
+  ]
+}

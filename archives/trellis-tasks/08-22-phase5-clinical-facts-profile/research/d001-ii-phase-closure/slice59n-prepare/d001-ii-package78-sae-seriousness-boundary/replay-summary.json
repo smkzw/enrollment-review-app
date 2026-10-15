@@ -1,0 +1,19 @@
+{
+  "attached_count": 33,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-6957cb1be2a8bef68de06e21",
+  "group_id": "d001-ii-package78-sae-seriousness-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 2,
+    "frozen_plan_owned": 43
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package78-sae-seriousness-boundary",
+  "owned_count": 12,
+  "prompt_char_count": 48398,
+  "prompt_sha256": "6b8a979178ae39ec03aa8af3a39e373dad3413124b90e737424ddc79c1ecfe2d",
+  "task_id": "phase5-slice61bp-20260830",
+  "unit_count": 45,
+  "worker": "codebuddy-worker_02"
+}

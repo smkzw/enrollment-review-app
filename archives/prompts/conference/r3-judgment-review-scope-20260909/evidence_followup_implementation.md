@@ -1,0 +1,15 @@
+# Same-session implementation review
+
+Continue the existing read-only engineering review, not product execution. No writes, no browsing, no API calls, no environment/credentials/databases/raw clinical materials. Do not read other benchmark artifacts. Review current source below and adjacent types/tests only. Return findings with paths/lines, uncertainties and minimal remedies, not a claim of clinical acceptance.
+
+User boundary: unverified content must not be labeled missing investigator judgment. Only confirmed absence after adequate applicable dual reading may become a reportable professional_judgment gap; it does not require stopping the workflow for user confirmation. Handwriting auxiliary rereads use both existing primary models, at most two rounds, blind first, prior excerpts second; candidates never automatically become facts. Unknown handwritten ownership is not agreement.
+
+Changes to challenge:
+- app/domain/contracts/enums.py, evidence_expectations_v2.py; app/domain/policies.py; app/projections/evidence_expectations.py; app/services/fact_normalization_executor.py: observation_unverified instead of automatically inferred professional_judgment. Source coverage may be weak with retained lab facts; the existing positive investigator source path is explicitly still incomplete. Do not infer it is implemented.
+- app/api/v2/patient_profile_schemas.py; frontend/src/domain/{enums,labels,mappers}.ts; frontend/src/api/wire.ts: unverified label and counts.
+- app/domain/targeted_handwriting_review.py; app/domain/contracts/{page_review_focus,targeted_review_outcome}.py; app/services/{targeted_review_candidates,targeted_page_review_jobs,targeted_page_review_executor}.py: separate handwriting boolean scope, nonempty normalized multiset and known target for candidate agreement, same source identity; stable reconciliation idempotency retained, job version v2.
+- app/llm/page_review_harness.py and page_review_format_repair.py: targeted-only prompt v3; handwriting-only scope forbids facts; ordinary page/protocol paths unchanged.
+- app/llm/page_review_repair_preservation.py: isolated only, counts additions and missing/changed independently, no acceptance.
+- Tests: tests/v2/domain/test_targeted_handwriting_review.py, test_targeted_review_outcome.py; tests/v2/services/test_targeted_page_review_jobs.py, test_fact_normalization_persistence.py; tests/v2/projections/test_evidence_expectations.py; tests/v2/api/test_patient_profiles.py; tests/v2/llm/test_targeted_page_review.py, test_page_review_format_repair.py, test_page_review_repair_preservation.py; frontend/src/test/labels.test.ts.
+
+Do not repeat the prior suggestion to fail the entire normalization job as a way to continue workflow: that contradicts the intended behavior. Check whether implementation actually preserves unknown vs absent, two-round semantics, partial successes, source/target association, rollback/restart and current UI data. In particular explore corner cases independently; list remaining blockers instead of treating counts as acceptance. No need to rerun the expensive full suite.

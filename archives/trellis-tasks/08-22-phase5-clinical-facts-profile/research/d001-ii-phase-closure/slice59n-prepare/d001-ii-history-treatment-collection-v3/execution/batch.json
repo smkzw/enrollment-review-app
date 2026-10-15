@@ -1,0 +1,684 @@
+{
+  "batch_id": "pcb-41da4e28ab70841b44d20aab",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1023",
+    "body.p316",
+    "body.p318",
+    "body.p319",
+    "body.p339",
+    "body.p632",
+    "body.p857",
+    "body.p870",
+    "body.t5.r7.c0.p0",
+    "body.t5.r7.c1.p0",
+    "body.t5.r7.c2.p0",
+    "body.t5.r7.c3.p0",
+    "body.t5.r8.c0.p0",
+    "body.t5.r8.c1.p0",
+    "body.t5.r8.c2.p0",
+    "body.t5.r8.c3.p0"
+  ],
+  "context_structure_unit_ids": [
+    "su-7d1d5177473a5713cf91f2f6",
+    "su-09d2f9df96dada35734f5fdb",
+    "su-97caf64d089af9677d378f82",
+    "su-d1c5487718e8374f918c883e",
+    "su-32cec98e1be3b1cdef20564f",
+    "su-0337a7d41fbcdbecc5596feb",
+    "su-a0c6e82bce23ee2d1c7d3875",
+    "su-35653a17c02366c19f46bc9c",
+    "su-b939ad4febb4f55c0d5dea7c",
+    "su-a4ee984ed31aa5fe26aa9401"
+  ],
+  "context_units": [
+    {
+      "excerpt": "既往和现病史^4 | X | （X） | X",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表",
+        "表 1 Ⅱ期临床研究阶段流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t5.r7.c0.p0",
+        "body.t5.r7.c1.p0",
+        "body.t5.r7.c2.p0",
+        "body.t5.r7.c3.p0"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 10011,
+      "source_ref": "body.t5.r7",
+      "source_span_ids": [
+        "body.t5.r7.c0.p0",
+        "body.t5.r7.c1.p0",
+        "body.t5.r7.c2.p0",
+        "body.t5.r7.c3.p0"
+      ],
+      "structure_unit_id": "su-7d1d5177473a5713cf91f2f6",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "项目"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            7,
+            0
+          ],
+          [
+            7,
+            1
+          ],
+          [
+            7,
+            2
+          ],
+          [
+            7,
+            3
+          ]
+        ],
+        "row_headers": [
+          "既往和现病史^4"
+        ],
+        "row_index": 7,
+        "table_path": [
+          7,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "治疗史^5 | X | （X） | X",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表",
+        "表 1 Ⅱ期临床研究阶段流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t5.r8.c0.p0",
+        "body.t5.r8.c1.p0",
+        "body.t5.r8.c2.p0",
+        "body.t5.r8.c3.p0"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 10111,
+      "source_ref": "body.t5.r8",
+      "source_span_ids": [
+        "body.t5.r8.c0.p0",
+        "body.t5.r8.c1.p0",
+        "body.t5.r8.c2.p0",
+        "body.t5.r8.c3.p0"
+      ],
+      "structure_unit_id": "su-09d2f9df96dada35734f5fdb",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "项目"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            8,
+            0
+          ],
+          [
+            8,
+            1
+          ],
+          [
+            8,
+            2
+          ],
+          [
+            8,
+            3
+          ]
+        ],
+        "row_headers": [
+          "治疗史^5"
+        ],
+        "row_index": 8,
+        "table_path": [
+          8,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "如果筛选访视和D1访视间隔≤7天，则筛选和基线访视可合并进行，两次访视中相同的评估事项可只进行一次。如果筛选访视和D1访视间隔＞7天，则需在D1天前7天内进行基线访视。以给药前最近一次评估结果作为基线值。生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p316"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13070,
+      "source_ref": "body.p316",
+      "source_span_ids": [
+        "body.p316"
+      ],
+      "structure_unit_id": "su-97caf64d089af9677d378f82",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "既往和现病史收集：包括既往病史/伴随疾病、过敏史、个人史（吸烟史、饮酒史、药物滥用史）、家族史、月经史（女性）、生育史（女性）等。病史应包括尽可能过去2年内研究者认为具有临床意义的个人病史信息。银屑病病史应记录详细信息，包括诊断时间、相关疾病特征、病程等。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p318"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13090,
+      "source_ref": "body.p318",
+      "source_span_ids": [
+        "body.p318"
+      ],
+      "structure_unit_id": "su-d1c5487718e8374f918c883e",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "治疗史收集：包括药物治疗史、非药物治疗史及手术史等，尽可能收集银屑病相关的治疗史，其他疾病过去半年内的治疗史。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p319"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13100,
+      "source_ref": "body.p319",
+      "source_span_ids": [
+        "body.p319"
+      ],
+      "structure_unit_id": "su-32cec98e1be3b1cdef20564f",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "合并治疗：定义为自签署ICF开始至研究结束，在此期间使用的治疗药物或治疗方法。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p339"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13300,
+      "source_ref": "body.p339",
+      "source_span_ids": [
+        "body.p339"
+      ],
+      "structure_unit_id": "su-0337a7d41fbcdbecc5596feb",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "筛选时，由研究者评估患有斑块状银屑病，病史≥6个月，且处于稳定期；",
+      "heading_path": [
+        "研究人群",
+        "入选标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p632"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23190,
+      "source_ref": "body.p632",
+      "source_span_ids": [
+        "body.p632"
+      ],
+      "structure_unit_id": "su-a0c6e82bce23ee2d1c7d3875",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "基线访视（D≤-7）",
+      "heading_path": [
+        "研究评估和程序",
+        "访视安排",
+        "Ⅱ期临床研究阶段",
+        "筛选期"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p857"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 26230,
+      "source_ref": "body.p857",
+      "source_span_ids": [
+        "body.p857"
+      ],
+      "structure_unit_id": "su-35653a17c02366c19f46bc9c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "W0（D1）访视",
+      "heading_path": [
+        "研究评估和程序",
+        "访视安排",
+        "Ⅱ期临床研究阶段",
+        "治疗期"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p870"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 26360,
+      "source_ref": "body.p870",
+      "source_span_ids": [
+        "body.p870"
+      ],
+      "structure_unit_id": "su-b939ad4febb4f55c0d5dea7c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "在签署知情同意书后到首次服用试验用药品之前，发生的临床不良医学事件作为病史/伴随疾病记录在原始病历中，不作为AE记录。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的收集和记录",
+        "不良事件的收集"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1023"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27890,
+      "source_ref": "body.p1023",
+      "source_span_ids": [
+        "body.p1023"
+      ],
+      "structure_unit_id": "su-a4ee984ed31aa5fe26aa9401",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice60q-history-treatment-reps",
+  "known_official_targets": [
+    {
+      "catalog_item_id": "pcm-row-7686be9f1a415e6c2bc8cc9d",
+      "label": "斑块状银屑病病程与稳定性",
+      "official_code": "IN-03",
+      "position": 3,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "筛选时，由研究者评估患有斑块状银屑病，病史≥6个月，且处于稳定期；"
+      ],
+      "source_span_ids": [
+        "span-e8187ca2f3db6b4910548b576701bc1f"
+      ]
+    }
+  ],
+  "known_procedure_targets": [
+    {
+      "catalog_item_id": "procedure:d001-history-screening",
+      "label": "筛选访视既往和现病史",
+      "position": 39,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "既往和现病史收集：包括既往病史/伴随疾病、过敏史、个人史（吸烟史、饮酒史、药物滥用史）、家族史、月经史（女性）、生育史（女性）等。病史应包括尽可能过去2年内研究者认为具有临床意义的个人病史信息。银屑病病史应记录详细信息，包括诊断时间、相关疾病特征、病程等。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+        "既往和现病史^4 | X | （X） | X",
+        "既往和现病史^4 | X | （X） | X",
+        "既往和现病史^4 | X | （X） | X",
+        "既往和现病史^4 | X | （X） | X"
+      ],
+      "source_span_ids": [
+        "span-15e719b96cfe880b384570529c150597",
+        "span-4a99db79b159b052dc705bbdd8a78068",
+        "span-bfd0cba18a3b4798f615c38757e1d91a",
+        "span-dad3f27cfcc943edfe7156df86c9e23b",
+        "span-e23fb1a130f0c55d5816c263b4dc4c77"
+      ],
+      "visit_instance": "筛选访视"
+    },
+    {
+      "catalog_item_id": "procedure:d001-history-baseline",
+      "label": "基线访视既往和现病史复核",
+      "position": 40,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "既往和现病史收集：包括既往病史/伴随疾病、过敏史、个人史（吸烟史、饮酒史、药物滥用史）、家族史、月经史（女性）、生育史（女性）等。病史应包括尽可能过去2年内研究者认为具有临床意义的个人病史信息。银屑病病史应记录详细信息，包括诊断时间、相关疾病特征、病程等。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+        "既往和现病史^4 | X | （X） | X",
+        "既往和现病史^4 | X | （X） | X",
+        "既往和现病史^4 | X | （X） | X",
+        "既往和现病史^4 | X | （X） | X"
+      ],
+      "source_span_ids": [
+        "span-15e719b96cfe880b384570529c150597",
+        "span-4a99db79b159b052dc705bbdd8a78068",
+        "span-bfd0cba18a3b4798f615c38757e1d91a",
+        "span-dad3f27cfcc943edfe7156df86c9e23b",
+        "span-e23fb1a130f0c55d5816c263b4dc4c77"
+      ],
+      "visit_instance": "基线访视"
+    },
+    {
+      "catalog_item_id": "procedure:d001-history-d1-pre-dose",
+      "label": "D1给药前既往和现病史复核",
+      "position": 41,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "既往和现病史收集：包括既往病史/伴随疾病、过敏史、个人史（吸烟史、饮酒史、药物滥用史）、家族史、月经史（女性）、生育史（女性）等。病史应包括尽可能过去2年内研究者认为具有临床意义的个人病史信息。银屑病病史应记录详细信息，包括诊断时间、相关疾病特征、病程等。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+        "既往和现病史^4 | X | （X） | X",
+        "既往和现病史^4 | X | （X） | X",
+        "既往和现病史^4 | X | （X） | X",
+        "既往和现病史^4 | X | （X） | X"
+      ],
+      "source_span_ids": [
+        "span-15e719b96cfe880b384570529c150597",
+        "span-4a99db79b159b052dc705bbdd8a78068",
+        "span-bfd0cba18a3b4798f615c38757e1d91a",
+        "span-dad3f27cfcc943edfe7156df86c9e23b",
+        "span-e23fb1a130f0c55d5816c263b4dc4c77"
+      ],
+      "visit_instance": "D1首次给药前"
+    },
+    {
+      "catalog_item_id": "procedure:d001-treatment-history-screening",
+      "label": "筛选访视治疗史",
+      "position": 42,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "治疗史收集：包括药物治疗史、非药物治疗史及手术史等，尽可能收集银屑病相关的治疗史，其他疾病过去半年内的治疗史。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+        "治疗史^5 | X | （X） | X",
+        "治疗史^5 | X | （X） | X",
+        "治疗史^5 | X | （X） | X",
+        "治疗史^5 | X | （X） | X"
+      ],
+      "source_span_ids": [
+        "span-39481ac9c9a50471658568e18e205ad3",
+        "span-421740060cd1340cfa365bf904b7741a",
+        "span-b20de3af26464cc5929c090e2722c563",
+        "span-b684e2906f1ddcde18fd9dcbeb2142ae",
+        "span-e4d437436a2d08fd07f0c0e0b3fbc9e6"
+      ],
+      "visit_instance": "筛选访视"
+    },
+    {
+      "catalog_item_id": "procedure:d001-treatment-history-baseline",
+      "label": "基线访视治疗史复核",
+      "position": 43,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "治疗史收集：包括药物治疗史、非药物治疗史及手术史等，尽可能收集银屑病相关的治疗史，其他疾病过去半年内的治疗史。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+        "治疗史^5 | X | （X） | X",
+        "治疗史^5 | X | （X） | X",
+        "治疗史^5 | X | （X） | X",
+        "治疗史^5 | X | （X） | X"
+      ],
+      "source_span_ids": [
+        "span-39481ac9c9a50471658568e18e205ad3",
+        "span-421740060cd1340cfa365bf904b7741a",
+        "span-b20de3af26464cc5929c090e2722c563",
+        "span-b684e2906f1ddcde18fd9dcbeb2142ae",
+        "span-e4d437436a2d08fd07f0c0e0b3fbc9e6"
+      ],
+      "visit_instance": "基线访视"
+    },
+    {
+      "catalog_item_id": "procedure:d001-treatment-history-d1-pre-dose",
+      "label": "D1给药前治疗史复核",
+      "position": 44,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "治疗史收集：包括药物治疗史、非药物治疗史及手术史等，尽可能收集银屑病相关的治疗史，其他疾病过去半年内的治疗史。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+        "治疗史^5 | X | （X） | X",
+        "治疗史^5 | X | （X） | X",
+        "治疗史^5 | X | （X） | X",
+        "治疗史^5 | X | （X） | X"
+      ],
+      "source_span_ids": [
+        "span-39481ac9c9a50471658568e18e205ad3",
+        "span-421740060cd1340cfa365bf904b7741a",
+        "span-b20de3af26464cc5929c090e2722c563",
+        "span-b684e2906f1ddcde18fd9dcbeb2142ae",
+        "span-e4d437436a2d08fd07f0c0e0b3fbc9e6"
+      ],
+      "visit_instance": "D1首次给药前"
+    }
+  ],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前复核",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1首次给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_source_span_ids": [
+    "body.p772",
+    "body.p773",
+    "body.p858",
+    "body.p871"
+  ],
+  "owned_structure_unit_ids": [
+    "su-e9207406320fe412783f44ff",
+    "su-bc320d1f0c3b2c2bc39a033e",
+    "su-bb5f5e52c7d8c4e1dc787b60",
+    "su-c25320780e6450cc4b4b239e"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "在筛选和/或基线收集既往和现病史：包括既往病史/伴随疾病、过敏史、个人史（吸烟史、饮酒史、药物滥用史）、家族史、月经史（女性）、生育史（女性）等。病史应包括尽可能过去2年内研究者认为具有临床意义的个人病史信息。银屑病病史应记录详细信息，包括诊断时间、相关疾病特征、病程等。排除标准中要求审查的病史时间范围遵循排除标准的规定时间收集。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "既往和现病史、治疗史"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p772"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25290,
+      "source_ref": "body.p772",
+      "source_span_ids": [
+        "body.p772"
+      ],
+      "structure_unit_id": "su-e9207406320fe412783f44ff",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "在筛选和/或基线收集治疗史：包括药物治疗史、非药物治疗史及手术史等，尽可能收集银屑病相关的治疗史，其他疾病过去半年内的治疗史。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "既往和现病史、治疗史"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p773"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25300,
+      "source_ref": "body.p773",
+      "source_span_ids": [
+        "body.p773"
+      ],
+      "structure_unit_id": "su-bc320d1f0c3b2c2bc39a033e",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "问询筛选访视以来的病史及诊治情况",
+      "heading_path": [
+        "研究评估和程序",
+        "访视安排",
+        "Ⅱ期临床研究阶段",
+        "筛选期"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p858"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 26240,
+      "source_ref": "body.p858",
+      "source_span_ids": [
+        "body.p858"
+      ],
+      "structure_unit_id": "su-bb5f5e52c7d8c4e1dc787b60",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "问询上次访视以来的病史及诊治情况",
+      "heading_path": [
+        "研究评估和程序",
+        "访视安排",
+        "Ⅱ期临床研究阶段",
+        "治疗期"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p871"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 26370,
+      "source_ref": "body.p871",
+      "source_span_ids": [
+        "body.p871"
+      ],
+      "structure_unit_id": "su-c25320780e6450cc4b4b239e",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "study_phase": "phase_ii"
+}

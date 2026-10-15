@@ -1,0 +1,22 @@
+.kz-protocol-controls { margin-block: var(--space-5); border-block: 1px solid var(--color-line); padding-block: var(--space-4); color: var(--color-ink); }
+.kz-protocol-controls > header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.kz-protocol-controls h2 { margin: 0; font-size: var(--font-size-title); }
+.kz-protocol-controls p { margin: var(--space-2) 0; line-height: var(--line-height-body); }
+.kz-control-list { display: grid; gap: var(--space-3); }
+.kz-control-item { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-m); box-shadow: var(--shadow-control); }
+.kz-control-item > summary { cursor: pointer; padding: var(--space-4); line-height: var(--line-height-body); transition: background-color var(--motion-control); }
+.kz-control-item > summary:hover { background: var(--color-muted-bg); }
+.kz-control-item > summary > span { color: var(--color-muted); margin-inline-end: var(--space-4); }
+.kz-control-item[open] { border-inline-start: 4px solid var(--color-brand); }
+.kz-control-body { padding: 0 var(--space-4) var(--space-4); overflow-wrap: anywhere; }
+.kz-control-layers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+.kz-control-layer { min-width: 0; border-top: 1px solid var(--color-line); }
+.kz-control-body h4 { margin: var(--space-4) 0 var(--space-2); font-size: var(--font-size-base); }
+.kz-control-body ul, .kz-control-body ol { padding-inline-start: var(--space-5); margin-block: var(--space-2); }
+.kz-control-body li + li { margin-block-start: var(--space-3); }
+.kz-control-qualifiers { color: var(--color-muted); }
+.kz-control-source > summary { color: var(--color-brand-dark); cursor: pointer; padding-block: var(--space-2); }
+.kz-control-source blockquote { white-space: pre-wrap; margin: var(--space-2) 0; padding: var(--space-3) var(--space-4); border-inline-start: 2px solid var(--color-line); line-height: var(--line-height-body); }
+.kz-protocol-controls summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .kz-control-item > summary { transition: none; } }
+@media print { .kz-protocol-controls button { display: none; } }

@@ -1,0 +1,5305 @@
+{
+  "claims_complete": false,
+  "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+  "matrix_id": "protocol-cross-section-controls-d001-ii-362443131f0d384c",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "rows": [
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组受试者",
+      "attainment_criteria_zh": "形成筛选审查、基线复核及首次给药前资格判定记录",
+      "condition_atoms": [],
+      "cross_source_relations": [],
+      "display_ordinal": 1,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-f706d9b42eab4823b232df04",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "核对筛选审核、基线复核和首次给药前资格判定的研究者记录。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-f706d9b42eab4823b232df04-evidence-00",
+          "fact_type_zh": "入排审核与资格判定记录",
+          "required_source_types": [
+            "入排审核记录",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": true,
+          "source_anchor_ids": [
+            "pcm-src-5a42ee108b4d5fb2d762fba1",
+            "pcm-src-8524c6fa6b73d0bc3ee3f430",
+            "pcm-src-9b7518b5c09d8d7ec6b02be1",
+            "pcm-src-ec78f8f46851d2fca72c90db"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-f706d9b42eab4823b232df04-obligation-00",
+              "pcm-row-f706d9b42eab4823b232df04-obligation-01",
+              "pcm-row-f706d9b42eab4823b232df04-obligation-02"
+            ],
+            "logic_basis_zh": "各审核节点的资格判定记录同时满足；组内原子同时满足；组内原子同时满足；组内原子同时满足；组内原子同时满足；组内原子同时满足",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-5a42ee108b4d5fb2d762fba1",
+              "pcm-src-8524c6fa6b73d0bc3ee3f430",
+              "pcm-src-9b7518b5c09d8d7ec6b02be1",
+              "pcm-src-ec78f8f46851d2fca72c90db"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": null,
+          "kind": "must_professional_assessment",
+          "obligation_id": "pcm-row-f706d9b42eab4823b232df04-obligation-00",
+          "requires_professional_judgment": true,
+          "source_anchor_ids": [
+            "pcm-src-9b7518b5c09d8d7ec6b02be1"
+          ],
+          "statement_zh": "完成筛选入排标准审核",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "must_professional_assessment",
+          "obligation_id": "pcm-row-f706d9b42eab4823b232df04-obligation-01",
+          "requires_professional_judgment": true,
+          "source_anchor_ids": [
+            "pcm-src-ec78f8f46851d2fca72c90db"
+          ],
+          "statement_zh": "完成基线入排标准复核",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "must_professional_assessment",
+          "obligation_id": "pcm-row-f706d9b42eab4823b232df04-obligation-02",
+          "requires_professional_judgment": true,
+          "source_anchor_ids": [
+            "pcm-src-8524c6fa6b73d0bc3ee3f430"
+          ],
+          "statement_zh": "形成首次给药前资格判定记录",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "selected_phase_applicable",
+      "prohibition_zh": null,
+      "protocol_control_id": null,
+      "required_action_zh": "完成筛选、基线及首次给药前入排标准复核",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选访视",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [
+            "pcm-src-9b7518b5c09d8d7ec6b02be1"
+          ],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": null,
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线访视",
+          "review_stage": "baseline",
+          "role": "early_attention",
+          "source_anchor_ids": [
+            "pcm-src-8524c6fa6b73d0bc3ee3f430"
+          ],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": null,
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "D1给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [
+            "pcm-src-8524c6fa6b73d0bc3ee3f430"
+          ],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": null,
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "方案摘要",
+            "研究流程表",
+            "表 1 Ⅱ期临床研究阶段流程表"
+          ],
+          "source_anchor_id": "pcm-src-5a42ee108b4d5fb2d762fba1",
+          "source_ordinal": 0,
+          "source_ref": "body.t5.r27",
+          "source_span_ids": [
+            "body.t5.r27.c0.p0",
+            "body.t5.r27.c1.p0",
+            "body.t5.r27.c2.p0",
+            "body.t5.r27.c3.p0"
+          ],
+          "source_title_zh": "表 1 Ⅱ期临床研究阶段流程表",
+          "structure_unit_id": "su-397a378a31c87767ff3404e8",
+          "verbatim_excerpt": "入排标准审核 | X | （X） | X"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "访视安排",
+            "Ⅱ期临床研究阶段",
+            "筛选期"
+          ],
+          "source_anchor_id": "pcm-src-9b7518b5c09d8d7ec6b02be1",
+          "source_ordinal": 1,
+          "source_ref": "body.p856",
+          "source_span_ids": [
+            "body.p856"
+          ],
+          "source_title_zh": "筛选期",
+          "structure_unit_id": "su-9b666e5e6cd8983bdf409733",
+          "verbatim_excerpt": "审核入排标准"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "访视安排",
+            "Ⅱ期临床研究阶段",
+            "筛选期"
+          ],
+          "source_anchor_id": "pcm-src-ec78f8f46851d2fca72c90db",
+          "source_ordinal": 2,
+          "source_ref": "body.p867",
+          "source_span_ids": [
+            "body.p867"
+          ],
+          "source_title_zh": "筛选期",
+          "structure_unit_id": "su-ac82228efa7d9f0b2f6ee742",
+          "verbatim_excerpt": "审核入排标准"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "访视安排",
+            "Ⅱ期临床研究阶段",
+            "治疗期"
+          ],
+          "source_anchor_id": "pcm-src-8524c6fa6b73d0bc3ee3f430",
+          "source_ordinal": 3,
+          "source_ref": "body.p885",
+          "source_span_ids": [
+            "body.p885"
+          ],
+          "source_title_zh": "治疗期",
+          "structure_unit_id": "su-7bd7f855582084756660e2b4",
+          "verbatim_excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。"
+        }
+      ],
+      "source_candidate_id": "candidate:procedure-179822f83d2b4c3ce1fc91382a3fb3e0",
+      "source_kind": "required_procedure",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "D1给药前",
+          "source_anchor_ids": [
+            "pcm-src-8524c6fa6b73d0bc3ee3f430"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-f706d9b42eab4823b232df04-time-00"
+        }
+      ],
+      "title_zh": "入排标准审核",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充流程合并治疗行的全程记录字段。",
+          "relation_id": "pcm-row-b948dbdee46d97e0f95d26c2-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-092f68091386987b07e67f9b",
+            "pcm-src-ae5c092e2c0389593b6372d6"
+          ],
+          "target_row_id": "pcm-row-ac740aed1f7fb0e761095c20"
+        }
+      ],
+      "display_ordinal": 2,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-b948dbdee46d97e0f95d26c2",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-b948dbdee46d97e0f95d26c2-evidence-00",
+          "fact_type_zh": "合并治疗记录范围与要素事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-092f68091386987b07e67f9b",
+            "pcm-src-ae5c092e2c0389593b6372d6"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-b948dbdee46d97e0f95d26c2-obligation-00",
+              "pcm-row-b948dbdee46d97e0f95d26c2-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足；不同路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-092f68091386987b07e67f9b",
+              "pcm-src-ae5c092e2c0389593b6372d6"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-b948dbdee46d97e0f95d26c2-obligation-02"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-092f68091386987b07e67f9b",
+              "pcm-src-ae5c092e2c0389593b6372d6"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-b948dbdee46d97e0f95d26c2-conjunction-00",
+          "kind": "must_record",
+          "obligation_id": "pcm-row-b948dbdee46d97e0f95d26c2-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-092f68091386987b07e67f9b",
+            "pcm-src-ae5c092e2c0389593b6372d6"
+          ],
+          "statement_zh": "记录合并治疗",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-b948dbdee46d97e0f95d26c2-conjunction-00",
+          "kind": "must_record",
+          "obligation_id": "pcm-row-b948dbdee46d97e0f95d26c2-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-092f68091386987b07e67f9b",
+            "pcm-src-ae5c092e2c0389593b6372d6"
+          ],
+          "statement_zh": "核对合并治疗起止时间",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "must_record",
+          "obligation_id": "pcm-row-b948dbdee46d97e0f95d26c2-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-092f68091386987b07e67f9b",
+            "pcm-src-ae5c092e2c0389593b6372d6"
+          ],
+          "statement_zh": "核对合并治疗方法",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": null,
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-092f68091386987b07e67f9b",
+          "source_ordinal": 0,
+          "source_ref": "body.p749",
+          "source_span_ids": [
+            "body.p749"
+          ],
+          "source_title_zh": "合并治疗记录范围与要素",
+          "structure_unit_id": "su-256df82ad8f103fea4136561",
+          "verbatim_excerpt": "合并治疗为合并药物/非药物治疗，包括参与者自签署ICF开始至研究结束使用的任何药物、治疗，应详细记录在eCRF中，并注明用药/治疗原因、给药/治疗方法及起止时间等。"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "记录合并用药"
+          ],
+          "source_anchor_id": "pcm-src-ae5c092e2c0389593b6372d6",
+          "source_ordinal": 1,
+          "source_ref": "body.p837",
+          "source_span_ids": [
+            "body.p837"
+          ],
+          "source_title_zh": "合并治疗记录范围与要素",
+          "structure_unit_id": "su-2dbc802620185870b1b1acd5",
+          "verbatim_excerpt": "自签署ICF开始至研究结束，合并治疗的收集包括治疗的开始/结束日期、剂量、治疗频率、给药途径或治疗方法和适应症，并记录在eCRF合并治疗页中。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-combined-treatment-record-scope",
+      "source_kind": "other_section_control",
+      "time_anchors": [],
+      "title_zh": "合并治疗记录范围与要素",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充流程合并治疗项的允许/禁止边界。",
+          "relation_id": "pcm-row-3119d7d22146270a175963af-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-00233ac48f31eb26260b044f",
+            "pcm-src-2b0b55cc159bc2c0bdd39180",
+            "pcm-src-6ac1009a3f8189a92d387448",
+            "pcm-src-b87933e391541240729dd71c",
+            "pcm-src-f2edb24dfd3e9e2a7319ddb9"
+          ],
+          "target_row_id": "pcm-row-ac740aed1f7fb0e761095c20"
+        }
+      ],
+      "display_ordinal": 3,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-3119d7d22146270a175963af",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-3119d7d22146270a175963af-evidence-00",
+          "fact_type_zh": "允许合并用药与治疗边界事实",
+          "required_source_types": [
+            "合并治疗记录",
+            "日记卡",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": true,
+          "source_anchor_ids": [
+            "pcm-src-00233ac48f31eb26260b044f",
+            "pcm-src-2b0b55cc159bc2c0bdd39180",
+            "pcm-src-6ac1009a3f8189a92d387448",
+            "pcm-src-b87933e391541240729dd71c",
+            "pcm-src-f2edb24dfd3e9e2a7319ddb9"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-3119d7d22146270a175963af-obligation-00",
+              "pcm-row-3119d7d22146270a175963af-obligation-01",
+              "pcm-row-3119d7d22146270a175963af-obligation-02",
+              "pcm-row-3119d7d22146270a175963af-obligation-03"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-00233ac48f31eb26260b044f",
+              "pcm-src-2b0b55cc159bc2c0bdd39180",
+              "pcm-src-6ac1009a3f8189a92d387448",
+              "pcm-src-b87933e391541240729dd71c",
+              "pcm-src-f2edb24dfd3e9e2a7319ddb9"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-3119d7d22146270a175963af-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-3119d7d22146270a175963af-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-00233ac48f31eb26260b044f",
+            "pcm-src-2b0b55cc159bc2c0bdd39180",
+            "pcm-src-6ac1009a3f8189a92d387448",
+            "pcm-src-b87933e391541240729dd71c",
+            "pcm-src-f2edb24dfd3e9e2a7319ddb9"
+          ],
+          "statement_zh": "核对合并疾病伴随用药",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-3119d7d22146270a175963af-conjunction-00",
+          "kind": "must_record",
+          "obligation_id": "pcm-row-3119d7d22146270a175963af-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-00233ac48f31eb26260b044f",
+            "pcm-src-2b0b55cc159bc2c0bdd39180",
+            "pcm-src-6ac1009a3f8189a92d387448",
+            "pcm-src-b87933e391541240729dd71c",
+            "pcm-src-f2edb24dfd3e9e2a7319ddb9"
+          ],
+          "statement_zh": "记录允许治疗变更",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-3119d7d22146270a175963af-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-3119d7d22146270a175963af-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-00233ac48f31eb26260b044f",
+            "pcm-src-2b0b55cc159bc2c0bdd39180",
+            "pcm-src-6ac1009a3f8189a92d387448",
+            "pcm-src-b87933e391541240729dd71c",
+            "pcm-src-f2edb24dfd3e9e2a7319ddb9"
+          ],
+          "statement_zh": "核对润肤剂访视前限制",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-3119d7d22146270a175963af-conjunction-00",
+          "kind": "must_record",
+          "obligation_id": "pcm-row-3119d7d22146270a175963af-obligation-03",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-00233ac48f31eb26260b044f",
+            "pcm-src-2b0b55cc159bc2c0bdd39180",
+            "pcm-src-6ac1009a3f8189a92d387448",
+            "pcm-src-b87933e391541240729dd71c",
+            "pcm-src-f2edb24dfd3e9e2a7319ddb9"
+          ],
+          "statement_zh": "核对必要的不良事件治疗",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": null,
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "允许的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-b87933e391541240729dd71c",
+          "source_ordinal": 0,
+          "source_ref": "body.p751",
+          "source_span_ids": [
+            "body.p751"
+          ],
+          "source_title_zh": "允许合并用药与治疗边界",
+          "structure_unit_id": "su-f082f00b4ee093ce794e2b47",
+          "verbatim_excerpt": "参与者在研究期间，除方案禁止的合并用药外，允许的合并治疗如下："
+        },
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "允许的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-00233ac48f31eb26260b044f",
+          "source_ordinal": 1,
+          "source_ref": "body.p752",
+          "source_span_ids": [
+            "body.p752"
+          ],
+          "source_title_zh": "允许合并用药与治疗边界",
+          "structure_unit_id": "su-b1030761a3662323f1d308c9",
+          "verbatim_excerpt": "允许对合并疾病（如高血压、糖尿病等）的伴随用药，但研究期间尽量保持剂量不变，除非存在临床病情需要，如发生剂量调整，需记录在eCRF中。"
+        },
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "允许的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-2b0b55cc159bc2c0bdd39180",
+          "source_ordinal": 2,
+          "source_ref": "body.p753",
+          "source_span_ids": [
+            "body.p753"
+          ],
+          "source_title_zh": "允许合并用药与治疗边界",
+          "structure_unit_id": "su-dce893c13dfad1aebfe16f46",
+          "verbatim_excerpt": "允许局部使用温和润肤剂（不含药理活性成分）。参与者在研究之前已规律使用温和润肤剂（经研究者确认），研究期间可以原使用方案继续使用该润肤剂；如在研究开始前未使用润肤剂，研究期间不建议使用润肤剂。在整个研究过程中，应尽一切努力保持使用相同的润肤剂和使用习惯。日记卡记录每日是否有使用润肤剂。请注意，每次访视前24小时内不得使用润肤剂。"
+        },
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "允许的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-6ac1009a3f8189a92d387448",
+          "source_ordinal": 3,
+          "source_ref": "body.p754",
+          "source_span_ids": [
+            "body.p754"
+          ],
+          "source_title_zh": "允许合并用药与治疗边界",
+          "structure_unit_id": "su-616027f162d776475a2882a4",
+          "verbatim_excerpt": "允许使用鼻内用皮质类固醇制剂及吸入用皮质类固醇。"
+        },
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "允许的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-f2edb24dfd3e9e2a7319ddb9",
+          "source_ordinal": 4,
+          "source_ref": "body.p755",
+          "source_span_ids": [
+            "body.p755"
+          ],
+          "source_title_zh": "允许合并用药与治疗边界",
+          "structure_unit_id": "su-d0b1c7d16e60b250b133e792",
+          "verbatim_excerpt": "经研究者评估，认为必要的用于治疗不良事件的药物/治疗。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-allowed-concomitant-treatment-boundaries",
+      "source_kind": "other_section_control",
+      "time_anchors": [],
+      "title_zh": "允许合并用药与治疗边界",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-a9a1e4ad292d2450774c4a72"
+          ],
+          "target_row_id": "pcm-row-fb14b9c2e9775f33bad2ea92"
+        }
+      ],
+      "display_ordinal": 4,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a-evidence-00",
+          "fact_type_zh": "表5靶向生物制剂禁用窗口事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-a9a1e4ad292d2450774c4a72"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-7d1c9444e9f8a7b3cd39c01a-obligation-00",
+              "pcm-row-7d1c9444e9f8a7b3cd39c01a-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足；不同路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-a9a1e4ad292d2450774c4a72"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-7d1c9444e9f8a7b3cd39c01a-obligation-02"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-a9a1e4ad292d2450774c4a72"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-a9a1e4ad292d2450774c4a72"
+          ],
+          "statement_zh": "核对靶向生物制剂类别",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a-conjunction-00",
+          "kind": "prohibit_medication_or_treatment_exposure",
+          "obligation_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-a9a1e4ad292d2450774c4a72"
+          ],
+          "statement_zh": "禁止靶向生物制剂暴露",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "must_record",
+          "obligation_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-a9a1e4ad292d2450774c4a72"
+          ],
+          "statement_zh": "核对研究期间限制",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-a9a1e4ad292d2450774c4a72",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r1",
+          "source_span_ids": [
+            "body.t10.r1.c0.p0",
+            "body.t10.r1.c1.p0"
+          ],
+          "source_title_zh": "表5靶向生物制剂禁用窗口",
+          "structure_unit_id": "su-bc603cfe2fa2cb7ad4d26623",
+          "verbatim_excerpt": "首次给药前6个月至试验结束 | 靶向IL-12、IL-17和/或IL-23的生物制剂"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-01",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前6个月",
+          "source_anchor_ids": [
+            "pcm-src-a9a1e4ad292d2450774c4a72"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "month",
+              "value": 6
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a-time-00"
+        },
+        {
+          "anchor_label_zh": "试验结束前",
+          "source_anchor_ids": [
+            "pcm-src-a9a1e4ad292d2450774c4a72"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "study_completion_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a-time-01"
+        }
+      ],
+      "title_zh": "表5靶向生物制剂禁用窗口",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-4e995e86397e193d2dce8e33-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-9861b3c7a6776206256a67ce"
+          ],
+          "target_row_id": "pcm-row-fb14b9c2e9775f33bad2ea92"
+        }
+      ],
+      "display_ordinal": 5,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-4e995e86397e193d2dce8e33",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-4e995e86397e193d2dce8e33-evidence-00",
+          "fact_type_zh": "表5免疫细胞耗竭治疗禁用窗口事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-9861b3c7a6776206256a67ce"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-4e995e86397e193d2dce8e33-obligation-00"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-9861b3c7a6776206256a67ce"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-4e995e86397e193d2dce8e33-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-9861b3c7a6776206256a67ce"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-4e995e86397e193d2dce8e33-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-9861b3c7a6776206256a67ce"
+          ],
+          "statement_zh": "核对利妥昔单抗类别",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "prohibit_medication_or_treatment_exposure",
+          "obligation_id": "pcm-row-4e995e86397e193d2dce8e33-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-9861b3c7a6776206256a67ce"
+          ],
+          "statement_zh": "禁止免疫细胞耗竭治疗暴露",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-9861b3c7a6776206256a67ce",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r2",
+          "source_span_ids": [
+            "body.t10.r2.c0.p0",
+            "body.t10.r2.c1.p0"
+          ],
+          "source_title_zh": "表5免疫细胞耗竭治疗禁用窗口",
+          "structure_unit_id": "su-74aba9c698c886a1b2b1b6c6",
+          "verbatim_excerpt": "首次给药前6个月至试验结束 | 利妥昔单抗或其它免疫细胞耗竭治疗"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-02",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前6个月",
+          "source_anchor_ids": [
+            "pcm-src-9861b3c7a6776206256a67ce"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "month",
+              "value": 6
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-4e995e86397e193d2dce8e33-time-00"
+        },
+        {
+          "anchor_label_zh": "试验结束前",
+          "source_anchor_ids": [
+            "pcm-src-9861b3c7a6776206256a67ce"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "study_completion_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-4e995e86397e193d2dce8e33-time-01"
+        }
+      ],
+      "title_zh": "表5免疫细胞耗竭治疗禁用窗口",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-ad33c204e3ae9155b97120f9-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-0d8385441f3700097f82cbb8"
+          ],
+          "target_row_id": "pcm-row-fb14b9c2e9775f33bad2ea92"
+        }
+      ],
+      "display_ordinal": 6,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-ad33c204e3ae9155b97120f9",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-ad33c204e3ae9155b97120f9-evidence-00",
+          "fact_type_zh": "表5来氟米特洗脱窗口及缩短路径事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-0d8385441f3700097f82cbb8"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-ad33c204e3ae9155b97120f9-obligation-00"
+            ],
+            "logic_basis_zh": null,
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-0d8385441f3700097f82cbb8"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-ad33c204e3ae9155b97120f9-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-0d8385441f3700097f82cbb8"
+          ],
+          "statement_zh": "核对来氟米特洗脱",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-0d8385441f3700097f82cbb8",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r3",
+          "source_span_ids": [
+            "body.t10.r3.c0.p0",
+            "body.t10.r3.c1.p0"
+          ],
+          "source_title_zh": "表5来氟米特洗脱窗口及缩短路径",
+          "structure_unit_id": "su-184be475f9a138762a4ae397",
+          "verbatim_excerpt": "首次给药前24个月至试验结束，若经过药物清除剂进行洗脱可缩短至首次给药前6个月 | 来氟米特"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-03",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前24个月",
+          "source_anchor_ids": [
+            "pcm-src-0d8385441f3700097f82cbb8"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "month",
+              "value": 24
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-ad33c204e3ae9155b97120f9-time-00"
+        },
+        {
+          "anchor_label_zh": "洗脱后首次给药前6个月",
+          "source_anchor_ids": [
+            "pcm-src-0d8385441f3700097f82cbb8"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "month",
+              "value": 6
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-ad33c204e3ae9155b97120f9-time-01"
+        }
+      ],
+      "title_zh": "表5来氟米特洗脱窗口及缩短路径",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-5af94ca09930bcbf5f1f38d1-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-adce49fba846bde7496e9e33"
+          ],
+          "target_row_id": "pcm-row-fb14b9c2e9775f33bad2ea92"
+        }
+      ],
+      "display_ordinal": 7,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-5af94ca09930bcbf5f1f38d1",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-5af94ca09930bcbf5f1f38d1-evidence-00",
+          "fact_type_zh": "表5其他生物制剂固定窗口与半衰期窗口事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-adce49fba846bde7496e9e33"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-5af94ca09930bcbf5f1f38d1-obligation-00",
+              "pcm-row-5af94ca09930bcbf5f1f38d1-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足；不同路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-adce49fba846bde7496e9e33"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-5af94ca09930bcbf5f1f38d1-obligation-02"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-adce49fba846bde7496e9e33"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-5af94ca09930bcbf5f1f38d1-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-5af94ca09930bcbf5f1f38d1-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-adce49fba846bde7496e9e33"
+          ],
+          "statement_zh": "核对固定窗口",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-5af94ca09930bcbf5f1f38d1-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-5af94ca09930bcbf5f1f38d1-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-adce49fba846bde7496e9e33"
+          ],
+          "statement_zh": "核对半衰期窗口",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-5af94ca09930bcbf5f1f38d1-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-adce49fba846bde7496e9e33"
+          ],
+          "statement_zh": "核对其他生物制剂类别",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-adce49fba846bde7496e9e33",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r4",
+          "source_span_ids": [
+            "body.t10.r4.c0.p0",
+            "body.t10.r4.c1.p0"
+          ],
+          "source_title_zh": "表5其他生物制剂固定窗口与半衰期窗口",
+          "structure_unit_id": "su-b04fd15fba3f660d163bbd32",
+          "verbatim_excerpt": "首次给药前3个月或5个半衰期（以时间较长者为准）至试验结束 | 除靶向IL-12、IL-17和/或IL-23外的其他生物制剂"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-04",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前3个月或5个半衰期",
+          "source_anchor_ids": [
+            "pcm-src-adce49fba846bde7496e9e33"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": 5.0,
+            "lower_bound": {
+              "unit": "month",
+              "value": 3
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-5af94ca09930bcbf5f1f38d1-time-00"
+        }
+      ],
+      "title_zh": "表5其他生物制剂固定窗口与半衰期窗口",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-dfa9f5c81faea39a17440a0e-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-71f4793083986d09f722d910"
+          ],
+          "target_row_id": "pcm-row-f138b8b0b6dea32520beecbf"
+        }
+      ],
+      "display_ordinal": 8,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-dfa9f5c81faea39a17440a0e",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-dfa9f5c81faea39a17440a0e-evidence-00",
+          "fact_type_zh": "表5其他临床试验药物洗脱窗口事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-71f4793083986d09f722d910"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-dfa9f5c81faea39a17440a0e-obligation-00"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-71f4793083986d09f722d910"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-dfa9f5c81faea39a17440a0e-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-71f4793083986d09f722d910"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-dfa9f5c81faea39a17440a0e-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-71f4793083986d09f722d910"
+          ],
+          "statement_zh": "核对临床试验药物洗脱",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-dfa9f5c81faea39a17440a0e-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-71f4793083986d09f722d910"
+          ],
+          "statement_zh": "核对半衰期窗口",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-71f4793083986d09f722d910",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r5",
+          "source_span_ids": [
+            "body.t10.r5.c0.p0",
+            "body.t10.r5.c1.p0"
+          ],
+          "source_title_zh": "表5其他临床试验药物洗脱窗口",
+          "structure_unit_id": "su-6cac7f360883d212807d6643",
+          "verbatim_excerpt": "首次给药前3个月或5个半衰期（以时间较长者为准）至试验结束 | 其它临床试验药物"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-05",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前3个月或5个半衰期",
+          "source_anchor_ids": [
+            "pcm-src-71f4793083986d09f722d910"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": 5.0,
+            "lower_bound": {
+              "unit": "month",
+              "value": 3
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-dfa9f5c81faea39a17440a0e-time-00"
+        }
+      ],
+      "title_zh": "表5其他临床试验药物洗脱窗口",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-d266123ce78cb5de1e2f42db-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-392b963f8126845c75e961ac"
+          ],
+          "target_row_id": "pcm-row-37e6569d074aeff6e729d47a"
+        }
+      ],
+      "display_ordinal": 9,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-d266123ce78cb5de1e2f42db",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-d266123ce78cb5de1e2f42db-evidence-00",
+          "fact_type_zh": "表5减毒活疫苗禁用窗口事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-392b963f8126845c75e961ac"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-d266123ce78cb5de1e2f42db-obligation-00"
+            ],
+            "logic_basis_zh": null,
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-392b963f8126845c75e961ac"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-d266123ce78cb5de1e2f42db-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-392b963f8126845c75e961ac"
+          ],
+          "statement_zh": "核对减毒活疫苗限制",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-392b963f8126845c75e961ac",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r6",
+          "source_span_ids": [
+            "body.t10.r6.c0.p0",
+            "body.t10.r6.c1.p0"
+          ],
+          "source_title_zh": "表5减毒活疫苗禁用窗口",
+          "structure_unit_id": "su-a81e48c4e5acc6af46028f1c",
+          "verbatim_excerpt": "首次给药前4周至试验结束后8周 | 接种减毒活疫苗"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-06",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前4周",
+          "source_anchor_ids": [
+            "pcm-src-392b963f8126845c75e961ac"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "week",
+              "value": 4
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-d266123ce78cb5de1e2f42db-time-00"
+        },
+        {
+          "anchor_label_zh": "试验结束后8周",
+          "source_anchor_ids": [
+            "pcm-src-392b963f8126845c75e961ac"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "study_completion_date",
+            "direction": "after",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "week",
+              "value": 8
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-d266123ce78cb5de1e2f42db-time-01"
+        }
+      ],
+      "title_zh": "表5减毒活疫苗禁用窗口",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-cafec6b69d20a566a4d5e9cf-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-4996a906a7dd84d603c0b300"
+          ],
+          "target_row_id": "pcm-row-fb14b9c2e9775f33bad2ea92"
+        }
+      ],
+      "display_ordinal": 10,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-cafec6b69d20a566a4d5e9cf",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-cafec6b69d20a566a4d5e9cf-evidence-00",
+          "fact_type_zh": "表5非生物制剂系统治疗事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-4996a906a7dd84d603c0b300"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-cafec6b69d20a566a4d5e9cf-obligation-00"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-4996a906a7dd84d603c0b300"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-cafec6b69d20a566a4d5e9cf-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-4996a906a7dd84d603c0b300"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-cafec6b69d20a566a4d5e9cf-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-4996a906a7dd84d603c0b300"
+          ],
+          "statement_zh": "核对系统治疗类别",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-cafec6b69d20a566a4d5e9cf-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-4996a906a7dd84d603c0b300"
+          ],
+          "statement_zh": "核对中成药窗口",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-4996a906a7dd84d603c0b300",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r7",
+          "source_span_ids": [
+            "body.t10.r7.c0.p0",
+            "body.t10.r7.c1.p0"
+          ],
+          "source_title_zh": "表5非生物制剂系统治疗",
+          "structure_unit_id": "su-cdabd77985e360528548e52f",
+          "verbatim_excerpt": "首次给药前4周至试验结束 | 影响银屑病病情的非生物制剂系统治疗，包括但不限于 JAKs抑制剂、糖皮质激素、维A酸类、环孢素、甲氨蝶呤、黄芪、雷公藤、苦参、复方甘草酸铵、硫唑嘌呤、吗替麦考酚酯、中成药及传统中草药（对于无明确临床证据可能改善银屑病病情的中成药或传统中草药，禁用时间可缩短至给药前2周至试验结束）、抗疟药、干扰素或锂制剂等"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-07",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前4周",
+          "source_anchor_ids": [
+            "pcm-src-4996a906a7dd84d603c0b300"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "week",
+              "value": 4
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-cafec6b69d20a566a4d5e9cf-time-00"
+        },
+        {
+          "anchor_label_zh": "无明确证据中成药首次给药前2周",
+          "source_anchor_ids": [
+            "pcm-src-4996a906a7dd84d603c0b300"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "week",
+              "value": 2
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-cafec6b69d20a566a4d5e9cf-time-01"
+        },
+        {
+          "anchor_label_zh": "试验结束前",
+          "source_anchor_ids": [
+            "pcm-src-4996a906a7dd84d603c0b300"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "study_completion_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-cafec6b69d20a566a4d5e9cf-time-02"
+        }
+      ],
+      "title_zh": "表5非生物制剂系统治疗",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-9376521d329dd61ca2ecd343-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-4064d52ced0de60891e4e84c"
+          ],
+          "target_row_id": "pcm-row-fb14b9c2e9775f33bad2ea92"
+        }
+      ],
+      "display_ordinal": 11,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-9376521d329dd61ca2ecd343",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-9376521d329dd61ca2ecd343-evidence-00",
+          "fact_type_zh": "表5肝药酶调节相关中药事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-4064d52ced0de60891e4e84c"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-9376521d329dd61ca2ecd343-obligation-00"
+            ],
+            "logic_basis_zh": null,
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-4064d52ced0de60891e4e84c"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-9376521d329dd61ca2ecd343-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-4064d52ced0de60891e4e84c"
+          ],
+          "statement_zh": "核对肝药酶调节中药",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-4064d52ced0de60891e4e84c",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r8",
+          "source_span_ids": [
+            "body.t10.r8.c0.p0",
+            "body.t10.r8.c1.p0"
+          ],
+          "source_title_zh": "表5肝药酶调节相关中药",
+          "structure_unit_id": "su-128f8e8db83a0a1a05ca766c",
+          "verbatim_excerpt": "首次给药前4周至试验结束 | 肝药酶调节相关的中药治疗（如甘草、五味子等）"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-08",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前4周",
+          "source_anchor_ids": [
+            "pcm-src-4064d52ced0de60891e4e84c"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "week",
+              "value": 4
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-9376521d329dd61ca2ecd343-time-00"
+        },
+        {
+          "anchor_label_zh": "试验结束前",
+          "source_anchor_ids": [
+            "pcm-src-4064d52ced0de60891e4e84c"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "study_completion_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-9376521d329dd61ca2ecd343-time-01"
+        }
+      ],
+      "title_zh": "表5肝药酶调节相关中药",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-0db8bb81233e45fc31cec21a-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-27de6bcf649e97dc0bade713"
+          ],
+          "target_row_id": "pcm-row-fb14b9c2e9775f33bad2ea92"
+        }
+      ],
+      "display_ordinal": 12,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-0db8bb81233e45fc31cec21a",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-0db8bb81233e45fc31cec21a-evidence-00",
+          "fact_type_zh": "表5物理治疗事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-27de6bcf649e97dc0bade713"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-0db8bb81233e45fc31cec21a-obligation-00"
+            ],
+            "logic_basis_zh": null,
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-27de6bcf649e97dc0bade713"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-0db8bb81233e45fc31cec21a-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-27de6bcf649e97dc0bade713"
+          ],
+          "statement_zh": "核对物理治疗",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-27de6bcf649e97dc0bade713",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r9",
+          "source_span_ids": [
+            "body.t10.r9.c0.p0",
+            "body.t10.r9.c1.p0"
+          ],
+          "source_title_zh": "表5物理治疗",
+          "structure_unit_id": "su-0169fa2ac8ec34b55bb84046",
+          "verbatim_excerpt": "首次给药前4周至试验结束 | 物理治疗，包括但不限于：紫外线疗法、光化学疗法、采用日光浴床自我治疗等"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-09",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前4周",
+          "source_anchor_ids": [
+            "pcm-src-27de6bcf649e97dc0bade713"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "week",
+              "value": 4
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-0db8bb81233e45fc31cec21a-time-00"
+        },
+        {
+          "anchor_label_zh": "试验结束前",
+          "source_anchor_ids": [
+            "pcm-src-27de6bcf649e97dc0bade713"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "study_completion_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-0db8bb81233e45fc31cec21a-time-01"
+        }
+      ],
+      "title_zh": "表5物理治疗",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-cb7131312f21880cb008e8e7-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-a380ba3fa7bbea4cf81fb6ca"
+          ],
+          "target_row_id": "pcm-row-aa565f1a6d0dedb03dc0db75"
+        }
+      ],
+      "display_ordinal": 13,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-cb7131312f21880cb008e8e7",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-cb7131312f21880cb008e8e7-evidence-00",
+          "fact_type_zh": "表5CYP3A相关治疗事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-a380ba3fa7bbea4cf81fb6ca"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-cb7131312f21880cb008e8e7-obligation-00"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-a380ba3fa7bbea4cf81fb6ca"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-cb7131312f21880cb008e8e7-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-a380ba3fa7bbea4cf81fb6ca"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-cb7131312f21880cb008e8e7-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-a380ba3fa7bbea4cf81fb6ca"
+          ],
+          "statement_zh": "核对CYP3A调节药物",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-cb7131312f21880cb008e8e7-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-a380ba3fa7bbea4cf81fb6ca"
+          ],
+          "statement_zh": "核对半衰期窗口",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-a380ba3fa7bbea4cf81fb6ca",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r10",
+          "source_span_ids": [
+            "body.t10.r10.c0.p0",
+            "body.t10.r10.c1.p0"
+          ],
+          "source_title_zh": "表5CYP3A相关治疗",
+          "structure_unit_id": "su-ffe84af13f283b2155231ca7",
+          "verbatim_excerpt": "首次给药前4周或5个半衰期（以时间较长者为准）至试验结束 | 任何影响研究评估的治疗，包括但不限于CYP3A强诱导剂或抑制剂的药物（见附录3）"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-10",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前4周或5个半衰期",
+          "source_anchor_ids": [
+            "pcm-src-a380ba3fa7bbea4cf81fb6ca"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": 5.0,
+            "lower_bound": {
+              "unit": "week",
+              "value": 4
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-cb7131312f21880cb008e8e7-time-00"
+        }
+      ],
+      "title_zh": "表5CYP3A相关治疗",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-7df48e08d6cbf2488b8e40ff-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-50b0913d488ae602241eb174"
+          ],
+          "target_row_id": "pcm-row-fb14b9c2e9775f33bad2ea92"
+        }
+      ],
+      "display_ordinal": 14,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-7df48e08d6cbf2488b8e40ff",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-7df48e08d6cbf2488b8e40ff-evidence-00",
+          "fact_type_zh": "表5局部及中医治疗事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-50b0913d488ae602241eb174"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-7df48e08d6cbf2488b8e40ff-obligation-00"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-50b0913d488ae602241eb174"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-7df48e08d6cbf2488b8e40ff-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-50b0913d488ae602241eb174"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-7df48e08d6cbf2488b8e40ff-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-50b0913d488ae602241eb174"
+          ],
+          "statement_zh": "核对局部及中医治疗",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-7df48e08d6cbf2488b8e40ff-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-50b0913d488ae602241eb174"
+          ],
+          "statement_zh": "核对非药物治疗",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-50b0913d488ae602241eb174",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r11",
+          "source_span_ids": [
+            "body.t10.r11.c0.p0",
+            "body.t10.r11.c1.p0"
+          ],
+          "source_title_zh": "表5局部及中医治疗",
+          "structure_unit_id": "su-b8e4de54e40eb452f668a250",
+          "verbatim_excerpt": "首次给药前2周至试验结束 | 可能影响银屑病病情的局部用药/治疗（包括但不限于：糖皮质激素、维A酸类、维生素D3衍生物、钙调磷酸酶抑制剂、本维莫德、抗人IL-8单克隆抗体乳膏、焦油、水杨酸、地蒽酚等）或含有上述成分的洗浴产品，或可能影响银屑病病情的中成药外用剂、中医非药物疗法；"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-11",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前2周",
+          "source_anchor_ids": [
+            "pcm-src-50b0913d488ae602241eb174"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "week",
+              "value": 2
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-7df48e08d6cbf2488b8e40ff-time-00"
+        },
+        {
+          "anchor_label_zh": "试验结束前",
+          "source_anchor_ids": [
+            "pcm-src-50b0913d488ae602241eb174"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "study_completion_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-7df48e08d6cbf2488b8e40ff-time-01"
+        }
+      ],
+      "title_zh": "表5局部及中医治疗",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充既有官方禁限用药/治疗控制的表5具体类别和时间窗口。",
+          "relation_id": "pcm-row-3ed0351f1951b1b4f5b52cf8-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-e65132cabf71270153d89f88"
+          ],
+          "target_row_id": "pcm-row-66d072a20ef765d6bcd1bc45"
+        }
+      ],
+      "display_ordinal": 15,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-3ed0351f1951b1b4f5b52cf8",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-3ed0351f1951b1b4f5b52cf8-evidence-00",
+          "fact_type_zh": "表5圣约翰草与葡萄柚限制事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-e65132cabf71270153d89f88"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-3ed0351f1951b1b4f5b52cf8-obligation-00"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-e65132cabf71270153d89f88"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-3ed0351f1951b1b4f5b52cf8-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-e65132cabf71270153d89f88"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-3ed0351f1951b1b4f5b52cf8-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-e65132cabf71270153d89f88"
+          ],
+          "statement_zh": "核对圣约翰草葡萄柚限制",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "must_record",
+          "obligation_id": "pcm-row-3ed0351f1951b1b4f5b52cf8-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-e65132cabf71270153d89f88"
+          ],
+          "statement_zh": "核对持续限制",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "满足表5对应禁限窗口",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究治疗",
+            "合并用药/治疗",
+            "禁止的合并用药/治疗",
+            "表 5 禁止的合并用药/治疗"
+          ],
+          "source_anchor_id": "pcm-src-e65132cabf71270153d89f88",
+          "source_ordinal": 0,
+          "source_ref": "body.t10.r12",
+          "source_span_ids": [
+            "body.t10.r12.c0.p0",
+            "body.t10.r12.c1.p0"
+          ],
+          "source_title_zh": "表5圣约翰草与葡萄柚限制",
+          "structure_unit_id": "su-d7b9da3ea4a0ddd3a8c3a1a0",
+          "verbatim_excerpt": "首次给药前7天至试验结束 | 圣·约翰草（贯叶连翘）制品、葡萄柚或葡萄柚汁"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-table5-12",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前7天",
+          "source_anchor_ids": [
+            "pcm-src-e65132cabf71270153d89f88"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": 7,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-3ed0351f1951b1b4f5b52cf8-time-00"
+        },
+        {
+          "anchor_label_zh": "试验结束前",
+          "source_anchor_ids": [
+            "pcm-src-e65132cabf71270153d89f88"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "study_completion_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-3ed0351f1951b1b4f5b52cf8-time-01"
+        }
+      ],
+      "title_zh": "表5圣约翰草与葡萄柚限制",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充流程入排审核行的重复检查与重新筛选边界。",
+          "relation_id": "pcm-row-8d0f127d22d363addcb0781c-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-51f04d0fe375145769c4955a"
+          ],
+          "target_row_id": "pcm-row-f706d9b42eab4823b232df04"
+        }
+      ],
+      "display_ordinal": 16,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-8d0f127d22d363addcb0781c",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-8d0f127d22d363addcb0781c-evidence-00",
+          "fact_type_zh": "筛选期重复检查与重新筛选边界事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": false,
+          "requires_researcher_assessment_record": true,
+          "source_anchor_ids": [
+            "pcm-src-51f04d0fe375145769c4955a"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-8d0f127d22d363addcb0781c-obligation-00",
+              "pcm-row-8d0f127d22d363addcb0781c-obligation-01",
+              "pcm-row-8d0f127d22d363addcb0781c-obligation-02",
+              "pcm-row-8d0f127d22d363addcb0781c-obligation-03"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-51f04d0fe375145769c4955a"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-8d0f127d22d363addcb0781c-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-8d0f127d22d363addcb0781c-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-51f04d0fe375145769c4955a"
+          ],
+          "statement_zh": "核对重复检查次数",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-8d0f127d22d363addcb0781c-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-8d0f127d22d363addcb0781c-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-51f04d0fe375145769c4955a"
+          ],
+          "statement_zh": "核对重新筛选次数",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-8d0f127d22d363addcb0781c-conjunction-00",
+          "kind": "must_record",
+          "obligation_id": "pcm-row-8d0f127d22d363addcb0781c-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-51f04d0fe375145769c4955a"
+          ],
+          "statement_zh": "核对重新筛选同意记录",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-8d0f127d22d363addcb0781c-conjunction-00",
+          "kind": "must_record",
+          "obligation_id": "pcm-row-8d0f127d22d363addcb0781c-obligation-03",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-51f04d0fe375145769c4955a"
+          ],
+          "statement_zh": "核对新筛选号",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": null,
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究人群",
+            "筛选失败"
+          ],
+          "source_anchor_id": "pcm-src-51f04d0fe375145769c4955a",
+          "source_ordinal": 0,
+          "source_ref": "body.p703",
+          "source_span_ids": [
+            "body.p703"
+          ],
+          "source_title_zh": "筛选期重复检查与重新筛选边界",
+          "structure_unit_id": "su-13c6fe5fe481eb9e6c9cd65c",
+          "verbatim_excerpt": "在筛选期间，不符合入排标准的检查，如果研究者认为参与者在重新检查后可能符合要求，则在筛选期间可以重复检查一次。此外，经研究者评估，允许初筛失败的参与者有一次重新筛选的机会，但需要重新签署知情同意书、分配新的筛选号。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-screening-retest-rescreen",
+      "source_kind": "other_section_control",
+      "time_anchors": [],
+      "title_zh": "筛选期重复检查与重新筛选边界",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "further_explanation",
+          "notes_zh": "进一步解释筛选/基线审核节点的合并访视和D1前7天边界。",
+          "relation_id": "pcm-row-c6eb8bbf8636dc83110216e6-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-2cc576241b7b81d8db15dca6"
+          ],
+          "target_row_id": "pcm-row-f706d9b42eab4823b232df04"
+        }
+      ],
+      "display_ordinal": 17,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-c6eb8bbf8636dc83110216e6",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-c6eb8bbf8636dc83110216e6-evidence-00",
+          "fact_type_zh": "筛选基线合并与D1前基线窗口事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": true,
+          "requires_researcher_assessment_record": true,
+          "source_anchor_ids": [
+            "pcm-src-2cc576241b7b81d8db15dca6"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-c6eb8bbf8636dc83110216e6-obligation-00",
+              "pcm-row-c6eb8bbf8636dc83110216e6-obligation-01",
+              "pcm-row-c6eb8bbf8636dc83110216e6-obligation-02"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-2cc576241b7b81d8db15dca6"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-c6eb8bbf8636dc83110216e6-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-c6eb8bbf8636dc83110216e6-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-2cc576241b7b81d8db15dca6"
+          ],
+          "statement_zh": "核对筛选期复查",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-c6eb8bbf8636dc83110216e6-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-c6eb8bbf8636dc83110216e6-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-2cc576241b7b81d8db15dca6"
+          ],
+          "statement_zh": "核对基线时间窗",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-c6eb8bbf8636dc83110216e6-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-c6eb8bbf8636dc83110216e6-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-2cc576241b7b81d8db15dca6"
+          ],
+          "statement_zh": "核对最近检查值",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": null,
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "访视安排",
+            "Ⅱ期临床研究阶段",
+            "筛选期"
+          ],
+          "source_anchor_id": "pcm-src-2cc576241b7b81d8db15dca6",
+          "source_ordinal": 0,
+          "source_ref": "body.p868",
+          "source_span_ids": [
+            "body.p868"
+          ],
+          "source_title_zh": "筛选基线合并与D1前基线窗口",
+          "structure_unit_id": "su-14cbbde23a2e420ac91ec1ca",
+          "verbatim_excerpt": "注：筛选期相关检查，经研究者评估如有必要可重复检查以确认参与者入选资格。如果筛选访视和D1访视间隔≤7天，则筛选和基线访视可合并进行，两次访视中相同的评估事项可只进行一次。如果筛选访视和D1访视间隔＞7天，则需在D1天前7天内进行基线访视，以给药前最近一次检查值作为基线。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-screening-baseline-d1-window",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "筛选访视",
+          "source_anchor_ids": [
+            "pcm-src-2cc576241b7b81d8db15dca6"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "screening_date",
+            "direction": "on",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-c6eb8bbf8636dc83110216e6-time-00"
+        },
+        {
+          "anchor_label_zh": "基线访视在D1前7天内",
+          "source_anchor_ids": [
+            "pcm-src-2cc576241b7b81d8db15dca6"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": 7
+          },
+          "time_constraint_id": "pcm-row-c6eb8bbf8636dc83110216e6-time-01"
+        }
+      ],
+      "title_zh": "筛选基线合并与D1前基线窗口",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充流程胸部CT行的结果有效期和复测裁量。",
+          "relation_id": "pcm-row-c35a617e6adc7f908a459aed-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-e353a9687da3fda15af3d4ab"
+          ],
+          "target_row_id": "pcm-row-02a2cd07e9ccaeb65c4d156c"
+        }
+      ],
+      "display_ordinal": 18,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-c35a617e6adc7f908a459aed",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-c35a617e6adc7f908a459aed-evidence-00",
+          "fact_type_zh": "胸部CT结果有效期与复测判断事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": true,
+          "requires_researcher_assessment_record": true,
+          "source_anchor_ids": [
+            "pcm-src-e353a9687da3fda15af3d4ab"
+          ],
+          "validity_time_constraint_id": "pcm-row-c35a617e6adc7f908a459aed-time-00"
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-c35a617e6adc7f908a459aed-obligation-00",
+              "pcm-row-c35a617e6adc7f908a459aed-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-e353a9687da3fda15af3d4ab"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-c35a617e6adc7f908a459aed-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-c35a617e6adc7f908a459aed-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-e353a9687da3fda15af3d4ab"
+          ],
+          "statement_zh": "核对CT有效期",
+          "time_constraint_id": "pcm-row-c35a617e6adc7f908a459aed-time-00"
+        },
+        {
+          "conjunction_group_id": "pcm-row-c35a617e6adc7f908a459aed-conjunction-00",
+          "kind": "must_professional_assessment",
+          "obligation_id": "pcm-row-c35a617e6adc7f908a459aed-obligation-01",
+          "requires_professional_judgment": true,
+          "source_anchor_ids": [
+            "pcm-src-e353a9687da3fda15af3d4ab"
+          ],
+          "statement_zh": "核对CT复测判断",
+          "time_constraint_id": "pcm-row-c35a617e6adc7f908a459aed-time-00"
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": null,
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "胸部CT平扫"
+          ],
+          "source_anchor_id": "pcm-src-e353a9687da3fda15af3d4ab",
+          "source_ordinal": 0,
+          "source_ref": "body.p797",
+          "source_span_ids": [
+            "body.p797"
+          ],
+          "source_title_zh": "胸部CT结果有效期与复测判断",
+          "structure_unit_id": "su-d700e515c8c34d7b81871783",
+          "verbatim_excerpt": "在筛选期进行胸部CT平扫，可接受知情同意书签署日之前1个月内的胸部CT检查结果并满足评估要求，则视其检查结果有效，研究中心可酌情决定是否再对其进行复测。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-ct-result-validity-retest",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "知情同意书签署日前1个月内",
+          "source_anchor_ids": [
+            "pcm-src-e353a9687da3fda15af3d4ab"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "icf_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "month",
+              "value": 1
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-c35a617e6adc7f908a459aed-time-00"
+        }
+      ],
+      "title_zh": "胸部CT结果有效期与复测判断",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充流程病毒学行的有效期和反射性检测。",
+          "relation_id": "pcm-row-5d5b0cd902abf8f8638dbfda-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-27d3bbd3a48ee72f93017578",
+            "pcm-src-d079ef0160d9ff6334173c51"
+          ],
+          "target_row_id": "pcm-row-2a4db6b98190f7f0c22da3b3"
+        }
+      ],
+      "display_ordinal": 19,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-5d5b0cd902abf8f8638dbfda",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-5d5b0cd902abf8f8638dbfda-evidence-00",
+          "fact_type_zh": "病毒学结果有效期与反射性复核事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": true,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-27d3bbd3a48ee72f93017578",
+            "pcm-src-d079ef0160d9ff6334173c51"
+          ],
+          "validity_time_constraint_id": "pcm-row-5d5b0cd902abf8f8638dbfda-time-00"
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-5d5b0cd902abf8f8638dbfda-obligation-00",
+              "pcm-row-5d5b0cd902abf8f8638dbfda-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-27d3bbd3a48ee72f93017578",
+              "pcm-src-d079ef0160d9ff6334173c51"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-5d5b0cd902abf8f8638dbfda-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-5d5b0cd902abf8f8638dbfda-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-27d3bbd3a48ee72f93017578",
+            "pcm-src-d079ef0160d9ff6334173c51"
+          ],
+          "statement_zh": "核对病毒学有效期",
+          "time_constraint_id": "pcm-row-5d5b0cd902abf8f8638dbfda-time-00"
+        },
+        {
+          "conjunction_group_id": "pcm-row-5d5b0cd902abf8f8638dbfda-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-5d5b0cd902abf8f8638dbfda-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-27d3bbd3a48ee72f93017578",
+            "pcm-src-d079ef0160d9ff6334173c51"
+          ],
+          "statement_zh": "核对阳性反射检测",
+          "time_constraint_id": "pcm-row-5d5b0cd902abf8f8638dbfda-time-00"
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": null,
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "病毒学检查"
+          ],
+          "source_anchor_id": "pcm-src-d079ef0160d9ff6334173c51",
+          "source_ordinal": 0,
+          "source_ref": "body.p804",
+          "source_span_ids": [
+            "body.p804"
+          ],
+          "source_title_zh": "病毒学结果有效期与反射性复核",
+          "structure_unit_id": "su-df77de015c0b691952b64f42",
+          "verbatim_excerpt": "将根据标准实验室程序进行包括乙肝表面抗原、乙肝表面抗体、乙肝e抗原、乙肝e抗体、乙肝核心抗体、丙型肝炎病毒抗体、人类免疫缺陷病毒抗体、梅毒特异性抗体检查。可接受在首次给药前28天内的结果，筛选期/基线期无需再次检查。"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "病毒学检查"
+          ],
+          "source_anchor_id": "pcm-src-27d3bbd3a48ee72f93017578",
+          "source_ordinal": 1,
+          "source_ref": "body.p805",
+          "source_span_ids": [
+            "body.p805"
+          ],
+          "source_title_zh": "病毒学结果有效期与反射性复核",
+          "structure_unit_id": "su-fbc5888c0bd416ad0595ac98",
+          "verbatim_excerpt": "乙型肝炎表面抗原阴性且乙型肝炎核心抗体阳性的参与者，需要进行HBV-DNA检测；丙型肝炎病毒抗体阳性的参与者，需要进行HCV-RNA检测。若梅毒特异性抗体检查阳性，则进行梅毒非特异性抗体检查。可接受在首次给药前28天内的结果，无需再次检查。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-viral-result-validity-reflex",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前28天内",
+          "source_anchor_ids": [
+            "pcm-src-27d3bbd3a48ee72f93017578",
+            "pcm-src-d079ef0160d9ff6334173c51"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": 28,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-5d5b0cd902abf8f8638dbfda-time-00"
+        }
+      ],
+      "title_zh": "病毒学结果有效期与反射性复核",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充官方EX-09的阳性IGRA后CT确认及结核随机门控。",
+          "relation_id": "pcm-row-9d354161857be03abcee62fb-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-7d0d833d989caf8269dadb35",
+            "pcm-src-7db659fb219bfaab44e58c98",
+            "pcm-src-c615868ff0c9ce3f5c52005f"
+          ],
+          "target_row_id": "pcm-row-761a05dceb59800d35de15eb"
+        },
+        {
+          "kind": "further_explanation",
+          "notes_zh": "进一步解释流程结核检测后的CT和随机前治疗时点。",
+          "relation_id": "pcm-row-9d354161857be03abcee62fb-relation-01",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-7d0d833d989caf8269dadb35",
+            "pcm-src-7db659fb219bfaab44e58c98",
+            "pcm-src-c615868ff0c9ce3f5c52005f"
+          ],
+          "target_row_id": "pcm-row-e190c160c55279c0aaf5f5a2"
+        }
+      ],
+      "display_ordinal": 20,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-9d354161857be03abcee62fb",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-9d354161857be03abcee62fb-evidence-00",
+          "fact_type_zh": "结核阳性后CT评估与随机门控事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": true,
+          "requires_researcher_assessment_record": true,
+          "source_anchor_ids": [
+            "pcm-src-7d0d833d989caf8269dadb35",
+            "pcm-src-7db659fb219bfaab44e58c98",
+            "pcm-src-c615868ff0c9ce3f5c52005f"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-9d354161857be03abcee62fb-obligation-00",
+              "pcm-row-9d354161857be03abcee62fb-obligation-01",
+              "pcm-row-9d354161857be03abcee62fb-obligation-02"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-7d0d833d989caf8269dadb35",
+              "pcm-src-7db659fb219bfaab44e58c98",
+              "pcm-src-c615868ff0c9ce3f5c52005f"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-9d354161857be03abcee62fb-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-9d354161857be03abcee62fb-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-7d0d833d989caf8269dadb35",
+            "pcm-src-7db659fb219bfaab44e58c98",
+            "pcm-src-c615868ff0c9ce3f5c52005f"
+          ],
+          "statement_zh": "核对IGRA阳性CT评估",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-9d354161857be03abcee62fb-conjunction-00",
+          "kind": "prohibit_event",
+          "obligation_id": "pcm-row-9d354161857be03abcee62fb-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-7d0d833d989caf8269dadb35",
+            "pcm-src-7db659fb219bfaab44e58c98",
+            "pcm-src-c615868ff0c9ce3f5c52005f"
+          ],
+          "statement_zh": "禁止活动性结核随机",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-9d354161857be03abcee62fb-conjunction-00",
+          "kind": "reach_condition",
+          "obligation_id": "pcm-row-9d354161857be03abcee62fb-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-7d0d833d989caf8269dadb35",
+            "pcm-src-7db659fb219bfaab44e58c98",
+            "pcm-src-c615868ff0c9ce3f5c52005f"
+          ],
+          "statement_zh": "核对潜伏性结核治疗",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "活动性结核不得随机",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "结核筛查"
+          ],
+          "source_anchor_id": "pcm-src-c615868ff0c9ce3f5c52005f",
+          "source_ordinal": 0,
+          "source_ref": "body.p807",
+          "source_span_ids": [
+            "body.p807"
+          ],
+          "source_title_zh": "结核阳性后CT评估与随机门控",
+          "structure_unit_id": "su-d52c8cb89627867c2173eabb",
+          "verbatim_excerpt": "如果γ-干扰素释放试验为阳性，则必须通过胸部CT进一步评估以确认结核状态（活动性或潜伏性）。"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "结核筛查"
+          ],
+          "source_anchor_id": "pcm-src-7d0d833d989caf8269dadb35",
+          "source_ordinal": 1,
+          "source_ref": "body.p808",
+          "source_span_ids": [
+            "body.p808"
+          ],
+          "source_title_zh": "结核阳性后CT评估与随机门控",
+          "structure_unit_id": "su-47932ea92023e5c6b8731dba",
+          "verbatim_excerpt": "−有活动性结核证据的参与者不得被随机分组；"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "结核筛查"
+          ],
+          "source_anchor_id": "pcm-src-7db659fb219bfaab44e58c98",
+          "source_ordinal": 2,
+          "source_ref": "body.p809",
+          "source_span_ids": [
+            "body.p809"
+          ],
+          "source_title_zh": "结核阳性后CT评估与随机门控",
+          "structure_unit_id": "su-d9a7dfbd4851850d7f3a476d",
+          "verbatim_excerpt": "−有潜伏性结核证据的参与者不得被随机分组，除非在随机分组前已完成至少4周的适当治疗疗程。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-tb-ct-randomization-gate",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "随机分组前至少4周",
+          "source_anchor_ids": [
+            "pcm-src-7d0d833d989caf8269dadb35",
+            "pcm-src-7db659fb219bfaab44e58c98",
+            "pcm-src-c615868ff0c9ce3f5c52005f"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "randomization_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "week",
+              "value": 4
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-9d354161857be03abcee62fb-time-00"
+        }
+      ],
+      "title_zh": "结核阳性后CT评估与随机门控",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充官方EX-09的预防治疗启动、禁用药物及复测边界。",
+          "relation_id": "pcm-row-0ba796fe56df11cb02a04440-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-6ad234e3cee81a0c251dd96e",
+            "pcm-src-9c77687ad8085ec397bc2ade",
+            "pcm-src-aa0250aa26457a0f2dcdf697"
+          ],
+          "target_row_id": "pcm-row-761a05dceb59800d35de15eb"
+        },
+        {
+          "kind": "further_explanation",
+          "notes_zh": "进一步解释流程结核检测后的治疗和复测处置。",
+          "relation_id": "pcm-row-0ba796fe56df11cb02a04440-relation-01",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-6ad234e3cee81a0c251dd96e",
+            "pcm-src-9c77687ad8085ec397bc2ade",
+            "pcm-src-aa0250aa26457a0f2dcdf697"
+          ],
+          "target_row_id": "pcm-row-e190c160c55279c0aaf5f5a2"
+        }
+      ],
+      "display_ordinal": 21,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-0ba796fe56df11cb02a04440",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-0ba796fe56df11cb02a04440-evidence-00",
+          "fact_type_zh": "结核预防治疗、禁用药物与不确定结果复测事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": true,
+          "requires_researcher_assessment_record": true,
+          "source_anchor_ids": [
+            "pcm-src-6ad234e3cee81a0c251dd96e",
+            "pcm-src-9c77687ad8085ec397bc2ade",
+            "pcm-src-aa0250aa26457a0f2dcdf697"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-0ba796fe56df11cb02a04440-obligation-00",
+              "pcm-row-0ba796fe56df11cb02a04440-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足；不同路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-6ad234e3cee81a0c251dd96e",
+              "pcm-src-9c77687ad8085ec397bc2ade",
+              "pcm-src-aa0250aa26457a0f2dcdf697"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-0ba796fe56df11cb02a04440-obligation-02"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-6ad234e3cee81a0c251dd96e",
+              "pcm-src-9c77687ad8085ec397bc2ade",
+              "pcm-src-aa0250aa26457a0f2dcdf697"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-0ba796fe56df11cb02a04440-obligation-03"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-6ad234e3cee81a0c251dd96e",
+              "pcm-src-9c77687ad8085ec397bc2ade",
+              "pcm-src-aa0250aa26457a0f2dcdf697"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-0ba796fe56df11cb02a04440-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-0ba796fe56df11cb02a04440-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-6ad234e3cee81a0c251dd96e",
+            "pcm-src-9c77687ad8085ec397bc2ade",
+            "pcm-src-aa0250aa26457a0f2dcdf697"
+          ],
+          "statement_zh": "核对预防治疗启动",
+          "time_constraint_id": "pcm-row-0ba796fe56df11cb02a04440-time-00"
+        },
+        {
+          "conjunction_group_id": "pcm-row-0ba796fe56df11cb02a04440-conjunction-00",
+          "kind": "reach_condition",
+          "obligation_id": "pcm-row-0ba796fe56df11cb02a04440-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-6ad234e3cee81a0c251dd96e",
+            "pcm-src-9c77687ad8085ec397bc2ade",
+            "pcm-src-aa0250aa26457a0f2dcdf697"
+          ],
+          "statement_zh": "核对后续疗程同意",
+          "time_constraint_id": "pcm-row-0ba796fe56df11cb02a04440-time-00"
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "prohibit_medication_or_treatment_exposure",
+          "obligation_id": "pcm-row-0ba796fe56df11cb02a04440-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-6ad234e3cee81a0c251dd96e",
+            "pcm-src-9c77687ad8085ec397bc2ade",
+            "pcm-src-aa0250aa26457a0f2dcdf697"
+          ],
+          "statement_zh": "禁止结核预防禁用药物",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-0ba796fe56df11cb02a04440-obligation-03",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-6ad234e3cee81a0c251dd96e",
+            "pcm-src-9c77687ad8085ec397bc2ade",
+            "pcm-src-aa0250aa26457a0f2dcdf697"
+          ],
+          "statement_zh": "核对不确定结果复测",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": null,
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "结核筛查"
+          ],
+          "source_anchor_id": "pcm-src-6ad234e3cee81a0c251dd96e",
+          "source_ordinal": 0,
+          "source_ref": "body.p811",
+          "source_span_ids": [
+            "body.p811"
+          ],
+          "source_title_zh": "结核预防治疗、禁用药物与不确定结果复测",
+          "structure_unit_id": "su-3510ce403535486833aa1d1f",
+          "verbatim_excerpt": "在筛选时，如果参与者有潜伏性结核感染的证据，必须在首次给药前至少4周开始预防性治疗，并且同意完成后续预防性治疗疗程；预防措施的整个疗程不必在首次给药前完成。"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "结核筛查"
+          ],
+          "source_anchor_id": "pcm-src-aa0250aa26457a0f2dcdf697",
+          "source_ordinal": 1,
+          "source_ref": "body.p812",
+          "source_span_ids": [
+            "body.p812"
+          ],
+          "source_title_zh": "结核预防治疗、禁用药物与不确定结果复测",
+          "structure_unit_id": "su-32c5de82f3beb470949acd0a",
+          "verbatim_excerpt": "不允许使用利福平或利福喷丁进行结核预防。"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "结核筛查"
+          ],
+          "source_anchor_id": "pcm-src-9c77687ad8085ec397bc2ade",
+          "source_ordinal": 2,
+          "source_ref": "body.p813",
+          "source_span_ids": [
+            "body.p813"
+          ],
+          "source_title_zh": "结核预防治疗、禁用药物与不确定结果复测",
+          "structure_unit_id": "su-8877f38f3edd3c2f6797e56e",
+          "verbatim_excerpt": "如结核检测结果为不确定者，可进行1次复测。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-tb-prophylaxis-retest",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "首次给药前至少4周",
+          "source_anchor_ids": [
+            "pcm-src-6ad234e3cee81a0c251dd96e",
+            "pcm-src-9c77687ad8085ec397bc2ade",
+            "pcm-src-aa0250aa26457a0f2dcdf697"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "week",
+              "value": 4
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-0ba796fe56df11cb02a04440-time-00"
+        }
+      ],
+      "title_zh": "结核预防治疗、禁用药物与不确定结果复测",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充官方EX-29的检测节点和首次给药前阳性门控。",
+          "relation_id": "pcm-row-b6b5156590be97880322fe9f-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-5fe4e6fe32cb2937a7f67fae",
+            "pcm-src-a6bb6335ae9b92566cc4b513"
+          ],
+          "target_row_id": "pcm-row-d9c86cde3e7281997cf4f19c"
+        },
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充流程妊娠/FSH行的II期节点和分类例外。",
+          "relation_id": "pcm-row-b6b5156590be97880322fe9f-relation-01",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-5fe4e6fe32cb2937a7f67fae",
+            "pcm-src-a6bb6335ae9b92566cc4b513"
+          ],
+          "target_row_id": "pcm-row-18127a0dc9921364671ebb8c"
+        }
+      ],
+      "display_ordinal": 22,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-b6b5156590be97880322fe9f",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-b6b5156590be97880322fe9f-evidence-00",
+          "fact_type_zh": "妊娠检测节点与首次给药门控事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": true,
+          "requires_researcher_assessment_record": true,
+          "source_anchor_ids": [
+            "pcm-src-5fe4e6fe32cb2937a7f67fae",
+            "pcm-src-a6bb6335ae9b92566cc4b513"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-b6b5156590be97880322fe9f-obligation-00",
+              "pcm-row-b6b5156590be97880322fe9f-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足；不同路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-5fe4e6fe32cb2937a7f67fae",
+              "pcm-src-a6bb6335ae9b92566cc4b513"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-b6b5156590be97880322fe9f-obligation-02"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-5fe4e6fe32cb2937a7f67fae",
+              "pcm-src-a6bb6335ae9b92566cc4b513"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-b6b5156590be97880322fe9f-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-b6b5156590be97880322fe9f-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-5fe4e6fe32cb2937a7f67fae",
+            "pcm-src-a6bb6335ae9b92566cc4b513"
+          ],
+          "statement_zh": "核对妊娠检测节点",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-b6b5156590be97880322fe9f-conjunction-00",
+          "kind": "prohibit_event",
+          "obligation_id": "pcm-row-b6b5156590be97880322fe9f-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-5fe4e6fe32cb2937a7f67fae",
+            "pcm-src-a6bb6335ae9b92566cc4b513"
+          ],
+          "statement_zh": "核对首次给药前阳性",
+          "time_constraint_id": "pcm-row-b6b5156590be97880322fe9f-time-03"
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-b6b5156590be97880322fe9f-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-5fe4e6fe32cb2937a7f67fae",
+            "pcm-src-a6bb6335ae9b92566cc4b513"
+          ],
+          "statement_zh": "核对FSH分类",
+          "time_constraint_id": "pcm-row-b6b5156590be97880322fe9f-time-00"
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "妊娠阳性不得进入研究",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "妊娠试验或卵泡刺激素（Follicle-stimulating hormone，FSH）检测"
+          ],
+          "source_anchor_id": "pcm-src-5fe4e6fe32cb2937a7f67fae",
+          "source_ordinal": 0,
+          "source_ref": "body.p815",
+          "source_span_ids": [
+            "body.p815"
+          ],
+          "source_title_zh": "妊娠检测节点与首次给药门控",
+          "structure_unit_id": "su-f92576bc405dcf2453e25994",
+          "verbatim_excerpt": "仅限有生育能力的女性。必须在研究的筛选、基线、第12周（Ⅱ期临床研究阶段）、第16、52周访视（Ⅲ期临床研究阶段）和提前退出访视时进行血清妊娠试验。筛选时或研究药物首次给药前妊娠试验结果为阳性的参与者不允许进入研究（筛选失败）。研究期间根据研究者的判断可选择性进行尿妊娠试验或血清妊娠试验。可根据需要进行更频繁的妊娠试验。"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "研究期间的检查和评估",
+            "妊娠试验或卵泡刺激素（Follicle-stimulating hormone，FSH）检测"
+          ],
+          "source_anchor_id": "pcm-src-a6bb6335ae9b92566cc4b513",
+          "source_ordinal": 1,
+          "source_ref": "body.p816",
+          "source_span_ids": [
+            "body.p816"
+          ],
+          "source_title_zh": "妊娠检测节点与首次给药门控",
+          "structure_unit_id": "su-1b8a4b43386389090ff962f4",
+          "verbatim_excerpt": "对于绝经女性参与者仅在筛选期进行FSH检查。本研究将初潮前女性、已绝经妇女（一年及以上无月经且无其他医学原因）或永久性绝育（如输卵管结扎、子宫切除或双侧输卵管切除等）的女性参与者视为不具有生育能力，无需进行妊娠试验。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-pregnancy-testing-gate",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "筛选期",
+          "source_anchor_ids": [
+            "pcm-src-5fe4e6fe32cb2937a7f67fae",
+            "pcm-src-a6bb6335ae9b92566cc4b513"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "screening_date",
+            "direction": "on",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-b6b5156590be97880322fe9f-time-00"
+        },
+        {
+          "anchor_label_zh": "基线期",
+          "source_anchor_ids": [
+            "pcm-src-5fe4e6fe32cb2937a7f67fae",
+            "pcm-src-a6bb6335ae9b92566cc4b513"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "baseline_date",
+            "direction": "on",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-b6b5156590be97880322fe9f-time-01"
+        },
+        {
+          "anchor_label_zh": "II期第12周访视",
+          "source_anchor_ids": [
+            "pcm-src-5fe4e6fe32cb2937a7f67fae",
+            "pcm-src-a6bb6335ae9b92566cc4b513"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "event_date",
+            "direction": "on",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-b6b5156590be97880322fe9f-time-02"
+        },
+        {
+          "anchor_label_zh": "首次给药前",
+          "source_anchor_ids": [
+            "pcm-src-5fe4e6fe32cb2937a7f67fae",
+            "pcm-src-a6bb6335ae9b92566cc4b513"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-b6b5156590be97880322fe9f-time-03"
+        }
+      ],
+      "title_zh": "妊娠检测节点与首次给药门控",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充官方IN-06的允许方法、禁止激素类避孕和记录要求。",
+          "relation_id": "pcm-row-14fff3c700b1f69a6003e147-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-40a0ca90abf65c0a465e9542",
+            "pcm-src-456efbf06bfb19bf4f8b4da2",
+            "pcm-src-c09a8051348e9dcf126a55c9"
+          ],
+          "target_row_id": "pcm-row-0555ca044760e4df3ef7e3c3"
+        },
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充流程妊娠/FSH行的避孕宣教要求。",
+          "relation_id": "pcm-row-14fff3c700b1f69a6003e147-relation-01",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-40a0ca90abf65c0a465e9542",
+            "pcm-src-456efbf06bfb19bf4f8b4da2",
+            "pcm-src-c09a8051348e9dcf126a55c9"
+          ],
+          "target_row_id": "pcm-row-18127a0dc9921364671ebb8c"
+        }
+      ],
+      "display_ordinal": 23,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-14fff3c700b1f69a6003e147",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-14fff3c700b1f69a6003e147-evidence-00",
+          "fact_type_zh": "避孕方法选择与宣教记录事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": true,
+          "requires_researcher_assessment_record": true,
+          "source_anchor_ids": [
+            "pcm-src-40a0ca90abf65c0a465e9542",
+            "pcm-src-456efbf06bfb19bf4f8b4da2",
+            "pcm-src-c09a8051348e9dcf126a55c9"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-14fff3c700b1f69a6003e147-obligation-00",
+              "pcm-row-14fff3c700b1f69a6003e147-obligation-01"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足；不同路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-40a0ca90abf65c0a465e9542",
+              "pcm-src-456efbf06bfb19bf4f8b4da2",
+              "pcm-src-c09a8051348e9dcf126a55c9"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          },
+          {
+            "atom_ids": [
+              "pcm-row-14fff3c700b1f69a6003e147-obligation-02"
+            ],
+            "logic_basis_zh": "方案来源保留不同替代路径，路径之间为或关系",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-40a0ca90abf65c0a465e9542",
+              "pcm-src-456efbf06bfb19bf4f8b4da2",
+              "pcm-src-c09a8051348e9dcf126a55c9"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-14fff3c700b1f69a6003e147-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-14fff3c700b1f69a6003e147-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-40a0ca90abf65c0a465e9542",
+            "pcm-src-456efbf06bfb19bf4f8b4da2",
+            "pcm-src-c09a8051348e9dcf126a55c9"
+          ],
+          "statement_zh": "核对避孕方法",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-14fff3c700b1f69a6003e147-conjunction-00",
+          "kind": "prohibit_medication_or_treatment_exposure",
+          "obligation_id": "pcm-row-14fff3c700b1f69a6003e147-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-40a0ca90abf65c0a465e9542",
+            "pcm-src-456efbf06bfb19bf4f8b4da2",
+            "pcm-src-c09a8051348e9dcf126a55c9"
+          ],
+          "statement_zh": "禁止激素避孕",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": null,
+          "kind": "must_record",
+          "obligation_id": "pcm-row-14fff3c700b1f69a6003e147-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-40a0ca90abf65c0a465e9542",
+            "pcm-src-456efbf06bfb19bf4f8b4da2",
+            "pcm-src-c09a8051348e9dcf126a55c9"
+          ],
+          "statement_zh": "核对宣教记录",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": "研究期间禁止激素类避孕",
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "方案摘要",
+            "研究流程表"
+          ],
+          "source_anchor_id": "pcm-src-40a0ca90abf65c0a465e9542",
+          "source_ordinal": 0,
+          "source_ref": "body.p327",
+          "source_span_ids": [
+            "body.p327"
+          ],
+          "source_title_zh": "避孕方法选择与宣教记录",
+          "structure_unit_id": "su-c3416d49ec7b1c56000a5f39",
+          "verbatim_excerpt": "妊娠试验或卵泡刺激素（FSH）：对有生育能力的女性（育龄女性）在筛选、基线和计划的时间点进行血/尿β-HCG检测，其中筛选、基线、W12(D85)、W16(113)或退出访视必须为血妊娠试验，筛选和/或基线检测结果需均为阴性，需要在访视当天用药前完成；对已绝经女性（一年及以上无月经且无其他医学原因）或永久性绝育（如双侧输卵管结扎、子宫切除或双侧输卵管切除等）的女性参与者视为不具有生育能力，无需进行妊娠试验，其中，对已绝经女性需在筛选时进行血清FSH检测，其结果应大于40 IU/L。若研究过程中出现停经也需进行额外的血清β-HCG检测。注意：对所有参与者，在每个访视做好避孕宣教：在试验期间及给药后3个月内严格遵循附录1避孕要求，且参与者或其伴侣在发现意外怀孕时及时联系研究者。"
+        },
+        {
+          "heading_path_zh": [
+            "附录"
+          ],
+          "source_anchor_id": "pcm-src-c09a8051348e9dcf126a55c9",
+          "source_ordinal": 1,
+          "source_ref": "body.p1325",
+          "source_span_ids": [
+            "body.p1325"
+          ],
+          "source_title_zh": "避孕方法选择与宣教记录",
+          "structure_unit_id": "su-26b5d2a43c56b0e5c6228017",
+          "verbatim_excerpt": "从签署知情同意书之日开始至研究药物末次给药后3个月为止，期间参与者必须同意持续和正确地使用一种高效或可接受的避孕方法进行避孕（禁止使用激素类避孕）。研究者或指定人员应与参与者讨论，确认参与者已从允许的避孕方法中选择了最适合其避孕的方法（下述），并确认参与者已知晓研究期间需持续并正确地使用该方法。"
+        },
+        {
+          "heading_path_zh": [
+            "附录"
+          ],
+          "source_anchor_id": "pcm-src-456efbf06bfb19bf4f8b4da2",
+          "source_ordinal": 2,
+          "source_ref": "body.p1326",
+          "source_span_ids": [
+            "body.p1326"
+          ],
+          "source_title_zh": "避孕方法选择与宣教记录",
+          "structure_unit_id": "su-e0ed718b3b2ec21c4b0fc1d8",
+          "verbatim_excerpt": "在研究流程中计划的访视点，研究者或指定人员将告知参与者需要持续使用高效或可接受的避孕方法，并在参与者病历中记录与之的对话和参与者的同意（参与者需要确认她同意将持续并正确使用至少1种选定的避孕方法）。此外，还应告知参与者，如果她已停用所选的避孕方法，或，已知或怀疑怀孕，需立即打电话给研究者或指定人员。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-contraception-method-documentation",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "签署知情同意书之日",
+          "source_anchor_ids": [
+            "pcm-src-40a0ca90abf65c0a465e9542",
+            "pcm-src-456efbf06bfb19bf4f8b4da2",
+            "pcm-src-c09a8051348e9dcf126a55c9"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "icf_date",
+            "direction": "on",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-14fff3c700b1f69a6003e147-time-00"
+        },
+        {
+          "anchor_label_zh": "末次给药后3个月",
+          "source_anchor_ids": [
+            "pcm-src-40a0ca90abf65c0a465e9542",
+            "pcm-src-456efbf06bfb19bf4f8b4da2",
+            "pcm-src-c09a8051348e9dcf126a55c9"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "last_dose_date",
+            "direction": "after",
+            "half_life_multiplier": null,
+            "lower_bound": {
+              "unit": "month",
+              "value": 3
+            },
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-14fff3c700b1f69a6003e147-time-01"
+        }
+      ],
+      "title_zh": "避孕方法选择与宣教记录",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充流程入排审核行的随机前复核、D1时点和资格闭环。",
+          "relation_id": "pcm-row-aef6f4284f7b4552e760f0d7-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-12923f9e0e59772c60a5e7cc",
+            "pcm-src-26df851197d8aefc51961c73",
+            "pcm-src-4de351f8b613565dc9fdf12e",
+            "pcm-src-64db2f9e8e97d18570594400",
+            "pcm-src-7007a02e0c85972643f890c1",
+            "pcm-src-8e0c052789bd3dd401c3d5d3",
+            "pcm-src-b454382beda6c2d3e122e4c9"
+          ],
+          "target_row_id": "pcm-row-f706d9b42eab4823b232df04"
+        }
+      ],
+      "display_ordinal": 24,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-aef6f4284f7b4552e760f0d7",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-aef6f4284f7b4552e760f0d7-evidence-00",
+          "fact_type_zh": "随机与首次给药前资格复核事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": true,
+          "requires_researcher_assessment_record": true,
+          "source_anchor_ids": [
+            "pcm-src-12923f9e0e59772c60a5e7cc",
+            "pcm-src-26df851197d8aefc51961c73",
+            "pcm-src-4de351f8b613565dc9fdf12e",
+            "pcm-src-64db2f9e8e97d18570594400",
+            "pcm-src-7007a02e0c85972643f890c1",
+            "pcm-src-8e0c052789bd3dd401c3d5d3",
+            "pcm-src-b454382beda6c2d3e122e4c9"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-aef6f4284f7b4552e760f0d7-obligation-00",
+              "pcm-row-aef6f4284f7b4552e760f0d7-obligation-01",
+              "pcm-row-aef6f4284f7b4552e760f0d7-obligation-02",
+              "pcm-row-aef6f4284f7b4552e760f0d7-obligation-03"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-12923f9e0e59772c60a5e7cc",
+              "pcm-src-26df851197d8aefc51961c73",
+              "pcm-src-4de351f8b613565dc9fdf12e",
+              "pcm-src-64db2f9e8e97d18570594400",
+              "pcm-src-7007a02e0c85972643f890c1",
+              "pcm-src-8e0c052789bd3dd401c3d5d3",
+              "pcm-src-b454382beda6c2d3e122e4c9"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-aef6f4284f7b4552e760f0d7-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-aef6f4284f7b4552e760f0d7-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-12923f9e0e59772c60a5e7cc",
+            "pcm-src-26df851197d8aefc51961c73",
+            "pcm-src-4de351f8b613565dc9fdf12e",
+            "pcm-src-64db2f9e8e97d18570594400",
+            "pcm-src-7007a02e0c85972643f890c1",
+            "pcm-src-8e0c052789bd3dd401c3d5d3",
+            "pcm-src-b454382beda6c2d3e122e4c9"
+          ],
+          "statement_zh": "核对随机前资格",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-aef6f4284f7b4552e760f0d7-conjunction-00",
+          "kind": "complete_or_verify",
+          "obligation_id": "pcm-row-aef6f4284f7b4552e760f0d7-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-12923f9e0e59772c60a5e7cc",
+            "pcm-src-26df851197d8aefc51961c73",
+            "pcm-src-4de351f8b613565dc9fdf12e",
+            "pcm-src-64db2f9e8e97d18570594400",
+            "pcm-src-7007a02e0c85972643f890c1",
+            "pcm-src-8e0c052789bd3dd401c3d5d3",
+            "pcm-src-b454382beda6c2d3e122e4c9"
+          ],
+          "statement_zh": "核对D1给药前资格",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-aef6f4284f7b4552e760f0d7-conjunction-00",
+          "kind": "must_record",
+          "obligation_id": "pcm-row-aef6f4284f7b4552e760f0d7-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-12923f9e0e59772c60a5e7cc",
+            "pcm-src-26df851197d8aefc51961c73",
+            "pcm-src-4de351f8b613565dc9fdf12e",
+            "pcm-src-64db2f9e8e97d18570594400",
+            "pcm-src-7007a02e0c85972643f890c1",
+            "pcm-src-8e0c052789bd3dd401c3d5d3",
+            "pcm-src-b454382beda6c2d3e122e4c9"
+          ],
+          "statement_zh": "核对随机记录",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-aef6f4284f7b4552e760f0d7-conjunction-00",
+          "kind": "must_record",
+          "obligation_id": "pcm-row-aef6f4284f7b4552e760f0d7-obligation-03",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-12923f9e0e59772c60a5e7cc",
+            "pcm-src-26df851197d8aefc51961c73",
+            "pcm-src-4de351f8b613565dc9fdf12e",
+            "pcm-src-64db2f9e8e97d18570594400",
+            "pcm-src-7007a02e0c85972643f890c1",
+            "pcm-src-8e0c052789bd3dd401c3d5d3",
+            "pcm-src-b454382beda6c2d3e122e4c9"
+          ],
+          "statement_zh": "核对D1安全记录",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": null,
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "方案摘要",
+            "研究流程表"
+          ],
+          "source_anchor_id": "pcm-src-b454382beda6c2d3e122e4c9",
+          "source_ordinal": 0,
+          "source_ref": "body.p333",
+          "source_span_ids": [
+            "body.p333"
+          ],
+          "source_title_zh": "随机与首次给药前资格复核",
+          "structure_unit_id": "su-7a8f217832dbc20b117402d6",
+          "verbatim_excerpt": "随机：在随机前再次审核入选和排除标准，对符合入选标准且不符合排除标准的参与者可进行随机。"
+        },
+        {
+          "heading_path_zh": [
+            "方案摘要",
+            "研究流程表"
+          ],
+          "source_anchor_id": "pcm-src-8e0c052789bd3dd401c3d5d3",
+          "source_ordinal": 1,
+          "source_ref": "body.p364",
+          "source_span_ids": [
+            "body.p364"
+          ],
+          "source_title_zh": "随机与首次给药前资格复核",
+          "structure_unit_id": "su-b2af35be8bf700166fd232f4",
+          "verbatim_excerpt": "随机：参与者随机分组在首次应用研究药物当天（D1）给药前进行。"
+        },
+        {
+          "heading_path_zh": [
+            "研究设计",
+            "总体设计"
+          ],
+          "source_anchor_id": "pcm-src-26df851197d8aefc51961c73",
+          "source_ordinal": 2,
+          "source_ref": "body.p528",
+          "source_span_ids": [
+            "body.p528"
+          ],
+          "source_title_zh": "随机与首次给药前资格复核",
+          "structure_unit_id": "su-b2bc895c657b8cfb27898d9e",
+          "verbatim_excerpt": "对于筛选合格的参与者，在D1给药前，需再次确认入组合格性，对合格的参与者完成随机，并以银屑病严重程度（PGA评分3/4）作为分层因素。每例参与者只允许接受一个剂量组的全程给药。研究人员根据中央随机系统（Interactive Web Response System，IWRS）给出的药物编号发放试验用药品。"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "访视安排",
+            "Ⅱ期临床研究阶段",
+            "治疗期"
+          ],
+          "source_anchor_id": "pcm-src-64db2f9e8e97d18570594400",
+          "source_ordinal": 3,
+          "source_ref": "body.p878",
+          "source_span_ids": [
+            "body.p878"
+          ],
+          "source_title_zh": "随机与首次给药前资格复核",
+          "structure_unit_id": "su-67d28f3fc8cfed0f10e8e867",
+          "verbatim_excerpt": "审核入排标准"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "访视安排",
+            "Ⅱ期临床研究阶段",
+            "治疗期"
+          ],
+          "source_anchor_id": "pcm-src-7007a02e0c85972643f890c1",
+          "source_ordinal": 4,
+          "source_ref": "body.p879",
+          "source_span_ids": [
+            "body.p879"
+          ],
+          "source_title_zh": "随机与首次给药前资格复核",
+          "structure_unit_id": "su-d45eb99203b17addaede9e7b",
+          "verbatim_excerpt": "随机"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "访视安排",
+            "Ⅱ期临床研究阶段",
+            "治疗期"
+          ],
+          "source_anchor_id": "pcm-src-12923f9e0e59772c60a5e7cc",
+          "source_ordinal": 5,
+          "source_ref": "body.p880",
+          "source_span_ids": [
+            "body.p880"
+          ],
+          "source_title_zh": "随机与首次给药前资格复核",
+          "structure_unit_id": "su-76c7c0d21ba4490600ed1ec9",
+          "verbatim_excerpt": "服用试验用药品"
+        },
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "访视安排",
+            "Ⅱ期临床研究阶段",
+            "治疗期"
+          ],
+          "source_anchor_id": "pcm-src-4de351f8b613565dc9fdf12e",
+          "source_ordinal": 6,
+          "source_ref": "body.p885",
+          "source_span_ids": [
+            "body.p885"
+          ],
+          "source_title_zh": "随机与首次给药前资格复核",
+          "structure_unit_id": "su-7bd7f855582084756660e2b4",
+          "verbatim_excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-randomization-first-dose-precheck",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "随机前",
+          "source_anchor_ids": [
+            "pcm-src-12923f9e0e59772c60a5e7cc",
+            "pcm-src-26df851197d8aefc51961c73",
+            "pcm-src-4de351f8b613565dc9fdf12e",
+            "pcm-src-64db2f9e8e97d18570594400",
+            "pcm-src-7007a02e0c85972643f890c1",
+            "pcm-src-8e0c052789bd3dd401c3d5d3",
+            "pcm-src-b454382beda6c2d3e122e4c9"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "randomization_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-aef6f4284f7b4552e760f0d7-time-00"
+        },
+        {
+          "anchor_label_zh": "首次给药当天D1给药前",
+          "source_anchor_ids": [
+            "pcm-src-12923f9e0e59772c60a5e7cc",
+            "pcm-src-26df851197d8aefc51961c73",
+            "pcm-src-4de351f8b613565dc9fdf12e",
+            "pcm-src-64db2f9e8e97d18570594400",
+            "pcm-src-7007a02e0c85972643f890c1",
+            "pcm-src-8e0c052789bd3dd401c3d5d3",
+            "pcm-src-b454382beda6c2d3e122e4c9"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-aef6f4284f7b4552e760f0d7-time-01"
+        }
+      ],
+      "title_zh": "随机与首次给药前资格复核",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    },
+    {
+      "applicability_expression": null,
+      "applicable_population_zh": "拟入组D001 II期受试者",
+      "attainment_criteria_zh": null,
+      "condition_atoms": [],
+      "cross_source_relations": [
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充PASI行的D1给药前基线时间点和完整性。",
+          "relation_id": "pcm-row-689838943c7e4a51c5345e67-relation-00",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-2f9a5454dcf0815d33d454b2"
+          ],
+          "target_row_id": "pcm-row-74c39766cfd3f147b7338c85"
+        },
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充PGA行的D1给药前基线时间点和完整性。",
+          "relation_id": "pcm-row-689838943c7e4a51c5345e67-relation-01",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-2f9a5454dcf0815d33d454b2"
+          ],
+          "target_row_id": "pcm-row-13886b8199b8390b329abf16"
+        },
+        {
+          "kind": "supplementary_requirement",
+          "notes_zh": "补充BSA行的D1给药前基线时间点和完整性。",
+          "relation_id": "pcm-row-689838943c7e4a51c5345e67-relation-02",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-2f9a5454dcf0815d33d454b2"
+          ],
+          "target_row_id": "pcm-row-c600456b551eecbf3dd87644"
+        },
+        {
+          "kind": "further_explanation",
+          "notes_zh": "进一步解释基线入排复核前的客观基线材料完整性。",
+          "relation_id": "pcm-row-689838943c7e4a51c5345e67-relation-03",
+          "resolution_zh": null,
+          "shared_assessment_identity": null,
+          "source_anchor_ids": [
+            "pcm-src-2f9a5454dcf0815d33d454b2"
+          ],
+          "target_row_id": "pcm-row-f706d9b42eab4823b232df04"
+        }
+      ],
+      "display_ordinal": 25,
+      "exception_expression": null,
+      "matrix_row_id": "pcm-row-689838943c7e4a51c5345e67",
+      "minimum_evidence": [
+        {
+          "allows_screening_record_transcription": true,
+          "description_zh": "回看原始来源、对应记录和研究者处置记录以确认该控制。",
+          "due_workflow_stage_id": "flow-d1-pre-dose",
+          "evidence_id": "pcm-row-689838943c7e4a51c5345e67-evidence-00",
+          "fact_type_zh": "D1给药前生命体征与疗效评分基线完整性事实",
+          "required_source_types": [
+            "原始资料",
+            "研究者评估记录"
+          ],
+          "requires_contemporaneous_objective_source": true,
+          "requires_researcher_assessment_record": false,
+          "source_anchor_ids": [
+            "pcm-src-2f9a5454dcf0815d33d454b2"
+          ],
+          "validity_time_constraint_id": null
+        }
+      ],
+      "obligation_expression": {
+        "groups": [
+          {
+            "atom_ids": [
+              "pcm-row-689838943c7e4a51c5345e67-obligation-00",
+              "pcm-row-689838943c7e4a51c5345e67-obligation-01",
+              "pcm-row-689838943c7e4a51c5345e67-obligation-02"
+            ],
+            "logic_basis_zh": "方案来源要求组内义务同时满足",
+            "negated_atom_ids": [],
+            "source_anchor_ids": [
+              "pcm-src-2f9a5454dcf0815d33d454b2"
+            ],
+            "trigger_branch_id": null,
+            "waives_trigger_branch_ids": []
+          }
+        ]
+      },
+      "obligations": [
+        {
+          "conjunction_group_id": "pcm-row-689838943c7e4a51c5345e67-conjunction-00",
+          "kind": "must_record",
+          "obligation_id": "pcm-row-689838943c7e4a51c5345e67-obligation-00",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-2f9a5454dcf0815d33d454b2"
+          ],
+          "statement_zh": "核对D1生命体征基线",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-689838943c7e4a51c5345e67-conjunction-00",
+          "kind": "must_record",
+          "obligation_id": "pcm-row-689838943c7e4a51c5345e67-obligation-01",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-2f9a5454dcf0815d33d454b2"
+          ],
+          "statement_zh": "核对D1评分基线",
+          "time_constraint_id": null
+        },
+        {
+          "conjunction_group_id": "pcm-row-689838943c7e4a51c5345e67-conjunction-00",
+          "kind": "must_record",
+          "obligation_id": "pcm-row-689838943c7e4a51c5345e67-obligation-02",
+          "requires_professional_judgment": false,
+          "source_anchor_ids": [
+            "pcm-src-2f9a5454dcf0815d33d454b2"
+          ],
+          "statement_zh": "核对D1照片基线",
+          "time_constraint_id": null
+        }
+      ],
+      "official_child_code": null,
+      "official_parent_code": null,
+      "phase_disposition": "cross_phase_shared",
+      "prohibition_zh": null,
+      "protocol_control_id": null,
+      "required_action_zh": "核对该章节控制",
+      "required_procedure_catalog_item_id": null,
+      "review_nodes": [
+        {
+          "node_label_zh": "筛选",
+          "review_stage": "screening",
+          "role": "early_attention",
+          "source_anchor_ids": [],
+          "stage_ordinal": 0,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-screening"
+        },
+        {
+          "node_label_zh": "基线",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 1,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-baseline"
+        },
+        {
+          "node_label_zh": "首次给药前",
+          "review_stage": "baseline",
+          "role": "decide_at_node",
+          "source_anchor_ids": [],
+          "stage_ordinal": 2,
+          "visit_instance": null,
+          "workflow_basis_row_id": "pcm-row-f706d9b42eab4823b232df04",
+          "workflow_stage_id": "flow-d1-pre-dose"
+        }
+      ],
+      "source_anchors": [
+        {
+          "heading_path_zh": [
+            "研究评估和程序",
+            "访视安排",
+            "Ⅱ期临床研究阶段",
+            "治疗期"
+          ],
+          "source_anchor_id": "pcm-src-2f9a5454dcf0815d33d454b2",
+          "source_ordinal": 0,
+          "source_ref": "body.p885",
+          "source_span_ids": [
+            "body.p885"
+          ],
+          "source_title_zh": "D1给药前生命体征与疗效评分基线完整性",
+          "structure_unit_id": "su-7bd7f855582084756660e2b4",
+          "verbatim_excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。"
+        }
+      ],
+      "source_candidate_id": "candidate:cross-d1-baseline-score-completeness",
+      "source_kind": "other_section_control",
+      "time_anchors": [
+        {
+          "anchor_label_zh": "D1给药前基线",
+          "source_anchor_ids": [
+            "pcm-src-2f9a5454dcf0815d33d454b2"
+          ],
+          "time_constraint": {
+            "allow_partial_date": false,
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "half_life_multiplier": null,
+            "lower_bound": null,
+            "lower_bound_days": null,
+            "upper_bound": null,
+            "upper_bound_days": null
+          },
+          "time_constraint_id": "pcm-row-689838943c7e4a51c5345e67-time-00"
+        }
+      ],
+      "title_zh": "D1给药前生命体征与疗效评分基线完整性",
+      "trigger_condition_zh": null,
+      "trigger_expression": null,
+      "unexpressed_logic": []
+    }
+  ],
+  "schema_version": "phase5/control-matrix/v5",
+  "selected_phase": "phase_ii",
+  "snapshot_id": "d001-ii-phase-closure-20260825-slice58e-snapshot",
+  "title_zh": "D001 II期临床方案其他章节控制候选矩阵"
+}

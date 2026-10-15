@@ -1,0 +1,19 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_history_collection.v4.json",
+  "group_id": "d001-ii-history-treatment-collection-v5",
+  "task_id": "phase5-slice60s-20260828",
+  "artifact_dir_name": "phase5-slice60s-d001-history-treatment-collection-replay-frozen-pre-enrollment-20260828",
+  "pre_enrollment_source_refs": [
+    "body.p871"
+  ],
+  "ids": {
+    "manifest_id": "manifest:slice60s-history-treatment-reps",
+    "catalog_id": "catalog:slice60s-history-treatment-reps"
+  },
+  "notes": [
+    "v4技术绿色结果保持不可变；父级拒绝其倒置D1访视原文顺序并把给药前问询判为治疗后事项。",
+    "v5以冻结访视顺序结构化标记p871位于入排复核、随机及首次给药边界之前，模型理由不能覆盖该事实。",
+    "该结构字段为通用访视边界，不包含D001特异医学判定；只读上下文仍不能成为候选来源。"
+  ]
+}

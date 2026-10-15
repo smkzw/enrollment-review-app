@@ -1,0 +1,86 @@
+{
+  "round": "0922V2",
+  "baseline": "e7f34d0508c05481164cf13569f66ddf64e2e74f",
+  "files": [
+    {
+      "path": "00_README.md",
+      "sha256": "70167dc666c148d8e54e891a0264ba6aaf6b2322eb60bde04b6052dba65f5f96",
+      "bytes": 2340
+    },
+    {
+      "path": "01_REVIEW_FINDINGS.md",
+      "sha256": "6df2a98e509eb9ebb75a16dc3770b8b5e3b894bd427aa7971dbe7ff86fe7b224",
+      "bytes": 12520
+    },
+    {
+      "path": "02_AGENT_MASTER.md",
+      "sha256": "8ef9650f71287020905777af0a5d828a4434bc313b1fb1850ba65c7906f88bbd",
+      "bytes": 6479
+    },
+    {
+      "path": "03_HARNESS_AND_UI_SPEC.md",
+      "sha256": "477cf762823d6fc0e53267f324fa974827f9d3f8572a93bebf9d85dd9d828723",
+      "bytes": 7495
+    },
+    {
+      "path": "04_ACCEPTANCE.md",
+      "sha256": "943f17fcada4e67e280a6bc2e7de36ab06d8f74594a617e87aa5d0160615f28b",
+      "bytes": 4375
+    },
+    {
+      "path": "05_HANDOFF_RETURN_TEMPLATE.md",
+      "sha256": "819ad8023be1b35c55a42e6def2837b927a9e4eb40c90666d2adbd2148b9572f",
+      "bytes": 1240
+    },
+    {
+      "path": "SOURCES.md",
+      "sha256": "5c8c219c76778bccff916e619d23c323270e3fd79883e36287c01f3950d78be4",
+      "bytes": 4316
+    },
+    {
+      "path": "evidence/tsc_exit_code.txt",
+      "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+      "bytes": 2
+    },
+    {
+      "path": "evidence/tsc_no_unused.txt",
+      "sha256": "8851ac63a67c5efc680298b47fa38ec6850fe91d400a507d28edced36722a3e3",
+      "bytes": 130
+    },
+    {
+      "path": "evidence/ui_selection.json",
+      "sha256": "6ecceeb01cc1d69fe4c2f3f551c677fdd2a01c79cc0fb98430e953431315bd4e",
+      "bytes": 80
+    },
+    {
+      "path": "probes/js/ui_excerpt.js",
+      "sha256": "870701fdff839cd89cc42c59435fd1f2e0ef720152b849a236993fac746b028e",
+      "bytes": 2218
+    },
+    {
+      "path": "probes/results.json",
+      "sha256": "5381d25963da39881fb15e24dbca0280edbf6319ca9a17ba673766bee2dd9332",
+      "bytes": 9281
+    },
+    {
+      "path": "probes/review_probes.py",
+      "sha256": "3fe4bb39d90f9c1ddd3d3d95178e949c93b46cf2cc094a9a6ae6867ddcf38f3c",
+      "bytes": 12608
+    },
+    {
+      "path": "probes/ui_excerpt.ts",
+      "sha256": "82402cbcc8e591c44b1af56c4c6f6eb3dbf7368b1c994213902e3285f69d6101",
+      "bytes": 2869
+    },
+    {
+      "path": "sources.json",
+      "sha256": "2576c32b384f02faa9c673a1bc824348b387d890af36e40a9ba3d2b811b0639d",
+      "bytes": 5066
+    },
+    {
+      "path": "work_packages.json",
+      "sha256": "68a2f80592364d8fc0137233dc2f8011fee6a5ac313c801ab6712645f3b174d4",
+      "bytes": 2301
+    }
+  ]
+}

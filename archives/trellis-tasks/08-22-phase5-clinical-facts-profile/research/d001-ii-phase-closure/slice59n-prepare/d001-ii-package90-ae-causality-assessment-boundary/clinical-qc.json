@@ -1,0 +1,308 @@
+{
+  "attached_source_refs": [
+    "body.t14.r0",
+    "body.t14.r1",
+    "body.t14.r2",
+    "body.t14.r3",
+    "body.t14.r4",
+    "body.t14.r5",
+    "body.t14.r6",
+    "body.t14.r7"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package90-ae-causality-assessment-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第90包十一个拥有单元全部为治疗后不良事件与试验用药品因果关系综合判断内容（body.p1087-p1097）：p1087因果关系判断标题与p1097表9入口标题仅作结构，p1088-p1096保持post_treatment_execution处置；全部禁止升格为预筛、筛选或基线入排门槛。required_candidate_source_refs显式为空，任何候选发射都构成越界。",
+    "五个评价要点（p1090-p1094）是研究者综合评价的输入，不是全部满足条件、不是固定计分规则、不是任一单项充分条件、也不是机械决策树；'综合评价'与'提供相关性判定依据'义务（p1089）必须保留。",
+    "表号不一致必须保留：p1095原文写'可参照表7进行'，紧接p1097及下表标题均为'表9'。必须保留该方案内部不一致并标为需要核对，不得静默改成表9，也不得把真正的第82包表7继发事件规则（body.t12.r0-r4）吸入本包作为因果评价表。",
+    "统计分组边界：统计分析时相关分组只含'肯定有关、很可能有关、可能有关'三类；不得扩大到'可能无关'或'无关'，也不得从统计分组反推个例报告规则。",
+    "SAE共同判断边界：p1096共同判断不等于双方意见一致；意见不一致时，研究者或申办者任意一方判断相关即进入报告范围（OR），不得把OR改为AND（双方一致才报告），也不得把'报告范围'升级为'最终确认相关'或'因果结论成立'。",
+    "跨维度分离：因果关系、严重程度（表8，第88-89包）、SAE严重性（第78-79包）、预期性（第92包）和报告时限（第93包）是不同维度，不得相互替代；本包只处理因果关系综合判断，不发布任何维度控制点。",
+    "只读附加来源（8）：第91包表9判定依据表（body.t14.r0-r7）含+/-/±/++/-?注记，仅用于闭合p1095/p1097指向的实际因果关系评价表及去激发/再激发未进行或不适用（-/?)含义；所有权与候选发射权归第91包，不转移。",
+    "防吞并边界：第89包表8、第88包严重程度评估、第78-79包SAE严重性、第87包记录规则、第92包预期性、第93包报告流程均仅保留所有权元数据，不进入本包语义；除t14.r0-r7外不附加第91包其他来源。",
+    "官方入排与流程矩阵不含任何以body.p1087-p1097或body.t14为锚点的行，也不含不良事件/TEAE/SAE控制行；本包不合成任何IN/EX官方规则。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1087",
+    "body.p1088",
+    "body.p1089",
+    "body.p1090",
+    "body.p1091",
+    "body.p1092",
+    "body.p1093",
+    "body.p1094",
+    "body.p1095",
+    "body.p1096",
+    "body.p1097"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "标题只闭合章节层级，不独立形成控制点；不得把标题本身解释为评价规则或判定门槛": "pending_codex",
+        "第90包拥有：因果关系判断（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件因果关系判断",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1087",
+      "structure_unit_id": "su-ad693c949dc5c0af171ceb98"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "五级结论必须逐字保留，不得删改级别、合并级别或增删级别；五级是相关性结论分级，不是严重程度、SAE严重性或预期性分级": "pending_codex",
+        "因果关系、严重程度、SAE严重性和预期性、报告时限是不同维度，不得相互替代": "pending_codex",
+        "第90包拥有：按五分法将相关性判定分为肯定有关、很可能有关、可能有关、可能无关、无关": "pending_codex"
+      },
+      "frozen_excerpt": "根据药物与不良事件相关性判断标准，按照五分法将不良事件与试验用药品相关性判定结果分为：肯定有关、很可能有关、可能有关、可能无关、无关。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1088",
+      "structure_unit_id": "su-5aaf226dcc02b5a3e08dd903"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "五个评价要点是综合评价输入：不得改为全部满足（AND化）、固定计分、任一单项充分条件或机械决策树；'综合评价'与'提供判定依据'义务必须保留": "pending_codex",
+        "第90包拥有：研究者需根据五个评价要点进行临床试验个例不良事件与试验用药品相关性综合评价，并提供相关性判定依据": "pending_codex"
+      },
+      "frozen_excerpt": "研究者需根据五个评价要点进行临床试验个例不良事件与试验用药品相关性综合评价，并提供相关性判定依据。五个评价要点概括如下：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1089",
+      "structure_unit_id": "su-3ae4a77dfe3156fb16aedc95"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第90包拥有：时间相关性：试验用药品和不良事件出现的有无合理的时间关系": "pending_codex",
+        "要点一为综合评价输入之一，不得单独作为充分条件，也不得与其他要点合并为必须全部满足": "pending_codex"
+      },
+      "frozen_excerpt": "时间相关性：试验用药品和不良事件出现的有无合理的时间关系；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1090",
+      "structure_unit_id": "su-1ce73e621477ea9e5887b43f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第90包拥有：是否已知：不良事件是否符合该药物已知的作用机制、特性或已知的不良反应": "pending_codex",
+        "要点二为综合评价输入之一，不得单独作为充分条件，也不得与其他要点合并为必须全部满足；已知性判断不得与第92包预期性评估混同": "pending_codex"
+      },
+      "frozen_excerpt": "是否已知：不良事件是否符合该药物已知的作用机制、特性或已知的不良反应；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1091",
+      "structure_unit_id": "su-c9d399e18f22ea63d650c96b"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第90包拥有：去激发结果：参与者在停药或减量后，可疑的不良事件是否减轻、好转或消失": "pending_codex",
+        "要点三为综合评价输入之一；去激发可能未进行或不适用的含义由第91包表9注记闭合（-/?），本包不得虚构必做义务": "pending_codex"
+      },
+      "frozen_excerpt": "去激发结果：参与者在停药或减量后，可疑的不良事件是否减轻、好转或消失；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1092",
+      "structure_unit_id": "su-3b951bc99a3a77fb80c95b25"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第90包拥有：再激发结果：参与者在再次给药后，已经消除的同样、同性质的不良事件再次出现": "pending_codex",
+        "要点四为综合评价输入之一；再激发可能未进行或不适用的含义由第91包表9注记闭合（-/?），本包不得虚构必做义务": "pending_codex"
+      },
+      "frozen_excerpt": "再激发结果：参与者在再次给药后，已经消除的同样、同性质的不良事件再次出现；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1093",
+      "structure_unit_id": "su-e0d364e47a938d1d1d590ac7"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第90包拥有：其他合理解释：不良事件是否可用参与者疾病进展（包括伴随疾病）、合并用药的作用、其他治疗措施或干扰因素等的影响来解释": "pending_codex",
+        "要点五为综合评价输入之一，不得单独作为否定充分条件，也不得与其他要点合并为必须全部满足": "pending_codex"
+      },
+      "frozen_excerpt": "其他合理解释：不良事件是否可用参与者疾病进展（包括伴随疾病）、合并用药的作用、其他治疗措施或干扰因素等的影响来解释。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1094",
+      "structure_unit_id": "su-69755d89787064f448a79042"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "'可参照表7'为原文逐字表述，紧接p1097及下表标题均为'表9'，该方案内部不一致必须保留并标为需要核对，不得静默改成表9；统计分析相关分组只含肯定有关/很可能有关/可能有关三类，不得扩大到'可能无关'或'无关'，不得反推个例报告规则；第82包表7继发事件规则（body.t12）不得吸入本包": "pending_codex",
+        "第90包拥有：相关性判定结果分类及判定依据可参照表7进行；统计分析时，将'肯定有关'、'很可能有关'、'可能有关'视为与试验用药品相关": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件与试验用药品相关性判定结果分类及判定依据可参照表7进行。统计分析时，将“肯定有关”、“很可能有关”、“可能有关”视为与试验用药品相关。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1095",
+      "structure_unit_id": "su-ddd04748eeae501561b21462"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "共同判断不等于双方意见一致：意见不一致时任一方判断相关即进入报告范围（OR），不得改为双方一致才报告（AND）；'报告范围'是范围归属，不得升级为'最终确认相关'或'因果结论成立'": "pending_codex",
+        "第90包拥有：SAE与试验用药品的因果关系由研究者和申办者双方共同判断；意见不一致时，任意一方判断相关的SAE均属报告范围": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件（SAE）与试验用药品的因果关系由研究者和申办者双方共同判断。当双方意见不一致时，对研究者或/和申办者任意一方判断与试验用药品相关的严重不良事件，均属报告范围。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1096",
+      "structure_unit_id": "su-d41dd8a6ab4c85237c0b2e49"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第90包拥有：表 9 不良事件与试验用药品因果关系评价（结构标题/表格入口），仅作结构": "pending_codex",
+        "表9入口标题与p1095'可参照表7'不一致需核对；具体表9判定依据行（body.t14.r0-r7）归第91包只读进入，本包不拥有表格行": "pending_codex"
+      },
+      "frozen_excerpt": "表 9 不良事件与试验用药品因果关系评价",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1097",
+      "structure_unit_id": "su-a6447a08863cae689b733633"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：闭合p1095/p1097指向的实际因果关系评价表列语义；所有权归第91包，不得转移": "pending_codex",
+        "第91包拥有：表9表头（判定依据 | 相关 | 不相关），只读": "pending_codex"
+      },
+      "frozen_excerpt": "判定依据 | 相关 | 不相关",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.t14.r0",
+      "structure_unit_id": "su-afd0ba9f4ceee6a0e4313fdc"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：与p1088五级结论一致；统计分析相关分组仍只含前三类，不得用表9行反推统计分组范围": "pending_codex",
+        "第91包拥有：表9结论行（肯定有关 | 很可能有关 | 可能有关 | 可能无关 | 无关），只读": "pending_codex"
+      },
+      "frozen_excerpt": "肯定有关 | 很可能有关 | 可能有关 | 可能无关 | 无关",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.t14.r1",
+      "structure_unit_id": "su-e590057de5c4225f15b7024d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：'±'表示时间关系不能排除；仅闭合p1090时间相关性要点的表内映射，不转移所有权": "pending_codex",
+        "第91包拥有：表9时间关系行（+ | + | + | ± | -），只读": "pending_codex"
+      },
+      "frozen_excerpt": "是否有合理的时间关系 | + | + | + | ± | -",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.t14.r2",
+      "structure_unit_id": "su-52e7b02e497756ea60fd42c1"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：闭合p1091是否已知要点；不改变第91包所有权": "pending_codex",
+        "第91包拥有：表9已知性行（+ | + | + | - | + | - | -），只读": "pending_codex"
+      },
+      "frozen_excerpt": "是否符合已知的作用机制、特性或已知的不良反应 | + | + | + | - | + | - | -",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.t14.r3",
+      "structure_unit_id": "su-d5a725f26cde701cc2273061"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：'-/?'表示去激发结果为阴性，或尚未进行去激发，或不适用去激发；闭合p1092含义，本包不得虚构必做义务": "pending_codex",
+        "第91包拥有：表9去激发结果行（+ | + | + | -/? | + | -/? | -/? | -/?），只读": "pending_codex"
+      },
+      "frozen_excerpt": "去激发结果 | + | + | + | -/? | + | -/? | -/? | -/?",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.t14.r4",
+      "structure_unit_id": "su-0eddfbce01c4de6fda5fc63e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：'-/?'表示再激发结果为阴性，或尚未进行再激发，或不适用再激发；闭合p1093含义，本包不得虚构必做义务": "pending_codex",
+        "第91包拥有：表9再激发结果行（+ | -/? | -/? | -/? | -/?），只读": "pending_codex"
+      },
+      "frozen_excerpt": "再激发结果 | + | -/? | -/? | -/? | -/?",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.t14.r5",
+      "structure_unit_id": "su-bf57639a93e8121fadc2abe9"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：'++'表示可用其他'更加'合理的原因解释；闭合p1094要点，不转移所有权": "pending_codex",
+        "第91包拥有：表9其他合理解释行（- | - | + | - | - | - | ++ | + | +），只读": "pending_codex"
+      },
+      "frozen_excerpt": "是否可用其他合理的原因解释 | - | - | + | - | - | - | ++ | + | +",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.t14.r6",
+      "structure_unit_id": "su-f90a974a28e4b2f090cd7c1a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：+肯定/阳性、-否定/阴性或暂未获得、±时间关系不能排除、++其他'更加'合理原因、-/？去激发/再激发阴性或未进行或不适用；去激发/再激发未进行或不适用不等于负面结论": "pending_codex",
+        "第91包拥有：表9注记（+/-/±/++/-? 符号含义），只读": "pending_codex"
+      },
+      "frozen_excerpt": "注： | “+”表示肯定，或阳性结果； | “-”表示否定，或阴性结果，或暂未获得结果的情况； | “±”表示时间关系不能排除； | “++”表示可用其他“更加”合理的原因解释； | “-/?”表示去激发/再激发结果为阴性，或尚未进行去激发/再激发，或不适用去激发/再激发。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.t14.r7",
+      "structure_unit_id": "su-829a78ccf20c0b48cfe08f69"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cb-20260830",
+  "worker": "codebuddy-worker_02"
+}

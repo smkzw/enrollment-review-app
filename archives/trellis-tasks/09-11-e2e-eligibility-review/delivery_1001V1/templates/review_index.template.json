@@ -1,0 +1,21 @@
+{
+  "schema_version": "review-index/0929v1/v1",
+  "document_kind": "template",
+  "round_id": "1001V1",
+  "recorded_at": null,
+  "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
+  "execution_variant": "RV1001-FLOW",
+  "base_review_commit": "60a849e603f69ffa669b8d57a661bcee47d3cd3c",
+  "delivered_snapshot_id": null,
+  "runtime_state": "not_observed_in_this_template",
+  "code_snapshots": [],
+  "changes": [],
+  "claims": [],
+  "tests": [],
+  "artifacts": [],
+  "hypotheses": [],
+  "recommendations": [],
+  "next_actions": [],
+  "product_claims_complete": false,
+  "notes": "待执行Agent填写，非运行回执。schema_version保留旧索引合同，不是本轮误标。无新增参照模型；配对臂RV1001-BASELINE/RV1001-FLOW。首错、同模型复核方式及比较边界通过既有claims/tests/artifacts/hypotheses/notes记录。原始临床材料留受控位置，缺用量null。"
+}

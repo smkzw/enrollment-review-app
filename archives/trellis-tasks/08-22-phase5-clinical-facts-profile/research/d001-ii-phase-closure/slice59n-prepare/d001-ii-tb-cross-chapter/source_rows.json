@@ -1,0 +1,284 @@
+[
+  {
+    "excerpt": "结核检测^15 | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r19",
+    "source_span_ids": [
+      "body.t5.r19.c0.p0",
+      "body.t5.r19.c1.p0"
+    ],
+    "structure_unit_id": "su-74055dea573dbae7cabc7a42",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "结核检测：筛选期进行γ干扰素释放试验（即QFT或T-SPOT试验）。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p329",
+    "source_span_ids": [
+      "body.p329"
+    ],
+    "structure_unit_id": "su-24562813606f5d9a905063ca",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "符合以下任一项结核筛查标准：",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-43f4c3ec4c7808b8d8627621",
+    "package_ordinal": 52,
+    "role": "attached",
+    "source_ref": "body.p649",
+    "source_span_ids": [
+      "body.p649"
+    ],
+    "structure_unit_id": "su-376fc536183856c602caa314",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "有活动性结核感染的现病史或既往病史；",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-43f4c3ec4c7808b8d8627621",
+    "package_ordinal": 52,
+    "role": "attached",
+    "source_ref": "body.p650",
+    "source_span_ids": [
+      "body.p650"
+    ],
+    "structure_unit_id": "su-46f3d44024412edbe15dc40a",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "在筛选期间，研究者判断存在活动性结核病的体征或症状；",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-172e5937fb9973123d54aa19",
+    "package_ordinal": 53,
+    "role": "attached",
+    "source_ref": "body.p651",
+    "source_span_ids": [
+      "body.p651"
+    ],
+    "structure_unit_id": "su-e7314e4bfec0ea521d0b12e2",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "胸部CT提示当前或既往活动性结核感染；",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-172e5937fb9973123d54aa19",
+    "package_ordinal": 53,
+    "role": "attached",
+    "source_ref": "body.p652",
+    "source_span_ids": [
+      "body.p652"
+    ],
+    "structure_unit_id": "su-516de913310cb49c084d575f",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "γ-干扰素释放试验结果显示潜伏性结核感染证据，定义为：筛选时γ-干扰素释放试验检测呈阳性或连续两次γ-干扰素释放试验结果不确定，且无临床症状。除非有记录表明参与者已经完成充分的结核潜伏感染的治疗，或者在首次给药前至少4周开始预防性治疗，并且同意完成后续预防性治疗疗程，预防措施的整个疗程不必在首次给药前完成。",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-172e5937fb9973123d54aa19",
+    "package_ordinal": 53,
+    "role": "attached",
+    "source_ref": "body.p653",
+    "source_span_ids": [
+      "body.p653"
+    ],
+    "structure_unit_id": "su-d09623f8a5a17c75a3e742cc",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "不允许使用利福平或利福喷丁进行结核预防。",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-172e5937fb9973123d54aa19",
+    "package_ordinal": 53,
+    "role": "attached",
+    "source_ref": "body.p655",
+    "source_span_ids": [
+      "body.p655"
+    ],
+    "structure_unit_id": "su-3ba3e4239d7e72e031bc06be",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "结核筛查",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "结核筛查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-3a57e1ae15a1a44c3ea68a1e",
+    "package_ordinal": 72,
+    "role": "owned",
+    "source_ref": "body.p806",
+    "source_span_ids": [
+      "body.p806"
+    ],
+    "structure_unit_id": "su-038b2b277113e42b60b36f72",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "如果γ-干扰素释放试验为阳性，则必须通过胸部CT进一步评估以确认结核状态（活动性或潜伏性）。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "结核筛查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-3a57e1ae15a1a44c3ea68a1e",
+    "package_ordinal": 72,
+    "role": "owned",
+    "source_ref": "body.p807",
+    "source_span_ids": [
+      "body.p807"
+    ],
+    "structure_unit_id": "su-7f53927513e2fea7b60619c3",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "−有活动性结核证据的参与者不得被随机分组；",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "结核筛查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-3a57e1ae15a1a44c3ea68a1e",
+    "package_ordinal": 72,
+    "role": "owned",
+    "source_ref": "body.p808",
+    "source_span_ids": [
+      "body.p808"
+    ],
+    "structure_unit_id": "su-df28162a093632765e150d0a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "−有潜伏性结核证据的参与者不得被随机分组，除非在随机分组前已完成至少4周的适当治疗疗程。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "结核筛查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-3a57e1ae15a1a44c3ea68a1e",
+    "package_ordinal": 72,
+    "role": "owned",
+    "source_ref": "body.p809",
+    "source_span_ids": [
+      "body.p809"
+    ],
+    "structure_unit_id": "su-46e60f29a998dc32549efb92",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "注：",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "结核筛查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-3a57e1ae15a1a44c3ea68a1e",
+    "package_ordinal": 72,
+    "role": "owned",
+    "source_ref": "body.p810",
+    "source_span_ids": [
+      "body.p810"
+    ],
+    "structure_unit_id": "su-4bf2b42795a5d8578ec4644f",
+    "unit_kind": "footnote_or_annotation"
+  },
+  {
+    "excerpt": "在筛选时，如果参与者有潜伏性结核感染的证据，必须在首次给药前至少4周开始预防性治疗，并且同意完成后续预防性治疗疗程；预防措施的整个疗程不必在首次给药前完成。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "结核筛查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-3a57e1ae15a1a44c3ea68a1e",
+    "package_ordinal": 72,
+    "role": "owned",
+    "source_ref": "body.p811",
+    "source_span_ids": [
+      "body.p811"
+    ],
+    "structure_unit_id": "su-c07db5fdf0c3f1acc7545649",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "不允许使用利福平或利福喷丁进行结核预防。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "结核筛查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-3a57e1ae15a1a44c3ea68a1e",
+    "package_ordinal": 72,
+    "role": "owned",
+    "source_ref": "body.p812",
+    "source_span_ids": [
+      "body.p812"
+    ],
+    "structure_unit_id": "su-9b53b022c1020197079693ea",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "如结核检测结果为不确定者，可进行1次复测。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "结核筛查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-3a57e1ae15a1a44c3ea68a1e",
+    "package_ordinal": 72,
+    "role": "owned",
+    "source_ref": "body.p813",
+    "source_span_ids": [
+      "body.p813"
+    ],
+    "structure_unit_id": "su-0d7e3607dad6cd383ba337ca",
+    "unit_kind": "list_item"
+  }
+]

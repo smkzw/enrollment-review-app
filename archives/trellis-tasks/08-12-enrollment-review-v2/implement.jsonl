@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/index.md","reason":"V2 后端边界与质量入口"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"目标目录和依赖方向"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"SQLite、版本和审计约束"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"可恢复任务与中文错误合同"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"确定性门禁和临床回归要求"}
+{"file":".trellis/spec/frontend/index.md","reason":"医学监查员产品合同"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"真实浏览器与中文界面验收"}
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"已冻结的产品和架构事实源"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"阶段顺序、退出门槛和验证矩阵"}

@@ -1,0 +1,11 @@
+# 单次复查许可归属：独立源码审阅
+
+沿用批准evidence_single_object只读角色与会话。仅读取源码，禁止任何文件修改、测试、应用导入、对象构造、服务、数据库、浏览器、产品模型或递归派发。runner保存最终回复。不是运行验收或临床签收。
+
+请从当前实际源码检查研究者许可是否被错误复用于其他复查，以及许可条件是否保留原布尔逻辑。完整读受影响定义：app/domain/contracts/repeat_scheme.py；app/services/observation_relation_input.py；app/services/repeat_condition_selection.py；app/services/repeat_permission_calculation.py；app/services/repeat_trigger_calculation.py；app/projections/control_repeat_trigger_calculation.py；app/services/repeat_result_resolution.py；app/services/qualified_observation_relation.py；app/agents/protocol_deconstructor.py和protocol_control_deconstructor.py的许可提示及校验。
+
+新增target_observation角色，经既有双读辅助来源对应到具体repeat_group_id，不能用日期邻近代替。written_permission_scoped_to_target要求唯一同identity的verified证据范围且目标组相等；external_context不再能充当逐次书面许可的凭证。trigger不得采用target角色证明自身触发。研究者原子须requires_professional_judgment，官方不得以普通semantic_proposition代替，控制族须investigator_judgment。当前资格算法v24、官方wire11、控制wire16/prompt2.13。历史不补改，不签发新方法批准，不建立新增模型任务。
+
+关键反例：同一许可只针对第一次复查；两次复查同值或同日；有书面否定；数字OR分支为真但研究者分支为假；辅助来源未对应；多个归属。源码能证明的问题优先，给文件行号与最小修复。明确覆盖多次的许可目前保守未知，属于功能待办，不声称已支持；不要建议复制许可到每次或手工补临床答案。上一轮AK1已补提取校验，请核对而非重复建议。AK2所谓单独日期事实已参与而报告当未采用，须沿实际fact IDs证明，不能只凭通用可能性认定。
+
+输出确定缺陷及未执行的验证；不重复无限设计回合。

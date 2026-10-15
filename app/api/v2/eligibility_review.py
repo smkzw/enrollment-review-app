@@ -1,0 +1,309 @@
+"""入排审核只读投影 API。
+
+路由只做受试者/审核节点作用域核对、会话边界和 DTO 协议转换；条款装配与
+确定性求值全部由 ``EligibilityReviewProjectionService`` 完成。
+"""
+from __future__ import annotations
+
+from typing import Literal
+from datetime import date
+
+from fastapi import APIRouter, Request
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+
+from app.services.evidence_app_errors import AppReviewSourceIncompleteError, translate_storage_error
+from app.domain.contracts.work_draft import SystemIssue
+from app.services.eligibility_review_projection import (
+    EligibilityReviewProjection,
+    EligibilityReviewProjectionService,
+    EligibilityReviewProjectionError,
+)
+
+router = APIRouter(prefix="/api/v2", tags=["v2-eligibility-review"])
+
+
+class EligibilityFactRefDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fact_id: str = Field(min_length=1)
+    locator_id: str = Field(min_length=1)
+    page_number: int = Field(ge=1)
+    source_document_version_id: str = Field(min_length=1)
+    page_artifact_id: str = Field(min_length=1)
+    excerpt: str | None
+
+
+class EligibilitySourceReadRefDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_document_version_id: str = Field(min_length=1)
+    page_artifact_id: str = Field(min_length=1)
+    page_number: int = Field(ge=1)
+    excerpt: str | None
+    disposition: Literal["mentioned", "not_seen", "unresolved"]
+
+
+class EligibilityReasonPartDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    condition_id: str = Field(min_length=1)
+    condition_text: str = Field(min_length=1)
+    reason_text: str = Field(min_length=1)
+    requires_attention: StrictBool
+
+
+class EligibilityClauseDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rule_component_id: str = Field(min_length=1)
+    rule_code: str = Field(pattern=r"^(IN|EX|REQ)-\d{2}$")
+    rule_kind: Literal["inclusion", "exclusion", "required_procedure", "medication"]
+    text_summary: str = Field(min_length=1)
+    source_text: str = Field(min_length=1)
+    parent_rule_code: str | None = Field(default=None, pattern=r"^(IN|EX|REQ)-\d{2}$")
+    decision: Literal[
+        "inclusion_met",
+        "inclusion_not_met",
+        "requirement_met",
+        "requirement_not_met",
+        "exclusion_triggered",
+        "exclusion_not_triggered",
+        "professional_judgment",
+        "indeterminate",
+        "conflict",
+        "not_due",
+        "not_applicable",
+        "system_issue",
+    ]
+    decision_label: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    reason_parts: list[EligibilityReasonPartDTO] = Field(default_factory=list)
+    fact_refs: list[EligibilityFactRefDTO] = Field(default_factory=list)
+    source_read_refs: list[EligibilitySourceReadRefDTO] = Field(default_factory=list)
+    gap_type: str | None = Field(default=None, min_length=1)
+    determination_mode: Literal[
+        "deterministic", "semantic", "investigator_judgment", "restricted"
+    ]
+    action_owner: Literal[
+        "investigator", "crc", "cra", "sponsor_medical_or_project"
+    ] | None = None
+    action_detail: str | None = None
+    action_evidence: str | None = None
+    limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"] | None = None
+    confidence: Literal["high", "low"] | None = None
+    confidence_reason: str | None = None
+    can_confirm: StrictBool = False
+    confirmation_kind: Literal["medical_manager", "builder_verification"] | None = None
+
+    @model_validator(mode="after")
+    def validate_reason_part_identity(self):
+        if len({part.condition_id for part in self.reason_parts}) != len(self.reason_parts):
+            raise ValueError("判断依据的条件身份不得重复")
+        return self
+
+
+class EligibilityUnassignedConflictDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conflict_group_id: str = Field(min_length=1)
+    member_kind: Literal["event", "exposure"]
+    member_ids: list[str] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def validate_members(self) -> "EligibilityUnassignedConflictDTO":
+        if any(not value for value in self.member_ids) or len(set(self.member_ids)) != len(self.member_ids):
+            raise ValueError("争议记录的来源成员不完整或重复")
+        return self
+
+
+class EligibilityControlObligationDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    obligation_id: str = Field(min_length=1)
+    obligation_group_id: str = Field(min_length=1)
+    statement: str = Field(min_length=1)
+    source_excerpts: list[str] = Field(default_factory=list)
+    status: Literal["fulfilled", "unfulfilled", "unverified", "restricted", "not_applicable"]
+    status_label: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    fact_refs: list[EligibilityFactRefDTO] = Field(default_factory=list)
+    source_read_refs: list[EligibilitySourceReadRefDTO] = Field(default_factory=list)
+    continuing_note: str | None = None
+    action_owner: Literal[
+        "investigator", "crc", "cra", "sponsor_medical_or_project"
+    ] | None = None
+    action_detail: str | None = None
+    action_evidence: str | None = None
+    limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"] | None = None
+
+
+class EligibilityControlDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    protocol_control_id: str = Field(min_length=1)
+    display_label: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    obligations: list[EligibilityControlObligationDTO] = Field(default_factory=list)
+
+
+class EligibilityReviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    subject_id: str = Field(min_length=1)
+    review_episode_id: str = Field(min_length=1)
+    rule_set_id: str = Field(min_length=1)
+    rule_set_revision: int = Field(ge=1)
+    evidence_snapshot_v2_id: str = Field(min_length=1)
+    complete_processing_revision_id: str = Field(min_length=1)
+    clauses: list[EligibilityClauseDTO] = Field(default_factory=list)
+    controls: list[EligibilityControlDTO] = Field(default_factory=list)
+    unassigned_conflicts: list[EligibilityUnassignedConflictDTO] = Field(default_factory=list)
+    work_draft_state: Literal["not_started", "current", "source_changed", "method_changed"] = "not_started"
+    review_run_id: str | None = None
+    system_issues: list[SystemIssue] = Field(default_factory=list)
+    verification_only: bool = False
+    component_clauses: list[EligibilityClauseDTO] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_component_identity(self) -> "EligibilityReviewResponse":
+        if not self.clauses and not self.controls:
+            raise ValueError("当前方案没有可审核的官方条款或补充要求")
+        identities = [clause.rule_component_id for clause in (*self.clauses, *self.component_clauses)]
+        if len(identities) != len(set(identities)):
+            raise ValueError("审核结果包含重复的审核要点身份")
+        groups = [item.conflict_group_id for item in self.unassigned_conflicts]
+        if len(groups) != len(set(groups)):
+            raise ValueError("审核结果包含重复的争议记录")
+        control_ids = [item.protocol_control_id for item in self.controls]
+        if len(control_ids) != len(set(control_ids)):
+            raise ValueError("审核结果包含重复的补充要求")
+        return self
+
+
+def _read(request: Request):
+    return request.app.state.evidence_api_read_service
+
+
+def _service(request: Request) -> EligibilityReviewProjectionService:
+    return request.app.state.eligibility_review_projection_service
+
+
+def _raise_translated(exc: Exception) -> None:
+    if isinstance(exc, EligibilityReviewProjectionError):
+        raise AppReviewSourceIncompleteError() from exc
+    translated = translate_storage_error(exc)
+    if translated is not None:
+        raise translated from exc
+    raise exc
+
+
+@router.get(
+    "/subjects/{subject_id}/review-episodes/{review_episode_id}/eligibility-review",
+    response_model=EligibilityReviewResponse,
+)
+def get_eligibility_review(
+    subject_id: str, review_episode_id: str, request: Request
+) -> EligibilityReviewResponse:
+    """读取当前活动资料下的入排条款投影；不启动正式 ReviewRun。"""
+    _read(request).require_subject_episode(subject_id, review_episode_id)
+    with request.app.state.session_factory() as session:
+        try:
+            projection: EligibilityReviewProjection = _service(request).project(
+                session, review_episode_id
+            )
+        except Exception as exc:  # noqa: BLE001 - 读取边界统一翻译
+            _raise_translated(exc)
+            raise
+    return EligibilityReviewResponse.model_validate(projection.to_dict())
+
+
+@router.post("/subjects/{subject_id}/review-episodes/{review_episode_id}/work-draft-jobs")
+def start_work_draft(subject_id: str, review_episode_id: str, request: Request):
+    _read(request).require_subject_episode(subject_id, review_episode_id)
+    try:
+        return request.app.state.work_draft_review_service.start(
+            subject_id=subject_id, review_episode_id=review_episode_id)
+    except Exception as exc:
+        _raise_translated(exc)
+
+
+class WorkDraftConfirmationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    review_run_id: str = Field(min_length=1)
+    item_id: str = Field(min_length=1)
+    confirmed: StrictBool
+    actor_kind: Literal["medical_manager", "builder_verification"]
+
+    @model_validator(mode="after")
+    def require_confirmation(self):
+        if not self.confirmed:
+            raise ValueError("请明确核实本条依据后再提交")
+        return self
+
+
+@router.post("/subjects/{subject_id}/review-episodes/{review_episode_id}/work-draft-confirmations")
+def confirm_work_draft(subject_id: str, review_episode_id: str, body: WorkDraftConfirmationRequest, request: Request):
+    _read(request).require_subject_episode(subject_id, review_episode_id)
+    try:
+        return request.app.state.work_draft_review_service.confirm(subject_id=subject_id, review_episode_id=review_episode_id,
+            review_run_id=body.review_run_id, item_id=body.item_id, actor_kind=body.actor_kind)
+    except Exception as exc:
+        _raise_translated(exc)
+
+
+class NodeDateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    node_date: date
+    expected_revision: int = Field(ge=1)
+
+
+class EvidenceCutoffRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    evidence_cutoff_date: date | None
+    expected_revision: int = Field(ge=1)
+
+
+@router.put("/subjects/{subject_id}/review-episodes/{review_episode_id}/evidence-cutoff")
+def update_evidence_cutoff(subject_id: str, review_episode_id: str, body: EvidenceCutoffRequest, request: Request):
+    _read(request).require_subject_episode(subject_id, review_episode_id)
+    try:
+        revision = request.app.state.work_draft_review_service.update_evidence_cutoff(
+            subject_id=subject_id, review_episode_id=review_episode_id,
+            value=body.evidence_cutoff_date, expected_revision=body.expected_revision)
+        return {"revision": revision}
+    except Exception as exc:
+        _raise_translated(exc)
+
+
+@router.put("/subjects/{subject_id}/review-episodes/{review_episode_id}/node-date")
+def update_node_date(subject_id: str, review_episode_id: str, body: NodeDateRequest, request: Request):
+    _read(request).require_subject_episode(subject_id, review_episode_id)
+    try:
+        revision = request.app.state.work_draft_review_service.update_anchor(
+            subject_id=subject_id, review_episode_id=review_episode_id,
+            value=body.node_date, expected_revision=body.expected_revision)
+        return {"revision": revision}
+    except Exception as exc:
+        _raise_translated(exc)
+
+
+@router.get("/subjects/{subject_id}/review-episodes/{review_episode_id}/work-draft-jobs/{job_id}")
+def read_work_draft(subject_id: str, review_episode_id: str, job_id: str, request: Request):
+    _read(request).require_subject_episode(subject_id, review_episode_id)
+    try:
+        return request.app.state.work_draft_review_service.status(
+            subject_id=subject_id, review_episode_id=review_episode_id, job_id=job_id)
+    except Exception as exc:
+        _raise_translated(exc)
+
+
+__all__ = [
+    "EligibilityClauseDTO",
+    "EligibilityFactRefDTO",
+    "EligibilityControlDTO",
+    "EligibilityControlObligationDTO",
+    "EligibilityReviewResponse",
+    "get_eligibility_review",
+    "router",
+]

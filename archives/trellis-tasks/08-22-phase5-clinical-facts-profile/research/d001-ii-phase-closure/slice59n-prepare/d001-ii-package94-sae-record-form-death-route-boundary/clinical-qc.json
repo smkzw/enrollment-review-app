@@ -1,0 +1,353 @@
+{
+  "attached_source_refs": [
+    "body.p1103",
+    "body.p1104",
+    "body.p1105",
+    "body.p1106",
+    "body.p1107",
+    "body.p1108",
+    "body.p1109",
+    "body.p1110",
+    "body.p1111",
+    "body.p1112"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package94-sae-record-form-death-route-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第94包十一个拥有单元（body.p1113-p1123）：p1113/p1114/p1116/p1119/p1121仅作结构；p1115要求病历与对应事件报告表同时记录；p1117保留所有SAE对象、治疗如适用、完整记录、表单所有使用部分、签名日期、获知后24小时内书面报送申办者及其指定联系人；p1118保留新表书面随访；p1120保留双接收方与示例开放性；p1122仅指向附录7；p1123保留单独变更与所有相关方书面确认后生效。全部保持post_treatment_execution处置（结构标题除外）。required_candidate_source_refs显式为空。",
+    "只读附加第93包body.p1103-p1112，用于限制事件/相关随访对象与回指关系；不得转移所有权、重复发布候选，不得用第94包细则改写第93包三类事件与两套获知时钟，也不得用第93包新信息获知时钟替换p1117的SAE获知时钟。",
+    "不得提前吸收第95包body.p1124-p1135的申办者科学评估、SUSAR快速报告对象/时限及快速报告除外情形。",
+    "本包及只读附加来源全部属于治疗后安全性记录/报告执行，禁止升格为预筛、筛选或基线入排门槛。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1113",
+    "body.p1114",
+    "body.p1115",
+    "body.p1116",
+    "body.p1117",
+    "body.p1118",
+    "body.p1119",
+    "body.p1120",
+    "body.p1121",
+    "body.p1122",
+    "body.p1123"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第93包": "pending_codex",
+        "用于限制p1115'事件和相关随访'及p1117/p1118报告语境的对象边界；不得转移所有权、重复发布候选或以第94包细则改写本条时钟": "pending_codex",
+        "第93包拥有：获知后24小时（含）内向申办者报告死亡/SAE/妊娠三类事件的引导句，只读": "pending_codex"
+      },
+      "frozen_excerpt": "以下是研究者必须在获知后24小时（含）内向申办者报告的事件类型，无论事件与试验用药品的关系如何：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1103",
+      "structure_unit_id": "su-9885c453d8356d0ca4e91fb5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅作对象语境限制，不转移所有权，不以第94包细则改写第93包首次事件报告义务": "pending_codex",
+        "所有权与候选发射权归第93包": "pending_codex",
+        "第93包拥有：死亡事件（并列应报告类型之一），只读": "pending_codex"
+      },
+      "frozen_excerpt": "死亡事件",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1104",
+      "structure_unit_id": "su-84df72afb742beeb8f47b4b9"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅作对象语境限制；p1117的SAE对象与本条相关但时钟/表单细则归第94包，不得混改第93包首次获知时钟": "pending_codex",
+        "所有权与候选发射权归第93包": "pending_codex",
+        "第93包拥有：严重不良事件（并列应报告类型之二），只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1105",
+      "structure_unit_id": "su-126276b0cc57955e9212a055"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅作对象语境限制，不因第94包SAE表单细则而吞并妊娠报告类型或附加前提": "pending_codex",
+        "所有权与候选发射权归第93包": "pending_codex",
+        "第93包拥有：妊娠事件（并列应报告类型之三），只读": "pending_codex"
+      },
+      "frozen_excerpt": "妊娠事件",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1106",
+      "structure_unit_id": "su-27b411319ef4c56cc38cee23"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第93包": "pending_codex",
+        "用于限制'相关随访'语境；不得用本条新信息获知时钟替换p1117的SAE获知时钟，也不得用第94包表单细则改写本条": "pending_codex",
+        "第93包拥有：这些事件新重要信息须立即且在获知信息后24小时内向申办者报告的引导句，只读": "pending_codex"
+      },
+      "frozen_excerpt": "研究者必须立即向申办者报告这些事件的新的重要信息（在获知信息后24小时内），包括：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1107",
+      "structure_unit_id": "su-437d5b150cc22348e71e340a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅作随访语境限制，不转移所有权": "pending_codex",
+        "所有权与候选发射权归第93包": "pending_codex",
+        "第93包拥有：新的体征或症状，或诊断改变（新重要信息之一），只读": "pending_codex"
+      },
+      "frozen_excerpt": "新的体征或症状，或诊断改变",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1108",
+      "structure_unit_id": "su-049a5285ef6c19fdef039c00"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅作随访语境限制，不转移所有权": "pending_codex",
+        "所有权与候选发射权归第93包": "pending_codex",
+        "第93包拥有：重要的新诊断检查结果（新重要信息之二），只读": "pending_codex"
+      },
+      "frozen_excerpt": "重要的新诊断检查结果",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1109",
+      "structure_unit_id": "su-56b4d2122a537d750b29a3c0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅作随访语境限制，不转移所有权": "pending_codex",
+        "所有权与候选发射权归第93包": "pending_codex",
+        "第93包拥有：基于新信息的因果关系变化（新重要信息之三），只读": "pending_codex"
+      },
+      "frozen_excerpt": "基于新信息的因果关系变化",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1110",
+      "structure_unit_id": "su-4b84e150cc7fced2a1322ec8"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅作随访语境限制；不得因第94包随访表单细则删除'包括恢复'": "pending_codex",
+        "所有权与候选发射权归第93包": "pending_codex",
+        "第93包拥有：事件结果的变化，包括恢复（新重要信息之四），只读": "pending_codex"
+      },
+      "frozen_excerpt": "事件结果的变化，包括恢复",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1111",
+      "structure_unit_id": "su-1847ee1b8b80e59fbf93deb9"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅作随访语境限制，不转移所有权，不改写开放性兜底": "pending_codex",
+        "所有权与候选发射权归第93包": "pending_codex",
+        "第93包拥有：关于事件临床过程的其他描述信息（新重要信息之五），只读": "pending_codex"
+      },
+      "frozen_excerpt": "关于事件临床过程的其他描述信息",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1112",
+      "structure_unit_id": "su-a6c0b36dfffc4a65710677df"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体资料、表单、死亡与途径义务由下属段落拥有，标题不替代具体规则": "pending_codex",
+        "标题只闭合研究者向申办者报告要求与途径下的资料要求章节层级，不独立形成记录、报告、接收方或时限义务": "pending_codex",
+        "第94包拥有：应提供的安全信息资料及要求（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "应提供的安全信息资料及要求",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1113",
+      "structure_unit_id": "su-d83da305cf4c78d8d2cf802c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体原则由p1115拥有，标题不义务化": "pending_codex",
+        "只闭合'原则'列表层级，不独立形成病历/报告表记录义务": "pending_codex",
+        "第94包拥有：原则（结构列表标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "原则",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1114",
+      "structure_unit_id": "su-e1a39a052bb6b1d32992a45a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读附加的p1103-p1112用于限制'事件和相关随访'的对象语境，不得用本条改写第93包三类事件或两套获知时钟；保持治疗后执行职责，零候选": "pending_codex",
+        "必须同时保留研究者责任、正确信息、相关随访、可溯源参与者病历、对应事件报告表；病历与报告表是并列要求，不得改成二选一": "pending_codex",
+        "第94包拥有：研究者负责确保事件及相关随访的正确信息记录在可溯源参与者病历及对应事件报告表上": "pending_codex"
+      },
+      "frozen_excerpt": "研究者将负责确保所有关于事件和相关随访的正确信息均被记录在可溯源的参与者病历及对应的事件报告表上。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1115",
+      "structure_unit_id": "su-8c1b6294c4d262b64718d3ee"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体义务由p1117/p1118拥有，标题不义务化": "pending_codex",
+        "只闭合报告表填写与随访要求列表层级，不独立形成表单、签名、书面报告或时限义务": "pending_codex",
+        "第94包拥有：报告表的填写及随访要求（结构列表标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "报告表的填写及随访要求",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1116",
+      "structure_unit_id": "su-c59b44d7631a066e1c3082d6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "'如适用'仅修饰治疗措施，不得外溢到记录、表单、签名或书面报告；'所有使用部分'不得改成填写所有字段或允许只填部分必要字段": "pending_codex",
+        "多项并列要求必须保留：及时适当治疗措施仅在适用时；完整及时且尽可能详细记录；填写《SAE报告表》所有使用部分；签名并签署日期；立即（获知后24小时内）及句末于获知后24小时内书面报告至申办者和其指定联系人": "pending_codex",
+        "对象严格为研究期间发生的所有SAE，不得缩窄为药物相关SAE，也不得扩大到全部AE、TEAE、实验室异常或任意安全性资料": "pending_codex",
+        "本段SAE获知时钟不得改成24小时后、工作日口径、固定日历日或0秒瞬时完成，也不得用第93包新信息获知时钟替换；保持治疗后执行职责，零候选": "pending_codex",
+        "第94包拥有：研究期间所有SAE（无论与试验药物是否相关）的治疗（如适用）、完整及时详细记录、填写《SAE报告表》所有使用部分、签名/日期，并于获知后24小时内书面报送申办者和其指定联系人": "pending_codex"
+      },
+      "frozen_excerpt": "研究期间发生的所有SAE，无论其与试验药物是否相关，研究者应立即（获知后24小时内）对参与者采取及时适当的治疗措施（如适用），完整并及时地记录所有相关信息，记录应尽可能详细，填写《SAE报告表》的所有使用部分，签名并签署日期，于获知后24小时内书面报告至申办者和其指定联系人。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1117",
+      "structure_unit_id": "su-050cb0463d7587ec2b1fe653"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "必须保留'新的《SAE报告表》'与'标明为之前报告的随访信息'；不得遗漏新表或随访标记；保持治疗后执行职责，零候选": "pending_codex",
+        "第94包拥有：首次书面报告后的详尽书面随访报告；随访信息或质疑表回复使用一份新的《SAE报告表》，并标明为之前报告的随访信息": "pending_codex",
+        "首次书面报告与随访报告是不同动作，不得压成同一表单动作；随访报告应及时、详尽、书面": "pending_codex"
+      },
+      "frozen_excerpt": "随后研究者应当及时提供详尽、书面的随访报告，随访信息或对质疑表中内容的回复将使用一份新的《SAE报告表》，并标明为之前报告的随访信息。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1118",
+      "structure_unit_id": "su-0c44ee2a69a98cf8a941660e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体义务由p1120拥有，标题不义务化": "pending_codex",
+        "只闭合死亡报告处理列表层级，不独立形成接收方或资料清单义务": "pending_codex",
+        "第94包拥有：死亡报告的处理（结构列表标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "死亡报告的处理",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1119",
+      "structure_unit_id": "su-1d16ae47be7a9f20842c81ba"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "'如尸检报告和最终医学报告'是相关资料示例，不得封闭成只需这两项，也不得反向变成所有死亡必须完成尸检；保持治疗后执行职责，零候选": "pending_codex",
+        "接收方同时包括申办者和监管机构，不得遗漏任一方": "pending_codex",
+        "第94包拥有：涉及死亡的报告，研究者应向申办者和监管机构提供所有相关资料；尸检报告和最终医学报告仅为示例": "pending_codex"
+      },
+      "frozen_excerpt": "涉及死亡的报告，研究者应当向申办者和监管机构提供所有相关的资料，如尸检报告和最终医学报告。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1120",
+      "structure_unit_id": "su-f04048e739ec004c19df9ac8"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体指向与变更规则由p1122/p1123拥有，标题不义务化": "pending_codex",
+        "标题只闭合报告途径章节层级，不独立形成具体联系方式、接收方或变更规则": "pending_codex",
+        "第94包拥有：报告途径（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "报告途径",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1121",
+      "structure_unit_id": "su-5bbbd4c7562dcdebbfeb1927"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅指向附录7的报告联系方式，当前包不提供具体姓名、电话、邮箱或地址，不得虚构附录7内容": "pending_codex",
+        "保持治疗后执行职责，零候选": "pending_codex",
+        "第94包拥有：本研究的报告联系方式见附录7": "pending_codex"
+      },
+      "frozen_excerpt": "本研究的报告联系方式见附录7。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1122",
+      "structure_unit_id": "su-4ffb7de4a9e461d863377ce8"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "保持治疗后执行职责，零候选": "pending_codex",
+        "必须保留单独变更、所有相关方、书面确认后生效；不得改成仅三方、任一方单独确认或口头确认即可生效，也不得擅自等同于方案修订案": "pending_codex",
+        "第94包拥有：附录7可按实际情况单独变更；变更须经所有相关方书面确认后生效；研究者、申办者、CRO为包括但不限于的示例": "pending_codex"
+      },
+      "frozen_excerpt": "附录7将根据实际情况进行单独变更（例如人员联系电话变动），变更内容应被所有相关方（包括但不限于研究者、申办者、参与本研究的CRO等）书面确认后生效。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1123",
+      "structure_unit_id": "su-d569d537c7d59a5a6603dd2f"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cf-20260830",
+  "worker": "cursor-worker_01"
+}

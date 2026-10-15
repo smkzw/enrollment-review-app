@@ -1,0 +1,615 @@
+{
+  "batch_id": "pcb-ee98d96b714f3ffc24f28388",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1150",
+    "body.p1151",
+    "body.p1152",
+    "body.p1153",
+    "body.p1154",
+    "body.p1155",
+    "body.p1156"
+  ],
+  "context_structure_unit_ids": [
+    "su-6514c434b7d574e83f69219c",
+    "su-6fa336f8c64c45509f9c108f",
+    "su-89c01672102f771c1f8a3d0a",
+    "su-1bfbb68fd2fe7829275b7c80",
+    "su-3d7ea99fd5234e40513482b7",
+    "su-f69f9102268a40b8fda1b341",
+    "su-8d4e3c940b0b2546fb805ea9"
+  ],
+  "context_units": [
+    {
+      "excerpt": "痊愈：指不良事件消失。无论参与者的基线情况是否异常，当不良事件恢复至基线时，即为痊愈。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1150"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30130,
+      "source_ref": "body.p1150",
+      "source_span_ids": [
+        "body.p1150"
+      ],
+      "structure_unit_id": "su-6514c434b7d574e83f69219c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "好转/缓解：指不良事件减轻或缓解，在报告时还未消失。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1151"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30140,
+      "source_ref": "body.p1151",
+      "source_span_ids": [
+        "body.p1151"
+      ],
+      "structure_unit_id": "su-6fa336f8c64c45509f9c108f",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "未好转/未缓解/持续：指不良事件在报告时仍未减轻或缓解。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1152"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30150,
+      "source_ref": "body.p1152",
+      "source_span_ids": [
+        "body.p1152"
+      ],
+      "structure_unit_id": "su-89c01672102f771c1f8a3d0a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "伴后遗症：指不良事件导致长期的或永久的生理机能障碍。不应将恢复期或恢复阶段的某些症状视为后遗症。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1153"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30160,
+      "source_ref": "body.p1153",
+      "source_span_ids": [
+        "body.p1153"
+      ],
+      "structure_unit_id": "su-1bfbb68fd2fe7829275b7c80",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "致死：指参与者因该不良事件导致死亡。如果参与者同时报告有多个不良事件，其中仅一个不良事件导致死亡，其它未导致死亡的不良事件的结果不应选择死亡。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1154"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30170,
+      "source_ref": "body.p1154",
+      "source_span_ids": [
+        "body.p1154"
+      ],
+      "structure_unit_id": "su-3d7ea99fd5234e40513482b7",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "不良事件的结束时间",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1155"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30180,
+      "source_ref": "body.p1155",
+      "source_span_ids": [
+        "body.p1155"
+      ],
+      "structure_unit_id": "su-f69f9102268a40b8fda1b341",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "应以不良事件解决（如痊愈、致死）、恢复到基线时状态或状态稳定并不能恢复得更好作为不良事件的结束时间。时间应尽量精确到年月日，如信息收集不全，也应具体到年月。若参与者失访或撤回知情同意，此情况不应作为“因AE导致退出”而记录；若明确因AE而退出，则必须跟踪随访具体的退出时间。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1156"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30190,
+      "source_ref": "body.p1156",
+      "source_span_ids": [
+        "body.p1156"
+      ],
+      "structure_unit_id": "su-8d4e3c940b0b2546fb805ea9",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61ci-package97-ae-followup-outcome-status-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {
+    "su-201eb6afd3fba1b31a3fb75b": [
+      "collect_data"
+    ]
+  },
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1138",
+    "body.p1139",
+    "body.p1140",
+    "body.p1141",
+    "body.p1142",
+    "body.p1143",
+    "body.p1144",
+    "body.p1145",
+    "body.p1146",
+    "body.p1147",
+    "body.p1148",
+    "body.p1149"
+  ],
+  "owned_structure_unit_ids": [
+    "su-f33c5766d05bebea031db9d0",
+    "su-994a2301e062de6b53581c0b",
+    "su-1db09a14c27daba97949a0af",
+    "su-bf224106a8e862a01afb4d4b",
+    "su-6cce067c0d0b3650438943ea",
+    "su-e8da9da58c98a6511e6d1308",
+    "su-c6130304902b386e4440ba43",
+    "su-acded56ada60acbcde51aa28",
+    "su-201eb6afd3fba1b31a3fb75b",
+    "su-1136dccfa7006acc6274e89d",
+    "su-54537c69350c6f73d5539567",
+    "su-a0a2d3b39e7b7fcc26d95a17"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "不良事件的随访",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1138"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30010,
+      "source_ref": "body.p1138",
+      "source_span_ids": [
+        "body.p1138"
+      ],
+      "structure_unit_id": "su-f33c5766d05bebea031db9d0",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "在临床试验期间，发生不良事件时，无论事件是否与试验用药品存在因果关系，均应做出积极处理。患者经历不良事件时应采用可接受的临床治疗措施进行治疗。如果一定有必要应用研究项目禁止的医疗措施，经与申办者协商后患者应退出本研究。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1139"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30020,
+      "source_ref": "body.p1139",
+      "source_span_ids": [
+        "body.p1139"
+      ],
+      "structure_unit_id": "su-994a2301e062de6b53581c0b",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "研究者应跟踪每例次不良事件，直至达到下列任何情况之一：",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1140"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30030,
+      "source_ref": "body.p1140",
+      "source_span_ids": [
+        "body.p1140"
+      ],
+      "structure_unit_id": "su-1db09a14c27daba97949a0af",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "事件消退；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1141"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30040,
+      "source_ref": "body.p1141",
+      "source_span_ids": [
+        "body.p1141"
+      ],
+      "structure_unit_id": "su-bf224106a8e862a01afb4d4b",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "事件返回至基线等级或更好；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1142"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30050,
+      "source_ref": "body.p1142",
+      "source_span_ids": [
+        "body.p1142"
+      ],
+      "structure_unit_id": "su-6cce067c0d0b3650438943ea",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "事件被研究者评估为稳定；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1143"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30060,
+      "source_ref": "body.p1143",
+      "source_span_ids": [
+        "body.p1143"
+      ],
+      "structure_unit_id": "su-e8da9da58c98a6511e6d1308",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "参与者失访或撤回同意。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1144"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30070,
+      "source_ref": "body.p1144",
+      "source_span_ids": [
+        "body.p1144"
+      ],
+      "structure_unit_id": "su-c6130304902b386e4440ba43",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "研究者应尽一切努力随访所有被认为与试验用药品或研究相关程序相关的不良事件，直至报告最终结局。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1145"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30080,
+      "source_ref": "body.p1145",
+      "source_span_ids": [
+        "body.p1145"
+      ],
+      "structure_unit_id": "su-acded56ada60acbcde51aa28",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "在随访时应询问及记录不良事件的结果；如有医疗检查或合并用药，应收集并记录检查结果或合并用药情况；如在当地医院进行诊治，应尽量收集当地医院处理记录和用药信息。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1146"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30090,
+      "source_ref": "body.p1146",
+      "source_span_ids": [
+        "body.p1146"
+      ],
+      "structure_unit_id": "su-201eb6afd3fba1b31a3fb75b",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "不良事件的结果类型",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1147"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30100,
+      "source_ref": "body.p1147",
+      "source_span_ids": [
+        "body.p1147"
+      ],
+      "structure_unit_id": "su-1136dccfa7006acc6274e89d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "根据2019年11月22日我国药监局正式发布的《个例安全性报告E2B（R3）区域实施指南》，不良事件的结果可有如下状态：①痊愈；②好转/缓解；③未好转/未缓解/持续；④痊愈伴后遗症；⑤致死；⑥未知。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1148"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30110,
+      "source_ref": "body.p1148",
+      "source_span_ids": [
+        "body.p1148"
+      ],
+      "structure_unit_id": "su-54537c69350c6f73d5539567",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "不良事件的“结果”针对的是不良事件本身的状态，而非不良事件在医学意义上的状态，因此：",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1149"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30120,
+      "source_ref": "body.p1149",
+      "source_span_ids": [
+        "body.p1149"
+      ],
+      "structure_unit_id": "su-a0a2d3b39e7b7fcc26d95a17",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-f33c5766d05bebea031db9d0",
+    "su-1136dccfa7006acc6274e89d"
+  ],
+  "study_phase": "phase_ii"
+}

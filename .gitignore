@@ -12,15 +12,18 @@ __pycache__/
 
 # 项目数据（受试者资料）
 projects/
+data_v2/
 
 # 测试与运行生成物（由清单和归档记录管理，不进入源码版本）
 output/
 .playwright-cli/
+archives/execution/
 
 # 前端与Python构建缓存
 node_modules/
 frontend/node_modules/
 frontend/dist/
+frontend/e2e/test-results/
 .pytest_cache/
 .coverage
 htmlcov/
@@ -29,3 +32,6 @@ venv/
 
 # macOS
 .DS_Store
+
+# 新运行工件不入库；已跟踪历史归档在 archives/。
+artifacts/*

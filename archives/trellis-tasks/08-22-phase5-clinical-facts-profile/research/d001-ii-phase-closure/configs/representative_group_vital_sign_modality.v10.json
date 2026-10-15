@@ -1,0 +1,21 @@
+{
+  "extends": "representative_group_vital_sign_modality.v9.json",
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-vital-sign-modality-v10",
+  "task_id": "phase5-slice61be-20260829",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice61be-d001-vital-sign-modality-closure-20260829",
+  "ids": {
+    "manifest_id": "manifest:slice61be-vital-sign-modality",
+    "catalog_id": "catalog:slice61be-vital-sign-modality"
+  },
+  "notes": [
+    "原始文档链直接提取，用户无需预处理方案文本。",
+    "同一生命体征操作方法适用于上下文明确列出的筛选和D1测量。",
+    "首次受影响节点与全部适用审核节点分别保存，不得相互替代。",
+    "建议义务在审核指引和最低证据描述中均不得强化为必须达到。",
+    "生命体征具体组分属于独立义务动作，不得仅保留在标题、证据或说明中。",
+    "建议修饰参与者准备动作的强度，用户可见内容核对实际事实而非建议沟通。",
+    "父级节点范围期望只用于最终QC，不注入Agent提示词。"
+  ]
+}

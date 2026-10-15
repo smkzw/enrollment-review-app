@@ -1,0 +1,13 @@
+# 1006V1 核查选择与跨Job实际预算独审
+
+沿批准C03同会话续审，不修改、不测试、不读临床/数据库/env/私有目录，不替产品执行。源码基线853bb90，本包未提交：app/agents/protocol_control_deconstructor.py、app/services/protocol_control_execution.py及两个原测试模块。最多8次必要只读工具；仅核当前实质采用/恢复保护，不另造框架。
+
+真实运行新017终态DEEP_OUTPUT_INVALID，5次请求先问已处理action0–4，而非未核要求7；第四陈述答复缺完整对象表头被原门拒。旧87和新017各以job_id绑定独立5/8预算，此前声称剩3且不清零是错误运行解释，已经在implement纠正。没有共同发布/采用/签发。
+
+修复一：已有partial_wire时以重新计算的action_candidate_indexes选择实际有源候选；经validated_source_review_seed保留的covered_by_procedure等已有目标与semantically_aligned兄弟不重问；无wire时只有明确required/prohibited/recommended动作会询问关系，descriptive不会被升为患者义务，最终完整覆盖与fresh语义门仍保留。单问题失败保存原source review/coverage/alignment，不抹掉兄弟；原普通时间疑问不变。
+
+修复二：_inherited_control_budget_requests从已冻结deep_source_job_id链逐个读取已终态、同原件的实际预约文件与完整校验回执，非零预算核batch及closure。缺/回退/篡改/活动祖先/错范围拒绝，不当cache miss。_merge_control_budget_reservations逐本按原max/contract重验，派生账用origin_logical_task_id+origin_request_ordinal去重，相同SHA的两个真实请求仍是两次。当前合同携带实际继承预约，现有限额已用尽则发送前失败；较大显式测试配额也携旧计数，不改祖先额度/旧hash。保存现有缓存派生前缀并恢复核前缀，不增加第二数据库/新队列。旧无祖先路径合同不变。
+
+集中四相连原模块v2 110pass/1575deselected/36.80s/exit0/5SWIG；v1唯一新夹具span排序错误修夹具未松生产门。新增真实Job/Runner集成测试父2次→新子继承2并累计3→下次发送前耗尽→显式limit5仍继承3再计1→祖先丢尾文件硬拒，合并篡改反例；新合成表格说明兄弟置前，实际Runner只发送有源要求问题。原局部重分类、原问句回放与服务种子证明、旧失效/停止条件保持。测试通过不代表真实49关系已核或完整临床交付。
+
+请审必要必修：是否还能漏记未知发送/历史调用、派生账重复或回退；按程序验证的已有目标跳过核问是否越权、失效是否仍完整处理；还有什么最小恢复消费者首因。对每个必修提供源码位置/可复现反例/最小修复；建议与证据不足分开。独立会话/适配器仍同DeepSeek家族，不宣称模型金标。

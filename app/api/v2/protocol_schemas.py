@@ -1,0 +1,394 @@
+"""V2 方案解构工作台 API 契约。"""
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.domain.contracts.agent_io import ProtocolDeconstructionDraft
+from app.domain.contracts.enums import DatePrecision, StudyPhase
+from app.domain.contracts.protocol_drafts import (
+    DraftFeedbackKind,
+    ProtocolDraftRevisionDiff,
+)
+from app.domain.contracts.rule_reviews import RuleReviewRecord, ReviewerKind
+from app.domain.contracts.protocol_metadata import InterpretationSource
+
+
+class _StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class StartDeconstructionResponse(_StrictModel):
+    job_id: str
+    state: str
+    state_label: str
+    created: bool
+    source_artifact_id: str
+    file_name: str
+
+
+class StartFeedbackRevisionRequest(_StrictModel):
+    project_id: str = Field(min_length=1, max_length=128)
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    interpretation_sources: list[InterpretationSource] = Field(default_factory=list)
+    actor: str = Field(default="用户", min_length=1, max_length=128)
+    workbench_origin: str | None = Field(default=None, min_length=1, max_length=256)
+
+
+class StartSavedCandidateRecoveryRequest(_StrictModel):
+    candidate_ref: str = Field(pattern=r"^artifacts/evaluation_manifest/[0-9a-f]{64}$")
+    candidate_origin: Literal["operator_imported_unpublished"]
+    expected_freeze_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    actor: str = Field(default="用户", min_length=1, max_length=128)
+
+
+class RegisterInterpretationSourcesRequest(_StrictModel):
+    expected_revision_id: str = Field(min_length=1, max_length=128)
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    interpretation_sources: list[InterpretationSource] = Field(min_length=1)
+    actor: str = Field(default="用户", min_length=1, max_length=128)
+
+
+class OfficialProjectDTO(_StrictModel):
+    """正式项目投影（重新解构选择使用）。"""
+
+    project_id: str
+    project_code: str
+    project_name: str
+    study_phase: StudyPhase
+    study_phase_label: str
+    protocol_code: str
+    official_version: str
+    official_date_value: str | None = None
+    official_date_precision: DatePrecision | None = None
+    rule_set_id: str
+    rule_set_revision: int
+
+
+class OfficialProjectListResponse(_StrictModel):
+    projects: list[OfficialProjectDTO]
+
+
+class ProjectVersionDTO(_StrictModel):
+    """某个已发布规则版本：revision、方案版本、哈希与规则条数。"""
+
+    rule_set_revision: int
+    protocol_version_id: str
+    official_version: str
+    official_date_value: str | None = None
+    official_date_precision: DatePrecision | None = None
+    sha256: str
+    rule_count: int
+    published_at: str
+
+
+class ProjectOfficialVersionResponse(_StrictModel):
+    project: OfficialProjectDTO
+    versions: list[ProjectVersionDTO]
+    publication_count: int
+
+
+class DraftComparisonSideResponse(_StrictModel):
+    """并列差异的一侧：正式基线或新草稿（含来源定位信息）。"""
+
+    revision_id: str
+    draft_id: str
+    protocol_version_id: str
+    official_version: str | None = None
+    revision_number: int | None = None
+    status: str | None = None
+    rule_count: int
+    workflow_stage_count: int
+    is_formal_baseline: bool
+    content: dict[str, Any]
+    source_refs: list[str]
+    review_scope_pending: bool = False
+
+
+class DraftComparisonResponse(_StrictModel):
+    """当前正式草稿 + 新草稿 + 相对正式版本的八类结构化差异。"""
+
+    job_id: str
+    baseline: DraftComparisonSideResponse
+    candidate: DraftComparisonSideResponse
+    diff: ProtocolDraftRevisionDiff
+    source_bound: bool
+
+
+class ProtocolSessionResponse(_StrictModel):
+    operator_name: str = "本机医学经理"
+    verification_only: bool | None = None
+    job_id: str
+    job_type: str
+    state: str
+    state_label: str
+    progress_completed: int
+    progress_total: int
+    session_kind: str
+    awaiting_user: str | None = None
+    awaiting_user_label: str | None = None
+    source_artifact_id: str | None = None
+    file_name: str | None = None
+    snapshot_id: str | None = None
+    draft_id: str | None = None
+    draft_revision_id: str | None = None
+    draft_revision_number: int | None = None
+    draft_status: str | None = None
+    draft_status_label: str | None = None
+    selected_phase: StudyPhase | None = None
+    selected_phase_label: str | None = None
+    protocol_code: str | None = None
+    official_version: str | None = None
+    recovery_checkpoint_id: str | None = None
+    recovery_step_id: str | None = None
+    next_action: str
+    publishable: bool | None = None
+    # 重新解构：目标正式项目投影（session_kind="re_deconstruction" 时有值）。
+    target_project_id: str | None = None
+    target_project_name: str | None = None
+    target_project_code: str | None = None
+    target_protocol_code: str | None = None
+    target_study_phase: StudyPhase | None = None
+    target_study_phase_label: str | None = None
+    target_official_version: str | None = None
+    target_rule_set_revision: int | None = None
+
+
+class IdentityDecisionDTO(_StrictModel):
+    identity_decision_id: str
+    snapshot_id: str
+    status: str
+    status_label: str
+    project_name: str | None = None
+    project_code: str | None = None
+    protocol_code: str | None = None
+    official_version: str | None = None
+    official_date_value: str | None = None
+    official_date_precision: DatePrecision | None = None
+    study_phase: StudyPhase | None = None
+    study_phase_label: str | None = None
+    confirmation_required: bool
+    conflict_ids: list[str] = Field(default_factory=list)
+    selected_candidate_ids: list[str] = Field(default_factory=list)
+
+
+class PhaseCandidateDTO(_StrictModel):
+    candidate_id: str
+    phase: StudyPhase
+    phase_label: str
+    rationale: str
+    source_excerpt: str
+
+
+class MetadataCandidateDTO(_StrictModel):
+    candidate_id: str
+    field: str
+    field_label: str
+    value: str
+    source_label: str
+    source_excerpt: str
+    is_fallback: bool
+
+
+class MetadataConflictCandidateDTO(_StrictModel):
+    candidate_id: str
+    value: str
+    source_label: str
+
+
+class MetadataConflictDTO(_StrictModel):
+    conflict_id: str
+    field: str
+    field_label: str
+    reason: str
+    candidates: list[MetadataConflictCandidateDTO] = Field(default_factory=list)
+
+
+class IdentityReviewResponse(_StrictModel):
+    job_id: str
+    snapshot_id: str
+    confirmation_required: bool
+    identity: IdentityDecisionDTO
+    phase_candidates: list[PhaseCandidateDTO] = Field(default_factory=list)
+    metadata_candidates: list[MetadataCandidateDTO] = Field(default_factory=list)
+    metadata_conflicts: list[MetadataConflictDTO] = Field(default_factory=list)
+
+
+class ConfirmIdentityRequest(_StrictModel):
+    protocol_code: str = Field(min_length=1, max_length=128)
+    project_name: str = Field(min_length=1, max_length=256)
+    project_code: str | None = Field(default=None, max_length=128)
+    official_version: str = Field(min_length=1, max_length=64)
+    official_date_value: str = Field(min_length=1, max_length=64)
+    official_date_precision: Literal["year", "month", "day"]
+    study_phase: StudyPhase
+    selected_candidate_ids: list[str] = Field(default_factory=list)
+    actor: str = Field(default="用户", min_length=1, max_length=128)
+
+
+class DraftRevisionResponse(_StrictModel):
+    job_id: str
+    revision_id: str
+    draft_id: str
+    revision_number: int
+    status: str
+    status_label: str
+    reason: str
+    reason_label: str
+    imported_unpublished_proposal: bool = False
+    review_scope_pending: bool = False
+    actor: str
+    created_at: datetime
+    study_phase: StudyPhase
+    study_phase_label: str
+    protocol_code: str | None = None
+    official_version: str | None = None
+    rule_count: int
+    workflow_stage_count: int
+    content: dict[str, Any]
+    diff: ProtocolDraftRevisionDiff | None = None
+
+
+class ManualEditRequest(_StrictModel):
+    expected_revision_id: str = Field(min_length=1, max_length=128)
+    draft: ProtocolDeconstructionDraft
+    actor: str = Field(default="用户", min_length=1, max_length=128)
+    reviewed_stage_assignment: bool = False
+
+
+class GenerationPreviewResponse(_StrictModel):
+    """生成期间的逐批只读预览；preview_only 内容不得用于发布判断。"""
+
+    job_id: str
+    available: bool
+    reason: str | None = None
+    detail: str | None = None
+    preview_only: bool = True
+    batch_index: int = 0
+    batch_total: int = 0
+    updated_at: str | None = None
+    pending_codes: list[str] = Field(default_factory=list)
+    unresolved_count: int = 0
+    content: dict[str, Any] = Field(default_factory=dict)
+
+
+class FeedbackRequest(_StrictModel):
+    expected_revision_id: str = Field(min_length=1, max_length=128)
+    feedback_kind: DraftFeedbackKind
+    target_rule_code: str = Field(pattern=r"^(IN|EX)-\d{2}$")
+    target_component_id: str | None = Field(default=None, min_length=1, max_length=128)
+    feedback_note: str = Field(min_length=1, max_length=12000)
+    review_parent_scope: bool = False
+    retire_redundant_source: bool = False
+    actor: str = Field(default="用户", min_length=1, max_length=128)
+
+
+class DraftActionRequest(_StrictModel):
+    expected_revision_id: str = Field(min_length=1, max_length=128)
+
+
+class IntegrityIssueDTO(_StrictModel):
+    issue_code: str
+    check_name: str
+    level: str
+    problem: str
+    impact: str
+    next_action: str
+    affected_refs: list[str]
+    repair_scope: list[str]
+
+
+class IntegrityCheckDTO(_StrictModel):
+    check_name: str
+    passed: bool
+    issue_count: int
+
+
+class IntegrityResponse(_StrictModel):
+    job_id: str
+    publishable: bool
+    blocking_count: int
+    review_count: int
+    reminder_count: int
+    summary: str
+    checks: list[IntegrityCheckDTO]
+    issues: list[IntegrityIssueDTO]
+
+
+class SourcesResponse(_StrictModel):
+    job_id: str
+    snapshot_id: str
+    selected_phase: StudyPhase
+    selected_phase_label: str
+    source_spans: dict[str, Any]
+    source_materials: dict[str, Any]
+    draft_revision_id: str | None = None
+    protocol_version_id: str
+    interpretation_sources: list[InterpretationSource] = Field(default_factory=list)
+
+
+class PublishRequest(_StrictModel):
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    actor: str = Field(default="用户", min_length=1, max_length=128)
+    control_job_id: str | None = Field(default=None, min_length=1, max_length=128)
+    control_checkpoint_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_control_references(self) -> "PublishRequest":
+        if (self.control_job_id is None) != (self.control_checkpoint_id is None):
+            raise ValueError("补充审核要求的任务和保存记录必须同时提供")
+        return self
+
+
+class PublishResponse(_StrictModel):
+    job_id: str
+    project_id: str
+    protocol_version_id: str
+    rule_set_id: str
+    rule_set_revision: int
+    replay: bool
+    verification_only: bool = False
+
+
+class RuleReviewEntryDTO(_StrictModel):
+    official_code: str
+    kind: Literal["rule", "procedure", "medication", "scope"]
+    label: str
+    rule_content_hash: str
+    source_refs: list[str]
+    issue_refs: list[str]
+    review: RuleReviewRecord | None
+    reviewed_content_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class RuleReviewResponse(_StrictModel):
+    job_id: str
+    draft_revision_id: str
+    operator_name: str
+    all_reviewed: bool
+    entries: list[RuleReviewEntryDTO]
+    history: list[RuleReviewRecord]
+
+
+class RuleReviewRequest(_StrictModel):
+    expected_revision_id: str = Field(min_length=1)
+    rule_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reviewer_kind: ReviewerKind
+    note: str | None = None
+    result_variables: list[str] = Field(default_factory=list)
+
+
+class RuleBatchReviewItem(_StrictModel):
+    official_code: str = Field(min_length=1)
+    rule_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    note: str | None = None
+    result_variables: list[str] = Field(default_factory=list)
+
+
+class RuleBatchReviewRequest(_StrictModel):
+    expected_revision_id: str = Field(min_length=1)
+    reviewer_kind: ReviewerKind
+    entries: list[RuleBatchReviewItem] = Field(min_length=1, max_length=1000)

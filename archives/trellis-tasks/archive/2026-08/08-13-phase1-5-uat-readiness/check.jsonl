@@ -1,0 +1,3 @@
+{"file":"contracts/v1/interaction/UAT_PHASE1.md","reason":"逐项检查用户任务是否真实可完成，而非只检查页面存在"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"确认退出门槛与阶段边界"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"桌面、窄屏、缩放、无障碍和控制台检查"}

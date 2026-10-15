@@ -1,0 +1,19 @@
+{
+  "attached_count": 32,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-1c0c7c6d50ecfc1a5a638911",
+  "group_id": "d001-ii-package79-sae-tail-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 3,
+    "frozen_plan_owned": 37
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package79-sae-tail-boundary",
+  "owned_count": 8,
+  "prompt_char_count": 46286,
+  "prompt_sha256": "df18186a467b82cab101cde35a0f9f62f7e2939656d0081a5da53f5bd33dec1f",
+  "task_id": "phase5-slice61bq-20260830",
+  "unit_count": 40,
+  "worker": "codebuddy-worker_02"
+}

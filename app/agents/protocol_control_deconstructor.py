@@ -1,0 +1,12465 @@
+"""Provider-neutral Agent adapter for other-protocol control candidates.
+
+This module is deliberately separate from :mod:`protocol_deconstructor`.  The
+official IN/EX Agent has a different member contract and a different identity
+boundary; this adapter only accepts semantic drafts for the frozen
+``ProtocolControlDispositionBatch`` produced by the Phase 5.8b planner.
+
+The provider wire is intentionally positional and inline:
+
+* one disposition is returned for every owned structure unit;
+* candidate drafts carry their own source-structure-unit closure;
+* applicability, trigger, obligation and exception expressions are separate
+  DNF values;
+* source span IDs and exact excerpts live on every semantic atom; and
+* no provider-authored batch, candidate, atom, evidence, relation or node ID is
+  accepted.
+
+The adapter turns this wire into the worker-01 domain draft and lets the
+domain-owned control hydration function assign stable identities.  It never
+calls a model and never writes a project artifact.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import inspect
+import json
+import re
+from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
+from functools import partial
+from types import SimpleNamespace
+from typing import Literal, Protocol
+from app.domain.contracts.record_semantics import RECORD_SEMANTICS_GUIDANCE, RecordSemantics
+
+from pydantic import Field, ValidationError, model_serializer, model_validator
+
+from app.domain.contracts.common import ContractModel
+from app.domain.contracts.repeat_scheme import RepeatEvidenceRoleReference, resolve_repeat_evidence_roles
+from app.domain.contracts.control_evaluation_spec import (
+    ControlAtomEvaluationSpec, validate_control_atom_evaluation,
+)
+from app.domain.contracts.observation_selection import ObservationPolicy
+from app.protocols.supplementary_relation_contract import (
+    is_cross_stage_subsequent_control_supplement,
+    procedure_execution_workflow_stage_id,
+)
+from app.domain.contracts.protocol_controls import (
+    ControlScopeCitation,
+    ControlConditionAtomDraft,
+    ControlConditionDnfDraft,
+    ControlConditionGroupDraft,
+    ControlRepeatTriggerDraft,
+    validate_control_repeat_conditions,
+    ControlCrossSourceRelationDraft,
+    ControlMinimumEvidenceDraft,
+    ControlObligationAtomDraft,
+    ControlContinuingObligation,
+    validate_control_continuing_obligation,
+    ControlObligationDnfDraft,
+    ControlObligationGroupDraft,
+    ControlRelationTargetKind,
+    ControlObligationKind,
+    ControlObligationModality,
+    ControlTemporalScopeKind,
+    CrossSourceRelationKind,
+    KnownOfficialRuleTarget,
+    KnownRequiredProcedureTarget,
+    KnownWorkflowStageTarget,
+    ProtocolControlDiscoveryBatch,
+    ProtocolControlDiscoveryDecision,
+    ProtocolControlDiscoveryDisposition,
+    ProtocolControlBatchDisposition,
+    ProtocolControlBatchDispositionHydrated,
+    ProtocolControlCandidateSemanticDraft,
+    ProtocolControlDispositionBatch,
+    ProtocolStructureUnit,
+    TableContextReadingBound,
+    validate_table_footnote_context_links,
+    ProtocolControlUnitDispositionDraft,
+    ReviewNodeBinding,
+    ReviewNodeRole,
+    StructureUnitDispositionKind,
+    control_candidate_ids_by_draft_index,
+    hydrate_protocol_control_batch_disposition,
+    is_forbidden_protocol_control_code,
+)
+from app.domain.contracts.enums import AnchorType, ReviewStage, StudyPhase, TimeDirection
+from app.domain.contracts.rules import ProspectivePeriod, TimeConstraint
+from app.domain.contracts.control_evidence_policy import ControlEvidenceSourcePolicy
+from app.domain.contracts.control_evidence_dependency import ControlEvidenceAtomReference
+from app.protocols.control_scope_sources import validate_scope_citations
+
+
+from .control_excerpt_restoration import (
+    control_quote_normalize as _control_quote_normalize,
+    recover_control_excerpt as _recover_control_excerpt,
+    restore_source_fields,
+)
+from .protocol_control_candidate_alignment import (
+    SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+    EVIDENCE_POLICY_ALIGNMENT_VERSION,
+    EvidencePolicyCheckError,
+    SourceCandidateAlignmentValidationError,
+    SourceCandidateAlignment,
+    alignment_with_items,
+    bind_candidate_alignment,
+    bind_partial_candidate_alignment,
+    build_candidate_alignment_prompt,
+    configure_candidate_alignment_request,
+    evidence_policy_alignment_pairs,
+    require_evidence_policy_alignment,
+    reviewed_source_type_mismatch_paths,
+    reusable_proven_alignment_items,
+    validate_candidate_alignment,
+)
+from .protocol_control_source_function import (
+    SOURCE_EXCEPTION_FIELD_REPAIR_VERSION,
+    SOURCE_FUNCTION_RECHECK_VERSION,
+    SourceFunctionRecheckUnresolved,
+    apply_source_function_recheck,
+    apply_source_function_field_repair,
+    build_source_function_field_repair_prompt,
+    build_source_function_recheck_prompt,
+    can_recheck_source_function,
+    missing_source_exception_witness,
+)
+from .protocol_control_source_interpretation import (
+    SOURCE_DEFINITION_CONSUMER_PROMPT_VERSION,
+    SOURCE_DEFINITION_CONSUMER_VERSION,
+    SOURCE_INTERPRETATION_PROMPT_VERSION,
+    SOURCE_QUOTE_RECOVERY_VERSION,
+    SOURCE_SCOPE_QUESTION_RECHECK_VERSION,
+    NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
+    SOURCE_TARGET_REVIEW_VERSION,
+    SOURCE_TARGET_REVIEW_POLICY_VERSION,
+    SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
+    TABLE_SEQUENCE_SOURCE_VERSION,
+    SourceDefinitionConsumers,
+    SourceInterpretation,
+    SourceInterpretationValidationError,
+    SourceQuoteCorrection,
+    SourceScopeCorrection,
+    SOURCE_HEADING_SCOPE_RECHECK_VERSION,
+    heading_scope_requires_recheck,
+    SourceStatement,
+    SourceStatementCoverage,
+    schedule_column_links,
+    SourceTargetReview,
+    SourceTargetReviewItem,
+    SourceTemporalScopeUnresolved,
+    SourceUnitComparison,
+    SourceTargetReviewValidationError,
+    apply_source_quote_correction,
+    apply_source_scope_correction,
+    apply_source_scope_question_recheck,
+    can_recheck_source_scope_question,
+    build_source_scope_question_prompt,
+    source_question_official_context,
+    source_question_context_identity,
+    source_scope_question_json_path,
+    build_source_definition_consumers_prompt,
+    build_source_interpretation_prompt,
+    build_source_quote_correction_prompt,
+    build_source_scope_correction_prompt,
+    build_source_target_review_prompt,
+    completed_quote_review_indexes,
+    source_target_context_recheck_needed,
+    source_target_cocited_units,
+    build_source_unit_comparison_prompt,
+    normalize_source_excerpt,
+    simple_visit_action_preserves_time,
+    relative_visit_action_preserves_time,
+    parse_product_source_definition_consumers,
+    parse_product_source_interpretation,
+    _unreported_time_fragments,
+    source_definition_statement_indexes,
+    target_review_indexes,
+    validate_source_interpretation,
+    normalize_schedule_randomization_anchors,
+    normalize_mixed_schedule_scopes,
+    normalize_source_stage_echo,
+    SOURCE_STAGE_ECHO_VERSION,
+    native_schedule_time_excerpt_is_grounded,
+    native_schedule_scope_requires_recheck,
+    validate_source_target_review,
+    validated_source_review_seed,
+    source_unit_comparison_as_review,
+    missing_sequence_source_units,
+)
+
+CONTROL_AGENT_WIRE_VERSION = "phase5/control-agent-wire/v26"
+MAX_SOURCE_INSERT_REPAIRS = 2
+CONTROL_AGENT_INPUT_VERSION = "phase5/control-agent-input/v1"
+CONTROL_AGENT_PROMPT_VERSION = "phase5/control-agent-prompt/v2.83"
+CONTROL_DISCOVERY_INPUT_VERSION = "phase5/control-discovery-input/v1"
+CONTROL_DISCOVERY_PROMPT_VERSION = "phase5/control-discovery-prompt/v3"
+CONTROL_DISCOVERY_WIRE_VERSION = "phase5/control-discovery-wire/v1"
+CONTROL_DISCOVERY_RESPONSE_FORMAT_NAME = "protocol_control_discovery_wire_v1"
+
+DEFAULT_MAX_TRANSPORT_RETRIES = 1
+DEFAULT_MAX_SCHEMA_REPAIRS = 2
+
+__all__ = [
+    "CONTROL_AGENT_INPUT_VERSION",
+    "CONTROL_AGENT_PROMPT_VERSION",
+    "CONTROL_AGENT_WIRE_VERSION",
+    "CONTROL_DISCOVERY_INPUT_VERSION",
+    "CONTROL_DISCOVERY_PROMPT_VERSION",
+    "CONTROL_DISCOVERY_RESPONSE_FORMAT_NAME",
+    "CONTROL_DISCOVERY_WIRE_VERSION",
+    "DEFAULT_MAX_SCHEMA_REPAIRS",
+    "DEFAULT_MAX_TRANSPORT_RETRIES",
+    "DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE",
+    "DEFAULT_PROTOCOL_CONTROL_DISCOVERY_PROMPT_TEMPLATE",
+    "ProtocolControlAgentAttempt",
+    "ProtocolControlAgentInput",
+    "ProtocolControlAgentResponse",
+    "ProtocolControlAgentRunResult",
+    "ProtocolControlAgentRunner",
+    "ProtocolControlAgentOutputValidator",
+    "ProtocolControlAgentTransport",
+    "ProtocolControlAgentWire",
+    "ProtocolControlAgentWireCandidate",
+    "ProtocolControlAgentWireConditionAtom",
+    "ProtocolControlAgentWireConditionDnf",
+    "ProtocolControlAgentWireConditionGroup",
+    "ProtocolControlAgentWireDisposition",
+    "ProtocolControlAgentWireEvidence",
+    "ProtocolControlAgentWireExceptionDnf",
+    "ProtocolControlAgentWireObligationAtom",
+    "ProtocolControlAgentWireObligationDnf",
+    "ProtocolControlAgentWireObligationGroup",
+    "ProtocolControlAgentWireRelation",
+    "ProtocolControlAgentWireValidationError",
+    "ProtocolControlDiscoveryAgentAttempt",
+    "ProtocolControlDiscoveryAgentAttemptCallback",
+    "ProtocolControlDiscoveryAgentInput",
+    "ProtocolControlDiscoveryAgentResponse",
+    "ProtocolControlDiscoveryAgentRunResult",
+    "ProtocolControlDiscoveryAgentRunner",
+    "ProtocolControlDiscoveryAgentWire",
+    "ProtocolControlDiscoveryAgentWireDecision",
+    "ProtocolControlDiscoveryWireValidationError",
+    "build_protocol_control_agent_prompt",
+    "build_protocol_control_discovery_prompt",
+    "build_protocol_control_discovery_repair_prompt",
+    "build_protocol_control_repair_prompt",
+    "bind_protocol_control_discovery_wire",
+    "discovery_wire_to_protocol_control_decisions",
+    "hydrate_protocol_control_agent_output",
+    "hydrate_protocol_control_discovery_agent_output",
+    "parse_protocol_control_agent_output",
+    "parse_protocol_control_agent_wire",
+    "parse_protocol_control_discovery_agent_wire",
+    "protocol_control_agent_json_schema",
+    "protocol_control_agent_prompt_template_sha256",
+    "protocol_control_agent_repair_contract_sha256",
+    "protocol_control_agent_response_format",
+    "protocol_control_discovery_agent_json_schema",
+    "protocol_control_discovery_agent_response_format",
+    "protocol_control_discovery_prompt_template_sha256",
+    "validate_protocol_control_agent_wire",
+    "validate_protocol_control_discovery_agent_wire",
+    "wire_to_protocol_control_batch_disposition",
+    "wire_to_protocol_control_discovery_decisions",
+    "wire_to_protocol_control_discovery_results",
+]
+
+
+PUBLICATION_REPAIR_SCOPE_VERSION = "phase5/publication-candidate-repair-scope/v2"
+_CANDIDATE_FIELD_REPAIR_VERSION = "phase5/candidate-field-repair/v2"
+_SCOPED_SOURCE_CONTEXT_REPAIR_GUIDANCE = (
+    "本次来源闭包修订须区分原文适用范围与系统审核位置。"
+    "applicable_population、条件、时间和例外只能由本动作原文、直接上位范围或经核实的结构关系支持；"
+    "context_units、已有官方/流程目标及其访视标签仅供核对关系，不能自动借作当前动作的限制。"
+    "review_stage及workflow_stage_id说明在哪里核查，不证明原文只适用于该阶段。"
+    "未能找到限定的原文及关系时，不为匹配目录而新增时期或缩窄人群；"
+    "明确未限定与原文存在歧义要分别保留，不能推断全方案没有其他限制。"
+)
+SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION = "phase5/source-requirement-failure-policy/v5"
+# Reporting changes do not change author/repair prompts or invalidate successful reads.
+SOURCE_REQUIREMENT_FAILURE_REASON_VERSION = "phase5/source-requirement-failure-reason/v2"
+
+
+class ProtocolControlAgentWireValidationError(ValueError):
+    """A provider wire error with a bounded repair scope."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        structure_unit_ids: Sequence[str] = (),
+        candidate_indexes: Sequence[int] = (),
+        candidate_ids: Sequence[str] = (),
+        obligation_source_span_ids: Sequence[str] = (),
+        error_class_codes: Sequence[str] = (),
+        allow_candidate_repartition: bool = False,
+        allow_source_closure_rewrite: bool = False,
+        allow_post_enrollment_reclassification: bool = False,
+        allow_source_insert: bool = False,
+        repair_scopes: Sequence[ProtocolControlAgentWireValidationError] = (),
+        validation_findings: Sequence[dict[str, object]] = (),
+        repair_scope_unknown: bool = False,
+    ) -> None:
+        self.code = code
+        self.error_class_codes = tuple(
+            dict.fromkeys((code, *error_class_codes))
+        )
+        self.structure_unit_ids = tuple(dict.fromkeys(structure_unit_ids))
+        self.candidate_indexes = tuple(dict.fromkeys(candidate_indexes))
+        self.candidate_ids = tuple(dict.fromkeys(candidate_ids))
+        self.obligation_source_span_ids = tuple(
+            dict.fromkeys(obligation_source_span_ids)
+        )
+        self.allow_candidate_repartition = allow_candidate_repartition
+        self.allow_source_closure_rewrite = allow_source_closure_rewrite
+        self.allow_post_enrollment_reclassification = allow_post_enrollment_reclassification
+        self.allow_source_insert = allow_source_insert
+        self.repair_scopes = tuple(repair_scopes)
+        self.validation_findings = tuple(validation_findings)
+        self.repair_scope_unknown = repair_scope_unknown
+        super().__init__(f"{code}: {message}")
+
+
+class ProtocolControlAgentResponse(ContractModel):
+    """Raw transport response retained only for adapter audit."""
+
+    session_id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    transport_receipt: dict[str, object] | None = None
+
+
+class ProtocolControlAgentTransport(Protocol):
+    """Provider-neutral transport boundary; no provider is selected here."""
+
+    def start(self, *, prompt: str) -> ProtocolControlAgentResponse: ...
+
+    def continue_session(
+        self, *, session_id: str, prompt: str
+    ) -> ProtocolControlAgentResponse: ...
+class ProtocolControlDiscoveryAgentResponse(ProtocolControlAgentResponse):
+    """Raw first-stage transport response retained for adapter audit."""
+
+
+class ProtocolControlDiscoveryAgentTransport(Protocol):
+    """Provider-neutral transport boundary for coarse discovery."""
+
+    def start(self, *, prompt: str) -> ProtocolControlDiscoveryAgentResponse: ...
+
+    def continue_session(
+        self,
+        *,
+        session_id: str,
+        prompt: str,
+    ) -> ProtocolControlDiscoveryAgentResponse: ...
+
+
+
+class ProtocolControlAgentInput(ContractModel):
+    """The frozen, read-only input projection sent to the control Agent."""
+
+    schema_version: Literal[CONTROL_AGENT_INPUT_VERSION] = Field(...)
+    batch_id: str = Field(min_length=1)
+    coverage_manifest_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    study_phase: StudyPhase
+    owned_units: list[ProtocolStructureUnit] = Field(min_length=1)
+    context_units: list[ProtocolStructureUnit] = Field(default_factory=list)
+    table_context_reading_bounds: dict[str, TableContextReadingBound] = Field(default_factory=dict)
+    table_footnote_context_links: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+    pre_enrollment_structure_unit_ids: list[str] = Field(default_factory=list)
+    owned_visit_instance_by_structure_unit_id: dict[str, str] = Field(
+        default_factory=dict
+    )
+    known_official_targets: list[KnownOfficialRuleTarget] = Field(default_factory=list)
+    known_procedure_targets: list[KnownRequiredProcedureTarget] = Field(default_factory=list)
+    known_workflow_stage_targets: list[KnownWorkflowStageTarget] = Field(
+        default_factory=list
+    )
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "ProtocolControlAgentInput":
+        owned_ids = [unit.structure_unit_id for unit in self.owned_units]
+        context_ids = [unit.structure_unit_id for unit in self.context_units]
+        if len(owned_ids) != len(set(owned_ids)):
+            raise ValueError("Agent 输入 owned_units 不得重复")
+        if len(context_ids) != len(set(context_ids)):
+            raise ValueError("Agent 输入 context_units 不得重复")
+        if set(owned_ids) & set(context_ids):
+            raise ValueError("Agent 输入 owned/context 单元不得重叠")
+        if not set(self.pre_enrollment_structure_unit_ids) <= set(owned_ids):
+            raise ValueError("Agent 输入给药前结构单元必须属于 owned_units")
+        if not set(self.owned_visit_instance_by_structure_unit_id) <= set(owned_ids):
+            raise ValueError("Agent 输入执行访视归属只能引用 owned_units")
+        validate_table_footnote_context_links(
+            self.table_footnote_context_links, self.owned_units, self.context_units,
+        )
+        return self
+
+
+    @classmethod
+    def from_batch(cls, batch: ProtocolControlDispositionBatch) -> "ProtocolControlAgentInput":
+        return cls(
+            schema_version=CONTROL_AGENT_INPUT_VERSION,
+            batch_id=batch.batch_id,
+            coverage_manifest_id=batch.coverage_manifest_id,
+            protocol_version_id=batch.protocol_version_id,
+            study_phase=batch.study_phase,
+            owned_units=list(batch.owned_units),
+            context_units=list(batch.context_units),
+            table_context_reading_bounds=dict(batch.table_context_reading_bounds),
+            table_footnote_context_links=deepcopy(batch.table_footnote_context_links),
+            pre_enrollment_structure_unit_ids=list(
+                batch.pre_enrollment_structure_unit_ids
+            ),
+            owned_visit_instance_by_structure_unit_id=dict(
+                batch.owned_visit_instance_by_structure_unit_id
+            ),
+            known_official_targets=list(batch.known_official_targets),
+            known_procedure_targets=list(batch.known_procedure_targets),
+            known_workflow_stage_targets=list(batch.known_workflow_stage_targets),
+        )
+
+class ProtocolControlDiscoveryAgentInput(ContractModel):
+    """Bounded first-stage input; no full-manifest ID list is included."""
+
+    schema_version: Literal[CONTROL_DISCOVERY_INPUT_VERSION] = Field(...)
+    discovery_batch_id: str = Field(min_length=1)
+    coverage_manifest_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    study_phase: StudyPhase
+    target_units: list[ProtocolStructureUnit] = Field(min_length=1)
+    context_units: list[ProtocolStructureUnit] = Field(default_factory=list)
+    target_structure_unit_ids: list[str] = Field(min_length=1)
+    context_structure_unit_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "ProtocolControlDiscoveryAgentInput":
+        target_ids = [unit.structure_unit_id for unit in self.target_units]
+        context_ids = [unit.structure_unit_id for unit in self.context_units]
+        if target_ids != self.target_structure_unit_ids:
+            raise ValueError("发现输入 target_structure_unit_ids 必须与 target_units 一致")
+        if context_ids != self.context_structure_unit_ids:
+            raise ValueError("发现输入 context_structure_unit_ids 必须与 context_units 一致")
+        if len(target_ids) != len(set(target_ids)):
+            raise ValueError("发现输入 target_units 不得重复")
+        if len(context_ids) != len(set(context_ids)):
+            raise ValueError("发现输入 context_units 不得重复")
+        if set(target_ids) & set(context_ids):
+            raise ValueError("发现输入 target/context 单元不得重叠")
+        if any(
+            unit.study_phase != self.study_phase
+            for unit in (*self.target_units, *self.context_units)
+        ):
+            raise ValueError("发现输入结构单元期别必须与输入一致")
+        return self
+
+    @classmethod
+    def from_batch(
+        cls,
+        batch: ProtocolControlDiscoveryBatch,
+    ) -> "ProtocolControlDiscoveryAgentInput":
+        return cls(
+            schema_version=CONTROL_DISCOVERY_INPUT_VERSION,
+            discovery_batch_id=batch.discovery_batch_id,
+            coverage_manifest_id=batch.coverage_manifest_id,
+            protocol_version_id=batch.protocol_version_id,
+            study_phase=batch.study_phase,
+            target_units=list(batch.target_units),
+            context_units=list(batch.context_units),
+            target_structure_unit_ids=list(batch.target_structure_unit_ids),
+            context_structure_unit_ids=list(batch.context_structure_unit_ids),
+        )
+
+
+class _WireModel(ContractModel):
+    """Explicit base keeps the provider boundary independent of domain models."""
+
+class ProtocolControlDiscoveryWireValidationError(ValueError):
+    """A first-stage provider wire error with bounded repair scope."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        structure_unit_ids: Sequence[str] = (),
+    ) -> None:
+        self.code = code
+        self.structure_unit_ids = tuple(dict.fromkeys(structure_unit_ids))
+        super().__init__(f"{code}: {message}")
+
+
+class ProtocolControlDiscoveryAgentWireDecision(_WireModel):
+    """One coarse routing decision without any provider-created identity."""
+
+    structure_unit_id: str = Field(min_length=1)
+    disposition: ProtocolControlDiscoveryDisposition
+    required_context_structure_unit_ids: list[str] = Field(default_factory=list)
+    rationale: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_context_scope(
+        self,
+    ) -> "ProtocolControlDiscoveryAgentWireDecision":
+        if self.structure_unit_id in self.required_context_structure_unit_ids:
+            raise ValueError("发现输出单元不得将自身声明为上下文")
+        if any(
+            not value.strip()
+            for value in self.required_context_structure_unit_ids
+        ):
+            raise ValueError("发现输出所需上下文结构单元不得为空")
+        if len(self.required_context_structure_unit_ids) != len(
+            set(self.required_context_structure_unit_ids)
+        ):
+            raise ValueError("发现输出所需上下文结构单元不得重复")
+        if self.required_context_structure_unit_ids != sorted(
+            self.required_context_structure_unit_ids
+        ):
+            raise ValueError("发现输出所需上下文结构单元必须按 ID 排序")
+        if (
+            self.disposition
+            in {
+                ProtocolControlDiscoveryDisposition.CONTEXT_ONLY,
+                ProtocolControlDiscoveryDisposition.NON_CONTROL,
+            }
+            and self.required_context_structure_unit_ids
+        ):
+            raise ValueError("context_only/non_control 处置不得反向声明所服务的单元")
+        return self
+
+
+class ProtocolControlDiscoveryAgentWire(_WireModel):
+    """Provider output for one bounded discovery batch."""
+
+    wire_version: Literal[CONTROL_DISCOVERY_WIRE_VERSION] = Field(...)
+    decisions: list[ProtocolControlDiscoveryAgentWireDecision] = Field(
+        min_length=1
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_units(self) -> "ProtocolControlDiscoveryAgentWire":
+        ids = [item.structure_unit_id for item in self.decisions]
+        if len(ids) != len(set(ids)):
+            raise ValueError("发现输出每个结构单元只能有一条粗筛处置")
+        return self
+
+
+
+
+def _validate_parallel_sources(
+    source_span_ids: Sequence[str],
+    source_excerpts: Sequence[str],
+    *,
+    label: str,
+) -> None:
+    if not source_span_ids or not source_excerpts:
+        raise ValueError(f"{label} 必须提供直接来源定位和精确摘录")
+    if len(source_span_ids) != len(source_excerpts):
+        raise ValueError(f"{label} 的 source_span_ids 与 source_excerpts 必须一一对应")
+    if any(not value.strip() for value in source_span_ids):
+        raise ValueError(f"{label} 的 source_span_ids 不得为空")
+    if any(not value.strip() for value in source_excerpts):
+        raise ValueError(f"{label} 的 source_excerpts 不得为空")
+
+
+def _stable_json(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+class ProtocolControlAgentWireConditionAtom(_WireModel):
+    """One inline condition atom; identity is intentionally absent."""
+
+    statement: str = Field(min_length=1)
+    evaluation: ControlAtomEvaluationSpec
+    source_span_ids: list[str] = Field(min_length=1)
+    source_excerpts: list[str] = Field(min_length=1)
+    time_constraint: TimeConstraint | None = Field(...)
+    requires_professional_judgment: bool = Field(...)
+
+    @model_validator(mode="after")
+    def validate_sources(self) -> "ProtocolControlAgentWireConditionAtom":
+        if self.evaluation.version != "control-atom-evaluation/v4" or "repeat_scheme" not in self.evaluation.model_fields_set:
+            raise ValueError("当前解构须显式说明复查要求；没有要求填null，不沿用旧规格")
+        if self.evaluation.repeat_scheme is not None:
+            self.evaluation.repeat_scheme.require_current_extraction()
+        validate_control_atom_evaluation(self, require_explicit=True)
+        _validate_parallel_sources(
+            self.source_span_ids,
+            self.source_excerpts,
+            label="条件原子",
+        )
+        return self
+
+
+class ProtocolControlAgentWireConditionGroup(_WireModel):
+    """A DNF conjunction: all inline atoms in this group must hold.
+
+    Exception drafts may list:
+    - ``waives_trigger_branch_indexes`` as ordinals into the trigger DNF;
+    - ``activates_obligation_group_indexes`` as ordinals into the obligation DNF
+      for replacement consequences when the condition holds.
+
+    Applicability/trigger drafts must leave both lists empty.
+    """
+
+    atoms: list[ProtocolControlAgentWireConditionAtom] = Field(min_length=1)
+    waives_trigger_branch_indexes: list[int] = Field(default_factory=list)
+    activates_obligation_group_indexes: list[int] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_scope_indexes(self) -> "ProtocolControlAgentWireConditionGroup":
+        if self.waives_trigger_branch_indexes:
+            if any(index < 0 for index in self.waives_trigger_branch_indexes):
+                raise ValueError("例外触发分支序位必须为非负整数")
+            if list(self.waives_trigger_branch_indexes) != sorted(
+                set(self.waives_trigger_branch_indexes)
+            ):
+                raise ValueError("例外触发分支序位必须按升序排列且不得重复")
+        if self.activates_obligation_group_indexes:
+            if any(index < 0 for index in self.activates_obligation_group_indexes):
+                raise ValueError("例外激活义务组序位必须为非负整数")
+            if list(self.activates_obligation_group_indexes) != sorted(
+                set(self.activates_obligation_group_indexes)
+            ):
+                raise ValueError("例外激活义务组序位必须按升序排列且不得重复")
+        return self
+
+
+class ProtocolControlAgentWireConditionDnf(_WireModel):
+    """A non-empty DNF: groups are alternative paths."""
+
+    groups: list[ProtocolControlAgentWireConditionGroup] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_groups(self) -> "ProtocolControlAgentWireConditionDnf":
+        fingerprints = {
+            _stable_json(group.model_dump(mode="json")) for group in self.groups
+        }
+        if len(fingerprints) != len(self.groups):
+            raise ValueError("条件 DNF 不得包含重复替代组")
+        return self
+
+
+class ProtocolControlAgentWireContinuingObligation(_WireModel):
+    statement: str = Field(min_length=1)
+    prospective_period: ProspectivePeriod
+    source_span_ids: list[str] = Field(min_length=1)
+    source_excerpts: list[str] = Field(min_length=1)
+    status: Literal["not_due_at_review_node"] = Field(...)
+
+    @model_validator(mode="after")
+    def validate_sources(self) -> "ProtocolControlAgentWireContinuingObligation":
+        _validate_parallel_sources(
+            self.source_span_ids, self.source_excerpts, label="后续持续义务"
+        )
+        return self
+
+
+class ProtocolControlAgentWireObligationAtom(_WireModel):
+    """One typed obligation atom with direct source evidence."""
+
+    kind: ControlObligationKind
+    evaluation: ControlAtomEvaluationSpec
+    statement: str = Field(min_length=1)
+    time_constraint: TimeConstraint | None = Field(...)
+    prospective_period: ProspectivePeriod | None = Field(...)
+    continuing_obligation: ProtocolControlAgentWireContinuingObligation | None = None
+    modality: ControlObligationModality = ControlObligationModality.MANDATORY
+    temporal_scope: ControlTemporalScopeKind | None = None
+    source_span_ids: list[str] = Field(min_length=1)
+    source_excerpts: list[str] = Field(min_length=1)
+    requires_professional_judgment: bool = Field(...)
+
+    @model_validator(mode="after")
+    def validate_sources(self) -> "ProtocolControlAgentWireObligationAtom":
+        if self.evaluation.version != "control-atom-evaluation/v4" or "repeat_scheme" not in self.evaluation.model_fields_set:
+            raise ValueError("当前解构须显式说明复查要求；没有要求填null，不沿用旧规格")
+        if self.evaluation.repeat_scheme is not None:
+            self.evaluation.repeat_scheme.require_current_extraction()
+        validate_control_atom_evaluation(self, require_explicit=True)
+        if self.modality == ControlObligationModality.BEST_EFFORT and self.kind in (
+            ControlObligationKind.PROHIBIT_EVENT,
+            ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE,
+        ):
+            raise ValueError("尽力完成不得用于禁止类义务")
+        if self.modality == ControlObligationModality.RECOMMENDED and self.kind in (
+            ControlObligationKind.PROHIBIT_EVENT,
+            ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE,
+        ):
+            raise ValueError("建议完成不得用于禁止类义务")
+        if self.temporal_scope == ControlTemporalScopeKind.CALENDAR_LOOKBACK:
+            if self.time_constraint is None:
+                raise ValueError("日历回顾范围必须提供结构化时间窗")
+        elif self.temporal_scope is not None and self.time_constraint is not None:
+            raise ValueError("非日历回顾范围不得附加统一日历窗")
+        _validate_parallel_sources(
+            self.source_span_ids,
+            self.source_excerpts,
+            label="义务原子",
+        )
+        if self.continuing_obligation is not None:
+            ControlObligationAtomDraft(
+                kind=self.kind,
+                evaluation=self.evaluation,
+                statement=self.statement,
+                time_constraint=self.time_constraint,
+                prospective_period=self.prospective_period,
+                continuing_obligation=(ControlContinuingObligation(
+                    **self.continuing_obligation.model_dump()
+                ) if self.continuing_obligation is not None else None),
+                modality=self.modality,
+                temporal_scope=self.temporal_scope,
+                source_span_ids=self.source_span_ids,
+                source_excerpts=self.source_excerpts,
+                requires_professional_judgment=self.requires_professional_judgment,
+            )
+        if (
+            self.kind == ControlObligationKind.COMPLETE_OR_VERIFY
+            and self.time_constraint is not None
+        ):
+            if (
+                self.evaluation.determination_mode != "semantic"
+                or self.evaluation.time_purpose != "interval_condition"
+            ):
+                raise ValueError(
+                    "具体操作持续期只能按带命名锚点的语义核对保存；"
+                    "不得以单次值比较证明全程完成，也不得混入访视或结果有效期"
+                )
+        if self.kind == ControlObligationKind.COMPLETE_BEFORE_ANCHOR:
+            if self.time_constraint is None:
+                raise ValueError("节点前完成义务必须提供命名时间锚点")
+            if self.time_constraint.direction != "before":
+                raise ValueError("节点前完成义务的方向必须为 before")
+        if (
+            self.kind == ControlObligationKind.VERIFY_RESULT_VALIDITY
+            and self.time_constraint is None
+        ):
+            raise ValueError("结果有效期义务必须提供结构化时间约束")
+        return self
+
+
+class _ObservationPolicyRepairItem(_WireModel):
+    layer: Literal["applicability", "trigger", "obligation", "exception"] = "obligation"
+    group_index: int = Field(ge=0)
+    atom_index: int = Field(ge=0)
+    policy: ObservationPolicy
+
+
+class _ObservationPolicyRepair(_WireModel):
+    items: list[_ObservationPolicyRepairItem] = Field(min_length=1)
+
+
+class _RecordSemanticsRepairItem(_WireModel):
+    layer: Literal["applicability", "trigger", "obligation", "exception"]
+    group_index: int = Field(ge=0)
+    atom_index: int = Field(ge=0)
+    semantics: RecordSemantics
+
+
+class _RecordSemanticsRepair(_WireModel):
+    items: list[_RecordSemanticsRepairItem] = Field(min_length=1)
+
+
+class _EvidenceSourcePolicyRepair(_WireModel):
+    policy: ControlEvidenceSourcePolicy
+
+
+class _EvidenceSourceTypesRepairItem(_WireModel):
+    candidate_index: int = Field(ge=0)
+    evidence_index: int = Field(ge=0)
+    required_source_types: list[str] = Field(...)
+
+
+class _EvidenceSourceTypesRepair(_WireModel):
+    items: list[_EvidenceSourceTypesRepairItem] = Field(min_length=1)
+
+
+class _TimeOperandRepairItem(_WireModel):
+    group_index: int = Field(ge=0)
+    atom_index: int = Field(ge=0)
+    attribute: Literal["date_range", "record_time", "unresolved"]
+
+
+class _TimeOperandRepair(_WireModel):
+    items: list[_TimeOperandRepairItem] = Field(min_length=1)
+
+
+class ProtocolControlAgentWireObligationGroup(_WireModel):
+    """Obligation conjunction optionally paired to trigger-branch ordinals."""
+
+    atoms: list[ProtocolControlAgentWireObligationAtom] = Field(min_length=1)
+    applies_to_trigger_branch_indexes: list[int] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_apply_indexes(self) -> "ProtocolControlAgentWireObligationGroup":
+        if self.applies_to_trigger_branch_indexes:
+            if any(index < 0 for index in self.applies_to_trigger_branch_indexes):
+                raise ValueError("义务触发分支序位必须为非负整数")
+            if list(self.applies_to_trigger_branch_indexes) != sorted(
+                set(self.applies_to_trigger_branch_indexes)
+            ):
+                raise ValueError("义务触发分支序位必须按升序排列且不得重复")
+        return self
+
+
+class ProtocolControlAgentWireObligationDnf(_WireModel):
+    groups: list[ProtocolControlAgentWireObligationGroup] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_groups(self) -> "ProtocolControlAgentWireObligationDnf":
+        fingerprints = {
+            _stable_json(group.model_dump(mode="json")) for group in self.groups
+        }
+        if len(fingerprints) != len(self.groups):
+            raise ValueError("义务 DNF 不得包含重复替代组")
+        return self
+
+
+class ProtocolControlAgentWireExceptionDnf(ProtocolControlAgentWireConditionDnf):
+    """Exception DNF remains a separate inline layer."""
+
+
+class ProtocolControlAgentWireNode(_WireModel):
+    """A node binding must carry an explicit role, never a free-form label."""
+
+    workflow_stage_id: str = Field(min_length=1)
+    review_stage: ReviewStage
+    role: ReviewNodeRole
+    guidance: str | None = Field(..., min_length=1)
+    scope_citation: ControlScopeCitation | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_historical_binding(self, handler):
+        value = handler(self)
+        if self.scope_citation is None:
+            value.pop("scope_citation", None)
+        return value
+
+
+class ProtocolControlAgentWireEvidence(_WireModel):
+    """Evidence description; it is not an Agent-owned evidence identity."""
+
+    fact_type: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    due_stage: ReviewStage
+    required_source_types: list[str] = Field(...)
+    workflow_stage_ids: list[str] = Field(min_length=1)
+    source_policy: ControlEvidenceSourcePolicy
+    atom_refs: list[ControlEvidenceAtomReference] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_source_types(self) -> "ProtocolControlAgentWireEvidence":
+        if any(not value.strip() for value in self.required_source_types):
+            raise ValueError("最低证据资料类型不得包含空字符串")
+        if any(not value.strip() for value in self.workflow_stage_ids) or len(self.workflow_stage_ids) != len(set(self.workflow_stage_ids)):
+            raise ValueError("最低证据节点身份不得为空或重复")
+        return self
+
+
+class ProtocolControlAgentWireRelation(_WireModel):
+    """One proposal to one planner-declared external target."""
+
+    kind: CrossSourceRelationKind
+    external_target_kind: ControlRelationTargetKind
+    external_target_id: str = Field(min_length=1)
+    candidate_side: Literal["left", "right"]
+    affected_workflow_stage_id: str | None = Field(..., min_length=1)
+    notes: str | None = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def validate_target_shape(self) -> "ProtocolControlAgentWireRelation":
+        if self.external_target_kind not in {
+            ControlRelationTargetKind.OFFICIAL_RULE,
+            ControlRelationTargetKind.REQUIRED_PROCEDURE,
+            ControlRelationTargetKind.WORKFLOW_STAGE,
+        }:
+            raise ValueError("关系提案只能指向规划器声明的官方规则、流程必做项或冻结流程节点")
+        if self.external_target_kind == ControlRelationTargetKind.OFFICIAL_RULE:
+            if not re.fullmatch(r"(IN|EX)-\d{2}", self.external_target_id):
+                raise ValueError("关系提案官方目标必须是既有 IN/EX 编号")
+        elif is_forbidden_protocol_control_code(self.external_target_id):
+            raise ValueError("关系提案流程目标不得使用伪官方控制编号")
+        if (
+            self.kind == CrossSourceRelationKind.SUPPLEMENTARY_REQUIREMENT
+            and self.external_target_kind
+            == ControlRelationTargetKind.REQUIRED_PROCEDURE
+        ):
+            if self.affected_workflow_stage_id is None:
+                raise ValueError("补充流程必做项必须声明首次受影响的冻结审核节点")
+        elif self.affected_workflow_stage_id is not None:
+            raise ValueError("只有补充流程必做项可以声明受影响审核节点")
+        return self
+
+
+class ProtocolControlAgentWireRepeatTrigger(_WireModel):
+    condition_id: str = Field(min_length=1)
+    expression: ProtocolControlAgentWireConditionDnf
+    evidence_roles: list[RepeatEvidenceRoleReference] = Field(...)
+
+    @model_validator(mode="after")
+    def require_complete_evidence_roles(self):
+        resolve_repeat_evidence_roles(self.evidence_roles, [
+            [f"{i}:{j}" for j, _ in enumerate(group.atoms)]
+            for i, group in enumerate(self.expression.groups)
+        ], require_complete=True)
+        return self
+
+
+class ProtocolControlAgentWireCandidate(_WireModel):
+    """Inline candidate semantics without candidate/control identities."""
+
+    title: str = Field(min_length=1)
+    applicable_population: str = Field(min_length=1)
+    applicability_expression: ProtocolControlAgentWireConditionDnf | None = Field(...)
+    trigger_expression: ProtocolControlAgentWireConditionDnf | None = Field(...)
+    obligation_expression: ProtocolControlAgentWireObligationDnf = Field(...)
+    exception_expression: ProtocolControlAgentWireExceptionDnf | None = Field(...)
+    repeat_trigger_conditions: list[ProtocolControlAgentWireRepeatTrigger] = Field(...)
+    review_node_bindings: list[ProtocolControlAgentWireNode] = Field(min_length=1)
+    minimum_evidence: list[ProtocolControlAgentWireEvidence] = Field(min_length=1)
+    source_structure_unit_ids: list[str] = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    cross_source_relations: list[ProtocolControlAgentWireRelation] = Field(...)
+
+    @model_validator(mode="before")
+    @classmethod
+    def canonicalize_source_id_sets(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        normalized = dict(value)
+        for field in ("source_structure_unit_ids", "source_span_ids"):
+            ids = normalized.get(field)
+            if isinstance(ids, list) and all(isinstance(item, str) for item in ids):
+                normalized[field] = sorted(set(ids))
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "ProtocolControlAgentWireCandidate":
+        validate_control_repeat_conditions(self)
+        conditions = {item.condition_id: item for item in self.repeat_trigger_conditions}
+        for expression in (self.applicability_expression, self.trigger_expression,
+                           self.obligation_expression, self.exception_expression):
+            for group in expression.groups if expression is not None else ():
+                for atom in group.atoms:
+                    scheme = atom.evaluation.repeat_scheme if atom.evaluation is not None else None
+                    if scheme is not None and scheme.permission == "investigator_discretion":
+                        permission = conditions[scheme.permission_condition_id]
+                        if not any(item.requires_professional_judgment for branch in permission.expression.groups
+                                   for item in branch.atoms):
+                            raise ValueError("研究者复查许可须保留书面判断条件，不得改成普通语义或签名条件")
+        _require_sorted_unique(self.source_structure_unit_ids, "候选 source_structure_unit_ids")
+        _require_sorted_unique(self.source_span_ids, "候选 source_span_ids")
+        node_keys = [
+            (item.workflow_stage_id, item.review_stage.value, item.role.value)
+            for item in self.review_node_bindings
+        ]
+        if len(node_keys) != len(set(node_keys)):
+            raise ValueError("候选审核节点作用不得重复")
+        node_locations = [
+            (item.workflow_stage_id, item.review_stage.value)
+            for item in self.review_node_bindings
+        ]
+        if len(node_locations) != len(set(node_locations)):
+            raise ValueError("同一审核节点不得绑定多个不同作用")
+        relation_keys = [
+            (
+                item.kind.value,
+                item.external_target_kind.value,
+                item.external_target_id,
+                item.candidate_side,
+                item.affected_workflow_stage_id,
+            )
+            for item in self.cross_source_relations
+        ]
+        if len(relation_keys) != len(set(relation_keys)):
+            raise ValueError("候选关系提案不得重复")
+        atom_spans: set[str] = set()
+        for expression in (
+            self.applicability_expression,
+            self.trigger_expression,
+            self.exception_expression,
+        ):
+            if expression is not None:
+                atom_spans.update(
+                    span_id
+                    for group in expression.groups
+                    for atom in group.atoms
+                    for span_id in atom.source_span_ids
+                )
+        atom_spans.update(
+            span_id
+            for group in self.obligation_expression.groups
+            for atom in group.atoms
+            for span_id in atom.source_span_ids
+        )
+        if not atom_spans <= set(self.source_span_ids):
+            raise ValueError("候选 source_span_ids 必须覆盖全部原子直接来源")
+        return self
+
+
+class ProtocolControlAgentWireDisposition(_WireModel):
+    """Disposition for one frozen owned unit; no candidate index/reference."""
+
+    structure_unit_id: str = Field(min_length=1)
+    disposition: StructureUnitDispositionKind
+    linked_official_code: str | None = Field(...)
+    linked_procedure_catalog_item_id: str | None = Field(...)
+    linked_procedure_catalog_item_ids: list[str] = Field(...)
+    notes: str | None = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def validate_links(self) -> "ProtocolControlAgentWireDisposition":
+        _require_sorted_unique(
+            self.linked_procedure_catalog_item_ids,
+            "linked_procedure_catalog_item_ids",
+        )
+        if (
+            self.linked_procedure_catalog_item_id is not None
+            and self.linked_procedure_catalog_item_ids
+        ):
+            raise ValueError("流程必做处置不得同时使用单项目标和多项目标字段")
+        procedure_target_ids = self.linked_procedure_catalog_item_ids or (
+            [self.linked_procedure_catalog_item_id]
+            if self.linked_procedure_catalog_item_id is not None
+            else []
+        )
+        if self.linked_official_code is not None:
+            if not re.fullmatch(r"(IN|EX)-\d{2}", self.linked_official_code):
+                raise ValueError("结构单元只能链接既有 IN/EX 编号")
+            if self.disposition != StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY:
+                raise ValueError("只有官方入排处置可以链接 IN/EX")
+        if procedure_target_ids:
+            if self.disposition != StructureUnitDispositionKind.REQUIRED_PROCEDURE:
+                raise ValueError("只有流程必做处置可以链接流程目录项")
+        if (
+            self.disposition == StructureUnitDispositionKind.REQUIRED_PROCEDURE
+            and not procedure_target_ids
+        ):
+            raise ValueError("流程必做处置必须链接一个或多个访视级流程目录项")
+        return self
+
+
+class ProtocolControlAgentWire(_WireModel):
+    """Strict, reference-free provider output for one planned batch."""
+
+    wire_version: Literal[CONTROL_AGENT_WIRE_VERSION] = Field(...)
+    dispositions: list[ProtocolControlAgentWireDisposition] = Field(min_length=1)
+    candidate_drafts: list[ProtocolControlAgentWireCandidate] = Field(...)
+
+    @model_validator(mode="after")
+    def validate_unique_dispositions(self) -> "ProtocolControlAgentWire":
+        ids = [item.structure_unit_id for item in self.dispositions]
+        if len(ids) != len(set(ids)):
+            raise ValueError("每个 owned 结构单元只能有一条处置")
+        fingerprints = {
+            _stable_json(item.model_dump(mode="json")) for item in self.candidate_drafts
+        }
+        if len(fingerprints) != len(self.candidate_drafts):
+            raise ValueError("候选语义草稿不得重复")
+        return self
+
+
+class _PostTreatmentAtomRef(_WireModel):
+    group_index: int = Field(ge=0)
+    atom_index: int = Field(ge=0)
+
+
+class _PostTreatmentSharedUnitRelease(_WireModel):
+    structure_unit_id: str = Field(min_length=1)
+    source_excerpt: str = Field(min_length=1)
+    notes: str = Field(min_length=1)
+
+
+class _PostTreatmentScopeRepair(_WireModel):
+    """A semantic deletion decision; unchanged atoms stay owned by the prior wire."""
+
+    removed_atoms: list[_PostTreatmentAtomRef] = Field(min_length=1)
+    released_shared_units: list[_PostTreatmentSharedUnitRelease] = Field(...)
+    removed_unit_dispositions: list[ProtocolControlAgentWireDisposition] = Field(...)
+    title: str = Field(min_length=1)
+    review_node_bindings: list[ProtocolControlAgentWireNode] = Field(min_length=1)
+    minimum_evidence: list[ProtocolControlAgentWireEvidence] = Field(min_length=1)
+    cross_source_relations: list[ProtocolControlAgentWireRelation]
+
+
+class _FutureProhibitionRepair(_WireModel):
+    current_statement: str = Field(min_length=1)
+    current_proposition: str = Field(min_length=1)
+    continuing_obligation: ProtocolControlAgentWireContinuingObligation | None = Field(...)
+
+
+class _CalendarBoundRepair(_WireModel):
+    time_constraint: TimeConstraint | None = Field(...)
+    time_purpose: Literal["not_applicable", "unresolved"] | None = None
+
+
+# Descriptive aliases make the adapter discoverable without introducing a
+# second implementation or a compatibility import from the official Agent.
+ProtocolControlAgentWireNodeBinding = ProtocolControlAgentWireNode
+ProtocolControlAgentWireBatch = ProtocolControlAgentWire
+
+
+def _require_sorted_unique(values: Sequence[str], label: str) -> None:
+    if any(not value.strip() for value in values):
+        raise ValueError(f"{label} 不得包含空 ID")
+    if list(values) != sorted(set(values)):
+        raise ValueError(f"{label} 必须按 ID 排序且不得重复")
+
+
+def _validation_error_summary(exc: ValidationError) -> str:
+    pieces: list[str] = []
+    for error in exc.errors(include_url=False, include_context=False, include_input=False):
+        location = ".".join(str(part) for part in error["loc"])
+        pieces.append(f"{location}: {error['msg']}")
+    return "；".join(pieces)
+
+
+_FORBIDDEN_PROVIDER_KEYS = frozenset(
+    {
+        "schema_version",
+        "batch_id",
+        "discovery_batch_id",
+        "coverage_manifest_id",
+        "manifest_structure_unit_ids",
+        "manifest_structure_unit_count",
+        "manifest_structure_unit_ids_sha256",
+        "expected_structure_unit_ids",
+        "target_structure_unit_ids",
+        "context_structure_unit_ids",
+        "candidate_id",
+        "control_candidate_id",
+        "candidate_ref",
+        "condition_atom_id",
+        "obligation_id",
+        "atom_id",
+        "predicate_id",
+        "evidence_key",
+        "relation_id",
+        "node_id",
+        "root_node_id",
+        "created_by_agent_call_id",
+        "candidate_draft_indexes",
+        "linked_control_candidate_id",
+        "linked_control_candidate_ids",
+    }
+)
+
+
+def _find_forbidden_provider_key(value: object, path: str = "") -> tuple[str, str] | None:
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            # This schema-local comparison label is not a published atom ID.
+            local_predicate = key == "predicate_id" and re.fullmatch(
+                r"(?:candidate_drafts\[\d+\]\."
+                r"(?:(?:applicability|trigger|obligation|exception)_expression|"
+                r"repeat_trigger_conditions\[\d+\]\.expression)"
+                r"\.groups\[\d+\]\.atoms\[\d+\]|atom)\.evaluation\.predicate",
+                path,
+            ) is not None
+            if key in _FORBIDDEN_PROVIDER_KEYS and not local_predicate:
+                return key, f"{path}.{key}" if path else key
+            found = _find_forbidden_provider_key(child, f"{path}.{key}" if path else key)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            found = _find_forbidden_provider_key(child, f"{path}[{index}]")
+            if found is not None:
+                return found
+    return None
+
+
+def parse_protocol_control_agent_wire(text: str) -> ProtocolControlAgentWire:
+    """Parse only the provider wire; context-dependent checks happen later."""
+
+    if not text or not text.strip():
+        raise ProtocolControlAgentWireValidationError("EMPTY_OUTPUT", "模型返回空输出")
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        raise ProtocolControlAgentWireValidationError(
+            "MARKDOWN_OUTPUT",
+            "模型输出不得包含 Markdown 代码块",
+        )
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "INVALID_JSON",
+            f"模型输出不是合法 JSON：{exc}",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ProtocolControlAgentWireValidationError(
+            "TOP_LEVEL_NOT_OBJECT",
+            "模型输出顶层必须是 JSON 对象",
+        )
+    forbidden = _find_forbidden_provider_key(payload)
+    if forbidden is not None:
+        key, path = forbidden
+        raise ProtocolControlAgentWireValidationError(
+            "PROVIDER_ID_FORBIDDEN",
+            f"provider 不得生成系统身份字段 {path}（{key}）",
+        )
+    _collapse_exact_duplicate_day_bounds(payload)
+    _normalize_absent_time_bound_flags(payload)
+    _copy_atom_sources_to_evaluation(payload)
+    try:
+        return ProtocolControlAgentWire.model_validate(payload)
+    except ValidationError as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "WIRE_SCHEMA_INVALID",
+            _validation_error_summary(exc),
+        ) from exc
+
+
+def _copy_atom_sources_to_evaluation(value: object) -> None:
+    """Fill only omitted evaluation source fields from the same atom's own quote."""
+
+    if isinstance(value, list):
+        for child in value:
+            _copy_atom_sources_to_evaluation(child)
+        return
+    if not isinstance(value, dict):
+        return
+    evaluation = value.get("evaluation")
+    if isinstance(evaluation, dict):
+        spans = value.get("source_span_ids")
+        excerpts = value.get("source_excerpts")
+        if (
+            isinstance(spans, list) and spans
+            and isinstance(excerpts, list) and excerpts
+            and len(spans) == len(excerpts)
+            and all(isinstance(item, str) and item for item in [*spans, *excerpts])
+        ):
+            for key, source in (("source_span_ids", spans), ("source_excerpts", excerpts)):
+                if key not in evaluation:
+                    evaluation[key] = source.copy()
+    for child in value.values():
+        _copy_atom_sources_to_evaluation(child)
+
+
+def _normalize_absent_time_bound_flags(value: object) -> None:
+    """Discard boundary openness only when that boundary does not exist."""
+
+    if isinstance(value, list):
+        for child in value:
+            _normalize_absent_time_bound_flags(child)
+        return
+    if not isinstance(value, dict):
+        return
+    constraint = value.get("time_constraint")
+    if isinstance(constraint, dict):
+        for edge in ("lower", "upper"):
+            if (constraint.get(f"{edge}_bound_days") is None
+                    and constraint.get(f"{edge}_bound") is None):
+                constraint[f"{edge}_bound_inclusive"] = True
+    for child in value.values():
+        _normalize_absent_time_bound_flags(child)
+
+
+def _preserve_unstated_observation_selection(value: object) -> None:
+    """Keep an omitted selection unresolved only when its atom cites exact sources."""
+
+    if isinstance(value, list):
+        for child in value:
+            _preserve_unstated_observation_selection(child)
+        return
+    if not isinstance(value, dict):
+        return
+    evaluation = value.get("evaluation")
+    spans = value.get("source_span_ids")
+    excerpts = value.get("source_excerpts")
+    if (
+        isinstance(evaluation, dict)
+        and isinstance(value.get("statement"), str) and value["statement"].strip()
+        and isinstance(spans, list) and spans
+        and isinstance(excerpts, list) and excerpts
+        and len(spans) == len(excerpts)
+        and all(isinstance(item, str) and item.strip() for item in [*spans, *excerpts])
+    ):
+        policy = evaluation.get("observation_policy")
+        if policy is None:
+            evaluation["observation_policy"] = {
+                "mode": "unresolved",
+                "scope": value["statement"],
+                "source_span_ids": spans.copy(),
+                "source_excerpts": excerpts.copy(),
+            }
+        elif isinstance(policy, dict) and policy.get("mode") == "unresolved":
+            for key, source in (
+                ("scope", value["statement"]),
+                ("source_span_ids", spans),
+                ("source_excerpts", excerpts),
+            ):
+                if key not in policy:
+                    policy[key] = source.copy() if isinstance(source, list) else source
+    for child in value.values():
+        _preserve_unstated_observation_selection(child)
+
+
+def _complete_evidence_source_pairs_from_atoms(draft: Mapping[str, Any]) -> None:
+    """Complete a one-sided prefix only when referenced atoms prove every pair."""
+
+    for evidence in draft.get("minimum_evidence", []):
+        if not isinstance(evidence, dict):
+            continue
+        policy = evidence.get("source_policy")
+        refs = evidence.get("atom_refs")
+        if not isinstance(policy, dict) or not isinstance(refs, list):
+            continue
+        spans = policy.get("source_span_ids")
+        excerpts = policy.get("source_excerpts")
+        if not isinstance(spans, list) or not isinstance(excerpts, list) or len(spans) == len(excerpts):
+            continue
+        pairs: list[tuple[str, str]] = []
+        for ref in refs:
+            try:
+                atom = draft[f"{ref['layer']}_expression"]["groups"][ref["group_index"]]["atoms"][ref["atom_index"]]
+                atom_spans = atom["source_span_ids"]
+                atom_excerpts = atom["source_excerpts"]
+                if len(atom_spans) != len(atom_excerpts):
+                    return
+                for pair in zip(atom_spans, atom_excerpts, strict=True):
+                    if pair not in pairs:
+                        pairs.append(pair)
+            except (KeyError, IndexError, TypeError):
+                return
+        if not pairs or not all(isinstance(part, str) and part.strip() for pair in pairs for part in pair):
+            continue
+        source_spans = [pair[0] for pair in pairs]
+        source_excerpts = [pair[1] for pair in pairs]
+        if spans == source_spans and excerpts == source_excerpts[:len(excerpts)]:
+            policy["source_excerpts"] = source_excerpts
+        elif excerpts == source_excerpts and spans == source_spans[:len(spans)]:
+            policy["source_span_ids"] = source_spans
+
+
+def _collapse_exact_duplicate_day_bounds(value: object) -> None:
+    """Remove only identical day bounds expressed twice in a provider wire."""
+
+    if isinstance(value, list):
+        for child in value:
+            _collapse_exact_duplicate_day_bounds(child)
+        return
+    if not isinstance(value, dict):
+        return
+    constraint = value.get("time_constraint")
+    if isinstance(constraint, dict):
+        for prefix in ("lower", "upper"):
+            days_key = f"{prefix}_bound_days"
+            quantity_key = f"{prefix}_bound"
+            days = constraint.get(days_key)
+            quantity = constraint.get(quantity_key)
+            if (
+                type(days) is int
+                and isinstance(quantity, dict)
+                and quantity.get("unit") == "day"
+                and type(quantity.get("value")) is int
+                and quantity["value"] == days
+            ):
+                constraint.pop(quantity_key)
+    for child in value.values():
+        _collapse_exact_duplicate_day_bounds(child)
+def parse_protocol_control_discovery_agent_wire(
+    text: str,
+) -> ProtocolControlDiscoveryAgentWire:
+    """Parse one bounded first-stage provider output."""
+
+    if not text or not text.strip():
+        raise ProtocolControlDiscoveryWireValidationError(
+            "EMPTY_OUTPUT",
+            "发现阶段模型返回空输出",
+        )
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        raise ProtocolControlDiscoveryWireValidationError(
+            "MARKDOWN_OUTPUT",
+            "发现阶段模型输出不得包含 Markdown 代码块",
+        )
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError as exc:
+        raise ProtocolControlDiscoveryWireValidationError(
+            "INVALID_JSON",
+            f"发现阶段模型输出不是合法 JSON：{exc}",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ProtocolControlDiscoveryWireValidationError(
+            "TOP_LEVEL_NOT_OBJECT",
+            "发现阶段模型输出顶层必须是 JSON 对象",
+        )
+    forbidden = _find_forbidden_provider_key(payload)
+    if forbidden is not None:
+        key, path = forbidden
+        raise ProtocolControlDiscoveryWireValidationError(
+            "PROVIDER_ID_FORBIDDEN",
+            f"发现阶段 provider 不得生成系统身份字段 {path}（{key}）",
+        )
+    decisions = payload.get("decisions")
+    if isinstance(decisions, list):
+        for decision in decisions:
+            if not isinstance(decision, dict):
+                continue
+            context_ids = decision.get("required_context_structure_unit_ids")
+            if isinstance(context_ids, list) and all(
+                isinstance(value, str) for value in context_ids
+            ):
+                # This reference closure is set-like. The system owns its
+                # canonical order; duplicates and semantic errors still fail
+                # in the typed validator below.
+                decision["required_context_structure_unit_ids"] = sorted(
+                    context_ids
+                )
+    try:
+        return ProtocolControlDiscoveryAgentWire.model_validate(payload)
+    except ValidationError as exc:
+        raise ProtocolControlDiscoveryWireValidationError(
+            "WIRE_SCHEMA_INVALID",
+            _validation_error_summary(exc),
+        ) from exc
+
+
+def validate_protocol_control_discovery_agent_wire(
+    wire: ProtocolControlDiscoveryAgentWire,
+) -> ProtocolControlDiscoveryAgentWire:
+    """Revalidate one parsed discovery wire at the provider boundary."""
+
+    try:
+        return ProtocolControlDiscoveryAgentWire.model_validate(
+            wire.model_dump(mode="json")
+        )
+    except ValidationError as exc:
+        raise ProtocolControlDiscoveryWireValidationError(
+            "WIRE_SCHEMA_INVALID",
+            _validation_error_summary(exc),
+        ) from exc
+
+
+def wire_to_protocol_control_discovery_decisions(
+    wire: ProtocolControlDiscoveryAgentWire,
+) -> tuple[ProtocolControlDiscoveryDecision, ...]:
+    wire = validate_protocol_control_discovery_agent_wire(wire)
+    return tuple(
+        ProtocolControlDiscoveryDecision(
+            structure_unit_id=decision.structure_unit_id,
+            disposition=decision.disposition,
+            required_context_structure_unit_ids=list(
+                decision.required_context_structure_unit_ids
+            ),
+            rationale=decision.rationale,
+        )
+        for decision in wire.decisions
+    )
+def bind_protocol_control_discovery_wire(
+    wire: ProtocolControlDiscoveryAgentWire,
+    batch: ProtocolControlDiscoveryBatch | ProtocolControlDiscoveryAgentInput,
+) -> tuple[ProtocolControlDiscoveryDecision, ...]:
+    """Bind one wire response to the system-owned batch scope.
+
+    The provider may echo frozen structure-unit IDs, but it cannot choose the
+    batch, create identities, omit targets, or widen the read-only context.
+    Stable manifest closure remains the planner's responsibility.
+    """
+
+    wire = validate_protocol_control_discovery_agent_wire(wire)
+    discovery_input = (
+        batch
+        if isinstance(batch, ProtocolControlDiscoveryAgentInput)
+        else ProtocolControlDiscoveryAgentInput.from_batch(batch)
+    )
+    expected_ids = list(discovery_input.target_structure_unit_ids)
+    actual_ids = [decision.structure_unit_id for decision in wire.decisions]
+    expected_set = set(expected_ids)
+    actual_set = set(actual_ids)
+    if actual_ids != expected_ids:
+        missing = [unit_id for unit_id in expected_ids if unit_id not in actual_set]
+        extra = [unit_id for unit_id in actual_ids if unit_id not in expected_set]
+        raise ProtocolControlDiscoveryWireValidationError(
+            "BATCH_SCOPE_MISMATCH",
+            "发现输出必须按冻结 target_units 原文顺序逐项闭合；"
+            f"missing={missing}, extra={extra}",
+            structure_unit_ids=tuple(dict.fromkeys((*missing, *extra))),
+        )
+
+    available_context_ids = expected_set | set(discovery_input.context_structure_unit_ids)
+    for decision in wire.decisions:
+        out_of_scope = [
+            context_id
+            for context_id in decision.required_context_structure_unit_ids
+            if context_id not in available_context_ids
+        ]
+        if out_of_scope:
+            raise ProtocolControlDiscoveryWireValidationError(
+                "CONTEXT_SCOPE_ESCAPE",
+                "发现输出所需上下文不得越出当前冻结批次可见范围："
+                + "、".join(out_of_scope),
+                structure_unit_ids=(decision.structure_unit_id, *out_of_scope),
+            )
+    bound_decisions = wire_to_protocol_control_discovery_decisions(wire)
+    required_context_ids = {
+        context_id
+        for decision in bound_decisions
+        if decision.disposition in {
+            ProtocolControlDiscoveryDisposition.CANDIDATE,
+            ProtocolControlDiscoveryDisposition.UNCERTAIN,
+        }
+        for context_id in decision.required_context_structure_unit_ids
+    }
+    return tuple(
+        ProtocolControlDiscoveryDecision(
+            structure_unit_id=expected_id,
+            disposition=(
+                ProtocolControlDiscoveryDisposition.CONTEXT_ONLY
+                if expected_id in required_context_ids
+                and decision.disposition == ProtocolControlDiscoveryDisposition.NON_CONTROL
+                else decision.disposition
+            ),
+            required_context_structure_unit_ids=list(
+                decision.required_context_structure_unit_ids
+            ),
+            rationale=(
+                decision.rationale
+                + "；原输出标为 non_control，但同批候选明确引用为必要上下文，"
+                "系统仅保留上下文，不生成独立审核要求。"
+                if expected_id in required_context_ids
+                and decision.disposition == ProtocolControlDiscoveryDisposition.NON_CONTROL
+                else decision.rationale
+            ),
+        )
+        for expected_id, decision in zip(
+            expected_ids, bound_decisions, strict=True
+        )
+    )
+
+
+def hydrate_protocol_control_discovery_agent_output(
+    text: str,
+    batch: ProtocolControlDiscoveryBatch | ProtocolControlDiscoveryAgentInput,
+) -> tuple[ProtocolControlDiscoveryDecision, ...]:
+    """Parse and bind one discovery response without creating identities."""
+
+    try:
+        wire = parse_protocol_control_discovery_agent_wire(text)
+        return bind_protocol_control_discovery_wire(wire, batch)
+    except ProtocolControlDiscoveryWireValidationError:
+        raise
+    except (ValidationError, ValueError) as exc:
+        raise ProtocolControlDiscoveryWireValidationError(
+            "OUTPUT_INVALID",
+            str(exc),
+        ) from exc
+
+
+
+discovery_wire_to_protocol_control_decisions = (
+    wire_to_protocol_control_discovery_decisions
+)
+
+def wire_to_protocol_control_discovery_results(
+    wires: Sequence[ProtocolControlDiscoveryAgentWire],
+) -> tuple[tuple[ProtocolControlDiscoveryDecision, ...], ...]:
+    """Bind parsed provider outputs to the planned batch order."""
+
+    return tuple(
+        wire_to_protocol_control_discovery_decisions(wire)
+        for wire in wires
+    )
+
+
+def protocol_control_discovery_agent_json_schema() -> dict[str, object]:
+    return deepcopy(ProtocolControlDiscoveryAgentWire.model_json_schema())
+
+
+def protocol_control_discovery_agent_response_format() -> dict[str, object]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": CONTROL_DISCOVERY_RESPONSE_FORMAT_NAME,
+            "strict": True,
+            "schema": protocol_control_discovery_agent_json_schema(),
+        },
+    }
+
+def protocol_control_discovery_prompt_template_sha256(
+    prompt_template: str,
+) -> str:
+    payload = "\n\n".join(
+        (
+            CONTROL_DISCOVERY_PROMPT_VERSION,
+            prompt_template.strip(),
+            _DISCOVERY_SYSTEM_CONTRACT,
+            _stable_json(protocol_control_discovery_agent_json_schema()),
+        )
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+
+
+def protocol_control_agent_json_schema() -> dict[str, object]:
+    """Return the strict schema used in the prompt/provider response format."""
+
+    schema = deepcopy(ProtocolControlAgentWire.model_json_schema())
+    from app.domain.contracts.observation_selection import ObservationOrdering
+    if "ObservationOrdering" in schema.get("$defs", {}):
+        schema["$defs"]["ObservationOrdering"] = ObservationOrdering.provider_json_schema()
+    if "RepeatScheme" in schema.get("$defs", {}):
+        schema["$defs"]["RepeatScheme"]["properties"]["version"] = {
+            "type": "string", "const": "repeat-scheme/v4",
+        }
+
+    def normalize_provider_schema(value: object) -> None:
+        if isinstance(value, list):
+            for item in value:
+                normalize_provider_schema(item)
+            return
+        if not isinstance(value, dict):
+            return
+        # MTPLX strict output does not implement conditional JSON Schema.
+        # Hydration still enforces these TimeConstraint rules in Python.
+        for key in ("if", "then", "else"):
+            value.pop(key, None)
+        properties = value.get("properties")
+        if isinstance(properties, dict) and properties:
+            value["required"] = list(properties)
+        for child in value.values():
+            normalize_provider_schema(child)
+
+    normalize_provider_schema(schema)
+    return schema
+
+
+def protocol_control_agent_response_format() -> dict[str, object]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_agent_wire_v1",
+            "strict": True,
+            "schema": protocol_control_agent_json_schema(),
+        },
+    }
+
+
+def protocol_control_batch_response_format(
+    batch: ProtocolControlDispositionBatch | ProtocolControlAgentInput,
+) -> dict[str, Any]:
+    """Narrow the existing author schema to the frozen write scope, not its context."""
+
+    response_format = protocol_control_agent_response_format()
+    schema = response_format["json_schema"]["schema"]
+    owned_ids = [unit.structure_unit_id for unit in batch.owned_units]
+    owned_spans = sorted({span for unit in batch.owned_units for span in unit.source_span_ids})
+    schema["$defs"]["FrozenOwnedSourceSpanId"] = {"type": "string", "enum": owned_spans}
+    dispositions = schema["properties"]["dispositions"]
+    dispositions.update(minItems=len(owned_ids), maxItems=len(owned_ids))
+    for definition in schema["$defs"].values():
+        properties = definition.get("properties", {})
+        if "structure_unit_id" in properties:
+            properties["structure_unit_id"]["enum"] = owned_ids
+        if "source_structure_unit_ids" in properties:
+            properties["source_structure_unit_ids"]["items"]["enum"] = owned_ids
+        if "source_span_ids" in properties:
+            properties["source_span_ids"]["items"]["$ref"] = "#/$defs/FrozenOwnedSourceSpanId"
+    return response_format
+
+
+def protocol_control_candidate_repair_response_format(
+    *, fields: tuple[str, ...] = (),
+    relation_stage_ids: tuple[str, ...] | None = None,
+) -> dict[str, object]:
+    """Ask for one candidate only; the system retains the rest of the wire."""
+
+    original = protocol_control_agent_json_schema()
+    # Current extraction rejects an omitted/null policy; keep the repair
+    # request consistent without changing historical domain decoding.
+    repeat = original["$defs"].get("RepeatScheme")
+    if repeat is not None:
+        policy = repeat["properties"]["no_repeat_result_use"]
+        policy["anyOf"] = [part for part in policy["anyOf"] if part.get("type") != "null"]
+        policy.pop("default", None)
+    candidate_schema: dict[str, Any] = {
+        "$ref": "#/$defs/ProtocolControlAgentWireCandidate"
+    }
+    if fields:
+        if fields != ("cross_source_relations",):
+            raise ValueError("未授权的候选字段修订范围")
+        properties = original["$defs"]["ProtocolControlAgentWireCandidate"]["properties"]
+        candidate_schema = {
+            "type": "object",
+            "properties": {field: properties[field] for field in fields},
+            "required": list(fields),
+            "additionalProperties": False,
+        }
+        if relation_stage_ids is not None:
+            if relation_stage_ids:
+                original["$defs"]["ProtocolControlAgentWireRelation"]["properties"]["affected_workflow_stage_id"] = {
+                    "type": "string", "enum": list(dict.fromkeys(relation_stage_ids)),
+                }
+            else:
+                candidate_schema["properties"]["cross_source_relations"] = {
+                    **candidate_schema["properties"]["cross_source_relations"], "maxItems": 0,
+                }
+    elif relation_stage_ids is not None:
+        raise ValueError("节点约束只适用于已授权的关联字段修订")
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": ("protocol_control_candidate_fields_v1" if fields
+                     else "protocol_control_candidate_repair_v1"),
+            "strict": True,
+            "schema": {
+                "$defs": original["$defs"],
+                "type": "object",
+                "properties": {
+                    "candidate_draft": candidate_schema
+                },
+                "required": ["candidate_draft"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def protocol_control_post_treatment_repair_response_format() -> dict[str, object]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_post_treatment_repair_v2",
+            "strict": True,
+            "schema": _PostTreatmentScopeRepair.model_json_schema(),
+        },
+    }
+
+
+def protocol_control_future_prohibition_repair_response_format() -> dict[str, object]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_future_prohibition_repair_v2",
+            "strict": True,
+            "schema": _FutureProhibitionRepair.model_json_schema(),
+        },
+    }
+
+
+def protocol_control_calendar_bound_repair_response_format() -> dict[str, object]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_calendar_bound_repair_v2",
+            "strict": True,
+            "schema": _CalendarBoundRepair.model_json_schema(),
+        },
+    }
+
+
+def protocol_control_atom_repair_response_format(
+    *, numeric_predicate_only: bool = False, repeat_scheme_only: bool = False,
+) -> dict[str, object]:
+    """Restrict a structural repair to one obligation atom."""
+
+    original = protocol_control_agent_json_schema()
+    definitions = original["$defs"]
+    if numeric_predicate_only and repeat_scheme_only:
+        raise ValueError("单字段修订不能同时更改数值比较和复查合同")
+    if numeric_predicate_only:
+        fields = ("determination_mode", "operation", "predicate", "operand_attribute")
+        definitions = deepcopy(definitions)
+        properties = {
+            "determination_mode": {"type": "string", "const": "deterministic"},
+            "operation": {"type": "string", "const": "value_comparison"},
+            "predicate": {"$ref": "#/$defs/AtomicPredicate"},
+            "operand_attribute": {"type": "string", "const": "value"},
+        }
+        definitions["NumericEvaluationPatch"] = {
+            "type": "object",
+            "properties": properties,
+            "required": list(fields),
+            "additionalProperties": False,
+        }
+    if repeat_scheme_only:
+        definitions = deepcopy(definitions)
+        meaning = deepcopy(definitions["RepeatScheme"])
+        for field in ("source_span_ids", "source_excerpts"):
+            meaning["properties"].pop(field)
+            meaning["required"].remove(field)
+        definitions["RepeatSchemeMeaning"] = meaning
+        definitions["RepeatEvaluationPatch"] = {
+            "type": "object", "properties": {"repeat_scheme": {"$ref": "#/$defs/RepeatSchemeMeaning"}},
+            "required": ["repeat_scheme"], "additionalProperties": False,
+        }
+    root_name = ("RepeatEvaluationPatch" if repeat_scheme_only else
+                 "NumericEvaluationPatch" if numeric_predicate_only else "ProtocolControlAgentWireObligationAtom")
+    root_field = "evaluation_patch" if numeric_predicate_only or repeat_scheme_only else "atom"
+    reachable: set[str] = set()
+    pending: list[str] = [root_name]
+    while pending:
+        name = pending.pop()
+        if name in reachable:
+            continue
+        reachable.add(name)
+        definition = definitions[name]
+        stack: list[object] = [definition]
+        while stack:
+            value = stack.pop()
+            if isinstance(value, dict):
+                ref = value.get("$ref")
+                if isinstance(ref, str) and ref.startswith("#/$defs/"):
+                    pending.append(ref.removeprefix("#/$defs/"))
+                stack.extend(value.values())
+            elif isinstance(value, list):
+                stack.extend(value)
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": ("protocol_control_repeat_evaluation_patch_v2" if repeat_scheme_only else
+                     "protocol_control_numeric_evaluation_patch_v1" if numeric_predicate_only else "protocol_control_atom_repair_v1"),
+            "strict": True,
+            "schema": {
+                "$defs": {name: definitions[name] for name in definitions if name in reachable},
+                "type": "object",
+                "properties": {
+                    root_field: {"$ref": f"#/$defs/{root_name}"}
+                },
+                "required": [root_field],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def protocol_control_observation_repair_response_format() -> dict[str, object]:
+    """Only observation-selection policies, not rewritten obligations."""
+
+    schema = _ObservationPolicyRepair.model_json_schema()
+
+    def require_properties(value: object) -> None:
+        if isinstance(value, dict):
+            properties = value.get("properties")
+            if isinstance(properties, dict):
+                value["required"] = list(properties)
+            for child in value.values():
+                require_properties(child)
+        elif isinstance(value, list):
+            for child in value:
+                require_properties(child)
+
+    require_properties(schema)
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_observation_repair_v2",
+            "strict": True,
+            "schema": schema,
+        },
+    }
+
+
+def protocol_control_record_semantics_repair_response_format() -> dict[str, object]:
+    return {"type": "json_schema", "json_schema": {
+        "name": "protocol_control_record_semantics_repair_v1", "strict": True,
+        "schema": _RecordSemanticsRepair.model_json_schema(),
+    }}
+
+
+def protocol_control_evidence_source_repair_response_format() -> dict[str, object]:
+    """One evidence-source policy, without the surrounding candidate."""
+
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_evidence_source_repair_v1",
+            "strict": True,
+            "schema": _EvidenceSourcePolicyRepair.model_json_schema(),
+        },
+    }
+
+
+def protocol_control_evidence_source_types_repair_response_format() -> dict[str, object]:
+    """Return only the missing evidence-source type lists."""
+
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_evidence_source_types_repair_v1",
+            "strict": True,
+            "schema": _EvidenceSourceTypesRepair.model_json_schema(),
+        },
+    }
+
+
+def protocol_control_time_operand_repair_response_format() -> dict[str, object]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_time_operand_repair_v1",
+            "strict": True,
+            "schema": _TimeOperandRepair.model_json_schema(),
+        },
+    }
+
+
+def protocol_control_candidates_repair_response_format() -> dict[str, object]:
+    """Return only the selected candidate drafts in frozen index order."""
+
+    original = protocol_control_agent_json_schema()
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_candidates_repair_v1",
+            "strict": True,
+            "schema": {
+                "$defs": original["$defs"],
+                "type": "object",
+                "properties": {
+                    "candidate_drafts": {
+                        "type": "array",
+                        "items": {"$ref": "#/$defs/ProtocolControlAgentWireCandidate"},
+                    }
+                },
+                "required": ["candidate_drafts"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE = (
+    "请对本次冻结的方案结构单元逐项完成其他方案控制候选审阅，并严格返回指定 JSON。"
+)
+DEFAULT_PROTOCOL_CONTROL_DISCOVERY_PROMPT_TEMPLATE = (
+    "请对本次发现批次中的结构单元完成高召回粗筛，并严格返回指定 JSON。"
+)
+
+_DISCOVERY_SYSTEM_CONTRACT = (
+    "你是原始方案结构清单的高召回候选发现助手，不是深度语义解构助手。"
+    "只对输入中的 target_units 做粗筛；context_units 仅供理解标题路径、表格语境、交叉引用和相邻原文，"
+    "不得处置、不得作为候选来源，也不得转移 target_units 的所有权。"
+    "每个 target_structure_unit_id 必须恰好返回一条 decision，disposition 只能是 candidate、context_only、"
+    "non_control 或 uncertain，并用 rationale 简要说明处置依据。candidate 表示该单元可能独立规定、补充或改变"
+    "预筛、筛选、导入、基线、随机或首次给药前的适用人群、条件、动作、时间、阈值、例外、所需资料或判定方式；"
+    "它既包括正式入选/排除条款，也包括流程表、检查评估、合并用药/治疗、访视安排、操作方法、附录和其他章节中"
+    "可能影响入排审核的控制要求。候选必须由该单元自身当前有效的规范内容支持；仅指向相关章节不等于"
+    "该单元自身规定了要求。context_only 表示该单元本身不形成独立控制，但必须与另一 candidate 或 uncertain"
+    "单元共同阅读。non_control 表示该单元没有独立的当前入排审核控制内容，包括治疗后执行、行政统计、"
+    "纯背景及无需作为其他候选上下文的导航性文字；"
+    "中心、研究者或申办方的研究启动准备、人员培训、授权、文件归档、监查稽查或系统管理义务，若未明确约束某一"
+    "受试者的资格判断、节点放行或个例证据，应标为 non_control。‘研究启动前’或‘任何研究操作前’只说明项目或中心"
+    "义务的时序，不能单独将其变成受试者入排控制。若同一 target_unit 还包含明确的受试者层面控制，应标为 candidate；"
+    "当前原文不足以区分义务对象时标为 uncertain。目录标题和页码仅是定位指针：如需帮助理解另一候选"
+    "则作 context_only，否则作 non_control，不得因为所指章节可能有要求就把目录项本身标为 candidate 或"
+    "uncertain。修订记录若仅描述曾经修改或优化某项标准，而没有写出当前生效的受试者要求，也不独立产生"
+    "候选；若原文确实载有当前生效的完整要求，按其实际内容处置。摘要或背景中真正陈述了当前筛选、导入、"
+    "基线或给药前条件时仍可为 candidate，不得仅因位于摘要而排除。"
+    "被其他单元声明为必要上下文时不得标为 non_control。uncertain 表示当前可见原文不足以可靠区分前三类，必须进入"
+    "深度分析。候选发现必须保持高召回：不能依据关键词、优先级、章节名称、单一命中或文本长度过滤结构单元；"
+    "不能因为内容未出现在‘入选标准’或‘排除标准’章节就降低等级；有潜在规范内容但条件、对象或适用期别"
+    "确实无法从已给来源判清时使用 uncertain，不得把临床不确定默认为 non_control；纯导航或历史叙述"
+    "缺少规范内容不是临床不确定。"
+    "wire_version 必须固定为 phase5/control-discovery-wire/v1；"
+    "只有 candidate 或 uncertain 可以用 required_context_structure_unit_ids 正向列出完成其深析所需的"
+    "其他单元；context_only 或 non_control 的该字段必须为空，不得反向列出它服务的候选。"
+    "required_context_structure_unit_ids 只能引用本输入已提供的 target_units 或 context_units 的结构单元身份，"
+    "该列表按结构单元 ID 升序排列且不得重复，"
+    "不得创建候选、批次、控制或其他稳定身份，不得输出额外字段。只返回一个完整 JSON 对象。"
+)
+
+_CONTROL_AGENT_SYSTEM_CONTRACT = (
+    RECORD_SEMANTICS_GUIDANCE +
+    "跨章条件的record_semantics写在evaluation中，内层predicate省略或null；"
+    "逐字用途依据须属于evaluation.source_excerpts，不为已有相关原文补造患者记录。"
+    "你是其他方案控制候选语义解构助手，不是官方 IN/EX 解构助手。"
+    "每个条件和义务原子都须填写evaluation：proposition明确本原子成立的含义，不是最终入排结论；"
+    "按原文区分deterministic、semantic和investigator_judgment，不按义务kind自动选择。"
+    "确定性值比较用value_comparison和predicate，比较必须直接表达本原子成立，不依靠后续按禁令名称取反；"
+    "使用value_comparison时evaluation.operand_attribute必须为value；日期属性只能用time_constraint计算，"
+    "研究者书面判断不能伪装成值比较。"
+    "每个值比较的 evaluation.predicate 必须填写 source_clause 或 source_clauses，逐字保留比较依据；"
+    "该片段还必须完整包含在同一 evaluation.source_excerpts 中，不能仅填 source_term。"
+    "predicate_id仅为本规格内局部标识，不是控制或事实身份。日期约束计算用time_constraint，"
+    "并明确使用date_range还是record_time，不能把记录日期冒充事件日期。"
+    "evaluation.version使用control-atom-evaluation/v4。值比较、语义或研究者判断如附有时间条件，"
+    "须另用time_operand_attribute声明核对时间的日期属性，后续代码独立核算时间，不由语义关系代替。"
+    "单独时间计算只用operand_attribute，没有附加时间条件时time_operand_attribute为null。"
+    "time_purpose区分事件筛选范围、临床间隔条件和来源有效期；不能区分时保留unresolved，"
+    "没有时间约束才写not_applicable；带时间约束的新义务须区分通用访视安排、结果有效期、"
+    "以及具体治疗或操作的持续期。具体治疗/操作持续期用complete_or_verify，"
+    "evaluation.determination_mode=semantic、time_purpose=interval_condition，"
+    "原文命名的起止时点写入time_constraint；proposition须保留动作、对象与完整持续要求，"
+    "time_constraint仅表达起始或结束事件相对锚点的日期限制，不能把疗程持续长度写成事件发生的上界；"
+    "完整持续要求留在proposition与逐期观察范围中，不能凭单次记录或仅凭药名值比较证明完成。"
+    "每个原子的来源定位只能用source_clause与source_clauses之一，"
+    "不得同时填两类。求值规格必须说明观察选择规则（一次、任一次或全部记录），"
+    "原文不足时明确标unverified；确定性求值必须声明computation方式，"
+    "semantic与investigator_judgment模式不得夹带任何computation字段。语义或研究者判断模式operation和predicate均为null。"
+    "语义任务不能确定所需事实属性时operand_attribute为null，不为填字段虚构操作数。"
+    "方案作者不根据患者缺记录作判断；工作稿的范围化无记录处理另由宿主负责。"
+    "不要用任意占位值加ne比较器表示无病史，也不要反向解释exists。"
+    "source_span_ids和source_excerpts必须逐项取自本原子的原文；比较的阈值、单位和方向均须有原文依据。"
+    "有发生次数或发生天数期间时，用predicate.occurrence_window保存duration/minimum_count及scope，"
+    "scope.version=occurrence-scope/v4，kind区分anchored_lookback、calendar_period、anchored_period、"
+    "any_consecutive、unresolved，quantifier按原文为single/every/any/unresolved；仅锚定型填anchor_type。"
+    "明确回溯时长但未命名锚点用unanchored_lookback、single、anchor_type=null，实际由当前"
+    "筛选/基线应用政策分别回溯，不把应用政策伪装为方案原文命名日期。"
+    "source_excerpts保留本条件逐字依据，不把每月默认成日历月；不明确时填写unresolved及具体原因。"
+    "scope.start_inclusive/end_inclusive按原文保留统计期间是否含起止当天，未能从方案确定填null，"
+    "不得默认两个端点均包含。"
+    "多个期间另填occurrence_window.horizon，原文起止日期用explicit_dates、命名节点对用anchor_span、"
+    "明示相对统计范围用relative_window；原文明示不限期间才用unbounded，不明用unresolved并保留"
+    "疑问及逐字依据。single的horizon为null，不从外层时间筛选自动借用。scope.boundary_periods"
+    "按原文为full_only/include_partial/unresolved，任一或每一期间均须核对，不按比例折算阈值。"
+    "日历周起始星期仅明确时写calendar_week_start，否则null，非周周期也为null。周期长度沿用"
+    "duration；每30天不等于任意连续30天，未明对齐不能改成滑动。"
+    "连续或锚定期间以scope.duration_basis保留calendar_span（日历跨度如4周为28个日历日、"
+    "两端均计入）或boundary_offset（从边界偏移时长，再依原文开闭决定计入）；未明用unresolved，"
+    "其他期间为null。不得把4周日历跨度算成29天或强行半开以掩盖未明定义。"
+    "频次期间已声明时evaluation.observation_policy和repeat_scheme均为null，不把计数简化为观察选择；"
+    "其与复查的先后规则尚无结构表达时保留完整原文并报告未决。其他求值模式须observation_policy，"
+    "保存原文限定的观察范围scope、逐字来源和mode："
+    "single是明确的一项观察，any是该范围任一次满足，all是该范围每一次均满足。"
+    "只有方案仅要求在本节点完成或核查某操作、未要求该操作的结果正常或资格合格时，"
+    "对应complete_or_verify的semantic原子才可用action_completion；"
+    "其proposition只表达该操作已完成，scope与逐字来源须明确操作及节点。"
+    "已做资格复核不等于资格合格；结果要求仍须作为独立原子按其自身原文核实。"
+    "混有结果、持续期、复查采用或例外而无法拆分时用unresolved，不借action_completion简化。"
+    "不能依据病例恰好只有一项或多项来反推方案规则。任一模式如原文明示采用最近或最早一次，"
+    "在single政策下提供selection：criterion为latest/earliest，ordering_attribute为date_range。"
+    "日期选择不证明内容或研究者判断适用，仍须逐原文核实。条件性复查触发/授权/独立时限/替代或聚合尚不能表示时，"
+    "用unresolved并在scope保留完整要求；不以次数证明复查许可，不简化为any/all。"
+    "观察政策只写在evaluation.observation_policy，内层predicate.observation_policy省略或null。"
+    "复查采用要求只写在evaluation.repeat_scheme，内层predicate.repeat_scheme填null；没有该要求也显式填null。"
+    "复查方案使用repeat-scheme/v4；multi_initial_result仅在原文明示多组初查的结果采用顺序时填写："
+    "per_initial_then_all或per_initial_then_any表示每组先按复查规则采用结果，再要求各组全部或任一满足；"
+    "保留对应source_excerpts。原文未涉及填null，涉及但先后顺序不明填unresolved。"
+    "不得从已有observation_policy、记录数量、日期或有利结果推断这种顺序。"
+    "条件性复查通过trigger_condition_id引用本候选repeat_trigger_conditions"
+    "中的局部condition_id，每项expression保留完整条件DNF；没有时填空数组。该条件不属于四层控制逻辑，"
+    "明确要求研究者许可时，用permission_condition_id引用该数组中的另一完整许可命题，不能与触发条件"
+    "共用编号；investigator_discretion必须提供此引用。许可保留决定者、检查对象、原文限定时间，"
+    "要求明确同意或决定复查的书面内容，而不是签名或普通病情判断。原文无额外批准要求时填null。"
+    "其中研究者作出同意或决定的原子须requires_professional_judgment=true，"
+    "evaluation.determination_mode=investigator_judgment，保留具体许可命题；其他事实子条件维持其原类型。"
+    "触发条件的作用范围不得从time_limit.reference推断。附加条件"
+    "逐原子填写evidence_roles，以零起算group_index/atom_index引用expression.groups中的atoms；"
+    "evidence_role.role按原文填写initial_observation、preceding_observation、target_observation、external_context或unresolved，"
+    "source_excerpts保留支持取证范围的逐字原文；许可针对本次复查时使用target_observation，仅用于许可条件，"
+    "须明确检查对象，不因日期接近推断适用，不将单次许可扩展到其他复查。初查/前次检验与外部用药背景分别标明。"
+    "原文未明填unresolved，不把混合条件树套同一检查范围，不用本次复查结果证明自身触发。附加条件"
+    "不能激活、豁免或替代入排分支，其原子evaluation.repeat_scheme必须为null。明确次数同时声明"
+    "count_scope为per_initial_acquisition/per_current_episode/unresolved；合并结果同时声明"
+    "result_combine为sum/mean/minimum/maximum/all/any/unresolved，同时声明result_population："
+    "initial_and_repeats包含初查及复查、repeats_only仅复查；原文未明或是其他范围用unresolved，"
+    "不猜范围或默认取最佳值。非combine的result_population填null。"
+    "no_repeat_result_use独立按原文填写retain_initial（明示可采用初查）、no_result（明示必须有复查才可采用）"
+    "或unresolved（无明确规定/无法确定）；不能因optional或未见记录推断退回初查，也不证明复查未发生或资料齐全。"
+    "原文明示触发条件不成立可用初查时用retain_initial_when_trigger_false，必须引用完整trigger_condition_id；"
+    "未核实和缺记录不表示条件不成立。"
+    "保留逐字来源、许可/必做/禁止/研究者决定、触发条件、次数、期限和结果采用方式；未规定与未核实须区分。"
+    "不能以日期先后推断复查关系，不能默认一次、无限次或最后/最有利结果；明确最后一次才用use_last_repeat，"
+    "仅明确以复查为准用use_single_repeat，尚不能表达的限制保留原文并标unresolved。"
+    "原文未规定结果采用方式时result_use为not_specified；有相关措辞但未核清为unresolved。"
+    "期限明确初查/前次检查/方案节点参照及开闭边界，月年不换成固定天数；条件与研究者许可不在解构时判真。"
+    "selection须明确window_order：within_window先限时间范围再选记录，before_window_check先选记录再核时间，"
+    "not_applicable仅在无时间约束时使用；原文不能确定顺序则unresolved，不默认改选更旧的有效记录。"
+    "这些模式表达本原子proposition，不按入选、排除或义务类别自动交换量词。"
+    "资料存在、签名存在、行动已办结均不证明履约；不得为强行确定性计算改写或简化要求。"
+    "你只处理本次输入中owned_units的结构单元；context_units仅作只读上下文，不能处置、不能转移所有权。"
+    "只读上下文可以帮助解释术语、访视和重复关系，但它本身不是已发布目标；只有输入中明确列出的"
+    "known_official_targets、known_procedure_targets 或 known_workflow_stage_targets，且当前处置或候选"
+    "建立了相应链接时，才能据此判定某项内容已被覆盖。只读上下文出现相似或重复表述，不能单独作为"
+    "丢弃 owned_unit 中独立人群、条件、动作、时间、阈值、例外或完成强度的理由。"
+    "每个 owned_unit 必须恰好有一条 disposition。可以有 0 个候选；但没有候选时，"
+    "凡不是已链接冻结官方 IN/EX 或流程必做目标的非候选处置，都必须给出明确、具体的非控制理由，"
+    "不能仅返回空数组。"
+    "本项目期别已经由上游冻结；原文明确仅属于其他期别的内容不得成为本期候选。首次给药后或"
+    "治疗期内才执行、且不影响筛选/基线入排判定的检查或随访，应处置为 post_treatment_execution，"
+    "不得绑定到筛选或基线审核节点。"
+    "原文若明确先确定符合入排或入组条件，然后才随机、分组、给药或执行后续治疗，"
+    "这些后续执行动作不是取得本次入排资格的前置条件；同单元若另有真正的本节点限制，"
+    "只为该限制建立候选，后续动作留在原文处置说明，不得把候选绑定为本次必须先完成的操作。"
+    "但章节标题写作‘治疗期’不能单独证明该访视内每项操作均发生在首次给药后。若同一访视的来源顺序"
+    "显示某项操作位于入排复核、随机或首次给药之前，或冻结目录提供了对应的给药前节点，应按给药前"
+    "入排流程核对，不得处置为 post_treatment_execution。"
+    "筛选、导入、基线、随机或首次给药前需要关注的操作要求，即使其偏离本身不直接触发入排失败，"
+    "仍属于入排审核控制点；应保留为相应强度的候选并绑定真实审核节点，不得因它不是排除条件，或"
+    "同一要求也适用于治疗期访视，就处置为 post_treatment_execution、non_enrollment_execution 或普通说明。"
+    "若同一句要求同时覆盖某审核节点前和该节点后的持续期间，当前节点的候选命题和求值只包含截至该节点"
+    "已经发生、能够从当前资料核实的部分；节点后的持续义务可在来源和后续说明中保留，但不得并入"
+    "本节点的确定性命题、不得要求当前受试者证明未来没有发生变化。不得因此丢掉节点前已有的限制；"
+    "后续持续义务本身不构成另一个当前入排节点的补充流程关系，也不得为它单设当前真假命题或最低证据；"
+    "仅当原文另有在后续入排节点到期且可核的增量要求时，才单独建立后续节点候选和关系。"
+    "若原文无法区分两个期间，保留未决边界，不把未来状态写成已满足。"
+    "必须先区分义务对象是个例受试者，还是中心、研究者、申办方及研究组织。研究启动准备、人员方案培训、授权、"
+    "文件归档、监查稽查或系统管理等组织层义务，若未明确约束某一受试者的资格判断、节点放行或个例证据，应按原文"
+    "处置为 non_enrollment_execution 或 administrative_statistical_background，不得建立候选。‘研究启动前’或"
+    "‘任何研究操作前’只说明组织义务的时序，不能单独把它变成受试者入排控制，也不得仅因时点或名称相似就关联"
+    "required_procedure 或 workflow_stage。若同一 owned_unit 同时包含组织义务和明确的受试者层面控制，单元处置为"
+    "other_control_candidate，但候选只能引用并表达受试者层面的真实增量，不能把组织义务带入候选。"
+    "pre_enrollment_structure_unit_ids 是系统根据冻结访视顺序确认的给药前单元，严禁将其中任何单元"
+    "处置为 post_treatment_execution；应与对应的给药前流程目标核对是否已覆盖。"
+    "owned_visit_instance_by_structure_unit_id 是系统对已知流程必做事项冻结的实际执行访视，不是原文中"
+    "‘自筛选/上次访视以来’这类回顾区间起点。映射中的单元必须处置为 required_procedure，不能降级成"
+    "普通补充说明；且只能绑定该实际执行访视和原文明示的执行访视，既不能漏绑，也不能额外绑定同阶段的其他访视。"
+    "访视表中只有项目名称、脚注号和 X 勾选的单元，X 只表示该项目在对应列安排，"
+    "不能由 X 推出额外的持续期、阈值、前后时间窗或条件。先按单元格坐标核对列位，"
+    "再核对该项目是否已由同来源的冻结流程目标覆盖；已覆盖且本格无增量要求时链接已有目标，"
+    "未覆盖时说明其真实流程含义，不得凭项目名称补造控制。脚注或其他章节的独立规范内容"
+    "须在各自来源单元保留，不能因为本格只有 X 就忽略它们。"
+    "其他章节可以对官方入组/排除标准作补充、重复表述或进一步解释，也可以产生新的方案控制"
+    "候选，但它们不会因此成为新的 IN/EX，绝不能新建、改号、合并或重命名官方 IN/EX，"
+    "也不能把流程必做目录项伪装成 IN/EX。候选与正式发布控制分离；本次只返回候选语义。"
+    "核对已知目标是否覆盖时只能依据其 source_excerpts 的实际规定；目录名称只证明有此事项，"
+    "不自动覆盖原文另写的药物、剂量、用法、持续期、时间窗或复核条件。未覆盖的受试者层面细节须保留增量候选，"
+    "不能仅因目录同名就全部降为 required_procedure；也不能将治疗持续期误写为通用访视安排。"
+    "一个候选可覆盖多个 owned_units，也可在同一批次产生多个候选。适用人群、触发条件、"
+    "同一来源同时写有当前节点可核的行为和以较晚节点为锚点才到期的独立要求时，"
+    "按各自最终核对节点分别建立候选，即使两者共用原文单元或属于同一治疗过程也不得合并；"
+    "较晚要求在当前节点只能提前关注，不能提前作最终判断。每个候选分别保留完整的逐字来源、"
+    "义务、时间条件和节点证据；不得为了分组而删除任何一项要求或借用另一项的时长。"
+    "若只是同一当前禁令延续到治疗期间，则由未到期持续义务承载，不重复建立未来节点候选。"
+    "义务和例外必须保持四个独立层次：每层 DNF 的一个 group 表示组内全部条件共同成立，"
+    "多个 group 表示替代路径；不得把且改成或，不得把例外混入触发条件。义务可同时包含"
+    "完成/核对、访视安排/核对、结果有效期核对、基线值选取、达到条件、禁止事件、"
+    "禁止药物或治疗暴露、必须记录和必须专业评估。带 time_constraint 的新义务不得继续使用"
+    "complete_or_verify：访视何时进行或能否合并使用 schedule_or_verify_visit；已有检查结果"
+    "在某锚点前多久内有效使用 verify_result_validity；以哪一次结果作为基线值使用"
+    "select_baseline_value。"
+    "原文的义务语气必须保真：‘可进行/允许进行’表示可选操作，不得改写成无条件必做；次数上限仍须逐字保留。"
+    "‘无需/不要求执行’表示免除该要求，不表示禁止执行；不得使用 prohibit_event 强化原文，"
+    "应以完成/核对适用人群及豁免状态表达。若免予后果受结果有效期限制，"
+    "必须在同一义务组中并列两个原子：用 verify_result_validity 表达有效期并仅由它"
+    "携带 time_constraint；用不携带 time_constraint 的 complete_or_verify 表达免予状态。"
+    "不得将结果有效期虚构成 trigger，不得把两个原子拆成替代义务组，最低证据只证明"
+    "有效期条件成立，不要求证明被免予的操作未发生。免予原子不得抄入或重述"
+    "无条件检查执行清单，以免把免予重新强化为必做操作。"
+    "常规检查、操作或记录本身是义务，不能仅因需要执行就写成触发条件。"
+    "若某项检查、操作或记录对全部适用人群无条件必做，trigger_expression 必须为 null，"
+    "义务组的 applies_to_trigger_branch_indexes 必须为空；不得为了连接义务而虚构触发分支。"
+    "原文只列出一组条件及其后续操作时，也必须把该条件放入触发层，并让义务显式绑定该分支。"
+    "但条件若只是研究者应告知、说明、提醒或确认参与者知晓的指令内容，当前控制动作是完成该沟通，"
+    "不是假定条件事件已经发生。此时用无条件 complete_or_verify 保留完整条件指令，不得把被告知的"
+    "未来条件改成筛选或基线已经发生的 trigger；只有原文直接规定当前控制动作本身在条件成立后才执行时，"
+    "才建立 trigger_expression 并绑定后果义务。must_record 只用于原文明示必须记录、记载或形成病历记录的动作，"
+    "不得把告知、说明、提醒、联系或讨论仅因需要留痕就改写成 must_record。"
+    "义务完成强度区分明确必做、建议与尽力遵循三档，项目无关。modality=mandatory 表示明确必做；"
+    "同一句混有必做和建议动作时，分别建立原子并从直接来源中逐字截取各自支持片段；"
+    "必做原子的 source_excerpts 不得连带包含建议措辞，建议原子保留建议片段。"
+    "原文使用‘建议’或同义措辞时必须使用 modality=recommended；原文使用‘尽可能’、‘在可获得范围内’、"
+    "‘尽量’、‘尽力’或同义措辞时必须使用 modality=best_effort。资料收集的 best_effort 只能搭配"
+    "must_record，不得强化为必须获得完整资料；其他非禁止类义务的 recommended 与 best_effort 保持"
+    "原强度，不得硬化为 mandatory，也不得因此丢弃控制点；禁止事件或禁止用药/治疗暴露不得使用"
+    "recommended 或 best_effort。每个收集原子只允许一种 temporal_scope：明确的近N天/周/月/年回顾窗使用"
+    "最低证据描述若涉及 recommended 或 best_effort 义务对应的动作，也必须明确写出‘建议项’、‘尽量’或"
+    "同等强度说明；最低证据是核对所需资料，不得借‘应包含’、‘需证明’等措辞把非强制动作升级为必达条件。"
+    "中文原文‘建议参与者完成某准备动作’中的‘建议’是完成强度，动作仍是参与者实际准备。"
+    "审核指引和最低证据必须核对是否实际完成该准备动作；禁止写成‘是否建议参与者’、‘已建议参与者’或"
+    "‘建议已告知’。建议项没有记录时不得单独生成证据不足，可写明仅在记录存在时核对，未记录不单独构成缺口。"
+    "calendar_lookback 并同时填写命名锚点的 time_constraint；要求保留完整病程、诊断至今历程或尽可能完整"
+    "专项治疗史时使用 full_history 且不得附加统一日历窗；要求按各项正式入排条款规定窗口审查时使用"
+    "official_rule_defined，不得把某个通用固定时长复制到各条 IN/EX；要求问询自筛选、基线或上次访视以来"
+    "新增情况时使用 since_previous_visit，不得虚构固定天数。一个原文段同时含上述多个范围时必须拆成"
+    "多个 must_record 原子，并让每个原子只引用直接支持该范围的最小连续摘录。资料收集不完整、既往源文件"
+    "不可得或描述不足属于证据缺口，不得在本控制中改写成官方排除标准已触发。"
+    "原文列出多组不同"
+    "条件及各自对应的后续操作时，必须分别建立触发分支和仅适用于该分支的义务组；不得把"
+    "多个条件合成一个笼统触发后要求全部后续操作，也不得为修复输出形状而删除原条件。"
+    "同一段落中多个条件共享一个后果（例如都适用同一结果有效窗）时，仍须保留多个触发分支；"
+    "可以用一个义务组的 applies_to_trigger_branch_indexes 同时列出这些分支序位。每个触发原子"
+    "只引用直接支撑该分支的最小连续原文，不得把跨分号或句号的多组条件整段塞进一个原子。"
+    "applicability_expression 只表达适用人群，不得用检查安排、结果有效窗或审核节点充当人群。"
+    "条件成立后改用较短时间窗或其他后果时，条件原子本身不得携带该后果的时间窗；必须把"
+    "默认后果和替代后果写成两个义务组，并由例外条件组的"
+    "activates_obligation_group_indexes 激活替代义务组。此时"
+    "waives_trigger_branch_indexes 表示默认后果被替代的触发分支范围，不表示无条件取消整条"
+    "控制；默认义务组、替代义务组的 applies_to_trigger_branch_indexes 与例外组的"
+    "waives_trigger_branch_indexes 必须使用完全相同的分支序位。"
+    "时间要求必须完整结构化：相对首次给药、随机、基线等锚点的起始窗口写入 time_constraint；"
+    "同一禁止原文若同时覆盖当前入排节点以前和其后的治疗或研究期间，禁止把整个未来期间写入当前节点的求值命题。"
+    "当前禁止原子只写截至绑定节点可核的事实，prospective_period=null；将后续禁止写入同原子的"
+    "continuing_obligation，保留相同的直接来源定位和逐字摘录、原文支持的 prospective_period，"
+    "status=not_due_at_review_node。后续记录没有当前节点的真假命题，不得据此判定已遵守或已违反。"
+    "若无法从原文和冻结节点区分当前与后续，保持待核，不得改作研究者判断或治疗后事项来绕过。"
+    "原文要求义务持续至试验结束、整个研究期间或治疗期间时，还必须分别写入"
+    "prospective_period=study_period 或 treatment_period。起始窗口与持续期间可以同时存在，"
+    "共同表示同一义务的完整覆盖范围，不得只把持续终点留在标题、说明或摘录中。"
+    "原文为‘从签署知情同意起至末次给药后N天/周/月’的完整区间时，持续义务使用"
+    "prospective_period=study_period，并把末次给药后的尾段写成 anchor_type=last_dose_date、"
+    "direction=after、upper_bound=N；不得把N误写成相对 icf_date 的上限。若已知目标已经完整覆盖"
+    "持续使用或达到条件本身，只保留该区间内真正新增的禁止、沟通或记录义务，不得重复目标义务。"
+    "沟通、确认、告知、讨论或病历记录动作不得继承被沟通内容本身的持续期。若研究期间、治疗期间、"
+    "持续至某时点或末次给药后若干时间出现在被告知、被确认知晓理解或被同意遵守的内容中，"
+    "它只描述沟通对象应遵守的行为或状态，不得写入沟通、确认或记录原子的 prospective_period 或"
+    "time_constraint，也不得为补期间把该措辞粘贴到无关原子的 source_excerpts。只有原文直接要求"
+    "沟通、确认或记录动作本身在某期间反复执行或持续有效时，才为该动作结构化期间。"
+    "原文明确写出N天、N周、N个月或N年时，必须把同一数值和单位写入 time_constraint 的"
+    "lower_bound 或 upper_bound；不得只给锚点和方向而把数值留空。time_constraint 中的"
+    "边界开闭必须逐字保留：‘超过/>N’使用 lower_bound=N 且 lower_bound_inclusive=false；"
+    "‘至少/≥N’使用 lower_bound=N 且 lower_bound_inclusive=true；‘少于/<N’使用"
+    "upper_bound=N 且 upper_bound_inclusive=false；‘不超过/≤N/N以内’使用 upper_bound=N"
+    "且 upper_bound_inclusive=true。比较较早事件与较晚命名锚点时，应把较早事件写成相对"
+    "较晚锚点的 before 时间约束，不得因两个日期同时出现而省略 time_constraint。"
+    "同一来源先给出通用访视、时间窗或基线值规则，随后又为明确列出的项目规定更严格或更精确"
+    "节点时，后者是前者的明确特例。不得把通用窗口传播到这些特例项目，也不得在最低证据或"
+    "跨来源关系中声称特例项目可按较宽窗口完成。冻结流程目标若已在精确节点覆盖特例项目，"
+    "新候选只保留尚未覆盖的通用规则，并通过 further_explanation 说明层级，不重复建立特例义务。"
+    "schedule_or_verify_visit 的 cross_source_relations 必须关联本候选 review_node_bindings 中相同身份的"
+    "workflow_stage；仅写审核节点而不建立关系不构成完整的访视安排。"
+    "通用访视安排必须关联 known_workflow_stage_targets 中的 workflow_stage，不得把通用时间窗分别挂到"
+    "各个 required_procedure。通用基线值选取原则关联 workflow_stage；只针对一个明确检查项的"
+    "特例才关联该 required_procedure。一个候选不得同时混合通用原则和具体检查项特例。"
+    "half_life_evidence只承载本原子正式方案原文明示的单一半衰期时长与适用对象，"
+    "source_span_id/source_excerpt须属于本原子来源；duration_quote逐字保留数值单位，"
+    "applies_to_quote逐字保留适用对象。不得凭记忆、药名、其他人群或范围端点补值；"
+    "原文只规定倍数但未给时长时该字段为null，仍保留倍数要求。"
+    "日历时长、半衰期倍数和 prospective_period 都必须在该原子自己的 source_excerpts 中"
+    "逐字找到直接支持；需要同时引用时间单元和项目单元时，按一一对应规则同时列出。"
+    "条件只缩短起始窗口、不改变持续终点时，替代义务仍必须保留原持续期间，"
+    "并在该替代义务自己的 source_excerpts 中同时引用缩短后起始窗口和"
+    "未改变的持续终点原文，不得只引用缩短条件却自行填入 prospective_period。"
+    "同一表格中药物或治疗类别、时间窗、条件例外不同的独立行，默认分别建立候选；只有它们"
+    "共享同一触发与后果结构时才可合并。activates_obligation_group_indexes 使用完整义务组数组的"
+    "从0开始序位，必须指向替代义务组本身，不能误填默认义务组或触发分支序位。"
+    "表格行的 excerpt 可能省略空格；须按 member_source_refs 中的 .r行.c列 坐标与同表表头列号对齐。"
+    "未出现的列是空单元格，不得把后面非空格的值左移到较早访视；列位或合并单元格无法核实时保留待核，"
+    "不得根据非空值个数猜测访视。"
+    "候选义务的 statement 不得把有源原句只放在 source_excerpts 后再改写对象、否定、"
+    "数量、时间或连接关系；单条义务可逐字保留原句并另填求值规格。多项独立义务拆分时，"
+    "每项义务陈述和对应来源摘录均须逐字对齐，不能把整句重复贴在各子义务的引用栏"
+    "来冒充完整表达。不能逐项保留时明确待核，不输出看似已证的同义句。"
+    "每个原子必须直接给出数量"
+    "完全相等、位置一一对应的"
+    "source_span_ids 与 source_excerpts；同一来源定位需要提供多个摘录时，必须为每个摘录"
+    "重复填写该 source_span_id。摘录必须是输入"
+    "owned_units 原文 excerpt 中逐字连续存在的片段，不得拼写、改写、推断或引用 context。"
+    "每个审核节点必须明确 workflow_stage_id、review_stage 与 role（提前关注、本节点判定或"
+    "后续节点复核），且 workflow_stage_id 只能从输入的 known_workflow_stage_targets 冻结目录"
+    "中选择；必须逐字回显所选目录项的 review_stage，不得发明、改写或新建节点身份。相同"
+    "ReviewStage 下不同 visit_instance 仍是不同的冻结节点，不能合并。若本批没有冻结流程节点"
+    "目录，则不得输出任何候选审核节点。相对首次给药、随机或基线等后续锚点的最终判定必须"
+    "绑定对应的后续决定节点；若冻结目录同时存在普通基线和首次给药前复核，首次给药锚点必须绑定"
+    "首次给药前复核，不得因二者同属 baseline 而退化为普通基线。较早筛选节点只能标记为提前关注，不能同时作最终判定。"
+    "审核指引 guidance 只说明如何核对已经结构化的原始义务，不得把原文动作替换成另一动作。"
+    "例如原文要求参与者实际静息时，应核对静息事实，不得改写成确认研究者已经告知参与者。"
+    "评分量表、检查或测量的方法学段落，若补充了已知流程目标未包含的评估维度、"
+    "计分或测量方法、量程及解释方向、操作规范或引用的评估手册，这些内容会影响入排结果"
+    "的可重复核对，不是普通背景说明。必须只为已知目标未覆盖的方法学增量建立"
+    "supplementary_requirement 候选并关联对应流程目标；不得重复造出‘必须完成该检查’，"
+    "也不得把量表量程或理论取值范围改写为入排阈值。"
+    "不同检查、量表或评分方法若关联不同流程目标，或适用的冻结访视集合不同，必须分成独立候选；"
+    "不得因为它们同属一个专章或共享最终审核阶段，就合并后把某项方法扩展到其他项目的访视。"
+    "方法或操作细节段落没有重复列出访视，不表示它只适用于最早访视。若只读上下文明确同一检查"
+    "在多个入排阶段执行，且原文没有把该方法限定到单一访视，应为所有相关冻结节点保留核对；"
+    "supplementary_requirement 的首次受影响节点不等于该方法的唯一适用节点。只读上下文只用于"
+    "解释适用范围，不得成为候选的直接来源摘录。"
+    "方案正文、方案附录、评分细则、操作规范、评估手册或SOP是控制规则的权威依据，不是某名受试者"
+    "完成该控制所需补充的个例证据。minimum_evidence.required_source_types 只能列受试者层面的实际记录，"
+    "且仅填写原文明文限定的资料种类；原文未限定时必须为空列表 []。"
+    "可用记录的示例只写入 description 或审核指引，不得将示例变成必须满足的来源限制。"
+    "例如已完成的评分表、检查报告、病历记录或研究者评估记录；不得把方案、附录、评分细则、操作规范、"
+    "评估手册或SOP列为个例最低证据，也不得因此制造证据不足。可在义务、审核指引或关系说明中保留"
+    "‘按附录/SOP执行’的规则要求。requires_professional_judgment 仅在该原子本身需要研究者、医生或其他"
+    "专业人员作判断时设为 true；患者自填/自评问卷、机械计分、范围核对或资料是否存在的核对不得仅因"
+    "需要审核就设为 true，也不得为纯患者自填/自评工具额外要求研究者评估记录。医生评分、研究者临床判断"
+    "等原文明示或工具固有的专业评估保持 true。该布尔不表示需另写研究者声明；诊断或评分记录"
+    "本身可承载专业评估。仅在方案要求研究者对特定对象作判断时，才为对应 minimum_evidence"
+    "指定 investigator_assessment，并明确对象、节点及可接受记录；不得扩散到同组件内客观检查"
+    "或一般病史的其他最低证据。义务陈述若保留‘见附录’、‘按SOP’、‘按手册’等权威引用，"
+    "该义务自己的 source_excerpts 必须同时包含直接支持该引用的连续原文；不得只引用方法描述却在陈述中补写引用。"
+    "原文要求在计划访视、各计划访视或计划的访视点执行告知、核对或记录时，候选义务和直接摘录必须"
+    "保留该访视作用域；审核节点只能选择当前 known_workflow_stage_targets 中实际冻结的节点，"
+    "并在其中所有具有 visit_instance 的冻结访视节点分别作本节点判定；每个决定节点均须有"
+    "该阶段到期的最低证据。不得发明未冻结的治疗期访视，也不得为了避开节点不足而把计划访视改写成"
+    "仅在单一访视执行或删除该控制。"
+    "一个候选只表达一个最终决定阶段的完整控制语义。同一来源同时包含筛选期应完成的操作和"
+    "基线/随机/首次给药前才可最终判断的有效窗时，必须按最终决定阶段拆成多个候选；不得用一个候选同时承载"
+    "筛选完成与后续有效性判定。如果冻结官方规则或流程必做目标已完整覆盖检查或操作本身，新候选只保留未被覆盖的"
+    "时间有效性、条件后果或其他增量要求，通过关系关联原目标，不得重复造一条‘必须检查’。每个本节点判定"
+    "必须至少有一项 due_stage 与该 review_stage 一致的最低证据。最低证据必须"
+    "说明 fact_type、description、due_stage 和 workflow_stage_ids。workflow_stage_ids须逐一选择本候选已绑定的"
+    "冻结节点，期别与due_stage一致，表示在哪些具体访视核对此项证据，不能仅凭同属一个阶段概括所有访视。"
+    "核对节点不等于资料生成日期：既往记录可以支持后续判断，病史回溯窗口不等于检查结果有效期。"
+    "每项证据的source_policy分别说明是否要求同期客观原件、是否允许筛选病历转述；"
+    "原文未能明确支持真或假时填null，不凭资料类型、疾病或常识补值。"
+    "result_validity_status为specified时保留原文完整有效期约束；明确未另规定时为not_specified，"
+    "尚无法确定时为unknown，两者的result_validity_constraint均为null，不把未规定说成无限有效。"
+    "source_policy须携带与该证据要求有关且一一对应的source_span_ids和逐字source_excerpts；"
+    "每项最低证据还须用atom_refs说明它用于核实哪个原子：layer从applicability、trigger、"
+    "obligation、exception或repeat_trigger选择；repeat_trigger须同时提供condition_id，"
+    "定位本候选旁置复查条件，其他层不得提供condition_id；group_index及atom_index均为相应表达式中的零基序位。"
+    "一项资料可对应多个原子，但不能只因资料类型相同而关联。核实适用人群、触发和例外的"
+    "资料也须明确关联，不能等到条件已成立才去收集用于确定条件的资料；此关联不表示条件成立。"
+    "不得把病史事件回溯期、禁药洗脱期抄作报告有效期。跨来源关系只能"
+    "从输入的 known_official_targets、known_procedure_targets 或 known_workflow_stage_targets 中选择目标，"
+    "不得发明目标。"
+    "补充流程必做目标时，affected_workflow_stage_id 表示本条增量首次构成可发布入排判定的冻结节点。"
+    "同阶段补充必须选择被补充流程必做项执行访视对应的唯一冻结节点；若增量义务仅为后续锚点的"
+    "结果有效窗或基线值选取等后续控制，且最终判定只能在更晚的基线/随机/首次给药前节点完成，"
+    "则 affected_workflow_stage_id 必须选择该最终判定节点，而非流程必做执行访视；procedure 仍通过"
+    "external_target_id 指向执行访视目标。候选必须在 affected 节点作本节点判定，最低证据也必须在"
+    "该节点所属阶段到期；较早执行访视只能 early_attention，不能对后续锚点作 decide_at_node。"
+    "同阶段普通补充不得用更晚访视目标承接较早筛选影响。"
+    "官方规则关系及非补充流程关系的 affected_workflow_stage_id 必须为 null。"
+    "资料收集原文同时指定筛选和基线时，筛选与基线冻结节点都必须分别使用 decide_at_node，并各有同阶段"
+    "资料收集原文同时指定筛选和后续审核阶段时，筛选与后续审核阶段可合并只表示相同评估可不重复，不得删除后续节点的完成核对。后续节点只核对自上次"
+    "访视以来的增量时，应另建 since_previous_visit 收集原子，不得在基线重新要求完整病史。"
+    "owned 单元只有在其全部临床语义（包括条件、时间窗、阈值、次数、例外和后果）均被目标"
+    "只读摘录完整覆盖时，才可直接处置为 official_eligibility 或 required_procedure。只要"
+    "owned 单元增加、收紧或改变任一语义，就必须处置为 other_control_candidate，并通过"
+    "cross_source_relations 关联原目标；不能用宽泛的‘属于同一流程’吞并新增控制要求。"
+    "对检查项目、药物、治疗、病史、事件或其他枚举清单，必须将 owned 原文与已知目标摘录逐项比对；"
+    "标题、类别或流程名称相同不代表清单完全相同。只要 owned 原文多出任何一项，就必须把未覆盖项保留在新候选义务中。"
+    "对解释、告知、讨论、评估、确认、签署、记录、采集、检查等独立动作谓词，"
+    "必须逐个与已知目标摘录比对；流程名称或最终完成状态相同，不代表其前置动作已被覆盖。"
+    "只有目标摘录明确覆盖每个动作谓词，才能将整个单元直接处置到该目标；"
+    "若仅部分覆盖，单元必须处置为 other_control_candidate，候选义务只保留未覆盖的动作，"
+    "并以 supplementary_requirement 关系关联已知目标，不得重复已覆盖动作。"
+    "原文明确要求解释、告知、评估、确认、签署、记录或采集等一般动作在某命名节点前完成时，"
+    "使用 complete_before_anchor，time_constraint 必须保留该命名锚点且 direction=before；"
+    "这不是访视安排，不得改写为 schedule_or_verify_visit。"
+    "措辞、举例范围或表述粒度不同本身不构成控制增量；只有适用人群、条件、动作、时间窗、阈值、"
+    "逻辑关系或例外范围发生实质变化时，才可建立 supplementary_requirement。"
+    "已知官方或流程目标携带 source_excerpts 时，这些摘录仅是只读权威上下文；"
+    "其中 null 表示对应来源只是表格根等纯结构定位，没有可逐字摘录文本，不得据此补写原文。"
+    "不得将其当作新候选的直接来源。official_rule 关系的 external_target_id "
+    "必须回显 official_code，不能回显 catalog_item_id；"
+    "required_procedure 关系才回显对应 catalog_item_id。任一候选引用的每个"
+    "source_structure_unit_id 都必须在 dispositions 中处置为 other_control_candidate；"
+    "official_eligibility 或 required_procedure 单元不得同时作为候选来源。"
+    "所有要求排序的 ID 列表必须按完整 ID 字典序排列且不得重复。"
+    "provider 不得输出 batch_id、candidate/control/atom/evidence/relation/node 稳定 ID、"
+    "候选位置索引或任何额外字段；系统会在水合时注入身份。仅evaluation.predicate内的predicate_id"
+    "是比较规格必需的局部标识，可按Schema提供，不代表正式条款或事实身份。只输出完整 JSON，"
+    "不得输出 Markdown、日志、说明或发布结论。"
+    "一个 owned 单元的全部语义若由多个访视级流程目标共同覆盖，必须处置为 required_procedure，"
+    "并在 linked_procedure_catalog_item_ids 中完整列出每个目标；不得只保留最早或最后一个访视。"
+    "链接目标只覆盖其 visit_instance 指明的访视；即使多个目标携带相同的跨访视来源摘录，也不得据此"
+    "把未列入链接目标的访视宣称为已覆盖。含未覆盖后续访视的混合单元不能"
+    "处置为 required_procedure，应按其对入排审核的真实作用选择支持说明或增量候选。"
+    "新输出始终令兼容字段 linked_procedure_catalog_item_id 为 null。"
+    "输出前按以下顺序自检：1）other_control_candidate 的 linked_official_code 为 null，"
+    "linked_procedure_catalog_item_id 为 null 且 linked_procedure_catalog_item_ids 为空，只在候选 cross_source_relations 中关联已知目标；"
+    "2）同一 DNF 的合取组内不得出现重复原子，DNF 不得出现重复组，candidate_drafts 不得出现重复候选；"
+    "3）凡含 first_dose_date、randomization_date 或 baseline_date 锚点，最终判定节点和最低证据"
+    "due_stage 均必须是 baseline，screening 若保留只能是 early_attention；"
+    "4）一个来源既有筛选期操作、又有首次给药/随机/基线有效性判定时，按最终决定阶段分成两个候选。"
+    "5）枚举清单必须逐项比对已知目标，目标缺少的任何项必须留在增量候选中。"
+    "清单增量必须写入 obligation_expression 的义务陈述；标题、说明、最低证据或审核指引提到清单，"
+    "都不能代替正式义务保留这些项目。"
+    "6）每个 supplementary_requirement 候选必须至少保留一个已知目标未覆盖的义务增量；"
+    "若条件操作本身已被目标完整覆盖、只有时间有效性或其他共用后果是新增内容，删除重复操作候选，"
+    "但在新增后果候选中保留各条件触发分支，并让共用增量义务显式绑定全部分支。"
+    "7）若 owned 单元的全部语义已被某个已知官方规则或流程目标完整覆盖，必须直接处置到该目标；"
+    "不得以‘维持完整控制链’、‘概括性重述’或‘进一步说明’为理由重复创建候选。"
+    "8）‘不得随机/不得给药’描述锚点事件本身时使用 direction=on；只有原文明确描述事件前窗口时才使用 before。"
+    "9）每条补充流程关系的 affected_workflow_stage_id 必须与候选本节点判定和最低证据到期阶段一致；"
+    "同阶段补充时 affected 还必须与被补充流程必做访视一致；跨阶段后续控制补充时 affected 为最终判定节点，"
+    "procedure 执行访视由 external_target_id 隐式确定。"
+    "10）原文若要求在计划访视执行，所有具有 visit_instance 的冻结访视节点都必须分别作本节点判定，"
+    "并具备该阶段到期的最低证据；不得只保留一个访视或发明目录外访视。"
+    "11）每个资料收集原子逐项核对 modality 与 temporal_scope；日历回顾、完整历程、正式条款自有窗口、"
+    "访视间增量不得合并到同一原子，也不得把资料缺口写成排除成立。"
+    "12）逐个核对独立动作谓词；不得用签署、记录或检查的完成状态替代未被目标摘录明确覆盖的"
+    "解释、告知、讨论、评估、确认或采集动作。"
+)
+
+_CONTROL_REPAIR_CONTRACT = (
+    "这是同一会话内的定向修复。只修复下方列出的冻结批次、结构单元和候选范围；不要替换"
+    "已经接受的批次，不要扩展到其他批次，不要删除未被指出且仍然有效的候选语义。"
+    "provider 不得生成任何稳定 ID。"
+    "修复时必须用修正后的项替换错误项，不得在原数组后追加修正版；返回前删除完全重复的 DNF 组和候选。"
+    "日期属性的独立修订只能使用 items 数组中的 group_index、atom_index、attribute 三个字段；"
+    "attribute 仅可为 date_range、record_time 或 unresolved，不得另造 date_attribute 字段。"
+    "单原子补答仍须遵守时间结构：没有原文支持的 time_constraint 时，"
+    "time_purpose 只能为 not_applicable 或 unresolved，不能补造时限凑合结构。"
+    "观察采用方式仅限 single、any、all、action_completion、unresolved；"
+    "有时间约束或持续期的义务不能用 action_completion 伪装成单次操作，原文不足时保留 unresolved。"
+    "冻结流程目标的 execution_workflow_stage_id 是该流程项目的执行节点，不是所有补充要求的最终判定节点；"
+    "逐条依据原文与冻结节点核对关系，不得将不同访视的流程目标一律指向同一节点。"
+    "修订判定节点时，不能把最后一个冻结节点改写为 later_node_review；"
+    "此角色只有存在更晚的明确判定节点才可使用。"
+    "嵌套求值政策的来源必须由所属原子的逐字来源完整承载：适用条件、否定、例外、许可和结果采用"
+    "不能只留在内层而从外层摘录中省去。若内层引用同一授权原文的完整条件句、外层只摘动作短句，"
+    "须在本轮允许修订的来源字段中保留该完整条件句；不得缩短内层摘录、删除触发条件或借用其他来源来凑合。"
+    "未获授权的来源字段保持不变；无法在授权范围内完整表达时保留具体失败。"
+)
+_CALENDAR_BOUND_REPAIR_PROMPT_VERSION = "phase5/calendar-bound-repair-prompt/v4"
+_AFFECTED_STAGE_REPAIR_GUIDANCE_VERSION = "phase5/affected-stage-repair-guidance/v5"
+_OPTIONAL_ACTION_REPAIR_GUIDANCE_VERSION = "phase5/optional-action-repair-guidance/v2"
+_PERMISSION_MODALITY_REPAIR_GUIDANCE = (
+    "本轮重点：recommended 只表示原文建议，不表示许可或豁免。先从授权原文区分"
+    "建议执行、允许执行、条件成立可免予执行与明确必做，不把 recommended 机械改成 mandatory。"
+    "允许复查用现有 evaluation.repeat_scheme.permission=optional 保留许可、触发条件、"
+    "次数限制和结果采用政策；没有该语义时不得为了修字段新增复查方案。"
+    "义务命题应核对原文规定的许可边界或实际执行后的限制，不要求证明可选操作已经完成；"
+    "其他必做或禁止动作分别保留其自己的条件、原文和强度，不借许可措辞削弱它们。"
+    "未发生复查不证明许可违规，也不能仅因 optional 自动采用初查结果；"
+    "原文未规定的 no_repeat_result_use 保留 unresolved，不补日期、批准或结果政策。"
+    "若原文是条件性免予检查，复用现有免予表达：同一义务组中的 verify_result_validity"
+    "保留有源有效期，complete_or_verify 核对免予适用状态且不携带该时间约束；"
+    "最低证据证明免予条件，不要求证明免予操作未发生，不把它改写成禁止或必做。"
+    "只修授权语义点及其真实依赖；不能完整表达时保留具体软件或来源未决，"
+    "不能通过改强度、删除条件或代填研究者判断来通过校验。"
+)
+_SOURCE_INSERT_GUIDANCE_VERSION = "phase5/source-insert-guidance/v8"
+_TREATMENT_DURATION_REPAIR_GUIDANCE_VERSION = "phase5/treatment-duration-repair-guidance/v2"
+_ATOM_REPAIR_GUIDANCE_VERSION = "phase5/atom-repair-guidance/v4"
+_SOURCE_SCOPE_CORRECTION_POLICY_VERSION = "phase5/source-scope-correction-policy/v6"
+_CALENDAR_REPAIR_TARGET_SELECTION_VERSION = "phase5/calendar-repair-target-selection/v3"
+_TIME_OPERAND_REPAIR_PRIORITY_VERSION = "phase5/time-operand-repair-priority/v3"
+_OBSERVATION_SOURCE_REPAIR_GUIDANCE_VERSION = "phase5/observation-source-repair/v3"
+SOURCE_TARGET_REPAIR_VERSION = "phase5/source-target-structured-feedback/v4"
+
+
+def _repair_problem_guidance(problem: str) -> str:
+    if "SCHEDULE_ENROLLMENT_COLUMN_DISCARDED" in problem:
+        return (
+            "本轮只核该访视表行的处置：已标记的入排审核列不能随给药后列一并排除。"
+            "逐列对照冻结访视与流程目标；有精确对应则链接这些目标，"
+            "后期列不因此成为当前资格要求。脚注无原文时保留未核，不补写阈值或时窗。"
+        )
+    if "OFFICIAL_SOURCE_LINK_MISMATCH" in problem:
+        return (
+            "逐字核对本条原文与冻结官方入排条款，修订结构单元的 linked_official_code；"
+            "不要按邻近编号、疾病主题或其他条目的相似措辞推测。"
+            "没有完整的原文对应时保留需要核对，不得强称已覆盖。"
+        )
+    if "ENROLLMENT_PROHIBITION_UNCOVERED" in problem:
+        return (
+            "本轮重点：逐字核对所指来源片段中的阶段和禁止行为。若该要求在当前入排节点"
+            "需要核实，补齐有来源的控制候选及对应单元链接；若确由已有官方条款或流程事项覆盖，"
+            "仅按冻结目标的原文与来源作真实链接，不得凭标题相似、表格符号或疾病常识跳过。"
+            "不要为了通过校验发明阈值、时窗或临床结论。"
+        )
+    if "WIRE_SCHEMA_INVALID" in problem or "CANDIDATE_REPAIR_INVALID" in problem:
+        guidance: list[str] = []
+        if "观察选择的原文不属于所在控制原子" in problem:
+            guidance.append(
+                "逐个义务原子核对观察选择的来源摘录：其来源编号必须与该原子对应，"
+                "观察选择的每段原文必须完整包含在同编号的原子 source_excerpts 中。"
+                "同句的数量范围确实同时限定并列动作时，可以让各原子分别引用含自身动作、"
+                "数量范围及连接关系的较长连续原句；不得借相邻要求扩大适用范围。"
+                "若原文不能证明当前 single、any 或 all 的选择，应保留 unresolved，"
+                "不要仅缩短引文却保留无据的选择方式，也不要改动其他候选和时间条件。"
+            )
+        if "操作完成核对只适用于无额外持续期或结果条件的必做操作" in problem:
+            guidance.append(
+                "已有明确持续期的操作不能用 action_completion 表示一次完成；保留原文时长与命名时间锚点，"
+                "按整个要求核对实际资料。观察采用方式只可为 single、any、all 或 unresolved；"
+                "只有原文和资料范围足以说明如何覆盖整段期间时才选相应方式，否则用 unresolved，"
+                "不得发明新的 mode，也不得删除持续期或把它改成单次记录。"
+            )
+        if "后续持续义务只适用于禁止类原子" in problem:
+            guidance.append(
+                "后续持续义务不能挂在完成、给药或记录原子上。逐项核对当前动作和未来限制的直接原文："
+                "只有原文确有独立的后续禁止要求，才在有直接来源的禁止原子中表达；"
+                "否则删除无据的后续禁止描述。不得借相邻句子补药量、日期或未来义务。"
+            )
+        if "确定性求值须声明计算方式" in problem:
+            guidance.append(
+                "逐个核对所报原子的原文含义：仅可按来源确定计算的原子用 deterministic 并填写相应 operation；"
+                "语义核对或研究者书面判断的 operation 和 predicate 均为 null。不得为通过结构校验改变临床含义。"
+            )
+        if "数值谓词必须声明单位" in problem:
+            guidance.append(
+                "数值谓词的单位按直接原文填写；原文确为无量纲数值时显式写 unitless，不能凭项目或疾病猜单位。"
+            )
+        if "求值规格须说明观察选择规则" in problem:
+            guidance.append(
+                "观察选择只依据方案原文；明示一次/任一/全部才写对应模式，原文不足则显式标未核实，"
+                "不得按已上传病例记录数推断。"
+            )
+        if "已有时间约束不能在求值规格中忽略" in problem:
+            guidance.append(
+                "若该原子确有逐字支持的时间约束，求值规格须说明该时间条件的用途和对应日期属性；"
+                "若时间词属于另一动作，应收窄本原子的摘录并删除无据时间约束，不能仅改标记绕过校验。"
+            )
+        if guidance:
+            return "本轮仅修复校验所指原子：" + "".join(guidance)
+    """Add only the structural guidance needed for the reported gate failure."""
+
+    value_operand_error = "普通值比较不能冒充日期间隔或书面判断计算" in problem
+    missing_time_error = "未给出时间约束，不能声明已确定其计算用途" in problem
+    if value_operand_error or missing_time_error:
+        guidance = []
+        if value_operand_error:
+            guidance.append(
+                "本轮重点：仅对原文确有明确数值、单位和比较方向的原子使用 "
+                "evaluation.operation=value_comparison；其 evaluation.operand_attribute 必须为 value，"
+                "predicate 须保留原文比较条件。日期间隔和研究者书面判断不得为通过格式校验伪装成数值比较。"
+            )
+        if missing_time_error:
+            guidance.append(
+                "本轮重点：原子没有 time_constraint 时，evaluation.time_purpose 只能是 "
+                "not_applicable 或 unresolved，不得凭访视背景推造日期计算。"
+                "若原文确有明确时间限制，先在同一原子中逐字保留并结构化 time_constraint，"
+                "再说明计算用途；不得为了让规格通过而补造原文没有的时限。"
+            )
+        return "".join(guidance)
+    if "比较条件必须保留求值规格内的逐字原文" in problem:
+        return (
+            "本轮重点：值比较须在 evaluation.predicate.source_clause 或 source_clauses 中"
+            "填写实际比较依据的逐字连续片段，并确保每片段包含在同一 evaluation.source_excerpts 中。"
+            "source_term 不能代替 predicate 的逐字来源；不得为凑校验改写原文或虚构比较条件。"
+        )
+    if "未来计划窗只允许研究药物给药日、末次给药日或研究完成日" in problem:
+        return (
+            "本轮重点：prospective_window 只适用于原文明确以研究药物给药日、"
+            "末次给药日或研究完成日为锚点的未来期限。筛选、基线和随机日期不能放入"
+            "prospective_window；应按原文使用相应的命名时间约束或期间，"
+            "无法确定时保留未核实，不得替换锚点。"
+        )
+    if "FABRICATED_EXCERPT" in problem:
+        return (
+            "本轮重点：原子摘录（source_excerpts）必须从授权结构单元的冻结原文（excerpt）中逐字复制连续文本片段，"
+            "标点、引号和空格均保持原样；不得改写、摘要、同义替换、跨单元拼接或擅自补全；"
+            "source_span_ids 与 source_excerpts 必须按位置一一对应且属于对应结构单元；"
+            "无法逐字核验的摘录不得输出。"
+        )
+    if "SOURCE_SCOPE_ESCAPE" in problem:
+        return (
+            "本轮重点：所有原子引用的来源定位（source_span_ids）必须属于本批授权结构单元的来源闭包，"
+            "不得引用 owned 之外或当前候选未声明的来源片段。"
+        )
+    if "MIXED_OBLIGATION_KIND_SCOPE" in problem:
+        return (
+            "本轮重点：将访视安排与结果有效期分别建候选；两项义务各自保留原文定位。"
+            "访视安排关联冻结流程节点，结果有效期只关联受影响的具体检查项；"
+            "拆分不得删除原有义务或扩大来源范围。"
+        )
+    if "PROSPECTIVE_PERIOD_HOLDER_INVALID" in problem:
+        return (
+            "本轮重点：当前节点的确定性核对原子不得自行携带 prospective_period。"
+            "若同一禁止原文还有未来持续要求，应把当前可核命题与同源 continuing_obligation 分开保存；"
+            "不能辨清时保留需要核对，不得删除当前义务或提前证明未来遵守。"
+        )
+    if "VISIT_SCHEDULE_" in problem:
+        return (
+            "本轮重点：访视合并、访视间隔或访视时间窗使用 schedule_or_verify_visit，"
+            "cross_source_relations 必须包含 external_target_kind=workflow_stage，"
+            "external_target_id 必须等于本候选 review_node_bindings 中对应节点的 workflow_stage_id；"
+            "仅绑定审核节点而把 cross_source_relations 留空仍不合格。"
+            "删除把同一通用时间窗分别挂到各检查项的关系；不得为凑关系发明节点。"
+        )
+    if "确定性求值须声明计算方式，其他模式不得夹带计算方式" in problem:
+        return (
+            "本轮重点：只有能由明确操作数、比较方式及来源计算的原子才使用 deterministic，"
+            "并填写相应 computation；需要结合记录语义核实动作是否完成时使用 semantic，"
+            "且 computation、operation、predicate 均为 null。不得为通过格式校验虚构计算方式。"
+        )
+    if "RESULT_VALIDITY_" in problem:
+        return (
+            "本轮重点：已有检查结果在命名锚点前的有效窗使用 verify_result_validity，"
+            "并以 supplementary_requirement 精确关联受影响的 required_procedure。"
+            "若有效窗相对首次给药/随机/基线锚点且流程必做在较早访视执行，affected_workflow_stage_id"
+            "必须选择最终判定节点，screening 仅 early_attention。"
+        )
+    if "BASELINE_VALUE_SCOPE_" in problem:
+        return (
+            "本轮重点：基线值选取使用 select_baseline_value。通用原则关联 workflow_stage；"
+            "具体检查项特例单独建候选并关联对应 required_procedure，不得在同一候选中混合两种范围。"
+            "须从首次请求的冻结目标原文核对项目与访视，在 cross_source_relations 中保存精确目标，"
+            "不能只在标题提及，也不能关联不受此原则影响的检查。"
+        )
+    if "ACTION_TARGET_SCOPE_MISMATCH" in problem:
+        return (
+            "本轮重点：按每项动作实际适用的冻结流程目标拆分候选。一个候选中的全部来源动作必须"
+            "具有相同的目标集合；只适用于较早节点的动作不得与跨节点动作合并，也不得绑定到更晚节点。"
+        )
+    if "CANDIDATE_OBLIGATION_ACTION_UNCOVERED" in problem:
+        return (
+            "本轮重点：把校验指出的未覆盖独立动作写回 obligation_expression，"
+            "并保留原文的完成强度和最小连续摘录。标题、处置说明、最低证据和审核指引"
+            "不能代替正式义务；不要删除候选内其他仍有效的义务。"
+        )
+    if "ACTION_INCREMENT_RELATION_UNDERSTATED" in problem:
+        return (
+            "本轮重点：候选包含已知流程必做项未覆盖的独立动作时，关系类型必须使用"
+            "supplementary_requirement，并填写该增量首次影响的冻结审核节点；"
+            "不得仅标记为 further_explanation。"
+        )
+    if "USER_FACING_ITEM_COUNT_MISMATCH" in problem:
+        return (
+            "本轮重点：审核指引和最低证据中出现的‘N项’必须与正式义务的项目计数一致。"
+            "不要因一个项目包含多个子测量值，就在用户可见文字中改变项目总数。"
+        )
+    if "REVIEW_GUIDANCE_ACTION_INVENTED" in problem:
+        return (
+            "本轮重点：审核指引只能说明如何核对原义务，不得新增或替换动作。"
+            "原文要求实际完成、达到或保持某状态时，直接核对该事实；"
+            "不得改写为告知、说明、提醒或其他原文没有要求的沟通动作。"
+        )
+    if "MINIMUM_EVIDENCE_MODALITY_DROPPED" in problem:
+        return (
+            "本轮重点：最低证据若描述建议或尽力完成义务对应的动作，必须显式保留原强度。"
+            "可要求核对记录，但不得把建议项或尽力项写成必须达到、必须证明的条件。"
+        )
+    if "MINIMUM_EVIDENCE_AUTHORITY_SOURCE_CONFLATED" in problem:
+        return (
+            "本轮重点：方案、附录、评分细则、操作规范、评估手册和SOP属于规则依据，不是受试者个例证据。"
+            "从 minimum_evidence.required_source_types 删除这些权威依据，仅保留原文明文限定的受试者资料种类；"
+            "未限定时保持空列表，不能另填示例。规则引用仍保留在义务、审核指引或关系说明中。"
+        )
+    if "SELF_REPORTED_TOOL_MARKED_PROFESSIONAL" in problem:
+        return (
+            "本轮重点：患者自填或自评问卷不属于研究者专业判断。将相应原子的 requires_professional_judgment"
+            "设为 false；只有医生评分、研究者临床判断或其他确需专业人员判断的原子才设为 true。"
+        )
+    if "SELF_REPORTED_TOOL_RESEARCHER_EVIDENCE" in problem:
+        return (
+            "本轮重点：纯患者自填或自评问卷的个例证据是已完成问卷及其可核对记录，不得额外要求研究者评估记录。"
+            "只有存在独立研究者判断义务时，才把研究者评估记录列为最低证据。"
+        )
+    if "AUTHORITY_REFERENCE_SOURCE_DROPPED" in problem:
+        return (
+            "本轮重点：义务陈述保留附录、SOP、手册或评分细则引用时，该义务自己的 source_excerpts 必须"
+            "包含直接支持该引用的连续原文；如拆分原子，应把引用句作为同一原子的另一条摘录并重复来源定位。"
+        )
+    if "PARTICIPANT_PREPARATION_RECAST_AS_ADVICE" in problem:
+        return (
+            "本轮重点：建议强度修饰参与者实际完成的准备动作。审核指引和最低证据应写成"
+            "‘如有记录，核对参与者是否实际静息、休息或完成相应准备（建议项；未记录不单独构成缺口）’；"
+            "禁止使用‘是否建议参与者’、‘已建议参与者’或‘建议已告知’。"
+        )
+    if "RECORD_PRECISION_COMPRESSED" in problem:
+        return (
+            "本轮重点：原文明示记录单位、整数或小数位数时，必须使用独立 must_record 原子，"
+            "逐字保留单位和精度；不得用 complete_or_verify 或完成测量概括记录要求。"
+        )
+    if "具体操作持续期只能按带命名锚点的语义核对保存" in problem:
+        return (
+            "本轮重点：具体治疗或操作的持续期可用 complete_or_verify，"
+            "但 evaluation 必须是 semantic、time_purpose=interval_condition，"
+            "同时保存原文命名的 time_constraint 和完整持续要求。"
+            "time_constraint只写起止事件相对锚点的日期要求，不得将持续N天写成发生于N天内；"
+            "不能用一次药名值比较证明疗程完成；访视安排和结果有效期仍分别使用其专门类型。"
+        )
+    if "CONDITIONAL_BRANCH_MAPPING_INVALID" in problem:
+        return (
+            "本轮重点：先区分当前动作本身受条件触发，还是当前动作仅为告知、说明或记录一项条件指令。"
+            "前者必须把每组条件各自保留为触发分支；多个真实条件共享同一后果时，用一个义务组绑定全部触发分支；"
+            "后者用无条件 complete_or_verify"
+            "保留完整指令，不得假定被告知的未来条件已在当前节点发生。must_record 仅保留原文明示的记录动作。"
+        )
+    if "PLANNED_VISIT_SCOPE_DROPPED" in problem:
+        return (
+            "本轮重点：原文要求在计划访视执行时，逐一绑定 known_workflow_stage_targets 中所有具有"
+            " visit_instance 的冻结访视节点并分别作本节点判定，为每个决定节点补齐对应阶段的最低证据。不得只保留"
+            "单一访视，也不得发明目录外节点。"
+        )
+    if "DECISION_STAGE_EVIDENCE_MISSING" in problem:
+        return (
+            "本轮重点：每个本节点判定所对应的 review_stage 都必须至少有一项同阶段到期的最低证据；"
+            "补充事实类型、可接受证据说明和 due_stage，不得删除决定节点来绕过证据要求。"
+        )
+    if "ROUTINE_OBLIGATION_MISLABELED_AS_TRIGGER" in problem:
+        return (
+            "本轮重点：期间、时点或常规检查安排不是触发条件。无条件操作应将 trigger_expression 设为 null；"
+            "若原文先要求若干事项全部满足，再写‘任一未满足则不得进入后续节点’，"
+            "后一句是前述要求不满足时的后果，不是激活前述要求的前提。"
+            "应保留全部合取义务与真实决定节点，不得将其倒置为触发条件或删除后果。"
+            "仅原文另有独立的适用人群或事件前提时才建立 trigger_expression；"
+            "若该操作仅在首次给药后或研究期间执行且不影响入排，应删除候选并将单元处置为"
+            " post_treatment_execution。"
+        )
+    if "MIXED_DECISION_STAGE_CONTROL" in problem:
+        return (
+            "本轮重点：按最终决定阶段拆成两个独立候选；当前节点完成的检查/操作与后续节点核对的"
+            "结果有效期不得留在同一候选中。不得因此重复建立已由已知目标覆盖的操作候选。"
+            "后续阶段的新增有效性或其他后果若只适用于原条件成立者，仍须保留原条件分支并绑定新增后果。"
+        )
+    if "MIXED_TRIGGER_DECISION_STAGES" in problem:
+        return (
+            "本轮重点：把筛选时触发与基线/随机/首次给药前触发拆成不同候选。"
+            "筛选候选在 screening 本节点判定，后续候选在对应 baseline 节点判定；不得把筛选失败降为提前关注。"
+        )
+    if "ANCHOR_WORKFLOW_STAGE_MISMATCH" in problem:
+        return (
+            "本轮重点：按冻结访视身份选择最终判定节点。若已有首次给药前复核或随机访视专门节点，"
+            "不得仅因 review_stage 相同而改绑普通基线节点。"
+        )
+    if "PROCEDURE_AFFECTED_STAGE_MISMATCH" in problem:
+        if "同一候选引用多个执行访视" in problem:
+            return (
+                "本轮重点：同一候选把不同执行访视的流程目标归到同一个最终判定节点。"
+                "按有源动作实际可判定的节点拆分同一原文单元的候选；每个补充关系的"
+                "受影响节点必须与其流程目标的执行访视相同，只有原文明确要求后续节点"
+                "另核结果有效性或选择基线值时才可跨阶段。保留原有到院操作、非到院日"
+                "评估频率和建议时窗各自的完成强度，不把建议时窗改成强制；"
+                "不得引用本批只读上下文作为候选原文，也不得复制已有官方阈值。"
+                "同一原文的所有候选、来源处置和目标关系须在一次完整修订中对齐。"
+            )
+        if "跨阶段" in problem:
+            return (
+                "本轮重点：先核对来源是否确有后续入排节点需要核实的增量。若有，"
+                "affected_workflow_stage_id 指向该后续最终判定节点，"
+                "external_target_id 保持原流程执行访视；当前节点只作提前关注。"
+                "若原文只要求当前行为持续到治疗期，不要另建未来当前真假命题。"
+            )
+        return (
+            "本轮重点：先逐字核对候选新增义务与所引流程目标是否属于同一具体检查或操作。"
+            "仅因都发生在相邻访视或同属研究流程，不能建立 supplementary_requirement；"
+            "若无直接补充关系，删除该错误关系，保留有源独立候选及其真实判定节点。"
+            "若确为同阶段流程补充，affected_workflow_stage_id 应与 external_target_id"
+            " 对应流程必做项的实际执行访视一致，并核对本节点判定与最低证据的到期节点。"
+            "不得为了凑关系改写原文时点。若原文要求完整持续期只能在后续节点核实，"
+            "而当前补充关系合同不能表达，不得改成更早判定、删除真实要求或改标义务种类；"
+            "保留该有源要求与明确的软件能力缺口，不把它说成研究者医学判断或病例缺件。"
+        )
+    if "AFFECTED_STAGE_DECISION_MISSING" in problem:
+        return (
+            "本轮重点：先核已有补充关系的原文依据；若候选义务与目标不是同一具体检查或操作的"
+            "有源增量，删除错误关系，不改变独立候选的真实节点。确有补充关系时才保留其目标，"
+            "并在受影响节点增加 decide_at_node，核对同阶段到期的最低证据。"
+            "先按冻结目标索引核对流程执行节点："
+            "同阶段补充的受影响节点须与其一致；只有原文明确要求在后续入排节点判定增量时，"
+            "才允许使用更晚的受影响节点和较早节点的 early_attention。"
+            "不得仅为通过校验更改原文时点、目标或受影响节点。"
+        )
+    if "EARLY_DECISION_FOR_FUTURE_ANCHOR" in problem:
+        return (
+            "本轮重点：跨阶段有效窗或后续锚点控制补充时，affected_workflow_stage_id 必须选择"
+            "与后续锚点一致的最终判定节点（如基线/首次给药前复核），external_target_id 仍指向"
+            "流程必做执行访视；screening 只能 early_attention，decide_at_node 和最低证据必须在"
+            "affected 决定节点。同阶段普通补充不得借用此路径。若原文只是当前要求在治疗期继续维持，"
+            "未来部分只保留为同一当前禁止原子的未到期持续义务，不要为未来期间另建补充关系、"
+            "当前真假命题或最低证据；仅原文另有后续入排节点可核增量时才建立独立候选。"
+            "若把最终判定从基线前移，不能保留基线日期锚点并在此前宣告完成；"
+            "原基线绑定只能删除，或在确有更晚判定节点时按原文安排，不能把末节点标为 later_node_review。"
+        )
+    if "PROCEDURE_VISIT_SCOPE_UNCOVERED" in problem:
+        return (
+            "本轮重点：required_procedure 只能覆盖链接目录项 visit_instance 明确列出的访视。"
+            "同一来源摘录还包含未链接的后续访视时，不得声称整个单元已被流程目标完整覆盖。"
+        )
+    if "DNF_DUPLICATE_ATOM" in problem:
+        return "本轮重点：删除同一合取组内语义和来源完全相同的重复原子，只保留一项。"
+    if "EXCEPTION_LAYER_MISSING" in problem:
+        return (
+            "本轮重点：把除非、除外或例外条件移入 exception_expression；"
+            "义务只保留默认后果，并用例外作用域精确指向被豁免的触发分支。"
+        )
+    if "OPTIONAL_ACTION_MODALITY_DROPPED" in problem:
+        return (
+            "本轮重点：不得把可选操作改写成必做操作；"
+            "如原文另规定实际执行后必做的动作，应另用实际执行条件限定，"
+            "该动作的原文摘录不得夹带许可措辞。次数上限、适用条件及原则性例外"
+            "须分别保留，不得用一个‘可’替整组义务消除语气差异。"
+        )
+    if "RECOMMENDED_MODALITY_DROPPED" in problem:
+        return (
+            "本轮重点：同一来源句若同时含明确必做和建议动作，应拆为不同义务原子。"
+            "每个原子的 source_excerpts 只逐字摘录支持该原子强度的连续片段；"
+            "必做原子不能连带引用后续的建议措辞，建议原子须保留建议原文并使用 recommended。"
+            "不得把明确剂量、频次等必做要求降为建议，也不得把建议动作写成必须完成。"
+        )
+    if "RECOMMENDED_MODALITY_UNSUPPORTED" in problem:
+        return _PERMISSION_MODALITY_REPAIR_GUIDANCE
+    if "RECOMMENDED_MODALITY_" in problem:
+        return (
+            "本轮重点：原文含‘建议’或同义措辞的原子必须使用 modality=recommended，"
+            "且只引用直接支持建议强度的最小连续摘录；没有该措辞的原子不得自行升格为建议完成。"
+        )
+    if "BEST_EFFORT_MODALITY_" in problem:
+        return (
+            "本轮重点：原文含‘尽可能’、‘尽量’或同义措辞的原子必须使用 modality=best_effort，"
+            "且只引用直接支持尽力强度的最小连续摘录；没有该措辞的原子不得自行降级为尽力完成；"
+            "资料收集的 best_effort 只能搭配 must_record。"
+        )
+    if "COLLECTION_TEMPORAL_SCOPE" in problem:
+        return (
+            "本轮重点：把资料收集中的日历回顾窗、完整病程/完整专项治疗史、按正式入排条款自有窗口、"
+            "自上次访视以来增量更新拆成独立 must_record 原子。分别使用 calendar_lookback、full_history、"
+            "official_rule_defined、since_previous_visit；只有 calendar_lookback 携带 time_constraint。"
+        )
+    if "COLLECTION_VISIT_CLOSURE_MISSING" in problem:
+        return (
+            "本轮重点：原文明示筛选和/或基线收集时，保留筛选与基线两个冻结节点的 decide_at_node，"
+            "并为两个阶段各提供最低证据。访视可合并只影响是否重复执行，不删除节点完成核对。"
+        )
+    if "COLLECTION_INTERVAL_REVIEW_NODE_MISSING" in problem:
+        return (
+            "本轮重点：自筛选、基线或上次访视以来的增量问询使用 since_previous_visit，"
+            "并绑定相应后续冻结节点作本节点判定，不得只保留筛选节点。"
+        )
+    if "EXEMPTION_MODALITY_OVERSTATED" in problem:
+        return (
+            "本轮重点：‘无需/不要求’是豁免，不是禁止事件。不得使用 prohibit_event；"
+            "用 complete_or_verify 核对适用人群及其无需执行该操作的状态，并只保留目标未覆盖的增量分支。"
+        )
+    if "CONDITIONAL_EXEMPTION_BINDING_MISSING" in problem:
+        return (
+            "本轮重点：原文的‘无需/不要求/可免除’若受同句条件或时间窗限制，"
+            "必须在同一候选的同一义务组中并列 verify_result_validity 和 complete_or_verify："
+            "前者携带有效期 time_constraint，后者只表达免予状态且 time_constraint=null。"
+            "不得把有效期改成 trigger，不得把两者拆成替代义务组，也不得删除免予后果。"
+            "免予原子不得抄入无条件检查执行清单。最低证据只保留结果日期与命名锚点，"
+            "删除‘确认未重复/未再次执行’证据。"
+        )
+    if "CONDITIONAL_EXEMPTION_SCOPE_SPLIT" in problem:
+        return (
+            "本轮重点：同一来源中的检查要求、结果有效期和条件性无需再次检查属于一个语义范围。"
+            "不得把检查项目拆成兄弟候选中的无条件筛选执行义务；应核对符合有效期的既有结果，"
+            "并在同一候选中保留有效期条件与无需再次检查后果。若来源确含互不相关动作，先保持来源局部性，"
+            "不得借拆分削弱原文条件。"
+        )
+    if "EXEMPTION_EVIDENCE_OVERSTATED" in problem:
+        return (
+            "本轮重点：豁免表示该操作在条件成立时不是必须，不表示操作禁止发生。"
+            "最低证据只保留用于证明豁免条件成立的资料，删除‘确认未重复/未再次执行’"
+            "之类把豁免强化为禁止的证据要求。"
+        )
+    if "PROHIBITED_EVENT_ANCHOR_MISMATCH" in problem:
+        return (
+            "本轮重点：不得随机或不得给药的禁止事件使用对应锚点的 direction=on；"
+            "前置窗口只写在另有直接原文支持的条件或例外中。"
+        )
+    if "POST_ENROLLMENT_PROCEDURE_MISCLASSIFIED" in problem:
+        return (
+            "本轮重点：治疗期或明确在首次给药后才执行的检查不是筛选/基线入排候选；"
+            "从签署知情同意开始并贯穿研究期的义务不能仅因 prospective_period=study_period 被删除。"
+            "逐个核对授权原文单元：只有完全属于给药后执行的单元才可从候选移出，"
+            "并明确处置为 post_treatment_execution、说明原文依据；"
+            "同段或其他单元中真实的入排增量必须保留在候选，不能整段删除。"
+        )
+    if "FUTURE_PROHIBITION_DECIDED_EARLY" in problem:
+        return (
+            "本轮重点：当前禁止原子的 statement 和 evaluation.proposition 均只陈述截至决定节点可核的行为，"
+            "不得在这两个当前节点字段中夹带后续期间名称或后续遵守要求；"
+            "prospective_period=null；把原文支持的后续禁止另存同原子的 continuing_obligation，"
+            "保留同一直接来源、期间及未到期状态，不为后续义务填写当前节点真假命题。"
+            "不得删除节点前已有的禁止要求、改成研究者判断或凭空补一份未来承诺。"
+            "若当前时点与后续时段不能从原文和冻结访视区分，保留未核边界，不生成当前已满足的候选。"
+        )
+    if "PRE_ENROLLMENT_PROCEDURE_MISCLASSIFIED" in problem:
+        return (
+            "本轮重点：该结构单元已由冻结访视顺序确认发生在入排复核、随机或首次给药边界之前，"
+            "不得仅凭章节标题处置为治疗后事项。请与同访视的给药前流程目标核对并返回真实处置。"
+        )
+    if "PROCEDURE_VISIT_SCOPE_OVERBOUND" in problem:
+        return (
+            "本轮重点：流程目标必须匹配该原文单元的实际执行访视。‘自筛选/上次访视以来’只表示回顾区间起点，"
+            "不表示在该起点访视执行；不得因访视可合并、review_stage 相同或摘录覆盖多个访视而额外绑定其他节点。"
+        )
+    if "KNOWN_PROCEDURE_DISPOSITION_MISMATCH" in problem:
+        return (
+            "本轮重点：该单元已由冻结流程识别为本节点必做事项，必须处置为 required_procedure 并绑定精确访视目标；"
+            "不得为了绕开访视闭包检查而改为 supporting_or_supplement、非控制或治疗后事项。"
+        )
+    if "PROCEDURE_SEMANTIC_FAMILY_UNCOVERED" in problem:
+        return (
+            "本轮重点：同一原文并列出现多个资料家族时，逐个核对该精确访视下的冻结流程目标。"
+            "例如病史与诊治/治疗史不能相互替代；只链接原文明示且目录中实际存在的家族，不新增目录目标。"
+        )
+    if "TIME_ANCHOR_GUESSED_FROM_SCREENING" in problem:
+        return (
+            "本轮重点：同一句含筛选和首次给药/随机两个时点时，拆成独立时间分支。"
+            "筛选分支只引用直接包含筛选时点的最小连续摘录并使用 screening_date；"
+            "后续分支只引用直接包含首次给药/随机时点的最小连续摘录并使用对应锚点，不能让一个分支摘录夹带另一个时点。"
+        )
+    if "TIME_ANCHOR_MISSING" in problem:
+        return (
+            "先核对报错原子的最小逐字摘录：如果时间词只属于同一结构单元的另一动作，"
+            "应收窄该原子的摘录并保留另一动作的独立候选，不能替无时限的计算或记录动作补造锚点。"
+            "本轮重点：每个时间性原子必须使用原文直接命名的锚点。混合多个时点时拆成独立分支并分别引用最小连续摘录；"
+            "一般动作明确在命名节点前完成时使用 complete_before_anchor，保留该锚点且 direction=before；"
+            "具体治疗或操作须持续一段期间时使用 complete_or_verify + semantic + interval_condition，"
+            "起始时点用命名锚点，持续长度保留在完整命题及逐期观察要求中，不得作为日期上界；"
+            "单次记录不能证明疗程完成。"
+            "‘从签署知情同意起至末次给药后N天/周/月’使用 study_period，并把尾段结构化为"
+            "last_dose_date、after、upper_bound=N，不得改用 icf_date 加N。"
+            "比较较早事件与较晚命名锚点时，把较早事件写成相对较晚锚点的 before 时间约束；"
+            "错误信息已给出具体原子编号和原句，须逐条补齐而不是只修第一个时间分支。"
+            "同时逐字保存大于/小于及边界是否包含。首次给药后的研究执行事项不得为了补锚点而保留为入排候选。"
+        )
+    if "VISIT_SCHEDULE_TARGET_TOO_NARROW" in problem:
+        return (
+            "本轮重点：先核对原文的时间限制究竟约束访视安排、结果有效期，还是治疗/用药持续期。"
+            "只有通用访视时间窗才使用 schedule_or_verify_visit 并关联冻结 workflow_stage；"
+            "针对具体治疗或操作的持续期用 complete_or_verify + semantic + interval_condition，"
+            "用命名锚点表示起止日期约束、用命题和逐期观察保留完整持续要求，不将持续长度写成日期上界；"
+            "保留逐字来源，不得为凑节点改写为访视安排，"
+            "也不能因同名目录项而丢弃增量要求。"
+        )
+    if "附时间条件的核对须单独声明日期属性" in problem:
+        return (
+            "本轮重点：若值比较、语义核对或研究者判断原子确有 time_constraint，"
+            "evaluation.time_operand_attribute 必须声明该时间条件核对的日期属性；"
+            "原文不能确定日期属性时保留未解决，不得凭空指定事件日期或记录日期。"
+        )
+    if "TREATMENT_DURATION_USED_AS_EVENT_WINDOW" in problem:
+        return (
+            "本轮重点：原文的持续治疗时长不是治疗开始或完成事件的发生期限。"
+            "仅按原文给起止事件设置命名日期锚点；不要把持续N天填入 time_constraint 的上界或下界。"
+            "time_constraint 只能是 null，或包含合法 anchor_type、direction 的对象；"
+            "原文明确要求从筛选日期开始时可用"
+            "{\"anchor_type\":\"screening_date\",\"direction\":\"on\"}，不填数值边界。"
+            "D-7、D-1、访视名称和自然语言区间都不能填入 lower_bound/upper_bound；"
+            "这些字段若需要填写，只接受 {\"value\":正整数,\"unit\":\"day|week|month|year\"}。"
+            "若 time_constraint 为 null，evaluation.time_purpose 只能为 not_applicable 或 unresolved，"
+            "evaluation.time_operand_attribute 必须为 null；若保留命名锚点，须同步保留相应的时间用途及日期属性。"
+            "在语义命题、观察范围和所需资料中保留全程治疗及剂量要求；资料不足时标记未核实，"
+            "不得凭一条给药记录推断疗程完成。"
+        )
+    if (
+        "TIME_CALENDAR_BOUND_UNSUPPORTED" in problem
+        or "TIME_CALENDAR_BOUND_MISSING" in problem
+    ):
+        return (
+            "本轮重点：逐个核对报错义务原子的直接摘录。摘录含明确日历时长时，"
+            "先区分事件发生期限与治疗持续长度；仅把前者保存为 time_constraint 数值、单位及边界，"
+            "后者保留在完整语义命题和逐期观察要求中。"
+            "摘录不含该时长时，删除无依据的结构化数值，不得借用同单元其他动作或其他原子的时长。"
+            "同一义务含起点与终点时分别核对，不凭空补零天边界。"
+        )
+    if "TIME_BOUND_COMPARATOR_MISMATCH" in problem:
+        return (
+            "本轮重点：逐字保留时间边界。超过/>N 使用下界N且不含N；至少/≥N使用下界N且包含N；"
+            "少于/<N使用上界N且不含N；不超过/≤N/N以内使用上界N且包含N。不得把开区间改成闭区间。"
+        )
+    if "PROSPECTIVE_PERIOD_MISSING" in problem:
+        return (
+            "本轮重点：先判断持续期约束的是当前动作，还是当前动作所告知、确认或记录的内容。"
+            "沟通、确认或记录原子不得因‘告知研究期间需持续’而补 prospective_period，也不得粘贴"
+            "被沟通的期间摘录来支持无关原子。若义务自身确为入排控制且原文要求贯穿研究或治疗期，"
+            "结构化保存对应 prospective_period；"
+            "若只是首次给药后的检查或随访，则删除候选并使用 post_treatment_execution。"
+        )
+    if "PROSPECTIVE_PERIOD_UNSUPPORTED" in problem:
+        return (
+            "本轮重点：删除没有由该动作直接来源支持的 prospective_period。告知、确认、讨论或记录"
+            "‘研究期间需持续’只说明被沟通内容的期间，不说明沟通或记录动作持续；不得把该内容摘录"
+            "粘贴到其他义务原子。只有动作自身明确贯穿研究或治疗期时才保留期间。"
+        )
+    if "CONTROL_DELTA_DROPPED" in problem:
+        return (
+            "本轮重点：逐项比较该 owned 单元与已知目标摘录，只为目标确实未覆盖的人群、条件、动作、时间、阈值或例外建立增量候选；"
+            "若 owned 单元是评分、检查或测量方法，还必须比较评估维度、计分方法、量程与解释方向、操作规范及评估手册；"
+            "已覆盖部分通过关系关联，不得重复，纯措辞或举例粒度差异也不得当作增量。"
+        )
+    if "CONTROL_DELTA_COMPONENT_DROPPED" in problem:
+        return (
+            "本轮重点：保留原文直接规定的全部记录或执行要素。逐项补回错误信息中列出的缺失要素，"
+            "但不得改变该单元的处置类型、适用阶段、必做或可选语气，也不得把资料记录义务升格为入排不通过条件。"
+        )
+    if "CONTROL_DUPLICATE_RETAINED" in problem:
+        return (
+            "本轮重点：该单元的入排相关内容已被已知目标完整覆盖。删除其候选，"
+            "按实际剩余内容处置为 required_procedure、post_treatment_execution 或其他非候选类型。"
+        )
+    if "COVERED_BRANCH_DUPLICATED" in problem:
+        return (
+            "本轮重点：删除已知目标已经覆盖的人群分支，只在增量候选中保留目标未覆盖的分支及其直接后果。"
+        )
+    if "CANDIDATE_MISSING" in problem:
+        return (
+            "本轮重点：处置为 other_control_candidate 的每个结构单元都必须至少由一个候选草稿引用。"
+            "若该单元仍有真实入排增量，补充只包含未覆盖人群、条件、动作、时点或例外的候选；"
+            "若没有真实增量，则删除候选处置，按原文改为 required_procedure、supporting_or_supplement、"
+            "post_treatment_execution 或其他真实非候选处置。不得只在 notes 中描述候选。"
+        )
+    return ""
+
+
+def _prompt_wire_schema(
+    batch: ProtocolControlDispositionBatch | ProtocolControlAgentInput | None = None,
+) -> dict[str, Any]:
+    """Omit generated display titles, retaining every validation and clinical description."""
+
+    def without_titles(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: without_titles(item) for key, item in value.items() if key != "title"}
+        if isinstance(value, list):
+            return [without_titles(item) for item in value]
+        return value
+
+    schema = (protocol_control_agent_json_schema() if batch is None
+              else protocol_control_batch_response_format(batch)["json_schema"]["schema"])
+    return without_titles(schema)
+
+
+def protocol_control_agent_prompt_template_sha256(
+    prompt_template: str, *, prompt_version: str = CONTROL_AGENT_PROMPT_VERSION,
+) -> str:
+    payload = "\n\n".join(
+        (
+            prompt_version,
+            SOURCE_INTERPRETATION_PROMPT_VERSION,
+            SOURCE_TARGET_REVIEW_VERSION,
+            SOURCE_TARGET_REVIEW_POLICY_VERSION,
+            EVIDENCE_POLICY_ALIGNMENT_VERSION,
+            SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+            SOURCE_DEFINITION_CONSUMER_VERSION,
+            SOURCE_DEFINITION_CONSUMER_PROMPT_VERSION,
+            prompt_template.strip(),
+            _CONTROL_AGENT_SYSTEM_CONTRACT,
+            _stable_json(_prompt_wire_schema()),
+        )
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def protocol_control_agent_repair_contract_sha256(
+    *, base_only: bool = False, without_duration_guidance: bool = False,
+    legacy_atom_v2: bool = False,
+) -> str:
+    parts = [_CONTROL_REPAIR_CONTRACT, _CALENDAR_BOUND_REPAIR_PROMPT_VERSION,
+             _AFFECTED_STAGE_REPAIR_GUIDANCE_VERSION]
+    if not base_only:
+        parts.extend((_OPTIONAL_ACTION_REPAIR_GUIDANCE_VERSION,
+                      _SOURCE_INSERT_GUIDANCE_VERSION))
+        if not without_duration_guidance:
+            parts.append(_TREATMENT_DURATION_REPAIR_GUIDANCE_VERSION)
+        parts.append(
+            "phase5/atom-repair-guidance/v2"
+            if legacy_atom_v2 else _ATOM_REPAIR_GUIDANCE_VERSION
+        )
+        parts.append(_SOURCE_SCOPE_CORRECTION_POLICY_VERSION)
+        parts.append(_CALENDAR_REPAIR_TARGET_SELECTION_VERSION)
+        parts.append(_TIME_OPERAND_REPAIR_PRIORITY_VERSION)
+        parts.append(_OBSERVATION_SOURCE_REPAIR_GUIDANCE_VERSION)
+        parts.append(SOURCE_TARGET_REPAIR_VERSION)
+        parts.append(SOURCE_QUOTE_RECOVERY_VERSION)
+        parts.append(SOURCE_SCOPE_QUESTION_RECHECK_VERSION)
+        parts.append(SOURCE_FUNCTION_RECHECK_VERSION)
+        parts.append(PUBLICATION_REPAIR_SCOPE_VERSION)
+        parts.append(_CANDIDATE_FIELD_REPAIR_VERSION)
+        parts.append(SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION)
+        parts.append(_SCOPED_SOURCE_CONTEXT_REPAIR_GUIDANCE)
+        parts.append(_PERMISSION_MODALITY_REPAIR_GUIDANCE)
+    material = "\n".join(parts)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def build_protocol_control_agent_prompt(
+    batch: ProtocolControlDispositionBatch | ProtocolControlAgentInput,
+    *,
+    prompt_template: str = DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE,
+    include_schema: bool = True,
+    source_interpretation: SourceInterpretation | None = None,
+) -> str:
+    """Build a deterministic prompt from one planner batch or frozen input."""
+
+    frozen_input = (
+        batch
+        if isinstance(batch, ProtocolControlAgentInput)
+        else ProtocolControlAgentInput.from_batch(batch)
+    )
+    input_view = frozen_input.model_dump(mode="json")
+    if not frozen_input.table_context_reading_bounds:
+        input_view.pop("table_context_reading_bounds")
+    if not frozen_input.table_footnote_context_links:
+        input_view.pop("table_footnote_context_links")
+    for units_key in ("owned_units", "context_units"):
+        for unit_view in input_view[units_key]:
+            unit_view.pop("member_source_span_ids", None)
+    # Target source excerpts remain complete; catalog bookkeeping stays in the
+    # frozen batch used by the validator and the later source-target review.
+    input_view["known_official_targets"] = [
+        {
+            "official_code": target.official_code,
+            "label": target.label,
+            "source_excerpts": target.source_excerpts,
+        }
+        for target in frozen_input.known_official_targets
+    ]
+    input_view["known_procedure_targets"] = [
+        {
+            "catalog_item_id": target.catalog_item_id,
+            "label": target.label,
+            "visit_instance": target.visit_instance,
+            "review_stage": target.review_stage.value,
+            "execution_workflow_stage_id": procedure_execution_workflow_stage_id(
+                target, frozen_input.known_workflow_stage_targets
+            ),
+            "semantic_family": target.semantic_family,
+            "covered_action_kinds": target.covered_action_kinds,
+            "source_excerpts": target.source_excerpts,
+            **({"source_span_ids": target.source_span_ids}
+               if any(unit.table_context is not None
+                      for unit in [*frozen_input.owned_units, *frozen_input.context_units]) else {}),
+        }
+        for target in frozen_input.known_procedure_targets
+    ]
+    schema_block = (
+        f"输出结构：{_stable_json(_prompt_wire_schema(frozen_input))}\n\n"
+        if include_schema
+        else "输出严格遵循本次请求随附的 JSON Schema；不得新增字段。\n\n"
+    )
+    return (
+        f"{prompt_template.strip()}\n\n"
+        f"{_CONTROL_AGENT_SYSTEM_CONTRACT}\n\n"
+        f"{schema_block}"
+        + ("相邻表格原文仅为有界只读片段；table_context_reading_bounds记录实际读取范围及停止原因，"
+           "不证明清单已完整。不可把预算截断或位置边界解释为清单结尾；范围不能核清时保留具体未决。\n\n"
+           if frozen_input.table_context_reading_bounds else "")
+        +
+        f"本次冻结输入：{_stable_json(input_view)}\n\n"
+        + (
+            "已逐字定位的来源陈述（仅供核对，不替代原文或结构门禁）："
+            f"{_stable_json(source_interpretation.model_dump(mode='json'))}\n\n"
+            if source_interpretation is not None else ""
+        )
+        +
+        "来源清单中的 time_words 仅是逐段原文，不是审核结论。"
+        "同句涉及本节点及后续期间时，结合冻结审核节点分别表达可核事实与未到期持续义务；"
+        "当前义务不得借用其他句子的数值时长，不能把后续禁令提前判为已遵守。"
+        "原文或节点关系不能确定时保留未核实，不按当前或将来猜定。\n\n"
+        "表格中的 X 标记须按 member_cell_paths 列位置与同表前置阶段、访视和时间行逐列核对；"
+        "不能按压缩文本中 X 的顺序推断节点。无法对应时保留未核实，不得造访视或时间窗。\n\n"
+        "按 owned_units 原文顺序逐项处理；每个 owned_unit 必须返回一条 disposition，"
+        "候选可为 0 到 N。若候选不存在，必须逐单元写出非控制 disposition 和理由。只返回一个完整 JSON 对象。"
+    )
+
+def build_protocol_control_discovery_prompt(
+    batch: ProtocolControlDiscoveryBatch | ProtocolControlDiscoveryAgentInput,
+    *,
+    prompt_template: str = DEFAULT_PROTOCOL_CONTROL_DISCOVERY_PROMPT_TEMPLATE,
+) -> str:
+    """Build a bounded first-stage prompt from one discovery batch."""
+
+    discovery_input = (
+        batch
+        if isinstance(batch, ProtocolControlDiscoveryAgentInput)
+        else ProtocolControlDiscoveryAgentInput.from_batch(batch)
+    )
+    return (
+        f"{prompt_template.strip()}\n\n"
+        f"{_DISCOVERY_SYSTEM_CONTRACT}\n\n"
+        f"输出结构：{_stable_json(protocol_control_discovery_agent_json_schema())}\n\n"
+        f"本次发现输入：{_stable_json(discovery_input.model_dump(mode='json'))}\n\n"
+        "按 target_units 原文顺序逐项返回一条 decision；context_units 只能阅读。"
+        "候选与不确定单元必须保留其结构单元身份，不能被粗筛遗漏或合并。只返回一个完整 JSON 对象。"
+    )
+def build_protocol_control_discovery_repair_prompt(
+    batch: ProtocolControlDiscoveryBatch | ProtocolControlDiscoveryAgentInput,
+    *,
+    problem: str,
+    structure_unit_ids: Sequence[str] | None = None,
+) -> str:
+    """Build a bounded same-session repair prompt for discovery output."""
+
+    discovery_input = (
+        batch
+        if isinstance(batch, ProtocolControlDiscoveryAgentInput)
+        else ProtocolControlDiscoveryAgentInput.from_batch(batch)
+    )
+    expected_ids = list(discovery_input.target_structure_unit_ids)
+    requested_ids = list(structure_unit_ids or expected_ids)
+    unknown_ids = set(requested_ids) - set(expected_ids)
+    if unknown_ids:
+        raise ValueError(
+            "发现定向修复结构单元不属于当前冻结 target_units："
+            + "、".join(sorted(unknown_ids))
+        )
+    return (
+        "这是同一发现会话内的有限结构修复，不是重新分析。"
+        "系统已冻结批次身份、target_units、context_units 和原文顺序；"
+        "只修复下列目标或其直接作用域中的 Schema/闭包错误："
+        f"{json.dumps(requested_ids, ensure_ascii=False)}。"
+        "不得改变未授权目标的处置或理由，不得创建批次、候选或其他稳定身份，"
+        "不得输出额外字段。必须返回当前批次全部 target_units 的完整 JSON，"
+        "disposition 只能是 candidate、context_only、non_control、uncertain，"
+        "required_context_structure_unit_ids 只能引用当前输入可见结构单元，"
+        "并按结构单元 ID 升序排列且不得重复。"
+        "沿用首次请求的输出结构，只返回包含 wire_version 和 decisions 的单个 JSON 对象；"
+        "不要回显输出结构、$defs 或额外的 JSON 对象。"
+        f"\n冻结发现批次：{discovery_input.discovery_batch_id}\n"
+        f"结构化问题：{problem[:12000]}\n"
+        f"本次发现输入：{_stable_json(discovery_input.model_dump(mode='json'))}"
+    )
+
+
+
+def build_protocol_control_repair_prompt(
+    batch: ProtocolControlDispositionBatch,
+    *,
+    problem: str,
+    structure_unit_ids: Sequence[str] | None = None,
+    candidate_ids: Sequence[str] | None = None,
+    candidate_indexes: Sequence[int] | None = None,
+    obligation_source_span_ids: Sequence[str] | None = None,
+    candidate_only: bool = False,
+    candidates_only: bool = False,
+    source_insert: bool = False,
+    source_insert_candidate_only: bool = False,
+    source_insert_candidates_only: bool = False,
+    source_closure_rewrite: bool = False,
+    baseline_wire_sha256: str | None = None,
+    baseline_candidate_drafts: Sequence[dict[str, Any]] | None = None,
+    missing_source_statements: Sequence[str] = (),
+    source_statement_inventory: Sequence[tuple[str, str]] = (),
+    validation_findings: Sequence[dict[str, object]] = (),
+) -> str:
+    """Build a same-session repair prompt with an explicit bounded scope."""
+
+    unit_ids = list(structure_unit_ids or batch.owned_structure_unit_ids)
+    unknown_units = set(unit_ids) - set(batch.owned_structure_unit_ids)
+    if unknown_units:
+        raise ValueError(f"定向修复结构单元不属于本批次：{sorted(unknown_units)}")
+    authorized_unit_ids = set(unit_ids)
+    authorized_sources = [
+        {
+            "structure_unit_id": unit.structure_unit_id,
+            "source_ref": unit.source_ref,
+            "source_span_ids": unit.source_span_ids,
+            "excerpt": unit.excerpt,
+        }
+        for unit in batch.owned_units
+        if unit.structure_unit_id in authorized_unit_ids
+    ]
+    frozen_workflow_targets = [
+        {
+            "workflow_stage_id": target.workflow_stage_id,
+            "review_stage": target.review_stage.value,
+            "display_name": target.display_name,
+        }
+        for target in batch.known_workflow_stage_targets
+    ]
+    frozen_target_index = {
+        "official": [
+            {
+                "official_code": target.official_code,
+                "catalog_item_id": target.catalog_item_id,
+                "label": target.label,
+            }
+            for target in batch.known_official_targets
+        ],
+        "procedures": [
+            {
+                "catalog_item_id": target.catalog_item_id,
+                "label": target.label,
+                "visit_instance": target.visit_instance,
+                "review_stage": target.review_stage.value,
+                "execution_workflow_stage_id": procedure_execution_workflow_stage_id(
+                    target, batch.known_workflow_stage_targets
+                ),
+            }
+            for target in batch.known_procedure_targets
+        ],
+    }
+    guidance = _repair_problem_guidance(problem)
+    guidance_block = f"{guidance}\n" if guidance else ""
+    regroup_guidance = (
+        "本来源已有禁止候选，但未完整表达冻结原句。本轮在授权来源闭包内替换或拆分旧候选，"
+        "不要在旧候选后仅追加近似候选；来源范围外候选保持不变。"
+        "保留原文支持的操作完成要求和独立禁止后果，不要把后果倒作操作的触发条件。"
+        "每个保留的义务都须回指自己的原句，未核清则保持失败，不要猜测临床含义。\n"
+        if source_closure_rewrite and missing_source_statements else ""
+    )
+    inventory_guidance = (
+        "本来源单元已有下列独立原文要求；重组后须逐项保留，不可只保留禁止后果或把操作完成条件塞入禁止动作。"
+        "指代词仅可在同一来源单元内按唯一明确的先行要求解释；无法核清时保留失败。"
+        f"来源陈述清单：{json.dumps(list(source_statement_inventory), ensure_ascii=False)}\n"
+        if source_closure_rewrite and source_statement_inventory else ""
+    )
+    insert_guidance = (
+        "这是遗漏要求的来源限定补入，不是改写旧候选。"
+        + (
+            "系统原样保留旧候选与全部范围外处置；本次只提交新增候选，"
+            "不得照抄旧候选、目标目录或未获授权的其他原文单元。"
+            "系统将新增候选追加到旧候选之后，再完整核验。"
+            if source_insert_candidate_only or source_insert_candidates_only else
+            "旧候选必须按原顺序逐字保留，旧处置除授权结构单元外不得改变；"
+            "只可在 candidate_drafts 末尾新增引用授权原文的候选。"
+        )
+        +
+        "校验问题中列出的每项增量要求均须在新增候选的义务原文摘录中表达，不能只补第一项。"
+        "新增候选的义务陈述也须逐字保留相应有源陈述，不能只在来源摘录中重复原句"
+        "而把义务对象、否定、数量、时间或连接关系改写。"
+        + (
+            "若授权单元原先关联官方条款或访视流程，系统会将该单元改为其他控制候选"
+            "并清除原处置链接；"
+            if source_insert_candidate_only or source_insert_candidates_only else
+            "若授权单元原先关联官方条款或访视流程，须将该单元改为其他控制候选"
+            "并清除原处置链接；"
+        )
+        + "新增候选的 cross_source_relations 须逐一保留原目标关系；"
+        "原目标已覆盖的动作不应伪装成新增要求。"
+        "新增义务带 time_constraint 时，evaluation.time_operand_attribute 须写明"
+        "原文支持的待核日期属性；无法从原文确定时不得猜测，应保持待核。"
+        "访视表的研究日区间标注首先是冻结访视的范围；若原文未明确"
+        "相对哪个实际日期计算，不得擅自换算为首次给药前几天的日历窗口。"
+        "可通过冻结审核节点及相应资料截止阶段保留访视范围；不可省略该范围。"
+        "只有补充流程必做项的关系可填写 affected_workflow_stage_id；"
+        "指向官方入排条款的关系须填 null，候选自身的审核节点仍应保留。"
+        "若增量从较早访视开始执行，但完整持续期只能在较晚的冻结审核节点核实，"
+        "不得将完整持续期提前判定；只有现有合同支持且原文确有依据的后续核对关系，"
+        "才可把指向较早执行访视的补充关系的受影响节点设为较晚的最终判定节点，"
+        "并保存本节点判定及到期证据。"
+        "当前关系合同不能表达时，保留有源要求及软件能力缺口，不改标义务种类或删去要求。"
+        "若较早访视另有可独立判定的原文要求，则分成不同候选，不能把完整持续期提前判定。"
+        "若原文允许某项操作但不要求所有适用者都执行，而仅规定实际执行后必做的动作，"
+        "不得让许可条件本身触发必做动作；须分别表达许可、次数限制、实际执行事件及其后果。"
+        "若现有合同无法保留这种区别，应保持失败待核，不得把可选操作降为无条件义务。"
+        "若原文不足以支持候选，不得编造医学要求，应保持失败待核。"
+        f"上一轮完整输出摘要：{baseline_wire_sha256}。\n"
+        if source_insert else ""
+    )
+    if source_insert_candidates_only:
+        output_instruction = (
+            "只返回新增候选数组 candidate_drafts；每项增量要求须在至少一个新增义务原文摘录中表达，"
+            "所有授权结构单元均须由新增候选覆盖。系统保留原候选与范围外处置；"
+            "仅返回包含 candidate_drafts 的 JSON 对象，严格遵守本请求随附的修订 JSON Schema。"
+        )
+    elif source_insert_candidate_only:
+        output_instruction = (
+            "只返回一个能表达全部所列增量要求的有源候选，系统保留原候选和范围外处置；"
+            "仅返回包含 candidate_draft 的 JSON 对象，严格遵守本请求随附的单候选 JSON Schema。"
+        )
+    elif candidate_only:
+        output_instruction = (
+            "只修复指定的一个候选；系统保留其他候选、处置及其来源。"
+            "仅返回包含 candidate_draft 的 JSON 对象，严格遵守本请求随附的单候选 JSON Schema。"
+        )
+    elif candidates_only:
+        output_instruction = (
+            "只修复指定位置的候选，按候选草稿位置的升序返回同样数量的 candidate_drafts；"
+            "系统保留其余候选、全部处置及来源。不得补造、删除或调换候选；"
+            "仅返回包含 candidate_drafts 的 JSON 对象，严格遵守本请求随附的修订 JSON Schema。"
+        )
+    else:
+        output_instruction = (
+            "仍须返回本批全部 owned_units 的完整 disposition 和本批完整候选集合。"
+            "请在同一会话内仅返回修复后的完整 wire JSON，严格遵守本请求随附的 JSON Schema；"
+            "若当前传输仅支持 JSON 对象，则沿用首轮提示中的输出结构。"
+        )
+    return (
+        f"{_CONTROL_REPAIR_CONTRACT}\n"
+        f"{guidance_block}"
+        f"{regroup_guidance}"
+        f"{inventory_guidance}"
+        f"{insert_guidance}"
+        f"冻结批次：{batch.batch_id}\n"
+        f"结构单元范围：{json.dumps(unit_ids, ensure_ascii=False)}\n"
+        f"授权结构单元原文与来源定位："
+        f"{json.dumps(authorized_sources, ensure_ascii=False)}\n"
+        f"冻结审核节点目录（仅可引用，不得新增）："
+        f"{json.dumps(frozen_workflow_targets, ensure_ascii=False)}\n"
+        "冻结目标索引（只帮助定位；是否覆盖仍须核对首轮输入中的目标原文）："
+        f"{json.dumps(frozen_target_index, ensure_ascii=False)}\n"
+        f"系统候选身份范围：{json.dumps(list(candidate_ids or []), ensure_ascii=False)}\n"
+        f"义务原文定位范围："
+        f"{json.dumps(list(obligation_source_span_ids or []), ensure_ascii=False)}\n"
+        + (
+            ("已由本批来源清单识别、但尚未形成独立候选的原句（逐句核对，不得改写）："
+             if source_insert else "已有候选尚未完整表达的原句（逐句核对，不得改写）：")
+            + f"{json.dumps(list(missing_source_statements), ensure_ascii=False)}\n"
+            if (source_insert or source_closure_rewrite) and missing_source_statements else ""
+        )
+        + f"候选草稿位置（仅用于诊断，不得原样输出）："
+        f"{json.dumps(list(candidate_indexes or []), ensure_ascii=False)}\n"
+        + (
+            "宿主定位的具体冲突（只定位修订范围，不是新的原文或医学判断）："
+            + json.dumps(list(validation_findings), ensure_ascii=False) + "\n"
+            if validation_findings else ""
+        )
+        + (
+            "本轮获授权候选原稿（来源身份与未被指出的问题均须保持）："
+            + json.dumps(list(baseline_candidate_drafts), ensure_ascii=False) + "\n"
+            if baseline_candidate_drafts is not None else ""
+        )
+        + f"校验问题：{problem[:12000]}\n"
+        + output_instruction
+    )
+
+
+def _candidate_source_texts(
+    batch: ProtocolControlDispositionBatch,
+    source_structure_unit_ids: Sequence[str],
+) -> dict[str, tuple[str, ...]]:
+    candidate_unit_ids = set(source_structure_unit_ids)
+    source_texts: dict[str, list[str]] = {}
+    for unit in batch.owned_units:
+        if unit.structure_unit_id not in candidate_unit_ids:
+            continue
+        for span_id in unit.source_span_ids:
+            source_texts.setdefault(span_id, []).append(unit.excerpt)
+    return {key: tuple(value) for key, value in source_texts.items()}
+
+
+def _validate_exact_atom_sources(
+    candidate: ProtocolControlAgentWireCandidate,
+    *,
+    batch: ProtocolControlDispositionBatch,
+) -> ProtocolControlAgentWireCandidate:
+    source_texts = _candidate_source_texts(
+        batch,
+        candidate.source_structure_unit_ids,
+    )
+    allowed_spans = set(source_texts)
+
+    # Deterministic typographic restoration: only quote glyphs, unique contiguous.
+    # Performed after runner parse, before strict hydration; preserves raw output hash
+    # at the attempt layer and does not consume the global repair budget.
+    # Only single/double curved ↔ straight quotes are normalized; all other
+    # characters (words, digits, units, comparators, general punctuation, whitespace)
+    # remain strict. Restoration succeeds only when the normalized excerpt occurs
+    # exactly once within the authorized source texts for its specific span_id.
+    candidate = ProtocolControlAgentWireCandidate.model_validate(
+        restore_source_fields(candidate.model_dump(mode="json"), source_texts)
+    )
+
+    expressions = (
+        ("applicability", candidate.applicability_expression),
+        ("trigger", candidate.trigger_expression),
+        ("exception", candidate.exception_expression),
+        *(("repeat_trigger", item.expression) for item in candidate.repeat_trigger_conditions),
+    )
+    # Strict verbatim check after deterministic restoration.
+    for layer, expression in expressions:
+        if expression is None:
+            continue
+        atoms = [atom for group in expression.groups for atom in group.atoms]
+        for atom_index, atom in enumerate(atoms):
+            for span_id, excerpt in zip(atom.source_span_ids, atom.source_excerpts):
+                if span_id not in allowed_spans:
+                    raise ProtocolControlAgentWireValidationError(
+                        "SOURCE_SCOPE_ESCAPE",
+                        f"{layer} 原子引用了本批 owned 之外的来源：{span_id}",
+                        structure_unit_ids=candidate.source_structure_unit_ids,
+                    )
+                if not any(excerpt in source for source in source_texts.get(span_id, ())):
+                    raise ProtocolControlAgentWireValidationError(
+                        "FABRICATED_EXCERPT",
+                        f"{layer} 原子 {atom_index} 的摘录不是来源 {span_id} 的连续原文",
+                        structure_unit_ids=candidate.source_structure_unit_ids,
+                    )
+
+    for group in candidate.obligation_expression.groups:
+        for atom_index, atom in enumerate(group.atoms):
+            for span_id, excerpt in zip(atom.source_span_ids, atom.source_excerpts):
+                if span_id not in allowed_spans:
+                    raise ProtocolControlAgentWireValidationError(
+                        "SOURCE_SCOPE_ESCAPE",
+                        f"obligation 原子引用了本批 owned 之外的来源：{span_id}",
+                        structure_unit_ids=candidate.source_structure_unit_ids,
+                    )
+                if not any(excerpt in source for source in source_texts.get(span_id, ())):
+                    raise ProtocolControlAgentWireValidationError(
+                        "FABRICATED_EXCERPT",
+                        f"obligation 原子 {atom_index} 的摘录不是来源 {span_id} 的连续原文",
+                        structure_unit_ids=candidate.source_structure_unit_ids,
+                    )
+
+
+    return candidate
+
+
+def _validate_known_targets(
+    candidate: ProtocolControlAgentWireCandidate,
+    *,
+    batch: ProtocolControlDispositionBatch,
+) -> None:
+    official_codes = {item.official_code for item in batch.known_official_targets}
+    procedures = {
+        item.catalog_item_id: item for item in batch.known_procedure_targets
+    }
+    workflow_by_id = {
+        item.workflow_stage_id: item for item in batch.known_workflow_stage_targets
+    }
+    procedure_execution_ids = {
+        procedure_execution_workflow_stage_id(
+            procedures[relation.external_target_id],
+            batch.known_workflow_stage_targets,
+        )
+        for relation in candidate.cross_source_relations
+        if relation.external_target_kind == ControlRelationTargetKind.REQUIRED_PROCEDURE
+        and relation.kind == CrossSourceRelationKind.SUPPLEMENTARY_REQUIREMENT
+        and relation.external_target_id in procedures
+    }
+    mixed_execution_stages = len(procedure_execution_ids - {None}) > 1
+    for relation_index, relation in enumerate(candidate.cross_source_relations):
+        if relation.external_target_kind == ControlRelationTargetKind.OFFICIAL_RULE:
+            if relation.external_target_id not in official_codes:
+                raise ProtocolControlAgentWireValidationError(
+                    "UNKNOWN_OFFICIAL_TARGET",
+                    f"关系提案引用了本批未知官方目标：{relation.external_target_id}",
+                    structure_unit_ids=candidate.source_structure_unit_ids,
+                )
+            continue
+        if relation.external_target_kind == ControlRelationTargetKind.WORKFLOW_STAGE:
+            if relation.external_target_id not in workflow_by_id:
+                raise ProtocolControlAgentWireValidationError(
+                    "UNKNOWN_WORKFLOW_STAGE_TARGET",
+                    f"关系提案引用了本批未知流程节点：{relation.external_target_id}",
+                    structure_unit_ids=candidate.source_structure_unit_ids,
+                )
+            continue
+        procedure = procedures.get(relation.external_target_id)
+        if procedure is None:
+            raise ProtocolControlAgentWireValidationError(
+                "UNKNOWN_PROCEDURE_TARGET",
+                f"关系提案引用了本批未知流程目标：{relation.external_target_id}",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+            )
+        if relation.kind != CrossSourceRelationKind.SUPPLEMENTARY_REQUIREMENT:
+            continue
+        affected_id = relation.affected_workflow_stage_id
+        affected = workflow_by_id.get(affected_id or "")
+        if affected is None:
+            raise ProtocolControlAgentWireValidationError(
+                "UNKNOWN_AFFECTED_WORKFLOW_STAGE",
+                "补充流程必做项引用了未知的受影响审核节点",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+            )
+        execution_id = procedure_execution_workflow_stage_id(
+            procedure, batch.known_workflow_stage_targets
+        )
+        cross_stage = is_cross_stage_subsequent_control_supplement(
+            obligation_expression=candidate.obligation_expression,
+            procedure=procedure,
+            affected_workflow_stage_id=affected_id,
+            workflow_targets=batch.known_workflow_stage_targets,
+        )
+        if cross_stage:
+            if execution_id == affected_id:
+                raise ProtocolControlAgentWireValidationError(
+                    "PROCEDURE_AFFECTED_STAGE_MISMATCH",
+                    "跨阶段后续控制补充的受影响审核节点必须晚于流程必做执行访视",
+                    structure_unit_ids=candidate.source_structure_unit_ids,
+                )
+        elif execution_id != affected_id:
+            raise ProtocolControlAgentWireValidationError(
+                "PROCEDURE_AFFECTED_STAGE_MISMATCH",
+                (
+                    "同一候选引用多个执行访视，补充关系的受影响审核节点与"
+                    "所引用流程必做访视不一致"
+                    if mixed_execution_stages else
+                    "补充关系的受影响审核节点与所引用流程必做访视不一致"
+                ),
+                structure_unit_ids=candidate.source_structure_unit_ids,
+                validation_findings=[{
+                    "code": "PROCEDURE_AFFECTED_STAGE_MISMATCH",
+                    "json_path": f"cross_source_relations.{relation_index}.affected_workflow_stage_id",
+                    "relation_index": relation_index,
+                    "source_refs": list(candidate.source_span_ids),
+                    "external_target_id": relation.external_target_id,
+                    "execution_workflow_stage_id": execution_id,
+                    "affected_workflow_stage_id": affected_id,
+                    "retry_class": "source_relationship_review",
+                }],
+            )
+        if not any(
+            node.workflow_stage_id == affected_id
+            and node.role == ReviewNodeRole.DECIDE_AT_NODE
+            for node in candidate.review_node_bindings
+        ):
+            raise ProtocolControlAgentWireValidationError(
+                "AFFECTED_STAGE_DECISION_MISSING",
+                "补充流程必做项必须在其受影响审核节点作本节点判定",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+            )
+        if not any(
+            item.due_stage == affected.review_stage
+            for item in candidate.minimum_evidence
+        ):
+            raise ProtocolControlAgentWireValidationError(
+                "AFFECTED_STAGE_EVIDENCE_MISSING",
+                "补充流程必做项的最低证据不得晚于受影响审核节点",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+            )
+
+
+def _validate_temporal_obligation_scope(
+    candidate: ProtocolControlAgentWireCandidate,
+) -> None:
+    kinds = {
+        atom.kind
+        for group in candidate.obligation_expression.groups
+        for atom in group.atoms
+    }
+    relation_target_kinds = {
+        relation.external_target_kind for relation in candidate.cross_source_relations
+    }
+    node_ids = {
+        node.workflow_stage_id for node in candidate.review_node_bindings
+    }
+    workflow_relation_ids = {
+        relation.external_target_id
+        for relation in candidate.cross_source_relations
+        if relation.external_target_kind == ControlRelationTargetKind.WORKFLOW_STAGE
+    }
+    if ControlObligationKind.SCHEDULE_OR_VERIFY_VISIT in kinds:
+        if ControlRelationTargetKind.REQUIRED_PROCEDURE in relation_target_kinds:
+            raise ProtocolControlAgentWireValidationError(
+                "VISIT_SCHEDULE_TARGET_TOO_NARROW",
+                "访视安排规则必须指向冻结流程节点，不得把通用访视时间窗传播到单个检查项",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+            )
+        if not workflow_relation_ids or not workflow_relation_ids.issubset(node_ids):
+            raise ProtocolControlAgentWireValidationError(
+                "VISIT_SCHEDULE_WORKFLOW_TARGET_MISSING",
+                "访视安排规则必须关联本候选已绑定的冻结流程节点",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+            )
+    if ControlObligationKind.VERIFY_RESULT_VALIDITY in kinds:
+        if not any(
+            relation.kind == CrossSourceRelationKind.SUPPLEMENTARY_REQUIREMENT
+            and relation.external_target_kind
+            == ControlRelationTargetKind.REQUIRED_PROCEDURE
+            for relation in candidate.cross_source_relations
+        ):
+            raise ProtocolControlAgentWireValidationError(
+                "RESULT_VALIDITY_PROCEDURE_TARGET_MISSING",
+                "结果有效期必须补充到受影响的冻结流程必做项",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+            )
+    if ControlObligationKind.SELECT_BASELINE_VALUE in kinds:
+        scoped_targets = relation_target_kinds.intersection(
+            {
+                ControlRelationTargetKind.REQUIRED_PROCEDURE,
+                ControlRelationTargetKind.WORKFLOW_STAGE,
+            }
+        )
+        if not scoped_targets:
+            raise ProtocolControlAgentWireValidationError(
+                "BASELINE_VALUE_SCOPE_MISSING",
+                "基线值选取原则必须明确关联通用流程节点或精确检查项",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+            )
+        if len(scoped_targets) > 1:
+            raise ProtocolControlAgentWireValidationError(
+                "BASELINE_VALUE_SCOPE_MIXED",
+                "通用基线值原则与具体检查项特例必须分成不同候选",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+            )
+
+
+def _validate_workflow_stage_bindings(
+    candidate: ProtocolControlAgentWireCandidate,
+    *,
+    batch: ProtocolControlDispositionBatch,
+    candidate_index: int,
+) -> None:
+    try:
+        validate_scope_citations(
+            candidate.review_node_bindings,
+            [unit for unit in batch.owned_units
+             if unit.structure_unit_id in candidate.source_structure_unit_ids],
+            [*batch.owned_units, *batch.context_units],
+        )
+    except ValueError as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "SCOPE_CITATION_INVALID", str(exc),
+            structure_unit_ids=candidate.source_structure_unit_ids,
+            candidate_indexes=[candidate_index],
+        ) from exc
+    targets = {
+        item.workflow_stage_id: item
+        for item in batch.known_workflow_stage_targets
+    }
+    if not targets:
+        raise ProtocolControlAgentWireValidationError(
+            "WORKFLOW_TARGET_CATALOG_MISSING",
+            "本批没有冻结 workflow_stage 目录，候选不得输出审核节点绑定",
+            structure_unit_ids=candidate.source_structure_unit_ids,
+            candidate_indexes=[candidate_index],
+        )
+    for node in candidate.review_node_bindings:
+        target = targets.get(node.workflow_stage_id)
+        if target is None:
+            raise ProtocolControlAgentWireValidationError(
+                "UNKNOWN_WORKFLOW_STAGE_TARGET",
+                f"候选 {candidate_index} 选择了本批未知 workflow_stage_id："
+                f"{node.workflow_stage_id}",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+                candidate_indexes=[candidate_index],
+            )
+        if node.review_stage != target.review_stage:
+            raise ProtocolControlAgentWireValidationError(
+                "WORKFLOW_REVIEW_STAGE_MISMATCH",
+                f"workflow_stage_id {node.workflow_stage_id} 的 review_stage 必须与冻结目录一致："
+                f"{target.review_stage.value}",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+                candidate_indexes=[candidate_index],
+            )
+
+
+def validate_protocol_control_agent_wire(
+    wire: ProtocolControlAgentWire,
+    batch: ProtocolControlDispositionBatch,
+) -> ProtocolControlAgentWire:
+    """Return a validated copy after deterministic source-glyph restoration."""
+
+    wire = wire.model_copy(deep=True)
+
+    # With one owned unit and no candidate, a one-character copied ID error
+    # has only one possible source binding. The raw provider reply remains in
+    # the attempt receipt; all disposition and target checks still run below.
+    if (
+        len(batch.owned_structure_unit_ids) == len(wire.dispositions) == 1
+        and not wire.candidate_drafts
+    ):
+        expected_id = batch.owned_structure_unit_ids[0]
+        reported_id = wire.dispositions[0].structure_unit_id
+        if (
+            reported_id != expected_id
+            and reported_id.startswith("su-")
+            and expected_id.startswith("su-")
+            and len(reported_id) == len(expected_id)
+            and sum(left != right for left, right in zip(reported_id, expected_id)) == 1
+        ):
+            wire.dispositions[0].structure_unit_id = expected_id
+
+    disposition_ids = [item.structure_unit_id for item in wire.dispositions]
+    expected_ids = list(batch.owned_structure_unit_ids)
+    extra_context_ids = set(disposition_ids) - set(expected_ids)
+    if (not (set(expected_ids) - set(disposition_ids))
+            and extra_context_ids
+            and extra_context_ids <= set(batch.context_structure_unit_ids)
+            and all(set(candidate.source_structure_unit_ids) <= set(expected_ids)
+                    for candidate in wire.candidate_drafts)):
+        wire.dispositions = [
+            item for item in wire.dispositions
+            if item.structure_unit_id in expected_ids
+        ]
+        disposition_ids = [item.structure_unit_id for item in wire.dispositions]
+    if set(disposition_ids) != set(expected_ids):
+        missing = sorted(set(expected_ids) - set(disposition_ids))
+        extra = sorted(set(disposition_ids) - set(expected_ids))
+        raise ProtocolControlAgentWireValidationError(
+            "PARTIAL_BATCH",
+            f"批次处置必须覆盖全部 owned_units；missing={missing}, extra={extra}",
+            structure_unit_ids=(*missing, *extra),
+        )
+
+    disposition_by_unit = {item.structure_unit_id: item for item in wire.dispositions}
+    known_official_codes = {item.official_code for item in batch.known_official_targets}
+    known_procedure_ids = {item.catalog_item_id for item in batch.known_procedure_targets}
+    for unit_id, disposition in disposition_by_unit.items():
+        procedure_target_ids = disposition.linked_procedure_catalog_item_ids or (
+            [disposition.linked_procedure_catalog_item_id]
+            if disposition.linked_procedure_catalog_item_id is not None
+            else []
+        )
+        if disposition.disposition == StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY:
+            if disposition.linked_official_code is None:
+                raise ProtocolControlAgentWireValidationError(
+                    "OFFICIAL_TARGET_MISSING",
+                    f"官方入排处置缺少已知 IN/EX 目标：{unit_id}",
+                    structure_unit_ids=[unit_id],
+                )
+            if disposition.linked_official_code not in known_official_codes:
+                raise ProtocolControlAgentWireValidationError(
+                    "UNKNOWN_OFFICIAL_TARGET",
+                    f"处置引用了本批未知官方目标：{disposition.linked_official_code}",
+                    structure_unit_ids=[unit_id],
+                )
+        elif disposition.disposition == StructureUnitDispositionKind.REQUIRED_PROCEDURE:
+            if not procedure_target_ids:
+                raise ProtocolControlAgentWireValidationError(
+                    "PROCEDURE_TARGET_MISSING",
+                    f"流程必做处置缺少已知目录目标：{unit_id}",
+                    structure_unit_ids=[unit_id],
+                )
+            unknown_procedure_ids = sorted(
+                set(procedure_target_ids) - known_procedure_ids
+            )
+            if unknown_procedure_ids:
+                raise ProtocolControlAgentWireValidationError(
+                    "UNKNOWN_PROCEDURE_TARGET",
+                    "处置引用了本批未知流程目标：" + ",".join(unknown_procedure_ids),
+                    structure_unit_ids=[unit_id],
+                )
+            # Apply the existing coverage check before a wrong native-row link
+            # becomes the immutable basis of a later additive source repair.
+            from .protocol_control_source_interpretation import (
+                native_schedule_label_sources, _target_contains_row_label,
+            )
+            unit = next(item for item in batch.owned_units if item.structure_unit_id == unit_id)
+            labels = native_schedule_label_sources(batch, unit, source_quote=unit.excerpt)
+            targets = {item.catalog_item_id: item for item in batch.known_procedure_targets}
+            if labels and any(not _target_contains_row_label(targets[target_id], labels)
+                              for target_id in procedure_target_ids):
+                raise ProtocolControlAgentWireValidationError(
+                    "PROCEDURE_ROW_SOURCE_MISMATCH",
+                    "流程处置的目标不含本表格项目的原始行来源；须核实本行处置，不能借其他项目的共同脚注。",
+                    structure_unit_ids=[unit_id], allow_candidate_repartition=True,
+                    allow_post_enrollment_reclassification=True,
+                )
+        elif disposition.linked_official_code or procedure_target_ids:
+            raise ProtocolControlAgentWireValidationError(
+                "DISPOSITION_LINK_MISMATCH",
+                f"非对应处置不得携带官方或流程目标：{unit_id}",
+                structure_unit_ids=[unit_id],
+            )
+        requires_non_control_reason = disposition.disposition not in {
+            StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+            StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+            StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+        }
+        if requires_non_control_reason:
+            if not disposition.notes or not disposition.notes.strip():
+                raise ProtocolControlAgentWireValidationError(
+                    "NON_CONTROL_REASON_MISSING",
+                    f"无候选处置必须给出明确非控制理由：{unit_id}",
+                    structure_unit_ids=[unit_id],
+                )
+
+    owned_units = set(expected_ids)
+    units_by_id = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    owned_spans = set(batch.owned_source_span_ids)
+    fingerprints: set[str] = set()
+    for candidate_index, candidate in enumerate(wire.candidate_drafts):
+        if not set(candidate.source_structure_unit_ids) <= owned_units:
+            raise ProtocolControlAgentWireValidationError(
+                "CANDIDATE_UNIT_SCOPE_ESCAPE",
+                f"候选 {candidate_index} 引用了本批之外的结构单元",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+                candidate_indexes=[candidate_index],
+            )
+        if not set(candidate.source_span_ids) <= owned_spans:
+            raise ProtocolControlAgentWireValidationError(
+                "CANDIDATE_SOURCE_SCOPE_ESCAPE",
+                f"候选 {candidate_index} 引用了本批之外的来源片段",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+                candidate_indexes=[candidate_index],
+            )
+        candidate_owned_spans = {
+            span_id
+            for unit_id in candidate.source_structure_unit_ids
+            for span_id in units_by_id[unit_id].source_span_ids
+        }
+        if not set(candidate.source_span_ids) <= candidate_owned_spans:
+            raise ProtocolControlAgentWireValidationError(
+                "CANDIDATE_SOURCE_UNIT_SCOPE_ESCAPE",
+                f"候选 {candidate_index} 的 source_span_ids 必须来自其 source_structure_unit_ids 的来源闭包",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+                candidate_indexes=[candidate_index],
+            )
+        candidate = _validate_exact_atom_sources(candidate, batch=batch)
+        # Whole-row provenance is host-owned; atom citations and meaning stay local.
+        row_spans = [
+            span
+            for unit_id in candidate.source_structure_unit_ids
+            if units_by_id[unit_id].unit_kind in {"table_header", "table_row", "table_note"}
+            for span in units_by_id[unit_id].source_span_ids
+        ]
+        if row_spans:
+            candidate = candidate.model_copy(update={
+                "source_span_ids": sorted({*candidate.source_span_ids, *row_spans}),
+            })
+        wire.candidate_drafts[candidate_index] = candidate
+        fingerprint = _stable_json(candidate.model_dump(mode="json"))
+        if fingerprint in fingerprints:
+            raise ProtocolControlAgentWireValidationError(
+                "DUPLICATE_CANDIDATE",
+                f"候选 {candidate_index} 与已有候选完全重复",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+                candidate_indexes=[candidate_index],
+            )
+        fingerprints.add(fingerprint)
+        if any(
+            disposition_by_unit[unit_id].disposition
+            != StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE
+            for unit_id in candidate.source_structure_unit_ids
+        ):
+            raise ProtocolControlAgentWireValidationError(
+                "CANDIDATE_DISPOSITION_MISMATCH",
+                f"候选 {candidate_index} 的来源结构单元必须处置为其他控制候选",
+                structure_unit_ids=candidate.source_structure_unit_ids,
+                candidate_indexes=[candidate_index],
+            )
+        _validate_workflow_stage_bindings(
+            candidate,
+            batch=batch,
+            candidate_index=candidate_index,
+        )
+        try:
+            _validate_known_targets(candidate, batch=batch)
+        except ProtocolControlAgentWireValidationError as exc:
+            if exc.candidate_indexes:
+                raise
+            raise ProtocolControlAgentWireValidationError(
+                exc.code,
+                str(exc).removeprefix(f"{exc.code}: "),
+                structure_unit_ids=exc.structure_unit_ids,
+                candidate_indexes=[candidate_index],
+                candidate_ids=exc.candidate_ids,
+                obligation_source_span_ids=exc.obligation_source_span_ids,
+                error_class_codes=exc.error_class_codes,
+                allow_candidate_repartition=exc.allow_candidate_repartition,
+                allow_source_closure_rewrite=exc.allow_source_closure_rewrite,
+                allow_post_enrollment_reclassification=exc.allow_post_enrollment_reclassification,
+                allow_source_insert=exc.allow_source_insert,
+                repair_scopes=exc.repair_scopes,
+                validation_findings=[{
+                    **finding,
+                    "candidate_index": candidate_index,
+                    "json_path": f"candidate_drafts.{candidate_index}.{finding['json_path']}",
+                } if finding.get("json_path") else {
+                    **finding, "candidate_index": candidate_index,
+                } for finding in exc.validation_findings],
+                repair_scope_unknown=exc.repair_scope_unknown,
+            ) from exc
+        _validate_temporal_obligation_scope(candidate)
+
+    candidate_units = {
+        unit_id
+        for candidate in wire.candidate_drafts
+        for unit_id in candidate.source_structure_unit_ids
+    }
+    for unit_id, disposition in disposition_by_unit.items():
+        if disposition.disposition == StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE:
+            if unit_id not in candidate_units:
+                raise ProtocolControlAgentWireValidationError(
+                    "CANDIDATE_MISSING",
+                    f"其他控制候选处置没有对应候选草稿：{unit_id}",
+                    structure_unit_ids=[unit_id],
+                )
+    return wire
+
+
+def _condition_dnf_to_domain(
+    value: ProtocolControlAgentWireConditionDnf | None,
+    *,
+    allow_exception_scopes: bool = False,
+) -> ControlConditionDnfDraft | None:
+    if value is None:
+        return None
+    groups: list[ControlConditionGroupDraft] = []
+    for group in value.groups:
+        if (
+            group.waives_trigger_branch_indexes
+            or group.activates_obligation_group_indexes
+        ) and not allow_exception_scopes:
+            raise ValueError("适用性/触发 DNF 不得携带例外作用域或激活义务组序位")
+        groups.append(
+            ControlConditionGroupDraft(
+                atoms=[
+                    ControlConditionAtomDraft(
+                        statement=atom.statement,
+                        evaluation=atom.evaluation,
+                        source_span_ids=list(atom.source_span_ids),
+                        source_excerpts=list(atom.source_excerpts),
+                        time_constraint=atom.time_constraint,
+                        requires_professional_judgment=atom.requires_professional_judgment,
+                    )
+                    for atom in group.atoms
+                ],
+                waives_trigger_branch_indexes=list(
+                    group.waives_trigger_branch_indexes
+                ),
+                activates_obligation_group_indexes=list(
+                    group.activates_obligation_group_indexes
+                ),
+            )
+        )
+    return ControlConditionDnfDraft(groups=groups)
+
+
+def _obligation_dnf_to_domain(
+    value: ProtocolControlAgentWireObligationDnf,
+) -> ControlObligationDnfDraft:
+    return ControlObligationDnfDraft(
+        groups=[
+            ControlObligationGroupDraft(
+                atoms=[
+                    ControlObligationAtomDraft(
+                        kind=atom.kind,
+                        evaluation=atom.evaluation,
+                        statement=atom.statement,
+                        time_constraint=atom.time_constraint,
+                        prospective_period=atom.prospective_period,
+                        continuing_obligation=(ControlContinuingObligation(
+                            **atom.continuing_obligation.model_dump()
+                        ) if atom.continuing_obligation is not None else None),
+                        modality=atom.modality,
+                        temporal_scope=atom.temporal_scope,
+                        source_span_ids=list(atom.source_span_ids),
+                        source_excerpts=list(atom.source_excerpts),
+                        requires_professional_judgment=atom.requires_professional_judgment,
+                    )
+                    for atom in group.atoms
+                ],
+                applies_to_trigger_branch_indexes=list(
+                    group.applies_to_trigger_branch_indexes
+                ),
+            )
+            for group in value.groups
+        ]
+    )
+
+
+def _candidate_to_domain(
+    candidate: ProtocolControlAgentWireCandidate,
+) -> ProtocolControlCandidateSemanticDraft:
+    return ProtocolControlCandidateSemanticDraft(
+        title=candidate.title,
+        applicable_population=candidate.applicable_population,
+        applicability_expression=_condition_dnf_to_domain(
+            candidate.applicability_expression
+        ),
+        trigger_expression=_condition_dnf_to_domain(candidate.trigger_expression),
+        obligation_expression=_obligation_dnf_to_domain(candidate.obligation_expression),
+        exception_expression=_condition_dnf_to_domain(
+            candidate.exception_expression,
+            allow_exception_scopes=True,
+        ),
+        repeat_trigger_conditions=[ControlRepeatTriggerDraft(
+            condition_id=item.condition_id, expression=_condition_dnf_to_domain(item.expression),
+            evidence_roles=list(item.evidence_roles),
+        ) for item in candidate.repeat_trigger_conditions],
+        review_node_bindings=[
+            ReviewNodeBinding(
+                workflow_stage_id=item.workflow_stage_id,
+                review_stage=item.review_stage,
+                role=item.role,
+                guidance=item.guidance,
+                scope_citation=item.scope_citation,
+            )
+            for item in candidate.review_node_bindings
+        ],
+        minimum_evidence=[
+            ControlMinimumEvidenceDraft(
+                fact_type=item.fact_type,
+                description=item.description,
+                due_stage=item.due_stage,
+                required_source_types=list(item.required_source_types),
+                workflow_stage_ids=list(item.workflow_stage_ids),
+                source_policy=item.source_policy,
+                atom_refs=list(item.atom_refs),
+            )
+            for item in candidate.minimum_evidence
+        ],
+        source_structure_unit_ids=list(candidate.source_structure_unit_ids),
+        source_span_ids=list(candidate.source_span_ids),
+        cross_source_relations=[
+            ControlCrossSourceRelationDraft(
+                kind=item.kind,
+                external_target_kind=item.external_target_kind,
+                external_target_id=item.external_target_id,
+                candidate_side=item.candidate_side,
+                affected_workflow_stage_id=item.affected_workflow_stage_id,
+                notes=item.notes,
+            )
+            for item in candidate.cross_source_relations
+        ],
+    )
+
+
+def wire_to_protocol_control_batch_disposition(
+    wire: ProtocolControlAgentWire,
+    batch: ProtocolControlDispositionBatch,
+) -> ProtocolControlBatchDisposition:
+    """Validate and inject only planner batch fields into the domain draft."""
+
+    if wire.wire_version != CONTROL_AGENT_WIRE_VERSION:
+        raise ProtocolControlAgentWireValidationError(
+            "WIRE_VERSION_INVALID",
+            f"不支持的 wire_version：{wire.wire_version}",
+        )
+    try:
+        wire = validate_protocol_control_agent_wire(wire, batch)
+        candidates = [_candidate_to_domain(item) for item in wire.candidate_drafts]
+        candidate_indexes_by_unit = {
+            unit_id: [
+                index
+                for index, candidate in enumerate(wire.candidate_drafts)
+                if unit_id in candidate.source_structure_unit_ids
+            ]
+            for unit_id in batch.owned_structure_unit_ids
+        }
+        by_unit = {item.structure_unit_id: item for item in wire.dispositions}
+        dispositions = [
+            ProtocolControlUnitDispositionDraft(
+                structure_unit_id=unit_id,
+                disposition=by_unit[unit_id].disposition,
+                linked_official_code=by_unit[unit_id].linked_official_code,
+                linked_procedure_catalog_item_id=by_unit[unit_id].linked_procedure_catalog_item_id,
+                linked_procedure_catalog_item_ids=list(
+                    by_unit[unit_id].linked_procedure_catalog_item_ids
+                ),
+                candidate_draft_indexes=(
+                    candidate_indexes_by_unit[unit_id]
+                    if by_unit[unit_id].disposition
+                    == StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE
+                    else []
+                ),
+                notes=by_unit[unit_id].notes,
+            )
+            for unit_id in batch.owned_structure_unit_ids
+        ]
+        return ProtocolControlBatchDisposition(
+            batch_id=batch.batch_id,
+            coverage_manifest_id=batch.coverage_manifest_id,
+            owned_structure_unit_ids=list(batch.owned_structure_unit_ids),
+            owned_source_span_ids=list(batch.owned_source_span_ids),
+            dispositions=dispositions,
+            candidate_drafts=candidates,
+        )
+    except ProtocolControlAgentWireValidationError:
+        raise
+    except (ValidationError, ValueError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "DOMAIN_DRAFT_INVALID",
+            str(exc),
+        ) from exc
+
+
+def hydrate_protocol_control_agent_output(
+    value: str | ProtocolControlAgentWire,
+    batch: ProtocolControlDispositionBatch,
+) -> ProtocolControlBatchDispositionHydrated:
+    """Parse/validate a wire and let the control domain assign stable IDs."""
+
+    wire = parse_protocol_control_agent_wire(value) if isinstance(value, str) else value
+    draft = wire_to_protocol_control_batch_disposition(wire, batch)
+    try:
+        return hydrate_protocol_control_batch_disposition(batch, draft)
+    except (ValidationError, ValueError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "HYDRATION_INVALID",
+            str(exc),
+        ) from exc
+
+
+def parse_protocol_control_agent_output(
+    text: str,
+    batch: ProtocolControlDispositionBatch,
+    *,
+    hydrate: bool = True,
+) -> ProtocolControlBatchDispositionHydrated | ProtocolControlBatchDisposition:
+    """Convenience parser; hydrated output is the safe default."""
+
+    wire = parse_protocol_control_agent_wire(text)
+    draft = wire_to_protocol_control_batch_disposition(wire, batch)
+    if hydrate:
+        try:
+            return hydrate_protocol_control_batch_disposition(batch, draft)
+        except (ValidationError, ValueError) as exc:
+            raise ProtocolControlAgentWireValidationError(
+                "HYDRATION_INVALID",
+                str(exc),
+            ) from exc
+    return draft
+
+
+class ProtocolControlDiscoveryAgentAttempt(ContractModel):
+    """One bounded discovery transport or schema-validation attempt."""
+
+    attempt: int = Field(ge=1)
+    session_id: str = Field(min_length=1)
+    raw_output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    outcome: Literal["parsed", "schema_invalid", "transport_failed"]
+    output: list[ProtocolControlDiscoveryDecision] | None = None
+    issues: list[str] = Field(default_factory=list)
+    error_code: str | None = None
+    error_classes: list[str] = Field(default_factory=list)
+    rejected_structure_unit_ids: list[str] = Field(default_factory=list)
+
+
+ProtocolControlDiscoveryAgentAttemptCallback = Callable[
+    [ProtocolControlDiscoveryAgentAttempt], None
+]
+
+
+class ProtocolControlDiscoveryAgentRunResult(ContractModel):
+    """Bounded discovery result; closure remains a deterministic planner step."""
+
+    status: Literal["已解析", "需要核对", "待跨章核验"]
+    discovery_batch_id: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
+    attempts: list[ProtocolControlDiscoveryAgentAttempt] = Field(min_length=1)
+    final_output: list[ProtocolControlDiscoveryDecision] | None = None
+
+    @property
+    def batch_id(self) -> str:
+        """Compatibility view for callers handling deep and discovery runs."""
+
+        return self.discovery_batch_id
+
+    @property
+    def final_decisions(
+        self,
+    ) -> tuple[ProtocolControlDiscoveryDecision, ...] | None:
+        return (
+            tuple(self.final_output)
+            if self.final_output is not None
+            else None
+        )
+
+
+class ProtocolControlDiscoveryAgentRunner:
+    """Run one discovery batch with bounded same-session schema repair.
+
+    The runner only accepts a complete, in-scope batch response.  It does not
+    infer dispositions, create identities, or close the full manifest; those
+    responsibilities stay in deterministic planner code.
+    """
+
+    def __init__(
+        self,
+        *,
+        max_transport_retries: int = DEFAULT_MAX_TRANSPORT_RETRIES,
+        max_schema_repairs: int = DEFAULT_MAX_SCHEMA_REPAIRS,
+    ) -> None:
+        if max_transport_retries < 0 or max_schema_repairs < 0:
+            raise ValueError("重试上限必须为非负整数")
+        self._max_transport_retries = max_transport_retries
+        self._max_schema_repairs = max_schema_repairs
+
+    def run(
+        self,
+        batch: ProtocolControlDiscoveryBatch | ProtocolControlDiscoveryAgentInput,
+        transport: ProtocolControlDiscoveryAgentTransport,
+        *,
+        prompt_template: str = DEFAULT_PROTOCOL_CONTROL_DISCOVERY_PROMPT_TEMPLATE,
+        accepted_batch_ids: Sequence[str] = (),
+        on_attempt: ProtocolControlDiscoveryAgentAttemptCallback | None = None,
+    ) -> ProtocolControlDiscoveryAgentRunResult:
+        from .protocol_control_agent_transport import protocol_control_call_failure_code
+
+        discovery_input = (
+            batch
+            if isinstance(batch, ProtocolControlDiscoveryAgentInput)
+            else ProtocolControlDiscoveryAgentInput.from_batch(batch)
+        )
+        batch_id = discovery_input.discovery_batch_id
+        if batch_id in set(accepted_batch_ids):
+            raise ValueError(f"已接受发现批次不得被同会话修复替换：{batch_id}")
+
+        attempts: list[ProtocolControlDiscoveryAgentAttempt] = []
+
+        def record_attempt(attempt: ProtocolControlDiscoveryAgentAttempt) -> None:
+            attempts.append(attempt)
+            if on_attempt is not None:
+                on_attempt(attempt)
+
+        session_id: str | None = None
+        raw_text: str | None = None
+        prompt = build_protocol_control_discovery_prompt(
+            discovery_input,
+            prompt_template=prompt_template,
+        )
+        transport_failures = 0
+        while True:
+            try:
+                response = (
+                    transport.start(prompt=prompt)
+                    if session_id is None
+                    else transport.continue_session(
+                        session_id=session_id,
+                        prompt=prompt,
+                    )
+                )
+                if session_id is not None and response.session_id != session_id:
+                    raise RuntimeError("同会话发现修复不得更换 session_id")
+                session_id = response.session_id
+                raw_text = response.text
+                break
+            except Exception as exc:  # noqa: BLE001 - transport boundary
+                attempt_id = len(attempts) + 1
+                terminal_code = protocol_control_call_failure_code(exc)
+                sid = session_id or getattr(exc, "session_id", None) or f"transport-failed-{attempt_id}"
+                record_attempt(
+                    ProtocolControlDiscoveryAgentAttempt(
+                        attempt=attempt_id,
+                        session_id=sid,
+                        raw_output_sha256=_sha256(str(exc)),
+                        outcome="transport_failed",
+                        issues=[str(exc)[:2000]],
+                        error_code=terminal_code,
+                        error_classes=[terminal_code] if terminal_code else [],
+                    )
+                )
+                transport_failures += 1
+                if (
+                    terminal_code is not None
+                    or session_id is not None
+                    or transport_failures > self._max_transport_retries
+                ):
+                    return ProtocolControlDiscoveryAgentRunResult(
+                        status="需要核对",
+                        discovery_batch_id=batch_id,
+                        session_id=sid,
+                        attempts=attempts,
+                    )
+
+        assert session_id is not None and raw_text is not None
+        repairs = 0
+        invalid_fingerprints: dict[tuple[str, str, str], int] = {}
+        while True:
+            try:
+                decisions = list(
+                    hydrate_protocol_control_discovery_agent_output(
+                        raw_text,
+                        discovery_input,
+                    )
+                )
+                record_attempt(
+                    ProtocolControlDiscoveryAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=session_id,
+                        raw_output_sha256=_sha256(raw_text),
+                        outcome="parsed",
+                        output=decisions,
+                    )
+                )
+                return ProtocolControlDiscoveryAgentRunResult(
+                    status="已解析",
+                    discovery_batch_id=batch_id,
+                    session_id=session_id,
+                    attempts=attempts,
+                    final_output=decisions,
+                )
+            except Exception as exc:  # noqa: BLE001 - bounded validation boundary
+                error = (
+                    exc
+                    if isinstance(exc, ProtocolControlDiscoveryWireValidationError)
+                    else ProtocolControlDiscoveryWireValidationError(
+                        "OUTPUT_INVALID",
+                        str(exc),
+                    )
+                )
+                raw_output_sha256 = _sha256(raw_text)
+                invalid_fingerprint = (
+                    raw_output_sha256,
+                    error.code,
+                    str(error)[:2000],
+                )
+                invalid_fingerprints[invalid_fingerprint] = (
+                    invalid_fingerprints.get(invalid_fingerprint, 0) + 1
+                )
+                no_progress = invalid_fingerprints[invalid_fingerprint] >= 2
+                expected_ids = set(discovery_input.target_structure_unit_ids)
+                rejected_ids = [
+                    unit_id
+                    for unit_id in error.structure_unit_ids
+                    if unit_id in expected_ids
+                ]
+                if not rejected_ids:
+                    rejected_ids = list(discovery_input.target_structure_unit_ids)
+                record_attempt(
+                    ProtocolControlDiscoveryAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=session_id,
+                        raw_output_sha256=raw_output_sha256,
+                        outcome="schema_invalid",
+                        issues=(
+                            [str(error)[:2000]]
+                            if not no_progress
+                            else [
+                                str(error)[:2000],
+                                "连续返回相同无效结果，本发现批次停止自动修复并转为需要核对",
+                            ]
+                        ),
+                        error_code=error.code,
+                        error_classes=[error.code],
+                        rejected_structure_unit_ids=rejected_ids,
+                    )
+                )
+                if no_progress or repairs >= self._max_schema_repairs:
+                    return ProtocolControlDiscoveryAgentRunResult(
+                        status="需要核对",
+                        discovery_batch_id=batch_id,
+                        session_id=session_id,
+                        attempts=attempts,
+                    )
+
+                repairs += 1
+                repair_prompt = build_protocol_control_discovery_repair_prompt(
+                    discovery_input,
+                    problem=str(error),
+                    structure_unit_ids=rejected_ids,
+                )
+                try:
+                    response = transport.continue_session(
+                        session_id=session_id,
+                        prompt=repair_prompt,
+                    )
+                    if response.session_id != session_id:
+                        raise RuntimeError("同会话发现修复不得更换 session_id")
+                    raw_text = response.text
+                except Exception as exc2:  # noqa: BLE001 - transport boundary
+                    record_attempt(
+                        ProtocolControlDiscoveryAgentAttempt(
+                            attempt=len(attempts) + 1,
+                            session_id=session_id,
+                            raw_output_sha256=_sha256(str(exc2)),
+                            outcome="transport_failed",
+                            issues=[str(exc2)[:2000]],
+                            error_code=protocol_control_call_failure_code(exc2),
+                            error_classes=(
+                                [protocol_control_call_failure_code(exc2)]
+                                if protocol_control_call_failure_code(exc2) else []
+                            ),
+                            rejected_structure_unit_ids=rejected_ids,
+                        )
+                    )
+                    return ProtocolControlDiscoveryAgentRunResult(
+                        status="需要核对",
+                        discovery_batch_id=batch_id,
+                        session_id=session_id,
+                        attempts=attempts,
+                    )
+
+class ProtocolControlAgentAttempt(ContractModel):
+    attempt: int = Field(ge=1)
+    session_id: str = Field(min_length=1)
+    raw_output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    raw_output_chars: int | None = Field(default=None, ge=0)
+    raw_output_text: str | None = Field(default=None, exclude=True)
+    outcome: Literal[
+        "parsed",
+        "schema_invalid",
+        "publication_invalid",
+        "transport_failed",
+    ]
+    output: ProtocolControlBatchDispositionHydrated | None = None
+    issues: list[str] = Field(default_factory=list)
+    error_classes: list[str] = Field(default_factory=list)
+    error_detail: dict[str, object] | None = None
+    rejected_structure_unit_ids: list[str] = Field(default_factory=list)
+    rejected_candidate_ids: list[str] = Field(default_factory=list)
+
+
+
+class ProtocolControlAgentRunResult(ContractModel):
+    status: Literal["已解析", "需要核对", "待跨章核验"]
+    batch_id: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
+    attempts: list[ProtocolControlAgentAttempt] = Field(min_length=1)
+    source_scope_question_history: list[dict[str, object]] = Field(
+        default_factory=list, exclude=True,
+    )
+    final_output: ProtocolControlBatchDispositionHydrated | None = None
+    source_interpretation: SourceInterpretation | None = None
+    # Failed source corrections are diagnostics, not authoring/adoption input.
+    pending_source_interpretation: SourceInterpretation | None = None
+    source_statement_coverage: list[SourceStatementCoverage] = Field(default_factory=list)
+    source_target_review: SourceTargetReview | None = None
+    # Pre-author comparison uses pending coverage, not the completed wire.
+    source_front_target_review: SourceTargetReview | None = None
+    source_candidate_alignment: SourceCandidateAlignment | None = None
+    # Bounded per-statement declarations of which hydrated candidate atoms
+    # evaluate a source calculation definition. They are only proposals: the
+    # execution layer turns them into frozen records after proving candidate
+    # identity and the exact basis excerpt, and an absent declaration keeps the
+    # publication block instead of passing.
+    source_definition_consumers: SourceDefinitionConsumers | None = None
+    # Diagnostic only: a gate-valid source run that stopped at an unresolved
+    # source/target correspondence keeps its declaration attempt here instead
+    # of the adoption field above. The declaration stays a proposal with its
+    # own 1-based attempt sequence; it never replaces the original failure and
+    # never makes the batch accepted. Both defaults stay out of the legacy
+    # serialized shape, so an old response round-trips unchanged.
+    pending_source_definition_consumers: SourceDefinitionConsumers | None = Field(
+        default=None, exclude_if=lambda value: value is None,
+    )
+    pending_source_definition_consumer_attempts: list[ProtocolControlAgentAttempt] = Field(
+        default_factory=list, exclude_if=lambda value: not value,
+    )
+    pending_source_definition_consumer_output_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$", exclude_if=lambda value: value is None,
+    )
+    restricted_source_definition_consumer_attempts: list[ProtocolControlAgentAttempt] = Field(
+        default_factory=list, exclude_if=lambda value: not value,
+    )
+    partial_wire: ProtocolControlAgentWire | None = None
+    reviewed_semantic_repair_unit_ids: list[str] = Field(
+        default_factory=list, exclude_if=lambda value: not value,
+    )
+    # A parsed author proposal is not a gate-valid draft or source-review proof.
+    pending_author_wire: ProtocolControlAgentWire | None = Field(default=None, exclude_if=lambda value: value is None)
+    pending_author_source_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$", exclude_if=lambda value: value is None)
+    pending_author_repairs_used: int = Field(default=0, ge=0, strict=True, exclude_if=lambda value: value == 0)
+    # Diagnostic only: an unaccepted full wire with a typed consumer-capability
+    # failure. The source restriction producer revalidates it on every read.
+    capability_wire: ProtocolControlAgentWire | None = None
+    repair_used: bool = False
+    workflow_variant_requested: Literal["RV1001-BASELINE", "RV1001-FLOW"] = "RV1001-BASELINE"
+    workflow_path_executed: Literal[
+        "not_recorded", "not_started", "front_stage_flow", "baseline_wire", "resumed_saved_wire",
+    ] = "not_recorded"
+
+
+def declare_source_definition_consumers(
+    batch: ProtocolControlDispositionBatch,
+    transport: ProtocolControlAgentTransport,
+    interpretation: SourceInterpretation | None,
+    output: ProtocolControlBatchDispositionHydrated | None,
+    attempts: list[ProtocolControlAgentAttempt],
+    *,
+    official_predicate_identities: Mapping[str, Sequence[tuple[str, str]]] | None = None,
+    official_predicate_sources: Mapping[str, Mapping[tuple[str, str], Sequence[str]]] | None = None,
+) -> tuple[SourceDefinitionConsumers | None, bool]:
+    """Run the one bounded product step that declares definition consumers.
+
+    Returns ``(declaration, failed)``. A run without a frozen source
+    interpretation, or a batch without a calculation definition, has nothing to
+    declare and returns ``(None, False)``. A batch with a definition must be
+    declared in the same frozen run: a missing reader, an invalid declaration,
+    or an official predicate whose identity is absent from the frozen identity
+    index all fail closed by returning ``failed=True`` without a saved relation,
+    so the publication block stays in place and the batch is reported for review
+    instead of passing silently.
+    """
+    from .protocol_control_agent_transport import protocol_control_call_failure_code
+
+    if interpretation is None:
+        return None, False
+    if not source_definition_statement_indexes(interpretation):
+        return None, False
+    # Callers reach this step only after the hydrated output passed its own
+    # batch gate; a missing output would mean the declaration cannot be anchored.
+    assert output is not None
+    reader = getattr(transport, "start_source_definition_consumers", None)
+    if not callable(reader):
+        attempts.append(ProtocolControlAgentAttempt(
+            attempt=len(attempts) + 1,
+            session_id="definition-consumer-unavailable",
+            raw_output_sha256=_sha256("定义消费声明服务不可用"),
+            raw_output_chars=None,
+            outcome="transport_failed",
+            issues=["来源定义消费声明服务不可用，不能跳过已冻结计算定义的消费者登记"],
+            error_classes=["SOURCE_DEFINITION_CONSUMER_TRANSPORT_FAILED"],
+        ))
+        return None, True
+    response: ProtocolControlAgentResponse | None = None
+    try:
+        response = reader(prompt=build_source_definition_consumers_prompt(
+            batch, interpretation, output,
+            official_predicate_identities=official_predicate_identities,
+            official_predicate_sources=official_predicate_sources,
+        ))
+        declaration = parse_product_source_definition_consumers(
+            batch, interpretation, response.text,
+            official_predicate_identities=official_predicate_identities,
+            restricted_statements=output.restricted_statements,
+        )
+    except Exception as exc:  # noqa: BLE001 - product declaration boundary
+        attempts.append(ProtocolControlAgentAttempt(
+            attempt=len(attempts) + 1,
+            session_id=getattr(exc, "session_id", None) or (
+                response.session_id if response is not None else "definition-consumer-invalid"
+            ),
+            raw_output_sha256=_sha256(response.text if response is not None else str(exc)),
+            raw_output_chars=(len(response.text) if response is not None else None),
+            raw_output_text=(response.text if response is not None else None),
+            outcome=("publication_invalid" if response is not None else "transport_failed"),
+            issues=["来源定义消费登记未通过有源校验：" + str(exc)[:1400]],
+            error_classes=[
+                protocol_control_call_failure_code(exc)
+                or (exc.code if isinstance(exc, SourceTargetReviewValidationError)
+                    else "SOURCE_DEFINITION_CONSUMER_INVALID")
+            ],
+            error_detail=(
+                {
+                    "code": exc.code,
+                    "statement_id": exc.statement_index,
+                    "json_path": exc.json_path,
+                    "source_refs": list(exc.source_refs),
+                    "retry_class": exc.retry_class,
+                    "affected_dependents": list(exc.affected_dependents),
+                }
+                if isinstance(exc, SourceTargetReviewValidationError) else None
+            ),
+        ))
+        return None, True
+    attempts.append(ProtocolControlAgentAttempt(
+        attempt=len(attempts) + 1,
+        session_id=response.session_id,
+        raw_output_sha256=_sha256(response.text),
+        raw_output_chars=len(response.text),
+        raw_output_text=response.text,
+        outcome="parsed",
+        issues=["已登记来源定义消费关系，作用范围仍由冻结来源闭包判定"],
+    ))
+    return declaration, False
+
+
+def _literally_cited_action_candidates(
+    batch: ProtocolControlDispositionBatch,
+    statement: SourceStatement,
+    wire: ProtocolControlAgentWire,
+) -> list[int]:
+    """Find an existing action citation without claiming its scope is verified."""
+    return [index for index, roles in _literally_cited_candidate_roles(batch, statement, wire).items()
+            if "obligation" in roles]
+
+
+def _literally_cited_candidate_roles(
+    batch: ProtocolControlDispositionBatch,
+    statement: SourceStatement,
+    wire: ProtocolControlAgentWire,
+) -> dict[int, list[str]]:
+    """Locate citations for blocking duplicate inserts, never prove expression."""
+    spans = {
+        span for unit in batch.owned_units
+        if unit.structure_unit_id == statement.structure_unit_id
+        for span in unit.source_span_ids
+    }
+    quote = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
+    if not quote:
+        return {}
+    found = {}
+    for index, candidate in enumerate(wire.candidate_drafts):
+        if statement.structure_unit_id not in candidate.source_structure_unit_ids:
+            continue
+        roles = [role for role, expression in (
+            ("applicability", candidate.applicability_expression),
+            ("trigger", candidate.trigger_expression),
+            ("obligation", candidate.obligation_expression),
+            ("exception", candidate.exception_expression),
+        ) if expression is not None and any(
+            set(atom.source_span_ids) & spans
+            and any(quote in normalize_source_excerpt(text)
+                    for text in [atom.statement, *atom.source_excerpts])
+            for group in expression.groups for atom in group.atoms
+        )]
+        if roles:
+            found[index] = roles
+    return found
+
+
+def source_statement_coverage(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    wire: ProtocolControlAgentWire,
+) -> list[SourceStatementCoverage]:
+    """Record literal source-to-output links without inferring clinical equivalence."""
+
+    from .protocol_control_source_interpretation import (
+        native_schedule_visit_scope_is_preserved, shared_prohibition_preserves_source,
+    )
+
+    unit_spans = {
+        unit.structure_unit_id: set(unit.source_span_ids)
+        for unit in batch.owned_units
+    }
+    dispositions = {item.structure_unit_id: item for item in wire.dispositions}
+    entries: list[SourceStatementCoverage] = []
+    for index, statement in enumerate(interpretation.statements):
+        linked_candidates: list[int] = []
+        unit_candidates: list[int] = []
+        action_candidates: list[int] = []
+        matched_roles: set[str] = set()
+        for candidate_index, candidate in enumerate(wire.candidate_drafts):
+            if statement.structure_unit_id not in candidate.source_structure_unit_ids:
+                continue
+            unit_candidates.append(candidate_index)
+            source_action = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
+            shared_prohibition = any(
+                set(atom.source_span_ids) & unit_spans[statement.structure_unit_id]
+                and shared_prohibition_preserves_source(statement, atom)
+                for group in candidate.obligation_expression.groups for atom in group.atoms
+            )
+            native_visit_scope = native_schedule_visit_scope_is_preserved(batch, statement, candidate)
+            time_scope_preserved = native_visit_scope or shared_prohibition or _candidate_preserves_source_time_words(
+                statement, candidate, unit_spans[statement.structure_unit_id]
+            )
+            if time_scope_preserved and any(
+                excerpt and (
+                    normalize_source_excerpt(excerpt) in source_action
+                    or source_action in normalize_source_excerpt(excerpt)
+                )
+                for group in candidate.obligation_expression.groups
+                for atom in group.atoms
+                for excerpt in atom.source_excerpts
+            ):
+                action_candidates.append(candidate_index)
+            expressions = (
+                ("applicability", candidate.applicability_expression),
+                ("trigger", candidate.trigger_expression),
+                ("obligation", candidate.obligation_expression),
+                ("exception", candidate.exception_expression),
+            )
+            candidate_roles: set[str] = set()
+            quote = normalize_source_excerpt(statement.quoted_text)
+            for role, expression in expressions:
+                if expression is None:
+                    continue
+                for group in expression.groups:
+                    if role == "obligation" and _split_obligation_quotes_cover_statement(
+                        quote, group.atoms
+                    ):
+                        candidate_roles.add(role)
+                    for atom in group.atoms:
+                        if not set(atom.source_span_ids) & unit_spans[statement.structure_unit_id]:
+                            continue
+                        if role == "obligation" and shared_prohibition_preserves_source(statement, atom):
+                            candidate_roles.add(role)
+                        if any(
+                            quote in normalize_source_excerpt(excerpt)
+                            for excerpt in atom.source_excerpts
+                        ) and (role != "obligation" or
+                               normalize_source_excerpt(atom.statement).rstrip("。；;.!！?？") ==
+                               quote.rstrip("。；;.!！?？")):
+                            candidate_roles.add(role)
+                        if role == "obligation" and atom.continuing_obligation is not None:
+                            continuing = atom.continuing_obligation
+                            if set(continuing.source_span_ids) & unit_spans[statement.structure_unit_id] and any(
+                                quote in normalize_source_excerpt(excerpt)
+                                for excerpt in continuing.source_excerpts
+                            ):
+                                candidate_roles.add("continuing")
+            if not time_scope_preserved:
+                candidate_roles.difference_update({"obligation", "continuing"})
+            matched_roles.update(candidate_roles)
+            defining_functions = set(statement.decision_functions) & {
+                "definition", "calculation_input", "threshold", "time_validity",
+            }
+            if statement.decision_functions in (["background"], ["unclassified"]):
+                expressed = False
+            elif shared_prohibition:
+                expressed = "obligation" in candidate_roles
+            elif defining_functions or statement.force == "descriptive":
+                compatible_kinds = {
+                    "definition": {ControlObligationKind.SELECT_BASELINE_VALUE,
+                                   ControlObligationKind.REACH_CONDITION,
+                                   ControlObligationKind.VERIFY_RESULT_VALIDITY},
+                    "calculation_input": {ControlObligationKind.SELECT_BASELINE_VALUE,
+                                          ControlObligationKind.REACH_CONDITION},
+                    "threshold": {ControlObligationKind.REACH_CONDITION},
+                    "time_validity": {ControlObligationKind.VERIFY_RESULT_VALIDITY,
+                                      ControlObligationKind.SELECT_BASELINE_VALUE,
+                                      ControlObligationKind.COMPLETE_BEFORE_ANCHOR},
+                }
+                if (simple_visit_action_preserves_time(batch, statement, candidate)
+                        or relative_visit_action_preserves_time(batch, statement, candidate)):
+                    compatible_kinds["time_validity"] = {
+                        *compatible_kinds["time_validity"],
+                        ControlObligationKind.COMPLETE_OR_VERIFY,
+                    }
+                expressed = "calculation_input" not in defining_functions and "obligation" in candidate_roles and all(
+                    any(
+                        atom.kind in compatible_kinds[function]
+                        and source_action in normalize_source_excerpt(atom.statement)
+                        for group in candidate.obligation_expression.groups
+                        for atom in group.atoms
+                    )
+                    for function in defining_functions
+                ) and (bool(defining_functions) or any(
+                    source_action in normalize_source_excerpt(atom.statement)
+                    for group in candidate.obligation_expression.groups
+                    for atom in group.atoms
+                ))
+            else:
+                expressed = bool(
+                    candidate_roles & {"obligation", "continuing"}
+                    if statement.force in {"required", "prohibited", "recommended"}
+                    else candidate_roles
+                )
+            # Physical visit correspondence selects a semantic check; it is not
+            # proof that the candidate's policies and other relations are faithful.
+            if (expressed and not native_visit_scope and not statement.unresolved
+                    and "exception" not in statement.decision_functions):
+                linked_candidates.append(candidate_index)
+        disposition = dispositions[statement.structure_unit_id]
+        quote = normalize_source_excerpt(statement.quoted_text)
+        exact_official_matches = sorted({
+            target.official_code for target in batch.known_official_targets
+            if quote and any(
+                excerpt is not None and quote in normalize_source_excerpt(excerpt)
+                for excerpt in target.source_excerpts
+            )
+        })
+        exact_procedure_matches = sorted({
+            target.catalog_item_id for target in batch.known_procedure_targets
+            if quote and any(
+                excerpt is not None and quote in normalize_source_excerpt(excerpt)
+                for excerpt in target.source_excerpts
+            )
+        })
+        if (
+            disposition.disposition == StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY
+            and exact_official_matches
+            and disposition.linked_official_code not in exact_official_matches
+        ):
+            raise ProtocolControlAgentWireValidationError(
+                "OFFICIAL_SOURCE_LINK_MISMATCH",
+                "官方编号与本条逐字原文不符：已选 "
+                f"{disposition.linked_official_code}，原文对应 "
+                + ",".join(exact_official_matches),
+                structure_unit_ids=[statement.structure_unit_id],
+            )
+        status = (
+            "expressed" if linked_candidates else
+            "candidate_linked" if unit_candidates else
+            "linked_only" if disposition.disposition in {
+                StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+                StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+            } else "not_located"
+        )
+        schedule_columns = schedule_column_links(
+            batch, statement.structure_unit_id, statement.quoted_text
+        )
+        if schedule_columns and disposition.disposition == StructureUnitDispositionKind.POST_TREATMENT_EXECUTION:
+            raise ProtocolControlAgentWireValidationError(
+                "SCHEDULE_ENROLLMENT_COLUMN_DISCARDED",
+                "访视表在入排审核节点仍有已标记流程，不能整行归为给药后执行",
+                structure_unit_ids=[statement.structure_unit_id],
+            )
+        entries.append(SourceStatementCoverage(
+            statement_index=index,
+            structure_unit_id=statement.structure_unit_id,
+            disposition=disposition.disposition.value,
+            status=status,
+            candidate_indexes=linked_candidates,
+            linked_candidate_indexes=unit_candidates,
+            action_candidate_indexes=action_candidates,
+            matched_roles=sorted(matched_roles),
+            schedule_columns=schedule_columns,
+            linked_official_code=disposition.linked_official_code,
+            linked_procedure_target_ids=(
+                disposition.linked_procedure_catalog_item_ids
+                or ([disposition.linked_procedure_catalog_item_id]
+                    if disposition.linked_procedure_catalog_item_id else [])
+            ),
+            exact_official_excerpt_matches=exact_official_matches,
+            exact_procedure_excerpt_matches=exact_procedure_matches,
+        ))
+    siblings_by_unit: dict[str, list[int]] = {}
+    for index, statement in enumerate(interpretation.statements):
+        siblings_by_unit.setdefault(statement.structure_unit_id, []).append(index)
+    for unit_id, sibling_indexes in siblings_by_unit.items():
+        if len(sibling_indexes) < 2:
+            continue
+        atom_refs: dict[int, set[tuple[int, int, int, str]]] = {}
+        for statement_index in sibling_indexes:
+            quote = normalize_source_excerpt(
+                interpretation.statements[statement_index].quoted_text
+            ).rstrip("。；;.!！?？")
+            refs: set[tuple[int, int, int, str]] = set()
+            for candidate_index in entries[statement_index].linked_candidate_indexes:
+                candidate = wire.candidate_drafts[candidate_index]
+                for group_index, group in enumerate(candidate.obligation_expression.groups):
+                    for atom_index, atom in enumerate(group.atoms):
+                        if not set(atom.source_span_ids) & unit_spans[unit_id]:
+                            continue
+                        if shared_prohibition_preserves_source(interpretation.statements[statement_index], atom):
+                            refs.add((candidate_index, group_index, atom_index, "current_and_continuing"))
+                        elif (quote in normalize_source_excerpt(atom.statement)
+                                and any(quote in normalize_source_excerpt(excerpt)
+                                        for excerpt in atom.source_excerpts)):
+                            refs.add((candidate_index, group_index, atom_index, "current"))
+                        continuing = atom.continuing_obligation
+                        if continuing is not None and (
+                            set(continuing.source_span_ids) & unit_spans[unit_id]
+                            and quote in normalize_source_excerpt(continuing.statement)
+                            and any(quote in normalize_source_excerpt(excerpt)
+                                    for excerpt in continuing.source_excerpts)
+                        ):
+                            refs.add((candidate_index, group_index, atom_index, "continuing"))
+            atom_refs[statement_index] = refs
+        for statement_index in sibling_indexes:
+            entry = entries[statement_index]
+            if entry.status != "expressed":
+                continue
+            other_refs = set().union(*(
+                atom_refs[other] for other in sibling_indexes if other != statement_index
+            ))
+            if not atom_refs[statement_index] - other_refs:
+                entries[statement_index] = entry.model_copy(update={
+                    "status": "candidate_linked", "candidate_indexes": [],
+                })
+    return entries
+
+
+def hydrated_source_coverage_indexes(
+    batch: ProtocolControlDispositionBatch,
+    wire: ProtocolControlAgentWire,
+    output: ProtocolControlBatchDispositionHydrated,
+    coverage: list[SourceStatementCoverage],
+) -> list[SourceStatementCoverage]:
+    """Keep review input indexes on the wire, but persist consumer indexes on the hydrated order."""
+    draft = wire_to_protocol_control_batch_disposition(wire, batch)
+    identities = control_candidate_ids_by_draft_index(batch, draft)
+    output_positions = {candidate.control_candidate_id: index
+                        for index, candidate in enumerate(output.candidates)}
+    if set(identities.values()) != set(output_positions):
+        raise ValueError("候选原序位与正式身份无法逐项对应")
+    return [entry.model_copy(update={
+        "candidate_indexes": [output_positions[identities[index]]
+                              for index in entry.candidate_indexes],
+    }) for entry in coverage]
+
+
+def _candidate_preserves_source_time_words(
+    statement: SourceStatement,
+    candidate: ProtocolControlAgentWireCandidate,
+    source_span_ids: set[str],
+) -> bool:
+    """A whole-source citation cannot hide one of several explicit visit scopes."""
+
+    time_words = {
+        normalize_source_excerpt(word) for word in statement.time_words if word.strip()
+    }
+    if len(time_words) < 2:
+        return True
+    quote = normalize_source_excerpt(statement.quoted_text)
+    scope = normalize_source_excerpt(statement.scope_quote or "")
+    scope_words = {scope, scope.rstrip("：:")} | {
+        normalize_source_excerpt(part) for part in re.split(r"[（）()，,；;：:]", scope)
+        if normalize_source_excerpt(part)
+    }
+    scope_cited = False
+    rendered: list[str] = []
+    for group in candidate.obligation_expression.groups:
+        for atom in group.atoms:
+            if not set(atom.source_span_ids) & source_span_ids:
+                continue
+            excerpts = [normalize_source_excerpt(value) for value in atom.source_excerpts]
+            if not any(value and (value in quote or quote in value) for value in excerpts):
+                continue
+            rendered.append(normalize_source_excerpt(atom.statement))
+            # A verified shared heading is a separate source excerpt, not text
+            # that the author must repeat inside the action itself.
+            if (scope and scope not in quote
+                    and normalize_source_excerpt(atom.statement).rstrip("。；;.!！?？") ==
+                    quote.rstrip("。；;.!！?？")
+                    and any(span in source_span_ids and normalize_source_excerpt(excerpt) == scope
+                            for span, excerpt in zip(atom.source_span_ids, atom.source_excerpts, strict=True))):
+                scope_cited = True
+            if atom.continuing_obligation is not None:
+                rendered.append(normalize_source_excerpt(atom.continuing_obligation.statement))
+    return all(any(word in text for text in rendered)
+               or (scope_cited and word in scope_words) for word in time_words)
+
+
+def _complete_inline_scope_citations(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    wire: ProtocolControlAgentWire,
+) -> tuple[ProtocolControlAgentWire, list[dict[str, object]]]:
+    """Attach a uniquely frozen inline heading; never change an atom's meaning."""
+    from .protocol_control_source_interpretation import source_visit_scope_matches
+
+    validate_source_interpretation(batch, interpretation)
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    stages = {stage.workflow_stage_id: stage for stage in batch.known_workflow_stage_targets}
+    result = wire.model_copy(deep=True)
+    changes: list[dict[str, object]] = []
+    for index, statement in enumerate(interpretation.statements):
+        before = source_statement_coverage(batch, interpretation, result)
+        unit = units[statement.structure_unit_id]
+        scope = normalize_source_excerpt(statement.scope_quote or "")
+        quote = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
+        body = normalize_source_excerpt(unit.excerpt)
+        if (before[index].status != "candidate_linked" or not scope or not quote
+                or statement.unresolved or statement.exception_words
+                or statement.force not in {"required", "prohibited", "recommended"}
+                or "action" not in statement.decision_functions
+                or len(unit.source_span_ids) != 1 or scope in quote
+                or not body.startswith(scope) or body.count(scope) != 1
+                or body.count(quote) != 1):
+            continue
+        paths = []
+        for candidate_index, candidate in enumerate(result.candidate_drafts):
+            if unit.structure_unit_id not in candidate.source_structure_unit_ids:
+                continue
+            if not candidate.review_node_bindings or any(
+                node.role != ReviewNodeRole.DECIDE_AT_NODE
+                or node.workflow_stage_id not in stages
+                or node.review_stage != stages[node.workflow_stage_id].review_stage
+                or not source_visit_scope_matches(scope, normalize_source_excerpt(" ".join(
+                    filter(None, (stages[node.workflow_stage_id].display_name,
+                                  stages[node.workflow_stage_id].visit_instance,
+                                  stages[node.workflow_stage_id].visit_window)),
+                ))) for node in candidate.review_node_bindings
+            ):
+                continue
+            for group_index, group in enumerate(candidate.obligation_expression.groups):
+                for atom_index, atom in enumerate(group.atoms):
+                    if (normalize_source_excerpt(atom.statement).rstrip("。；;.!！?？") == quote
+                            and any(span == unit.source_span_ids[0]
+                                    and normalize_source_excerpt(excerpt).rstrip("。；;.!！?？") == quote
+                                    for span, excerpt in zip(atom.source_span_ids,
+                                                             atom.source_excerpts, strict=True))
+                            and all(normalize_source_excerpt(excerpt) != scope
+                                    for excerpt in atom.source_excerpts)):
+                        paths.append((candidate_index, group_index, atom_index))
+        if len(paths) != 1:
+            continue
+        candidate_index, group_index, atom_index = paths[0]
+        trial = result.model_copy(deep=True)
+        atom = trial.candidate_drafts[candidate_index].obligation_expression.groups[group_index].atoms[atom_index]
+        atom.source_span_ids.append(unit.source_span_ids[0])
+        atom.source_excerpts.append(statement.scope_quote)
+        checked = validate_protocol_control_agent_wire(trial, batch)
+        if checked != trial:
+            # Quote restoration has its own receipt boundary. This assembler
+            # cannot silently normalize an unrelated atom while adding a pair.
+            continue
+        after = source_statement_coverage(batch, interpretation, trial)
+        # A heading can itself be another statement. Do not let an added quote
+        # silently change that sibling's coverage or authorize a second atom.
+        if (after[index].status != "expressed"
+                or after[index].candidate_indexes != [candidate_index]
+                or any(old != new for i, (old, new) in enumerate(zip(before, after, strict=True))
+                       if i != index)):
+            continue
+        changes.append({
+            "statement_id": index, "candidate_index": candidate_index,
+            "group_index": group_index, "atom_index": atom_index,
+            "source_refs": [unit.source_span_ids[0]],
+            "wire_before_sha256": _sha256(result.model_dump_json()),
+            "wire_after_sha256": _sha256(trial.model_dump_json()),
+        })
+        result = trial
+    return result, changes
+
+
+def _split_obligation_quotes_cover_statement(quote: str, atoms: Sequence[object]) -> bool:
+    """Accept a sentence split across atoms only when literal spans cover it once."""
+
+    if len(atoms) < 2:
+        return False
+    covered = [False] * len(quote)
+    for atom in atoms:
+        for raw_excerpt in getattr(atom, "source_excerpts", ()) or ():
+            excerpt = normalize_source_excerpt(raw_excerpt or "")
+            if (not excerpt or
+                    normalize_source_excerpt(getattr(atom, "statement", "")).rstrip("。；;.!！?？") !=
+                    excerpt.rstrip("。；;.!！?？")):
+                continue
+            positions = [match.start() for match in re.finditer(re.escape(excerpt), quote)]
+            if len(positions) != 1:
+                continue
+            start = positions[0]
+            for index in range(start, start + len(excerpt)):
+                if covered[index]:
+                    return False
+                covered[index] = True
+    return bool(quote) and all(
+        is_covered or char in "，,、；;。.!！?？"
+        for char, is_covered in zip(quote, covered, strict=True)
+    )
+
+
+ProtocolControlAgentOutputValidator = Callable[
+    [ProtocolControlBatchDispositionHydrated],
+    None,
+]
+
+
+def _error_class_codes(error: ProtocolControlAgentWireValidationError) -> tuple[str, ...]:
+    """Return structured error classes without parsing user-facing text."""
+
+    return tuple(sorted(error.error_class_codes))
+
+
+def _validate_bounded_output_repair(
+    previous: ProtocolControlBatchDispositionHydrated,
+    current: ProtocolControlBatchDispositionHydrated,
+    *,
+    mutable_structure_unit_ids: set[str],
+    mutable_candidate_source_keys: set[tuple[str, ...]] | None = None,
+    mutable_candidate_source_union: set[str] | None = None,
+    allow_candidate_repartition: bool = False,
+    allow_source_closure_rewrite: bool = False,
+) -> None:
+    """Reject semantic drift outside the deterministic repair scope."""
+
+    mutable_candidate_source_keys = mutable_candidate_source_keys or set()
+    mutable_candidate_source_union = mutable_candidate_source_union or set()
+    closure_rewrite = allow_candidate_repartition or allow_source_closure_rewrite
+
+    def normalized_dispositions(
+        output: ProtocolControlBatchDispositionHydrated,
+    ) -> dict[str, dict[str, object]]:
+        source_key_by_candidate_id = {
+            candidate.control_candidate_id: tuple(
+                candidate.frozen_structure_unit_ids
+            )
+            for candidate in output.candidates
+        }
+        normalized: dict[str, dict[str, object]] = {}
+        for item in output.dispositions:
+            if item.structure_unit_id in mutable_structure_unit_ids:
+                continue
+            payload = item.model_dump(mode="json")
+            payload["linked_control_candidate_ids"] = sorted(
+                source_key_by_candidate_id[candidate_id]
+                for candidate_id in item.linked_control_candidate_ids
+            )
+            normalized[item.structure_unit_id] = payload
+        return normalized
+
+    previous_dispositions = normalized_dispositions(previous)
+    current_dispositions = normalized_dispositions(current)
+    changed_units = {
+        unit_id
+        for unit_id in previous_dispositions.keys() | current_dispositions.keys()
+        if previous_dispositions.get(unit_id) != current_dispositions.get(unit_id)
+    }
+
+    def frozen_candidates(
+        output: ProtocolControlBatchDispositionHydrated,
+    ) -> dict[str, tuple[str, ...]]:
+        result: dict[str, tuple[str, ...]] = {}
+        for candidate in output.candidates:
+            source_units = tuple(candidate.frozen_structure_unit_ids)
+            candidate_is_mutable = source_units in mutable_candidate_source_keys or (
+                closure_rewrite
+                and bool(set(source_units) & mutable_candidate_source_union)
+                and set(source_units) <= mutable_candidate_source_union
+            )
+            if (
+                not candidate_is_mutable
+                and (
+                    mutable_candidate_source_keys
+                    or set(source_units).isdisjoint(mutable_structure_unit_ids)
+                )
+            ):
+                result[_stable_json(candidate.model_dump(mode="json"))] = source_units
+        return result
+
+    previous_candidates = frozen_candidates(previous)
+    current_candidates = frozen_candidates(current)
+    if previous_candidates.keys() != current_candidates.keys():
+        for payload in previous_candidates.keys() ^ current_candidates.keys():
+            changed_units.update(
+                unit_id
+                for unit_id in (
+                    previous_candidates.get(payload) or current_candidates.get(payload) or ()
+                )
+                if unit_id not in mutable_structure_unit_ids
+            )
+
+    if changed_units:
+        raise ProtocolControlAgentWireValidationError(
+            "REPAIR_SCOPE_ESCAPE",
+            "定向修订改动了未被上一轮问题授权的候选或处置；"
+            "必须恢复这些单元的上一轮内容，只修复原问题范围",
+            structure_unit_ids=sorted(changed_units),
+        )
+
+
+def _merge_scoped_unit_repair(
+    raw_text: str, previous: ProtocolControlAgentWire, authorized_units: set[str],
+) -> ProtocolControlAgentWire:
+    """Splice the explicit source closure; full hydration and scope gates still follow."""
+    patch = _parse_repartition_with_checked_time(raw_text, previous)
+    known_units = {item.structure_unit_id for item in previous.dispositions}
+    if (not authorized_units or not authorized_units <= known_units
+            or {item.structure_unit_id for item in patch.dispositions} != authorized_units
+            or any(not set(item.source_structure_unit_ids) <= authorized_units
+                   for item in patch.candidate_drafts)):
+        raise ProtocolControlAgentWireValidationError(
+            "REPAIR_SCOPE_ESCAPE", "局部修订必须完整处置授权单元，不得携带其他单元候选或处置",
+            structure_unit_ids=sorted(authorized_units),
+        )
+    if any(set(item.source_structure_unit_ids) & authorized_units
+           and not set(item.source_structure_unit_ids) <= authorized_units
+           for item in previous.candidate_drafts):
+        raise ProtocolControlAgentWireValidationError(
+            "REPAIR_SCOPE_ESCAPE", "局部修订范围没有包含原候选的完整来源闭包",
+            structure_unit_ids=sorted(authorized_units),
+        )
+    changes = {item.structure_unit_id: item for item in patch.dispositions}
+    return previous.model_copy(update={
+        "dispositions": [changes.get(item.structure_unit_id, item) for item in previous.dispositions],
+        "candidate_drafts": [item for item in previous.candidate_drafts
+                             if set(item.source_structure_unit_ids).isdisjoint(authorized_units)]
+                            + patch.candidate_drafts,
+    })
+
+
+def _reviewed_semantic_closure_repair(
+    batch: ProtocolControlDispositionBatch,
+    source: SourceInterpretation,
+    wire: ProtocolControlAgentWire,
+    coverage: Sequence[SourceStatementCoverage],
+    alignment: SourceCandidateAlignment | None,
+    statement_indexes: Sequence[int],
+) -> ProtocolControlAgentWireValidationError | None:
+    """Authorize one complete, unambiguous source unit from a bound negative review."""
+    if alignment is None or not statement_indexes:
+        return None
+    bound = reusable_proven_alignment_items(
+        batch, source, coverage, wire, alignment, require_positive=False,
+    )
+    negative = [item for item in bound
+                if item.decision == "incomplete"
+                and item.statement_index in statement_indexes]
+    if not negative:
+        return None
+    units = {source.statements[index].structure_unit_id for index in statement_indexes}
+    if len(units) != 1 or any(statement.unresolved for statement in source.statements
+                              if statement.structure_unit_id in units):
+        return None
+    indexes = [index for index, candidate in enumerate(wire.candidate_drafts)
+               if set(candidate.source_structure_unit_ids) & units]
+    if (not indexes or any(set(wire.candidate_drafts[index].source_structure_unit_ids) != units
+                           for index in indexes)):
+        return None
+    candidate_ids = _candidate_ids_from_wire(wire, batch)
+    if len(candidate_ids) != len(wire.candidate_drafts):
+        return None
+    return ProtocolControlAgentWireValidationError(
+        "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+        "已核原文与候选不等义；只修订这个完整来源单元，不新增原文含义："
+        + _stable_json([item.model_dump(mode="json") for item in negative]),
+        structure_unit_ids=sorted(units),
+        candidate_ids=[candidate_ids[index] for index in indexes],
+        allow_source_closure_rewrite=True,
+    )
+
+
+def _restore_bounded_wire_repair(
+    previous: ProtocolControlAgentWire,
+    current: ProtocolControlAgentWire,
+    *,
+    mutable_structure_unit_ids: set[str],
+    mutable_candidate_source_keys: set[tuple[str, ...]] | None = None,
+    mutable_candidate_indexes: set[int] | None = None,
+    mutable_candidate_source_union: set[str] | None = None,
+    mutable_obligation_source_span_ids: set[str] | None = None,
+    allow_candidate_repartition: bool = False,
+    allow_source_closure_rewrite: bool = False,
+    allow_post_enrollment_reclassification: bool = False,
+    allow_source_insert: bool = False,
+    preserve_candidate_order: bool = False,
+) -> tuple[ProtocolControlAgentWire, bool]:
+    """Restore immutable wire entries before hydration and gate validation."""
+
+    mutable_candidate_source_keys = mutable_candidate_source_keys or set()
+    mutable_candidate_indexes = mutable_candidate_indexes or set()
+    mutable_candidate_source_union = mutable_candidate_source_union or set()
+    closure_rewrite = allow_candidate_repartition or allow_source_closure_rewrite
+    mutable_obligation_source_span_ids = (
+        mutable_obligation_source_span_ids or set()
+    )
+    if allow_source_insert:
+        if not mutable_structure_unit_ids or not mutable_obligation_source_span_ids:
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE", "来源补入缺少明确的结构单元或原文定位"
+            )
+        prior = previous.candidate_drafts
+        if current.candidate_drafts[:len(prior)] != prior or len(current.candidate_drafts) <= len(prior):
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE", "来源补入只能在旧候选后新增候选，不得改写或删除旧候选"
+            )
+        old_dispositions = {item.structure_unit_id: item for item in previous.dispositions}
+        if [item.structure_unit_id for item in current.dispositions] != [
+            item.structure_unit_id for item in previous.dispositions
+        ] or any(
+            item != old_dispositions[item.structure_unit_id]
+            for item in current.dispositions
+            if item.structure_unit_id not in mutable_structure_unit_ids
+        ):
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE", "来源补入改动了范围外的结构单元处置"
+            )
+        for candidate in current.candidate_drafts[len(prior):]:
+            if not set(candidate.source_structure_unit_ids) <= mutable_structure_unit_ids or not (
+                set(candidate.source_span_ids) & mutable_obligation_source_span_ids
+            ) or not set(candidate.source_span_ids) <= mutable_obligation_source_span_ids:
+                raise ProtocolControlAgentWireValidationError(
+                    "REPAIR_SCOPE_ESCAPE", "新增候选没有绑定授权结构单元和原文定位"
+                )
+        current_dispositions = {item.structure_unit_id: item for item in current.dispositions}
+        for unit_id in mutable_structure_unit_ids:
+            before = old_dispositions[unit_id]
+            if before.disposition not in {
+                StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+                StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+            }:
+                continue
+            after = current_dispositions[unit_id]
+            if after.disposition != StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE:
+                raise ProtocolControlAgentWireValidationError(
+                    "REPAIR_SCOPE_ESCAPE", "补入后必须将混合来源单元改为其他控制候选"
+                )
+            expected_targets = (
+                {(ControlRelationTargetKind.OFFICIAL_RULE, before.linked_official_code)}
+                if before.disposition == StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY
+                else {
+                    (ControlRelationTargetKind.REQUIRED_PROCEDURE, target_id)
+                    for target_id in (
+                        before.linked_procedure_catalog_item_ids
+                        or [before.linked_procedure_catalog_item_id]
+                    )
+                }
+            )
+            actual_targets = {
+                (relation.external_target_kind, relation.external_target_id)
+                for candidate in current.candidate_drafts[len(prior):]
+                if unit_id in candidate.source_structure_unit_ids
+                for relation in candidate.cross_source_relations
+            }
+            if not expected_targets <= actual_targets:
+                raise ProtocolControlAgentWireValidationError(
+                    "REPAIR_SCOPE_ESCAPE", "补入候选未保留原有官方或访视流程目标关系"
+                )
+        return current, False
+    previous_dispositions = {
+        item.structure_unit_id: item for item in previous.dispositions
+    }
+    dispositions = [
+        item
+        if item.structure_unit_id in mutable_structure_unit_ids
+        else previous_dispositions[item.structure_unit_id]
+        for item in current.dispositions
+    ]
+
+    if mutable_obligation_source_span_ids:
+        if closure_rewrite or not mutable_candidate_source_keys:
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE",
+                "义务原子定向修订必须绑定候选来源，"
+                "且不得同时改变候选分区",
+            )
+        previous_by_key: dict[
+            tuple[str, ...], list[ProtocolControlAgentWireCandidate]
+        ] = {}
+        current_by_key: dict[
+            tuple[str, ...], list[ProtocolControlAgentWireCandidate]
+        ] = {}
+        for candidate in previous.candidate_drafts:
+            previous_by_key.setdefault(
+                tuple(candidate.source_structure_unit_ids), []
+            ).append(candidate)
+        for candidate in current.candidate_drafts:
+            current_by_key.setdefault(
+                tuple(candidate.source_structure_unit_ids), []
+            ).append(candidate)
+        candidates = []
+        for previous_candidate in previous.candidate_drafts:
+            key = tuple(previous_candidate.source_structure_unit_ids)
+            if key not in mutable_candidate_source_keys:
+                candidates.append(previous_candidate)
+                continue
+            if (
+                len(previous_by_key.get(key, ())) != 1
+                or len(current_by_key.get(key, ())) != 1
+            ):
+                raise ProtocolControlAgentWireValidationError(
+                    "REPAIR_SCOPE_ESCAPE",
+                    "义务原子定向修订时候选对应关系不唯一",
+                    structure_unit_ids=list(key),
+                )
+            current_candidate = current_by_key[key][0]
+            previous_groups = previous_candidate.obligation_expression.groups
+            current_groups = current_candidate.obligation_expression.groups
+            if len(previous_groups) != len(current_groups):
+                raise ProtocolControlAgentWireValidationError(
+                    "REPAIR_SCOPE_ESCAPE",
+                    "义务原子定向修订不得拆分、合并或重排义务组",
+                    structure_unit_ids=list(key),
+                )
+            restored_groups: list[ProtocolControlAgentWireObligationGroup] = []
+            covered_span_ids: set[str] = set()
+            for previous_group, current_group in zip(
+                previous_groups, current_groups, strict=True
+            ):
+                if (
+                    previous_group.applies_to_trigger_branch_indexes
+                    != current_group.applies_to_trigger_branch_indexes
+                ):
+                    raise ProtocolControlAgentWireValidationError(
+                        "REPAIR_SCOPE_ESCAPE",
+                        "义务原子定向修订不得改变义务组的触发分支范围",
+                        structure_unit_ids=list(key),
+                    )
+                previous_atoms = {
+                    tuple(atom.source_span_ids): atom for atom in previous_group.atoms
+                }
+                current_atoms = {
+                    tuple(atom.source_span_ids): atom for atom in current_group.atoms
+                }
+                if (
+                    len(previous_atoms) != len(previous_group.atoms)
+                    or len(current_atoms) != len(current_group.atoms)
+                    or previous_atoms.keys() != current_atoms.keys()
+                ):
+                    raise ProtocolControlAgentWireValidationError(
+                        "REPAIR_SCOPE_ESCAPE",
+                        "义务原子定向修订需要唯一且不变的原文定位；"
+                        "拆分、合并或重复定位时必须人工核对",
+                        structure_unit_ids=list(key),
+                    )
+                atoms: list[ProtocolControlAgentWireObligationAtom] = []
+                for source_key, previous_atom in previous_atoms.items():
+                    source_ids = set(source_key)
+                    intersects = bool(
+                        source_ids & mutable_obligation_source_span_ids
+                    )
+                    if (
+                        intersects
+                        and not source_ids <= mutable_obligation_source_span_ids
+                    ):
+                        raise ProtocolControlAgentWireValidationError(
+                            "REPAIR_SCOPE_ESCAPE",
+                            "授权原文定位与多来源义务原子交叉，不能自动局部修订",
+                            structure_unit_ids=list(key),
+                        )
+                    if intersects:
+                        atoms.append(current_atoms[source_key])
+                        covered_span_ids.update(source_ids)
+                    else:
+                        atoms.append(previous_atom)
+                restored_groups.append(previous_group.model_copy(update={"atoms": atoms}))
+            expected_span_ids = mutable_obligation_source_span_ids & set(
+                previous_candidate.source_span_ids
+            )
+            if covered_span_ids != expected_span_ids:
+                raise ProtocolControlAgentWireValidationError(
+                    "REPAIR_SCOPE_ESCAPE",
+                    "义务原子定向修订未完整覆盖授权原文定位",
+                    structure_unit_ids=list(key),
+                )
+            candidates.append(
+                previous_candidate.model_copy(
+                    update={
+                        "obligation_expression": (
+                            previous_candidate.obligation_expression.model_copy(
+                                update={"groups": restored_groups}
+                            )
+                        )
+                    }
+                )
+            )
+    elif closure_rewrite:
+        if not mutable_candidate_source_union:
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE",
+                "候选重分区缺少完整的来源闭包，不能自动修订",
+            )
+        frozen_candidates = [
+            candidate
+            for candidate in previous.candidate_drafts
+            if tuple(candidate.source_structure_unit_ids)
+            not in mutable_candidate_source_keys
+        ]
+        mutable_candidates = [
+            candidate
+            for candidate in current.candidate_drafts
+            if set(candidate.source_structure_unit_ids)
+            <= mutable_candidate_source_union
+            and bool(
+                set(candidate.source_structure_unit_ids)
+                & mutable_candidate_source_union
+            )
+        ]
+        current_union = {
+            unit_id
+            for candidate in mutable_candidates
+            for unit_id in candidate.source_structure_unit_ids
+        }
+        crossing_candidates = [
+            candidate
+            for candidate in current.candidate_drafts
+            if set(candidate.source_structure_unit_ids) & mutable_candidate_source_union
+            and not set(candidate.source_structure_unit_ids)
+            <= mutable_candidate_source_union
+        ]
+        dropped_units = mutable_candidate_source_union - current_union
+        permitted_drop = (
+            allow_post_enrollment_reclassification
+            and bool(dropped_units)
+            and dropped_units <= {item.structure_unit_id for item in dispositions}
+            and all(
+                item.disposition == StructureUnitDispositionKind.POST_TREATMENT_EXECUTION
+                and item.notes
+                for item in dispositions
+                if item.structure_unit_id in dropped_units
+            )
+        )
+        if (
+            crossing_candidates
+            or not current_union <= mutable_candidate_source_union
+            or (dropped_units and not permitted_drop)
+        ):
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE",
+                "候选重分区必须保留授权来源，或将移出单元明确处置为治疗后执行；"
+                "不得与范围外候选交叉",
+                structure_unit_ids=sorted(mutable_candidate_source_union),
+            )
+        candidates = [*frozen_candidates, *mutable_candidates]
+    elif mutable_candidate_indexes:
+        if len(previous.candidate_drafts) != len(current.candidate_drafts):
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE",
+                "定向修订不得增删候选；候选拆分或合并必须由对应问题明确授权",
+            )
+        if any(
+            index < 0 or index >= len(previous.candidate_drafts)
+            for index in mutable_candidate_indexes
+        ):
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE",
+                "定向修订候选位置超出上一轮范围",
+            )
+        remaining_current = list(current.candidate_drafts)
+        mutable_source_keys = {
+            tuple(previous.candidate_drafts[index].source_structure_unit_ids)
+            for index in mutable_candidate_indexes
+        }
+        for index, previous_candidate in enumerate(previous.candidate_drafts):
+            if index in mutable_candidate_indexes:
+                continue
+            previous_source_key = tuple(
+                previous_candidate.source_structure_unit_ids
+            )
+            matches = [
+                candidate
+                for candidate in remaining_current
+                if (
+                    candidate == previous_candidate
+                    if previous_source_key in mutable_source_keys
+                    else tuple(candidate.source_structure_unit_ids)
+                    == previous_source_key
+                )
+            ]
+            expected_match_count = (
+                1 if previous_source_key in mutable_source_keys else None
+            )
+            if not matches or (
+                expected_match_count is not None
+                and len(matches) != expected_match_count
+            ):
+                raise ProtocolControlAgentWireValidationError(
+                    "REPAIR_SCOPE_ESCAPE",
+                    "定向修订改动了未获授权的同源候选，或候选对应关系不唯一",
+                    structure_unit_ids=list(
+                        previous_candidate.source_structure_unit_ids
+                    ),
+                )
+            remaining_current.remove(matches[0])
+        previous_mutable = [
+            previous.candidate_drafts[index]
+            for index in sorted(mutable_candidate_indexes)
+        ]
+        previous_source_keys = sorted(
+            tuple(candidate.source_structure_unit_ids)
+            for candidate in previous_mutable
+        )
+        current_source_keys = sorted(
+            tuple(candidate.source_structure_unit_ids)
+            for candidate in remaining_current
+        )
+        if previous_source_keys != current_source_keys:
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE",
+                "定向修订不得改变获授权候选的来源范围",
+                structure_unit_ids=sorted(
+                    {
+                        unit_id
+                        for candidate in [*previous_mutable, *remaining_current]
+                        for unit_id in candidate.source_structure_unit_ids
+                    }
+                ),
+            )
+        replacements_by_source: dict[
+            tuple[str, ...], list[ProtocolControlAgentWireCandidate]
+        ] = {}
+        for candidate in remaining_current:
+            replacements_by_source.setdefault(
+                tuple(candidate.source_structure_unit_ids), []
+            ).append(candidate)
+        # This branch grants authority by wire position. Sorting same-source
+        # siblings would transfer that authority to a different candidate.
+        candidates = []
+        for index, previous_candidate in enumerate(previous.candidate_drafts):
+            if index not in mutable_candidate_indexes:
+                candidates.append(previous_candidate)
+                continue
+            candidates.append(
+                replacements_by_source[
+                    tuple(previous_candidate.source_structure_unit_ids)
+                ].pop(0)
+            )
+    elif mutable_candidate_source_keys:
+        previous_by_key: dict[tuple[str, ...], list[ProtocolControlAgentWireCandidate]] = {}
+        current_by_key: dict[tuple[str, ...], list[ProtocolControlAgentWireCandidate]] = {}
+        for candidate in previous.candidate_drafts:
+            previous_by_key.setdefault(
+                tuple(candidate.source_structure_unit_ids), []
+            ).append(candidate)
+        for candidate in current.candidate_drafts:
+            current_by_key.setdefault(
+                tuple(candidate.source_structure_unit_ids), []
+            ).append(candidate)
+        mutable_source_union = {
+            unit_id
+            for key in mutable_candidate_source_keys
+            for unit_id in key
+        }
+        unexpected_partition_keys = [
+            key
+            for key in current_by_key
+            if key not in previous_by_key and set(key) & mutable_source_union
+        ]
+        if unexpected_partition_keys:
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE",
+                "定向修订新增了候选来源分区，但当前问题未授权候选拆分或合并",
+                structure_unit_ids=sorted(
+                    {
+                        unit_id
+                        for key in unexpected_partition_keys
+                        for unit_id in key
+                    }
+                ),
+            )
+        for key in mutable_candidate_source_keys:
+            if len(previous_by_key.get(key, ())) != 1 or len(current_by_key.get(key, ())) != 1:
+                raise ProtocolControlAgentWireValidationError(
+                    "REPAIR_SCOPE_ESCAPE",
+                    "定向修订候选发生拆分、合并或对应关系不唯一，不能自动保留",
+                    structure_unit_ids=list(key),
+                )
+        candidates = [
+            (
+                current_by_key[key][0]
+                if key in mutable_candidate_source_keys
+                else candidate
+            )
+            for candidate in previous.candidate_drafts
+            for key in [tuple(candidate.source_structure_unit_ids)]
+        ]
+    else:
+        mutable_candidates: list[ProtocolControlAgentWireCandidate] = []
+        for candidate in current.candidate_drafts:
+            source_units = set(candidate.source_structure_unit_ids)
+            if source_units <= mutable_structure_unit_ids:
+                mutable_candidates.append(candidate)
+            elif source_units & mutable_structure_unit_ids:
+                raise ProtocolControlAgentWireValidationError(
+                    "REPAIR_SCOPE_ESCAPE",
+                    "定向修订不得将授权单元与范围外单元合并成新候选",
+                    structure_unit_ids=sorted(source_units - mutable_structure_unit_ids),
+                )
+
+        frozen_candidates = [
+            candidate
+            for candidate in previous.candidate_drafts
+            if set(candidate.source_structure_unit_ids).isdisjoint(
+                mutable_structure_unit_ids
+            )
+        ]
+        candidates = [*frozen_candidates, *mutable_candidates]
+    # Sorting must not transfer positional authority or reorder a pending append.
+    if not mutable_candidate_indexes and not preserve_candidate_order:
+        candidates = sorted(
+            candidates,
+            key=lambda item: (
+                tuple(item.source_structure_unit_ids),
+                item.title,
+                _stable_json(item.model_dump(mode="json")),
+            ),
+        )
+    restored = current.model_copy(
+        update={
+            "dispositions": dispositions,
+            "candidate_drafts": candidates,
+        }
+    )
+    return restored, restored != current
+
+
+def _candidate_ids_from_wire(
+    wire: ProtocolControlAgentWire | None,
+    batch: ProtocolControlDispositionBatch,
+) -> list[str]:
+    if wire is None:
+        return []
+    try:
+        draft = wire_to_protocol_control_batch_disposition(wire.model_copy(deep=True), batch)
+        identities = control_candidate_ids_by_draft_index(batch, draft)
+    except (ValidationError, ValueError):
+        # No accepted identity exists for an invalid draft. Partial filtering
+        # would shift indexes and could grant the wrong sibling's repair scope.
+        return []
+    return [identities[index] for index in range(len(wire.candidate_drafts))]
+
+
+def _merge_candidate_repair_payload(
+    raw_text: str,
+    baseline: ProtocolControlAgentWire | Mapping[str, Any],
+    index: int,
+    *, fields: tuple[str, ...] = (), relation_target_ids: tuple[str, ...] = (),
+    relation_indexes: tuple[int, ...] = (),
+) -> dict[str, Any]:
+    """Replace one validated draft without accepting its unvalidated siblings."""
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise ProtocolControlAgentWireValidationError("INVALID_JSON", str(exc)) from exc
+    if not isinstance(payload, dict) or set(payload) != {"candidate_draft"}:
+        raise ProtocolControlAgentWireValidationError(
+            "CANDIDATE_REPAIR_SHAPE_INVALID", "单候选修订只接受 candidate_draft"
+        )
+    if not isinstance(payload["candidate_draft"], dict):
+        raise ProtocolControlAgentWireValidationError(
+            "CANDIDATE_REPAIR_SHAPE_INVALID", "单候选修订必须返回候选对象"
+        )
+    forbidden = _find_forbidden_provider_key(
+        {"candidate_drafts": [payload["candidate_draft"]]}
+    )
+    if forbidden is not None:
+        raise ProtocolControlAgentWireValidationError(
+            "PROVIDER_ID_FORBIDDEN", f"模型不得填写系统身份 {forbidden[1]}"
+        )
+    try:
+        if fields:
+            if fields != ("cross_source_relations",) or not isinstance(baseline, ProtocolControlAgentWire):
+                raise ValueError("字段修订缺少已解析的授权基稿")
+            if not 0 <= index < len(baseline.candidate_drafts):
+                raise ValueError("字段修订位置不属于原始批次")
+            if set(payload["candidate_draft"]) != set(fields):
+                raise ValueError("字段修订不得增加、遗漏或改写授权范围外字段")
+            original = baseline.candidate_drafts[index].model_dump(mode="json")
+            relations = payload["candidate_draft"]["cross_source_relations"]
+            if not relation_target_ids or not relation_indexes or not isinstance(relations, list):
+                raise ValueError("关联字段修订缺少机器可核的目标范围")
+            old_relations = original["cross_source_relations"]
+            if any(not isinstance(item, dict) for item in relations):
+                raise ValueError("关联修订必须返回关系对象")
+            identities = ("kind", "external_target_kind", "external_target_id", "candidate_side")
+            if any(type(index) is not int or not 0 <= index < len(old_relations)
+                   for index in relation_indexes):
+                raise ValueError("关联字段修订位置不属于原始候选")
+            selected = [old_relations[index] for index in relation_indexes]
+            if {item["external_target_id"] for item in selected} != set(relation_target_ids):
+                raise ValueError("关联修订位置与授权目标不一致")
+            if len(set(relation_indexes)) != len(relation_indexes):
+                raise ValueError("关联字段修订位置不得重复")
+            if len(relations) not in {0, len(selected)}:
+                raise ValueError("关联修订不得以部分遗漏暗中删除获授权关系")
+            available = [tuple(item[key] for key in identities) for item in selected]
+            for item in relations:
+                identity = tuple(item.get(key) for key in identities)
+                if identity not in available:
+                    raise ValueError("关联修订不得新建目标、改变关系性质或包含未授权关系")
+                available.remove(identity)
+            # Only selected relations come back from the model. The host keeps
+            # every unselected relation, including equal-identity siblings.
+            replacements = list(relations)
+            merged_relations = []
+            for relation_index, item in enumerate(old_relations):
+                if relation_index not in relation_indexes:
+                    merged_relations.append(item)
+                    continue
+                identity = tuple(item[key] for key in identities)
+                match = next((i for i, replacement in enumerate(replacements)
+                              if tuple(replacement.get(key) for key in identities) == identity), None)
+                if match is not None:
+                    merged_relations.append(replacements.pop(match))
+            payload["candidate_draft"] = {**original, "cross_source_relations": merged_relations}
+        _collapse_exact_duplicate_day_bounds(payload["candidate_draft"])
+        _normalize_absent_time_bound_flags(payload["candidate_draft"])
+        if isinstance(baseline, ProtocolControlAgentWire) and 0 <= index < len(baseline.candidate_drafts):
+            _restore_unchanged_time_operands(
+                payload["candidate_draft"], baseline.candidate_drafts[index]
+            )
+        candidate = ProtocolControlAgentWireCandidate.model_validate(
+            payload["candidate_draft"]
+        )
+        merged = (
+            baseline.model_dump(mode="json")
+            if isinstance(baseline, ProtocolControlAgentWire)
+            else deepcopy(dict(baseline))
+        )
+        if not 0 <= index < len(merged["candidate_drafts"]):
+            raise ValueError("单候选修订位置不属于原始批次")
+        if not isinstance(baseline, ProtocolControlAgentWire):
+            original = merged["candidate_drafts"][index]
+            if any(
+                candidate.model_dump(mode="json")[field] != original.get(field)
+                for field in ("source_structure_unit_ids", "source_span_ids")
+            ):
+                raise ValueError("单候选修订不得改变原始来源范围")
+        merged["candidate_drafts"][index] = candidate.model_dump(mode="json")
+        return merged
+    except (ValidationError, ValueError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "CANDIDATE_REPAIR_INVALID", _validation_error_summary(exc)
+            if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _merge_candidate_repair(
+    raw_text: str,
+    baseline: ProtocolControlAgentWire | Mapping[str, Any],
+    index: int,
+    *, fields: tuple[str, ...] = (), relation_target_ids: tuple[str, ...] = (),
+    relation_indexes: tuple[int, ...] = (),
+) -> ProtocolControlAgentWire:
+    """Replace one draft and validate the complete wire."""
+
+    try:
+        return ProtocolControlAgentWire.model_validate(
+            _merge_candidate_repair_payload(
+                raw_text, baseline, index, fields=fields, relation_target_ids=relation_target_ids,
+                relation_indexes=relation_indexes,
+            )
+        )
+    except ValidationError as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "CANDIDATE_REPAIR_INVALID", _validation_error_summary(exc)
+        ) from exc
+
+
+def _restore_unchanged_time_operands(
+    draft: dict[str, Any], previous: ProtocolControlAgentWireCandidate
+) -> None:
+    """Retain a checked date attribute only for an unchanged source/time obligation."""
+
+    prior_atoms = [
+        atom.model_dump(mode="json")
+        for group in previous.obligation_expression.groups
+        for atom in group.atoms
+    ]
+    for group in draft.get("obligation_expression", {}).get("groups", []):
+        for atom in group.get("atoms", []):
+            evaluation = atom.get("evaluation")
+            if (
+                not isinstance(evaluation, dict)
+                or evaluation.get("time_operand_attribute") is not None
+                or not isinstance(atom.get("time_constraint"), dict)
+            ):
+                continue
+            matches = []
+            for old in prior_atoms:
+                old_attribute = (old.get("evaluation") or {}).get("time_operand_attribute")
+                if old_attribute not in {"date_range", "record_time"}:
+                    continue
+                # Compare the complete normalized atom, not a field allowlist
+                # that could omit a newly introduced semantic property.
+                probe = deepcopy(atom)
+                probe["evaluation"]["time_operand_attribute"] = old_attribute
+                try:
+                    normalized = ProtocolControlAgentWireObligationAtom.model_validate(
+                        probe
+                    ).model_dump(mode="json")
+                except ValidationError:
+                    continue
+                if normalized == old:
+                    matches.append(old)
+            if len(matches) == 1:
+                old_attribute = (matches[0].get("evaluation") or {}).get("time_operand_attribute")
+                if old_attribute in {"date_range", "record_time"}:
+                    evaluation["time_operand_attribute"] = old_attribute
+
+
+def _parse_repartition_with_checked_time(
+    raw_text: str, previous: ProtocolControlAgentWire
+) -> ProtocolControlAgentWire:
+    """Keep prior checked time fields when a bounded source regrouping preserves an atom."""
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return parse_protocol_control_agent_wire(raw_text)
+    if isinstance(payload, dict) and isinstance(payload.get("candidate_drafts"), list):
+        for draft in payload["candidate_drafts"]:
+            if not isinstance(draft, dict):
+                continue
+            source_ids = set(draft.get("source_structure_unit_ids") or ())
+            matches = [
+                candidate for candidate in previous.candidate_drafts
+                if source_ids and source_ids <= set(candidate.source_structure_unit_ids)
+            ]
+            if len(matches) == 1:
+                _restore_unchanged_time_operands(draft, matches[0])
+    return parse_protocol_control_agent_wire(json.dumps(payload, ensure_ascii=False))
+
+
+def _build_post_treatment_repair_prompt(
+    batch: ProtocolControlDispositionBatch,
+    previous: ProtocolControlAgentWire,
+    index: int,
+    problem: str,
+) -> str:
+    candidate = previous.candidate_drafts[index]
+    units = [
+        {"structure_unit_id": unit.structure_unit_id, "excerpt": unit.excerpt,
+         "source_span_ids": unit.source_span_ids,
+         "other_candidate_requirements": [
+             {
+                 "candidate_index": other_index,
+                 "title": other.title,
+                 "obligation_excerpts": [
+                     excerpt
+                     for group in other.obligation_expression.groups
+                     for atom in group.atoms
+                     if set(atom.source_span_ids) & set(unit.source_span_ids)
+                     for excerpt in atom.source_excerpts
+                 ],
+             }
+             for other_index, other in enumerate(previous.candidate_drafts)
+             if other_index != index and unit.structure_unit_id in other.source_structure_unit_ids
+         ]}
+        for unit in batch.owned_units
+        if unit.structure_unit_id in candidate.source_structure_unit_ids
+    ]
+    atoms = [
+        {"group_index": group_index, "atom_index": atom_index,
+         "kind": atom.kind.value, "statement": atom.statement,
+         "source_span_ids": atom.source_span_ids, "source_excerpts": atom.source_excerpts}
+        for group_index, group in enumerate(candidate.obligation_expression.groups)
+        for atom_index, atom in enumerate(group.atoms)
+    ]
+    return (
+        "这是同一方案Agent对一个混合来源候选的有界修订。逐个核原文单元和义务原子；"
+        "只列出确属入排节点之后执行而必须移走的原子坐标。未列出的原子由系统原样保留，"
+        "包括已核时间、求值与原文，不要重写它们。仅当一个原文单元没有任何仍有效的当前节点"
+        "要求时，才从本候选移走该原文单元。若该单元仍被其他候选使用，"
+        "只填 released_shared_units，给出本单元逐字摘录及移出本候选的理由；"
+        "不得改变其全批次处置。只有无人再引用的单元，才在 removed_unit_dispositions 中"
+        "明确处置为 post_treatment_execution 并给出依据。两栏合计必须恰好覆盖本次"
+        "从候选移走的单元；不移走时均填空数组。仍有本候选当前限制的单元必须留下。"
+        "重写剩余候选的 title、review_node_bindings、minimum_evidence、cross_source_relations，"
+        "不得继续要求本次证明治疗后才发生的事实。最低证据 atom_refs 使用移除后各组的新序位。"
+        "不确定应保留失败待核，不得猜测阶段或删除整段。只返回请求结构的JSON。\n"
+        f"校验问题：{problem[:1800]}\n"
+        f"原文单元：{_stable_json(units)}\n"
+        f"原候选原子：{_stable_json(atoms)}\n"
+        f"原候选其余字段：{_stable_json({'title': candidate.title, 'review_node_bindings': [x.model_dump(mode='json') for x in candidate.review_node_bindings], 'minimum_evidence': [x.model_dump(mode='json') for x in candidate.minimum_evidence], 'cross_source_relations': [x.model_dump(mode='json') for x in candidate.cross_source_relations]})}"
+    )
+
+
+def _merge_post_treatment_scope_repair(
+    raw_text: str,
+    previous: ProtocolControlAgentWire,
+    index: int,
+    batch: ProtocolControlDispositionBatch,
+) -> ProtocolControlAgentWire:
+    try:
+        repair = _PostTreatmentScopeRepair.model_validate_json(raw_text)
+        old = previous.candidate_drafts[index]
+        removed = {(item.group_index, item.atom_index) for item in repair.removed_atoms}
+        if len(removed) != len(repair.removed_atoms):
+            raise ValueError("移出原子定位不得重复")
+        old_atoms = {
+            (group_index, atom_index)
+            for group_index, group in enumerate(old.obligation_expression.groups)
+            for atom_index, _ in enumerate(group.atoms)
+        }
+        if not removed < old_atoms:
+            raise ValueError("只可移出原候选的部分原子，至少保留一项")
+        groups = []
+        for group_index, group in enumerate(old.obligation_expression.groups):
+            atoms = [atom for atom_index, atom in enumerate(group.atoms)
+                     if (group_index, atom_index) not in removed]
+            if not atoms:
+                raise ValueError("不能留下空义务组并改变原条件逻辑")
+            groups.append(group.model_copy(update={"atoms": atoms}))
+        reclassified_units = {item.structure_unit_id for item in repair.removed_unit_dispositions}
+        released_units = {item.structure_unit_id for item in repair.released_shared_units}
+        removed_units = reclassified_units | released_units
+        if (len(reclassified_units) != len(repair.removed_unit_dispositions)
+                or len(released_units) != len(repair.released_shared_units)
+                or reclassified_units & released_units):
+            raise ValueError("移出单元不得重复")
+        if not removed_units <= set(old.source_structure_unit_ids) or any(
+            item.disposition != StructureUnitDispositionKind.POST_TREATMENT_EXECUTION
+            or not item.notes
+            for item in repair.removed_unit_dispositions
+        ):
+            raise ValueError("移出单元必须属于原候选并明确给出治疗后处置及依据")
+        other_units = {
+            unit_id
+            for other_index, other in enumerate(previous.candidate_drafts)
+            if other_index != index
+            for unit_id in other.source_structure_unit_ids
+        }
+        if not released_units <= other_units or reclassified_units & other_units:
+            raise ValueError("共享来源只能从本候选释放，不能将仍被其他候选引用的单元整体改为治疗后处置")
+        units_by_id = {unit.structure_unit_id: unit for unit in batch.owned_units}
+        if any(
+            normalize_source_excerpt(item.source_excerpt)
+            not in normalize_source_excerpt(units_by_id[item.structure_unit_id].excerpt)
+            for item in repair.released_shared_units
+        ):
+            raise ValueError("共享来源释放的摘录必须逐字属于该冻结原文单元")
+        unit_spans = {
+            unit.structure_unit_id: set(unit.source_span_ids)
+            for unit in batch.owned_units
+        }
+        removed_spans = set().union(*(unit_spans[unit_id] for unit_id in removed_units)) if removed_units else set()
+        retained_atoms = [atom for group in groups for atom in group.atoms]
+        if any(set(atom.source_span_ids) & removed_spans for atom in retained_atoms):
+            raise ValueError("移出单元仍被保留的义务引用")
+        if any(set(evidence.source_policy.source_span_ids) & removed_spans
+               for evidence in repair.minimum_evidence):
+            raise ValueError("新最低证据仍引用移出的原文单元")
+        retained_source_ids = sorted(set(old.source_span_ids) - removed_spans)
+        candidate = old.model_copy(update={
+            "title": repair.title,
+            "obligation_expression": old.obligation_expression.model_copy(update={"groups": groups}),
+            "review_node_bindings": repair.review_node_bindings,
+            "minimum_evidence": repair.minimum_evidence,
+            "cross_source_relations": repair.cross_source_relations,
+            "source_structure_unit_ids": sorted(set(old.source_structure_unit_ids) - removed_units),
+            "source_span_ids": retained_source_ids,
+        })
+        updated = previous.model_dump(mode="json")
+        updated["candidate_drafts"][index] = candidate.model_dump(mode="json")
+        disposition_by_unit = {item.structure_unit_id: item for item in repair.removed_unit_dispositions}
+        updated["dispositions"] = [
+            disposition_by_unit.get(item.structure_unit_id, item).model_dump(mode="json")
+            for item in previous.dispositions
+        ]
+        return ProtocolControlAgentWire.model_validate(updated)
+    except (ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "POST_TREATMENT_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _future_prohibition_finding_paths(
+    error: ProtocolControlAgentWireValidationError,
+) -> tuple[tuple[int, int, str], ...] | None:
+    """None means legacy metadata; malformed present locations grant no scope."""
+
+    findings = [item for item in error.validation_findings
+                if item.get("code") == "FUTURE_PROHIBITION_DECIDED_EARLY"]
+    if not any(item.get("json_path") is not None for item in findings):
+        return None
+    paths = []
+    fields = {"continuing_obligation", "statement", "evaluation.proposition",
+              "evaluation.observation_policy.scope"}
+    for finding in findings:
+        path = finding.get("json_path")
+        if not isinstance(path, str):
+            return ()
+        parts = path.split(".")
+        if (len(parts) < 6 or parts[0:2] != ["obligation_expression", "groups"]
+                or parts[3] != "atoms" or not parts[2].isascii() or not parts[2].isdigit()
+                or not parts[4].isascii() or not parts[4].isdigit()
+                or ".".join(parts[5:]) not in fields):
+            return ()
+        paths.append((int(parts[2]), int(parts[4]), ".".join(parts[5:])))
+    return tuple(dict.fromkeys(paths))
+
+
+def _future_prohibition_repair_path(
+    error: ProtocolControlAgentWireValidationError,
+    wire: ProtocolControlAgentWire | None,
+    candidate_indexes: set[int],
+) -> tuple[int, int, int] | None:
+    error_classes = set(error.error_class_codes)
+    if (
+        wire is None
+        or "FUTURE_PROHIBITION_DECIDED_EARLY" not in error_classes
+        or error_classes - {"FUTURE_PROHIBITION_DECIDED_EARLY", "PUBLICATION_GATE_REJECTED"}
+        or len(candidate_indexes) != 1
+        or error.allow_candidate_repartition
+        or error.allow_source_closure_rewrite
+    ):
+        return None
+    candidate_index = next(iter(candidate_indexes))
+    if not 0 <= candidate_index < len(wire.candidate_drafts):
+        return None
+    located = _future_prohibition_finding_paths(error)
+    if located is not None:
+        if (len(located) != 1
+                or located[0][2] == "evaluation.observation_policy.scope"):
+            return None
+        group_index, atom_index, _ = located[0]
+        groups = wire.candidate_drafts[candidate_index].obligation_expression.groups
+        if group_index >= len(groups) or atom_index >= len(groups[group_index].atoms):
+            return None
+        atom = groups[group_index].atoms[atom_index]
+        if (atom.kind not in {ControlObligationKind.PROHIBIT_EVENT,
+                              ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE}
+                or atom.prospective_period is not None):
+            return None
+        return candidate_index, group_index, atom_index
+    if "当前节点的观察范围" in str(error):
+        return None
+    matches = [
+        (candidate_index, group_index, atom_index)
+        for group_index, group in enumerate(
+            wire.candidate_drafts[candidate_index].obligation_expression.groups
+        )
+        for atom_index, atom in enumerate(group.atoms)
+        if atom.kind in {
+            ControlObligationKind.PROHIBIT_EVENT,
+            ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE,
+        }
+        and atom.prospective_period is None
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _future_observation_scope_repair_path(
+    error: ProtocolControlAgentWireValidationError,
+    wire: ProtocolControlAgentWire | None,
+    candidate_indexes: set[int],
+) -> tuple[int, tuple[tuple[str, int, int], ...]] | None:
+    if (
+        wire is None
+        or "FUTURE_PROHIBITION_DECIDED_EARLY" not in error.error_class_codes
+        or set(error.error_class_codes) - {"FUTURE_PROHIBITION_DECIDED_EARLY", "PUBLICATION_GATE_REJECTED"}
+        or len(candidate_indexes) != 1
+        or error.allow_candidate_repartition
+        or error.allow_source_closure_rewrite
+    ):
+        return None
+    candidate_index = next(iter(candidate_indexes))
+    if not 0 <= candidate_index < len(wire.candidate_drafts):
+        return None
+    located = _future_prohibition_finding_paths(error)
+    if located is not None:
+        if not located or any(field != "evaluation.observation_policy.scope"
+                              for _, _, field in located):
+            return None
+        groups = wire.candidate_drafts[candidate_index].obligation_expression.groups
+        paths = []
+        for group_index, atom_index, _ in located:
+            if group_index >= len(groups) or atom_index >= len(groups[group_index].atoms):
+                return None
+            atom = groups[group_index].atoms[atom_index]
+            if (atom.kind not in {ControlObligationKind.PROHIBIT_EVENT,
+                                  ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE}
+                    or atom.continuing_obligation is None or atom.evaluation is None
+                    or atom.evaluation.observation_policy is None):
+                return None
+            paths.append(("obligation", group_index, atom_index))
+        return candidate_index, tuple(paths)
+    if "当前节点的观察范围" not in str(error):
+        return None
+    matches = [
+        ("obligation", group_index, atom_index)
+        for group_index, group in enumerate(wire.candidate_drafts[candidate_index].obligation_expression.groups)
+        for atom_index, atom in enumerate(group.atoms)
+        if atom.continuing_obligation is not None
+        and atom.evaluation is not None
+        and atom.evaluation.observation_policy is not None
+    ]
+    return (candidate_index, (matches[0],)) if len(matches) == 1 else None
+
+
+def _missing_anchor_atom_repair_path(
+    error: ProtocolControlAgentWireValidationError,
+    wire: ProtocolControlAgentWire,
+    output: ProtocolControlBatchDispositionHydrated,
+    candidate_indexes: set[int],
+) -> tuple[int, int, int] | None:
+    """Bind a gate-owned path to the current atom, never to a shared span alone."""
+    if (set(error.error_class_codes) != {"PUBLICATION_GATE_REJECTED", "TIME_ANCHOR_MISSING"}
+            or error.repair_scope_unknown or len(candidate_indexes) != 1
+            or error.allow_candidate_repartition or error.allow_source_closure_rewrite
+            or error.allow_source_insert or len(error.validation_findings) != 1):
+        return None
+    index = next(iter(candidate_indexes))
+    if not 0 <= index < len(wire.candidate_drafts) or index >= len(output.candidates):
+        return None
+    finding = error.validation_findings[0]
+    path = re.fullmatch(
+        r"/obligation_expression/groups/(0|[1-9]\d*)/atoms/(0|[1-9]\d*)/time_constraint",
+        str(finding.get("json_path", "")),
+    )
+    if finding.get("code") != "TIME_ANCHOR_MISSING" or path is None:
+        return None
+    candidate = output.candidates[index]
+    if (candidate.semantics is None or error.candidate_ids != (candidate.control_candidate_id,)
+            or finding.get("owner_candidate_id") != candidate.control_candidate_id):
+        return None
+    group_index, atom_index = map(int, path.groups())
+    try:
+        atom = wire.candidate_drafts[index].obligation_expression.groups[group_index].atoms[atom_index]
+        hydrated = candidate.semantics.obligation_expression.groups[group_index].atoms[atom_index]
+    except IndexError:
+        return None
+    excerpt_hash = hashlib.sha256(json.dumps(
+        atom.source_excerpts, ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    if (atom.time_constraint is not None or not atom.source_span_ids
+            or wire.candidate_drafts[index].source_structure_unit_ids != candidate.frozen_structure_unit_ids
+            or atom.source_span_ids != hydrated.source_span_ids
+            or atom.source_excerpts != hydrated.source_excerpts
+            or finding.get("entity_id") != f"{candidate.control_candidate_id}/{hydrated.obligation_id}"
+            or set(finding.get("structure_unit_ids") or ()) != set(candidate.frozen_structure_unit_ids)
+            or set(error.structure_unit_ids) != set(candidate.frozen_structure_unit_ids)
+            or set(finding.get("obligation_source_span_ids") or ()) != set(atom.source_span_ids)
+            or set(error.obligation_source_span_ids) != set(atom.source_span_ids)
+            or finding.get("source_excerpt_sha256") != excerpt_hash):
+        return None
+    return index, group_index, atom_index
+
+
+def _early_anchor_atom_repair_path(
+    error: ProtocolControlAgentWireValidationError,
+    wire: ProtocolControlAgentWire | None,
+    candidate_indexes: set[int],
+) -> tuple[int, int, int] | None:
+    classes = set(error.error_class_codes)
+    if (
+        wire is None
+        or "EARLY_DECISION_FOR_FUTURE_ANCHOR" not in classes
+        or classes - {"EARLY_DECISION_FOR_FUTURE_ANCHOR", "PUBLICATION_GATE_REJECTED"}
+        or len(candidate_indexes) != 1
+        or error.allow_candidate_repartition
+        or error.allow_source_closure_rewrite
+    ):
+        return None
+    candidate_index = next(iter(candidate_indexes))
+    if not 0 <= candidate_index < len(wire.candidate_drafts):
+        return None
+    future_anchors = {
+        "baseline_date", "randomization_date", "first_dose_date",
+        "study_drug_administration_date",
+    }
+    matches = [
+        (candidate_index, group_index, atom_index)
+        for group_index, group in enumerate(
+            wire.candidate_drafts[candidate_index].obligation_expression.groups
+        )
+        for atom_index, atom in enumerate(group.atoms)
+        if atom.time_constraint is not None
+        and atom.time_constraint.anchor_type.value in future_anchors
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _build_future_prohibition_repair_prompt(
+    wire: ProtocolControlAgentWire, path: tuple[int, int, int]
+) -> str:
+    candidate_index, group_index, atom_index = path
+    atom = wire.candidate_drafts[candidate_index].obligation_expression.groups[group_index].atoms[atom_index]
+    return (
+        "这是同一方案Agent对一条跨当前与后续期间的禁止义务作有界拆分。"
+        "只可改写这一原子的当前 statement 和 evaluation.proposition；"
+        "其他求值字段、时间、证据、候选和所有其他原子均已冻结，不可重写。"
+        "当前两个文本只表达截至当前审核节点可核的禁止行为，不得写入后续期间；"
+        "只在原文直接同时支持当前禁止和后续禁止、且二者确为同一禁止行为时，"
+        "如原子已有 continuing_obligation，返回 null 并原样保留；否则补充有源的后续义务。"
+        "不得把完成操作、给药或记录义务写成持续禁止。"
+        "其 source_span_ids 与 source_excerpts 必须从下列原子来源成对原样选取，"
+        "prospective_period 只按原文确定，status 固定为 not_due_at_review_node。"
+        "原文不能证明同一禁止行为及后续期间时，不得猜测；返回无法成形的内容将被拒绝。"
+        "只返回含 current_statement、current_proposition、continuing_obligation "
+        "三个字段的JSON对象；不得返回 wire_version、dispositions 或 candidate_drafts。"
+        "已有后续义务时 continuing_obligation 可为 null，或与冻结值逐字段完全相同；"
+        "不得改写已有后续义务。\n"
+        f"冻结当前原子：{_stable_json({'kind': atom.kind.value, 'statement': atom.statement, 'proposition': atom.evaluation.proposition, 'continuing_obligation': atom.continuing_obligation.model_dump(mode='json') if atom.continuing_obligation is not None else None, 'source_span_ids': atom.source_span_ids, 'source_excerpts': atom.source_excerpts})}"
+    )
+
+
+def _merge_future_prohibition_repair(
+    raw_text: str, previous: ProtocolControlAgentWire, path: tuple[int, int, int]
+) -> ProtocolControlAgentWire:
+    try:
+        repair = _FutureProhibitionRepair.model_validate_json(raw_text)
+        candidate_index, group_index, atom_index = path
+        candidate = previous.candidate_drafts[candidate_index]
+        atom = candidate.obligation_expression.groups[group_index].atoms[atom_index]
+        if atom.kind not in {
+            ControlObligationKind.PROHIBIT_EVENT,
+            ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE,
+        } or atom.prospective_period is not None:
+            raise ValueError("只能修订唯一当前节点禁止义务")
+        if atom.continuing_obligation is None:
+            if repair.continuing_obligation is None:
+                raise ValueError("缺少后续义务须有源补齐")
+        elif (
+            repair.continuing_obligation is not None
+            and repair.continuing_obligation != atom.continuing_obligation
+        ):
+            raise ValueError("已有后续义务不可改写")
+        updated_atom = ProtocolControlAgentWireObligationAtom.model_validate({
+            **atom.model_dump(mode="json"),
+            "statement": repair.current_statement,
+            "evaluation": {
+                **atom.evaluation.model_dump(mode="json"),
+                "proposition": repair.current_proposition,
+            },
+            "continuing_obligation": (
+                atom.continuing_obligation.model_dump(mode="json")
+                if atom.continuing_obligation is not None
+                else repair.continuing_obligation.model_dump(mode="json")
+            ),
+        })
+        updated = previous.model_dump(mode="json")
+        updated["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index] = updated_atom.model_dump(mode="json")
+        return ProtocolControlAgentWire.model_validate(updated)
+    except (ValidationError, ValueError, IndexError, KeyError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "FUTURE_PROHIBITION_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _calendar_bound_repair_path(
+    error: ProtocolControlAgentWireValidationError,
+    wire: ProtocolControlAgentWire | None,
+    candidate_indexes: set[int],
+) -> tuple[int, int, int] | None:
+    classes = set(error.error_class_codes)
+    if (
+        wire is None
+        or "TIME_CALENDAR_BOUND_UNSUPPORTED" not in classes
+        or classes - {"TIME_CALENDAR_BOUND_UNSUPPORTED", "PUBLICATION_GATE_REJECTED"}
+        or not candidate_indexes
+        or not error.obligation_source_span_ids
+        or error.allow_candidate_repartition
+        or error.allow_source_closure_rewrite
+    ):
+        return None
+    source_ids = set(error.obligation_source_span_ids)
+    targets: list[tuple[int, int, int]] = []
+    for candidate_index in sorted(candidate_indexes):
+        if not 0 <= candidate_index < len(wire.candidate_drafts):
+            return None
+        matches = [
+            (candidate_index, group_index, atom_index)
+            for group_index, group in enumerate(
+                wire.candidate_drafts[candidate_index].obligation_expression.groups
+            )
+            for atom_index, atom in enumerate(group.atoms)
+            if atom.time_constraint is not None
+            and set(atom.source_span_ids)
+            and set(atom.source_span_ids) <= source_ids
+        ]
+        if len(matches) != 1:
+            return None
+        targets.extend(matches)
+    return targets[0]
+
+
+def _treatment_duration_atom_repair_path(
+    error: ProtocolControlAgentWireValidationError,
+    wire: ProtocolControlAgentWire | None,
+    candidate_indexes: set[int],
+) -> tuple[int, int, int] | None:
+    """A treatment period can require both time and evaluation changes."""
+
+    classes = set(error.error_class_codes)
+    if (
+        wire is None
+        or "TREATMENT_DURATION_USED_AS_EVENT_WINDOW" not in classes
+        or classes - {"TREATMENT_DURATION_USED_AS_EVENT_WINDOW", "PUBLICATION_GATE_REJECTED"}
+        or len(candidate_indexes) != 1
+        or not error.obligation_source_span_ids
+        or error.allow_candidate_repartition
+        or error.allow_source_closure_rewrite
+        or error.allow_source_insert
+    ):
+        return None
+    candidate_index = next(iter(candidate_indexes))
+    if not 0 <= candidate_index < len(wire.candidate_drafts):
+        return None
+    source_ids = set(error.obligation_source_span_ids)
+    matches = [
+        (candidate_index, group_index, atom_index)
+        for group_index, group in enumerate(wire.candidate_drafts[candidate_index].obligation_expression.groups)
+        for atom_index, atom in enumerate(group.atoms)
+        if atom.time_constraint is not None and set(atom.source_span_ids) == source_ids
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _build_calendar_bound_repair_prompt(
+    wire: ProtocolControlAgentWire, path: tuple[int, int, int],
+    *, batch: ProtocolControlDispositionBatch | None = None,
+) -> str:
+    candidate_index, group_index, atom_index = path
+    atom = wire.candidate_drafts[candidate_index].obligation_expression.groups[group_index].atoms[atom_index]
+    stage_context = [
+        {"display_name": stage.display_name, "visit_instance": stage.visit_instance,
+         "visit_window": stage.visit_window}
+        for stage in (batch.known_workflow_stage_targets if batch is not None else ())
+    ]
+    return (
+        "这是同一方案Agent的单项时间条件核对。只返回该义务的 time_constraint，"
+        "其他已核实字段全部冻结。数值与单位只能来自下列原子的直接逐字来源，"
+        "不得借用同一段落中另一动作的时长；仅保留原文支持的锚点与方向。"
+        "如果原文根本没有此义务的时间条件，time_constraint 填 null；不能猜测起止天数。"
+        "‘自某节点开始’本身不是零天的数值窗口；若原文直接要求该动作在命名日期开始，"
+        "可核同日方向 on；若时长只描述治疗持续期，不要把它移到动作发生时间窗，"
+        "原候选的完整命题仍保持冻结。"
+        "冻结访视名称仅用于辨认阶段范围，不能把名称中的相对日标记直接充当本动作的独立回溯时长；"
+        "只有动作自身的直接原文规定发生期限时才保留数值窗口。"
+        '只返回 JSON 对象，顶层只能有 time_constraint 与 time_purpose；'
+        '无时间条件时返回 time_constraint:null，并把 time_purpose 明确选为 '
+        'not_applicable 或 unresolved；仍有时间条件时 time_purpose 填 null，'
+        '不得复制冻结原子的无据字段、返回解释、原子或整份候选。'
+        f"时间条件允许字段：{_stable_json(list(TimeConstraint.model_fields))}。"
+        f"anchor_type 只可选：{_stable_json([item.value for item in AnchorType])}；"
+        f"direction 只可选：{_stable_json([item.value for item in TimeDirection])}。"
+        "筛选期、导入期等时期名称不是 anchor_type；找不到原文指定的日期锚点时"
+        "不得用时期名称填充。输出顶层结构示例："
+        '{"time_constraint":null,"time_purpose":"unresolved"}；'
+        "示例只说明格式，不代表本条应删除时间约束。\n"
+        f"冻结访视：{_stable_json(stage_context)}。\n"
+        f"待核原子：{_stable_json({'kind': atom.kind.value, 'statement': atom.statement, 'source_span_ids': atom.source_span_ids, 'source_excerpts': atom.source_excerpts, 'time_constraint': atom.time_constraint.model_dump(mode='json')})}"
+    )
+
+
+def _merge_calendar_bound_repair(
+    raw_text: str, previous: ProtocolControlAgentWire, path: tuple[int, int, int]
+) -> ProtocolControlAgentWire:
+    try:
+        payload = json.loads(raw_text)
+        if isinstance(payload, dict) and "time_constraint" not in payload:
+            # Some providers omit the single wrapper. The schema is validated
+            # below after irrelevant absent-bound flags receive their default.
+            payload = {"time_constraint": payload}
+        if isinstance(payload, dict) and isinstance(payload.get("time_constraint"), dict):
+            _normalize_absent_time_bound_flags(payload)
+        repair = _CalendarBoundRepair.model_validate(payload)
+        candidate_index, group_index, atom_index = path
+        updated = previous.model_dump(mode="json")
+        atom = updated["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index]
+        if atom["time_constraint"] is None:
+            raise ValueError("该义务原本没有需要核对的时间条件")
+        atom["time_constraint"] = (
+            repair.time_constraint.model_dump(mode="json")
+            if repair.time_constraint is not None else None
+        )
+        if repair.time_constraint is None:
+            if repair.time_purpose is None:
+                raise ValueError("删除时间窗须同时核实该原子的时间用途")
+            atom["evaluation"]["time_purpose"] = repair.time_purpose
+            atom["evaluation"]["time_operand_attribute"] = None
+        elif repair.time_purpose is not None:
+            raise ValueError("保留时间窗时不得借本修订改变求值用途")
+        return ProtocolControlAgentWire.model_validate(updated)
+    except (ValidationError, ValueError, IndexError, KeyError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "CALENDAR_BOUND_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _merge_source_candidate_insert(
+    raw_text: str,
+    baseline: ProtocolControlAgentWire,
+    *,
+    authorized_unit_ids: set[str],
+) -> ProtocolControlAgentWire:
+    """Append source-bound candidates without letting a provider rewrite prior work."""
+
+    try:
+        payload = json.loads(raw_text)
+        if not isinstance(payload, dict) or set(payload) not in (
+            {"candidate_draft"}, {"candidate_drafts"}
+        ):
+            raise ValueError("来源补入只接受候选草稿")
+        drafts = (
+            [payload["candidate_draft"]]
+            if "candidate_draft" in payload else payload["candidate_drafts"]
+        )
+        if not isinstance(drafts, list) or not drafts:
+            raise ValueError("来源补入至少需要一个候选")
+        candidates = []
+        for draft in drafts:
+            if isinstance(draft, dict) and "source_excerpts" in draft:
+                extra = draft["source_excerpts"]
+                atom_excerpts = {
+                    excerpt
+                    for group in draft.get("obligation_expression", {}).get("groups", [])
+                    for atom in group.get("atoms", [])
+                    for excerpt in atom.get("source_excerpts", [])
+                }
+                if (
+                    not isinstance(extra, list)
+                    or not extra
+                    or any(not isinstance(excerpt, str) or excerpt not in atom_excerpts for excerpt in extra)
+                ):
+                    raise ValueError("候选外层多出的来源摘录未在义务原子中逐字保存")
+                draft = {key: value for key, value in draft.items() if key != "source_excerpts"}
+            _collapse_exact_duplicate_day_bounds(draft)
+            _copy_atom_sources_to_evaluation(draft)
+            _preserve_unstated_observation_selection(draft)
+            _complete_evidence_source_pairs_from_atoms(draft)
+            candidate = ProtocolControlAgentWireCandidate.model_validate(draft)
+            if not set(candidate.source_structure_unit_ids) <= authorized_unit_ids:
+                raise ValueError("新增候选超出授权原文单元")
+            candidates.append(candidate)
+        if {unit_id for candidate in candidates for unit_id in candidate.source_structure_unit_ids} != authorized_unit_ids:
+            raise ValueError("新增候选未逐一覆盖授权原文单元")
+        previous_by_unit = {item.structure_unit_id: item for item in baseline.dispositions}
+        if any(
+            previous_by_unit[unit_id].disposition not in {
+                StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+                StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+                StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+                StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+            }
+            for unit_id in authorized_unit_ids
+        ):
+            raise ValueError("来源补入不能改写不支持混合要求的原处置")
+        updated = baseline.model_dump(mode="json")
+        updated["candidate_drafts"].extend(candidate.model_dump(mode="json") for candidate in candidates)
+        for item in updated["dispositions"]:
+            if item["structure_unit_id"] in authorized_unit_ids:
+                item["disposition"] = StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE.value
+                item["linked_official_code"] = None
+                item["linked_procedure_catalog_item_id"] = None
+                item["linked_procedure_catalog_item_ids"] = []
+                item["notes"] = None
+        merged = ProtocolControlAgentWire.model_validate(updated)
+        _restore_bounded_wire_repair(
+            baseline, merged,
+            mutable_structure_unit_ids=authorized_unit_ids,
+            mutable_obligation_source_span_ids={
+                span for candidate in candidates for span in candidate.source_span_ids
+            },
+            allow_source_insert=True,
+        )
+        return merged
+    except (KeyError, TypeError, ValidationError, ValueError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "SOURCE_INSERT_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _invalid_candidate_payload(raw_text: str) -> tuple[dict[str, Any], tuple[int, ...]] | None:
+    """Retain dispositions and valid siblings when drafts fail wire validation."""
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict) or set(payload) != {
+        "wire_version", "dispositions", "candidate_drafts"
+    } or payload["wire_version"] != CONTROL_AGENT_WIRE_VERSION:
+        return None
+    if _find_forbidden_provider_key(payload) is not None:
+        return None
+    # Probe the same deterministic representation as the canonical parser.
+    # Otherwise omitted defaults can disguise a field-only repair as a full rewrite.
+    _collapse_exact_duplicate_day_bounds(payload)
+    _normalize_absent_time_bound_flags(payload)
+    _copy_atom_sources_to_evaluation(payload)
+    dispositions = payload["dispositions"]
+    drafts = payload["candidate_drafts"]
+    if not isinstance(dispositions, list) or not dispositions or not isinstance(drafts, list):
+        return None
+    try:
+        validated = [ProtocolControlAgentWireDisposition.model_validate(item) for item in dispositions]
+    except (ValidationError, ValueError):
+        return None
+    if len({item.structure_unit_id for item in validated}) != len(validated):
+        return None
+    invalid_indexes: list[int] = []
+    for index, draft in enumerate(drafts):
+        if not isinstance(draft, dict) or any(
+            not isinstance(draft.get(field), list)
+            or not draft[field]
+            or not all(isinstance(item, str) and item.strip() for item in draft[field])
+            or draft[field] != sorted(set(draft[field]))
+            for field in ("source_structure_unit_ids", "source_span_ids")
+        ):
+            return None
+        try:
+            ProtocolControlAgentWireCandidate.model_validate(draft)
+        except (ValidationError, ValueError):
+            invalid_indexes.append(index)
+    return (payload, tuple(invalid_indexes)) if invalid_indexes else None
+
+
+def _single_invalid_candidate_payload(raw_text: str) -> tuple[dict[str, Any], int] | None:
+    result = _invalid_candidate_payload(raw_text)
+    return (result[0], result[1][0]) if result is not None and len(result[1]) == 1 else None
+
+
+def _invalid_obligation_atom_path(
+    error: ProtocolControlAgentWireValidationError,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+) -> tuple[int, int, int] | None:
+    """Find one malformed atom without treating sibling errors as its repair scope."""
+
+    cause = error.__cause__
+    if not isinstance(cause, ValidationError):
+        return None
+    if any("观察选择的原文不属于所在控制原子" in item["msg"]
+           for item in cause.errors(include_url=False)):
+        return None
+    locations = [tuple(item["loc"]) for item in cause.errors(include_url=False)]
+    paths: set[tuple[int, int, int]] = set()
+    for location in locations:
+        if (
+            len(location) < 7
+            or location[0] != "candidate_drafts"
+            or not isinstance(location[1], int)
+            or location[2:4] != ("obligation_expression", "groups")
+            or not isinstance(location[4], int)
+            or location[5] != "atoms"
+            or not isinstance(location[6], int)
+            or (len(location) > 7 and location[7] not in {"evaluation", "time_constraint"})
+        ):
+            return None
+        paths.add((location[1], location[4], location[6]))
+    if len(paths) != 1:
+        return None
+    path = next(iter(paths))
+    if path[0] != candidate_index:
+        return None
+    try:
+        atom = baseline["candidate_drafts"][path[0]]["obligation_expression"]["groups"][path[1]]["atoms"][path[2]]
+    except (KeyError, IndexError, TypeError):
+        return None
+    frozen_fields = (
+        "kind", "statement", "modality", "temporal_scope", "source_span_ids",
+        "source_excerpts", "requires_professional_judgment", "prospective_period",
+        "continuing_obligation",
+    )
+    if not isinstance(atom, dict) or not all(field in atom for field in frozen_fields):
+        return None
+    if atom["continuing_obligation"] is not None:
+        try:
+            validate_control_continuing_obligation(SimpleNamespace(
+                kind=ControlObligationKind(atom["kind"]),
+                prospective_period=atom["prospective_period"],
+                source_span_ids=atom["source_span_ids"],
+                source_excerpts=atom["source_excerpts"],
+                continuing_obligation=ControlContinuingObligation.model_validate(
+                    atom["continuing_obligation"],
+                ),
+            ))
+        except (ValueError, TypeError, KeyError):
+            # Atom repair freezes these fields, so this failure needs candidate
+            # repair rather than a round that cannot change the invalid source.
+            return None
+    return path
+
+
+def _invalid_observation_policy_paths(
+    error: ProtocolControlAgentWireValidationError | ValidationError,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    *, field: Literal["observation_policy", "record_semantics"] = "observation_policy",
+) -> tuple[tuple[str, int, int], ...]:
+    """Locate a sole selected metadata defect without granting atom-wide repair."""
+
+    candidate_relative = isinstance(error, ValidationError)
+    cause = error if candidate_relative else error.__cause__
+    if not isinstance(cause, ValidationError):
+        return ()
+    paths: set[tuple[str, int, int]] = set()
+    for item in cause.errors(include_url=False):
+        location = tuple(item["loc"])
+        if candidate_relative or (
+            isinstance(error, ProtocolControlAgentWireValidationError)
+            and error.code == "CANDIDATE_REPAIR_INVALID"
+            and location[:1] != ("candidate_drafts",)
+        ):
+            location = ("candidate_drafts", candidate_index, *location)
+        layer = (
+            str(location[2]).removesuffix("_expression")
+            if len(location) > 2 and isinstance(location[2], str) else ""
+        )
+        if (
+            (field == "observation_policy" and "求值规格须说明观察选择规则" not in item["msg"])
+            or (field == "record_semantics" and location[7:9] != ("evaluation", "record_semantics"))
+            or
+            len(location) < 7
+            or layer not in {"applicability", "trigger", "obligation", "exception"}
+            or location[:4] != ("candidate_drafts", candidate_index, f"{layer}_expression", "groups")
+            or not isinstance(location[4], int)
+            or location[5] != "atoms"
+            or not isinstance(location[6], int)
+        ):
+            return ()
+        group_index, atom_index = location[4], location[6]
+        try:
+            atom = baseline["candidate_drafts"][candidate_index][f"{layer}_expression"]["groups"][group_index]["atoms"][atom_index]
+            evaluation = atom["evaluation"]
+        except (KeyError, IndexError, TypeError):
+            return ()
+        if not isinstance(evaluation, dict) or (field == "observation_policy"
+                                               and evaluation.get("observation_policy") is not None):
+            return ()
+        if field == "record_semantics":
+            semantics = evaluation.get(field)
+            if (not isinstance(semantics, dict)
+                    or semantics.get("target_kind") not in {"other", "unresolved"}
+                    or semantics.get("proposition_direction") not in {"event_present", "event_absent"}):
+                return ()
+            try:
+                # Classify a direction-only contract failure, without adopting
+                # this hypothetical value as a model answer or clinical fact.
+                RecordSemantics.model_validate({**semantics, "proposition_direction": "unresolved"})
+            except ValidationError:
+                return ()
+        paths.add((layer, group_index, atom_index))
+    return tuple(sorted(paths))
+
+
+def _merge_observation_policy_repair_payload(
+    raw_text: str,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    paths: tuple[tuple[str, int, int], ...],
+    *, field: Literal["observation_policy", "record_semantics"] = "observation_policy",
+) -> dict[str, Any]:
+    """Stage only the selected metadata field; this is not an accepted wire."""
+
+    try:
+        repair = (_ObservationPolicyRepair if field == "observation_policy"
+                  else _RecordSemanticsRepair).model_validate_json(raw_text)
+        returned = [(item.layer, item.group_index, item.atom_index) for item in repair.items]
+        if sorted(returned) != list(paths):
+            raise ValueError("修订字段的原子位置与授权范围不一致")
+        merged = deepcopy(dict(baseline))
+        candidate = merged["candidate_drafts"][candidate_index]
+        for item in repair.items:
+            atom = candidate[f"{item.layer}_expression"]["groups"][item.group_index]["atoms"][item.atom_index]
+            proposed_value = item.policy if field == "observation_policy" else item.semantics
+            proposed = proposed_value.model_dump(mode="json")
+            existing = atom["evaluation"].get(field)
+            if field == "observation_policy" and existing is not None and {
+                key: value for key, value in proposed.items() if key != "scope"
+            } != {
+                key: value for key, value in existing.items() if key != "scope"
+            }:
+                raise ValueError("已有观察采用说明只允许修正 scope，不能更改采用方式或引用来源")
+            direct_sources = list(zip(
+                atom["source_span_ids"], atom["source_excerpts"], strict=True,
+            ))
+            if field == "record_semantics":
+                if (not isinstance(existing, dict)
+                        or any(proposed[key] != existing.get(key)
+                               for key in ("target_kind", "record_obligation", "source_excerpts"))):
+                    raise ValueError("本次只能修正事件方向，不得改记录义务、对象分类或引用来源")
+                if any(not any(excerpt in source for _, source in direct_sources)
+                       or not any(excerpt in source for source in atom["evaluation"]["source_excerpts"])
+                       for excerpt in item.semantics.source_excerpts):
+                    raise ValueError("记录用途的原文不属于所在控制原子及求值规格")
+            elif any(
+                not any(
+                    span_id == direct_span and isinstance(direct_excerpt, str)
+                    and excerpt in direct_excerpt
+                    for direct_span, direct_excerpt in direct_sources
+                )
+                for span_id, excerpt in zip(
+                    item.policy.source_span_ids, item.policy.source_excerpts, strict=True,
+                )
+            ):
+                raise ValueError("观察选择的原文不属于所在控制原子")
+            atom["evaluation"][field] = proposed
+        return merged
+    except (ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "OBSERVATION_REPAIR_INVALID" if field == "observation_policy" else "RECORD_SEMANTICS_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _merge_observation_policy_repair(
+    raw_text: str,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    paths: tuple[tuple[str, int, int], ...],
+) -> ProtocolControlAgentWire:
+    merged = _merge_observation_policy_repair_payload(
+        raw_text, baseline, candidate_index, paths,
+    )
+    try:
+        return ProtocolControlAgentWire.model_validate(merged)
+    except (ValidationError, ValueError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "OBSERVATION_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _invalid_scoped_observation_payload(
+    raw_text: str, previous: ProtocolControlAgentWire, authorized_units: set[str],
+    batch: ProtocolControlDispositionBatch,
+    *, field: Literal["observation_policy", "record_semantics"] = "observation_policy",
+) -> tuple[dict[str, Any], int, tuple[tuple[str, int, int], ...]] | None:
+    """Splice an unaccepted local proposal only for one typed metadata defect."""
+    salvage = _invalid_candidate_payload(raw_text)
+    if salvage is None or len(salvage[1]) != 1:
+        return None
+    payload, invalid_indexes = salvage
+    dispositions, drafts = payload["dispositions"], payload["candidate_drafts"]
+    allowed_spans = {span for unit in batch.owned_units if unit.structure_unit_id in authorized_units
+                     for span in unit.source_span_ids}
+    if (not authorized_units
+            or {item["structure_unit_id"] for item in dispositions} != authorized_units
+            or any(not set(item["source_structure_unit_ids"]) <= authorized_units
+                   or not set(item["source_span_ids"]) <= allowed_spans for item in drafts)
+            or any(set(item.source_structure_unit_ids) & authorized_units
+                   and not set(item.source_structure_unit_ids) <= authorized_units
+                   for item in previous.candidate_drafts)):
+        return None
+    for draft in drafts:
+        source_ids = set(draft["source_structure_unit_ids"])
+        matches = [item for item in previous.candidate_drafts
+                   if source_ids <= set(item.source_structure_unit_ids)]
+        if len(matches) == 1:
+            _restore_unchanged_time_operands(draft, matches[0])
+    changes = {item["structure_unit_id"]: item for item in dispositions}
+    merged = previous.model_dump(mode="json")
+    merged["dispositions"] = [changes.get(item["structure_unit_id"], item) for item in merged["dispositions"]]
+    siblings = [item for item in merged["candidate_drafts"]
+                if set(item["source_structure_unit_ids"]).isdisjoint(authorized_units)]
+    merged["candidate_drafts"] = [*siblings, *drafts]
+    index = len(siblings) + invalid_indexes[0]
+    try:
+        ProtocolControlAgentWireCandidate.model_validate(drafts[invalid_indexes[0]])
+    except ValidationError as cause:
+        paths = _invalid_observation_policy_paths(cause, merged, index, field=field)
+        return (merged, index, paths) if paths else None
+    return None
+
+
+def _build_observation_policy_repair_prompt(
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    paths: tuple[tuple[str, int, int], ...],
+    problem: str,
+) -> str:
+    candidate = baseline["candidate_drafts"][candidate_index]
+    atoms = [
+        {
+            "layer": layer,
+            "group_index": group_index,
+            "atom_index": atom_index,
+            "atom": candidate[f"{layer}_expression"]["groups"][group_index]["atoms"][atom_index],
+        }
+        for layer, group_index, atom_index in paths
+    ]
+    scope_only = "当前节点的观察范围" in problem
+    return (
+        ("仅修正现有观察采用说明的 scope 为截至当前审核节点可核对的资料范围；"
+         "mode、selection、来源编号与原文必须原样保留，不能把后续期间记录提前当作本节点证据。"
+         "若原文不足以支持修正，保留原值让校验继续拒绝。")
+        if scope_only else
+        "仅为列出的条件或义务原子补充观察采用说明，不重写条件、义务、阈值、时间、例外或来源。"
+        "方案明确规定单次、任一、全部或最近/最早时才选择对应方式；"
+        "原文不足时使用 unresolved 并说明范围，不得猜测。"
+        "每项的来源只能从相应原子的 source_span_ids 与 source_excerpts 成对选取；"
+        "旁边的段落不是本次可引用来源。若原子来源不足以确定采用方式，填 unresolved；"
+    ) + (
+        "只返回 items 列表，位置须一一对应。\n"
+        f"校验问题：{problem[:3000]}\n"
+        f"需修原子：{_stable_json(atoms)}\n"
+    )
+
+
+def _invalid_evidence_source_policy_path(
+    error: ProtocolControlAgentWireValidationError,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+) -> tuple[int, int] | None:
+    cause = error.__cause__
+    if not isinstance(cause, ValidationError):
+        return None
+    paths: set[tuple[int, int]] = set()
+    for item in cause.errors(include_url=False):
+        location = tuple(item["loc"])
+        if (
+            len(location) < 4
+            or location[:2] != ("candidate_drafts", candidate_index)
+            or location[2] != "minimum_evidence"
+            or not isinstance(location[3], int)
+            or location[4:5] != ("source_policy",)
+        ):
+            return None
+        paths.add((candidate_index, location[3]))
+    if len(paths) != 1:
+        return None
+    path = next(iter(paths))
+    try:
+        evidence = baseline["candidate_drafts"][path[0]]["minimum_evidence"][path[1]]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return path if isinstance(evidence, dict) else None
+
+
+def _build_evidence_source_policy_repair_prompt(
+    batch: ProtocolControlDispositionBatch,
+    baseline: Mapping[str, Any],
+    path: tuple[int, int],
+    problem: str,
+) -> str:
+    candidate = baseline["candidate_drafts"][path[0]]
+    evidence = candidate["minimum_evidence"][path[1]]
+    source_texts = _candidate_source_texts(batch, candidate["source_structure_unit_ids"])
+    return (
+        "仅修订这一项最低证据的资料来源要求 source_policy，不改写证据、义务、期别、时间或其他候选。"
+        "source_span_ids 与 source_excerpts 必须成对，摘录必须是相应冻结原文中的连续文字；"
+        "原文未明确是否要求同期客观原件或允许筛选病历转述时填 null，未明确结果有效期时"
+        "填 not_specified，不得补造期限。只返回 policy。\n"
+        f"校验问题：{problem[:2000]}\n"
+        f"需修证据：{_stable_json(evidence)}\n"
+        f"授权原文：{_stable_json(source_texts)}\n"
+    )
+
+
+def _merge_evidence_source_policy_repair(
+    raw_text: str,
+    baseline: Mapping[str, Any],
+    path: tuple[int, int],
+    batch: ProtocolControlDispositionBatch,
+) -> ProtocolControlAgentWire:
+    try:
+        repair = _EvidenceSourcePolicyRepair.model_validate_json(raw_text)
+        merged = deepcopy(dict(baseline))
+        candidate = merged["candidate_drafts"][path[0]]
+        source_texts = _candidate_source_texts(batch, candidate["source_structure_unit_ids"])
+        for span_id, excerpt in zip(
+            repair.policy.source_span_ids, repair.policy.source_excerpts, strict=True
+        ):
+            if not any(excerpt in text for text in source_texts.get(span_id, ())):
+                raise ValueError("资料来源要求的摘录不属于授权原文")
+        candidate["minimum_evidence"][path[1]]["source_policy"] = repair.policy.model_dump(mode="json")
+        return ProtocolControlAgentWire.model_validate(merged)
+    except (ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "EVIDENCE_SOURCE_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _missing_evidence_source_type_paths(
+    error: ProtocolControlAgentWireValidationError,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+) -> tuple[tuple[int, int], ...]:
+    cause = error.__cause__
+    if not isinstance(cause, ValidationError):
+        return ()
+    paths: set[tuple[int, int]] = set()
+    for item in cause.errors(include_url=False):
+        location = tuple(item["loc"])
+        if len(location) == 3 and location[0] == "minimum_evidence":
+            location = ("candidate_drafts", candidate_index, *location)
+        if (
+            item["type"] != "missing"
+            or len(location) != 5
+            or location[:3] != ("candidate_drafts", candidate_index, "minimum_evidence")
+            or not isinstance(location[3], int)
+            or location[4] != "required_source_types"
+        ):
+            return ()
+        paths.add((candidate_index, location[3]))
+    try:
+        evidence = baseline["candidate_drafts"][candidate_index]["minimum_evidence"]
+        if any(not isinstance(evidence[index], dict) or "required_source_types" in evidence[index]
+               for _, index in paths):
+            return ()
+    except (KeyError, IndexError, TypeError):
+        return ()
+    return tuple(sorted(paths))
+
+
+def _build_evidence_source_types_repair_prompt(
+    batch: ProtocolControlDispositionBatch,
+    baseline: Mapping[str, Any],
+    paths: tuple[tuple[int, int], ...],
+    *, replace_reviewed: bool = False,
+) -> str:
+    items = []
+    for candidate_index, evidence_index in paths:
+        candidate = baseline["candidate_drafts"][candidate_index]
+        items.append({
+            "candidate_index": candidate_index,
+            "evidence_index": evidence_index,
+            "evidence": candidate["minimum_evidence"][evidence_index],
+            "obligations": candidate["obligation_expression"],
+            "source": _candidate_source_texts(batch, candidate["source_structure_unit_ids"]),
+        })
+    return (
+        ("仅重新核对下列最低证据项目的 required_source_types 资料类型列表；"
+         if replace_reviewed else "仅补齐下列最低证据项目缺少的 required_source_types 资料类型列表；")
+        + "不要重写候选、原文、时间、义务或其他字段。资料类型必须是原文明文限定的"
+        "受试者层面资料，不是常见核实材料的建议；不得把方案、附录或操作规范当成病例证据；"
+        "原文没有要求特定资料类型时返回空列表，不得凭常识追加检查。"
+        "仅返回 items，每个位置恰好一次。\n"
+        f"需补项目：{_stable_json(items)}"
+    )
+
+
+def _merge_evidence_source_types_repair(
+    raw_text: str,
+    baseline: Mapping[str, Any],
+    paths: tuple[tuple[int, int], ...],
+    *, replace_reviewed: bool = False,
+) -> ProtocolControlAgentWire:
+    try:
+        repair = _EvidenceSourceTypesRepair.model_validate_json(raw_text)
+        actual = [(item.candidate_index, item.evidence_index) for item in repair.items]
+        if sorted(actual) != list(paths):
+            raise ValueError("资料类型修订位置与授权缺口不一致")
+        merged = deepcopy(dict(baseline))
+        for item in repair.items:
+            if any(not value.strip() for value in item.required_source_types):
+                raise ValueError("资料类型不得为空白")
+            evidence = merged["candidate_drafts"][item.candidate_index]["minimum_evidence"][item.evidence_index]
+            if "required_source_types" in evidence and not replace_reviewed:
+                raise ValueError("不得覆盖已有资料类型")
+            evidence["required_source_types"] = item.required_source_types
+        return ProtocolControlAgentWire.model_validate(merged)
+    except (ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "EVIDENCE_SOURCE_TYPES_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _invalid_time_operand_paths(
+    error: ProtocolControlAgentWireValidationError,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+) -> tuple[tuple[int, int], ...]:
+    cause = error.__cause__
+    if not isinstance(cause, ValidationError):
+        return ()
+    paths: set[tuple[int, int]] = set()
+    for item in cause.errors(include_url=False):
+        location = tuple(item["loc"])
+        # A single-candidate validator reports locations relative to that
+        # candidate. The server-selected index, not model output, supplies scope.
+        if error.code == "CANDIDATE_REPAIR_INVALID" and location[:1] != ("candidate_drafts",):
+            location = ("candidate_drafts", candidate_index, *location)
+        if (
+            item["type"] != "control_time_operand_missing"
+            or len(location) != 7
+            or location[:4] != (
+                "candidate_drafts", candidate_index, "obligation_expression", "groups"
+            )
+            or not isinstance(location[4], int)
+            or location[5] != "atoms"
+            or not isinstance(location[6], int)
+        ):
+            return ()
+        paths.add((location[4], location[6]))
+    for group_index, atom_index in paths:
+        try:
+            atom = baseline["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index]
+            if atom["time_constraint"] is None or atom["evaluation"].get("time_operand_attribute") is not None:
+                return ()
+        except (KeyError, IndexError, TypeError):
+            return ()
+    return tuple(sorted(paths))
+
+
+def _build_time_operand_repair_prompt(
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    paths: tuple[tuple[int, int], ...],
+) -> str:
+    candidate = baseline["candidate_drafts"][candidate_index]
+    atoms = [
+        {
+            "group_index": group_index,
+            "atom_index": atom_index,
+            "atom": candidate["obligation_expression"]["groups"][group_index]["atoms"][atom_index],
+        }
+        for group_index, atom_index in paths
+    ]
+    return (
+        "只为列出的义务原子选择时间核对使用的日期属性：事件所属期间用 date_range，"
+        "记录形成或检查发生的单日日期用 record_time。"
+        "不得更改原文、时间锚点、期限、义务和其他字段；若不能从原子来源判断，不得猜测。"
+        '只返回 JSON 对象，结构为 {"items":[{"group_index":0,"atom_index":0,'
+        '"attribute":"date_range|record_time|unresolved"}]}；'
+        "group_index 和 atom_index 必须填写实际原子位置，attribute 只取一个枚举值；"
+        "不得返回 date_attribute 或其他字段，位置须一一对应。\n"
+        f"需修原子：{_stable_json(atoms)}\n"
+    )
+
+
+def _merge_time_operand_repair_payload(
+    raw_text: str,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    paths: tuple[tuple[int, int], ...],
+) -> dict[str, Any]:
+    try:
+        repair = _TimeOperandRepair.model_validate_json(raw_text)
+        if sorted((item.group_index, item.atom_index) for item in repair.items) != list(paths):
+            raise ValueError("时间日期属性的原子位置与授权范围不一致")
+        if any(item.attribute == "unresolved" for item in repair.items):
+            raise ProtocolControlAgentWireValidationError(
+                "TIME_OPERAND_UNRESOLVED", "原文不足以确定核对日期属性，保留未核实"
+            )
+        merged = deepcopy(dict(baseline))
+        candidate = merged["candidate_drafts"][candidate_index]
+        for item in repair.items:
+            atom = candidate["obligation_expression"]["groups"][item.group_index]["atoms"][item.atom_index]
+            if (atom.get("time_constraint") is None
+                    or atom["evaluation"].get("time_operand_attribute") is not None):
+                raise ValueError("只能补齐已定位的缺失日期属性，不得覆盖已有属性")
+            atom["evaluation"]["time_operand_attribute"] = item.attribute
+        _normalize_absent_time_bound_flags(candidate)
+        ProtocolControlAgentWireCandidate.model_validate(candidate)
+        return merged
+    except ProtocolControlAgentWireValidationError:
+        raise
+    except (ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "TIME_OPERAND_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _merge_time_operand_repair(
+    raw_text: str,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    paths: tuple[tuple[int, int], ...],
+) -> ProtocolControlAgentWire:
+    try:
+        return ProtocolControlAgentWire.model_validate(
+            _merge_time_operand_repair_payload(raw_text, baseline, candidate_index, paths)
+        )
+    except ValidationError as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "TIME_OPERAND_REPAIR_INVALID", _validation_error_summary(exc),
+        ) from exc
+
+
+def _merge_obligation_atom_repair(
+    raw_text: str, baseline: Mapping[str, Any], path: tuple[int, int, int],
+    *, numeric_predicate_only: bool = False, missing_anchor_only: bool = False,
+    repeat_scheme_only: bool = False,
+    proposition_only: bool = False,
+) -> ProtocolControlAgentWire:
+    """Splice a checked atom into the original batch; all siblings remain byte-identical."""
+
+    try:
+        payload = json.loads(raw_text)
+        field_patch = False
+        if (numeric_predicate_only or repeat_scheme_only) and isinstance(payload, dict) and set(payload) == {"evaluation_patch"}:
+            patch = payload["evaluation_patch"]
+            allowed = {"repeat_scheme"} if repeat_scheme_only else {"determination_mode", "operation", "predicate", "operand_attribute"}
+            if not isinstance(patch, dict) or set(patch) != allowed:
+                raise ValueError("局部修订必须且仅能包含获准的求值字段")
+            if numeric_predicate_only and (patch["determination_mode"] != "deterministic"
+                    or patch["operation"] != "value_comparison"
+                    or not isinstance(patch["predicate"], dict)
+                    or patch["operand_attribute"] != "value"):
+                raise ValueError("数值比较修订不得删除或降级已定位的比较条件")
+            candidate_index, group_index, atom_index = path
+            frozen_atom = deepcopy(baseline["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index])
+            if repeat_scheme_only:
+                scheme = patch["repeat_scheme"]
+                if not isinstance(scheme, dict):
+                    raise ValueError("复查含义补丁必须非空")
+                scheme = deepcopy(scheme)
+                # The evaluation owns this scope; legacy full patches must match it exactly.
+                for field in ("source_span_ids", "source_excerpts"):
+                    if field in scheme and scheme[field] != frozen_atom["evaluation"][field]:
+                        raise ValueError(f"复查含义补丁不得改变冻结来源 {field}")
+                    scheme[field] = deepcopy(frozen_atom["evaluation"][field])
+                patch = {"repeat_scheme": scheme}
+            frozen_atom["evaluation"].update(patch)
+            payload = {"atom": frozen_atom}
+            field_patch = True
+        if not isinstance(payload, dict) or set(payload) != {"atom"}:
+            raise ValueError("义务原子修订只接受 atom")
+        if _find_forbidden_provider_key(payload) is not None:
+            raise ValueError("义务原子修订不得填写系统身份")
+        if (not field_patch and isinstance(payload["atom"], dict)
+                and isinstance(payload["atom"].get("time_constraint"), dict)):
+            _normalize_absent_time_bound_flags(payload["atom"])
+        if numeric_predicate_only and isinstance(payload["atom"], dict):
+            predicate = (payload["atom"].get("evaluation") or {}).get("predicate")
+            if (isinstance(predicate, dict) and predicate.get("source_clause")
+                    and predicate.get("source_clauses") == [predicate["source_clause"]]):
+                # Equivalent duplicate source fields are formatting, not a choice of evidence.
+                predicate["source_clause"] = None
+        if not field_patch:
+            _preserve_unstated_observation_selection(payload["atom"])
+        candidate_index, group_index, atom_index = path
+        merged = deepcopy(dict(baseline))
+        original = merged["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index]
+        replacement = ProtocolControlAgentWireObligationAtom.model_validate(payload["atom"])
+        replacement_json = replacement.model_dump(mode="json")
+        for field in (
+            "kind", "statement", "modality", "temporal_scope",
+            "source_span_ids", "source_excerpts", "requires_professional_judgment",
+            "prospective_period", "continuing_obligation",
+        ):
+            if field not in original or replacement_json[field] != original[field]:
+                raise ValueError(f"义务原子修订不得改变 {field}")
+        if numeric_predicate_only:
+            allowed = {"determination_mode", "operation", "predicate", "operand_attribute"}
+            if replacement_json["time_constraint"] != original["time_constraint"]:
+                raise ValueError("数值条件修订不得改变时间约束")
+            for field, value in original["evaluation"].items():
+                if field not in allowed and replacement_json["evaluation"][field] != value:
+                    raise ValueError(f"数值条件修订不得改变 evaluation/{field}")
+        if repeat_scheme_only:
+            if replacement_json["time_constraint"] != original["time_constraint"]:
+                raise ValueError("复查合同修订不得改变时间约束")
+            scheme = replacement.evaluation.repeat_scheme
+            if scheme is None or original["evaluation"].get("repeat_scheme") is not None:
+                raise ValueError("只可补齐已定位的缺失复查合同")
+            scheme.require_current_extraction()
+            for field, value in original["evaluation"].items():
+                if field != "repeat_scheme" and replacement_json["evaluation"][field] != value:
+                    raise ValueError(f"复查合同修订不得改变 evaluation/{field}")
+        if missing_anchor_only:
+            if original["time_constraint"] is not None or replacement_json["time_constraint"] is None:
+                raise ValueError("时间锚点修订只能补齐已定位的缺失时间约束")
+            for field, value in original["evaluation"].items():
+                if field not in {"time_operand_attribute", "time_purpose"} and replacement_json["evaluation"][field] != value:
+                    raise ValueError(f"时间锚点修订不得改变 evaluation/{field}")
+        if proposition_only:
+            if replacement_json["time_constraint"] != original["time_constraint"]:
+                raise ValueError("判断句修订不得改变时间约束")
+            proposed = normalize_source_excerpt(replacement_json["evaluation"]["proposition"])
+            if not proposed or not any(proposed in normalize_source_excerpt(excerpt)
+                    for excerpt in original["evaluation"]["source_excerpts"]):
+                raise ValueError("局部判断句须逐字来自本原子冻结摘录，不得夹带其他主张")
+            for field, value in original["evaluation"].items():
+                if field != "proposition" and replacement_json["evaluation"][field] != value:
+                    raise ValueError(f"判断句修订不得改变 evaluation/{field}")
+        merged["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index] = replacement_json
+        return ProtocolControlAgentWire.model_validate(merged)
+    except (json.JSONDecodeError, ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "ATOM_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _build_obligation_atom_repair_prompt(
+    batch: ProtocolControlDispositionBatch,
+    baseline: Mapping[str, Any],
+    path: tuple[int, int, int],
+    problem: str,
+    *, numeric_predicate_only: bool = False, field_patch: bool = False,
+    missing_anchor_only: bool = False,
+    repeat_scheme_only: bool = False,
+    proposition_only: bool = False,
+) -> str:
+    candidate_index, group_index, atom_index = path
+    candidate = baseline["candidate_drafts"][candidate_index]
+    atom = candidate["obligation_expression"]["groups"][group_index]["atoms"][atom_index]
+    owned_ids = set(candidate["source_structure_unit_ids"])
+    sources = [
+        {
+            "structure_unit_id": unit.structure_unit_id,
+            "heading_path": unit.heading_path,
+            "excerpt": unit.excerpt,
+        }
+        for unit in batch.owned_units
+        if unit.structure_unit_id in owned_ids
+    ]
+    if proposition_only:
+        return (
+            "仅修订冻结原子的 evaluation.proposition，使已有判断句逐项保留冻结来源的条件。"
+            "只能整理同一要求的表达，不增加事实、阈值、时点、义务或例外。"
+            "返回含 atom 的 JSON；除了 evaluation.proposition 外所有字段逐项原样保留，"
+            "宿主仅合并该字段，完整门禁及新的来源含义核对仍须通过。"
+            "新判断句必须是本原子冻结evaluation.source_excerpts内的连续逐字原文，"
+            "不得借整段上下文扩大摘录或拼入额外主张。"
+            "不得仅把原文贴进引用字段来假装表达，也不得用同意或投票替代含义核对。"
+            "不能忠实表达时保留原稿，不猜测；不改其他原子或要求。\n"
+            f"问题：{problem}\n原子位置：{path}\n"
+            f"冻结原子：{_stable_json(atom)}\n冻结上下文：{_stable_json(sources)}"
+        )
+    if field_patch:
+        if repeat_scheme_only:
+            return (
+                "仅补冻结原子中缺失的复查合同，不重发或改写原子。"
+                "只返回 evaluation_patch 对象，其中必须且只能包含 repeat_scheme。"
+                "本次只允许补 evaluation.repeat_scheme，其他字段和兄弟由宿主原样保留。"
+                "repeat_scheme只填写含义字段，不输出source_span_ids/source_excerpts；"
+                "来源定位和逐字摘录由宿主从本原子的冻结求值来源逐项保留，不重新编号或借兄弟摘录。"
+                "使用repeat-scheme/v4，所有明确值须有本原子已冻结来源；未明范围和结果采用保留未核实。"
+                "不制造检验比较、来源编号、条件身份、日期或计算方式。"
+                "result_use 不是 combine 时，result_combine/result_population 必须为null，"
+                "未知结果采用用result_use=unresolved，不把unknown组合字段填成非空。"
+                "result_use=combine 时，方式和初查参与范围分别保留原文规定或unresolved。"
+                "count_status=specified 须同时有maximum_repeats和count_scope；范围不明用unresolved。"
+                "time_status=specified 才能有time_limit；没有规定与未核清须分开。"
+                "条件性触发必须绑定既有完整条件；来源不能证明时用unresolved，不伪造身份。"
+                "无复查时结果采用no_repeat_result_use必须明确，原文不明用unresolved。"
+                "Schema通过不等于采用，宿主仍将完整重验。\n"
+                f"问题：{problem}\n原子位置：{path}\n"
+                f"冻结原子：{_stable_json(atom)}\n冻结上下文：{_stable_json(sources)}"
+            )
+        if not numeric_predicate_only:
+            raise ValueError("仅数值求值修订支持字段补丁")
+        return (
+            "只修订冻结原子的四个数值求值字段，不重写整个原子，不新增临床含义。"
+            "只返回含 evaluation_patch 的 JSON；补丁必须且仅能包含 determination_mode、"
+            "operation、predicate、operand_attribute。原句、时间、研究者判断、观察采用政策、"
+            "来源和兄弟原子由宿主原样保留。不得把它们放进补丁。"
+            "本次仅补已定位的数值比较：determination_mode 为 deterministic，operation 为 "
+            "value_comparison，predicate 非空，operand_attribute 为 value；无法支持时不得伪造比较。"
+            "predicate 的比较方向、数值和单位必须由原文支持；不能通过改变阈值解决结构错误。"
+            "predicate.source_clause 或 source_clauses 中每个逐字摘录必须包含在冻结原子"
+            "evaluation.source_excerpts 的某一项中。整段上下文仅用于理解适用关系，"
+            "不得用整段替代原子已冻结的局部摘录；需要扩大来源或改动原句时，不得在本次补丁中做。"
+            "source_clause 与 source_clauses 互斥；单段用前者，多段用后者。"
+            "原文存在单位必须保留；不得补推时间或观察政策，不得声称已采用或已通过。\n"
+            f"问题：{problem}\n原子位置：{path}\n"
+            f"冻结原子：{_stable_json(atom)}\n冻结上下文：{_stable_json(sources)}"
+        )
+    return (
+        "仅修订一个已有义务原子的结构，不新增临床含义。"
+        "原句、义务类型、强度、来源定位、后续义务和研究者判断属性必须原样保留；"
+        + ("本次只允许补 evaluation.repeat_scheme，其他所有字段原样保留。"
+           "本条是有源动作次数，不是检验阈值，不填写虚假的数值比较。"
+           "使用repeat-scheme/v4；逐项说明允许或禁止、触发、次数、次数适用范围、期限、"
+           "复查结果及不复查时结果的采用。原文没有说明的范围或结果采用规则写unresolved，"
+           "不得默认每次初查、当前节点或自动保留初查结果。"
+           "复查合同的source_span_ids/source_excerpts必须来自本原子已冻结来源，"
+           "不得借兄弟来源补日期、条件或结果采用规则。返回完整atom，由宿主只合并获准字段。"
+           if repeat_scheme_only else "")
+        + ("本次仅补齐已定位原子的 time_constraint，以及与该约束配套的 "
+           "evaluation.time_operand_attribute 和 evaluation.time_purpose；"
+           "其他求值字段、观察政策和所有兄弟项必须原样保留。不得借用兄弟项的时窗。"
+           if missing_anchor_only else "")
+        + ("本次仅允许修订 evaluation 的 determination_mode、operation、predicate、operand_attribute；"
+           "时间字段、命题、观察采用政策及其他所有字段必须原样保留。"
+           "比较条件的source_clause与source_clauses互斥：单段填写source_clause时source_clauses为空；"
+           "多段填写source_clauses时source_clause为null，不能同时填写。"
+           "原文有次数、天数等单位时必须保留该单位，不能改写为unitless；只有真正无量纲的值才用unitless。"
+           if numeric_predicate_only else "" if repeat_scheme_only else "只能根据冻结原文修订求值和时间字段。")
+        + "若原文无法支持修订，不得猜测。"
+        "返回的是完整原子，不是单个字段补丁：数值比较的单位须按原文填写，"
+        "确为无量纲时写 unitless；求值规格须同时保留非空观察采用说明，"
+        "原文未说明如何选择记录时写 unresolved，不得以 null 省略。"
+        "若 observation_policy.mode 为 unresolved，scope 和来源定位须引用本原子的原句及来源；"
+        "没有独立的 time_constraint 时，time_purpose 只能为 not_applicable 或 unresolved。"
+        "时间字段须作为一组保持一致：time_constraint 为 null 时，"
+        "evaluation.time_operand_attribute 也必须为 null；保留附加时间条件时，"
+        "semantic/investigator_judgment 或 value_comparison 须明确 date_range/record_time；"
+        "独立 time_constraint 计算只用 operand_attribute，time_operand_attribute 为 null。"
+        "不得为补字段虚构时窗，也不得为少填字段删去原文已有时间要求。"
+        "observation_policy.mode 仅可为 single、any、all、action_completion、unresolved；"
+        "有时间约束或持续期的义务不可使用 action_completion；不得新增自造枚举。"
+        f"{_repair_problem_guidance(problem)}"
+        + (
+            "本次是较早节点被错误绑定到后续日期锚点：逐一核对原文与冻结审核节点。"
+            "只有同一要求确实能截至各审核节点分别核对时，才可使用审核节点日期锚点；"
+            "若不同节点要求不同动作或当前节点尚不可判，保持原稿让门禁拒绝，"
+            "不得通过删除较早节点或改写当前原句蒙混通过。"
+            if "EARLY_DECISION_FOR_FUTURE_ANCHOR" in problem else ""
+        )
+        +
+        "只返回含 atom 的 JSON，其他候选、原子和处置由系统原样保留。\n"
+        f"问题：{problem}\n"
+        f"原子位置：候选{candidate_index}／义务组{group_index}／原子{atom_index}\n"
+        f"原子原稿：{_stable_json(atom)}\n"
+        f"冻结来源：{_stable_json(sources)}"
+    )
+
+
+def _merge_candidate_repairs(
+    raw_text: str,
+    baseline: ProtocolControlAgentWire | Mapping[str, Any],
+    indexes: Sequence[int],
+) -> ProtocolControlAgentWire:
+    try:
+        payload = json.loads(raw_text)
+        if not isinstance(payload, dict) or set(payload) != {"candidate_drafts"}:
+            raise ValueError("多候选修订只接受 candidate_drafts")
+        drafts = payload["candidate_drafts"]
+        if not isinstance(drafts, list) or len(drafts) != len(indexes):
+            raise ValueError("修订候选数量与授权位置不一致")
+        if _find_forbidden_provider_key(payload) is not None:
+            raise ValueError("修订候选不得填写系统身份")
+        merged = (
+            baseline.model_dump(mode="json")
+            if isinstance(baseline, ProtocolControlAgentWire)
+            else deepcopy(dict(baseline))
+        )
+        if list(indexes) != sorted(set(indexes)) or any(
+            index < 0 or index >= len(merged["candidate_drafts"]) for index in indexes
+        ):
+            raise ValueError("修订候选位置不属于原始批次")
+        for index, draft in zip(indexes, drafts, strict=True):
+            candidate = ProtocolControlAgentWireCandidate.model_validate(draft)
+            if not isinstance(baseline, ProtocolControlAgentWire):
+                original = merged["candidate_drafts"][index]
+                if any(
+                    candidate.model_dump(mode="json")[field] != original.get(field)
+                    for field in ("source_structure_unit_ids", "source_span_ids")
+                ):
+                    raise ValueError("多候选修订不得调换候选或改变原始来源范围")
+            merged["candidate_drafts"][index] = candidate.model_dump(mode="json")
+        return ProtocolControlAgentWire.model_validate(merged)
+    except (json.JSONDecodeError, ValidationError, ValueError, KeyError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "CANDIDATE_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _source_statement_reuse_identity(statement: SourceStatement) -> tuple[object, ...]:
+    """Fingerprint the source facts a saved per-statement decision depends on.
+
+    Any change to the quote, scope, time, exception, force, function, sequence or
+    authority of a statement invalidates only that statement's saved reuse.
+    """
+
+    return (
+        statement.structure_unit_id,
+        statement.quoted_text,
+        statement.scope_quote,
+        statement.scope_context_unit_id,
+        statement.force,
+        tuple(statement.decision_functions),
+        statement.affected_stage,
+        tuple(statement.time_words),
+        statement.exception_words,
+        tuple(statement.unresolved),
+        statement.eligibility_sequence,
+        statement.eligibility_sequence_quote,
+        (_stable_json(statement.eligibility_sequence_context.model_dump(mode="json"))
+         if statement.eligibility_sequence_context is not None else None),
+        statement.control_authority,
+        statement.attribution_quote,
+    )
+
+
+def _temporal_scope_error_detail(exc: BaseException) -> dict[str, object] | None:
+    """Expose the unresolved duration/cross-node range without parsing text."""
+
+    if not isinstance(exc, SourceTemporalScopeUnresolved):
+        return None
+    return {
+        "code": exc.code,
+        "statement_ids": list(exc.statement_ids),
+        "json_path": exc.json_path,
+        "source_refs": list(exc.source_refs),
+        "retry_class": exc.retry_class,
+        "affected_dependents": list(exc.affected_dependents),
+    }
+
+
+def _require_resolved_source_target_review(
+    batch: ProtocolControlDispositionBatch | ProtocolControlAgentInput,
+    interpretation: SourceInterpretation,
+    review: SourceTargetReview,
+) -> None:
+    unresolved = [item.statement_index for item in review.items if item.decision == "unresolved"]
+    if not unresolved:
+        return
+    units = {interpretation.statements[index].structure_unit_id for index in unresolved}
+    raise SourceTargetReviewValidationError(
+        "已读原文与审核要求的对应关系仍需核清。",
+        code="SOURCE_TARGET_REVIEW_UNRESOLVED",
+        statement_index=unresolved[0] if len(unresolved) == 1 else None,
+        json_path="/items",
+        source_refs=tuple(sorted({span for unit in batch.owned_units
+                                  if unit.structure_unit_id in units
+                                  for span in unit.source_span_ids})),
+    )
+
+
+def _located_publication_failure_identities(
+    error: ProtocolControlAgentWireValidationError,
+    candidate_ids: Sequence[str],
+) -> tuple[str, ...]:
+    """Track a located defect, not changing generated candidate IDs or prose."""
+    if error.repair_scope_unknown:
+        return ()
+    owners = {candidate_id: index for index, candidate_id in enumerate(candidate_ids)}
+    identities: set[str] = set()
+    for item in error.validation_findings:
+        units = set(item.get("structure_unit_ids") or ())
+        path = item.get("json_path")
+        entity_id = item.get("entity_id")
+        if not units or not path or not isinstance(entity_id, str):
+            continue
+        if error.structure_unit_ids and not units <= set(error.structure_unit_ids):
+            continue
+        owner = entity_id.split("/", 1)[0]
+        if owner not in owners:
+            owner = item.get("owner_candidate_id")
+        source_finding = (item.get("code") == "ENROLLMENT_PROHIBITION_UNCOVERED"
+                          and entity_id in units
+                          and str(path).startswith(f"/source_units/{entity_id}/clauses/"))
+        if not source_finding and owner not in owners:
+            continue
+        if not source_finding and error.candidate_ids and owner not in error.candidate_ids:
+            continue
+        identity = {
+            "candidate_index": None if source_finding else owners[owner],
+            "code": item.get("code"), "json_path": path,
+            "structure_unit_ids": sorted(units),
+            "source_span_ids": sorted(item.get("obligation_source_span_ids", ())),
+        }
+        if item.get("code") == "TIME_ANCHOR_MISSING":
+            excerpt_hash = item.get("source_excerpt_sha256")
+            if not isinstance(excerpt_hash, str) or not excerpt_hash:
+                continue
+            identity["source_excerpt_sha256"] = excerpt_hash
+        # These producers locate the defect without generated IDs or prose.
+        # Other findings retain their existing distinct-condition fingerprint.
+        if item.get("code") not in {"ENROLLMENT_PROHIBITION_UNCOVERED", "TIME_ANCHOR_MISSING"}:
+            if not isinstance(item.get("message"), str):
+                continue
+            identity["message_sha256"] = _sha256(item["message"])
+        identities.add(_stable_json(identity))
+    return tuple(sorted(identities))
+
+
+class ProtocolControlAgentRunner:
+    """Bounded same-session parser/repair loop for one planned batch.
+
+    Repair budget contract for serial multi-class repairs (串行修订类预算合同):
+
+    1. The total number of schema repair rounds is strictly bounded by
+       ``max_schema_repairs`` (default ``DEFAULT_MAX_SCHEMA_REPAIRS`` = 2).
+       The budget is shared across source corrections, structure and publication
+       errors; a whole-source format repair also consumes it. Once a
+       parsed output passes those checks, a source-target review may authorize
+       one separate, source-scoped insertion. It cannot grant another schema
+       repair or repeat an unsuccessful insertion.
+    2. The loop always terminates (no infinite loop): the ``repairs``
+       counter increases monotonically against the strict bound, and an
+       identical invalid result (raw text sha256 + error code + message), or
+       the same source-located publication defect despite a rewritten answer,
+       observed for the second time triggers the ``no_progress`` early
+       stop before the remaining budget is consumed.
+    3. Transport calls are bounded: one initial call, at most
+       ``max_transport_retries`` (default ``DEFAULT_MAX_TRANSPORT_RETRIES``
+       = 1) retries, one call per schema repair round, and at most one
+       source-scoped insertion, uniquely scoped future-prohibition call,
+       and uniquely scoped calendar-bound correction.
+    4. Invariant output: given the same transport response sequence, every
+       attempt (including its ``error_classes`` accounting), the status and
+       the final output are fully deterministic; rerunning the same
+       sequence reproduces the identical result field for field.
+    """
+
+    def __init__(
+        self,
+        *,
+        max_transport_retries: int = DEFAULT_MAX_TRANSPORT_RETRIES,
+        max_schema_repairs: int = DEFAULT_MAX_SCHEMA_REPAIRS,
+    ) -> None:
+        if max_transport_retries < 0 or max_schema_repairs < 0:
+            raise ValueError("重试上限必须为非负整数")
+        self._max_transport_retries = max_transport_retries
+        self._max_schema_repairs = max_schema_repairs
+
+    def run(
+        self,
+        batch: ProtocolControlDispositionBatch,
+        transport: ProtocolControlAgentTransport,
+        *,
+        prompt_template: str = DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE,
+        accepted_batch_ids: Sequence[str] = (),
+        output_validator: ProtocolControlAgentOutputValidator | None = None,
+        resume_wire: ProtocolControlAgentWire | None = None,
+        resume_pending_author_wire: ProtocolControlAgentWire | None = None,
+        resume_pending_author_repairs_used: int = 0,
+        resume_source_interpretation: SourceInterpretation | None = None,
+        resume_session_id: str | None = None,
+        resume_source_target_review: SourceTargetReview | None = None,
+        resume_source_statement_coverage: Sequence[SourceStatementCoverage] = (),
+        resume_source_candidate_alignment: SourceCandidateAlignment | None = None,
+        resume_reviewed_semantic_repair_unit_ids: Sequence[str] = (),
+        resume_source_scope_question_history: Sequence[Mapping[str, object]] = (),
+        resume_source_scope_correction_indexes: Sequence[int] = (),
+        resume_source_unit_completion_ids: Sequence[str] = (),
+        official_predicate_identities: Mapping[str, Sequence[tuple[str, str]]] | None = None,
+        official_predicate_sources: Mapping[str, Mapping[tuple[str, str], Sequence[str]]] | None = None,
+        workflow_variant: str = "RV1001-BASELINE",
+    ) -> ProtocolControlAgentRunResult:
+        from .protocol_control_agent_transport import protocol_control_call_failure_code
+
+        from .protocol_control_fixed_flow import (
+            BASELINE, FIXED_FLOW, prepare_front_stage_flow, supports_front_stage_flow,
+        )
+        if workflow_variant not in {BASELINE, FIXED_FLOW}:
+            raise ValueError("未知方案语义工作流程")
+        if batch.batch_id in set(accepted_batch_ids):
+            raise ValueError(f"已接受批次不得被同会话修复替换：{batch.batch_id}")
+
+        attempts: list[ProtocolControlAgentAttempt] = []
+        resumed_review_items: dict[int, SourceTargetReviewItem] = {}
+        resumed_review_identity: dict[int, tuple[object, ...]] = {}
+        if resume_source_target_review is not None:
+            # A saved review only suppresses a reviewer call after the current
+            # validators prove it against the frozen batch, the restored source
+            # statements and its own saved coverage. An unproven review is
+            # dropped here (the reviewer is asked again). Individually proved
+            # siblings may seed recovery, but cannot bypass the final full gate.
+            saved_coverage = list(resume_source_statement_coverage)
+            if resume_source_interpretation is None or not saved_coverage:
+                raise ValueError("已保存的逐项来源核对缺少对应有源陈述或来源覆盖账")
+            validate_source_interpretation(batch, resume_source_interpretation)
+            try:
+                retained = validated_source_review_seed(
+                    batch, resume_source_interpretation, saved_coverage,
+                    resume_source_target_review,
+                    completed_quote_indexes=completed_quote_review_indexes(
+                        resume_source_interpretation, resume_source_scope_question_history,
+                    ),
+                )
+            except (SourceTargetReviewValidationError, SourceInterpretationValidationError):
+                resumed_review_items = {}
+            else:
+                resumed_review_items = {
+                    item.statement_index: item
+                    for item in (retained.items if retained is not None else [])
+                }
+                resumed_review_identity = {
+                    index: _source_statement_reuse_identity(statement)
+                    for index, statement in enumerate(resume_source_interpretation.statements)
+                }
+        elif resume_source_statement_coverage:
+            raise ValueError("来源覆盖账不能脱离已保存的逐项来源核对单独恢复")
+        session_id: str | None = None
+        raw_text: str | None = None
+        source_interpretation: SourceInterpretation | None = None
+        partial_wire: ProtocolControlAgentWire | None = None
+        pending_author_wire: ProtocolControlAgentWire | None = None
+        pending_author_source_sha256: str | None = None
+        repairs = source_repairs = 0
+        if (any(type(unit) is not str for unit in resume_reviewed_semantic_repair_unit_ids)
+                or len(set(resume_reviewed_semantic_repair_unit_ids)) != len(resume_reviewed_semantic_repair_unit_ids)
+                or not set(resume_reviewed_semantic_repair_unit_ids) <= set(batch.owned_structure_unit_ids)
+                or (resume_reviewed_semantic_repair_unit_ids and resume_wire is None)):
+            raise ValueError("已尝试来源单元必须随同当前相容的局部草稿恢复")
+        reviewed_semantic_repair_units = set(resume_reviewed_semantic_repair_unit_ids)
+        front_flow_assembled = False
+        front_target_review: SourceTargetReview | None = None
+        front_candidate_alignment: SourceCandidateAlignment | None = None
+        workflow_path_executed = "not_started"
+        pending_alignment_atom_baseline = None
+        def build_result(**values) -> ProtocolControlAgentRunResult:
+            nonlocal pending_alignment_atom_baseline, partial_wire
+            nonlocal latest_source_candidate_alignment, latest_source_statement_coverage
+            values.setdefault("reviewed_semantic_repair_unit_ids", sorted(reviewed_semantic_repair_units))
+            if (values.get("final_output") is None and values.get("partial_wire") is None
+                    and values.get("capability_wire") is None
+                    and source_interpretation is not None and pending_author_source_sha256
+                    == _sha256(source_interpretation.model_dump_json())):
+                values.setdefault("pending_author_wire", pending_author_wire)
+                if values.get("pending_author_wire") is not None:
+                    values.setdefault("pending_author_source_sha256", pending_author_source_sha256)
+                    values.setdefault("pending_author_repairs_used", max(
+                        resume_pending_author_repairs_used, repairs - source_repairs))
+            values.setdefault("source_scope_question_history", [
+                *question_history,
+                *[{**attempt.model_dump(mode="json"), "raw_output_text": attempt.raw_output_text}
+                  for attempt in attempts
+                  if attempt.error_detail and attempt.error_detail.get("workflow_phase") in {
+                      "source_scope_question_recheck", "source_context_completion",
+                      "source_unit_quote_completion",
+                      "source_heading_scope_recheck",
+                      "source_exception_field_repair",
+                  }],
+            ])
+            if any(attempt.error_detail and attempt.error_detail.get("workflow_phase") in {
+                "source_scope_question_recheck", "source_function_field_repair", "source_context_completion",
+                "source_unit_quote_completion",
+                "source_heading_scope_recheck",
+                "source_exception_field_repair",
+            }
+                   for attempt in attempts):
+                values.setdefault("repair_used", True)
+            values.setdefault("source_front_target_review", front_target_review)
+            values.setdefault("workflow_variant_requested", workflow_variant)
+            values.setdefault("workflow_path_executed", workflow_path_executed)
+            if values.get("final_output") is not None and values.get("source_interpretation") is not None:
+                inventory = values["source_interpretation"]
+                saved_wire = values["partial_wire"]
+                raw_coverage = source_statement_coverage(batch, inventory, saved_wire)
+                pairs = evidence_policy_alignment_pairs(inventory, raw_coverage, saved_wire)
+                if pairs:
+                    alignment = values.get("source_candidate_alignment")
+                    proven = reusable_proven_alignment_items(
+                        batch, inventory, raw_coverage, saved_wire, alignment,
+                    )
+                    pending = [pair for pair in pairs if pair not in {
+                        (item.statement_index, item.candidate_index) for item in proven
+                    }]
+                    response = None
+                    policy_review_complete = False
+                    reader = getattr(transport, "start_source_candidate_alignment", None)
+                    try:
+                        if pending:
+                            if not callable(reader):
+                                raise ValueError("当前读取通道未提供资料来源限制核对")
+                            configure_candidate_alignment_request(transport, saved_wire, pending)
+                            response = reader(prompt=build_candidate_alignment_prompt(
+                                batch, inventory, saved_wire, pending,
+                            ))
+                            fresh = SourceCandidateAlignment.model_validate_json(response.text)
+                            if {(item.statement_index, item.candidate_index) for item in fresh.items} != set(pending):
+                                raise ValueError("资料来源限制核对没有逐项对应本次范围")
+                            fresh = bind_candidate_alignment(
+                                batch, inventory, raw_coverage, saved_wire, fresh, response.text,
+                            )
+                            previous = alignment_with_items(alignment, proven) if proven else None
+                            alignment = SourceCandidateAlignment(
+                                version=SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+                                items=[*(previous.items if previous else []), *fresh.items],
+                                proofs=[*(previous.proofs if previous else []), *fresh.proofs],
+                            )
+                            values["source_candidate_alignment"] = alignment
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1, session_id=response.session_id,
+                                raw_output_sha256=_sha256(response.text),
+                                raw_output_chars=len(response.text), raw_output_text=response.text,
+                                outcome="parsed", issues=["已保存资料来源限制的局部核对，仍须通过采用校验"],
+                            ))
+                        policy_review_complete = True
+                        require_evidence_policy_alignment(
+                            batch, inventory, raw_coverage, saved_wire, alignment,
+                        )
+                    except Exception as policy_error:  # noqa: BLE001 - retain source and failed review
+                        bound = reusable_proven_alignment_items(
+                            batch, inventory, raw_coverage, saved_wire, alignment,
+                            require_positive=False,
+                        ) if alignment is not None else []
+                        negative = [item for item in bound
+                                    if item.decision == "incomplete"
+                                    and (item.statement_index, item.candidate_index) in set(pairs)
+                                    and policy_review_complete
+                                    and isinstance(policy_error, SourceCandidateAlignmentValidationError)
+                                    and not isinstance(policy_error, EvidencePolicyCheckError)]
+                        if negative:
+                            # A valid negative semantic receipt is not a transport or
+                            # policy-field error. Keep unrelated, freshly checked edits.
+                            retain_checked_wire = pending_alignment_atom_baseline is None
+                            if pending_alignment_atom_baseline is not None:
+                                baseline_wire = pending_alignment_atom_baseline[0]
+                                changed = {index for index, (before, after) in enumerate(zip(
+                                    baseline_wire.candidate_drafts, saved_wire.candidate_drafts,
+                                )) if before != after}
+                                positive = {(item.statement_index, item.candidate_index)
+                                            for item in bound if item.decision == "fully_expressed"}
+                                required_changed_pairs = {(row.statement_index, index)
+                                    for row in raw_coverage for index in row.action_candidate_indexes
+                                    if index in changed}
+                                if (len(baseline_wire.candidate_drafts) == len(saved_wire.candidate_drafts)
+                                        and baseline_wire.dispositions == saved_wire.dispositions
+                                        and changed
+                                        and changed <= {index for _, index in positive}
+                                        and changed.isdisjoint(item.candidate_index for item in negative)
+                                        and required_changed_pairs <= positive
+                                        and {pair for pair in pairs if pair[1] in changed} <= positive
+                                        and not any(statement.unresolved
+                                            and statement.structure_unit_id in {
+                                                unit for index in changed
+                                                for unit in saved_wire.candidate_drafts[index].source_structure_unit_ids}
+                                            for statement in inventory.statements)):
+                                    pending_alignment_atom_baseline = None
+                                    retain_checked_wire = True
+                            if retain_checked_wire:
+                                partial_wire = saved_wire
+                                latest_source_candidate_alignment = alignment
+                                latest_source_statement_coverage = raw_coverage
+                            semantic_repair = _reviewed_semantic_closure_repair(
+                                batch, inventory, saved_wire, raw_coverage, alignment,
+                                [item.statement_index for item in negative],
+                            ) if retain_checked_wire else None
+                            if (semantic_repair is not None
+                                    and not set(semantic_repair.structure_unit_ids) & reviewed_semantic_repair_units
+                                    and callable(getattr(transport, "continue_scoped_unit_repair", None))
+                                    and max(repairs, source_repairs) < self._max_schema_repairs):
+                                reviewed_semantic_repair_units.update(semantic_repair.structure_unit_ids)
+                                raise semantic_repair from policy_error
+                        from .protocol_control_agent_transport import protocol_control_call_failure_code
+                        code = (protocol_control_call_failure_code(policy_error) or (
+                                "EVIDENCE_POLICY_REVIEW_UNAVAILABLE" if not callable(reader)
+                                else "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED" if response is None
+                                else "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED" if negative
+                                     and not isinstance(policy_error, EvidencePolicyCheckError)
+                                else "EVIDENCE_POLICY_UNJUSTIFIED"))
+                        attempts.append(ProtocolControlAgentAttempt(
+                            attempt=len(attempts) + 1,
+                            session_id=response.session_id if response else values.get("session_id"),
+                            raw_output_sha256=_sha256(response.text if response else str(policy_error)),
+                            raw_output_chars=len(response.text) if response else None,
+                            raw_output_text=response.text if response else None,
+                            outcome=("transport_failed" if code == "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED"
+                                     else "publication_invalid"),
+                            issues=["资料来源限制尚未核实：" + str(policy_error)[:1000]],
+                            error_classes=[code], error_detail=(policy_error.error_detail
+                                if isinstance(policy_error, EvidencePolicyCheckError) else {
+                                "code": code, "statement_ids": sorted({index for index, _ in pending}),
+                                "candidate_indexes": sorted({index for _, index in pending}),
+                                "json_path": "/candidate_drafts/minimum_evidence",
+                                "source_refs": sorted({span for index, _ in pending
+                                    for unit in batch.owned_units
+                                    if unit.structure_unit_id == inventory.statements[index].structure_unit_id
+                                    for span in unit.source_span_ids}),
+                                "retry_class": "source_semantic_review" if response else "technical_failure",
+                            }),
+                        ))
+                        values.update(status="需要核对", final_output=None)
+            if pending_alignment_atom_baseline is not None and values.get("final_output") is None:
+                # Keep the attempted reply in receipts, never expose an unvalidated edit as the draft.
+                saved_wire, saved_coverage, saved_alignment, saved_review = pending_alignment_atom_baseline
+                values.update(partial_wire=saved_wire, source_statement_coverage=saved_coverage,
+                              source_candidate_alignment=saved_alignment, source_target_review=saved_review)
+            return ProtocolControlAgentRunResult(**values)
+
+        resuming_partial = resume_wire is not None
+        repair_used = resuming_partial
+        if type(resume_pending_author_repairs_used) is not int or resume_pending_author_repairs_used < 0:
+            raise ValueError("未核作者提案的已用修订次数无效")
+        if resume_pending_author_repairs_used and resume_pending_author_wire is None:
+            raise ValueError("已用作者修订次数不能脱离未核提案恢复")
+        source_repair_limit = max(0, self._max_schema_repairs - resume_pending_author_repairs_used)
+        if resume_pending_author_wire is not None:
+            if (resume_wire is not None or workflow_variant != BASELINE
+                    or resume_source_interpretation is None or not resume_session_id
+                    or output_validator is None or resume_source_target_review is not None
+                    or resume_source_statement_coverage or resume_source_candidate_alignment is not None
+                    or resume_source_scope_correction_indexes or resume_source_unit_completion_ids):
+                raise ValueError("未核作者提案不能与已核草稿或核对证明混用")
+            validate_source_interpretation(batch, resume_source_interpretation)
+            restore_scoped = getattr(transport, "restore_scoped_session", None)
+            if not callable(restore_scoped):
+                raise ValueError("未核作者提案缺少有源会话恢复能力，未退回整组读取")
+            restore_scoped(session_id=resume_session_id, context_sha256=_sha256(_stable_json({
+                "batch": batch.model_dump(mode="json"),
+                "source": resume_source_interpretation.model_dump(mode="json"),
+                "pending_author_wire": resume_pending_author_wire.model_dump(mode="json"),
+            })))
+            source_interpretation = resume_source_interpretation
+            session_id = resume_session_id
+            raw_text = resume_pending_author_wire.model_dump_json()
+            pending_author_wire = resume_pending_author_wire.model_copy(deep=True)
+            pending_author_source_sha256 = _sha256(source_interpretation.model_dump_json())
+            workflow_path_executed = "resumed_saved_wire"
+            repair_used = True
+            # The normal parse/hydrate/gate loop below determines the current
+            # defect before granting any repair scope. No approval is restored.
+            attempts.append(ProtocolControlAgentAttempt(
+                attempt=1, session_id=session_id, raw_output_sha256=_sha256(raw_text),
+                raw_output_chars=len(raw_text), raw_output_text=raw_text,
+                outcome="parsed", issues=["恢复未核作者提案；尚未通过来源、语义或采用校验"],
+                error_detail={"workflow_phase": "pending_author_revalidation", "adopted": False},
+            ))
+        if resume_wire is not None:
+            if workflow_variant == FIXED_FLOW:
+                raise ValueError("FLOW_RESUME_PROOF_REQUIRED：局部装配缺少可恢复的前置核对证明，未调用模型")
+            workflow_path_executed = "resumed_saved_wire"
+            if resume_source_interpretation is None or not resume_session_id or output_validator is None:
+                raise ValueError("局部恢复缺少来源、会话或发布校验")
+            validate_source_interpretation(batch, resume_source_interpretation)
+            output_validator(hydrate_protocol_control_agent_output(resume_wire, batch))
+            restore_scoped = getattr(transport, "restore_scoped_session", None)
+            if callable(restore_scoped):
+                restore_scoped(session_id=resume_session_id, context_sha256=_sha256(_stable_json({
+                    "batch": batch.model_dump(mode="json"),
+                    "source": resume_source_interpretation.model_dump(mode="json"),
+                    "wire": resume_wire.model_dump(mode="json"),
+                })))
+            source_interpretation = resume_source_interpretation
+            partial_wire = resume_wire
+            session_id = resume_session_id
+            raw_text = resume_wire.model_dump_json()
+            attempts.append(ProtocolControlAgentAttempt(
+                attempt=1,
+                session_id=session_id,
+                raw_output_sha256=_sha256(raw_text),
+                raw_output_chars=len(raw_text),
+                raw_output_text=raw_text,
+                outcome="parsed",
+                issues=["已保存的局部草稿重新通过来源与原批次门禁"],
+            ))
+        elif resume_source_interpretation is not None:
+            validate_source_interpretation(batch, resume_source_interpretation)
+            source_interpretation = resume_source_interpretation
+        source_reader = getattr(transport, "start_source_interpretation", None)
+        source_batch_reader = getattr(transport, "start_source_interpretation_batch", None)
+        question_history = [dict(item) for item in resume_source_scope_question_history]
+        seen_questions: set[int] = set()
+        seen_context_attempts: set[int] = set()
+        seen_heading_attempts: set[tuple[int, str]] = set()
+        seen_unit_completions: set[tuple[str, str]] = set()
+        seen_exception_repairs: set[int] = set()
+        for record in question_history:
+            attempt = ProtocolControlAgentAttempt.model_validate(record)
+            detail = attempt.error_detail or {}
+            index = detail.get("statement_id")
+            if detail.get("workflow_phase") == "source_exception_field_repair":
+                if (source_interpretation is None or type(index) is not int
+                        or not 0 <= index < len(source_interpretation.statements)):
+                    raise ValueError("例外限定补正的历史目标无效，未发送请求")
+                statement = source_interpretation.statements[index]
+                unit = next(unit for unit in batch.owned_units
+                            if unit.structure_unit_id == statement.structure_unit_id)
+                frozen = statement.model_dump(mode="json", exclude={"exception_words", "unresolved"})
+                if (detail.get("code") != "SOURCE_EXCEPTION_WITNESS_MISSING"
+                        or detail.get("guidance_version") != SOURCE_EXCEPTION_FIELD_REPAIR_VERSION
+                        or detail.get("structure_unit_id") != unit.structure_unit_id
+                        or detail.get("source_refs") != list(unit.source_span_ids)
+                        or detail.get("json_path") != f"/statements/{index}/exception_words"
+                        or detail.get("frozen_statement_sha256") != _sha256(_stable_json(frozen))
+                        or detail.get("source_context_sha256") != _sha256(batch.model_dump_json())
+                        or (attempt.raw_output_text is not None
+                            and _sha256(attempt.raw_output_text) != attempt.raw_output_sha256)):
+                    raise ValueError("例外限定补正的历史见证损坏或来源已变，未发送请求")
+                if attempt.outcome == "parsed":
+                    if not attempt.raw_output_text:
+                        raise ValueError("例外限定补正缺少实际答复，未发送请求")
+                    proposal = SourceInterpretation.model_validate_json(attempt.raw_output_text)
+                    if (proposal.version != source_interpretation.version
+                            or len(proposal.statements) != 1 or proposal.units_without_statement
+                            or proposal.statements[0] != statement):
+                        raise ValueError("例外限定补正答复与保存来源不一致，未发送请求")
+                if detail.get("called") is True and attempt.outcome != "transport_failed":
+                    seen_exception_repairs.add(index)
+                continue
+            context_completion = detail.get("workflow_phase") == "source_context_completion"
+            unit_completion = detail.get("workflow_phase") == "source_unit_quote_completion"
+            heading_recheck = detail.get("workflow_phase") == "source_heading_scope_recheck"
+            if (source_interpretation is None or detail.get("workflow_phase") != "source_scope_question_recheck"
+                    and not context_completion and not unit_completion and not heading_recheck
+                    or detail.get("code") != ("SOURCE_HEADING_SCOPE_RECHECK" if heading_recheck
+                                              else "SOURCE_UNIT_QUOTE_COMPLETION" if unit_completion
+                                              else "SOURCE_CONTEXT_COMPLETION" if context_completion
+                                              else "SOURCE_SCOPE_QUESTION_RECHECK")
+                    or type(index) is not int or not 0 <= index < len(source_interpretation.statements)):
+                raise ValueError("来源疑问的历史核对范围无效，未发送请求")
+            statement = source_interpretation.statements[index]
+            unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == statement.structure_unit_id)
+            if (detail.get("source_refs") != list(unit.source_span_ids)
+                    or detail.get("json_path") != (f"statements[{index}].quoted_text" if unit_completion
+                        else f"statements[{index}].scope_quote" if context_completion or heading_recheck
+                        else source_scope_question_json_path(statement, batch, index))
+                    or not isinstance(detail.get("precondition_sha256"), str)
+                    or len(detail["precondition_sha256"]) != 64
+                    or (attempt.raw_output_text is not None and _sha256(attempt.raw_output_text) != attempt.raw_output_sha256)):
+                raise ValueError("来源疑问的历史核对见证损坏，未发送请求")
+            if heading_recheck:
+                if detail.get("guidance_version") != SOURCE_HEADING_SCOPE_RECHECK_VERSION:
+                    raise ValueError("标题范围核对合同已变，不能复用旧见证")
+                if attempt.outcome != "transport_failed" and detail.get("called", True) is not False:
+                    seen_heading_attempts.add((index, detail["precondition_sha256"]))
+                continue
+            if unit_completion:
+                if detail.get("structure_unit_id") != statement.structure_unit_id:
+                    raise ValueError("局部补读历史与冻结单元身份不一致")
+                if attempt.outcome != "transport_failed":
+                    seen_unit_completions.add((statement.structure_unit_id, detail["precondition_sha256"]))
+                continue
+            if context_completion:
+                if (attempt.outcome != "transport_failed"
+                        and detail["precondition_sha256"] == _sha256(statement.model_dump_json())):
+                    seen_context_attempts.add(index)
+                continue
+            if attempt.outcome == "parsed" and not attempt.error_classes and attempt.raw_output_text:
+                proposal = SourceInterpretation.model_validate_json(attempt.raw_output_text)
+                if (proposal.version != source_interpretation.version or len(proposal.statements) != 1
+                        or proposal.units_without_statement):
+                    raise ValueError("来源疑问的历史答复不是单条有源提案")
+                context_compatible = detail.get("source_context_sha256") == source_question_context_identity(statement, batch)
+                if not context_compatible and not statement.unresolved:
+                    raise ValueError("来源疑问的旧答复依赖已变更上下文，不能复用已清空的疑问")
+                if (proposal.statements[0] == statement and context_compatible
+                        and (unit.table_context is None
+                             or detail.get("native_guidance_version") == NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION)):
+                    seen_questions.add(index)
+        if source_interpretation is not None:
+            completed_quote_review_indexes(source_interpretation, question_history)
+        # Legacy records predate the explicit dispatch flag and count conservatively.
+        source_repairs = sum((item.get("error_detail") or {}).get("called", True) is not False
+                             for item in question_history)
+        def complete_source_units(unit_ids):
+            nonlocal source_interpretation, source_repairs
+            from .protocol_control_source_interpretation import (
+                apply_source_unit_quote_completion, source_unit_quote_completion_prompt,
+                source_unit_quotes_cover_source,
+            )
+            unit_ids = tuple(unit_ids)
+            if (source_interpretation is None or resume_wire is not None or resume_source_target_review is not None
+                    or resume_source_candidate_alignment is not None or resume_source_statement_coverage
+                    or len(set(unit_ids)) != len(unit_ids)
+                    or not set(unit_ids) <= {unit.structure_unit_id for unit in batch.owned_units}):
+                raise ValueError("局部补读仅可使用有源草稿，不得沿用旧候选或核对证明")
+            for unit_id in unit_ids:
+                indexes = [index for index, statement in enumerate(source_interpretation.statements)
+                           if statement.structure_unit_id == unit_id]
+                unit = next(unit for unit in batch.owned_units if unit.structure_unit_id == unit_id)
+                if not indexes or source_unit_quotes_cover_source(unit, source_interpretation, indexes):
+                    raise ValueError("局部补读计划与实际遗漏来源不一致")
+                precondition = _sha256(_stable_json([
+                    source_interpretation.statements[index].model_dump(mode="json") for index in indexes
+                ]))
+                detail = {"workflow_phase": "source_unit_quote_completion", "code": "SOURCE_UNIT_QUOTE_COMPLETION",
+                          "structure_unit_id": unit_id, "statement_id": indexes[0],
+                          "json_path": f"statements[{indexes[0]}].quoted_text",
+                          "source_refs": list(unit.source_span_ids), "retry_class": "source_inventory",
+                          "affected_dependents": indexes, "precondition_sha256": precondition,
+                          "called": False}
+                response = None
+                called = False
+                try:
+                    if ((unit_id, precondition) in seen_unit_completions
+                            or source_repairs >= source_repair_limit):
+                        raise ValueError("相同遗漏来源已补读或共用额度用尽，不重复调用")
+                    if not callable(source_reader):
+                        raise ValueError("来源局部补读服务不可用")
+                    prompt = source_unit_quote_completion_prompt(batch, source_interpretation, unit_id)
+                    detail["prompt_sha256"] = _sha256(prompt)
+                    source_repairs += 1
+                    called = True
+                    detail["called"] = True
+                    response = source_reader(prompt=prompt)
+                    original = source_interpretation
+                    source_interpretation = apply_source_unit_quote_completion(
+                        batch, source_interpretation, unit_id, SourceInterpretation.model_validate_json(response.text),
+                    )
+                    detail["expanded_statement_indexes"] = [index for index in indexes
+                        if original.statements[index].quoted_text != source_interpretation.statements[index].quoted_text]
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1, session_id=response.session_id,
+                        raw_output_sha256=_sha256(response.text), raw_output_chars=len(response.text),
+                        raw_output_text=response.text, outcome="parsed", error_detail=detail,
+                        issues=["仅补齐指定来源单元原摘录；旧候选与核对未复用，仍须重新装配和核对"],
+                    ))
+                except Exception as completion_error:  # noqa: BLE001 - retain exact failed proposal
+                    code = protocol_control_call_failure_code(completion_error) or (
+                        "SOURCE_UNIT_QUOTE_COMPLETION_TRANSPORT_FAILED" if called and response is None
+                        else "SOURCE_UNIT_QUOTE_COMPLETION_INVALID")
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=response.session_id if response else "source-unit-completion-failed",
+                        raw_output_sha256=_sha256(response.text if response else str(completion_error)),
+                        raw_output_chars=len(response.text) if response else None,
+                        raw_output_text=response.text if response else None,
+                        outcome="schema_invalid" if response else "transport_failed" if called else "publication_invalid",
+                        error_classes=[code], error_detail=detail, issues=[str(completion_error)[:1200]],
+                    ))
+                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                        session_id=response.session_id if response else "source-unit-completion-failed",
+                        attempts=attempts, source_interpretation=source_interpretation,
+                        pending_source_interpretation=source_interpretation)
+            return None
+
+        if resume_source_unit_completion_ids:
+            completion_failure = complete_source_units(resume_source_unit_completion_ids)
+            if completion_failure is not None:
+                return completion_failure
+        if resume_source_scope_correction_indexes:
+            from .protocol_control_source_interpretation import apply_source_context_completion
+
+            indexes = tuple(resume_source_scope_correction_indexes)
+            if (resume_wire is None or source_interpretation is None
+                    or tuple(sorted(set(indexes))) != indexes
+                    or any(type(index) is not int or not 0 <= index < len(source_interpretation.statements)
+                           for index in indexes)):
+                raise ValueError("单条来源范围恢复缺少有效的冻结草稿或索引")
+            for index in indexes:
+                statement = source_interpretation.statements[index]
+                unit = next(unit for unit in batch.owned_units
+                            if unit.structure_unit_id == statement.structure_unit_id)
+                response = None
+                correction = None
+                called = False
+                detail = {
+                    "workflow_phase": "source_context_completion", "code": "SOURCE_CONTEXT_COMPLETION",
+                    "statement_id": index, "json_path": f"statements[{index}].scope_quote",
+                    "source_refs": list(unit.source_span_ids), "retry_class": "source_semantic_review",
+                    "affected_dependents": [index], "precondition_sha256": _sha256(statement.model_dump_json()),
+                }
+                try:
+                    corrector = getattr(transport, "correct_source_scope", None)
+                    if index in seen_context_attempts or source_repairs >= source_repair_limit:
+                        raise ValueError("相同来源范围已核对或核对额度用尽，未重复调用")
+                    if not callable(corrector):
+                        raise ValueError("单条来源范围核对服务不可用")
+                    prompt = build_source_scope_correction_prompt(batch, statement,
+                        "SOURCE_CONTEXT_INCOMPLETE：本条动作前的同单元原文尚未完整保留。仅核是否为本条"
+                        "直接对象或共同范围；若确属范围，scope_quote须逐字保留整个前置范围，不只填标题。"
+                        "若其中含另一条独立动作、条件或例外，本接口不能增加陈述，unresolved写明，不得吞入范围。")
+                    detail["prompt_sha256"] = _sha256(prompt)
+                    source_repairs += 1
+                    called = True
+                    response = corrector(prompt=prompt)
+                    correction = SourceScopeCorrection.model_validate_json(response.text)
+                    source_interpretation = apply_source_context_completion(
+                        batch, source_interpretation, index, correction,
+                    )
+                    repair_used = True
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1, session_id=response.session_id,
+                        raw_output_sha256=_sha256(response.text), raw_output_chars=len(response.text),
+                        raw_output_text=response.text, outcome="parsed", error_detail=detail,
+                        issues=["仅核对本条前置范围；原动作及其他陈述未改，适用关系仍待核对"],
+                    ))
+                except Exception as context_error:
+                    code = protocol_control_call_failure_code(context_error) or (
+                        "SOURCE_CONTEXT_UNRESOLVED" if correction is not None and correction.unresolved
+                        else "SOURCE_CONTEXT_COMPLETION_TRANSPORT_FAILED" if called and response is None
+                        else "SOURCE_CONTEXT_COMPLETION_INVALID"
+                    )
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=response.session_id if response else session_id or "source-context-failed",
+                        raw_output_sha256=_sha256(response.text if response else str(context_error)),
+                        raw_output_chars=len(response.text) if response else None,
+                        raw_output_text=response.text if response else None,
+                        outcome="schema_invalid" if response else "transport_failed" if called else "publication_invalid",
+                        error_classes=[code], error_detail=detail, issues=[str(context_error)[:1200]],
+                    ))
+                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                        session_id=session_id or "source-context-failed", attempts=attempts,
+                        source_interpretation=source_interpretation, partial_wire=partial_wire,
+                        source_target_review=resume_source_target_review,
+                        source_statement_coverage=list(resume_source_statement_coverage))
+        if source_interpretation is None and callable(source_reader):
+            source_response: ProtocolControlAgentResponse | None = None
+            source_prompt = build_source_interpretation_prompt(batch)
+            for source_attempt in range(2):
+                source_response = None
+                try:
+                    source_response = (source_batch_reader(prompt=source_prompt, batch=batch)
+                                       if callable(source_batch_reader)
+                                       else source_reader(prompt=source_prompt))
+                    source_text = source_response.text
+                    corrected_function_indexes: set[int] = set()
+                    while True:
+                        try:
+                            source_interpretation = parse_product_source_interpretation(batch, source_text)
+                            break
+                        except SourceInterpretationValidationError as function_issue:
+                            if (function_issue.code not in {
+                                "SOURCE_FUNCTION_UNSTATED", "SOURCE_FUNCTION_UNRESOLVED",
+                            } or source_repairs >= source_repair_limit
+                                    or function_issue.statement_id in corrected_function_indexes):
+                                raise
+                            detail = {
+                                "workflow_phase": "source_function_field_repair",
+                                "code": function_issue.code,
+                                "statement_id": function_issue.statement_id,
+                                "structure_unit_id": function_issue.structure_unit_id,
+                                "json_path": function_issue.json_path,
+                                "source_refs": function_issue.source_refs,
+                                "retry_class": function_issue.retry_class,
+                                "affected_dependents": function_issue.affected_dependents,
+                                "precondition_sha256": _sha256(source_text),
+                            }
+                            repair_prompt = build_source_function_field_repair_prompt(
+                                batch, source_text, function_issue,
+                            )
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1, session_id=source_response.session_id,
+                                raw_output_sha256=_sha256(source_text), raw_output_text=source_text,
+                                raw_output_chars=len(source_text), outcome="schema_invalid",
+                                error_classes=[function_issue.code], error_detail=detail,
+                                issues=["来源用途字段不完整；只补正指定字段，不重读整组"],
+                            ))
+                            repair_response = None
+                            source_repairs += 1
+                            try:
+                                repair_response = source_reader(prompt=repair_prompt)
+                                source_text = apply_source_function_field_repair(
+                                    batch, source_text, function_issue, repair_response.text,
+                                )
+                            except Exception as repair_error:
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=repair_response.session_id if repair_response else "source-function-field-failed",
+                                    raw_output_sha256=_sha256(repair_response.text if repair_response else str(repair_error)),
+                                    raw_output_text=repair_response.text if repair_response else None,
+                                    raw_output_chars=len(repair_response.text) if repair_response else None,
+                                    outcome="schema_invalid" if repair_response else "transport_failed",
+                                    error_classes=[protocol_control_call_failure_code(repair_error)
+                                                   or ("SOURCE_FUNCTION_FIELD_REPAIR_TRANSPORT_FAILED"
+                                                       if repair_response is None else "SOURCE_FUNCTION_FIELD_REPAIR_INVALID")],
+                                    error_detail=detail, issues=[str(repair_error)[:1200]],
+                                ))
+                                return build_result(
+                                    status="需要核对", batch_id=batch.batch_id,
+                                    session_id=source_response.session_id, attempts=attempts,
+                                )
+                            corrected_function_indexes.add(function_issue.statement_id)
+                            repair_used = True
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1, session_id=repair_response.session_id,
+                                raw_output_sha256=_sha256(repair_response.text), raw_output_text=repair_response.text,
+                                raw_output_chars=len(repair_response.text), outcome="parsed",
+                                error_detail={**detail, "merged_sha256": _sha256(source_text)},
+                                issues=["单条用途提案仅合并授权字段；完整来源仍须核对"],
+                            ))
+                    source_interpretation, anchor_ids = normalize_schedule_randomization_anchors(
+                        batch, source_interpretation
+                    )
+                    source_interpretation, mixed_scope_ids = normalize_mixed_schedule_scopes(
+                        batch, source_interpretation
+                    )
+                    source_interpretation, stage_echo_indexes = normalize_source_stage_echo(
+                        batch, source_interpretation
+                    )
+                    validate_source_interpretation(batch, source_interpretation)
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=source_response.session_id,
+                        raw_output_sha256=_sha256(source_text),
+                        raw_output_chars=len(source_text),
+                        raw_output_text=source_text,
+                        outcome="parsed",
+                        issues=["有源陈述：局部授权字段合并后的来源，尚未采用"
+                                if corrected_function_indexes else "有源陈述：实际回答，尚未采用"] +
+                               (["日程表纯随机节点标记按原文结构保留为流程背景：" + ",".join(anchor_ids)]
+                                if anchor_ids else []) +
+                               (["混合访视行错误共享范围按原列来源拆除：" + ",".join(mixed_scope_ids)]
+                                if mixed_scope_ids else []),
+                        error_detail=({"normalization_version": SOURCE_STAGE_ECHO_VERSION,
+                                       "stage_echo_indexes": stage_echo_indexes}
+                                      if stage_echo_indexes else None),
+                    ))
+                    break
+                except Exception as exc:  # noqa: BLE001 - product transport/schema boundary
+                    source_session_id = (
+                        getattr(exc, "session_id", None)
+                        or (source_response.session_id if source_response is not None else None)
+                        or "source-interpretation-invalid"
+                    )
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=source_session_id,
+                        raw_output_sha256=_sha256(
+                            source_response.text if source_response is not None else str(exc)
+                        ),
+                        raw_output_text=(source_response.text if source_response is not None else None),
+                        raw_output_chars=(len(source_response.text) if source_response is not None else None),
+                        outcome=(
+                            "transport_failed" if source_response is None
+                            else "schema_invalid"
+                        ),
+                        issues=[f"有源陈述核对未通过：{str(exc)[:1800]}"],
+                        error_classes=(
+                            [exc.code] if isinstance(exc, SourceInterpretationValidationError)
+                            else [protocol_control_call_failure_code(exc)]
+                            if protocol_control_call_failure_code(exc) else []
+                        ),
+                        error_detail=(
+                            {
+                                "code": exc.code,
+                                "statement_id": exc.statement_id,
+                                "json_path": exc.json_path,
+                                "source_refs": exc.source_refs,
+                                "retry_class": exc.retry_class,
+                                "affected_dependents": exc.affected_dependents,
+                            }
+                            if isinstance(exc, SourceInterpretationValidationError) else None
+                        ),
+                    ))
+                    scope_corrector = getattr(transport, "correct_source_scope", None)
+                    if (source_attempt == 0 and source_response is not None
+                            and source_interpretation is not None and callable(scope_corrector)):
+                        scope_issue = exc
+                        corrected_scope_indexes: set[int] = set()
+                        while source_repairs < source_repair_limit:
+                            if (not isinstance(scope_issue, SourceInterpretationValidationError)
+                                    or scope_issue.code not in {
+                                        "SOURCE_TIME_UNGROUNDED", "SOURCE_SCOPE_UNGROUNDED",
+                                        "SOURCE_SCOPE_CONTEXT_INVALID", "SOURCE_STAGE_UNGROUNDED",
+                                        "SOURCE_TIME_INCOMPLETE",
+                                        "SOURCE_STAGE_TIME_MISSING",
+                                        "STUDY_PHASE_NOT_VISIT_TIME", "STUDY_PHASE_NOT_VISIT_STAGE",
+                                    }):
+                                break
+                            unit_id = scope_issue.structure_unit_id
+                            index = scope_issue.statement_id
+                            if (index >= len(source_interpretation.statements)
+                                    or source_interpretation.statements[index].structure_unit_id != unit_id
+                                    or index in corrected_scope_indexes):
+                                break
+                            correction_response = None
+                            try:
+                                original_statement = source_interpretation.statements[index]
+                                correction_prompt = build_source_scope_correction_prompt(
+                                    batch, original_statement, str(scope_issue)
+                                )
+                                if scope_issue.code == "STUDY_PHASE_NOT_VISIT_TIME":
+                                    correction_prompt += (
+                                        "\n本次只将方案期别从 time_words 中移除；"
+                                        "scope_quote 和 affected_stage 必须原样保留。"
+                                    )
+                                elif scope_issue.code in {"SOURCE_TIME_INCOMPLETE", "SOURCE_STAGE_TIME_MISSING"}:
+                                    correction_prompt += (
+                                        "\n本次只补全 time_words；已核 scope_quote 和 affected_stage"
+                                        "必须原样保留，不得删除共同范围或缩短时间限制。"
+                                    )
+                                source_repairs += 1
+                                correction_response = scope_corrector(prompt=correction_prompt)
+                                correction = SourceScopeCorrection.model_validate_json(correction_response.text)
+                                if scope_issue.code in {
+                                    "STUDY_PHASE_NOT_VISIT_TIME", "SOURCE_TIME_INCOMPLETE", "SOURCE_STAGE_TIME_MISSING",
+                                } and (
+                                    correction.scope_quote != original_statement.scope_quote
+                                    or correction.scope_context_unit_id != original_statement.scope_context_unit_id
+                                    or correction.affected_stage != original_statement.affected_stage
+                                ):
+                                    raise ValueError("单条时间校正不得改变已核原文范围或审核阶段")
+                                source_interpretation = apply_source_scope_correction(
+                                    batch, source_interpretation, index, correction
+                                )
+                                corrected_scope_indexes.add(index)
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=correction_response.session_id,
+                                    raw_output_sha256=_sha256(correction_response.text),
+                                    raw_output_chars=len(correction_response.text),
+                                    raw_output_text=correction_response.text,
+                                    outcome="parsed",
+                                    issues=["单条来源范围经原文核对；整批仍须校验"],
+                                    error_detail={
+                                        "workflow_phase": "source_scope_correction",
+                                        "code": scope_issue.code,
+                                        "statement_id": scope_issue.statement_id,
+                                        "json_path": scope_issue.json_path,
+                                        "source_refs": scope_issue.source_refs,
+                                        "retry_class": scope_issue.retry_class,
+                                        "affected_dependents": scope_issue.affected_dependents,
+                                    },
+                                ))
+                                try:
+                                    validate_source_interpretation(batch, source_interpretation)
+                                except SourceInterpretationValidationError as next_issue:
+                                    scope_issue = next_issue
+                                    continue
+                                break
+                            except Exception as correction_exc:  # noqa: BLE001 - bounded source correction
+                                failure_code = protocol_control_call_failure_code(correction_exc)
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=(correction_response.session_id if correction_response
+                                                else getattr(correction_exc, "session_id", None)
+                                                or "source-scope-correction-invalid"),
+                                    raw_output_sha256=_sha256(
+                                        correction_response.text if correction_response else str(correction_exc)
+                                    ),
+                                    raw_output_chars=(len(correction_response.text) if correction_response else None),
+                                    raw_output_text=(correction_response.text if correction_response else None),
+                                    outcome="schema_invalid" if correction_response else "transport_failed",
+                                    issues=["单条来源范围校正未通过：" + str(correction_exc)[:1200]],
+                                    error_classes=[failure_code or "SOURCE_INTERPRETATION_CORRECTION_TRANSPORT_FAILED"]
+                                    if correction_response is None else [],
+                                ))
+                                if correction_response is None:
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id,
+                                        session_id=source_session_id, attempts=attempts,
+                                        pending_source_interpretation=source_interpretation,
+                                    )
+                                break
+                        exc = scope_issue
+                        if corrected_scope_indexes:
+                            try:
+                                validate_source_interpretation(batch, source_interpretation)
+                            except ValueError:
+                                pass
+                            else:
+                                break
+                    quote_corrector = getattr(transport, "correct_source_quote", None)
+                    if (
+                        source_attempt == 0
+                        and source_response is not None
+                        and source_interpretation is not None
+                        and isinstance(exc, SourceInterpretationValidationError)
+                        and exc.code in {
+                            "SOURCE_QUOTE_UNGROUNDED", "POST_ELIGIBILITY_SEQUENCE_UNGROUNDED",
+                        }
+                        and callable(quote_corrector)
+                    ):
+                        quote_issue = exc
+                        corrected_quote_indexes: set[int] = set()
+                        while source_repairs < source_repair_limit and quote_issue.code in {
+                            "SOURCE_QUOTE_UNGROUNDED", "POST_ELIGIBILITY_SEQUENCE_UNGROUNDED",
+                        }:
+                            index = quote_issue.statement_id
+                            if (index >= len(source_interpretation.statements)
+                                    or source_interpretation.statements[index].structure_unit_id
+                                    != quote_issue.structure_unit_id
+                                    or index in corrected_quote_indexes):
+                                break
+                            correction_response = None
+                            try:
+                                source_repairs += 1
+                                correction_response = quote_corrector(prompt=build_source_quote_correction_prompt(
+                                    batch, source_interpretation.statements[index], quote_issue.code
+                                ))
+                                correction = SourceQuoteCorrection.model_validate_json(correction_response.text)
+                                source_interpretation = apply_source_quote_correction(
+                                    batch, source_interpretation, index, correction
+                                )
+                                corrected_quote_indexes.add(index)
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=correction_response.session_id,
+                                    raw_output_sha256=_sha256(correction_response.text),
+                                    raw_output_chars=len(correction_response.text),
+                                    raw_output_text=correction_response.text,
+                                    outcome="parsed",
+                                    issues=["单条来源摘录经原文核对；整批仍须校验"],
+                                    error_detail={
+                                        "workflow_phase": "source_quote_correction",
+                                        "code": quote_issue.code,
+                                        "statement_id": quote_issue.statement_id,
+                                        "structure_unit_id": quote_issue.structure_unit_id,
+                                        "json_path": quote_issue.json_path,
+                                        "source_refs": quote_issue.source_refs,
+                                        "retry_class": quote_issue.retry_class,
+                                        "affected_dependents": quote_issue.affected_dependents,
+                                    },
+                                ))
+                                try:
+                                    validate_source_interpretation(batch, source_interpretation)
+                                except SourceInterpretationValidationError as next_issue:
+                                    quote_issue = next_issue
+                                    continue
+                                break
+                            except Exception as correction_exc:  # noqa: BLE001 - bounded correction
+                                failure_code = protocol_control_call_failure_code(correction_exc)
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=(correction_response.session_id if correction_response
+                                                else getattr(correction_exc, "session_id", None)
+                                                or "source-quote-correction-invalid"),
+                                    raw_output_sha256=_sha256(
+                                        correction_response.text if correction_response else str(correction_exc)
+                                    ),
+                                    raw_output_chars=(len(correction_response.text) if correction_response else None),
+                                    raw_output_text=(correction_response.text if correction_response else None),
+                                    outcome="schema_invalid" if correction_response else "transport_failed",
+                                    issues=["单条来源摘录校正未通过：" + str(correction_exc)[:1200]],
+                                    error_detail={
+                                        "workflow_phase": "source_quote_correction",
+                                        "code": quote_issue.code,
+                                        "statement_id": quote_issue.statement_id,
+                                        "structure_unit_id": quote_issue.structure_unit_id,
+                                        "json_path": quote_issue.json_path,
+                                        "source_refs": quote_issue.source_refs,
+                                        "retry_class": quote_issue.retry_class,
+                                        "affected_dependents": quote_issue.affected_dependents,
+                                    },
+                                    error_classes=[failure_code or "SOURCE_INTERPRETATION_CORRECTION_TRANSPORT_FAILED"]
+                                    if correction_response is None else [],
+                                ))
+                                if correction_response is None:
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id,
+                                        session_id=source_session_id, attempts=attempts,
+                                        pending_source_interpretation=source_interpretation,
+                                    )
+                                break
+                        exc = quote_issue
+                        if corrected_quote_indexes:
+                            try:
+                                validate_source_interpretation(batch, source_interpretation)
+                            except ValueError:
+                                pass
+                            else:
+                                break
+                    # A known semantic defect is a local task, never a reason to
+                    # discard its siblings and reread the complete source batch.
+                    if source_interpretation is not None:
+                        try:
+                            validate_source_interpretation(batch, source_interpretation)
+                        except SourceInterpretationValidationError as remaining:
+                            exc = remaining
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1,
+                                session_id=source_session_id,
+                                raw_output_sha256=_sha256(str(remaining)),
+                                outcome="schema_invalid",
+                                issues=["局部来源仍未核清；保留修订，不重读整组"],
+                                error_classes=[remaining.code],
+                                error_detail={
+                                    "workflow_phase": "source_correction_pending",
+                                    "code": remaining.code,
+                                    "statement_id": remaining.statement_id,
+                                    "structure_unit_id": remaining.structure_unit_id,
+                                    "json_path": remaining.json_path,
+                                    "source_refs": remaining.source_refs,
+                                    "retry_class": remaining.retry_class,
+                                    "affected_dependents": remaining.affected_dependents,
+                                    "repairs_used": source_repairs,
+                                    "repair_limit": self._max_schema_repairs,
+                                },
+                            ))
+                    if (source_response is None or source_attempt == 1
+                            or source_repairs >= source_repair_limit
+                            or isinstance(exc, SourceInterpretationValidationError)):
+                        return build_result(
+                            status="需要核对",
+                            batch_id=batch.batch_id,
+                            session_id=source_session_id,
+                            attempts=attempts,
+                            pending_source_interpretation=source_interpretation,
+                        )
+                    source_repairs += 1
+                    source_prompt = (
+                        build_source_interpretation_prompt(batch)
+                        + "\n上一轮有源陈述未通过逐字来源核对："
+                        + str(exc)[:1200]
+                        + "。仅当适用范围能在本条之前的原文、所属标题或本单元表格标题中"
+                        "逐字定位时填写 scope_quote；否则留空。仍须返回全部原文陈述，"
+                        "不得改写原文、推断医学含义或遗漏其他单元。"
+                    )
+        if (source_interpretation is not None and resume_wire is None
+                and resume_pending_author_wire is None and resume_source_target_review is None
+                and resume_source_candidate_alignment is None and not resume_source_statement_coverage):
+            # Do not spend author/reviewer calls on a capture defect that saving
+            # already rejects. Completion uses the existing budget and scope.
+            completion_ids = missing_sequence_source_units(batch, source_interpretation)
+            if completion_ids:
+                completion_failure = complete_source_units(completion_ids)
+                if completion_failure is not None:
+                    return completion_failure
+        if source_interpretation is not None:
+            # Recover only the missing source field, before any candidate proof
+            # may be reused. An excerpt is still subject to semantic review.
+            while (issue := missing_source_exception_witness(batch, source_interpretation)) is not None:
+                statement = source_interpretation.statements[issue.statement_id]
+                source_text = source_interpretation.model_dump_json()
+                detail = {"workflow_phase": "source_exception_field_repair", "code": issue.code,
+                    "guidance_version": SOURCE_EXCEPTION_FIELD_REPAIR_VERSION,
+                    "statement_id": issue.statement_id, "structure_unit_id": issue.structure_unit_id,
+                    "json_path": issue.json_path, "source_refs": issue.source_refs,
+                    "precondition_sha256": _sha256(source_text),
+                    "frozen_statement_sha256": _sha256(_stable_json(statement.model_dump(
+                        mode="json", exclude={"exception_words", "unresolved"}))),
+                    "source_context_sha256": _sha256(batch.model_dump_json()), "called": False}
+                response = None
+                try:
+                    if issue.statement_id in seen_exception_repairs or source_repairs >= source_repair_limit:
+                        raise ValueError("该来源限定已尝试补正或共享额度已用完，未重复读取")
+                    if not callable(source_reader):
+                        raise ValueError("单条来源限定补正服务不可用")
+                    prompt = build_source_function_field_repair_prompt(batch, source_text, issue)
+                    detail["prompt_sha256"] = _sha256(prompt)
+                    source_repairs += 1
+                    detail["called"] = True
+                    seen_exception_repairs.add(issue.statement_id)
+                    response = source_reader(prompt=prompt)
+                    merged = apply_source_function_field_repair(batch, source_text, issue, response.text)
+                    source_interpretation = parse_product_source_interpretation(batch, merged)
+                    validate_source_interpretation(batch, source_interpretation)
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1, session_id=response.session_id,
+                        raw_output_sha256=_sha256(response.text), raw_output_chars=len(response.text),
+                        raw_output_text=response.text, outcome="parsed", error_detail=detail,
+                        issues=["只补存本条例外限定；来源、兄弟要求不变，仍待重新核对含义"],
+                    ))
+                    repair_used = True
+                except Exception as exc:
+                    code = protocol_control_call_failure_code(exc) or (
+                        "SOURCE_EXCEPTION_FIELD_REPAIR_TRANSPORT_FAILED" if detail["called"] and response is None
+                        else "SOURCE_EXCEPTION_FIELD_REPAIR_INVALID")
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1, session_id=response.session_id if response else session_id or "source-exception-failed",
+                        raw_output_sha256=_sha256(response.text if response else str(exc)),
+                        raw_output_chars=len(response.text) if response else None,
+                        raw_output_text=response.text if response else None,
+                        outcome="schema_invalid" if response else "transport_failed" if detail["called"] else "publication_invalid",
+                        error_classes=[code], error_detail=detail, issues=[str(exc)[:1200]],
+                    ))
+                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                        session_id=session_id or "source-exception-failed", attempts=attempts,
+                        source_interpretation=source_interpretation, partial_wire=partial_wire,
+                        source_target_review=resume_source_target_review,
+                        source_candidate_alignment=resume_source_candidate_alignment,
+                        source_statement_coverage=list(resume_source_statement_coverage))
+        if source_interpretation is not None:
+            for index, statement in enumerate(source_interpretation.statements):
+                if not heading_scope_requires_recheck(batch, statement):
+                    continue
+                response = None
+                called = False
+                unit = next(unit for unit in batch.owned_units
+                            if unit.structure_unit_id == statement.structure_unit_id)
+                detail = {"workflow_phase": "source_heading_scope_recheck",
+                    "code": "SOURCE_HEADING_SCOPE_RECHECK", "statement_id": index,
+                    "json_path": f"statements[{index}].scope_quote", "source_refs": list(unit.source_span_ids),
+                    "precondition_sha256": _sha256(statement.model_dump_json()),
+                    "guidance_version": SOURCE_HEADING_SCOPE_RECHECK_VERSION,
+                    "retry_class": "source_semantic_review", "affected_dependents": [index]}
+                try:
+                    corrector = getattr(transport, "correct_source_scope", None)
+                    if ((index, detail["precondition_sha256"]) in seen_heading_attempts
+                            or source_repairs >= source_repair_limit or not callable(corrector)):
+                        raise ValueError("标题范围尚未核清，未重复调用或扩大读取")
+                    prompt = build_source_scope_correction_prompt(batch, statement,
+                        "旧阶段仅来自完整章节标题，而非本条正文。核实标题是主题还是实际审核时点；"
+                        "只能修范围、阶段和时间字段，原句、条件、例外及兄弟陈述保留。")
+                    detail["prompt_sha256"] = _sha256(prompt)
+                    source_repairs += 1
+                    called = True
+                    response = corrector(prompt=prompt)
+                    correction = SourceScopeCorrection.model_validate_json(response.text)
+                    revised_source = apply_source_scope_correction(batch, source_interpretation, index, correction)
+                    if heading_scope_requires_recheck(batch, revised_source.statements[index]):
+                        raise ValueError("标题用途仍未说明，不能照抄旧分类充当核对")
+                    validate_source_interpretation(batch, revised_source)
+                    source_interpretation = revised_source
+                    repair_used = True
+                    attempts.append(ProtocolControlAgentAttempt(attempt=len(attempts) + 1,
+                        session_id=response.session_id, raw_output_sha256=_sha256(response.text),
+                        raw_output_text=response.text, raw_output_chars=len(response.text),
+                        outcome="parsed", error_detail=detail,
+                        issues=["仅核标题范围；原文、正文时间及兄弟陈述保留，目标含义仍须核对"]))
+                except Exception as error:
+                    code = protocol_control_call_failure_code(error) or "SOURCE_HEADING_SCOPE_RECHECK_INVALID"
+                    detail["called"] = called
+                    attempts.append(ProtocolControlAgentAttempt(attempt=len(attempts) + 1,
+                        session_id=response.session_id if response else "heading-scope-failed",
+                        raw_output_sha256=_sha256(response.text if response else str(error)),
+                        raw_output_text=response.text if response else None if called else str(error),
+                        raw_output_chars=len(response.text) if response else None if called else len(str(error)),
+                        outcome="schema_invalid" if response else "transport_failed" if called else "publication_invalid",
+                        error_classes=[code], error_detail=detail, issues=[str(error)[:1200]]))
+                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                        session_id=session_id or "heading-scope-failed", attempts=attempts,
+                        source_interpretation=source_interpretation, partial_wire=partial_wire,
+                        source_target_review=resume_source_target_review,
+                        source_statement_coverage=list(resume_source_statement_coverage))
+        if source_interpretation is not None and callable(source_reader):
+            sequence_coverage = (source_statement_coverage(batch, source_interpretation, partial_wire)
+                                 if partial_wire is not None else [])
+            for index, statement in enumerate(source_interpretation.statements):
+                if (index in seen_questions or not can_recheck_source_scope_question(statement, batch)
+                        or source_repairs >= source_repair_limit):
+                    continue
+                if source_scope_question_json_path(statement, batch, index).endswith(".eligibility_sequence"):
+                    retained_review = resumed_review_items.get(index)
+                    retained_coverage = next((item for item in resume_source_statement_coverage
+                                              if item.statement_index == index), None)
+                    # Table availability is not a reason to reread every action.
+                    # Only an unresolved, actually represented requirement needs
+                    # this recovery; normal source/coverage checks still run below.
+                    if ((not sequence_coverage and statement.force not in {"required", "prohibited", "recommended"})
+                            or sequence_coverage and not sequence_coverage[index].action_candidate_indexes
+                            or retained_review is not None and retained_review.decision != "additional_requirement"
+                            or retained_review is not None and retained_coverage is not None
+                            and retained_coverage.status == "semantically_aligned"):
+                        continue
+                question_response = None
+                question_prompt = build_source_scope_question_prompt(batch, source_interpretation, index)
+                detail = {
+                    "workflow_phase": "source_scope_question_recheck",
+                    "code": "SOURCE_SCOPE_QUESTION_RECHECK",
+                    "statement_id": index, "json_path": source_scope_question_json_path(statement, batch, index),
+                    "source_refs": list(next(unit.source_span_ids for unit in batch.owned_units
+                                             if unit.structure_unit_id == statement.structure_unit_id)),
+                    "retry_class": "source_semantic_review", "affected_dependents": [index],
+                    "precondition_sha256": _sha256(statement.model_dump_json()),
+                    "prompt_sha256": _sha256(question_prompt),
+                    "native_guidance_version": NATIVE_SCOPE_QUESTION_GUIDANCE_VERSION,
+                }
+                official_context = source_question_official_context(statement, batch)
+                context_identity = source_question_context_identity(statement, batch)
+                if context_identity is not None:
+                    detail["source_context_sha256"] = context_identity
+                    detail["source_context_version"] = (official_context["version"]
+                        if official_context is not None else TABLE_SEQUENCE_SOURCE_VERSION)
+                try:
+                    source_repairs += 1
+                    repair_used = True
+                    question_response = source_reader(prompt=question_prompt)
+                    proposal = SourceInterpretation.model_validate_json(question_response.text)
+                    source_interpretation = apply_source_scope_question_recheck(
+                        batch, source_interpretation, index, proposal,
+                    )
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1, session_id=question_response.session_id,
+                        raw_output_sha256=_sha256(question_response.text),
+                        raw_output_chars=len(question_response.text), raw_output_text=question_response.text,
+                        outcome="parsed", error_detail=detail,
+                        issues=["本条来源疑问经原文局部核对；完整要求仍须独立核验"],
+                    ))
+                except Exception as question_error:  # noqa: BLE001 - retain the frozen source on failure
+                    code = protocol_control_call_failure_code(question_error) or "SOURCE_SCOPE_QUESTION_RECHECK_INVALID"
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=question_response.session_id if question_response else "source-time-question-failed",
+                        raw_output_sha256=_sha256(question_response.text if question_response else str(question_error)),
+                        raw_output_text=question_response.text if question_response else None,
+                        raw_output_chars=len(question_response.text) if question_response else None,
+                        outcome="schema_invalid" if question_response else "transport_failed",
+                        error_classes=[code], error_detail=detail,
+                        issues=["单条时间疑问核对失败，原陈述保留：" + str(question_error)[:1000]],
+                    ))
+                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                                        session_id=session_id or (question_response.session_id if question_response else "source-time-question-failed"),
+                                        attempts=attempts,
+                                        source_interpretation=source_interpretation,
+                                        partial_wire=partial_wire,
+                                        source_target_review=resume_source_target_review,
+                                        source_statement_coverage=list(resume_source_statement_coverage),
+                                        source_candidate_alignment=resume_source_candidate_alignment)
+        if (workflow_variant == FIXED_FLOW and raw_text is None
+                and source_interpretation is not None
+                and output_validator is not None
+                and supports_front_stage_flow(batch, source_interpretation)):
+            workflow_path_executed = "front_stage_flow"
+            prepared = prepare_front_stage_flow(
+                batch, source_interpretation, transport, output_validator,
+                review_seed=(resume_source_target_review
+                             if len(resumed_review_items) == len(source_interpretation.statements)
+                             else None),
+            )
+            if prepared.review_validated:
+                front_target_review = prepared.review
+            front_candidate_alignment = prepared.alignment
+            for phase, actual_response in prepared.responses:
+                attempts.append(ProtocolControlAgentAttempt(
+                    attempt=len(attempts) + 1,
+                    session_id=actual_response.session_id,
+                    raw_output_sha256=_sha256(actual_response.text),
+                    raw_output_chars=len(actual_response.text),
+                    raw_output_text=actual_response.text,
+                    outcome="parsed",
+                    issues=[f"RV1001-FLOW/{phase}：实际回答，尚未采用"],
+                    error_detail={"workflow_phase": phase},
+                ))
+            if prepared.error is not None or prepared.wire is None:
+                sid = (prepared.responses[-1][1].session_id if prepared.responses
+                       else getattr(prepared.error, "session_id", None) or "flow-failed")
+                attempts.append(ProtocolControlAgentAttempt(
+                    attempt=len(attempts) + 1, session_id=sid,
+                    raw_output_sha256=_sha256(str(prepared.error)),
+                    outcome=("transport_failed" if prepared.error_code in {
+                        "FLOW_TRANSPORT_FAILED", "FLOW_COMPLETION_UNCERTAIN", "LOGICAL_BUDGET_EXHAUSTED",
+                        "MODEL_IDENTITY_INVALID"}
+                             else "publication_invalid"),
+                    error_classes=[prepared.error_code or "FLOW_ASSEMBLY_INVALID"],
+                    issues=[str(prepared.error)[:1800]],
+                    error_detail=(prepared.error.error_detail
+                                  if isinstance(prepared.error, EvidencePolicyCheckError) else prepared.error_detail),
+                ))
+                return build_result(
+                    status="需要核对", batch_id=batch.batch_id, session_id=sid,
+                    attempts=attempts, source_interpretation=source_interpretation,
+                    source_front_target_review=front_target_review,
+                    source_candidate_alignment=front_candidate_alignment,
+                    partial_wire=prepared.wire,
+                    source_statement_coverage=(source_statement_coverage(
+                        batch, source_interpretation, prepared.wire,
+                    ) if prepared.wire is not None else []),
+                )
+            # This is host assembly, not a provider-authored final wire. Actual
+            # short answers remain above; the normal consumer still checks it.
+            raw_text = prepared.wire.model_dump_json()
+            front_flow_assembled = True
+            session_id = (prepared.responses[-1][1].session_id if prepared.responses
+                          else resume_session_id or "flow-source-review-reused")
+            attempts.append(ProtocolControlAgentAttempt(
+                attempt=len(attempts) + 1, session_id=session_id,
+                raw_output_sha256=_sha256(raw_text), raw_output_chars=len(raw_text),
+                raw_output_text=raw_text,
+                outcome="parsed", issues=["RV1001-FLOW：宿主装配，非模型原答，仍待完整采用检查"],
+            ))
+        if (resume_pending_author_wire is not None
+                and source_interpretation != resume_source_interpretation):
+            attempts.append(ProtocolControlAgentAttempt(
+                attempt=len(attempts) + 1, session_id=session_id,
+                raw_output_sha256=_sha256(source_interpretation.model_dump_json()),
+                outcome="publication_invalid", error_classes=["PENDING_AUTHOR_SOURCE_CHANGED"],
+                issues=["原文解释已改变；旧作者提案保留在原回执中，本次不修订或重读整组"],
+                error_detail={"code": "PENDING_AUTHOR_SOURCE_CHANGED", "adopted": False},
+            ))
+            return build_result(status="需要核对", batch_id=batch.batch_id, session_id=session_id,
+                attempts=attempts, source_interpretation=source_interpretation,
+                partial_wire=None, pending_author_wire=None)
+        prompt = build_protocol_control_agent_prompt(
+            batch,
+            prompt_template=prompt_template,
+            include_schema=getattr(transport, "response_format_mode", None) != "json_schema",
+            source_interpretation=source_interpretation,
+        )
+        transport_failures = 0
+        while raw_text is None:
+            workflow_path_executed = "baseline_wire"
+            try:
+                response = (
+                    (transport.start_batch(prompt=prompt, batch=batch)
+                     if callable(getattr(transport, "start_batch", None))
+                     else transport.start(prompt=prompt))
+                    if session_id is None
+                    else transport.continue_session(session_id=session_id, prompt=prompt)
+                )
+                if session_id is not None and response.session_id != session_id:
+                    raise RuntimeError("同会话修复不得更换 session_id")
+                session_id = response.session_id
+                raw_text = response.text
+                break
+            except Exception as exc:  # noqa: BLE001 - transport boundary
+                attempt_id = len(attempts) + 1
+                from .protocol_control_agent_transport import protocol_control_call_failure_code
+                terminal_code = protocol_control_call_failure_code(exc)
+                sid = getattr(exc, "session_id", None) or session_id or f"transport-failed-{attempt_id}"
+                attempts.append(
+                    ProtocolControlAgentAttempt(
+                        attempt=attempt_id,
+                        session_id=sid,
+                        raw_output_sha256=_sha256(str(exc)),
+                        outcome="transport_failed",
+                        issues=[str(exc)[:2000]],
+                        error_classes=[terminal_code] if terminal_code else [],
+                    )
+                )
+                transport_failures += 1
+                if terminal_code is not None or (
+                    transport_failures > self._max_transport_retries
+                ):
+                    return build_result(
+                        status="需要核对",
+                        batch_id=batch.batch_id,
+                        session_id=sid,
+                        attempts=attempts,
+                        source_interpretation=source_interpretation,
+                    )
+
+        assert session_id is not None and raw_text is not None
+        repairs = source_repairs + resume_pending_author_repairs_used
+        source_insert_repairs = 0
+        future_scope_repairs = 0
+        future_observation_scope_repairs = 0
+        future_observation_scope_paths: set[tuple[int, tuple[tuple[str, int, int], ...]]] = set()
+        calendar_bound_repairs = 0
+        calendar_bound_repair_paths: set[tuple[int, int, int]] = set()
+        invalid_fingerprint_counts: dict[tuple[str, str, str], int] = {}
+        repair_baseline: ProtocolControlBatchDispositionHydrated | None = None
+        repair_baseline_wire: ProtocolControlAgentWire | None = None
+        repair_baseline_raw: dict[str, Any] | None = None
+        candidate_repair_indexes: tuple[int, ...] = ()
+        mutable_structure_unit_ids: set[str] = set()
+        mutable_candidate_source_keys: set[tuple[str, ...]] = set()
+        mutable_candidate_indexes: set[int] = set()
+        mutable_candidate_source_union: set[str] = set()
+        mutable_obligation_source_span_ids: set[str] = set()
+        allow_candidate_repartition = False
+        allow_source_closure_rewrite = False
+        allow_post_enrollment_reclassification = False
+        scoped_unit_repair_ids: set[str] = set()
+        allow_source_insert = False
+        pending_source_insert: tuple[ProtocolControlAgentWire, set[str], set[str]] | None = None
+        source_insert_candidate_only = False
+        source_insert_candidates_only = False
+        source_insert_statement_count = 0
+        latest_source_target_review: SourceTargetReview | None = (
+            resume_source_target_review if resumed_review_items else None
+        )
+        validated_target_coverage: dict[int, SourceStatementCoverage] = (
+            {entry.statement_index: entry for entry in resume_source_statement_coverage}
+            if resumed_review_items else {}
+        )
+        validated_target_source_identity = dict(resumed_review_identity)
+        if front_flow_assembled and front_target_review is not None:
+            front_wire = parse_protocol_control_agent_wire(raw_text)
+            front_coverage = source_statement_coverage(batch, source_interpretation, front_wire)
+            front_review_indexes = set(target_review_indexes(source_interpretation, front_coverage, batch))
+            covered_review = front_target_review.model_copy(update={"items": [
+                item for item in front_target_review.items
+                if item.decision in {"covered_by_official", "covered_by_procedure", "background_context", "definition_dependency"}
+                and item.statement_index in front_review_indexes
+            ]})
+            try:
+                validate_source_target_review(batch, source_interpretation, front_coverage, covered_review)
+            except SourceTargetReviewValidationError as exc:
+                attempts.append(ProtocolControlAgentAttempt(
+                    attempt=len(attempts) + 1, session_id=session_id,
+                    raw_output_sha256=_sha256(raw_text),
+                    raw_output_chars=len(raw_text), raw_output_text=raw_text,
+                    outcome="publication_invalid", error_classes=[exc.code],
+                    issues=["装配后的已有要求覆盖核对未通过：" + str(exc)[:1800]],
+                    error_detail={
+                        "code": exc.code, "statement_id": exc.statement_index,
+                        "json_path": exc.json_path, "source_refs": list(exc.source_refs),
+                        "retry_class": exc.retry_class,
+                        "affected_dependents": list(exc.affected_dependents),
+                    },
+                ))
+                return build_result(
+                    status="需要核对", batch_id=batch.batch_id, session_id=session_id,
+                    attempts=attempts, source_interpretation=source_interpretation,
+                    source_front_target_review=front_target_review,
+                    source_candidate_alignment=front_candidate_alignment,
+                    partial_wire=front_wire, source_statement_coverage=front_coverage,
+                )
+            latest_source_target_review = covered_review if covered_review.items else None
+            validated_target_coverage = {entry.statement_index: entry for entry in front_coverage}
+            validated_target_source_identity = {
+                index: _source_statement_reuse_identity(statement)
+                for index, statement in enumerate(source_interpretation.statements)
+            }
+        latest_source_statement_coverage: list[SourceStatementCoverage] = []
+        latest_source_candidate_alignment: SourceCandidateAlignment | None = None
+
+        def checkpoint_alignment() -> SourceCandidateAlignment | None:
+            if partial_wire is None or source_interpretation is None:
+                return None
+            matched = reusable_proven_alignment_items(
+                batch, source_interpretation, latest_source_statement_coverage,
+                partial_wire, latest_source_candidate_alignment, require_positive=False,
+            )
+            return (alignment_with_items(latest_source_candidate_alignment, matched)
+                    if matched else None)
+
+        candidate_repair_index: int | None = None
+        candidate_repair_fields: tuple[str, ...] = ()
+        candidate_repair_relation_targets: tuple[str, ...] = ()
+        candidate_repair_relation_indexes: tuple[int, ...] = ()
+        post_treatment_repair_index: int | None = None
+        future_repair_path: tuple[int, int, int] | None = None
+        calendar_repair_path: tuple[int, int, int] | None = None
+        atom_repair_path: tuple[int, int, int] | None = None
+        missing_anchor_only = False
+        time_operand_repair_paths: tuple[tuple[int, int], ...] = ()
+        time_operand_repair_candidate: int | None = None
+        observation_repair_paths: tuple[tuple[str, int, int], ...] = ()
+        observation_repair_candidate: int | None = None
+        observation_repair_field: Literal["observation_policy", "record_semantics"] = "observation_policy"
+        evidence_source_repair_path: tuple[int, int] | None = None
+        evidence_source_types_repair_paths: tuple[tuple[int, int], ...] = ()
+        reviewed_source_type_repairs: set[tuple[int, int]] = set()
+        reviewed_atom_repairs: set[tuple[int, int, int]] = set()
+        while True:
+            wire: ProtocolControlAgentWire | None = None
+            output: ProtocolControlBatchDispositionHydrated | None = None
+            bounded_restore_applied = False
+            invalid_outcome: Literal["schema_invalid", "publication_invalid"] = (
+                "schema_invalid"
+            )
+            try:
+                if observation_repair_candidate is not None and repair_baseline_raw is not None:
+                    # Preserve a bounded patch when full validation reveals a
+                    # different error. Keep raw_text as the actual model reply.
+                    repair_baseline_raw = _merge_observation_policy_repair_payload(
+                        raw_text, repair_baseline_raw, observation_repair_candidate,
+                        observation_repair_paths,
+                        field=observation_repair_field,
+                    )
+                    wire = parse_protocol_control_agent_wire(_stable_json(repair_baseline_raw))
+                wire = wire or (
+                    _merge_future_prohibition_repair(
+                        raw_text, repair_baseline_wire, future_repair_path
+                    )
+                    if future_repair_path is not None and repair_baseline_wire is not None
+                    else _merge_calendar_bound_repair(
+                        raw_text, repair_baseline_wire, calendar_repair_path
+                    )
+                    if calendar_repair_path is not None and repair_baseline_wire is not None
+                    else _merge_post_treatment_scope_repair(
+                        raw_text, repair_baseline_wire, post_treatment_repair_index, batch
+                    )
+                    if post_treatment_repair_index is not None and repair_baseline_wire is not None
+                    else
+                    _merge_evidence_source_types_repair(
+                        raw_text, repair_baseline_raw, evidence_source_types_repair_paths,
+                    )
+                    if evidence_source_types_repair_paths and repair_baseline_raw is not None
+                    else _merge_time_operand_repair(
+                        raw_text, repair_baseline_raw, time_operand_repair_candidate,
+                        time_operand_repair_paths,
+                    )
+                    if time_operand_repair_candidate is not None and repair_baseline_raw is not None
+                    else _merge_evidence_source_policy_repair(
+                        raw_text, repair_baseline_raw, evidence_source_repair_path, batch
+                    )
+                    if evidence_source_repair_path is not None and repair_baseline_raw is not None
+                    else _merge_observation_policy_repair(
+                        raw_text,
+                        repair_baseline_raw,
+                        observation_repair_candidate,
+                        observation_repair_paths,
+                    )
+                    if observation_repair_candidate is not None and repair_baseline_raw is not None
+                    else _merge_obligation_atom_repair(
+                        raw_text, repair_baseline_raw, atom_repair_path,
+                        missing_anchor_only=missing_anchor_only,
+                    )
+                    if atom_repair_path is not None and repair_baseline_raw is not None
+                    else
+                    _merge_source_candidate_insert(
+                        raw_text,
+                        repair_baseline_wire,
+                        authorized_unit_ids=mutable_structure_unit_ids,
+                    )
+                    if (source_insert_candidate_only or source_insert_candidates_only)
+                    and repair_baseline_wire is not None
+                    else
+                    _merge_candidate_repairs(
+                        raw_text,
+                        repair_baseline_wire or repair_baseline_raw,
+                        candidate_repair_indexes,
+                    )
+                    if candidate_repair_indexes
+                    and (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                    else
+                    _merge_candidate_repair(
+                        raw_text,
+                        repair_baseline_wire or repair_baseline_raw,
+                        candidate_repair_index,
+                        fields=candidate_repair_fields,
+                        relation_target_ids=candidate_repair_relation_targets,
+                        relation_indexes=candidate_repair_relation_indexes,
+                    )
+                    if candidate_repair_index is not None
+                    and (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                    else _merge_scoped_unit_repair(raw_text, repair_baseline_wire, scoped_unit_repair_ids)
+                    if scoped_unit_repair_ids and repair_baseline_wire is not None
+                    else _parse_repartition_with_checked_time(raw_text, repair_baseline_wire)
+                    if allow_post_enrollment_reclassification and repair_baseline_wire is not None
+                    else parse_protocol_control_agent_wire(raw_text)
+                )
+                # These mergers splice only the server-selected atom/fields into
+                # the frozen baseline. A span may support independent siblings;
+                # do not re-identify this already bounded patch by span alone.
+                bounded_atom_patch_applied = any(path is not None for path in (
+                    calendar_repair_path, future_repair_path, atom_repair_path,
+                ))
+                scoped_unit_repair_ids = set()
+                repair_baseline_raw = None
+                post_treatment_repair_index = None
+                future_repair_path = None
+                calendar_repair_path = None
+                time_operand_repair_paths = ()
+                time_operand_repair_candidate = None
+                atom_repair_path = None
+                missing_anchor_only = False
+                observation_repair_paths = ()
+                observation_repair_candidate = None
+                evidence_source_repair_path = None
+                evidence_source_types_repair_paths = ()
+                if repair_baseline_wire is not None:
+                    wire, bounded_restore_applied = _restore_bounded_wire_repair(
+                        repair_baseline_wire,
+                        wire,
+                        mutable_structure_unit_ids=mutable_structure_unit_ids,
+                        mutable_candidate_source_keys=mutable_candidate_source_keys,
+                        mutable_candidate_indexes=mutable_candidate_indexes,
+                        mutable_candidate_source_union=mutable_candidate_source_union,
+                        mutable_obligation_source_span_ids=(
+                            set() if bounded_atom_patch_applied
+                            else mutable_obligation_source_span_ids
+                        ),
+                        allow_candidate_repartition=allow_candidate_repartition,
+                        allow_source_closure_rewrite=allow_source_closure_rewrite,
+                        allow_post_enrollment_reclassification=allow_post_enrollment_reclassification,
+                        allow_source_insert=allow_source_insert,
+                        preserve_candidate_order=pending_source_insert is not None,
+                    )
+                if pending_source_insert is not None:
+                    # Repair mode can change; the original append authority cannot.
+                    insert_baseline, insert_units, insert_spans = pending_source_insert
+                    _restore_bounded_wire_repair(
+                        insert_baseline, wire,
+                        mutable_structure_unit_ids=insert_units,
+                        mutable_obligation_source_span_ids=insert_spans,
+                        allow_source_insert=True,
+                    )
+                context_only_dispositions = sorted(
+                    {item.structure_unit_id for item in wire.dispositions}
+                    - set(batch.owned_structure_unit_ids)
+                )
+                pending_author_wire = wire.model_copy(deep=True)
+                pending_author_source_sha256 = (_sha256(source_interpretation.model_dump_json())
+                                               if source_interpretation is not None else None)
+                output = hydrate_protocol_control_agent_output(wire, batch)
+                if allow_source_insert:
+                    # A successfully merged addition becomes the immutable baseline
+                    # for any later, separately scoped candidate correction.
+                    allow_source_insert = False
+                    source_insert_candidate_only = False
+                    source_insert_candidates_only = False
+                if output_validator is not None:
+                    invalid_outcome = "publication_invalid"
+                    if repair_baseline is not None:
+                        _validate_bounded_output_repair(
+                            repair_baseline,
+                            output,
+                            mutable_structure_unit_ids=mutable_structure_unit_ids,
+                            mutable_candidate_source_keys=mutable_candidate_source_keys,
+                            mutable_candidate_source_union=mutable_candidate_source_union,
+                            allow_candidate_repartition=allow_candidate_repartition,
+                            allow_source_closure_rewrite=allow_source_closure_rewrite,
+                        )
+                # Check model repair authority before independently assembling
+                # host-proven source metadata; never widen its mutable scope.
+                inline_scope_changes = []
+                if source_interpretation is not None:
+                    wire, inline_scope_changes = _complete_inline_scope_citations(
+                        batch, source_interpretation, wire,
+                    )
+                    if inline_scope_changes:
+                        output = hydrate_protocol_control_agent_output(wire, batch)
+                if output_validator is not None:
+                    try:
+                        output_validator(output)
+                    except ProtocolControlAgentWireValidationError:
+                        raise
+                    except Exception as exc:  # noqa: BLE001 - validation boundary
+                        raise ProtocolControlAgentWireValidationError(
+                            "POST_HYDRATION_INVALID",
+                            str(exc),
+                        ) from exc
+                attempts.append(
+                    ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=session_id,
+                        raw_output_sha256=_sha256(raw_text),
+                        raw_output_chars=len(raw_text),
+                        raw_output_text=raw_text,
+                        outcome="parsed",
+                        output=output,
+                        issues=(
+                            ["已由系统原样保留定向修订范围外的上一轮内容"]
+                            if bounded_restore_applied
+                            else []
+                        ) + (["已明确删除获授权关联，候选位置=" + str(candidate_repair_index)
+                              + "，关联位置=" + str(list(candidate_repair_relation_indexes))
+                              + "；原义务、来源及未授权关联保留，仍须完整核对"]
+                             if candidate_repair_fields and not json.loads(raw_text)["candidate_draft"]["cross_source_relations"]
+                             else []) + (["只读原文被误列为本批处置，已按冻结分包归属排除："
+                             + ",".join(context_only_dispositions)]
+                             if context_only_dispositions else []),
+                        error_detail=({
+                            "code": "INLINE_SCOPE_CITATION_ASSEMBLED",
+                            "workflow_phase": "deterministic_source_assembly",
+                            "assembly_version": "inline-scope-citation-assembly/v1",
+                            "physical_model_calls": 0,
+                            "changes": inline_scope_changes,
+                        } if inline_scope_changes else None),
+                    )
+                )
+                coverage = (
+                    source_statement_coverage(batch, source_interpretation, wire)
+                    if source_interpretation is not None and wire is not None else []
+                )
+                latest_source_statement_coverage = coverage
+                post_decision_conflicts = [
+                    entry for entry in coverage
+                    if source_interpretation.statements[entry.statement_index].eligibility_sequence
+                    == "after_eligibility_decision" and entry.action_candidate_indexes
+                ] if source_interpretation is not None else []
+                if post_decision_conflicts:
+                    indexes = sorted({index for entry in post_decision_conflicts
+                                      for index in entry.action_candidate_indexes})
+                    witnessed_sequence = all(source_interpretation.statements[
+                        entry.statement_index].eligibility_sequence_context is not None
+                        for entry in post_decision_conflicts)
+                    raise ProtocolControlAgentWireValidationError(
+                        "POST_ELIGIBILITY_ACTION_AS_CONTROL",
+                        "原文明确在确定入排资格后执行的动作，不得作为本次资格前置条件："
+                        + ",".join(str(entry.statement_index) for entry in post_decision_conflicts),
+                        structure_unit_ids=sorted({entry.structure_unit_id
+                                                   for entry in post_decision_conflicts}),
+                        candidate_ids=[output.candidates[index].control_candidate_id for index in indexes],
+                        candidate_indexes=indexes,
+                        allow_source_closure_rewrite=witnessed_sequence,
+                        allow_post_enrollment_reclassification=witnessed_sequence,
+                    )
+                attributed_conflicts = [
+                    entry for entry in coverage
+                    if source_interpretation.statements[entry.statement_index].control_authority
+                    == "cited_external_rationale" and entry.action_candidate_indexes
+                ] if source_interpretation is not None else []
+                if attributed_conflicts:
+                    indexes = sorted({index for entry in attributed_conflicts
+                                      for index in entry.action_candidate_indexes})
+                    raise ProtocolControlAgentWireValidationError(
+                        "EXTERNAL_RATIONALE_AS_CONTROL",
+                        "外部资料转述不能作为本研究独立控制："
+                        + ",".join(str(entry.statement_index) for entry in attributed_conflicts),
+                        structure_unit_ids=sorted({entry.structure_unit_id
+                                                   for entry in attributed_conflicts}),
+                        candidate_ids=[output.candidates[index].control_candidate_id for index in indexes],
+                        candidate_indexes=indexes,
+                    )
+                target_review: SourceTargetReview | None = None
+                reviewer = getattr(transport, "start_source_target_review", None)
+                if callable(reviewer) and "target_ids" in inspect.signature(reviewer).parameters:
+                    # A decoding constraint only: existing scope/source checks remain decisive.
+                    reviewer = partial(reviewer, target_ids=[
+                        *(target.official_code for target in batch.known_official_targets),
+                        *(target.catalog_item_id for target in batch.known_procedure_targets),
+                        *(unit.structure_unit_id for unit in batch.context_units),
+                    ])
+                # Source-completion reviews share one scope across planning, repair and validation.
+                completed_indexes = (completed_quote_review_indexes(source_interpretation,
+                    [*question_history, *[attempt.model_dump(mode="json") for attempt in attempts]])
+                    if source_interpretation is not None else set())
+                select_target_review = partial(target_review_indexes,
+                    completed_quote_indexes=completed_indexes)
+                build_target_review_prompt = partial(build_source_target_review_prompt,
+                    completed_quote_indexes=completed_indexes)
+                validate_target_review = partial(validate_source_target_review,
+                    completed_quote_indexes=completed_indexes)
+                source_review_seed = partial(validated_source_review_seed,
+                    completed_quote_indexes=completed_indexes)
+                review_indexes = (
+                    select_target_review(source_interpretation, coverage, batch)
+                    if source_interpretation is not None else []
+                )
+                if source_interpretation is not None and review_indexes:
+                    review_response: ProtocolControlAgentResponse | None = None
+                    review_validation_snapshot: SourceTargetReview | None = None
+                    review_validation_kind = "not_started"
+                    review_unavailable = False
+                    unresolved_indexes: list[int] = []
+                    temporal_unresolved_indexes: list[int] = []
+                    pending_review: SourceTargetReview | None = None
+                    reusable: list = []
+                    repaired_review_indexes: set[int] = set()
+                    def recovery_target_review() -> SourceTargetReview | None:
+                        proposed = target_review
+                        if proposed is None and pending_review is not None:
+                            proposed = SourceTargetReview(
+                                version=SOURCE_TARGET_REVIEW_VERSION,
+                                items=[*reusable, *pending_review.items],
+                            )
+                        if proposed is None:
+                            proposed = latest_source_target_review
+                        if proposed is None:
+                            return None
+                        try:
+                            return source_review_seed(
+                                batch, source_interpretation, coverage, proposed,
+                            )
+                        except (SourceTargetReviewValidationError, ValueError, KeyError, TypeError):
+                            return None
+
+                    try:
+                        resumed_review_indexes = {
+                            index for index in resumed_review_items
+                            if index < len(source_interpretation.statements)
+                            and resumed_review_identity.get(index)
+                            == _source_statement_reuse_identity(
+                                source_interpretation.statements[index]
+                            )
+                        }
+                        previous_covered = {
+                            item.statement_index: item
+                            for item in (latest_source_target_review.items
+                                         if latest_source_target_review is not None else [])
+                            if item.decision in {"covered_by_official", "covered_by_procedure", "background_context", "definition_dependency"}
+                            or (item.statement_index in resumed_review_indexes
+                                and item.decision != "unresolved"
+                                and (item.decision != "additional_requirement"
+                                     or not (source_target_cocited_units(batch, wire,
+                                         {source_interpretation.statements[item.statement_index].structure_unit_id})
+                                         - {source_interpretation.statements[item.statement_index].structure_unit_id})))
+                        }
+                        current_coverage = {
+                            entry.statement_index: entry for entry in coverage
+                        }
+                        def target_inputs(entry: SourceStatementCoverage) -> tuple[object, ...]:
+                            return (
+                                entry.status,
+                                entry.disposition,
+                                entry.linked_official_code,
+                                tuple(entry.linked_procedure_target_ids),
+                            )
+
+                        def reuse_inputs_unchanged(index: int) -> bool:
+                            if validated_target_source_identity.get(index) != _source_statement_reuse_identity(
+                                source_interpretation.statements[index]
+                            ):
+                                return False
+                            # A restored cross-run decision is bound to its exact
+                            # saved coverage entry; any candidate or coverage
+                            # change invalidates only that statement's reuse.
+                            if index in resumed_review_indexes:
+                                return validated_target_coverage[index] == current_coverage[index]
+                            return (
+                                target_inputs(validated_target_coverage[index])
+                                == target_inputs(current_coverage[index])
+                            )
+
+                        reusable = [
+                            previous_covered[index]
+                            for index in review_indexes
+                            if index in previous_covered
+                            and index in validated_target_coverage
+                            and reuse_inputs_unchanged(index)
+                        ]
+                        reusable_indexes = {item.statement_index for item in reusable}
+                        pending_coverage = [
+                            entry for entry in coverage
+                            if entry.statement_index not in reusable_indexes
+                        ]
+                        pending_items = []
+                        if select_target_review(source_interpretation, pending_coverage, batch):
+                            if not callable(reviewer):
+                                review_unavailable = True
+                                raise RuntimeError("逐项来源核对服务不可用，不能跳过未闭合陈述")
+                            review_prompt = build_target_review_prompt(
+                                batch, source_interpretation, pending_coverage, wire=wire,
+                            )
+                            expanded = sorted(completed_indexes)
+                            if expanded:
+                                review_prompt += ("\n本次补齐原文的陈述索引=" + json.dumps(expanded)
+                                    + "。这些条目的source_action_excerpt须逐字保留补齐后的整个quoted_text，"
+                                    "确认新增范围的条件、对象、例外及依赖均已核清；不能只核旧片段。"
+                                    "尚不能确认时返回unresolved并说明具体疑问，不能宣称原有目标完整覆盖。")
+                            review_response = reviewer(prompt=review_prompt)
+                            pending_review = SourceTargetReview.model_validate_json(review_response.text)
+                            corrected_invalid_review = False
+                            # Each typed invalid statement gets one local correction.
+                            # Valid siblings are retained; a repeated failure cannot loop.
+                            while True:
+                                try:
+                                    review_validation_snapshot = pending_review
+                                    review_validation_kind = "assembled_pending_review"
+                                    validate_target_review(
+                                        batch, source_interpretation, pending_coverage, pending_review,
+                                    )
+                                    break
+                                except SourceTargetReviewValidationError as review_error:
+                                    corrected_invalid_review = True
+                                    invalid_index = review_error.statement_index
+                                    if invalid_index is None or invalid_index in repaired_review_indexes:
+                                        raise
+                                    repaired_review_indexes.add(invalid_index)
+                                    invalid_entries = [
+                                        entry for entry in pending_coverage
+                                        if entry.statement_index == invalid_index
+                                    ]
+                                    if len(invalid_entries) != 1:
+                                        raise
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1,
+                                        session_id=review_response.session_id,
+                                        raw_output_sha256=_sha256(review_response.text),
+                                        raw_output_chars=len(review_response.text),
+                                        raw_output_text=review_response.text,
+                                        outcome="publication_invalid",
+                                        issues=["逐项目标核对未通过：" + str(review_error)[:1400]],
+                                        error_classes=["SOURCE_TARGET_REVIEW_INVALID"],
+                                        error_detail={
+                                            "code": review_error.code,
+                                            "statement_id": review_error.statement_index,
+                                            "json_path": review_error.json_path,
+                                            "source_refs": list(review_error.source_refs),
+                                            "retry_class": review_error.retry_class,
+                                            "affected_dependents": list(review_error.affected_dependents),
+                                            "review_snapshot_kind": "assembled_pending_review",
+                                            "review_snapshot": pending_review.model_dump(mode="json"),
+                                        },
+                                    ))
+                                    overclaimed = next(
+                                        item for item in pending_review.items
+                                        if item.statement_index == invalid_index
+                                    )
+                                    compare_one = (
+                                        review_error.code in {
+                                            "FREQUENCY_ONLY_COVERAGE", "SOURCE_TIME_INCOMPLETE",
+                                        }
+                                        and overclaimed.target_id is not None
+                                    )
+                                    source_unit = next(
+                                        unit for unit in batch.owned_units
+                                        if unit.structure_unit_id == source_interpretation.statements[invalid_index].structure_unit_id
+                                    )
+                                    native_time_recheck = native_schedule_scope_requires_recheck(
+                                        batch, source_interpretation.statements[invalid_index],
+                                    )
+                                    # Repair the source dependency before spending the one target repair,
+                                    # even when another invalid target field is reported first.
+                                    if review_error.code == "SOURCE_TIME_INCOMPLETE" or native_time_recheck:
+                                        scope_corrector = getattr(transport, "correct_source_scope", None)
+                                        if not callable(scope_corrector) or source_repairs >= self._max_schema_repairs:
+                                            raise review_error
+                                        original_statement = source_interpretation.statements[invalid_index]
+                                        review_response = None
+                                        scope_prompt = (
+                                            build_source_scope_correction_prompt(
+                                                batch, original_statement, str(review_error)
+                                            )
+                                            + ("\n本次核对原生标记列中的遗漏范围；只能补本条的范围、阶段、时间。"
+                                               "scope_quote须引用完整原生标题格文字或完整有源列标题，不能只取一个字。"
+                                               "后续仍须重新核对目标，不能将上一项时间声明当作已采信结论。"
+                                               if native_time_recheck else
+                                               "\n本次只补全 time_words；scope_quote 与 affected_stage "
+                                               "须与原陈述相同，其他陈述和医学含义不变。")
+                                        )
+                                        # Only malformed JSON gets one local retry, within the existing budget.
+                                        for format_attempt in range(2):
+                                            source_repairs += 1
+                                            time_response = scope_corrector(prompt=scope_prompt)
+                                            review_response = time_response
+                                            try:
+                                                time_correction = SourceScopeCorrection.model_validate_json(
+                                                    time_response.text
+                                                )
+                                                break
+                                            except ValidationError as format_error:
+                                                if not all(item["type"] == "json_invalid"
+                                                           for item in format_error.errors()):
+                                                    raise
+                                                attempts.append(ProtocolControlAgentAttempt(
+                                                    attempt=len(attempts) + 1,
+                                                    session_id=time_response.session_id,
+                                                    raw_output_sha256=_sha256(time_response.text),
+                                                    raw_output_text=time_response.text,
+                                                    raw_output_chars=len(time_response.text),
+                                                    outcome="schema_invalid",
+                                                    issues=["本条来源范围回答不是合法 JSON"],
+                                                    error_classes=["SOURCE_SCOPE_CORRECTION_JSON_INVALID"],
+                                                    error_detail={
+                                                        "workflow_phase": "source_scope_correction",
+                                                        "code": "SOURCE_SCOPE_CORRECTION_JSON_INVALID",
+                                                        "statement_id": invalid_index,
+                                                        "json_path": "/", "retry_class": "schema",
+                                                        "source_refs": list(source_unit.source_span_ids),
+                                                        "affected_dependents": [invalid_index],
+                                                        "precondition_sha256": _sha256(original_statement.model_dump_json()),
+                                                    },
+                                                ))
+                                                if format_attempt or source_repairs >= self._max_schema_repairs:
+                                                    failure = SourceTargetReviewValidationError(
+                                                        "本条来源范围回答格式未修复，未应用任何修订",
+                                                        code="SOURCE_SCOPE_CORRECTION_JSON_INVALID",
+                                                        statement_index=invalid_index, json_path="/",
+                                                        source_refs=tuple(source_unit.source_span_ids),
+                                                    )
+                                                    failure.retry_class = "schema"
+                                                    raise failure from format_error
+                                                scope_prompt += (
+                                                    "\n上次回答未通过 JSON 语法校验。本次仅按原 Schema 重新提交一个完整 JSON 对象，"
+                                                    "不含思考、说明、自我修改文字或 Markdown。原来源、编号与修订范围不变；"
+                                                    "不能借格式修复增加或改写其他内容。"
+                                                )
+                                        if not native_time_recheck and (
+                                                time_correction.scope_quote != original_statement.scope_quote
+                                                or time_correction.scope_context_unit_id != original_statement.scope_context_unit_id
+                                                or time_correction.affected_stage != original_statement.affected_stage):
+                                            raise ValueError("补全来源时间不得更改已核范围或阶段")
+                                        corrected_source = apply_source_scope_correction(
+                                            batch, source_interpretation, invalid_index, time_correction
+                                        )
+                                        if native_time_recheck:
+                                            corrected_statement = corrected_source.statements[invalid_index]
+                                            if (corrected_statement.scope_context_unit_id != original_statement.scope_context_unit_id
+                                                    or not corrected_statement.time_words
+                                                    or not corrected_statement.scope_quote
+                                                    or not native_schedule_time_excerpt_is_grounded(
+                                                        batch, corrected_statement, corrected_statement.scope_quote,
+                                                    )):
+                                                raise ValueError("原生访视列范围尚未逐字核清，不能借目标核对补造时间")
+                                        if _unreported_time_fragments(corrected_source.statements[invalid_index]):
+                                            raise ValueError("本条原文时间仍未逐项列全")
+                                        source_interpretation = corrected_source
+                                        coverage = source_statement_coverage(batch, source_interpretation, wire)
+                                        latest_source_statement_coverage = coverage
+                                        pending_coverage = [
+                                            entry for entry in coverage
+                                            if entry.statement_index not in reusable_indexes
+                                        ]
+                                        invalid_entries = [
+                                            entry for entry in pending_coverage
+                                            if entry.statement_index == invalid_index
+                                        ]
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=time_response.session_id,
+                                            raw_output_sha256=_sha256(time_response.text),
+                                            raw_output_text=time_response.text,
+                                            raw_output_chars=len(time_response.text),
+                                            outcome="parsed",
+                                            issues=["仅补核本条来源时间；逐项目标仍须重新核验"],
+                                            error_detail={
+                                                "workflow_phase": "source_scope_correction",
+                                                "code": review_error.code,
+                                                "statement_id": invalid_index,
+                                                "source_refs": list(source_unit.source_span_ids),
+                                                "precondition_sha256": _sha256(original_statement.model_dump_json()),
+                                            },
+                                        ))
+                                    corrected = None
+                                    correction_response = None
+                                    if (review_error.code == "BACKGROUND_CONTEXT_UNPROVEN"
+                                            and callable(source_reader)
+                                            and can_recheck_source_function(
+                                                batch, source_interpretation,
+                                                invalid_entries[0], overclaimed,
+                                            )):
+                                        function_response = None
+                                        try:
+                                            function_response = source_reader(
+                                                prompt=build_source_function_recheck_prompt(
+                                                    batch, source_interpretation, invalid_index,
+                                                ),
+                                            )
+                                            proposal = SourceInterpretation.model_validate_json(
+                                                function_response.text,
+                                            )
+                                            revised_source = apply_source_function_recheck(
+                                                batch, source_interpretation, invalid_entries[0],
+                                                overclaimed, proposal,
+                                            )
+                                            revised_coverage = source_statement_coverage(
+                                                batch, revised_source, wire,
+                                            )
+                                            revised_entry = next(entry for entry in revised_coverage
+                                                                 if entry.statement_index == invalid_index)
+                                            background_confirmed = (
+                                                revised_source.statements[invalid_index].decision_functions
+                                                == ["background"]
+                                            )
+                                            if background_confirmed:
+                                                validate_target_review(
+                                                    batch, revised_source, [revised_entry],
+                                                    SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION,
+                                                                       items=[overclaimed]),
+                                                )
+                                            source_interpretation = revised_source
+                                            coverage = revised_coverage
+                                            latest_source_statement_coverage = coverage
+                                            pending_coverage = [
+                                                entry for entry in revised_coverage
+                                                if entry.statement_index not in reusable_indexes
+                                            ]
+                                            invalid_entries = [revised_entry]
+                                            if background_confirmed:
+                                                corrected = SourceTargetReview(
+                                                    version=SOURCE_TARGET_REVIEW_VERSION, items=[overclaimed],
+                                                )
+                                        except Exception as function_error:  # noqa: BLE001 - bounded proposal
+                                            function_code = (
+                                                protocol_control_call_failure_code(function_error)
+                                                or "SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED"
+                                                if function_response is None else
+                                                "SOURCE_FUNCTION_RECHECK_SCHEMA_INVALID"
+                                                if isinstance(function_error, ValidationError) else
+                                                "SOURCE_FUNCTION_RECHECK_UNRESOLVED"
+                                                if isinstance(function_error, SourceFunctionRecheckUnresolved) else
+                                                "SOURCE_FUNCTION_RECHECK_INVALID"
+                                            )
+                                            attempts.append(ProtocolControlAgentAttempt(
+                                                attempt=len(attempts) + 1,
+                                                session_id=(function_response.session_id if function_response
+                                                            else "source-function-recheck-failed"),
+                                                raw_output_sha256=_sha256(
+                                                    function_response.text if function_response else str(function_error)),
+                                                raw_output_text=(function_response.text if function_response else None),
+                                                raw_output_chars=(len(function_response.text) if function_response else None),
+                                                outcome=("transport_failed" if function_response is None else
+                                                         "schema_invalid" if isinstance(function_error, ValidationError)
+                                                         else "publication_invalid"),
+                                                error_classes=[function_code],
+                                                error_detail={
+                                                    "code": function_code,
+                                                    "statement_id": invalid_index,
+                                                    "source_refs": list(source_unit.source_span_ids),
+                                                    "retry_class": (
+                                                        "transport" if function_response is None
+                                                        else "source_function_review"
+                                                    ),
+                                                    "affected_dependents": [invalid_index],
+                                                },
+                                                issues=["单条用途复核未获证实，原来源清单保留："
+                                                        + str(function_error)[:1000]],
+                                            ))
+                                            return build_result(
+                                                status="需要核对", batch_id=batch.batch_id,
+                                                session_id=session_id, attempts=attempts,
+                                                source_interpretation=source_interpretation,
+                                                source_statement_coverage=coverage,
+                                                source_target_review=recovery_target_review(),
+                                                source_candidate_alignment=checkpoint_alignment(),
+                                                partial_wire=wire,
+                                            )
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=function_response.session_id,
+                                            raw_output_sha256=_sha256(function_response.text),
+                                            raw_output_text=function_response.text,
+                                            raw_output_chars=len(function_response.text),
+                                            outcome="parsed",
+                                            issues=[
+                                                "本条纯背景用途经有源复核；整批仍须通过原门禁"
+                                                if background_confirmed else
+                                                "本条复核保留原用途；被拒的目标处置仍须单独纠正，未证明覆盖"
+                                            ],
+                                        ))
+                                    comparison_reader = getattr(transport, "start_source_unit_comparison", None)
+                                    if (review_error.code == "FREQUENCY_ONLY_COVERAGE"
+                                            and callable(comparison_reader)
+                                            and batch.context_units):
+                                        comparison_response = None
+                                        try:
+                                            comparison_response = comparison_reader(
+                                                prompt=build_source_unit_comparison_prompt(
+                                                    batch, source_interpretation, invalid_index,
+                                                )
+                                            )
+                                            comparison = SourceUnitComparison.model_validate_json(
+                                                comparison_response.text
+                                            )
+                                            corrected = source_unit_comparison_as_review(
+                                                batch, source_interpretation, invalid_entries[0], comparison,
+                                            )
+                                            attempts.append(ProtocolControlAgentAttempt(
+                                                attempt=len(attempts) + 1,
+                                                session_id=comparison_response.session_id,
+                                                raw_output_sha256=_sha256(comparison_response.text),
+                                                raw_output_chars=len(comparison_response.text),
+                                                raw_output_text=comparison_response.text,
+                                                outcome="parsed" if corrected else "publication_invalid",
+                                                issues=["跨章节原文对应仅登记待核，仍须后文独立通过及发布前复验"],
+                                            ))
+                                        except Exception as comparison_error:  # noqa: BLE001 - preserve old correction path
+                                            attempts.append(ProtocolControlAgentAttempt(
+                                                attempt=len(attempts) + 1,
+                                                session_id=(comparison_response.session_id if comparison_response else review_response.session_id),
+                                                raw_output_sha256=_sha256(
+                                                    comparison_response.text if comparison_response else str(comparison_error)
+                                                ),
+                                                raw_output_chars=(len(comparison_response.text) if comparison_response else None),
+                                                raw_output_text=(comparison_response.text if comparison_response else None),
+                                                outcome="publication_invalid" if comparison_response else "transport_failed",
+                                                issues=["跨章节原文对应未获证实：" + str(comparison_error)[:900]],
+                                                error_classes=[
+                                                    protocol_control_call_failure_code(comparison_error)
+                                                    or "SOURCE_UNIT_COMPARISON_INVALID"
+                                                ],
+                                            ))
+                                            if comparison_response is None:
+                                                review_response = None
+                                                raise
+                                    if corrected is None:
+                                        correction_prompt = build_target_review_prompt(
+                                            batch, source_interpretation, invalid_entries,
+                                            comparison_target_id=overclaimed.target_id if compare_one else None,
+                                            wire=wire,
+                                        ) + (
+                                            "\n上一回答对此条的完整覆盖判断未通过来源核对："
+                                            + str(review_error)[:1000]
+                                            + "\n结构化拒绝反馈："
+                                            + _stable_json({
+                                                "code": review_error.code,
+                                                "statement_index": invalid_index,
+                                                "json_path": review_error.json_path,
+                                                "source_refs": list(review_error.source_refs),
+                                                "retry_class": review_error.retry_class,
+                                                "affected_dependents": list(review_error.affected_dependents),
+                                                "rejected_item": overclaimed.model_dump(mode="json"),
+                                            })
+                                            + "\n上一项未经采信。按具体错误字段核对原文，不能原样重复被拒的声明。"
+                                            "potential_same_requirement 必须同时给出只读来源的 structure_unit_id"
+                                            "作为 target_id、该来源的逐字 target_action_excerpt、同句对象及明确时期；"
+                                            "target_id 或目标摘录为 null 就没有证明对应关系。"
+                                            "全部判断选项仍以本提示的合同为准，不强制把失败改为增量要求。"
+                                            "无法证明对应时保留具体未核内容，不猜来源编号、不改来源功能分类，"
+                                            "更不能因格式或程序错误要求研究者作医学判断。"
+                                            + "。只复核这一条；逐项核全原文时间、条件和例外。"
+                                            + ("source_action_excerpt 只能逐字摘自冻结 quoted_text；"
+                                               "不能把其外的时间前缀或例外尾句拼成动作。"
+                                               "时间填时间字段，例外与目标原文单独比对。"
+                                               if review_error.code == "SOURCE_ACTION_MISMATCH" else "")
+                                            + "不能证明同一目标完整覆盖时，选增量要求或无法核清并写明差额。"
+                                            "若仍引用已有目标作对照，target_id 与该目标原文中的 "
+                                            "target_action_excerpt 必须同时填写；不引用目标时两者及 "
+                                            "target_time_excerpt 都填 null，不能把来源原文复制成目标摘录。"
+                                            "不得重写其他陈述，只返回本提示要求的一个 items 条目。"
+                                            "同单元其他句子仅供辨认上下文，不自动成为本句的适用时期。"
+                                            + ("本次只比较列出的目标，不得改引其他目标。" if compare_one else "")
+                                            + "\n同单元完整原文："
+                                            + json.dumps({"heading_path": source_unit.heading_path,
+                                                          "excerpt": source_unit.excerpt}, ensure_ascii=False)
+                                        )
+                                        review_response = None
+                                        correction_response = reviewer(prompt=correction_prompt)
+                                        review_response = correction_response
+                                        corrected = SourceTargetReview.model_validate_json(correction_response.text)
+                                        if compare_one and corrected.items and corrected.items[0].target_id not in {
+                                            None, overclaimed.target_id,
+                                        }:
+                                            raise ValueError("单条范围复核不得改引未提供的目标")
+                                        review_validation_snapshot = corrected
+                                        review_validation_kind = "rejected_local_correction"
+                                        validate_target_review(
+                                            batch, source_interpretation, invalid_entries, corrected,
+                                        )
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=correction_response.session_id,
+                                            raw_output_sha256=_sha256(correction_response.text),
+                                            raw_output_chars=len(correction_response.text),
+                                            raw_output_text=correction_response.text,
+                                            outcome="parsed",
+                                            issues=["本条目标处置已通过来源核对；其他条目保持，整批尚未采用"],
+                                        ))
+                                    pending_review = SourceTargetReview(
+                                        version=SOURCE_TARGET_REVIEW_VERSION,
+                                        items=[
+                                            corrected.items[0] if item.statement_index == invalid_index else item
+                                            for item in pending_review.items
+                                        ],
+                                    )
+                            function_reads = 0
+                            for item in tuple(pending_review.items):
+                                entry = next((entry for entry in pending_coverage
+                                              if entry.statement_index == item.statement_index), None)
+                                if (item.decision != "unresolved" or entry is None
+                                        or item.statement_index in repaired_review_indexes
+                                        or function_reads >= 2 or not callable(source_reader)
+                                        or not can_recheck_source_function(
+                                            batch, source_interpretation, entry, item)):
+                                    continue
+                                function_reads += 1
+                                local_response = None
+                                local_phase = "SOURCE_FUNCTION_RECHECK"
+                                try:
+                                    local_response = source_reader(prompt=build_source_function_recheck_prompt(
+                                        batch, source_interpretation, item.statement_index,
+                                    ))
+                                    proposal = SourceInterpretation.model_validate_json(local_response.text)
+                                    revised_source = apply_source_function_recheck(
+                                        batch, source_interpretation, entry, item, proposal,
+                                    )
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=local_response.session_id,
+                                        raw_output_sha256=_sha256(local_response.text),
+                                        raw_output_chars=len(local_response.text),
+                                        raw_output_text=local_response.text, outcome="parsed",
+                                        issues=["仅复核未消费陈述的用途；未生成覆盖或采用证明"],
+                                    ))
+                                    if revised_source == source_interpretation:
+                                        continue
+                                    source_interpretation = revised_source
+                                    coverage = source_statement_coverage(batch, source_interpretation, wire)
+                                    latest_source_statement_coverage = coverage
+                                    pending_coverage = [entry for entry in coverage
+                                                        if entry.statement_index not in reusable_indexes]
+                                    revised_entry = next(entry for entry in coverage
+                                                         if entry.statement_index == item.statement_index)
+                                    # A classification proposal is not a target-review answer.
+                                    local_phase = "SOURCE_TARGET_FOCUSED"
+                                    local_response = None
+                                    local_response = reviewer(prompt=build_target_review_prompt(
+                                        batch, source_interpretation, [revised_entry], wire=wire,
+                                    ))
+                                    corrected = SourceTargetReview.model_validate_json(local_response.text)
+                                    validate_target_review(
+                                        batch, source_interpretation, [revised_entry], corrected,
+                                    )
+                                    pending_review = SourceTargetReview(
+                                        version=SOURCE_TARGET_REVIEW_VERSION,
+                                        items=[corrected.items[0] if old.statement_index == item.statement_index
+                                               else old for old in pending_review.items],
+                                    )
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=local_response.session_id,
+                                        raw_output_sha256=_sha256(local_response.text),
+                                        raw_output_chars=len(local_response.text),
+                                        raw_output_text=local_response.text, outcome="parsed",
+                                        issues=["用途复核后已重新读取本条目标处置；兄弟核对保持不变"],
+                                    ))
+                                except Exception as local_error:  # noqa: BLE001 - preserve bounded recovery
+                                    failure_code = (
+                                        protocol_control_call_failure_code(local_error)
+                                        or f"{local_phase}_TRANSPORT_FAILED"
+                                        if local_response is None else
+                                        f"{local_phase}_SCHEMA_INVALID"
+                                        if isinstance(local_error, ValidationError) else
+                                        "SOURCE_FUNCTION_RECHECK_UNRESOLVED"
+                                        if isinstance(local_error, SourceFunctionRecheckUnresolved) else
+                                        f"{local_phase}_INVALID"
+                                    )
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1,
+                                        session_id=(local_response.session_id if local_response else
+                                                    getattr(local_error, "session_id", None) or session_id),
+                                        raw_output_sha256=_sha256(local_response.text if local_response else str(local_error)),
+                                        raw_output_chars=len(local_response.text) if local_response else None,
+                                        raw_output_text=local_response.text if local_response else None,
+                                        outcome=("transport_failed" if local_response is None else
+                                                 "schema_invalid" if isinstance(local_error, ValidationError)
+                                                 else "publication_invalid"),
+                                        error_classes=[failure_code],
+                                        error_detail={
+                                            "code": failure_code, "statement_id": item.statement_index,
+                                            "json_path": f"/statements/{item.statement_index}",
+                                            "source_refs": list(next(unit for unit in batch.owned_units
+                                                                     if unit.structure_unit_id == entry.structure_unit_id).source_span_ids),
+                                            "retry_class": "transport" if local_response is None else "source_function_review",
+                                            "affected_dependents": [item.statement_index],
+                                        },
+                                        issues=["局部用途复核未完成，已保存原文和已有核对：" + str(local_error)[:1000]],
+                                    ))
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id, session_id=session_id,
+                                        attempts=attempts, source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage,
+                                        source_target_review=recovery_target_review(),
+                                        source_candidate_alignment=checkpoint_alignment(), partial_wire=wire,
+                                    )
+                            if not corrected_invalid_review:
+                                focused_reads = 0
+                                for item in tuple(pending_review.items):
+                                    entry = next((entry for entry in pending_coverage
+                                                  if entry.statement_index == item.statement_index), None)
+                                    if (item.decision != "unresolved" or entry is None
+                                            or entry.status != "candidate_linked" or focused_reads >= 2):
+                                        continue
+                                    focused_reads += 1
+                                    focused_prompt = build_target_review_prompt(
+                                        batch, source_interpretation, [entry], wire=wire,
+                                    ) + (
+                                        "\n只复核这一条。已有候选覆盖该来源单元的其他要求，不代表本条已覆盖；"
+                                        "本条的 linked_procedure_target_ids 为空也不代表冻结目标列表为空。"
+                                        "逐项比较动作、对象、数值、单位、时间、条件和例外。"
+                                        "只有目标逐字支持全部含义才选已有目标完整覆盖；仍缺内容选增量要求，"
+                                        "来源动作与适用时点有逐字依据、但目标仅缺该时点时，"
+                                        "选增量要求并注明差额；来源本身无法核清才保留无法核清。"
+                                        "不得借相邻动作的时期补本条，也不得改写其他条目。"
+                                    )
+                                    focused_response = None
+                                    focused_review = None
+                                    try:
+                                        focused_response = reviewer(prompt=focused_prompt)
+                                        focused_review = SourceTargetReview.model_validate_json(
+                                            focused_response.text
+                                        )
+                                        validate_target_review(
+                                            batch, source_interpretation, [entry], focused_review,
+                                        )
+                                    except Exception as focused_error:  # noqa: BLE001 - preserve failed read
+                                        failure_code = (
+                                            "SOURCE_TARGET_FOCUSED_SCHEMA_INVALID"
+                                            if focused_response is not None and isinstance(focused_error, ValidationError)
+                                            else "SOURCE_TARGET_FOCUSED_INVALID" if focused_response is not None
+                                            else protocol_control_call_failure_code(focused_error)
+                                            or "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED"
+                                        )
+                                        detail = {
+                                            "code": failure_code,
+                                            "failure_class": failure_code,
+                                            "validation_code": None,
+                                            "statement_id": item.statement_index,
+                                            "json_path": "/items",
+                                            "source_refs": sorted({
+                                                span for unit in batch.owned_units
+                                                if unit.structure_unit_id == entry.structure_unit_id
+                                                for span in unit.source_span_ids
+                                            }),
+                                            "retry_class": ("source_semantic_review"
+                                                            if focused_response is not None else "transport"),
+                                            "affected_dependents": list(entry.candidate_indexes),
+                                            "linked_candidate_indexes": list(entry.linked_candidate_indexes),
+                                            "review_snapshot_kind": "rejected_focused_review",
+                                            "review_snapshot": (focused_review.model_dump(mode="json")
+                                                                if focused_review is not None else None),
+                                        }
+                                        if isinstance(focused_error, SourceTargetReviewValidationError):
+                                            detail.update({
+                                                "code": focused_error.code,
+                                                "validation_code": focused_error.code,
+                                                "statement_id": focused_error.statement_index,
+                                                "json_path": focused_error.json_path,
+                                                "source_refs": list(focused_error.source_refs),
+                                                "retry_class": focused_error.retry_class,
+                                                "affected_dependents": list(focused_error.affected_dependents),
+                                            })
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=(focused_response.session_id if focused_response is not None
+                                                        else getattr(focused_error, "session_id", None)
+                                                        or session_id),
+                                            raw_output_sha256=_sha256(focused_response.text
+                                                                     if focused_response is not None
+                                                                     else str(focused_error)),
+                                            raw_output_chars=(len(focused_response.text)
+                                                              if focused_response is not None else None),
+                                            raw_output_text=(focused_response.text
+                                                             if focused_response is not None else None),
+                                            outcome=("schema_invalid" if failure_code == "SOURCE_TARGET_FOCUSED_SCHEMA_INVALID"
+                                                     else "publication_invalid" if focused_response is not None
+                                                     else "transport_failed"),
+                                            issues=["单条来源复核未通过：" + str(focused_error)[:1000]],
+                                            error_classes=[failure_code],
+                                            error_detail=detail,
+                                        ))
+                                        return build_result(
+                                            status="需要核对", batch_id=batch.batch_id,
+                                            session_id=session_id, attempts=attempts,
+                                            source_interpretation=source_interpretation,
+                                            source_statement_coverage=coverage,
+                                            source_target_review=SourceTargetReview(
+                                                version=SOURCE_TARGET_REVIEW_VERSION,
+                                                items=sorted([*reusable, *pending_review.items],
+                                                             key=lambda entry: entry.statement_index),
+                                            ),
+                                            source_candidate_alignment=checkpoint_alignment(),
+                                            partial_wire=wire,
+                                        )
+                                    pending_review = SourceTargetReview(
+                                        version=SOURCE_TARGET_REVIEW_VERSION,
+                                        items=[focused_review.items[0] if old.statement_index == item.statement_index
+                                               else old for old in pending_review.items],
+                                    )
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1,
+                                        session_id=focused_response.session_id,
+                                        raw_output_sha256=_sha256(focused_response.text),
+                                        raw_output_chars=len(focused_response.text),
+                                        raw_output_text=focused_response.text,
+                                        outcome="parsed",
+                                        issues=["已按单条来源复核，仍须经整批原门禁核对"],
+                                    ))
+                                validate_target_review(
+                                    batch, source_interpretation, pending_coverage, pending_review,
+                                )
+                            pending_items = pending_review.items
+                        target_review = SourceTargetReview(
+                            version=SOURCE_TARGET_REVIEW_VERSION,
+                            items=sorted([*reusable, *pending_items], key=lambda item: item.statement_index),
+                        )
+                        review_validation_snapshot = target_review
+                        review_validation_kind = "assembled_complete_review"
+                        validate_target_review(
+                            batch, source_interpretation, coverage, target_review,
+                        )
+                        # A split point must not lose the owned paragraph's exception.
+                        # Exact source equality selects one fresh comparison, never coverage.
+                        context_rechecked = {
+                            attempt.error_detail.get("statement_id")
+                            for attempt in attempts
+                            if isinstance(attempt.error_detail, dict)
+                            and attempt.error_detail.get("recovery_method")
+                            == SOURCE_TARGET_CONTEXT_RECHECK_VERSION
+                        }
+                        context_reads = 0
+                        for item in tuple(target_review.items):
+                            if (context_reads >= 2 or item.statement_index in context_rechecked
+                                    or not source_target_context_recheck_needed(
+                                        batch, source_interpretation, item)):
+                                continue
+                            context_reads += 1
+                            entry = next(entry for entry in coverage
+                                         if entry.statement_index == item.statement_index)
+                            context_prompt = build_target_review_prompt(
+                                batch, source_interpretation, [entry],
+                                comparison_target_id=item.target_id, include_owned_context=True, wire=wire,
+                            )
+                            detail = {
+                                "recovery_method": SOURCE_TARGET_CONTEXT_RECHECK_VERSION,
+                                "statement_id": item.statement_index,
+                                "request_prompt_sha256": _sha256(context_prompt),
+                                "previous_item_sha256": _sha256(item.model_dump_json()),
+                                "automatic_adoption": False,
+                            }
+                            review_response = None
+                            try:
+                                review_response = reviewer(prompt=context_prompt)
+                                corrected = SourceTargetReview.model_validate_json(review_response.text)
+                                validate_target_review(
+                                    batch, source_interpretation, [entry], corrected,
+                                )
+                                proposed_review = target_review.model_copy(update={"items": [
+                                    corrected.items[0] if old.statement_index == item.statement_index
+                                    else old for old in target_review.items
+                                ]})
+                                validate_target_review(
+                                    batch, source_interpretation, coverage, proposed_review,
+                                )
+                            except Exception as context_error:
+                                detail["code"] = (protocol_control_call_failure_code(context_error)
+                                                  or "SOURCE_TARGET_CONTEXT_RECHECK_INVALID")
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=(review_response.session_id if review_response
+                                                else getattr(context_error, "session_id", None) or session_id),
+                                    raw_output_sha256=_sha256(review_response.text if review_response else str(context_error)),
+                                    raw_output_chars=len(review_response.text) if review_response else None,
+                                    raw_output_text=review_response.text if review_response else None,
+                                    outcome="publication_invalid" if review_response else "transport_failed",
+                                    error_classes=[detail["code"]], error_detail=detail,
+                                    issues=["同单元关系核查未通过；原核对与兄弟保持：" + str(context_error)[:900]],
+                                ))
+                                raise
+                            target_review = proposed_review
+                            repaired_review_indexes.add(item.statement_index)
+                            review_validation_snapshot = target_review
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1, session_id=review_response.session_id,
+                                raw_output_sha256=_sha256(review_response.text),
+                                raw_output_chars=len(review_response.text), raw_output_text=review_response.text,
+                                outcome="parsed", error_detail=detail,
+                                issues=["同单元关系已局部复核；兄弟保持，仍需整批采用核验"],
+                            ))
+                        # A clear source may lack a catalog target while its exact
+                        # statement recurs in frozen context. Establish only the
+                        # existing pending correspondence, never target coverage.
+                        comparison_reader = getattr(transport, "start_source_unit_comparison", None)
+                        contextual_unresolved = next((
+                            item for item in target_review.items
+                            if item.decision == "unresolved"
+                            and not source_interpretation.statements[item.statement_index].unresolved
+                            and source_interpretation.statements[item.statement_index].decision_functions != ["unclassified"]
+                            and source_interpretation.statements[item.statement_index].control_authority != "cited_external_rationale"
+                            and len(normalize_source_excerpt(item.source_action_excerpt)) >= 8
+                            and any(normalize_source_excerpt(item.source_action_excerpt)
+                                    in normalize_source_excerpt(unit.excerpt)
+                                    for unit in batch.context_units)
+                        ), None) if callable(comparison_reader) and not any(
+                            isinstance(attempt.error_detail, dict)
+                            and attempt.error_detail.get("recovery_method") == "unresolved-frozen-source-correspondence/v1"
+                            for attempt in attempts
+                        ) else None
+                        if contextual_unresolved is not None:
+                            comparison_response = None
+                            comparison_detail = {
+                                "recovery_method": "unresolved-frozen-source-correspondence/v1",
+                                "statement_id": contextual_unresolved.statement_index,
+                                "original_review_sha256": _sha256(contextual_unresolved.model_dump_json()),
+                                "automatic_adoption": False,
+                            }
+                            try:
+                                comparison_response = comparison_reader(prompt=(
+                                    build_source_unit_comparison_prompt(
+                                        batch, source_interpretation, contextual_unresolved.statement_index,
+                                    ) + "\n已保存的具体未决（只供核查，不是答案）："
+                                    + _stable_json(contextual_unresolved.model_dump(mode="json"))
+                                ))
+                                comparison = SourceUnitComparison.model_validate_json(comparison_response.text)
+                                proposed = source_unit_comparison_as_review(
+                                    batch, source_interpretation,
+                                    next(entry for entry in coverage
+                                         if entry.statement_index == contextual_unresolved.statement_index),
+                                    comparison,
+                                )
+                                if proposed is not None:
+                                    revised = SourceTargetReview(
+                                        version=SOURCE_TARGET_REVIEW_VERSION,
+                                        items=[proposed.items[0] if item.statement_index == contextual_unresolved.statement_index
+                                               else item for item in target_review.items],
+                                    )
+                                    validate_target_review(batch, source_interpretation, coverage, revised)
+                                    target_review = revised
+                                    repaired_review_indexes.add(contextual_unresolved.statement_index)
+                                comparison_detail["pending_correspondence_verified"] = proposed is not None
+                                comparison_detail["assembled_review_sha256"] = _sha256(target_review.model_dump_json())
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1, session_id=comparison_response.session_id,
+                                    raw_output_sha256=_sha256(comparison_response.text),
+                                    raw_output_chars=len(comparison_response.text), raw_output_text=comparison_response.text,
+                                    outcome="parsed", error_detail=comparison_detail,
+                                    issues=["跨章节关系仅登记待核；没有改写来源、候选或证明已有流程完整覆盖"],
+                                ))
+                            except Exception as comparison_error:  # noqa: BLE001 - preserve original unresolved item
+                                comparison_detail["code"] = (
+                                    protocol_control_call_failure_code(comparison_error)
+                                    or "SOURCE_UNIT_COMPARISON_INVALID"
+                                )
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=(comparison_response.session_id if comparison_response else review_response.session_id
+                                                if review_response else session_id),
+                                    raw_output_sha256=_sha256(comparison_response.text if comparison_response else str(comparison_error)),
+                                    raw_output_chars=(len(comparison_response.text) if comparison_response else None),
+                                    raw_output_text=(comparison_response.text if comparison_response else None),
+                                    outcome="publication_invalid" if comparison_response else "transport_failed",
+                                    error_classes=[comparison_detail["code"]], error_detail=comparison_detail,
+                                    issues=["局部对应核查未通过，原未决保持：" + str(comparison_error)[:900]],
+                                ))
+                                if comparison_response is None:
+                                    review_response = None
+                                    raise
+                                return build_result(
+                                    status="需要核对", batch_id=batch.batch_id,
+                                    session_id=session_id, attempts=attempts,
+                                    source_interpretation=source_interpretation,
+                                    source_statement_coverage=coverage,
+                                    source_target_review=target_review,
+                                    source_candidate_alignment=checkpoint_alignment(), partial_wire=wire,
+                                )
+                            review_validation_snapshot = target_review
+                        latest_source_target_review = target_review
+                        # Restored review evidence is not a new model response.
+                        review_basis_session = review_response.session_id if review_response else session_id
+                        review_basis_text = review_response.text if review_response else target_review.model_dump_json()
+                        review_basis_detail = {
+                            "review_proof_origin": (
+                                "assembled_source_target_review"
+                                if review_response and repaired_review_indexes else
+                                "model_response" if review_response else
+                                "current_front_target_review" if front_target_review is not None else
+                                "saved_source_target_review"
+                            ),
+                            "review_proof_sha256": _sha256(target_review.model_dump_json()),
+                        }
+                        validated_target_coverage = {
+                            entry.statement_index: entry for entry in coverage
+                            if entry.statement_index in review_indexes
+                        }
+                        validated_target_source_identity = {
+                            index: _source_statement_reuse_identity(statement)
+                            for index, statement in enumerate(source_interpretation.statements)
+                        }
+                        unresolved_indexes = [
+                            item.statement_index for item in target_review.items
+                            if item.decision == "unresolved"
+                        ]
+                        additional = [
+                            item for item in target_review.items
+                            if item.decision == "additional_requirement"
+                        ]
+                        if additional:
+                            from .protocol_control_stage_compiler import (
+                                assemble_source_requirement_inserts,
+                                compile_source_requirement_response,
+                                build_relative_stage_requirement_prompt,
+                                build_stage_bound_requirement_prompt,
+                                build_shared_prohibition_requirement_prompt,
+                                can_compile_relative_stage_requirement,
+                                can_compile_stage_bound_requirement,
+                                can_compile_shared_prohibition_requirement,
+                                requires_temporal_resolution,
+                            )
+
+                            temporal_unresolved_indexes = [
+                                item.statement_index for item in additional
+                                if requires_temporal_resolution(source_interpretation, item.statement_index)
+                            ]
+                            simple_additional = [
+                                item for item in additional
+                                if item.statement_index not in temporal_unresolved_indexes
+                            ]
+
+                            pending_additional = []
+                            if output_validator is not None and wire is not None:
+                                single_read_calls = 0
+                                short_reviews = []
+                                short_responses = []
+                                short_failure = None
+                                for item in [*simple_additional, *(entry for entry in additional
+                                                                     if entry.statement_index in temporal_unresolved_indexes)]:
+                                    if single_read_calls >= 3:
+                                        pending_additional.append(item)
+                                        continue
+                                    if can_compile_stage_bound_requirement(batch, source_interpretation, item):
+                                        reader = getattr(transport, "read_stage_bound_requirement", None)
+                                        builder = build_stage_bound_requirement_prompt
+                                    elif can_compile_relative_stage_requirement(batch, source_interpretation, item):
+                                        reader = getattr(transport, "read_relative_stage_requirement", None)
+                                        builder = build_relative_stage_requirement_prompt
+                                    elif can_compile_shared_prohibition_requirement(batch, source_interpretation, item):
+                                        reader = getattr(transport, "read_shared_prohibition_requirement", None)
+                                        builder = build_shared_prohibition_requirement_prompt
+                                    else:
+                                        if item.statement_index not in temporal_unresolved_indexes:
+                                            pending_additional.append(item)
+                                        continue
+                                    if not callable(reader):
+                                        if item.statement_index not in temporal_unresolved_indexes:
+                                            pending_additional.append(item)
+                                        continue
+                                    single_read_calls += 1
+                                    response = None
+                                    request_started = False
+                                    try:
+                                        requirement_prompt = builder(batch, source_interpretation, item)
+                                        request_started = True
+                                        response = reader(prompt=requirement_prompt)
+                                        short_reviews.append(item)
+                                        short_responses.append(response)
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=response.session_id,
+                                            raw_output_sha256=_sha256(response.text),
+                                            raw_output_chars=len(response.text),
+                                            raw_output_text=response.text,
+                                            outcome="parsed",
+                                            issues=["单项解释已返回，待同批来源与发布门禁核实"],
+                                        ))
+                                    except Exception as stage_exc:  # noqa: BLE001 - bounded alternate path
+                                        if request_started and response is None:
+                                            from .protocol_control_agent_transport import protocol_control_call_failure_code
+                                            code = protocol_control_call_failure_code(stage_exc) or "SOURCE_REQUIREMENT_TRANSPORT_FAILED"
+                                            short_failure = (stage_exc, item.statement_index, code)
+                                            break
+                                        if item.statement_index not in temporal_unresolved_indexes:
+                                            pending_additional.append(item)
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=(response.session_id if response else session_id),
+                                            raw_output_sha256=_sha256(response.text if response else str(stage_exc)),
+                                            raw_output_chars=(len(response.text) if response else None),
+                                            raw_output_text=(response.text if response else None),
+                                            outcome="publication_invalid" if response else "transport_failed",
+                                            issues=["单项来源解释未通过原门禁：" + str(stage_exc)[:1400]],
+                                            error_classes=["STAGE_BOUND_INSERT_INVALID"],
+                                        ))
+                                validated_short_reviews = []
+                                validated_short_responses = []
+                                failed_short_indexes = []
+                                for short_review, short_response in zip(short_reviews, short_responses, strict=True):
+                                    try:
+                                        compile_source_requirement_response(
+                                            batch, source_interpretation, short_review, short_response,
+                                        )
+                                        validated_short_reviews.append(short_review)
+                                        validated_short_responses.append(short_response)
+                                    except Exception as stage_exc:  # noqa: BLE001 - preserve unresolved source
+                                        failed_short_indexes.append(short_review.statement_index)
+                                        if short_review.statement_index not in temporal_unresolved_indexes:
+                                            pending_additional.append(short_review)
+                                        failed_statement = source_interpretation.statements[short_review.statement_index]
+                                        failed_unit = next(unit for unit in batch.owned_units
+                                                           if unit.structure_unit_id == failed_statement.structure_unit_id)
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=short_response.session_id,
+                                            raw_output_sha256=_sha256(str(stage_exc)),
+                                            raw_output_chars=None,
+                                            outcome="publication_invalid",
+                                            issues=["本条解释未通过原门禁；此前通过条目保持：" + str(stage_exc)[:1400]],
+                                            error_classes=["STAGE_BOUND_INSERT_INVALID"],
+                                            error_detail={
+                                                "code": getattr(stage_exc, "code", None) or "STAGE_BOUND_INSERT_INVALID",
+                                                "statement_id": short_review.statement_index,
+                                                "json_path": getattr(stage_exc, "json_path", None) or f"/source_interpretation/statements/{short_review.statement_index}",
+                                                "source_refs": list(failed_unit.source_span_ids),
+                                                "retry_class": "single_statement",
+                                                "affected_dependents": [short_review.statement_index],
+                                            },
+                                        ))
+                                # Individual source checks isolate bad answers; the valid
+                                # subset still must pass the original whole-batch gate.
+                                if validated_short_reviews:
+                                    try:
+                                        next_wire, next_output, next_coverage = assemble_source_requirement_inserts(
+                                            batch, source_interpretation, validated_short_reviews, wire,
+                                            validated_short_responses, output_validator,
+                                        )
+                                        inserted_indexes = {item.statement_index for item in validated_short_reviews}
+                                        remaining = SourceTargetReview(
+                                            version=SOURCE_TARGET_REVIEW_VERSION,
+                                            items=[entry for entry in target_review.items
+                                                   if entry.statement_index not in inserted_indexes
+                                                   or entry.statement_index in completed_indexes],
+                                        )
+                                        validate_target_review(
+                                            batch, source_interpretation, next_coverage, remaining,
+                                        )
+                                        wire, output, coverage = next_wire, next_output, next_coverage
+                                        partial_wire = wire
+                                        raw_text = wire.model_dump_json()
+                                        target_review = remaining
+                                        latest_source_target_review = remaining
+                                        latest_source_statement_coverage = coverage
+                                        review_validation_snapshot = remaining
+                                        temporal_unresolved_indexes = [index for index in temporal_unresolved_indexes
+                                                                       if index not in inserted_indexes]
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=validated_short_responses[-1].session_id,
+                                            raw_output_sha256=_sha256(raw_text), raw_output_chars=len(raw_text),
+                                            outcome="parsed", output=output,
+                                            issues=["有效单项解释经来源闭包与原批次门禁核实；未通过条目保持待核"],
+                                        ))
+                                    except Exception as stage_exc:  # noqa: BLE001 - shared dependencies remain mandatory
+                                        failed_short_indexes.extend(item.statement_index for item in validated_short_reviews)
+                                        pending_additional.extend(item for item in validated_short_reviews
+                                                                  if item.statement_index not in temporal_unresolved_indexes)
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=validated_short_responses[-1].session_id,
+                                            raw_output_sha256=_sha256(str(stage_exc)), raw_output_chars=None,
+                                            outcome="publication_invalid",
+                                            issues=["有效解释合并未通过原批次门禁：" + str(stage_exc)[:1400]],
+                                            error_classes=["STAGE_BOUND_INSERT_INVALID"],
+                                            error_detail={
+                                                "code": "STAGE_BOUND_INSERT_INVALID",
+                                                "statement_ids": [item.statement_index for item in validated_short_reviews],
+                                                "json_path": "/candidate_drafts",
+                                                "source_refs": list(dict.fromkeys(span for unit in batch.owned_units
+                                                    if unit.structure_unit_id in {source_interpretation.statements[item.statement_index].structure_unit_id
+                                                                                 for item in validated_short_reviews}
+                                                    for span in unit.source_span_ids)),
+                                                "retry_class": "assembly_validation",
+                                                "affected_dependents": [item.statement_index for item in validated_short_reviews],
+                                            },
+                                        ))
+                                if short_failure is not None:
+                                    failure, failed_index, code = short_failure
+                                    failed_statement = source_interpretation.statements[failed_index]
+                                    failed_unit = next(unit for unit in batch.owned_units
+                                                       if unit.structure_unit_id == failed_statement.structure_unit_id)
+                                    failed_session = getattr(failure, "session_id", None) or session_id
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=failed_session,
+                                        raw_output_sha256=_sha256(str(failure)), outcome="transport_failed",
+                                        issues=["单项读取未完成，已保留此前通过的部分：" + str(failure)[:1400]],
+                                        error_classes=[code], error_detail={
+                                            "code": code, "statement_ids": [failed_index],
+                                            "json_path": f"/source_interpretation/statements/{failed_index}",
+                                            "source_refs": list(failed_unit.source_span_ids),
+                                            "retry_class": ("technical_failure" if code == "SOURCE_REQUIREMENT_TRANSPORT_FAILED"
+                                                            else "stop_current_read"),
+                                            "affected_dependents": [failed_index],
+                                        },
+                                    ))
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id, session_id=failed_session,
+                                        attempts=attempts, source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        partial_wire=wire, source_candidate_alignment=checkpoint_alignment(),
+                                    )
+                                if failed_short_indexes:
+                                    # A rejected short proposal cannot authorize a later
+                                    # whole-unit rewrite or an alignment vote over that error.
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id, session_id=session_id,
+                                        attempts=attempts, source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        partial_wire=wire, source_candidate_alignment=checkpoint_alignment(),
+                                    )
+                            else:
+                                pending_additional = simple_additional
+                            candidate_alignment: SourceCandidateAlignment | None = None
+                            alignment_failures = []
+                            alignment_pairs = []
+                            # A temporal statement may already have a complete candidate;
+                            # it must not fall back to a single-visit source insert.
+                            alignment_items = [*pending_additional, *(item for item in additional
+                                if item.statement_index in temporal_unresolved_indexes
+                                and item.statement_index not in {
+                                    entry.statement_index for entry in pending_additional
+                                })]
+                            for item in alignment_items:
+                                entry = next((entry for entry in coverage
+                                              if entry.statement_index == item.statement_index), None)
+                                if (entry is not None and entry.status in {
+                                        "candidate_linked", "semantically_aligned"}
+                                        and len(entry.action_candidate_indexes) == 1):
+                                    alignment_pairs.append((item.statement_index,
+                                                            entry.action_candidate_indexes[0]))
+                            retained_alignment_items = reusable_proven_alignment_items(
+                                batch, source_interpretation, coverage, wire,
+                                resume_source_candidate_alignment, require_positive=False,
+                            )
+                            retained_alignment_items = [item for item in retained_alignment_items
+                                if (item.statement_index, item.candidate_index) in set(alignment_pairs)]
+                            resumed_alignment_items = [item for item in retained_alignment_items
+                                if item.decision == "fully_expressed"]
+                            resumed_pairs = {
+                                (item.statement_index, item.candidate_index)
+                                for item in resumed_alignment_items
+                                if (item.statement_index, item.candidate_index) in set(alignment_pairs)
+                            }
+                            resumed_alignment_items = [
+                                item for item in resumed_alignment_items
+                                if (item.statement_index, item.candidate_index) in resumed_pairs
+                            ]
+                            pending_alignment_pairs = [
+                                pair for pair in alignment_pairs if pair not in resumed_pairs
+                            ]
+                            alignment_reader = getattr(transport, "start_source_candidate_alignment", None)
+                            alignment_response = None
+                            if pending_alignment_pairs and callable(alignment_reader):
+                                try:
+                                    configure_candidate_alignment_request(transport, wire, pending_alignment_pairs)
+                                    alignment_response = alignment_reader(prompt=build_candidate_alignment_prompt(
+                                        batch, source_interpretation, wire, pending_alignment_pairs,
+                                    ))
+                                    fresh_alignment = SourceCandidateAlignment.model_validate_json(
+                                        alignment_response.text
+                                    )
+                                    fresh_alignment, alignment_failures = bind_partial_candidate_alignment(
+                                        batch, source_interpretation, coverage, wire,
+                                        fresh_alignment, alignment_response.text,
+                                        pending_alignment_pairs,
+                                    )
+                                    for failure in alignment_failures:
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1,
+                                            session_id=alignment_response.session_id,
+                                            raw_output_sha256=_sha256(alignment_response.text),
+                                            raw_output_chars=len(alignment_response.text),
+                                            raw_output_text=alignment_response.text,
+                                            outcome="publication_invalid",
+                                            issues=[failure["message"]],
+                                            error_classes=[failure["code"]], error_detail=failure,
+                                        ))
+                                    fresh_pairs = {(item.statement_index, item.candidate_index)
+                                        for item in (fresh_alignment.items if fresh_alignment else [])}
+                                    retained = [item for item in retained_alignment_items
+                                        if (item.statement_index, item.candidate_index) not in fresh_pairs]
+                                    if retained:
+                                        candidate_alignment = SourceCandidateAlignment(
+                                            version=SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+                                            items=[*retained, *(fresh_alignment.items if fresh_alignment else [])],
+                                            proofs=[*alignment_with_items(
+                                                resume_source_candidate_alignment, retained,
+                                            ).proofs, *(fresh_alignment.proofs if fresh_alignment else [])],
+                                        )
+                                        validate_candidate_alignment(
+                                            batch, source_interpretation, coverage, wire,
+                                            candidate_alignment,
+                                        )
+                                    else:
+                                        candidate_alignment = fresh_alignment
+                                    accepted = {item.statement_index for item in (candidate_alignment.items if candidate_alignment else [])
+                                                if item.decision == "fully_expressed"}
+                                    # Sibling temporal gaps must not erase proven pairs or their
+                                    # coverage mutation when the alignment record itself is kept.
+                                    temporal_unresolved_indexes = [
+                                        index for index in temporal_unresolved_indexes
+                                        if index not in accepted
+                                    ]
+                                    coverage = [
+                                        entry.model_copy(update={
+                                            "status": "semantically_aligned",
+                                            "candidate_indexes": [next(
+                                                item.candidate_index for item in candidate_alignment.items
+                                                if item.statement_index == entry.statement_index
+                                                and item.decision == "fully_expressed"
+                                            )],
+                                        }) if entry.statement_index in accepted else entry
+                                        for entry in coverage
+                                    ]
+                                    pending_additional = [item for item in pending_additional
+                                                          if item.statement_index not in accepted]
+                                    latest_source_candidate_alignment = candidate_alignment
+                                    latest_source_statement_coverage = coverage
+                                    partial_wire = wire
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1,
+                                        session_id=alignment_response.session_id,
+                                        raw_output_sha256=_sha256(alignment_response.text),
+                                        raw_output_chars=len(alignment_response.text),
+                                        raw_output_text=alignment_response.text,
+                                        outcome="parsed",
+                                        issues=["候选与原文的对应关系已单独核对；未核清条目仍保留"],
+                                    ))
+                                except Exception as alignment_error:  # noqa: BLE001 - fail closed
+                                    candidate_alignment = None
+                                    if retained_alignment_items:
+                                        candidate_alignment = alignment_with_items(
+                                            resume_source_candidate_alignment, retained_alignment_items,
+                                        )
+                                        validate_candidate_alignment(
+                                            batch, source_interpretation, coverage, wire, candidate_alignment,
+                                        )
+                                        accepted = {
+                                            item.statement_index for item in resumed_alignment_items
+                                        }
+                                        temporal_unresolved_indexes = [
+                                            index for index in temporal_unresolved_indexes
+                                            if index not in accepted
+                                        ]
+                                        coverage = [
+                                            entry.model_copy(update={
+                                                "status": "semantically_aligned",
+                                                "candidate_indexes": [next(
+                                                    item.candidate_index
+                                                    for item in resumed_alignment_items
+                                                    if item.statement_index == entry.statement_index
+                                                )],
+                                            }) if entry.statement_index in accepted else entry
+                                            for entry in coverage
+                                        ]
+                                        pending_additional = [
+                                            item for item in pending_additional
+                                            if item.statement_index not in accepted
+                                        ]
+                                        latest_source_candidate_alignment = candidate_alignment
+                                        latest_source_statement_coverage = coverage
+                                        partial_wire = wire
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1,
+                                        session_id=(getattr(alignment_error, "session_id", None)
+                                                    or (alignment_response.session_id if alignment_response else session_id)),
+                                        raw_output_sha256=_sha256(
+                                            alignment_response.text if alignment_response else str(alignment_error)
+                                        ),
+                                        raw_output_chars=(len(alignment_response.text)
+                                                          if alignment_response else None),
+                                        raw_output_text=(alignment_response.text
+                                                         if alignment_response else None),
+                                        outcome=("publication_invalid" if alignment_response else "transport_failed"),
+                                        issues=["候选与原文的对应关系未通过核对：" + str(alignment_error)[:1000]],
+                                        error_classes=["SOURCE_CANDIDATE_ALIGNMENT_INVALID"],
+                                    ))
+                                    if alignment_response is None:
+                                        from .protocol_control_agent_transport import protocol_control_call_failure_code
+                                        code = protocol_control_call_failure_code(alignment_error) or "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED"
+                                        attempts[-1].error_classes = [code]
+                                        attempts[-1].error_detail = {
+                                            "code": code,
+                                            "statement_ids": sorted({index for index, _ in pending_alignment_pairs}),
+                                            "candidate_indexes": sorted({index for _, index in pending_alignment_pairs}),
+                                            "json_path": "/source_candidate_alignment/items",
+                                            "source_refs": sorted({span for index, _ in pending_alignment_pairs
+                                                for unit in batch.owned_units
+                                                if unit.structure_unit_id == source_interpretation.statements[index].structure_unit_id
+                                                for span in unit.source_span_ids}),
+                                            "retry_class": ("technical_failure" if code == "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED"
+                                                            else "stop_current_read"),
+                                        }
+                                        return build_result(
+                                            status="需要核对", batch_id=batch.batch_id, session_id=attempts[-1].session_id,
+                                            attempts=attempts, source_interpretation=source_interpretation,
+                                            source_statement_coverage=coverage, source_target_review=target_review,
+                                            source_candidate_alignment=checkpoint_alignment(), partial_wire=wire,
+                                        )
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id, session_id=attempts[-1].session_id,
+                                        attempts=attempts, source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        source_candidate_alignment=checkpoint_alignment(), partial_wire=wire,
+                                    )
+                            elif retained_alignment_items:
+                                candidate_alignment = alignment_with_items(
+                                    resume_source_candidate_alignment, retained_alignment_items,
+                                )
+                                validate_candidate_alignment(
+                                    batch, source_interpretation, coverage, wire, candidate_alignment,
+                                )
+                                accepted = {
+                                    item.statement_index for item in resumed_alignment_items
+                                }
+                                temporal_unresolved_indexes = [
+                                    index for index in temporal_unresolved_indexes
+                                    if index not in accepted
+                                ]
+                                coverage = [
+                                    entry.model_copy(update={
+                                        "status": "semantically_aligned",
+                                        "candidate_indexes": [next(
+                                            item.candidate_index for item in resumed_alignment_items
+                                            if item.statement_index == entry.statement_index
+                                        )],
+                                    }) if entry.statement_index in accepted else entry
+                                    for entry in coverage
+                                ]
+                                pending_additional = [
+                                    item for item in pending_additional
+                                    if item.statement_index not in accepted
+                                ]
+                                latest_source_candidate_alignment = candidate_alignment
+                                latest_source_statement_coverage = coverage
+                                partial_wire = wire
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=session_id,
+                                    raw_output_sha256=_sha256(candidate_alignment.model_dump_json()),
+                                    raw_output_chars=None,
+                                    outcome="parsed",
+                                    issues=["已保存且经当前源码重核的候选对应关系继续沿用；未核清条目仍保留"],
+                                ))
+                            if temporal_unresolved_indexes:
+                                partial_wire = wire
+                                policy_failures = [failure for failure in alignment_failures
+                                    if failure["code"] == "EVIDENCE_POLICY_UNJUSTIFIED"]
+                                policy_indexes = sorted({index for failure in policy_failures
+                                    for index in failure["statement_ids"]})
+                                if policy_failures and set(policy_indexes) == set(temporal_unresolved_indexes):
+                                    failure = policy_failures[0]
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=alignment_response.session_id,
+                                        raw_output_sha256=_sha256(alignment_response.text),
+                                        raw_output_text=alignment_response.text,
+                                        raw_output_chars=len(alignment_response.text),
+                                        outcome="publication_invalid", issues=[failure["message"]],
+                                        error_classes=[failure["code"]], error_detail={**deepcopy(failure),
+                                            "statement_ids": policy_indexes,
+                                            "candidate_indexes": sorted({index for item in policy_failures
+                                                for index in item["candidate_indexes"]}),
+                                            "source_refs": sorted({span for item in policy_failures
+                                                for span in item["source_refs"]}),
+                                            "affected_dependents": sorted({index for item in policy_failures
+                                                for index in item["affected_dependents"]}),
+                                            "policy_failures": deepcopy(policy_failures)},
+                                    ))
+                                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                                        session_id=session_id, attempts=attempts,
+                                        source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        source_candidate_alignment=checkpoint_alignment(), partial_wire=wire)
+                                rejected_temporal = [failure for failure in alignment_failures
+                                    if set(failure["statement_ids"]) & set(temporal_unresolved_indexes)]
+                                negative_temporal = [item for item in (candidate_alignment.items
+                                    if candidate_alignment else []) if item.decision == "incomplete"
+                                    and item.statement_index in temporal_unresolved_indexes]
+                                failed_indexes = sorted({index for failure in rejected_temporal
+                                    for index in failure["statement_ids"]} | {
+                                    item.statement_index for item in negative_temporal})
+                                if (set(failed_indexes) == set(temporal_unresolved_indexes)
+                                        and all(failure["code"] == "SOURCE_CANDIDATE_ALIGNMENT_INVALID"
+                                                for failure in rejected_temporal)):
+                                    candidate_indexes = sorted({index for failure in rejected_temporal
+                                        for index in failure["candidate_indexes"]} | {
+                                        item.candidate_index for item in negative_temporal})
+                                    # Failed candidate meaning is not an ambiguous source time.
+                                    # Keep the rejection and let the frozen independent-read
+                                    # policy decide whether unrelated steps may continue.
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=session_id,
+                                        raw_output_sha256=_sha256(alignment_response.text
+                                            if alignment_response else candidate_alignment.model_dump_json()),
+                                        raw_output_text=alignment_response.text if alignment_response else None,
+                                        raw_output_chars=len(alignment_response.text) if alignment_response else None,
+                                        outcome="publication_invalid",
+                                        issues=["已有候选未通过原文含义核对；保留对应失败及已核兄弟，不改记为原文时间歧义。"],
+                                        error_classes=["SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"],
+                                        error_detail={"code": "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+                                            "statement_ids": failed_indexes, "candidate_indexes": candidate_indexes,
+                                            "json_path": "/source_candidate_alignment/items",
+                                            "source_refs": sorted({span for index in failed_indexes
+                                                for unit in batch.owned_units if unit.structure_unit_id
+                                                == source_interpretation.statements[index].structure_unit_id
+                                                for span in unit.source_span_ids}),
+                                            "retry_class": "source_semantic_review",
+                                            "affected_dependents": candidate_indexes,
+                                            "alignment_failures": deepcopy(rejected_temporal)},
+                                    ))
+                                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                                        session_id=session_id, attempts=attempts,
+                                        source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        source_candidate_alignment=checkpoint_alignment(), partial_wire=wire)
+                                raise SourceTemporalScopeUnresolved(
+                                    statement_ids=tuple(temporal_unresolved_indexes),
+                                    json_path="/items",
+                                    source_refs=tuple(sorted({
+                                        span
+                                        for index in temporal_unresolved_indexes
+                                        for unit in batch.owned_units
+                                        if unit.structure_unit_id
+                                        == source_interpretation.statements[index].structure_unit_id
+                                        for span in unit.source_span_ids
+                                    })),
+                                )
+                            if not pending_additional:
+                                # Keep gate-verified inserts before stopping at a sibling's
+                                # unresolved scope. This never makes the batch publishable.
+                                _require_resolved_source_target_review(
+                                    batch, source_interpretation, target_review,
+                                )
+                                definition_consumers, definition_failed = (
+                                    declare_source_definition_consumers(
+                                        batch, transport, source_interpretation, output,
+                                        attempts,
+                                        official_predicate_identities=official_predicate_identities,
+                                        official_predicate_sources=official_predicate_sources,
+                                    )
+                                )
+                                if definition_failed:
+                                    return build_result(
+                                        status="需要核对",
+                                        batch_id=batch.batch_id,
+                                        session_id=session_id,
+                                        attempts=attempts,
+                                        source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage,
+                                        source_target_review=target_review,
+                                        source_candidate_alignment=checkpoint_alignment(),
+                                        partial_wire=partial_wire,
+                                    )
+                                return build_result(
+                                    status=("待跨章核验" if any(
+                                        item.decision == "potential_same_requirement"
+                                        for item in target_review.items
+                                    ) else "已解析"),
+                                    batch_id=batch.batch_id,
+                                    session_id=session_id,
+                                    attempts=attempts,
+                                    final_output=output,
+                                    source_interpretation=source_interpretation,
+                                    source_statement_coverage=hydrated_source_coverage_indexes(
+                                        batch, wire, output, coverage,
+                                    ),
+                                    source_target_review=target_review,
+                                    source_candidate_alignment=candidate_alignment,
+                                    source_definition_consumers=definition_consumers,
+                                    partial_wire=wire,
+                                    repair_used=repair_used,
+                                )
+                            additional = pending_additional
+                            latest_source_target_review = target_review
+                            latest_source_statement_coverage = coverage
+                            # A bound negative review authorizes only another proposal
+                            # for this scalar list. All source and semantic gates rerun.
+                            type_paths = reviewed_source_type_mismatch_paths(
+                                batch, source_interpretation, coverage, wire, candidate_alignment,
+                            )
+                            type_reader = getattr(transport, "continue_evidence_source_types", None)
+                            if (type_paths and not set(type_paths) & reviewed_source_type_repairs
+                                    and callable(type_reader)
+                                    and max(repairs, source_repairs) < self._max_schema_repairs):
+                                repairs = max(repairs, source_repairs) + 1
+                                source_repairs = repairs
+                                reviewed_source_type_repairs.update(type_paths)
+                                type_response = None
+                                baseline = wire.model_dump(mode="json")
+                                try:
+                                    type_response = type_reader(session_id=session_id,
+                                        prompt=_build_evidence_source_types_repair_prompt(
+                                            batch, baseline, type_paths, replace_reviewed=True,
+                                        ))
+                                    if type_response.session_id != session_id:
+                                        raise ValueError("资料类型局部修订不得更换原会话")
+                                    revised = _merge_evidence_source_types_repair(
+                                        type_response.text, baseline, type_paths, replace_reviewed=True,
+                                    )
+                                except Exception as type_error:  # noqa: BLE001 - preserve rejected proposal
+                                    code = (protocol_control_call_failure_code(type_error)
+                                            or "EVIDENCE_SOURCE_TYPES_REPAIR_INVALID")
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1,
+                                        session_id=type_response.session_id if type_response else session_id,
+                                        raw_output_sha256=_sha256(type_response.text if type_response else str(type_error)),
+                                        raw_output_text=type_response.text if type_response else None,
+                                        raw_output_chars=len(type_response.text) if type_response else 0,
+                                        outcome="publication_invalid" if type_response else "transport_failed",
+                                        error_classes=[code], issues=[str(type_error)[:1000]],
+                                        error_detail={"code": code,
+                                            "workflow_phase": "reviewed_source_types_repair",
+                                            "paths": [list(path) for path in type_paths],
+                                            "precondition_sha256": _sha256(wire.model_dump_json()),
+                                            "review_sha256": _sha256(candidate_alignment.model_dump_json()),
+                                            "automatic_adoption": False},
+                                    ))
+                                    return build_result(status="需要核对", batch_id=batch.batch_id,
+                                        session_id=session_id, attempts=attempts,
+                                        source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        source_candidate_alignment=checkpoint_alignment(), partial_wire=wire)
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1, session_id=session_id,
+                                    raw_output_sha256=_sha256(type_response.text),
+                                    raw_output_text=type_response.text, raw_output_chars=len(type_response.text),
+                                    outcome="parsed", issues=["仅修订已核出差额的资料类型，仍须完整重验"],
+                                    error_detail={"code": "REVIEWED_SOURCE_TYPES_REPAIR",
+                                        "workflow_phase": "reviewed_source_types_repair",
+                                        "paths": [list(path) for path in type_paths],
+                                        "precondition_sha256": _sha256(wire.model_dump_json()),
+                                        "review_sha256": _sha256(candidate_alignment.model_dump_json()),
+                                        "automatic_adoption": False},
+                                ))
+                                raw_text = revised.model_dump_json()
+                                partial_wire = revised
+                                repair_used = True
+                                continue
+                            units = {source_interpretation.statements[item.statement_index].structure_unit_id
+                                     for item in additional}
+                            unresolved_units = {source_interpretation.statements[index].structure_unit_id
+                                                for index in unresolved_indexes}
+                            additional_spans = {span for unit in batch.owned_units
+                                if unit.structure_unit_id in units for span in unit.source_span_ids}
+                            unresolved_spans = {span for unit in batch.owned_units
+                                if unit.structure_unit_id in unresolved_units for span in unit.source_span_ids}
+                            shared_candidate = any(
+                                (set(candidate.source_structure_unit_ids) & units
+                                 or set(candidate.source_span_ids) & additional_spans)
+                                and (set(candidate.source_structure_unit_ids) & unresolved_units
+                                     or set(candidate.source_span_ids) & unresolved_spans)
+                                for candidate in wire.candidate_drafts
+                            )
+                            cited_roles = {entry.statement_index: _literally_cited_candidate_roles(
+                                batch, source_interpretation.statements[entry.statement_index], wire)
+                                for entry in coverage if entry.status == "candidate_linked"}
+                            obligation_candidates = {
+                                entry.statement_index: sorted(set(
+                                    entry.action_candidate_indexes
+                                    + _literally_cited_action_candidates(
+                                        batch,
+                                        source_interpretation.statements[entry.statement_index],
+                                        wire,
+                                    )
+                                ))
+                                for entry in coverage if entry.status == "candidate_linked"
+                            }
+                            cited_candidates = {index: sorted(set(candidates) | set(cited_roles[index]))
+                                                for index, candidates in obligation_candidates.items()}
+                            cited_unexpressed = [
+                                item.statement_index for item in additional
+                                if cited_candidates.get(item.statement_index)
+                            ]
+                            if cited_unexpressed:
+                                numeric_failures = [failure for failure in alignment_failures
+                                    if failure.get("reason") in {"numeric_predicate_missing", "repeat_scheme_missing",
+                                                                  "source_condition_unrepresented"}
+                                    and len(failure.get("atom_paths", [])) == 1]
+                                from .protocol_control_candidate_alignment import source_declares_uncompared_action_count
+                                repeat_scheme_only = (len(numeric_failures) == 1
+                                    and numeric_failures[0]["reason"] == "repeat_scheme_missing"
+                                    and len(numeric_failures[0]["statement_ids"]) == 1
+                                    and source_declares_uncompared_action_count(source_interpretation.statements[
+                                        numeric_failures[0]["statement_ids"][0]]))
+                                proposition_only = (len(numeric_failures) == 1
+                                    and numeric_failures[0]["reason"] == "source_condition_unrepresented")
+                                patch_reader = (None if proposition_only else
+                                                getattr(transport, "continue_repeat_scheme", None) if repeat_scheme_only else
+                                                getattr(transport, "continue_numeric_predicate", None))
+                                atom_reader = patch_reader if callable(patch_reader) else getattr(transport, "continue_atom", None)
+                                if (len(numeric_failures) == 1
+                                        and len(numeric_failures[0]["statement_ids"]) == 1
+                                        and numeric_failures[0]["statement_ids"][0] in cited_unexpressed
+                                        and callable(atom_reader)
+                                        and max(repairs, source_repairs) < self._max_schema_repairs):
+                                    failure = numeric_failures[0]
+                                    path = tuple(failure["atom_paths"][0])
+                                    if path not in reviewed_atom_repairs:
+                                        reviewed_atom_repairs.add(path)
+                                        repairs = max(repairs, source_repairs) + 1
+                                        source_repairs = repairs
+                                        baseline = wire.model_dump(mode="json")
+                                        atom_response = None
+                                        detail = {**failure, "workflow_phase": "reviewed_atom_repair",
+                                            "precondition_sha256": _sha256(wire.model_dump_json()),
+                                            "automatic_adoption": False}
+                                        try:
+                                            atom_response = atom_reader(session_id=session_id,
+                                                prompt=_build_obligation_atom_repair_prompt(
+                                                    batch, baseline, path, _stable_json(failure),
+                                                    numeric_predicate_only=not (repeat_scheme_only or proposition_only),
+                                                    repeat_scheme_only=repeat_scheme_only,
+                                                    proposition_only=proposition_only,
+                                                    field_patch=callable(patch_reader)))
+                                            if atom_response.session_id != session_id:
+                                                raise ValueError("义务局部修订不得更换原会话")
+                                            revised = _merge_obligation_atom_repair(
+                                                atom_response.text, baseline, path,
+                                                numeric_predicate_only=not (repeat_scheme_only or proposition_only),
+                                                repeat_scheme_only=repeat_scheme_only, proposition_only=proposition_only)
+                                        except Exception as atom_error:  # noqa: BLE001 - preserve failed scoped reply
+                                            code = protocol_control_call_failure_code(atom_error) or "ATOM_REPAIR_INVALID"
+                                            attempts.append(ProtocolControlAgentAttempt(
+                                                attempt=len(attempts) + 1, session_id=session_id,
+                                                raw_output_sha256=_sha256(atom_response.text if atom_response else str(atom_error)),
+                                                raw_output_text=atom_response.text if atom_response else None,
+                                                raw_output_chars=len(atom_response.text) if atom_response else None,
+                                                outcome="publication_invalid" if atom_response else "transport_failed",
+                                                issues=[str(atom_error)[:1200]], error_classes=[code], error_detail=detail))
+                                            return build_result(status="需要核对", batch_id=batch.batch_id,
+                                                session_id=session_id, attempts=attempts,
+                                                source_interpretation=source_interpretation,
+                                                source_statement_coverage=coverage, source_target_review=target_review,
+                                                source_candidate_alignment=checkpoint_alignment(), partial_wire=wire)
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1, session_id=session_id,
+                                            raw_output_sha256=_sha256(atom_response.text),
+                                            raw_output_text=atom_response.text, raw_output_chars=len(atom_response.text),
+                                            outcome="parsed", issues=["仅修订原句对应的求值字段，仍须完整重验"],
+                                            error_detail=detail))
+                                        if pending_alignment_atom_baseline is None:
+                                            pending_alignment_atom_baseline = (wire.model_copy(deep=True),
+                                                deepcopy(coverage), candidate_alignment, target_review)
+                                        resume_source_candidate_alignment = candidate_alignment
+                                        partial_wire = revised
+                                        raw_text = revised.model_dump_json()
+                                        repair_used = True
+                                        continue
+                                if not alignment_failures and (units & unresolved_units or shared_candidate):
+                                    # Keep the real source doubt and its existing dependency closure;
+                                    # a role-only citation is neither coverage nor an insert license.
+                                    _require_resolved_source_target_review(batch, source_interpretation, target_review)
+                                affected = [
+                                    entry for entry in coverage
+                                    if entry.statement_index in cited_unexpressed
+                                ]
+                                candidate_indexes = sorted({
+                                    index for entry in affected
+                                    for index in cited_candidates[entry.statement_index]
+                                })
+                                semantic_repair = (
+                                    _reviewed_semantic_closure_repair(
+                                        batch, source_interpretation, wire, coverage,
+                                        candidate_alignment, cited_unexpressed,
+                                    ) if not alignment_failures else None
+                                )
+                                if (semantic_repair is not None
+                                        and not set(semantic_repair.structure_unit_ids)
+                                        & reviewed_semantic_repair_units
+                                        and callable(getattr(transport, "continue_scoped_unit_repair", None))
+                                        and max(repairs, source_repairs) < self._max_schema_repairs):
+                                    reviewed_semantic_repair_units.update(semantic_repair.structure_unit_ids)
+                                    # The existing host splice, full gates and fresh source review
+                                    # remain authoritative; a negative review is not adoption.
+                                    raise semantic_repair
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=review_basis_session,
+                                    raw_output_sha256=_sha256(review_basis_text),
+                                    raw_output_chars=(len(review_response.text) if review_response else None),
+                                    outcome="publication_invalid",
+                                    output=output,
+                                    issues=["已有候选引用该原文，但判断语句尚未证明完整表达；"
+                                            "停止重复补入，待逐项核对："
+                                            + ",".join(str(index) for index in cited_unexpressed)],
+                                    error_classes=["SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED"],
+                                    error_detail={
+                                        **review_basis_detail,
+                                        "code": "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+                                        "statement_ids": cited_unexpressed,
+                                        "candidate_indexes": candidate_indexes,
+                                        "matched_candidate_roles": {
+                                            str(index): cited_roles.get(index, {}) for index in cited_unexpressed},
+                                        "source_refs": sorted({
+                                            span for entry in affected
+                                            for unit in batch.owned_units
+                                            if unit.structure_unit_id == entry.structure_unit_id
+                                            for span in unit.source_span_ids
+                                        }),
+                                        "retry_class": "source_semantic_review",
+                                        "affected_dependents": candidate_indexes,
+                                        **({"alignment_failures": deepcopy(alignment_failures)}
+                                           if alignment_failures else {}),
+                                    },
+                                ))
+                                return build_result(
+                                    status="需要核对", batch_id=batch.batch_id,
+                                    session_id=session_id, attempts=attempts,
+                                    source_interpretation=source_interpretation,
+                                    source_statement_coverage=coverage,
+                                    source_target_review=target_review,
+                                    source_candidate_alignment=candidate_alignment,
+                                    partial_wire=wire,
+                                )
+                            if output_validator is None or source_insert_repairs >= MAX_SOURCE_INSERT_REPAIRS:
+                                addition_indexes = [item.statement_index for item in additional]
+                                addition_units = {
+                                    source_interpretation.statements[index].structure_unit_id
+                                    for index in addition_indexes
+                                }
+                                raise SourceTargetReviewValidationError(
+                                    "原文支持的补充要求尚缺可靠的装配核验能力。"
+                                    if output_validator is None else
+                                    "补充要求在本次限定修订次数内尚未核验完成。",
+                                    code=("SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE"
+                                          if output_validator is None else
+                                          "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED"),
+                                    statement_index=(addition_indexes[0]
+                                                     if len(addition_indexes) == 1 else None),
+                                    json_path="/items",
+                                    source_refs=tuple(sorted({
+                                        span for unit in batch.owned_units
+                                        if unit.structure_unit_id in addition_units
+                                        for span in unit.source_span_ids
+                                    })),
+                                )
+                            if units & unresolved_units or shared_candidate:
+                                # Unit-scoped insertion cannot authorize a still-unknown
+                                # sibling or split a shared candidate's source meaning.
+                                _require_resolved_source_target_review(
+                                    batch, source_interpretation, target_review,
+                                )
+                            authorized = [unit for unit in batch.owned_units
+                                          if unit.structure_unit_id in units]
+                            source_insert_statement_count = len(additional)
+                            details = [
+                                f"第{item.statement_index}条："
+                                f"{source_interpretation.statements[item.statement_index].quoted_text}；"
+                                f"差异：{'；'.join(item.unresolved_aspects)}"
+                                for item in additional
+                            ]
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1,
+                                session_id=review_basis_session,
+                                raw_output_sha256=_sha256(review_basis_text),
+                                raw_output_chars=(len(review_response.text) if review_response else None),
+                                raw_output_text=(review_response.text if review_response else None),
+                                outcome="publication_invalid",
+                                output=output,
+                                issues=["逐项核对发现原文支持的增量要求，进入来源限定补入"],
+                                error_classes=["SOURCE_TARGET_ADDITIONAL_REQUIREMENT"],
+                                error_detail=review_basis_detail,
+                            ))
+                            raise ProtocolControlAgentWireValidationError(
+                                "SOURCE_TARGET_ADDITIONAL_REQUIREMENT",
+                                "原文要求未由已有目标完整覆盖：" + "；".join(details),
+                                structure_unit_ids=sorted(units),
+                                obligation_source_span_ids=sorted({
+                                    span for unit in authorized for span in unit.source_span_ids
+                                }),
+                                allow_source_insert=True,
+                            )
+                        _require_resolved_source_target_review(
+                            batch, source_interpretation, target_review,
+                        )
+                    except ProtocolControlAgentWireValidationError:
+                        # This baseline passed hydration and the batch gate;
+                        # supplementation is still unaccepted and unpublished.
+                        if wire is not None and output is not None:
+                            partial_wire = wire.model_copy(deep=True)
+                        raise
+                    except Exception as exc:  # noqa: BLE001 - source/target acceptance boundary
+                        # The candidate wire has already passed hydration and the
+                        # batch gate. Preserve it for identity-checked recovery;
+                        # unresolved source/target coverage remains unpublished.
+                        if wire is not None and output is not None:
+                            partial_wire = wire
+                        review_session = (
+                            getattr(exc, "session_id", None)
+                            or (review_response.session_id if review_response else None)
+                            or "source-target-review-invalid"
+                        )
+                        failure_statement_ids = (
+                            unresolved_indexes
+                            if isinstance(exc, SourceTargetReviewValidationError)
+                            and exc.code == "SOURCE_TARGET_REVIEW_UNRESOLVED" else
+                            [item.statement_index for item in target_review.items
+                             if item.decision == "additional_requirement"]
+                            if isinstance(exc, SourceTargetReviewValidationError)
+                            and exc.code in {
+                                "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE",
+                                "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED",
+                            } and target_review is not None else
+                            [exc.statement_index]
+                            if isinstance(exc, SourceTargetReviewValidationError)
+                            and exc.statement_index is not None else []
+                        )
+                        attempts.append(ProtocolControlAgentAttempt(
+                            attempt=len(attempts) + 1,
+                            session_id=review_session,
+                            raw_output_sha256=_sha256(
+                                review_response.text if review_response else str(exc)
+                            ),
+                            raw_output_chars=(
+                                len(review_response.text) if review_response else None
+                            ),
+                            raw_output_text=(review_response.text if review_response else None),
+                            outcome=("publication_invalid" if review_response is not None
+                                     or isinstance(exc, (SourceTemporalScopeUnresolved,
+                                                         SourceTargetReviewValidationError))
+                                     else "transport_failed"),
+                            output=output,
+                            issues=[f"逐项来源与已有目标核对未通过：{str(exc)[:1800]}"],
+                            error_classes=[
+                                protocol_control_call_failure_code(exc)
+                                or (exc.code if isinstance(exc, SourceTargetReviewValidationError)
+                                    and exc.code in {
+                                        "SOURCE_TARGET_REVIEW_UNRESOLVED",
+                                        "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE",
+                                        "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED",
+                                        "SOURCE_SCOPE_CORRECTION_JSON_INVALID",
+                                    } else
+                                "SOURCE_TARGET_REVIEW_UNAVAILABLE" if review_unavailable else
+                                "TEMPORAL_SCOPE_UNRESOLVED"
+                                if temporal_unresolved_indexes
+                                else
+                                "SOURCE_TARGET_REVIEW_UNRESOLVED"
+                                if unresolved_indexes
+                                else "SOURCE_TARGET_REVIEW_INVALID"
+                                if review_response is not None
+                                else "SOURCE_TARGET_REVIEW_TRANSPORT_FAILED")
+                            ],
+                            error_detail=(
+                                {
+                                    "code": exc.code,
+                                    "failure_reason_version": SOURCE_REQUIREMENT_FAILURE_REASON_VERSION,
+                                    "statement_id": exc.statement_index,
+                                    "statement_ids": failure_statement_ids,
+                                    "json_path": exc.json_path,
+                                    "source_refs": list(exc.source_refs),
+                                    "retry_class": exc.retry_class,
+                                    "affected_dependents": failure_statement_ids or list(exc.affected_dependents),
+                                    "review_snapshot_kind": review_validation_kind,
+                                    "review_snapshot": (
+                                        review_validation_snapshot.model_dump(mode="json")
+                                        if review_validation_snapshot is not None else None
+                                    ),
+                                } if isinstance(exc, SourceTargetReviewValidationError)
+                                else _temporal_scope_error_detail(exc)
+                            ),
+                        ))
+                        # The source and the hydrated author wire are both
+                        # valid; only the source/target correspondence stayed
+                        # unresolved. Keep the original failure untouched and
+                        # let the one bounded declaration step record, as a
+                        # strictly separate diagnostic, whether this definition
+                        # has provable consumers. A missing reader, a missing
+                        # definition, an invalid declaration or a transport
+                        # failure stays a diagnostic only: no adoption, no
+                        # status change, and no shared attempt sequence.
+                        pending_definition_consumers = None
+                        pending_definition_output_sha256 = None
+                        pending_definition_attempts: list[ProtocolControlAgentAttempt] = []
+                        if (
+                            isinstance(exc, SourceTargetReviewValidationError)
+                            and exc.code == "SOURCE_TARGET_REVIEW_UNRESOLVED"
+                            and source_interpretation is not None
+                            and output is not None
+                            and callable(getattr(
+                                transport, "start_source_definition_consumers", None,
+                            ))
+                        ):
+                            pending_definition_consumers, _pending_failed = (
+                                declare_source_definition_consumers(
+                                    batch, transport, source_interpretation, output,
+                                    pending_definition_attempts,
+                                    official_predicate_identities=official_predicate_identities,
+                                    official_predicate_sources=official_predicate_sources,
+                                )
+                            )
+                            pending_definition_output_sha256 = _sha256(output.model_dump_json())
+                        return build_result(
+                            status="需要核对",
+                            batch_id=batch.batch_id,
+                            session_id=session_id,
+                            attempts=attempts,
+                            source_interpretation=source_interpretation,
+                            source_statement_coverage=coverage,
+                            source_target_review=recovery_target_review(),
+                            source_candidate_alignment=checkpoint_alignment(),
+                            partial_wire=partial_wire,
+                            pending_source_definition_consumers=pending_definition_consumers,
+                            pending_source_definition_consumer_attempts=pending_definition_attempts,
+                            pending_source_definition_consumer_output_sha256=pending_definition_output_sha256,
+                        )
+                definition_consumers, definition_failed = declare_source_definition_consumers(
+                    batch, transport, source_interpretation, output, attempts,
+                    official_predicate_identities=official_predicate_identities,
+                    official_predicate_sources=official_predicate_sources,
+                )
+                if definition_failed:
+                    return build_result(
+                        status="需要核对",
+                        batch_id=batch.batch_id,
+                        session_id=session_id,
+                        attempts=attempts,
+                        source_interpretation=source_interpretation,
+                        source_statement_coverage=coverage,
+                        source_target_review=target_review,
+                        source_candidate_alignment=checkpoint_alignment(),
+                        partial_wire=partial_wire,
+                    )
+                return build_result(
+                    status=("待跨章核验" if target_review is not None and any(
+                        item.decision == "potential_same_requirement"
+                        for item in target_review.items
+                    ) else "已解析"),
+                    batch_id=batch.batch_id,
+                    session_id=session_id,
+                    attempts=attempts,
+                    final_output=output,
+                    source_front_target_review=front_target_review,
+                    source_candidate_alignment=front_candidate_alignment,
+                    source_interpretation=source_interpretation,
+                    source_statement_coverage=hydrated_source_coverage_indexes(
+                        batch, wire, output, coverage,
+                    ),
+                    source_target_review=target_review,
+                    source_definition_consumers=definition_consumers,
+                    partial_wire=wire,
+                    repair_used=repair_used,
+                )
+            except Exception as exc:  # noqa: BLE001 - bounded validation boundary
+                previous_atom_repair_path = atom_repair_path
+                failed_scoped_unit_repair = bool(scoped_unit_repair_ids)
+                failed_scoped_unit_ids = set(scoped_unit_repair_ids)
+                scoped_unit_repair_ids = set()
+                previous_missing_anchor_only = missing_anchor_only
+                previous_time_operand_repair_candidate = time_operand_repair_candidate
+                previous_observation_repair_candidate = observation_repair_candidate
+                previous_evidence_source_repair_path = evidence_source_repair_path
+                atom_repair_path = None
+                missing_anchor_only = False
+                time_operand_repair_paths = ()
+                time_operand_repair_candidate = None
+                observation_repair_paths = ()
+                observation_repair_candidate = None
+                observation_repair_field = "observation_policy"
+                evidence_source_repair_path = None
+                error = (
+                    exc
+                    if isinstance(exc, ProtocolControlAgentWireValidationError)
+                    else ProtocolControlAgentWireValidationError(
+                        "OUTPUT_INVALID",
+                        str(exc),
+                    )
+                )
+                validation_error = error
+                # Keep every finding in the receipt, but grant only one proven
+                # candidate scope. The next full validation discovers what remains.
+                if error.repair_scopes:
+                    error = error.repair_scopes[0]
+                candidate_ids = _candidate_ids_from_wire(wire, batch)
+                raw_output_sha256 = _sha256(raw_text)
+                invalid_fingerprint = (
+                    raw_output_sha256,
+                    error.code,
+                    str(validation_error)[:2000],
+                )
+                invalid_fingerprint_counts[invalid_fingerprint] = (
+                    invalid_fingerprint_counts.get(invalid_fingerprint, 0) + 1
+                )
+                located_fingerprints = _located_publication_failure_identities(
+                    error, candidate_ids)
+                for fingerprint in located_fingerprints:
+                    key = (fingerprint, "located-publication-defect", "")
+                    invalid_fingerprint_counts[key] = invalid_fingerprint_counts.get(key, 0) + 1
+                no_progress = (invalid_fingerprint_counts[invalid_fingerprint] >= 2
+                               or any(invalid_fingerprint_counts[(item, "located-publication-defect", "")] >= 2
+                                      for item in located_fingerprints))
+                repair_scope_unknown = bool(
+                    set(error.structure_unit_ids) - set(batch.owned_structure_unit_ids)
+                ) or error.repair_scope_unknown
+                repair_candidate_indexes = set(error.candidate_indexes)
+                focused_invalid_indexes: tuple[int, ...] = ()
+                if output is None and previous_atom_repair_path is not None:
+                    repair_candidate_indexes.add(previous_atom_repair_path[0])
+                    if previous_missing_anchor_only and repair_baseline_raw is not None:
+                        atom_repair_path = previous_atom_repair_path
+                        missing_anchor_only = True
+                if output is None and previous_time_operand_repair_candidate is not None:
+                    repair_candidate_indexes.add(previous_time_operand_repair_candidate)
+                if output is None and previous_observation_repair_candidate is not None:
+                    repair_candidate_indexes.add(previous_observation_repair_candidate)
+                if output is None and previous_evidence_source_repair_path is not None:
+                    repair_candidate_indexes.add(previous_evidence_source_repair_path[0])
+                if wire is None and error.code == "WIRE_SCHEMA_INVALID":
+                    salvage = _invalid_candidate_payload(
+                        _stable_json(repair_baseline_raw)
+                        if repair_baseline_raw is not None else raw_text
+                    )
+                    if salvage is not None:
+                        repair_baseline_raw, invalid_indexes = salvage
+                        repair_candidate_indexes.update(invalid_indexes)
+                        focused_invalid_indexes = invalid_indexes
+                        if len(invalid_indexes) == 1:
+                            evidence_source_types_repair_paths = _missing_evidence_source_type_paths(
+                                error, repair_baseline_raw, invalid_indexes[0]
+                            )
+                            if not evidence_source_types_repair_paths:
+                                time_operand_repair_paths = _invalid_time_operand_paths(
+                                    error, repair_baseline_raw, invalid_indexes[0]
+                                )
+                                if time_operand_repair_paths:
+                                    time_operand_repair_candidate = invalid_indexes[0]
+                                else:
+                                    observation_repair_paths = _invalid_observation_policy_paths(
+                                        error, repair_baseline_raw, invalid_indexes[0]
+                                    )
+                                    if observation_repair_paths:
+                                        observation_repair_candidate = invalid_indexes[0]
+                                    else:
+                                        atom_repair_path = _invalid_obligation_atom_path(
+                                            error, repair_baseline_raw, invalid_indexes[0]
+                                        )
+                            if (atom_repair_path is None and not observation_repair_paths
+                                    and not time_operand_repair_paths
+                                    and not evidence_source_types_repair_paths):
+                                evidence_source_repair_path = _invalid_evidence_source_policy_path(
+                                    error, repair_baseline_raw, invalid_indexes[0]
+                                )
+                elif (
+                    wire is None and error.code == "CANDIDATE_REPAIR_INVALID"
+                    and (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                    and candidate_repair_index is not None
+                ):
+                    try:
+                        candidate_payload = json.loads(raw_text)
+                        if isinstance(candidate_payload, dict) and set(candidate_payload) == {"candidate_draft"}:
+                            wrapped = (repair_baseline_wire.model_dump(mode="json")
+                                       if repair_baseline_wire is not None
+                                       else deepcopy(repair_baseline_raw))
+                            repaired_draft = candidate_payload["candidate_draft"]
+                            original = wrapped["candidate_drafts"][candidate_repair_index]
+                            if (not isinstance(repaired_draft, dict)
+                                    or _find_forbidden_provider_key(
+                                        {"candidate_drafts": [repaired_draft]}
+                                    ) is not None
+                                    or any(repaired_draft.get(field) != original[field] for field in (
+                                        "source_structure_unit_ids", "source_span_ids",
+                                    ))):
+                                raise ValueError("局部恢复不得改变原始来源或填写系统身份")
+                            wrapped["candidate_drafts"][candidate_repair_index] = repaired_draft
+                            missing = _missing_evidence_source_type_paths(
+                                error, wrapped, candidate_repair_index
+                            )
+                            if missing:
+                                repair_baseline_raw = wrapped
+                                evidence_source_types_repair_paths = missing
+                                repair_candidate_indexes.add(candidate_repair_index)
+                            else:
+                                missing_dates = _invalid_time_operand_paths(
+                                    error, wrapped, candidate_repair_index,
+                                )
+                                if missing_dates:
+                                    # This is an unaccepted repair proposal. Only
+                                    # its missing attributes may be filled next;
+                                    # the whole wire and source gates still run.
+                                    repair_baseline_raw = wrapped
+                                    time_operand_repair_paths = missing_dates
+                                    time_operand_repair_candidate = candidate_repair_index
+                                    repair_candidate_indexes.add(candidate_repair_index)
+                                else:
+                                    missing_policies = _invalid_observation_policy_paths(
+                                        error, wrapped, candidate_repair_index,
+                                    )
+                                    if missing_policies:
+                                        repair_baseline_raw = wrapped
+                                        observation_repair_paths = missing_policies
+                                        observation_repair_candidate = candidate_repair_index
+                                        repair_candidate_indexes.add(candidate_repair_index)
+                    except (ValueError, TypeError, KeyError, IndexError):
+                        pass
+                elif (
+                    wire is None and error.code == "CANDIDATE_REPAIR_INVALID"
+                    and candidate_repair_indexes
+                    and (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                ):
+                    try:
+                        proposal = json.loads(raw_text)
+                        wrapped = (repair_baseline_wire.model_dump(mode="json")
+                                   if repair_baseline_wire is not None else deepcopy(repair_baseline_raw))
+                        if (not isinstance(proposal, dict) or set(proposal) != {"candidate_drafts"}
+                                or not isinstance(proposal["candidate_drafts"], list)
+                                or len(proposal["candidate_drafts"]) != len(candidate_repair_indexes)
+                                or _find_forbidden_provider_key(proposal) is not None):
+                            raise ValueError("多候选日期补齐须保留授权数量与来源身份")
+                        for index, draft in zip(candidate_repair_indexes, proposal["candidate_drafts"], strict=True):
+                            original = wrapped["candidate_drafts"][index]
+                            if (not isinstance(draft, dict)
+                                    or any(draft.get(field) != original[field] for field in (
+                                        "source_structure_unit_ids", "source_span_ids",
+                                    ))):
+                                raise ValueError("多候选日期补齐不得调换或改变来源范围")
+                            wrapped["candidate_drafts"][index] = draft
+                        try:
+                            ProtocolControlAgentWire.model_validate(wrapped)
+                        except ValidationError as cause:
+                            failure_indexes = {item["loc"][1] for item in cause.errors(include_url=False)
+                                               if len(item["loc"]) > 1 and item["loc"][0] == "candidate_drafts"}
+                            if len(failure_indexes) == 1:
+                                index = next(iter(failure_indexes))
+                                scoped_error = ProtocolControlAgentWireValidationError("CANDIDATE_REPAIR_INVALID", str(cause))
+                                scoped_error.__cause__ = cause
+                                paths = _invalid_time_operand_paths(scoped_error, wrapped, index)
+                                if paths and index in candidate_repair_indexes:
+                                    repair_baseline_raw = wrapped
+                                    time_operand_repair_paths = paths
+                                    time_operand_repair_candidate = index
+                                    repair_candidate_indexes.add(index)
+                    except (ValueError, TypeError, KeyError, IndexError):
+                        pass
+                elif repair_baseline_raw is not None and candidate_repair_index is not None:
+                    repair_candidate_indexes.add(candidate_repair_index)
+                elif repair_baseline_raw is not None and candidate_repair_indexes:
+                    repair_candidate_indexes.update(candidate_repair_indexes)
+                if (failed_scoped_unit_repair and repair_baseline_wire is not None
+                        and error.code == "WIRE_SCHEMA_INVALID"
+                        and previous_observation_repair_candidate is None
+                        and callable(getattr(transport, "continue_observation_policies", None))):
+                    scoped_policy = _invalid_scoped_observation_payload(
+                        raw_text, repair_baseline_wire, failed_scoped_unit_ids, batch,
+                    )
+                    if scoped_policy is not None:
+                        repair_baseline_raw, observation_repair_candidate, observation_repair_paths = scoped_policy
+                        atom_repair_path = None
+                        repair_candidate_indexes = {observation_repair_candidate}
+                        focused_invalid_indexes = ()
+                        failed_scoped_unit_repair = False
+                    elif callable(getattr(transport, "continue_record_semantics", None)):
+                        scoped_record = _invalid_scoped_observation_payload(
+                            raw_text, repair_baseline_wire, failed_scoped_unit_ids, batch,
+                            field="record_semantics",
+                        )
+                        if scoped_record is not None:
+                            repair_baseline_raw, observation_repair_candidate, observation_repair_paths = scoped_record
+                            atom_repair_path = None
+                            observation_repair_field = "record_semantics"
+                            repair_candidate_indexes = {observation_repair_candidate}
+                            focused_invalid_indexes = ()
+                            failed_scoped_unit_repair = False
+                if output is not None and output_validator is not None:
+                    candidate_source_by_id = {
+                        candidate.control_candidate_id: tuple(
+                            candidate.frozen_structure_unit_ids
+                        )
+                        for candidate in output.candidates
+                    }
+                    candidate_span_ids_by_id = {
+                        candidate.control_candidate_id: set(candidate.source_span_ids)
+                        for candidate in output.candidates
+                    }
+                    unknown_candidate_ids = set(error.candidate_ids) - set(
+                        candidate_source_by_id
+                    )
+                    wire_candidate_ids = _candidate_ids_from_wire(wire, batch)
+                    candidate_indexes_by_id = {
+                        candidate_id: index
+                        for index, candidate_id in enumerate(wire_candidate_ids)
+                    }
+                    unknown_candidate_index_ids = set(error.candidate_ids) - set(
+                        candidate_indexes_by_id
+                    )
+                    repair_candidate_indexes.update(
+                        candidate_indexes_by_id[candidate_id]
+                        for candidate_id in error.candidate_ids
+                        if candidate_id in candidate_indexes_by_id
+                    )
+                    selected_candidate_span_ids = {
+                        span_id
+                        for candidate_id in error.candidate_ids
+                        for span_id in candidate_span_ids_by_id.get(candidate_id, set())
+                    }
+                    selected_candidate_source_keys = {
+                        candidate_source_by_id[candidate_id]
+                        for candidate_id in error.candidate_ids
+                        if candidate_id in candidate_source_by_id
+                    }
+                    closure_candidate_source_keys = set(
+                        selected_candidate_source_keys
+                    )
+                    if (
+                        error.allow_candidate_repartition
+                        or error.allow_source_closure_rewrite
+                    ):
+                        all_candidate_source_keys = set(candidate_source_by_id.values())
+                        changed = True
+                        while changed:
+                            changed = False
+                            closure_union = {
+                                unit_id
+                                for key in closure_candidate_source_keys
+                                for unit_id in key
+                            }
+                            for key in all_candidate_source_keys:
+                                if (
+                                    key not in closure_candidate_source_keys
+                                    and set(key) & closure_union
+                                ):
+                                    closure_candidate_source_keys.add(key)
+                                    changed = True
+                    closure_candidate_source_union = {
+                        unit_id
+                        for key in closure_candidate_source_keys
+                        for unit_id in key
+                    }
+                    source_closure_authority = set(error.structure_unit_ids)
+                    source_closure_authority_escape = (
+                        error.allow_source_closure_rewrite
+                        and (
+                            not source_closure_authority
+                            or not closure_candidate_source_union
+                            or not closure_candidate_source_union
+                            <= source_closure_authority
+                        )
+                    )
+                    unknown_obligation_spans = set(
+                        error.obligation_source_span_ids
+                    ) - selected_candidate_span_ids
+                    insert_source_spans = {
+                        span_id
+                        for unit in batch.owned_units
+                        if unit.structure_unit_id in error.structure_unit_ids
+                        for span_id in unit.source_span_ids
+                    }
+                    insert_scope_valid = (
+                        error.allow_source_insert
+                        and not error.candidate_ids
+                        and bool(error.structure_unit_ids)
+                        and bool(error.obligation_source_span_ids)
+                        and set(error.obligation_source_span_ids) <= insert_source_spans
+                    )
+                    repair_scope_unknown = (
+                        repair_scope_unknown
+                        or bool(unknown_candidate_ids)
+                        or bool(unknown_candidate_index_ids)
+                        or (bool(unknown_obligation_spans) and not insert_scope_valid)
+                        or bool(
+                            error.obligation_source_span_ids
+                            and not error.candidate_ids
+                            and not insert_scope_valid
+                        )
+                        or (error.allow_source_insert and not insert_scope_valid)
+                        or source_closure_authority_escape
+                        or not (error.candidate_ids or error.structure_unit_ids)
+                    )
+                    if error.code != "REPAIR_SCOPE_ESCAPE" and not repair_scope_unknown:
+                        repair_baseline = output
+                        repair_baseline_wire = wire
+                        if (
+                            error.allow_candidate_repartition
+                            or error.allow_source_closure_rewrite
+                        ):
+                            mutable_candidate_source_keys = set(
+                                closure_candidate_source_keys
+                            )
+                            mutable_candidate_source_union = set(
+                                closure_candidate_source_union
+                            )
+                            mutable_candidate_indexes = set()
+                        else:
+                            mutable_candidate_source_keys = (
+                                selected_candidate_source_keys
+                            )
+                            mutable_candidate_source_union = set()
+                            source_key_counts: dict[tuple[str, ...], int] = {}
+                            for source_key in candidate_source_by_id.values():
+                                source_key_counts[source_key] = (
+                                    source_key_counts.get(source_key, 0) + 1
+                                )
+                            # Source closure is the stable identity when it is
+                            # unique. Wire position is needed only for siblings
+                            # that genuinely share the same source closure.
+                            mutable_candidate_indexes = (
+                                set(repair_candidate_indexes)
+                                if any(
+                                    source_key_counts.get(source_key, 0) > 1
+                                    for source_key in selected_candidate_source_keys
+                                )
+                                else set()
+                            )
+                        allow_candidate_repartition = (
+                            error.allow_candidate_repartition
+                        )
+                        allow_source_closure_rewrite = (
+                            error.allow_source_closure_rewrite
+                        )
+                        allow_post_enrollment_reclassification = (
+                            error.allow_post_enrollment_reclassification
+                        )
+                        allow_source_insert = error.allow_source_insert
+                        if allow_source_insert:
+                            pending_source_insert = (
+                                wire.model_copy(deep=True),
+                                set(error.structure_unit_ids),
+                                set(error.obligation_source_span_ids),
+                            )
+                        mutable_obligation_source_span_ids = set(
+                            error.obligation_source_span_ids
+                        )
+                        mutable_structure_unit_ids = set(error.structure_unit_ids)
+                        if (
+                            error.allow_candidate_repartition
+                            or error.allow_source_closure_rewrite
+                        ):
+                            mutable_structure_unit_ids.update(
+                                mutable_candidate_source_union
+                            )
+                elif (
+                    wire is not None
+                    and output is None
+                    and error.allow_candidate_repartition
+                    and not repair_scope_unknown
+                    and error.structure_unit_ids
+                ):
+                    closure_units = set(error.structure_unit_ids)
+                    changed = True
+                    while changed:
+                        expanded = {
+                            unit_id
+                            for candidate in wire.candidate_drafts
+                            if set(candidate.source_structure_unit_ids) & closure_units
+                            for unit_id in candidate.source_structure_unit_ids
+                        }
+                        changed = bool(expanded - closure_units)
+                        closure_units.update(expanded)
+                    if closure_units <= set(batch.owned_structure_unit_ids):
+                        repair_baseline_wire = wire
+                        mutable_structure_unit_ids = closure_units
+                        mutable_candidate_source_union = closure_units
+                        mutable_candidate_source_keys = {
+                            tuple(candidate.source_structure_unit_ids)
+                            for candidate in wire.candidate_drafts
+                            if set(candidate.source_structure_unit_ids) & closure_units
+                        }
+                        repair_candidate_indexes.update(
+                            index for index, candidate in enumerate(wire.candidate_drafts)
+                            if set(candidate.source_structure_unit_ids) & closure_units
+                        )
+                        allow_candidate_repartition = True
+                        allow_post_enrollment_reclassification = error.allow_post_enrollment_reclassification
+                elif (
+                    wire is not None
+                    and output is None
+                    and len(repair_candidate_indexes) == 1
+                    and not repair_scope_unknown
+                    and not error.allow_candidate_repartition
+                    and not error.allow_source_closure_rewrite
+                    and not error.allow_source_insert
+                    and len(wire.dispositions) == len(batch.owned_structure_unit_ids)
+                    and {item.structure_unit_id for item in wire.dispositions}
+                    == set(batch.owned_structure_unit_ids)
+                ):
+                    index = next(iter(repair_candidate_indexes))
+                    if 0 <= index < len(wire.candidate_drafts):
+                        candidate_source = set(
+                            wire.candidate_drafts[index].source_structure_unit_ids
+                        )
+                        if candidate_source and set(error.structure_unit_ids) <= candidate_source:
+                            repair_baseline_wire = wire
+                            mutable_candidate_indexes = {index}
+                            mutable_structure_unit_ids = set(error.structure_unit_ids)
+                            if allow_source_insert:
+                                # The append scope has already been verified. Keep
+                                # this unaccepted wire only as a local repair basis;
+                                # the next answer replaces the failing candidate.
+                                mutable_obligation_source_span_ids = set(error.obligation_source_span_ids)
+                                mutable_candidate_source_keys = (
+                                    {tuple(wire.candidate_drafts[index].source_structure_unit_ids)}
+                                    if mutable_obligation_source_span_ids else set()
+                                )
+                                mutable_candidate_source_union = set()
+                                allow_source_insert = False
+                                source_insert_candidate_only = False
+                                source_insert_candidates_only = False
+                if (
+                    output is not None and wire is not None
+                    and not repair_scope_unknown
+                    and repair_baseline_wire is wire
+                ):
+                    scope_path = _future_observation_scope_repair_path(
+                        error, wire, repair_candidate_indexes
+                    )
+                    if scope_path is not None:
+                        observation_repair_candidate, observation_repair_paths = scope_path
+                        repair_baseline_raw = wire.model_dump(mode="json")
+                    early_atom_path = _early_anchor_atom_repair_path(
+                        error, wire, repair_candidate_indexes
+                    )
+                    if early_atom_path is not None:
+                        repair_baseline_raw = wire.model_dump(mode="json")
+                        atom_repair_path = early_atom_path
+                    duration_atom_path = _treatment_duration_atom_repair_path(
+                        error, wire, repair_candidate_indexes
+                    )
+                    if duration_atom_path is not None:
+                        repair_baseline_raw = wire.model_dump(mode="json")
+                        atom_repair_path = duration_atom_path
+                    missing_anchor_path = _missing_anchor_atom_repair_path(
+                        error, wire, output, repair_candidate_indexes
+                    )
+                    if missing_anchor_path is not None:
+                        repair_baseline_raw = wire.model_dump(mode="json")
+                        atom_repair_path = missing_anchor_path
+                        missing_anchor_only = True
+                attempts.append(
+                    ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=session_id,
+                        raw_output_sha256=raw_output_sha256,
+                        raw_output_chars=len(raw_text),
+                        raw_output_text=raw_text,
+                        outcome=invalid_outcome,
+                        issues=(
+                            [
+                                str(validation_error)[:2000],
+                                "连续返回相同无效结果，"
+                                "本批次停止自动修订并转为需要核对",
+                            ]
+                            if no_progress
+                            else [str(validation_error)[:2000]]
+                        ),
+                        error_classes=list(_error_class_codes(validation_error)),
+                        error_detail=(
+                            {
+                                "version": PUBLICATION_REPAIR_SCOPE_VERSION,
+                                "code": validation_error.code,
+                                "findings": list(validation_error.validation_findings),
+                                "repair_candidate_ids": list(error.candidate_ids),
+                                "repair_structure_unit_ids": list(error.structure_unit_ids),
+                                "repair_source_span_ids": list(error.obligation_source_span_ids),
+                                "repair_error_classes": list(error.error_class_codes),
+                                "repair_scope_unknown": error.repair_scope_unknown,
+                            } if (validation_error.validation_findings or error.structure_unit_ids
+                                  or error.candidate_ids or error.candidate_indexes) else None
+                        ),
+                        rejected_structure_unit_ids=list(
+                            error.structure_unit_ids or batch.owned_structure_unit_ids
+                        ),
+                        rejected_candidate_ids=list(error.candidate_ids or candidate_ids),
+                    )
+                )
+                if set(validation_error.error_class_codes) & {
+                    "TIME_PRECISION_UNSUPPORTED", "SOURCE_NUMERIC_SEMANTICS_UNVERIFIED",
+                    "NUMERIC_VALUE_NOT_IN_SOURCE", "COMPARATOR_CHANGED", "NUMERIC_UNIT_NOT_IN_SOURCE",
+                }:
+                    # Unscoped candidate rewriting cannot repair a source-bound scalar safely.
+                    return build_result(
+                        status="需要核对", batch_id=batch.batch_id,
+                        session_id=session_id, attempts=attempts,
+                        source_interpretation=source_interpretation,
+                        source_statement_coverage=latest_source_statement_coverage,
+                        source_target_review=latest_source_target_review,
+                        source_candidate_alignment=checkpoint_alignment(),
+                        partial_wire=partial_wire,
+                        capability_wire=(wire if output is not None
+                                         and "TIME_PRECISION_UNSUPPORTED" in error.error_class_codes
+                                         and not set(validation_error.error_class_codes) - {
+                                             "TIME_PRECISION_UNSUPPORTED", "PUBLICATION_GATE_REJECTED",
+                                         } else None),
+                    )
+                focused_reader = getattr(transport, "continue_candidate", None)
+                if (
+                    wire is None
+                    and error.code == "WIRE_SCHEMA_INVALID"
+                    and 1 < len(focused_invalid_indexes) <= 3
+                    and repair_baseline_raw is not None
+                    and (callable(focused_reader) or callable(
+                        getattr(transport, "continue_observation_policies", None)
+                    ))
+                    and not no_progress
+                    and not repair_scope_unknown
+                    and repairs < self._max_schema_repairs
+                ):
+                    owned_spans = {
+                        unit.structure_unit_id: set(unit.source_span_ids)
+                        for unit in batch.owned_units
+                    }
+                    drafts = repair_baseline_raw["candidate_drafts"]
+                    grounded = all(
+                        set(drafts[index]["source_structure_unit_ids"]) <= set(owned_spans)
+                        and set(drafts[index]["source_span_ids"]) <= {
+                            span for unit_id in drafts[index]["source_structure_unit_ids"]
+                            for span in owned_spans[unit_id]
+                        }
+                        for index in focused_invalid_indexes
+                    )
+                    if grounded:
+                        repaired = deepcopy(repair_baseline_raw)
+                        focused_response = None
+                        try:
+                            for index in focused_invalid_indexes:
+                                focused_response = None
+                                draft = repaired["candidate_drafts"][index]
+                                policy_paths = ()
+                                try:
+                                    ProtocolControlAgentWireCandidate.model_validate(draft)
+                                except ValidationError as draft_error:
+                                    problem = _validation_error_summary(draft_error)
+                                    policy_paths = _invalid_observation_policy_paths(
+                                        draft_error, repaired, index,
+                                    )
+                                else:
+                                    raise ValueError("候选已有效，不能再次请求修订")
+                                if repairs >= self._max_schema_repairs:
+                                    raise ProtocolControlAgentWireValidationError(
+                                        "REPAIR_BUDGET_EXHAUSTED",
+                                        "逐项修订次数已用完，剩余候选未通过校验",
+                                    )
+                                repairs += 1
+                                if policy_paths:
+                                    policy_reader = getattr(transport, "continue_observation_policies", None)
+                                    if not callable(policy_reader):
+                                        raise ValueError("缺少观察说明字段修订能力，不能退回整候选改写")
+                                    focused_response = None
+                                    focused_response = policy_reader(
+                                        session_id=session_id,
+                                        prompt=_build_observation_policy_repair_prompt(
+                                            repaired, index, policy_paths, problem,
+                                        ),
+                                    )
+                                    if focused_response.session_id != session_id:
+                                        raise ValueError("观察说明修订不得更换原会话")
+                                    # Other candidates may still be invalid: retain only
+                                    # these fields, then validate this candidate and the full wire.
+                                    repaired = _merge_observation_policy_repair_payload(
+                                        focused_response.text, repaired, index, policy_paths,
+                                    )
+                                    try:
+                                        ProtocolControlAgentWireCandidate.model_validate(
+                                            repaired["candidate_drafts"][index],
+                                        )
+                                    except ValidationError as cause:
+                                        candidate_error = ProtocolControlAgentWireValidationError(
+                                            "CANDIDATE_REPAIR_INVALID", _validation_error_summary(cause),
+                                        )
+                                        candidate_error.__cause__ = cause
+                                        date_paths = _invalid_time_operand_paths(candidate_error, repaired, index)
+                                        date_reader = getattr(transport, "continue_time_operands", None)
+                                        if not date_paths or not callable(date_reader):
+                                            raise candidate_error from cause
+                                        attempts.append(ProtocolControlAgentAttempt(
+                                            attempt=len(attempts) + 1, session_id=session_id,
+                                            raw_output_sha256=_sha256(focused_response.text),
+                                            raw_output_chars=len(focused_response.text),
+                                            raw_output_text=focused_response.text,
+                                            outcome="schema_invalid", error_classes=[candidate_error.code],
+                                            issues=[str(candidate_error)[:1400]],
+                                        ))
+                                        if repairs >= self._max_schema_repairs:
+                                            focused_response = None
+                                            raise ProtocolControlAgentWireValidationError(
+                                                "REPAIR_BUDGET_EXHAUSTED", "逐项修订次数已用完，缺失日期属性未补齐",
+                                            )
+                                        repairs += 1
+                                        focused_response = None
+                                        focused_response = date_reader(
+                                            session_id=session_id,
+                                            prompt=_build_time_operand_repair_prompt(repaired, index, date_paths),
+                                        )
+                                        if focused_response.session_id != session_id:
+                                            raise ValueError("缺失日期属性修订不得更换原会话")
+                                        repaired = _merge_time_operand_repair_payload(
+                                            focused_response.text, repaired, index, date_paths,
+                                        )
+                                        ProtocolControlAgentWireCandidate.model_validate(
+                                            repaired["candidate_drafts"][index],
+                                        )
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=session_id,
+                                        raw_output_sha256=_sha256(focused_response.text),
+                                        raw_output_chars=len(focused_response.text),
+                                        raw_output_text=focused_response.text,
+                                        outcome="parsed",
+                                        issues=["仅补入授权缺失字段，整批仍须通过原发布门禁"],
+                                    ))
+                                    continue
+                                if not callable(focused_reader):
+                                    raise ValueError("缺少候选修订能力，不能扩大整批重读")
+                                focused_prompt = build_protocol_control_repair_prompt(
+                                    batch,
+                                    problem=problem,
+                                    structure_unit_ids=draft["source_structure_unit_ids"],
+                                    candidate_indexes=[index],
+                                    candidate_only=True,
+                                    baseline_candidate_drafts=[draft],
+                                )
+                                focused_response = None
+                                focused_response = focused_reader(
+                                    session_id=session_id, prompt=focused_prompt,
+                                )
+                                if focused_response.session_id != session_id:
+                                    raise ValueError("单候选修订不得更换原会话")
+                                try:
+                                    repaired = _merge_candidate_repair_payload(
+                                        focused_response.text, repaired, index,
+                                    )
+                                except ProtocolControlAgentWireValidationError as candidate_error:
+                                    proposal = json.loads(focused_response.text)
+                                    date_reader = getattr(transport, "continue_time_operands", None)
+                                    if (candidate_error.code != "CANDIDATE_REPAIR_INVALID"
+                                            or repairs >= self._max_schema_repairs
+                                            or not isinstance(proposal, dict)
+                                            or set(proposal) != {"candidate_draft"}
+                                            or not isinstance(proposal["candidate_draft"], dict)
+                                            or _find_forbidden_provider_key({
+                                                "candidate_drafts": [proposal["candidate_draft"]]
+                                            }) is not None
+                                            or any(proposal["candidate_draft"].get(field) != draft[field]
+                                                   for field in ("source_structure_unit_ids", "source_span_ids"))):
+                                        raise
+                                    proposed = deepcopy(repaired)
+                                    proposed["candidate_drafts"][index] = proposal["candidate_draft"]
+                                    date_paths = _invalid_time_operand_paths(candidate_error, proposed, index)
+                                    policy_paths = _invalid_observation_policy_paths(candidate_error, proposed, index)
+                                    policy_reader = getattr(transport, "continue_observation_policies", None)
+                                    if not ((date_paths and callable(date_reader))
+                                            or (policy_paths and callable(policy_reader))):
+                                        raise
+                                    # Retain this unaccepted proposal only for the
+                                    # typed missing-field repair. Siblings stay frozen.
+                                    repaired = proposed
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=session_id,
+                                        raw_output_sha256=_sha256(focused_response.text),
+                                        raw_output_chars=len(focused_response.text),
+                                        raw_output_text=focused_response.text,
+                                        outcome="schema_invalid", error_classes=[candidate_error.code],
+                                        issues=[str(candidate_error)[:1400]],
+                                    ))
+                                    repairs += 1
+                                    field_prompt = (
+                                        _build_time_operand_repair_prompt(repaired, index, date_paths)
+                                        if date_paths else _build_observation_policy_repair_prompt(
+                                            repaired, index, policy_paths, str(candidate_error),
+                                        )
+                                    )
+                                    field_reader = date_reader if date_paths else policy_reader
+                                    focused_response = None
+                                    focused_response = field_reader(session_id=session_id, prompt=field_prompt)
+                                    if focused_response.session_id != session_id:
+                                        raise ValueError("缺失字段修订不得更换原会话")
+                                    repaired = (
+                                        _merge_time_operand_repair_payload(
+                                            focused_response.text, repaired, index, date_paths,
+                                        ) if date_paths else _merge_observation_policy_repair_payload(
+                                            focused_response.text, repaired, index, policy_paths,
+                                        )
+                                    )
+                                    ProtocolControlAgentWireCandidate.model_validate(
+                                        repaired["candidate_drafts"][index],
+                                    )
+                                attempts.append(ProtocolControlAgentAttempt(
+                                    attempt=len(attempts) + 1,
+                                    session_id=session_id,
+                                    raw_output_sha256=_sha256(focused_response.text),
+                                    raw_output_chars=len(focused_response.text),
+                                    raw_output_text=focused_response.text,
+                                    outcome="parsed",
+                                    issues=["单个候选结构已核，整批仍须通过原发布门禁"],
+                                ))
+                            repaired_wire = parse_protocol_control_agent_wire(_stable_json(repaired))
+                        except Exception as focused_error:  # noqa: BLE001 - fail closed
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1,
+                                session_id=getattr(focused_error, "session_id", None) or session_id,
+                                raw_output_sha256=_sha256(
+                                    focused_response.text if focused_response is not None
+                                    else str(focused_error)
+                                ),
+                                raw_output_chars=(
+                                    len(focused_response.text) if focused_response is not None else None
+                                ),
+                                raw_output_text=(
+                                    focused_response.text if focused_response is not None else None
+                                ),
+                                outcome=("publication_invalid" if focused_response is not None
+                                         else "schema_invalid" if isinstance(
+                                             focused_error, ProtocolControlAgentWireValidationError
+                                         ) else "transport_failed"),
+                                issues=["单候选逐项修订未通过：" + str(focused_error)[:1400]],
+                                error_classes=[protocol_control_call_failure_code(focused_error)
+                                               or (focused_error.code if isinstance(
+                                                   focused_error, ProtocolControlAgentWireValidationError
+                                               ) else "CANDIDATE_REPAIR_INVALID")],
+                            ))
+                            return build_result(
+                                status="需要核对", batch_id=batch.batch_id,
+                                session_id=session_id, attempts=attempts,
+                                source_interpretation=source_interpretation,
+                                source_statement_coverage=latest_source_statement_coverage,
+                                source_target_review=latest_source_target_review,
+                                source_candidate_alignment=checkpoint_alignment(),
+                                partial_wire=partial_wire,
+                            )
+                        raw_text = repaired_wire.model_dump_json()
+                        repair_baseline_raw = None
+                        candidate_repair_index = None
+                        candidate_repair_indexes = ()
+                        repair_used = True
+                        continue
+                future_path = _future_prohibition_repair_path(
+                    error, repair_baseline_wire, repair_candidate_indexes
+                )
+                future_only = (
+                    future_scope_repairs == 0
+                    and future_path is not None
+                    and callable(getattr(transport, "continue_future_prohibition_repair", None))
+                )
+                current_scope_path = _future_observation_scope_repair_path(
+                    error, repair_baseline_wire, repair_candidate_indexes
+                )
+                located_scope = _future_prohibition_finding_paths(error) is not None
+                scope_only = (
+                    current_scope_path is not None
+                    and current_scope_path not in future_observation_scope_paths
+                    and future_observation_scope_repairs < (
+                        max(1, self._max_schema_repairs) if located_scope else 1
+                    )
+                    and observation_repair_candidate is not None
+                    and bool(observation_repair_paths)
+                    and callable(getattr(transport, "continue_observation_policies", None))
+                )
+                calendar_path = _calendar_bound_repair_path(
+                    error, repair_baseline_wire, repair_candidate_indexes
+                )
+                calendar_only = (
+                    calendar_bound_repairs < 3
+                    and calendar_path is not None
+                    and calendar_path not in calendar_bound_repair_paths
+                    and callable(getattr(transport, "continue_calendar_bound_repair", None))
+                )
+                calendar_scope_ambiguous = (
+                    "TIME_CALENDAR_BOUND_UNSUPPORTED" in error.error_class_codes
+                    and len(repair_candidate_indexes) > 1
+                    and not (allow_candidate_repartition or allow_source_closure_rewrite or allow_source_insert)
+                    and not calendar_only
+                )
+                if (
+                    no_progress
+                    or failed_scoped_unit_repair
+                    or (previous_observation_repair_candidate is not None
+                        and error.code in {"OBSERVATION_REPAIR_INVALID", "RECORD_SEMANTICS_REPAIR_INVALID"})
+                    or (error.code == "CANDIDATE_REPAIR_INVALID"
+                        and candidate_repair_index is not None
+                        and not (time_operand_repair_candidate is not None
+                                 and callable(getattr(transport, "continue_time_operands", None)))
+                        and not (observation_repair_candidate is not None
+                                 and callable(getattr(transport, "continue_observation_policies", None)))
+                        and not (evidence_source_types_repair_paths
+                                 and callable(getattr(transport, "continue_evidence_source_types", None))))
+                    or (current_scope_path is not None and (
+                        current_scope_path in future_observation_scope_paths
+                        or future_observation_scope_repairs >= (
+                            max(1, self._max_schema_repairs) if located_scope else 1
+                        )
+                    ))
+                    or (candidate_repair_fields and wire is None)
+                    or front_flow_assembled
+                    or error.code == "REPAIR_SCOPE_ESCAPE"
+                    or error.code == "TIME_OPERAND_UNRESOLVED"
+                    or repair_scope_unknown
+                    or calendar_scope_ambiguous
+                    or (source_insert_repairs >= MAX_SOURCE_INSERT_REPAIRS and allow_source_insert)
+                    or (not error.allow_source_insert and repairs >= self._max_schema_repairs and not future_only and not calendar_only and not scope_only)
+                ):
+                    if repair_scope_unknown:
+                        attempts[-1].issues.append(
+                            "校验问题缺少完整的机器可读修订范围，"
+                            "本批次停止自动修订并转为需要核对"
+                        )
+                    if failed_scoped_unit_repair:
+                        attempts[-1].issues.append(
+                            "局部来源修订未通过，保留原提案及失败原答；不得退回整组改写"
+                        )
+                    if calendar_scope_ambiguous:
+                        attempts[-1].issues.append(
+                            "多条要求的时间问题无法逐条定位，本批次停止自动改写并转为需要核对"
+                        )
+                    return build_result(
+                        status="需要核对",
+                        batch_id=batch.batch_id,
+                        session_id=session_id,
+                        attempts=attempts,
+                        source_interpretation=source_interpretation,
+                        source_statement_coverage=latest_source_statement_coverage,
+                        source_target_review=latest_source_target_review,
+                        source_candidate_alignment=checkpoint_alignment(),
+                        partial_wire=partial_wire,
+                    )
+                if error.allow_source_insert:
+                    source_insert_repairs += 1
+                elif future_only:
+                    future_scope_repairs += 1
+                    future_repair_path = future_path
+                elif calendar_only:
+                    calendar_bound_repairs += 1
+                    calendar_repair_path = calendar_path
+                    calendar_bound_repair_paths.add(calendar_path)
+                elif scope_only:
+                    future_observation_scope_repairs += 1
+                    future_observation_scope_paths.add(current_scope_path)
+                else:
+                    repairs += 1
+                atom_only = (
+                    atom_repair_path is not None
+                    and repair_baseline_raw is not None
+                    and callable(getattr(transport, "continue_atom", None))
+                )
+                if not atom_only:
+                    if missing_anchor_only:
+                        return build_result(
+                            status="需要核对", batch_id=batch.batch_id,
+                            session_id=session_id, attempts=attempts,
+                            source_interpretation=source_interpretation,
+                            source_statement_coverage=latest_source_statement_coverage,
+                            source_target_review=latest_source_target_review,
+                            source_candidate_alignment=checkpoint_alignment(),
+                            partial_wire=partial_wire,
+                        )
+                    atom_repair_path = None
+                time_operand_only = (
+                    time_operand_repair_candidate is not None
+                    and bool(time_operand_repair_paths)
+                    and repair_baseline_raw is not None
+                    and callable(getattr(transport, "continue_time_operands", None))
+                )
+                if not time_operand_only:
+                    time_operand_repair_candidate = None
+                    time_operand_repair_paths = ()
+                observation_only = (
+                    observation_repair_candidate is not None
+                    and bool(observation_repair_paths)
+                    and repair_baseline_raw is not None
+                    and callable(getattr(transport, "continue_record_semantics"
+                                         if observation_repair_field == "record_semantics"
+                                         else "continue_observation_policies", None))
+                )
+                if not observation_only:
+                    observation_repair_candidate = None
+                    observation_repair_paths = ()
+                evidence_source_only = (
+                    evidence_source_repair_path is not None
+                    and repair_baseline_raw is not None
+                    and callable(getattr(transport, "continue_evidence_source_policy", None))
+                )
+                if not evidence_source_only:
+                    evidence_source_repair_path = None
+                evidence_source_types_only = (
+                    bool(evidence_source_types_repair_paths)
+                    and repair_baseline_raw is not None
+                    and callable(getattr(transport, "continue_evidence_source_types", None))
+                )
+                if not evidence_source_types_only:
+                    evidence_source_types_repair_paths = ()
+                candidate_only = (
+                    not future_only and not calendar_only and not atom_only and not time_operand_only and not observation_only and not evidence_source_only
+                    and (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                    and len(repair_candidate_indexes) == 1
+                    and not allow_candidate_repartition
+                    and not allow_source_closure_rewrite
+                    and not allow_source_insert
+                    and callable(getattr(transport, "continue_candidate", None))
+                )
+                candidates_only = (
+                    (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                    and len(repair_candidate_indexes) > 1
+                    and not allow_candidate_repartition
+                    and not allow_source_closure_rewrite
+                    and not allow_source_insert
+                    and callable(getattr(transport, "continue_candidates", None))
+                )
+                source_insert_candidate_only = (
+                    allow_source_insert
+                    and source_insert_statement_count <= 1
+                    and repair_baseline_wire is not None
+                    and callable(getattr(
+                        transport,
+                        "start_source_insert" if resuming_partial else "continue_candidate",
+                        None,
+                    ))
+                    and all(
+                        item.disposition in {
+                            StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+                            StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+                            StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+                            StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+                        }
+                        for item in repair_baseline_wire.dispositions
+                        if item.structure_unit_id in mutable_structure_unit_ids
+                    )
+                )
+                source_insert_candidates_only = (
+                    allow_source_insert
+                    and not source_insert_candidate_only
+                    and repair_baseline_wire is not None
+                    and callable(getattr(
+                        transport,
+                        "start_source_insert" if resuming_partial else "continue_candidates",
+                        None,
+                    ))
+                )
+                candidate_repair_index = (
+                    next(iter(repair_candidate_indexes)) if candidate_only else None
+                )
+                candidate_repair_fields = (
+                    ("cross_source_relations",)
+                    if candidate_only and repair_baseline_wire is not None
+                    and "PROCEDURE_AFFECTED_STAGE_MISMATCH" in error.error_class_codes
+                    else ()
+                )
+                if (
+                    "PROCEDURE_AFFECTED_STAGE_MISMATCH" in error.error_class_codes
+                    and not allow_candidate_repartition and not candidate_repair_fields
+                ):
+                    attempts[-1].issues.append("关系错误缺少单一候选字段范围，不授权整候选或多候选改写")
+                    return build_result(
+                        status="需要核对", batch_id=batch.batch_id, session_id=session_id,
+                        attempts=attempts, source_interpretation=source_interpretation,
+                        source_statement_coverage=latest_source_statement_coverage,
+                        source_target_review=latest_source_target_review, partial_wire=partial_wire,
+                    )
+                candidate_repair_relation_targets = tuple(dict.fromkeys(
+                    str(finding["external_target_id"])
+                    for finding in error.validation_findings
+                    if finding.get("code") == "PROCEDURE_AFFECTED_STAGE_MISMATCH"
+                    and isinstance(finding.get("external_target_id"), str)
+                )) if candidate_repair_fields else ()
+                candidate_repair_relation_indexes = tuple(sorted(set(
+                    finding["relation_index"] for finding in error.validation_findings
+                    if finding.get("code") == "PROCEDURE_AFFECTED_STAGE_MISMATCH"
+                    and type(finding.get("relation_index")) is int
+                ))) if candidate_repair_fields else ()
+                candidate_repair_indexes = (
+                    tuple(sorted(repair_candidate_indexes)) if candidates_only else ()
+                )
+                post_treatment_only = (
+                    allow_post_enrollment_reclassification
+                    and repair_baseline_wire is not None
+                    and len(repair_candidate_indexes) == 1
+                    and callable(getattr(transport, "continue_post_treatment_repair", None))
+                )
+                post_treatment_repair_index = (
+                    next(iter(repair_candidate_indexes)) if post_treatment_only else None
+                )
+                scoped_unit_repair = (
+                    not post_treatment_only
+                    and not observation_only
+                    and (allow_candidate_repartition or allow_source_closure_rewrite)
+                    and repair_baseline_wire is not None and bool(mutable_candidate_source_union)
+                    and callable(getattr(transport, "continue_scoped_unit_repair", None))
+                )
+                repair_prompt = build_protocol_control_repair_prompt(
+                    batch,
+                    problem=str(error),
+                    validation_findings=error.validation_findings,
+                    structure_unit_ids=(
+                        error.structure_unit_ids or batch.owned_structure_unit_ids
+                    ),
+                    candidate_ids=error.candidate_ids or candidate_ids,
+                    candidate_indexes=sorted(repair_candidate_indexes),
+                    obligation_source_span_ids=error.obligation_source_span_ids,
+                    candidate_only=candidate_only,
+                    candidates_only=candidates_only,
+                    source_insert=allow_source_insert,
+                    source_insert_candidate_only=source_insert_candidate_only,
+                    source_insert_candidates_only=source_insert_candidates_only,
+                    source_closure_rewrite=allow_source_closure_rewrite,
+                    baseline_wire_sha256=(
+                        _sha256(_stable_json(repair_baseline_wire.model_dump(mode="json")))
+                        if allow_source_insert and repair_baseline_wire is not None
+                        else None
+                    ),
+                    baseline_candidate_drafts=(
+                        [repair_baseline_wire.candidate_drafts[index].model_dump(mode="json")
+                         for index in sorted(repair_candidate_indexes)]
+                        if (candidate_only or candidates_only or allow_source_closure_rewrite)
+                        and repair_baseline_wire is not None else None
+                    ),
+                    missing_source_statements=(
+                        [statement.quoted_text for statement in source_interpretation.statements
+                         if statement.force == "prohibited"
+                         and statement.structure_unit_id in error.structure_unit_ids
+                         and any(
+                             statement.structure_unit_id == unit.structure_unit_id
+                             and normalize_source_excerpt(statement.quoted_text)
+                             in normalize_source_excerpt(unit.excerpt)
+                             for unit in batch.owned_units
+                         )]
+                        if (allow_source_insert or allow_source_closure_rewrite)
+                        and source_interpretation is not None
+                        and "ENROLLMENT_PROHIBITION_UNCOVERED" in error.error_class_codes
+                        else ()
+                    ),
+                    source_statement_inventory=(
+                        [(statement.force, statement.quoted_text)
+                         for statement in source_interpretation.statements
+                         if statement.structure_unit_id in error.structure_unit_ids
+                         and statement.force in {"required", "prohibited", "recommended"}]
+                        if allow_source_closure_rewrite and source_interpretation is not None
+                        else ()
+                    ),
+                )
+                if evidence_source_types_only and repair_baseline_raw is not None:
+                    repair_prompt = _build_evidence_source_types_repair_prompt(
+                        batch, repair_baseline_raw, evidence_source_types_repair_paths
+                    )
+                elif time_operand_only and repair_baseline_raw is not None and time_operand_repair_candidate is not None:
+                    repair_prompt = _build_time_operand_repair_prompt(
+                        repair_baseline_raw, time_operand_repair_candidate,
+                        time_operand_repair_paths,
+                    )
+                elif atom_only and repair_baseline_raw is not None and atom_repair_path is not None:
+                    repair_prompt = _build_obligation_atom_repair_prompt(
+                        batch, repair_baseline_raw, atom_repair_path, str(error),
+                        missing_anchor_only=missing_anchor_only,
+                    )
+                elif observation_only and repair_baseline_raw is not None and observation_repair_candidate is not None:
+                    repair_prompt = _build_observation_policy_repair_prompt(
+                        repair_baseline_raw,
+                        observation_repair_candidate,
+                        observation_repair_paths,
+                        str(error),
+                    )
+                    if observation_repair_field == "record_semantics":
+                        candidate = repair_baseline_raw["candidate_drafts"][observation_repair_candidate]
+                        selected = [{"layer": layer, "group_index": group, "atom_index": atom,
+                            "atom": candidate[f"{layer}_expression"]["groups"][group]["atoms"][atom]}
+                            for layer, group, atom in observation_repair_paths]
+                        repair_prompt = (RECORD_SEMANTICS_GUIDANCE
+                            + "\n仅修订列出原子的 evaluation.record_semantics 中 proposition_direction；不得改条件、数值、日期、观察选择、来源或兄弟。"
+                            "target_kind、record_obligation和source_excerpts必须与原值一致。"
+                            "只能返回对应位置的 items 与 semantics。若用途未核清，填写unresolved并保留本原子逐字依据。"
+                            "source_excerpts必须来自同一原子的source_excerpts，不能引用旁段。"
+                            + "\n原子：" + _stable_json(selected) + "\n问题：" + str(error))
+                elif evidence_source_only and repair_baseline_raw is not None and evidence_source_repair_path is not None:
+                    repair_prompt = _build_evidence_source_policy_repair_prompt(
+                        batch, repair_baseline_raw, evidence_source_repair_path, str(error)
+                    )
+                elif post_treatment_only and post_treatment_repair_index is not None:
+                    repair_prompt = _build_post_treatment_repair_prompt(
+                        batch, repair_baseline_wire, post_treatment_repair_index, str(error)
+                    )
+                elif future_only and future_repair_path is not None and repair_baseline_wire is not None:
+                    repair_prompt = _build_future_prohibition_repair_prompt(
+                        repair_baseline_wire, future_repair_path
+                    )
+                elif calendar_only and calendar_repair_path is not None and repair_baseline_wire is not None:
+                    repair_prompt = _build_calendar_bound_repair_prompt(
+                        repair_baseline_wire, calendar_repair_path, batch=batch
+                    )
+                if resuming_partial and allow_source_insert and repair_baseline_wire is not None:
+                    frozen_candidates = [
+                        {"title": item.title, "source_structure_unit_ids": item.source_structure_unit_ids}
+                        for item in repair_baseline_wire.candidate_drafts
+                    ]
+                    repair_prompt += (
+                        "\n本次为作业恢复的新会话；以下已核候选只供去重，不得改写："
+                        + json.dumps(frozen_candidates, ensure_ascii=False)
+                    )
+                if candidate_repair_fields:
+                    candidate_repair_stage_ids = tuple(dict.fromkeys(
+                        binding.workflow_stage_id
+                        for binding in repair_baseline_wire.candidate_drafts[candidate_repair_index].review_node_bindings
+                        if binding.role == ReviewNodeRole.DECIDE_AT_NODE
+                    ))
+                    selected_relations = [
+                        repair_baseline_wire.candidate_drafts[candidate_repair_index]
+                        .cross_source_relations[index].model_dump(mode="json")
+                        for index in candidate_repair_relation_indexes
+                    ]
+                    repair_prompt += (
+                        "\n本次仅授权 candidate_draft.cross_source_relations。"
+                        "返回 {\"candidate_draft\":{\"cross_source_relations\":[...]}}；"
+                        "只返回下列获授权关系的修订，不要照抄其他关系；其他关系由系统原样保留。"
+                        "kind、external_target_kind、external_target_id、candidate_side必须保持，"
+                        "不得换成另一个流程或条款。可以修订受影响节点及说明；"
+                        "确无补充关系时可删除获授权关系（返回空数组），不能换对象替代。"
+                        "本次须返回全部获授权关系的修订，或明确删除全部获授权关系；"
+                        "不得只返回其中一部分而隐含删除其余关系。"
+                        + "获授权关系原稿：" + json.dumps(selected_relations, ensure_ascii=False) + "\n"
+                        +
+                        "不要重发候选其他字段。系统原样保留疗程、时间、义务、判定节点和证据。"
+                        "若所引用流程不能表达该要求，应删除错误关联、保留独立要求；"
+                        "不得为适配流程而提前完成时间或改变临床含义。"
+                        "关联调整后仍须完整来源、语义及采用核对；空关联不表示已完成审核。"
+                        "\n本候选已冻结的本节点判定身份："
+                        + json.dumps(candidate_repair_stage_ids, ensure_ascii=False)
+                        + "。保留的补充关联只能引用这些既有身份，不能通过改关联新增判定节点。"
+                        "同时仍须符合冻结流程的实际执行节点及原文支持的跨节点规则；"
+                        "若原有判定节点与所引流程不能相容，删除错误关联而保留独立要求，"
+                        "不得把关联移到没有本节点判定的更早节点来凑合。"
+                    )
+                try:
+                    repair_used = True
+                    if scoped_unit_repair:
+                        scoped_unit_repair_ids = set(mutable_candidate_source_union)
+                        owned_units = [item for item in batch.owned_units
+                                       if item.structure_unit_id in scoped_unit_repair_ids]
+                        context_units = [*batch.context_units, *[item for item in batch.owned_units
+                                         if item.structure_unit_id not in scoped_unit_repair_ids]]
+                        local_fields = batch.model_dump(mode="python")
+                        local_fields.update(
+                            owned_units=owned_units, context_units=context_units,
+                            owned_structure_unit_ids=[item.structure_unit_id for item in owned_units],
+                            context_structure_unit_ids=[item.structure_unit_id for item in context_units],
+                            owned_source_span_ids=sorted({span for item in owned_units for span in item.source_span_ids}),
+                            context_source_span_ids=sorted({span for item in context_units for span in item.source_span_ids}),
+                        )
+                        for field in ("pre_enrollment_structure_unit_ids", "structural_only_structure_unit_ids"):
+                            local_fields[field] = [unit_id for unit_id in local_fields[field]
+                                                   if unit_id in scoped_unit_repair_ids]
+                        for field in (
+                            "table_context_reading_bounds", "table_footnote_context_links",
+                            "owned_visit_instance_by_structure_unit_id",
+                            "owned_procedure_semantic_families_by_structure_unit_id",
+                            "owned_required_action_kinds_by_structure_unit_id",
+                            "owned_required_procedure_target_ids_by_structure_unit_id",
+                        ):
+                            local_fields[field] = {unit_id: value for unit_id, value in local_fields.get(field, {}).items()
+                                                   if unit_id in scoped_unit_repair_ids}
+                        local_batch = ProtocolControlDispositionBatch.model_validate(local_fields)
+                        local_wire = repair_baseline_wire.model_copy(update={
+                            "dispositions": [item for item in repair_baseline_wire.dispositions
+                                             if item.structure_unit_id in scoped_unit_repair_ids],
+                            "candidate_drafts": [item for item in repair_baseline_wire.candidate_drafts
+                                                 if set(item.source_structure_unit_ids) <= scoped_unit_repair_ids],
+                        })
+                        repair_prompt = build_protocol_control_agent_prompt(
+                            local_batch, prompt_template=prompt_template,
+                            include_schema=False, source_interpretation=source_interpretation,
+                        ) + _SCOPED_SOURCE_CONTEXT_REPAIR_GUIDANCE + (
+                            "\n本次只修订上述 owned_units 的来源闭包，context_units 仅供只读核对。"
+                            "只返回这些单元的 dispositions 和候选；其余内容由系统保留。"
+                            "下列提案尚未采用，须按原文核实错误关联，不得因无正确关联就称要求已覆盖。"
+                            "独立要求应保留有源候选；真正后续事项按原文处置，不能改为支持说明来绕过要求。"
+                            "禁止事项位于括号内或混合条件句时，义务statement保留实际禁止事项，"
+                            "原子的source_excerpts同时保留禁止事项逐字片段及其完整上位情形原句；"
+                            "条件、允许行为、数量、后续结果或免除范围不能只留在notes中而从候选引用消失。"
+                            "保留上位情形的引用不等于把允许/免除行为改成必须完成，仍按原文分别建模。"
+                            "修订后仍须完整来源、含义、覆盖及发布核对。问题：" + str(error)
+                            + "\n原局部提案：" + local_wire.model_dump_json()
+                        )
+                        response = transport.continue_scoped_unit_repair(
+                            session_id=session_id, prompt=repair_prompt, batch=local_batch,
+                        )
+                    elif resuming_partial and allow_source_insert:
+                        if not (source_insert_candidate_only or source_insert_candidates_only):
+                            raise RuntimeError("局部恢复缺少独立来源补入通道")
+                        response = transport.start_source_insert(
+                            prompt=repair_prompt,
+                            multiple=source_insert_candidates_only,
+                        )
+                        session_id = response.session_id
+                        resuming_partial = False
+                    elif evidence_source_types_only:
+                        response = transport.continue_evidence_source_types(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif future_only:
+                        response = transport.continue_future_prohibition_repair(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif calendar_only:
+                        response = transport.continue_calendar_bound_repair(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif post_treatment_only:
+                        response = transport.continue_post_treatment_repair(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif time_operand_only:
+                        response = transport.continue_time_operands(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif atom_only:
+                        response = transport.continue_atom(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif observation_only:
+                        reader = (transport.continue_record_semantics
+                                  if observation_repair_field == "record_semantics"
+                                  else transport.continue_observation_policies)
+                        response = reader(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif evidence_source_only:
+                        response = transport.continue_evidence_source_policy(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif candidate_only or source_insert_candidate_only:
+                        if candidate_repair_fields and (
+                            not candidate_repair_relation_targets
+                            or not candidate_repair_relation_indexes
+                            or not getattr(transport, "supports_candidate_field_repair", False)
+                        ):
+                            raise RuntimeError("缺少字段修订能力或关系位置证明，不能退回整候选改写")
+                        response = transport.continue_candidate(
+                            session_id=session_id, prompt=repair_prompt,
+                            **({"fields": candidate_repair_fields} if candidate_repair_fields else {}),
+                            **({"relation_stage_ids": candidate_repair_stage_ids}
+                               if candidate_repair_fields and getattr(
+                                   transport, "supports_candidate_relation_stage_scope", False,
+                               ) else {}),
+                        )
+                    elif candidates_only or source_insert_candidates_only:
+                        response = transport.continue_candidates(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    else:
+                        response = transport.continue_session(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    if response.session_id != session_id:
+                        raise RuntimeError("同会话修复不得更换 session_id")
+                    raw_text = response.text
+                except Exception as exc2:  # noqa: BLE001 - transport boundary
+                    attempts.append(
+                        ProtocolControlAgentAttempt(
+                            attempt=len(attempts) + 1,
+                            session_id=session_id,
+                            raw_output_sha256=_sha256(str(exc2)),
+                            outcome="transport_failed",
+                            issues=[str(exc2)[:2000]],
+                            error_classes=(
+                                [protocol_control_call_failure_code(exc2)]
+                                if protocol_control_call_failure_code(exc2) else []
+                            ),
+                            rejected_structure_unit_ids=list(
+                                error.structure_unit_ids or batch.owned_structure_unit_ids
+                            ),
+                            rejected_candidate_ids=list(error.candidate_ids or candidate_ids),
+                        )
+                    )
+                    return build_result(
+                        status="需要核对",
+                        batch_id=batch.batch_id,
+                        session_id=session_id,
+                        attempts=attempts,
+                        source_interpretation=source_interpretation,
+                        source_statement_coverage=latest_source_statement_coverage,
+                        source_target_review=latest_source_target_review,
+                        partial_wire=partial_wire,
+                    )
+
+
+def _sha256(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()

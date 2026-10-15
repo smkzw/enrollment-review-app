@@ -1,0 +1,397 @@
+{
+  "batch_id": "pcb-e7dc037e8e384ebf04e10e59",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [],
+  "context_structure_unit_ids": [],
+  "context_units": [],
+  "coverage_manifest_id": "manifest:slice61ce-package93-ae-reportable-events-followup-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1102",
+    "body.p1103",
+    "body.p1104",
+    "body.p1105",
+    "body.p1106",
+    "body.p1107",
+    "body.p1108",
+    "body.p1109",
+    "body.p1110",
+    "body.p1111",
+    "body.p1112"
+  ],
+  "owned_structure_unit_ids": [
+    "su-dbeb8cab9a2507dcc96e1bf9",
+    "su-9885c453d8356d0ca4e91fb5",
+    "su-84df72afb742beeb8f47b4b9",
+    "su-126276b0cc57955e9212a055",
+    "su-27b411319ef4c56cc38cee23",
+    "su-437d5b150cc22348e71e340a",
+    "su-049a5285ef6c19fdef039c00",
+    "su-56b4d2122a537d750b29a3c0",
+    "su-4b84e150cc7fced2a1322ec8",
+    "su-1847ee1b8b80e59fbf93deb9",
+    "su-a6c0b36dfffc4a65710677df"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "应报告的事件类型",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "研究者向申办者报告不良事件等信息的要求与途径",
+        "应报告的事件类型"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1102"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29650,
+      "source_ref": "body.p1102",
+      "source_span_ids": [
+        "body.p1102"
+      ],
+      "structure_unit_id": "su-dbeb8cab9a2507dcc96e1bf9",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "以下是研究者必须在获知后24小时（含）内向申办者报告的事件类型，无论事件与试验用药品的关系如何：",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "研究者向申办者报告不良事件等信息的要求与途径",
+        "应报告的事件类型"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1103"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29660,
+      "source_ref": "body.p1103",
+      "source_span_ids": [
+        "body.p1103"
+      ],
+      "structure_unit_id": "su-9885c453d8356d0ca4e91fb5",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "死亡事件",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "研究者向申办者报告不良事件等信息的要求与途径",
+        "应报告的事件类型"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1104"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29670,
+      "source_ref": "body.p1104",
+      "source_span_ids": [
+        "body.p1104"
+      ],
+      "structure_unit_id": "su-84df72afb742beeb8f47b4b9",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "严重不良事件",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "研究者向申办者报告不良事件等信息的要求与途径",
+        "应报告的事件类型"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1105"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29680,
+      "source_ref": "body.p1105",
+      "source_span_ids": [
+        "body.p1105"
+      ],
+      "structure_unit_id": "su-126276b0cc57955e9212a055",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "妊娠事件",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "研究者向申办者报告不良事件等信息的要求与途径",
+        "应报告的事件类型"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1106"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29690,
+      "source_ref": "body.p1106",
+      "source_span_ids": [
+        "body.p1106"
+      ],
+      "structure_unit_id": "su-27b411319ef4c56cc38cee23",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "研究者必须立即向申办者报告这些事件的新的重要信息（在获知信息后24小时内），包括：",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "研究者向申办者报告不良事件等信息的要求与途径",
+        "应报告的事件类型"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1107"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29700,
+      "source_ref": "body.p1107",
+      "source_span_ids": [
+        "body.p1107"
+      ],
+      "structure_unit_id": "su-437d5b150cc22348e71e340a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "新的体征或症状，或诊断改变",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "研究者向申办者报告不良事件等信息的要求与途径",
+        "应报告的事件类型"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1108"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29710,
+      "source_ref": "body.p1108",
+      "source_span_ids": [
+        "body.p1108"
+      ],
+      "structure_unit_id": "su-049a5285ef6c19fdef039c00",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "重要的新诊断检查结果",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "研究者向申办者报告不良事件等信息的要求与途径",
+        "应报告的事件类型"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1109"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29720,
+      "source_ref": "body.p1109",
+      "source_span_ids": [
+        "body.p1109"
+      ],
+      "structure_unit_id": "su-56b4d2122a537d750b29a3c0",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "基于新信息的因果关系变化",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "研究者向申办者报告不良事件等信息的要求与途径",
+        "应报告的事件类型"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1110"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29730,
+      "source_ref": "body.p1110",
+      "source_span_ids": [
+        "body.p1110"
+      ],
+      "structure_unit_id": "su-4b84e150cc7fced2a1322ec8",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "事件结果的变化，包括恢复",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "研究者向申办者报告不良事件等信息的要求与途径",
+        "应报告的事件类型"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1111"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29740,
+      "source_ref": "body.p1111",
+      "source_span_ids": [
+        "body.p1111"
+      ],
+      "structure_unit_id": "su-1847ee1b8b80e59fbf93deb9",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "关于事件临床过程的其他描述信息",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的报告",
+        "研究者向申办者报告不良事件等信息的要求与途径",
+        "应报告的事件类型"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1112"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29750,
+      "source_ref": "body.p1112",
+      "source_span_ids": [
+        "body.p1112"
+      ],
+      "structure_unit_id": "su-a6c0b36dfffc4a65710677df",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-dbeb8cab9a2507dcc96e1bf9"
+  ],
+  "study_phase": "phase_ii"
+}

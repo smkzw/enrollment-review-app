@@ -1,0 +1,18 @@
+{
+  "attached_count": 9,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-639da36664c42ded875e5247",
+  "group_id": "d001-ii-package89-table8-severity-grading-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 15
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package89-table8-severity-grading-boundary",
+  "owned_count": 6,
+  "prompt_char_count": 35538,
+  "prompt_sha256": "d7e6dee22032a0b2f822533160852e1f17717dcc7c288405e728616ad5794822",
+  "task_id": "phase5-slice61ca-20260830",
+  "unit_count": 15,
+  "worker": "codebuddy-worker_02"
+}

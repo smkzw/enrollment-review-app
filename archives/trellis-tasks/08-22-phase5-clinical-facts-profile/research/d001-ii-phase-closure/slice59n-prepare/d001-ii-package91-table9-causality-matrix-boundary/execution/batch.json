@@ -1,0 +1,1082 @@
+{
+  "batch_id": "pcb-5ca43829b322205f87ba0dc4",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1087",
+    "body.p1088",
+    "body.p1089",
+    "body.p1090",
+    "body.p1091",
+    "body.p1092",
+    "body.p1093",
+    "body.p1094",
+    "body.p1095",
+    "body.p1096",
+    "body.p1097"
+  ],
+  "context_structure_unit_ids": [
+    "su-ad693c949dc5c0af171ceb98",
+    "su-5aaf226dcc02b5a3e08dd903",
+    "su-3ae4a77dfe3156fb16aedc95",
+    "su-1ce73e621477ea9e5887b43f",
+    "su-c9d399e18f22ea63d650c96b",
+    "su-3b951bc99a3a77fb80c95b25",
+    "su-e0d364e47a938d1d1d590ac7",
+    "su-69755d89787064f448a79042",
+    "su-ddd04748eeae501561b21462",
+    "su-d41dd8a6ab4c85237c0b2e49",
+    "su-a6447a08863cae689b733633"
+  ],
+  "context_units": [
+    {
+      "excerpt": "不良事件因果关系判断",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1087"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 28950,
+      "source_ref": "body.p1087",
+      "source_span_ids": [
+        "body.p1087"
+      ],
+      "structure_unit_id": "su-ad693c949dc5c0af171ceb98",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "根据药物与不良事件相关性判断标准，按照五分法将不良事件与试验用药品相关性判定结果分为：肯定有关、很可能有关、可能有关、可能无关、无关。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1088"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 28960,
+      "source_ref": "body.p1088",
+      "source_span_ids": [
+        "body.p1088"
+      ],
+      "structure_unit_id": "su-5aaf226dcc02b5a3e08dd903",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "研究者需根据五个评价要点进行临床试验个例不良事件与试验用药品相关性综合评价，并提供相关性判定依据。五个评价要点概括如下：",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1089"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 28970,
+      "source_ref": "body.p1089",
+      "source_span_ids": [
+        "body.p1089"
+      ],
+      "structure_unit_id": "su-3ae4a77dfe3156fb16aedc95",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "时间相关性：试验用药品和不良事件出现的有无合理的时间关系；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1090"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 28980,
+      "source_ref": "body.p1090",
+      "source_span_ids": [
+        "body.p1090"
+      ],
+      "structure_unit_id": "su-1ce73e621477ea9e5887b43f",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "是否已知：不良事件是否符合该药物已知的作用机制、特性或已知的不良反应；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1091"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 28990,
+      "source_ref": "body.p1091",
+      "source_span_ids": [
+        "body.p1091"
+      ],
+      "structure_unit_id": "su-c9d399e18f22ea63d650c96b",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "去激发结果：参与者在停药或减量后，可疑的不良事件是否减轻、好转或消失；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1092"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29000,
+      "source_ref": "body.p1092",
+      "source_span_ids": [
+        "body.p1092"
+      ],
+      "structure_unit_id": "su-3b951bc99a3a77fb80c95b25",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "再激发结果：参与者在再次给药后，已经消除的同样、同性质的不良事件再次出现；",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1093"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29010,
+      "source_ref": "body.p1093",
+      "source_span_ids": [
+        "body.p1093"
+      ],
+      "structure_unit_id": "su-e0d364e47a938d1d1d590ac7",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "其他合理解释：不良事件是否可用参与者疾病进展（包括伴随疾病）、合并用药的作用、其他治疗措施或干扰因素等的影响来解释。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1094"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29020,
+      "source_ref": "body.p1094",
+      "source_span_ids": [
+        "body.p1094"
+      ],
+      "structure_unit_id": "su-69755d89787064f448a79042",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "不良事件与试验用药品相关性判定结果分类及判定依据可参照表7进行。统计分析时，将“肯定有关”、“很可能有关”、“可能有关”视为与试验用药品相关。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1095"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29030,
+      "source_ref": "body.p1095",
+      "source_span_ids": [
+        "body.p1095"
+      ],
+      "structure_unit_id": "su-ddd04748eeae501561b21462",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "严重不良事件（SAE）与试验用药品的因果关系由研究者和申办者双方共同判断。当双方意见不一致时，对研究者或/和申办者任意一方判断与试验用药品相关的严重不良事件，均属报告范围。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1096"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29040,
+      "source_ref": "body.p1096",
+      "source_span_ids": [
+        "body.p1096"
+      ],
+      "structure_unit_id": "su-d41dd8a6ab4c85237c0b2e49",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "表 9 不良事件与试验用药品因果关系评价",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1097"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29050,
+      "source_ref": "body.p1097",
+      "source_span_ids": [
+        "body.p1097"
+      ],
+      "structure_unit_id": "su-a6447a08863cae689b733633",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61cc-package91-table9-causality-matrix-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.t14.r0.c0.p0",
+    "body.t14.r0.c1.p0",
+    "body.t14.r0.c7.p0",
+    "body.t14.r1.c1.p0",
+    "body.t14.r1.c2.p0",
+    "body.t14.r1.c3.p0",
+    "body.t14.r1.c7.p0",
+    "body.t14.r1.c9.p0",
+    "body.t14.r2.c0.p0",
+    "body.t14.r2.c1.p0",
+    "body.t14.r2.c2.p0",
+    "body.t14.r2.c3.p0",
+    "body.t14.r2.c7.p0",
+    "body.t14.r2.c9.p0",
+    "body.t14.r3.c0.p0",
+    "body.t14.r3.c1.p0",
+    "body.t14.r3.c2.p0",
+    "body.t14.r3.c3.p0",
+    "body.t14.r3.c5.p0",
+    "body.t14.r3.c7.p0",
+    "body.t14.r3.c8.p0",
+    "body.t14.r3.c9.p0",
+    "body.t14.r4.c0.p0",
+    "body.t14.r4.c1.p0",
+    "body.t14.r4.c2.p0",
+    "body.t14.r4.c3.p0",
+    "body.t14.r4.c4.p0",
+    "body.t14.r4.c5.p0",
+    "body.t14.r4.c6.p0",
+    "body.t14.r4.c7.p0",
+    "body.t14.r4.c9.p0",
+    "body.t14.r5.c0.p0",
+    "body.t14.r5.c1.p0",
+    "body.t14.r5.c2.p0",
+    "body.t14.r5.c3.p0",
+    "body.t14.r5.c7.p0",
+    "body.t14.r5.c9.p0",
+    "body.t14.r6.c0.p0",
+    "body.t14.r6.c1.p0",
+    "body.t14.r6.c2.p0",
+    "body.t14.r6.c3.p0",
+    "body.t14.r6.c4.p0",
+    "body.t14.r6.c5.p0",
+    "body.t14.r6.c6.p0",
+    "body.t14.r6.c7.p0",
+    "body.t14.r6.c8.p0",
+    "body.t14.r6.c9.p0",
+    "body.t14.r7.c0.p0",
+    "body.t14.r7.c0.p1",
+    "body.t14.r7.c0.p2",
+    "body.t14.r7.c0.p3",
+    "body.t14.r7.c0.p4",
+    "body.t14.r7.c0.p5"
+  ],
+  "owned_structure_unit_ids": [
+    "su-afd0ba9f4ceee6a0e4313fdc",
+    "su-e590057de5c4225f15b7024d",
+    "su-52e7b02e497756ea60fd42c1",
+    "su-d5a725f26cde701cc2273061",
+    "su-0eddfbce01c4de6fda5fc63e",
+    "su-bf57639a93e8121fadc2abe9",
+    "su-f90a974a28e4b2f090cd7c1a",
+    "su-829a78ccf20c0b48cfe08f69"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "判定依据 | 相关 | 不相关",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断",
+        "表 9 不良事件与试验用药品因果关系评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t14.r0.c0.p0",
+        "body.t14.r0.c1.p0",
+        "body.t14.r0.c7.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29071,
+      "source_ref": "body.t14.r0",
+      "source_span_ids": [
+        "body.t14.r0.c0.p0",
+        "body.t14.r0.c1.p0",
+        "body.t14.r0.c7.p0"
+      ],
+      "structure_unit_id": "su-afd0ba9f4ceee6a0e4313fdc",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "判定依据"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            7
+          ]
+        ],
+        "row_headers": [
+          "判定依据"
+        ],
+        "row_index": 0,
+        "table_path": [
+          0,
+          0
+        ]
+      },
+      "unit_kind": "table_header"
+    },
+    {
+      "excerpt": "肯定有关 | 很可能有关 | 可能有关 | 可能无关 | 无关",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断",
+        "表 9 不良事件与试验用药品因果关系评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t14.r1.c1.p0",
+        "body.t14.r1.c2.p0",
+        "body.t14.r1.c3.p0",
+        "body.t14.r1.c7.p0",
+        "body.t14.r1.c9.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29111,
+      "source_ref": "body.t14.r1",
+      "source_span_ids": [
+        "body.t14.r1.c1.p0",
+        "body.t14.r1.c2.p0",
+        "body.t14.r1.c3.p0",
+        "body.t14.r1.c7.p0",
+        "body.t14.r1.c9.p0"
+      ],
+      "structure_unit_id": "su-e590057de5c4225f15b7024d",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "相关"
+        ],
+        "column_index": 1,
+        "member_cell_paths": [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            1,
+            7
+          ],
+          [
+            1,
+            9
+          ]
+        ],
+        "row_headers": [],
+        "row_index": 1,
+        "table_path": [
+          1,
+          1
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "是否有合理的时间关系 | + | + | + | ± | -",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断",
+        "表 9 不良事件与试验用药品因果关系评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t14.r2.c0.p0",
+        "body.t14.r2.c1.p0",
+        "body.t14.r2.c2.p0",
+        "body.t14.r2.c3.p0",
+        "body.t14.r2.c7.p0",
+        "body.t14.r2.c9.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29161,
+      "source_ref": "body.t14.r2",
+      "source_span_ids": [
+        "body.t14.r2.c0.p0",
+        "body.t14.r2.c1.p0",
+        "body.t14.r2.c2.p0",
+        "body.t14.r2.c3.p0",
+        "body.t14.r2.c7.p0",
+        "body.t14.r2.c9.p0"
+      ],
+      "structure_unit_id": "su-52e7b02e497756ea60fd42c1",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "判定依据"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            2,
+            7
+          ],
+          [
+            2,
+            9
+          ]
+        ],
+        "row_headers": [
+          "是否有合理的时间关系"
+        ],
+        "row_index": 2,
+        "table_path": [
+          2,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "是否符合已知的作用机制、特性或已知的不良反应 | + | + | + | - | + | - | -",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断",
+        "表 9 不良事件与试验用药品因果关系评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t14.r3.c0.p0",
+        "body.t14.r3.c1.p0",
+        "body.t14.r3.c2.p0",
+        "body.t14.r3.c3.p0",
+        "body.t14.r3.c5.p0",
+        "body.t14.r3.c7.p0",
+        "body.t14.r3.c8.p0",
+        "body.t14.r3.c9.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29221,
+      "source_ref": "body.t14.r3",
+      "source_span_ids": [
+        "body.t14.r3.c0.p0",
+        "body.t14.r3.c1.p0",
+        "body.t14.r3.c2.p0",
+        "body.t14.r3.c3.p0",
+        "body.t14.r3.c5.p0",
+        "body.t14.r3.c7.p0",
+        "body.t14.r3.c8.p0",
+        "body.t14.r3.c9.p0"
+      ],
+      "structure_unit_id": "su-d5a725f26cde701cc2273061",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "判定依据"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            3,
+            0
+          ],
+          [
+            3,
+            1
+          ],
+          [
+            3,
+            2
+          ],
+          [
+            3,
+            3
+          ],
+          [
+            3,
+            5
+          ],
+          [
+            3,
+            7
+          ],
+          [
+            3,
+            8
+          ],
+          [
+            3,
+            9
+          ]
+        ],
+        "row_headers": [
+          "是否符合已知的作用机制、特性或已知的不良反应"
+        ],
+        "row_index": 3,
+        "table_path": [
+          3,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "去激发结果 | + | + | + | -/? | + | -/? | -/? | -/?",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断",
+        "表 9 不良事件与试验用药品因果关系评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t14.r4.c0.p0",
+        "body.t14.r4.c1.p0",
+        "body.t14.r4.c2.p0",
+        "body.t14.r4.c3.p0",
+        "body.t14.r4.c4.p0",
+        "body.t14.r4.c5.p0",
+        "body.t14.r4.c6.p0",
+        "body.t14.r4.c7.p0",
+        "body.t14.r4.c9.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29301,
+      "source_ref": "body.t14.r4",
+      "source_span_ids": [
+        "body.t14.r4.c0.p0",
+        "body.t14.r4.c1.p0",
+        "body.t14.r4.c2.p0",
+        "body.t14.r4.c3.p0",
+        "body.t14.r4.c4.p0",
+        "body.t14.r4.c5.p0",
+        "body.t14.r4.c6.p0",
+        "body.t14.r4.c7.p0",
+        "body.t14.r4.c9.p0"
+      ],
+      "structure_unit_id": "su-0eddfbce01c4de6fda5fc63e",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "判定依据"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            4,
+            0
+          ],
+          [
+            4,
+            1
+          ],
+          [
+            4,
+            2
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            4,
+            4
+          ],
+          [
+            4,
+            5
+          ],
+          [
+            4,
+            6
+          ],
+          [
+            4,
+            7
+          ],
+          [
+            4,
+            9
+          ]
+        ],
+        "row_headers": [
+          "去激发结果"
+        ],
+        "row_index": 4,
+        "table_path": [
+          4,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "再激发结果 | + | -/? | -/? | -/? | -/?",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断",
+        "表 9 不良事件与试验用药品因果关系评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t14.r5.c0.p0",
+        "body.t14.r5.c1.p0",
+        "body.t14.r5.c2.p0",
+        "body.t14.r5.c3.p0",
+        "body.t14.r5.c7.p0",
+        "body.t14.r5.c9.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29391,
+      "source_ref": "body.t14.r5",
+      "source_span_ids": [
+        "body.t14.r5.c0.p0",
+        "body.t14.r5.c1.p0",
+        "body.t14.r5.c2.p0",
+        "body.t14.r5.c3.p0",
+        "body.t14.r5.c7.p0",
+        "body.t14.r5.c9.p0"
+      ],
+      "structure_unit_id": "su-bf57639a93e8121fadc2abe9",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "判定依据"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            5,
+            0
+          ],
+          [
+            5,
+            1
+          ],
+          [
+            5,
+            2
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            5,
+            7
+          ],
+          [
+            5,
+            9
+          ]
+        ],
+        "row_headers": [
+          "再激发结果"
+        ],
+        "row_index": 5,
+        "table_path": [
+          5,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "是否可用其他合理的原因解释 | - | - | + | - | - | - | ++ | + | +",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断",
+        "表 9 不良事件与试验用药品因果关系评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t14.r6.c0.p0",
+        "body.t14.r6.c1.p0",
+        "body.t14.r6.c2.p0",
+        "body.t14.r6.c3.p0",
+        "body.t14.r6.c4.p0",
+        "body.t14.r6.c5.p0",
+        "body.t14.r6.c6.p0",
+        "body.t14.r6.c7.p0",
+        "body.t14.r6.c8.p0",
+        "body.t14.r6.c9.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29451,
+      "source_ref": "body.t14.r6",
+      "source_span_ids": [
+        "body.t14.r6.c0.p0",
+        "body.t14.r6.c1.p0",
+        "body.t14.r6.c2.p0",
+        "body.t14.r6.c3.p0",
+        "body.t14.r6.c4.p0",
+        "body.t14.r6.c5.p0",
+        "body.t14.r6.c6.p0",
+        "body.t14.r6.c7.p0",
+        "body.t14.r6.c8.p0",
+        "body.t14.r6.c9.p0"
+      ],
+      "structure_unit_id": "su-f90a974a28e4b2f090cd7c1a",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "判定依据"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            6,
+            0
+          ],
+          [
+            6,
+            1
+          ],
+          [
+            6,
+            2
+          ],
+          [
+            6,
+            3
+          ],
+          [
+            6,
+            4
+          ],
+          [
+            6,
+            5
+          ],
+          [
+            6,
+            6
+          ],
+          [
+            6,
+            7
+          ],
+          [
+            6,
+            8
+          ],
+          [
+            6,
+            9
+          ]
+        ],
+        "row_headers": [
+          "是否可用其他合理的原因解释"
+        ],
+        "row_index": 6,
+        "table_path": [
+          6,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "注： | “+”表示肯定，或阳性结果； | “-”表示否定，或阴性结果，或暂未获得结果的情况； | “±”表示时间关系不能排除； | “++”表示可用其他“更加”合理的原因解释； | “-/?”表示去激发/再激发结果为阴性，或尚未进行去激发/再激发，或不适用去激发/再激发。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "不良事件的评估",
+        "不良事件因果关系判断",
+        "表 9 不良事件与试验用药品因果关系评价"
+      ],
+      "is_footnote_or_note": true,
+      "member_source_refs": [
+        "body.t14.r7.c0.p0",
+        "body.t14.r7.c0.p1",
+        "body.t14.r7.c0.p2",
+        "body.t14.r7.c0.p3",
+        "body.t14.r7.c0.p4",
+        "body.t14.r7.c0.p5"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 29551,
+      "source_ref": "body.t14.r7",
+      "source_span_ids": [
+        "body.t14.r7.c0.p0",
+        "body.t14.r7.c0.p1",
+        "body.t14.r7.c0.p2",
+        "body.t14.r7.c0.p3",
+        "body.t14.r7.c0.p4",
+        "body.t14.r7.c0.p5"
+      ],
+      "structure_unit_id": "su-829a78ccf20c0b48cfe08f69",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "判定依据"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            7,
+            0
+          ]
+        ],
+        "row_headers": [
+          "注："
+        ],
+        "row_index": 7,
+        "table_path": [
+          7,
+          0
+        ]
+      },
+      "unit_kind": "table_note"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-afd0ba9f4ceee6a0e4313fdc"
+  ],
+  "study_phase": "phase_ii"
+}

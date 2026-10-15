@@ -1,0 +1,78 @@
+{
+  "schema": "phase4_real_omlx_probe_v1",
+  "server": "http://127.0.0.1:8002",
+  "model": "GLM-OCR-bf16",
+  "synthetic_no_phi": true,
+  "pages": [
+    {
+      "gold_page_id": "scanned-01-p1",
+      "file_ref": "scanned-01.pdf",
+      "route": "vision_ocr",
+      "expected_text": "胸部X线检查未见异常。\n检查日期：2026-04-02",
+      "recognized_text": "胸部X线检查未见异常。\n检查日期：2026-04-02",
+      "normalized_exact": true,
+      "expected_fragments_found": [
+        "胸部X线检查未见异常。",
+        "检查日期：2026-04-02"
+      ],
+      "expected_fragment_count": 2,
+      "machine_coordinates_present": false,
+      "exact_text": true,
+      "response_status": 200,
+      "response_model": "GLM-OCR-bf16",
+      "model_matches_request": true,
+      "finish_reason": "stop",
+      "elapsed_seconds": 1.621,
+      "response_sha256": "54fb35f7f531d846382a0ec00b7119fb91ae04b490d9dba9174a9deaccc79d82",
+      "raw_response_base64": "IHsiaWQiOiJjaGF0Y21wbC0xMWNkNWFkOSIsIm9iamVjdCI6ImNoYXQuY29tcGxldGlvbiIsImNyZWF0ZWQiOjE3ODcxMDQ2NzAsIm1vZGVsIjoiR0xNLU9DUi1iZjE2IiwiY2hvaWNlcyI6W3siaW5kZXgiOjAsIm1lc3NhZ2UiOnsicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOiLog7jpg6hY57q/5qOA5p+l5pyq6KeB5byC5bi444CCXG7mo4Dmn6Xml6XmnJ/vvJoyMDI2LTA0LTAyIn0sImZpbmlzaF9yZWFzb24iOiJzdG9wIn1dLCJ1c2FnZSI6eyJwcm9tcHRfdG9rZW5zIjoyNTczLCJjb21wbGV0aW9uX3Rva2VucyI6MTksInRvdGFsX3Rva2VucyI6MjU5MiwiaW5wdXRfdG9rZW5zIjoyNTczLCJvdXRwdXRfdG9rZW5zIjoxOSwicHJvbXB0X3Rva2Vuc19kZXRhaWxzIjp7ImNhY2hlZF90b2tlbnMiOjB9LCJ0b3RhbF90aW1lIjowLjc1fX0=",
+      "raw_response_utf8": " {\"id\":\"chatcmpl-11cd5ad9\",\"object\":\"chat.completion\",\"created\":1787104670,\"model\":\"GLM-OCR-bf16\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"胸部X线检查未见异常。\\n检查日期：2026-04-02\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":2573,\"completion_tokens\":19,\"total_tokens\":2592,\"input_tokens\":2573,\"output_tokens\":19,\"prompt_tokens_details\":{\"cached_tokens\":0},\"total_time\":0.75}}"
+    },
+    {
+      "gold_page_id": "photo-01-p1",
+      "file_ref": "photo-01.jpg",
+      "route": "vision_ocr",
+      "expected_text": "胸部X线检查未见异常。\n检查日期：2026-04-02",
+      "recognized_text": "胸部X线检查未见异常。\n检查日期：2026-04-02",
+      "normalized_exact": true,
+      "expected_fragments_found": [
+        "胸部X线检查未见异常。",
+        "检查日期：2026-04-02"
+      ],
+      "expected_fragment_count": 2,
+      "machine_coordinates_present": false,
+      "exact_text": true,
+      "response_status": 200,
+      "response_model": "GLM-OCR-bf16",
+      "model_matches_request": true,
+      "finish_reason": "stop",
+      "elapsed_seconds": 0.742,
+      "response_sha256": "719189bc2d472974b4259078f57ac0e7530c1a88968a20405b32ab0be54f22c2",
+      "raw_response_base64": "IHsiaWQiOiJjaGF0Y21wbC0zOGM3MDNjZiIsIm9iamVjdCI6ImNoYXQuY29tcGxldGlvbiIsImNyZWF0ZWQiOjE3ODcxMDQ2NzEsIm1vZGVsIjoiR0xNLU9DUi1iZjE2IiwiY2hvaWNlcyI6W3siaW5kZXgiOjAsIm1lc3NhZ2UiOnsicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOiLog7jpg6hY57q/5qOA5p+l5pyq6KeB5byC5bi444CCXG7mo4Dmn6Xml6XmnJ/vvJoyMDI2LTA0LTAyIn0sImZpbmlzaF9yZWFzb24iOiJzdG9wIn1dLCJ1c2FnZSI6eyJwcm9tcHRfdG9rZW5zIjoyODI1LCJjb21wbGV0aW9uX3Rva2VucyI6MTksInRvdGFsX3Rva2VucyI6Mjg0NCwiaW5wdXRfdG9rZW5zIjoyODI1LCJvdXRwdXRfdG9rZW5zIjoxOSwicHJvbXB0X3Rva2Vuc19kZXRhaWxzIjp7ImNhY2hlZF90b2tlbnMiOjB9LCJ0b3RhbF90aW1lIjowLjc0fX0=",
+      "raw_response_utf8": " {\"id\":\"chatcmpl-38c703cf\",\"object\":\"chat.completion\",\"created\":1787104671,\"model\":\"GLM-OCR-bf16\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"胸部X线检查未见异常。\\n检查日期：2026-04-02\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":2825,\"completion_tokens\":19,\"total_tokens\":2844,\"input_tokens\":2825,\"output_tokens\":19,\"prompt_tokens_details\":{\"cached_tokens\":0},\"total_time\":0.74}}"
+    }
+  ],
+  "text_exact_pages": 2,
+  "raw_exact_pages": 2,
+  "total_pages": 2,
+  "all_expected_fragments_found": true,
+  "all_responses_successful": true,
+  "all_response_models_match": true,
+  "model_identity_evidence": {
+    "gate_selected_model": "GLM-OCR-bf16",
+    "provider_reported_model": "GLM-OCR-bf16",
+    "independent_server_catalog_captured": false,
+    "independent_process_launch_log_captured": false,
+    "interpretation": "行为证据来自门禁请求及其原始响应；模型实际加载身份未由独立服务清单或启动日志证明。"
+  },
+  "gate": {
+    "owner": "phase4-evidence-ocr-v2",
+    "kind": "ocr",
+    "model": "GLM-OCR-bf16",
+    "request_id": "b5c63d50e99949baa113536ec912269b",
+    "request_state": "released",
+    "request_created_at_unix": 1787104668.8576288,
+    "lease_scope": "one lease held for the sequential two-request probe process",
+    "evidence_source": "/Users/smkzw/.codex/state/omlx_workload_gate.sqlite3"
+  },
+  "layout_coordinates_observed": false
+}

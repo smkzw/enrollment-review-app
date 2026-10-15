@@ -1,0 +1,14 @@
+{
+  "validation_scope": "generated_materials_only_not_product_tests",
+  "json_parse_files": 7,
+  "schema_valid": true,
+  "synthetic_receipt_valid": true,
+  "negative_schema_cases_rejected": 2,
+  "work_package_dag_valid": true,
+  "python_scripts_syntax_valid": true,
+  "product_pytest_run": false,
+  "frontend_build_run": false,
+  "real_model_run": false,
+  "real_case_run": false,
+  "github_written": false
+}

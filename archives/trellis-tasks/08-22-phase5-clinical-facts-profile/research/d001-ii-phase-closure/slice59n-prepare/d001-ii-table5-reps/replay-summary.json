@@ -1,0 +1,18 @@
+{
+  "attached_count": 0,
+  "batching_mode": "planner",
+  "claims_complete": false,
+  "control_batch_id": "pcb-9b9d50642383976b5ae7774e",
+  "group_id": "d001-ii-table5-reps",
+  "lookup_counts": {
+    "frozen_plan_owned": 4
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-table5-reps",
+  "owned_count": 4,
+  "prompt_char_count": 18815,
+  "prompt_sha256": "4f1476a06ff2abb76066cbabcef016ba47714c79e438d0d363b5d43eb99c2a20",
+  "task_id": "phase5-slice59m-20260827",
+  "unit_count": 4,
+  "worker": "config-parity"
+}

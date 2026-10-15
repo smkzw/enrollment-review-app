@@ -1,0 +1,67 @@
+{
+  "package_id": "1006V1-EXEC-01",
+  "round": "1006V1",
+  "created_at": "2026-10-06T18:30:12+02:00",
+  "purpose": "approved_delivery_window_execution_materials",
+  "repo": "smkzw/enrollment-review-app",
+  "review_head": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
+  "product_source_commit_reported": "8b5b4c4f75f85110dfc81ce080755b1c8457144f",
+  "approval": {
+    "delivery_window": "approved_by_user",
+    "r1": "previously_approved",
+    "workflow_mechanism": "approved_candidate_not_proven_migration",
+    "new_reference_model_required": false,
+    "formal_adoption_activation_signature_authorized_by_package": false,
+    "runtime_resumed_by_package": false
+  },
+  "single_delivery": "complete-source isolated case work draft plus one sourced correction/supplement and updated result with preserved history",
+  "source_attachment": {
+    "name": "HANDOFF_20261006_1001V1_PAUSE.md",
+    "sha256": "9242b164a2730a71e57ad896120d33538d9a954758d0cef5376b423f7441821b",
+    "included_in_zip": false,
+    "evidence_class": "author_report_not_independently_replayed"
+  },
+  "claims_complete": false,
+  "files": [
+    {
+      "path": "00_START_HERE.md",
+      "bytes": 2972,
+      "sha256": "133876ea9c5eb51ab89c246cee5e55257bf6a71452f9f99967f2cb20f2b4a93f"
+    },
+    {
+      "path": "01_PASTE_TO_AGENT.md",
+      "bytes": 6340,
+      "sha256": "1075048eba06b9604bdce7d21e2d92e2df10e2f30fc87617e8b61ae7159f474b"
+    },
+    {
+      "path": "02_DELIVERY_WINDOW.md",
+      "bytes": 8708,
+      "sha256": "198c0200dbe2f4729f084da33ed4bc7f40574f5a09fc95a5d5702b8a4de55e9c"
+    },
+    {
+      "path": "03_ACCEPTANCE.md",
+      "bytes": 6178,
+      "sha256": "99c6c94578a8fd38f05d9f76afa3ea318ceb6d75ae221ce9c53ff33e42964019"
+    },
+    {
+      "path": "04_DOCS_SYNC.md",
+      "bytes": 5875,
+      "sha256": "8292db3217613a8dca0798a8e2ae63c498622cf6206b6a0a49bc1f6654bff25e"
+    },
+    {
+      "path": "05_HANDOFF_TEMPLATE.md",
+      "bytes": 4344,
+      "sha256": "ffee540d12b5c41c622fa980557a832e783a15b6ea92fd1b57503177c7af573e"
+    },
+    {
+      "path": "06_SOURCE_BASELINE.md",
+      "bytes": 4651,
+      "sha256": "d265aa0300c51dea3b42e15ed82ba1c1c496b622531e5a27382928653ea75948"
+    }
+  ],
+  "inventory_exclusions": [
+    "MANIFEST.json",
+    "PACKAGE_CHECKS.json"
+  ],
+  "note": "Inventory only; no product API, task runner, clinical authorization or runtime input."
+}

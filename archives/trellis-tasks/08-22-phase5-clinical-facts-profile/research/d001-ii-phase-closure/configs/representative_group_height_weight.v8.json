@@ -1,0 +1,17 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_height_weight.v7.json",
+  "group_id": "d001-ii-height-weight-v8",
+  "task_id": "phase5-slice60zk-20260828",
+  "artifact_dir_name": "phase5-slice60zk-d001-height-weight-replay-structural-label-closure-20260828",
+  "structural_only_source_refs": ["body.p774", "body.p776", "body.p781"],
+  "ids": {
+    "manifest_id": "manifest:slice60zk-height-weight",
+    "catalog_id": "catalog:slice60zk-height-weight"
+  },
+  "notes": [
+    "v7候选语义和节点范围已通过，但模型把章节标题及身高、体重子标题误处置为流程必做项。",
+    "v8冻结纯结构来源；发布门禁止其被提升为官方入排、流程必做或其他控制候选。",
+    "纯结构来源期望只进入确定性门禁，不进入Agent首轮输入。"
+  ]
+}

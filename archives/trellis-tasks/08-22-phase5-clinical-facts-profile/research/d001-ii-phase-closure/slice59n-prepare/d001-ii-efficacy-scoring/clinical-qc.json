@@ -1,0 +1,282 @@
+{
+  "attached_source_refs": [
+    "body.t5.r22",
+    "body.t5.r23",
+    "body.t5.r24",
+    "body.t5.r25",
+    "body.p316",
+    "body.p633",
+    "body.p634",
+    "body.p635",
+    "body.p636",
+    "body.p885"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-efficacy-scoring",
+  "notes": [
+    "原始DOCX产品链直接提取，用户无需预处理方案文本。",
+    "本组只处置评分方法学（PASI/PGA/BSA/DLQI四个指标的构成、范围与细则指引），不发布入排阈值和流程必做项。",
+    "IN-04为三项合取官方阈值（PASI≥12、PGA≥3、BSA≥10%），DLQI不是入排指标，不得新增DLQI阈值。",
+    "流程表PASI/PGA/BSA行覆盖筛选、基线（X）和治疗期各访视，DLQI行筛选期与基线列无标记、首个节点为D1给药前。",
+    "四个疗效指标的基线值均为D1给药前结果；基线访视需再次审查入选和排除标准后方可随机分组。",
+    "治疗期及以后访视的疗效结局（PASI 75、PGA-TS等）属于统计分析章节，不进入本组。",
+    "本切片为来源闭包切片：不调用临床语义模型，不并入131包正式目录，claims_complete=false。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p819",
+    "body.p820",
+    "body.p821",
+    "body.p822",
+    "body.p823",
+    "body.p824",
+    "body.p825",
+    "body.p826",
+    "body.p827"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "PASI流程行筛选X、基线（X）、治疗期及以后各X，不得重复发布流程必做项": "pending_codex"
+      },
+      "frozen_excerpt": "PASI评分 | X | （X） | X | X | X | X | X | X | X",
+      "lookup": "coverage_manifest",
+      "role": "attached",
+      "source_ref": "body.t5.r22",
+      "structure_unit_id": "su-94ab8f405752d11f31627e12"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "PGA流程行筛选X、基线（X）、治疗期及以后各X，不得重复发布流程必做项": "pending_codex"
+      },
+      "frozen_excerpt": "PGA评分 | X | （X） | X | X | X | X | X | X | X",
+      "lookup": "coverage_manifest",
+      "role": "attached",
+      "source_ref": "body.t5.r23",
+      "structure_unit_id": "su-d70cabaf2c7d65e06abecf14"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "BSA流程行筛选X、基线（X）、治疗期及以后各X，不得重复发布流程必做项": "pending_codex"
+      },
+      "frozen_excerpt": "BSA评分 | X | （X） | X | X | X | X | X | X | X",
+      "lookup": "coverage_manifest",
+      "role": "attached",
+      "source_ref": "body.t5.r24",
+      "structure_unit_id": "su-9bfd6c174ac65b84df527afc"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "DLQI流程行筛选期和基线列无标记，首个X出现在D1；不得据此虚构DLQI筛选或基线评估义务": "pending_codex"
+      },
+      "frozen_excerpt": "DLQI评分 | X | X | X | X | X | X",
+      "lookup": "coverage_manifest",
+      "role": "attached",
+      "source_ref": "body.t5.r25",
+      "structure_unit_id": "su-ffd0f604f2ce0067f904f0f0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "D1给药前基线取值不得改写为筛选访视取值": "pending_codex",
+        "访视合并与基线取值规则只读：≤7天可合并、＞7天需D1前7天内基线访视；疗效指标以D1给药前结果作为基线值": "pending_codex"
+      },
+      "frozen_excerpt": "如果筛选访视和D1访视间隔≤7天，则筛选和基线访视可合并进行，两次访视中相同的评估事项可只进行一次。如果筛选访视和D1访视间隔＞7天，则需在D1天前7天内进行基线访视。以给药前最近一次评估结果作为基线值。生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p316",
+      "structure_unit_id": "su-97caf64d089af9677d378f82"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "IN-04只读官方阈值：筛选和基线时研究者评估需同时满足PASI≥12、PGA≥3、BSA≥10%": "pending_codex",
+        "不得改写阈值方向或数值，不得把DLQI加入IN-04": "pending_codex"
+      },
+      "frozen_excerpt": "筛选和基线时研究者评估斑块状银屑病病情满足以下要求：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p633",
+      "structure_unit_id": "su-8c449f970af6ae7203786a13"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "PASI≥12分仅为IN-04入选阈值，不是评分方法学，不得重复发布": "pending_codex"
+      },
+      "frozen_excerpt": "银屑病面积与严重程度指数（PASI）评分≥12分；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p634",
+      "structure_unit_id": "su-63628185e0e3535a6544cc78"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "PGA≥3分仅为IN-04入选阈值，不是评分方法学，不得重复发布": "pending_codex"
+      },
+      "frozen_excerpt": "医生整体评价（PGA）评分≥3分；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p635",
+      "structure_unit_id": "su-32ec48553dd1ff1b962ff70a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "BSA≥10%仅为IN-04入选阈值，不是评分方法学，不得重复发布": "pending_codex"
+      },
+      "frozen_excerpt": "受累的体表面积（BSA）≥10%；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p636",
+      "structure_unit_id": "su-79143962cf3999a590a1ed1f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "疗效评价",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p819",
+      "structure_unit_id": "su-5b68363eeee710dce3e66c03"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "银屑病面积和严重程度指数（PASI）",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p820",
+      "structure_unit_id": "su-4b8b1f21ec3afc8b3f90fede"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "PASI综合皮损严重程度（红斑、厚度、鳞屑）及皮损面积，0-72分，评分细则见附录4": "pending_codex",
+        "不得把PASI 0-72的方法学范围改写为入排阈值或基线合格线": "pending_codex"
+      },
+      "frozen_excerpt": "PASI评分是综合皮损严重程度（包括红斑、厚度、鳞屑）及皮损面积对银屑病严重程度进行定量评价^[9]。PASI评分在0-72分之间，分数越高表示程度越严重。评分细则见附录4。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p821",
+      "structure_unit_id": "su-f17962eb229797524736e432"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "医生整体评估（PGA）",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p822",
+      "structure_unit_id": "su-4a56866bbf64df4acb399ba8"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "PGA根据红斑、鳞屑和斑块厚度整体评估，0-4分，评分细则见附录5": "pending_codex",
+        "不得把PGA 0-4的方法学范围改写为入排阈值；IN-04的PGA≥3为只读官方阈值": "pending_codex"
+      },
+      "frozen_excerpt": "PGA是根据患者红斑、鳞屑和斑块厚度整体情况进行评分^[10]。PGA评分在0-4分之间，分数越高表示程度越严重。评分细则见附录5。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p823",
+      "structure_unit_id": "su-5433d768c6df4a1c7531ee50"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "受累的体表面积（BSA）",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p824",
+      "structure_unit_id": "su-2500e2723112e896345c33ab"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "BSA以单手掌及手指屈侧面积为体表面积1%，0%-100%，评分细则见疗效评价SOP": "pending_codex",
+        "不得把BSA 0%-100%的方法学范围改写为入排阈值；IN-04的BSA≥10%为只读官方阈值": "pending_codex"
+      },
+      "frozen_excerpt": "BSA是将患者单个手掌及手指屈侧面积定义为人体表面积的1%^[11]，评估患者全身皮损总和达到多少个手掌面积，记为BSA。参与者BSA评分在0%-100%之间，分数越大表示皮损面积越大。评分细则见“疗效评价SOP”文件。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p825",
+      "structure_unit_id": "su-baddf307128adae6b6fc9908"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "皮肤病学生活质量指数（DLQI）",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p826",
+      "structure_unit_id": "su-c984573a961144b7ecb4f8df"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "DLQI不得被设为入排阈值或筛选/基线流程必做项；其首个流程评估节点为D1给药前": "pending_codex",
+        "DLQI为10个问题的问卷，评估上1周生活质量影响，0-30分，评分细则见附录6": "pending_codex"
+      },
+      "frozen_excerpt": "DLQI是一份包含10个问题的问卷，用于评估上1周内患者主观感受因疾病对生活质量所造成的影响^[12]。DLQI评分在0-30分之间，分数越高表示生活质量受损越严重。DLQI评分细则见附录6。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p827",
+      "structure_unit_id": "su-e57454fe5ea551f89bf26390"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把D1给药前基线取值并入筛选或基线访视节点": "pending_codex",
+        "基线访视注只读：四个疗效指标以D1给药前结果作为基线值，基线需再次审查入选和排除标准": "pending_codex"
+      },
+      "frozen_excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p885",
+      "structure_unit_id": "su-8c8a34eb18d0139b009c191d"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61bk-20260829",
+  "worker": "codex-parent"
+}

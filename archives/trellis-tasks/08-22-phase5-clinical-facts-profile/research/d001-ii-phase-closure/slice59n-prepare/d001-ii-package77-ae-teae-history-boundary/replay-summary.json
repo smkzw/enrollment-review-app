@@ -1,0 +1,19 @@
+{
+  "attached_count": 41,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-147416c0cee33e7e29dc1401",
+  "group_id": "d001-ii-package77-ae-teae-history-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 3,
+    "frozen_plan_owned": 48
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package77-ae-teae-history-boundary",
+  "owned_count": 10,
+  "prompt_char_count": 51140,
+  "prompt_sha256": "aec9b108764ee2cabef39d903f77580778cd29a7bb3f45189ad50dae2371b62d",
+  "task_id": "phase5-slice61bo-20260830",
+  "unit_count": 51,
+  "worker": "codebuddy-worker_02"
+}

@@ -1,12 +1,16 @@
-"""LLM-based enrollment review module v2.0.
+"""Legacy Markdown-based enrollment review compatibility module.
 
-Sends criteria rules + evidence bundle to the LLM and parses the
-structured markdown response into a ReviewReport.
+This module is the legacy review surface used by ``app/router`` and the
+report/backfill readers.  Its free-text parser and project-specific semantic
+heuristics are intentionally quarantined here for read-only compatibility.
+The V2 protocol/deconstruction path must not import this module; it routes
+through the structured contracts and Agent adapters under ``app/domain``,
+``app/protocols`` and ``app/agents`` instead.
 
-Key changes from v1:
-- No auto-extracted anchor dates — LLM identifies dates from evidence.
-- Evidence hierarchy rules in prompt (screening record > prior record).
-- LLM must quote source document names and categories in reasoning.
+Sends criteria rules + evidence bundle to the legacy LLM and parses the
+structured markdown response into a ReviewReport.  Do not add new
+project-specific heuristics here; migrate new behavior to a structured
+contract and deterministic gate.
 """
 
 from __future__ import annotations
@@ -22,9 +26,24 @@ from app.llm.client import review_chat
 from app.models import GroupResult, ReviewReport, ReviewResult
 from app.phases import phase_by_id, render_phase_scope
 
-logger = logging.getLogger(__name__)
+
+LEGACY_REVIEWER_CONTRACT_VERSION = "legacy/reviewer-markdown/v1"
+LEGACY_REVIEWER_BOUNDARY = "legacy_only"
+LEGACY_REVIEWER_V2_IMPORTS_ALLOWED = False
+"""Import policy exposed for architecture-boundary tests and diagnostics."""
+
+_LEGACY_REVIEWER_HEURISTICS = frozenset(
+    {
+        "free_text_trigger_semantics",
+        "project_specific_rule_text",
+        "disease_indicator_text",
+        "historical_source_text",
+    }
+)
 
 RULE_ID_PATTERN = re.compile(r"(?<![A-Za-z0-9])(?:IN|EX)-[A-Za-z0-9_.-]+")
+logger = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Verdict emoji ↔ internal value mapping
@@ -90,10 +109,10 @@ def _map_verdict(cell: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# System prompt (v2.0 — evidence hierarchy, LLM-identified dates)
+# Legacy-only system prompt (never used by V2 structured Agents)
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = """\
+_LEGACY_SYSTEM_PROMPT = """\
 你是一名资深的临床试验入排审核专家。根据入排标准规则和证据材料，逐条审核。
 
 ## 证据层级规则（重要！）
@@ -183,6 +202,9 @@ DeepSeek在长规则和高推理token下容易出现“推理正确但表格判�
 判定结果：（pass / fail / insufficient / investigator）
 一段话总结。
 """
+
+# Historical name retained for callers that import the legacy prompt.
+_SYSTEM_PROMPT = _LEGACY_SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +383,15 @@ def _parse_overall_verdict(text: str) -> str:
     return "needs_evidence"
 
 
-POSITIVE_TRIGGER_PATTERNS = [
+# ---------------------------------------------------------------------------
+# Legacy-only free-text semantic heuristics
+# ---------------------------------------------------------------------------
+#
+# These matchers are retained solely for the legacy Markdown response
+# compatibility path.  They are deliberately not a shared clinical contract:
+# V2 callers must provide typed facts/conditions/obligations to the
+# structured protocol-control contracts and deterministic gates.
+_LEGACY_POSITIVE_TRIGGER_PATTERNS = [
     r"触发判断[：:]\s*已触发",
     r"(?<!未见)(?<!未)(?<!不)(?<!无)(明确|已|已经)?触发(?:了)?(?:本条|该条|排除|子项|EX-[A-Za-z0-9_.-]+)",
     r"(?<!未见)(?<!未)(?<!不)(?<!无)(达到|符合)(?:了)?(?:本条|该条|排除|方案).{0,16}(标准|条件|阈值)",
@@ -373,7 +403,7 @@ POSITIVE_TRIGGER_PATTERNS = [
     r"研究者.{0,8}(判断|评估|认为).{0,12}(有临床意义|CS|临床显著)",
 ]
 
-NEGATIVE_TRIGGER_PATTERNS = [
+_LEGACY_NEGATIVE_TRIGGER_PATTERNS = [
     r"触发判断[：:]\s*(未触发|不触发|未见触发)",
     r"触发判断[：:]\s*(?:未达到|未达|未见达到|未见达)[^。；;|]{0,24}(?:不触发|未触发)",
     r"(未触发|不触发).{0,18}(EX-[A-Za-z0-9_.-]+|排除|标准|条件|阈值|本条|该条)",
@@ -384,7 +414,7 @@ NEGATIVE_TRIGGER_PATTERNS = [
     r"均未触发排除标准",
 ]
 
-INVESTIGATOR_PATTERNS = [
+_LEGACY_INVESTIGATOR_PATTERNS = [
     r"暂不直接判定不通过",
     r"(待|需|需要).{0,8}(研究者|PI|医学监查).{0,8}(确认|评估|判断)",
     r"尚未见研究者.{0,12}(确认|评估|判断)",
@@ -393,6 +423,14 @@ INVESTIGATOR_PATTERNS = [
     r"(时间窗|洗脱期|用药记录|治疗记录).{0,30}(不清|不明确|交接不清|待确认|需确认)",
 ]
 
+# Keep the historical names as read-only aliases for old imports/tests.
+POSITIVE_TRIGGER_PATTERNS = _LEGACY_POSITIVE_TRIGGER_PATTERNS
+NEGATIVE_TRIGGER_PATTERNS = _LEGACY_NEGATIVE_TRIGGER_PATTERNS
+INVESTIGATOR_PATTERNS = _LEGACY_INVESTIGATOR_PATTERNS
+
+# The helper functions below intentionally remain inside this legacy module.
+# Their free-text rule/disease/indicator/history matching is not a reusable
+# clinical interpretation layer and is never part of the V2 structured route.
 
 def _last_semantic_index(patterns: List[str], reasoning: str) -> int:
     last = -1
@@ -1657,12 +1695,29 @@ def _append_missing_rule_placeholders(
     return True
 
 
+def _apply_legacy_reviewer_semantic_heuristics(
+    rule_results: List[ReviewResult],
+) -> bool:
+    """Apply only the frozen legacy free-text compatibility heuristics.
+
+    This seam is intentionally the last place where rule text, disease/
+    indicator wording, or historical-source prose can affect a result.  The
+    structured V2 protocol-control path does not call this function.
+    """
+    adjusted = _apply_explicit_conmed_denial_adjustments(rule_results)
+    return _apply_reasoning_verdict_consistency_adjustments(rule_results) or adjusted
+
+
 def parse_review_response(raw_response: str) -> dict:
+    """Parse a legacy Markdown review response.
+
+    V2 structured candidates and controls must not be routed through this
+    parser; use their versioned contract and deterministic gate instead.
+    """
     rule_results = _merge_duplicate_rule_results(_parse_rule_table(raw_response))
     group_results = _parse_group_table(raw_response)
     adjusted = _insert_missing_parent_rule_results(rule_results)
-    adjusted = _apply_explicit_conmed_denial_adjustments(rule_results) or adjusted
-    adjusted = _apply_reasoning_verdict_consistency_adjustments(rule_results) or adjusted
+    adjusted = _apply_legacy_reviewer_semantic_heuristics(rule_results) or adjusted
     adjusted = _reconcile_parent_rule_results(rule_results) or adjusted
     overall_verdict = _parse_overall_verdict(raw_response)
     overall_verdict = _recalculate_overall_verdict(rule_results, group_results, overall_verdict)
@@ -1684,6 +1739,8 @@ def parse_review_response(raw_response: str) -> dict:
         "rule_results": rule_results,
         "group_results": group_results,
     }
+
+
 
 
 def _phase_id_from_review_phase(review_phase: Optional[Union[Dict[str, object], str]]) -> str:

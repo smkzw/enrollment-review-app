@@ -1,0 +1,8 @@
+{
+  "attached_count": 10,
+  "batching_mode": "single_batch_with_known_targets",
+  "context_structure_unit_ids": [],
+  "owned_count": 4,
+  "prompt_char_count": 29285,
+  "prompt_sha256": "246b119cf304e271fd211c045b2be496ff4dd4b819ad472cc8da69ace640e7b0"
+}

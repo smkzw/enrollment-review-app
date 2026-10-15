@@ -1,0 +1,7 @@
+{
+  "status": "需要核对",
+  "session_id": "phase-applicability-chat-d595b11a1c8c4f12b6f30f748253d287",
+  "elapsed_seconds": 514.13,
+  "error_type": "PhaseApplicabilityAgentWireValidationError",
+  "error": "RATIONALE_INCOMPLETE: 共发现 12 个目标的理由质量问题：RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句"
+}

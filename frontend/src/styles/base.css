@@ -1,0 +1,187 @@
+/* 基础样式：重置、排版、焦点与无障碍基础。 */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family:
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    system-ui,
+    sans-serif;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-body);
+  letter-spacing: 0;
+  color: var(--color-ink);
+  background: var(--color-canvas);
+  /* 页面级禁止横向滚动（§3.2） */
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--color-blue);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* 文本块内的链接：下划线区分，不依赖颜色（axe link-in-text-block） */
+p a:not(.button):not(.icon-button),
+dd a:not(.button):not(.icon-button),
+blockquote a:not(.button):not(.icon-button),
+.feedback__hint a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* 键盘焦点：清晰可见（§7.1） */
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-s);
+}
+
+/* 图形按钮与链接按钮：无文本时必须有中文可访问名称 */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--color-muted-bg);
+  color: var(--color-ink);
+}
+
+.icon-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* 主操作按钮（明确命令才使用） */
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--shadow-control);
+  transition: background-color var(--motion-control), border-color var(--motion-control),
+    color var(--motion-control), box-shadow var(--motion-control);
+}
+
+.button:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: var(--color-brand-dark);
+  color: var(--color-brand-dark);
+  box-shadow: var(--shadow-control-hover);
+}
+
+.button--primary {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: var(--color-ink);
+}
+
+.button--primary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--color-brand-secondary);
+  border-color: var(--color-brand-dark);
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.button--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-blue);
+  box-shadow: none;
+}
+
+.button:active:not(:disabled):not([aria-disabled="true"]) {
+  box-shadow: inset 0 1px 3px rgb(31 41 51 / 16%);
+}
+
+.button:disabled,
+.button[aria-disabled="true"] {
+  border-color: var(--color-line);
+  background: var(--color-muted-bg);
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 1;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: -100%;
+  z-index: 100;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+}
+
+.skip-link:focus {
+  top: var(--space-2);
+}

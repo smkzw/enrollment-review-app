@@ -1,0 +1,20 @@
+{
+  "attached_count": 7,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-4a2eb60d7b26174b4faa7c5b",
+  "group_id": "d001-ii-virology-p803-p805-closure",
+  "lookup_counts": {
+    "coverage_manifest": 1,
+    "frozen_plan_context": 1,
+    "frozen_plan_owned": 8
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-virology-p803-p805-closure",
+  "owned_count": 3,
+  "prompt_char_count": 30599,
+  "prompt_sha256": "fe04c42bb2aa4654f8be2b53621d00cab8a436ab2ecc59d51fa1834715865e71",
+  "task_id": "phase5-slice60zx-virology-source-closure-20260828",
+  "unit_count": 10,
+  "worker": "worker_02"
+}

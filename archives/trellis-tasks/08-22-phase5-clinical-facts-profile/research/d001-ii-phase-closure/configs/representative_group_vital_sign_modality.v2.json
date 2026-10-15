@@ -1,0 +1,8 @@
+{
+  "extends": "representative_group_vital_sign_modality.v1.json",
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-vital-sign-modality-v2",
+  "task_id": "phase5-slice61aw-20260829",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice61aw-d001-vital-sign-modality-repair-20260829"
+}

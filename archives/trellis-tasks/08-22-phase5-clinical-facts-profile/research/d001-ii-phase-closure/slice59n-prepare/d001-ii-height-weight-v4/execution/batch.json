@@ -1,0 +1,587 @@
+{
+  "batch_id": "pcb-6728e7ddc12e6bebcb7bed19",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p320",
+    "body.p845",
+    "body.t5.r9.c0.p0",
+    "body.t5.r9.c1.p0",
+    "body.t5.r9.c2.p0",
+    "body.t5.r9.c5.p0",
+    "body.t5.r9.c6.p0",
+    "body.t5.r9.c7.p0",
+    "body.t5.r9.c8.p0",
+    "body.t5.r9.c9.p0"
+  ],
+  "context_structure_unit_ids": [
+    "su-6fe2bab21f6c2983c2bca48b",
+    "su-2f4ea527d3bfcc8b25f1f31f",
+    "su-ec85798aa4acf2f5b7ced8f2"
+  ],
+  "context_units": [
+    {
+      "excerpt": "身高及体重^6 | X | （X） | X | X | X | X | X",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表",
+        "表 1 Ⅱ期临床研究阶段流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t5.r9.c0.p0",
+        "body.t5.r9.c1.p0",
+        "body.t5.r9.c2.p0",
+        "body.t5.r9.c5.p0",
+        "body.t5.r9.c6.p0",
+        "body.t5.r9.c7.p0",
+        "body.t5.r9.c8.p0",
+        "body.t5.r9.c9.p0"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 10211,
+      "source_ref": "body.t5.r9",
+      "source_span_ids": [
+        "body.t5.r9.c0.p0",
+        "body.t5.r9.c1.p0",
+        "body.t5.r9.c2.p0",
+        "body.t5.r9.c5.p0",
+        "body.t5.r9.c6.p0",
+        "body.t5.r9.c7.p0",
+        "body.t5.r9.c8.p0",
+        "body.t5.r9.c9.p0"
+      ],
+      "structure_unit_id": "su-6fe2bab21f6c2983c2bca48b",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "项目"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            9,
+            0
+          ],
+          [
+            9,
+            1
+          ],
+          [
+            9,
+            2
+          ],
+          [
+            9,
+            5
+          ],
+          [
+            9,
+            6
+          ],
+          [
+            9,
+            7
+          ],
+          [
+            9,
+            8
+          ],
+          [
+            9,
+            9
+          ]
+        ],
+        "row_headers": [
+          "身高及体重^6"
+        ],
+        "row_index": 9,
+        "table_path": [
+          9,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "身高和体重：筛选访视进行身高和体重测量，其余访视点进行体重测量。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p320"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13110,
+      "source_ref": "body.p320",
+      "source_span_ids": [
+        "body.p320"
+      ],
+      "structure_unit_id": "su-2f4ea527d3bfcc8b25f1f31f",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "测量身高及体重",
+      "heading_path": [
+        "研究评估和程序",
+        "访视安排",
+        "Ⅱ期临床研究阶段",
+        "筛选期"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p845"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 26110,
+      "source_ref": "body.p845",
+      "source_span_ids": [
+        "body.p845"
+      ],
+      "structure_unit_id": "su-ec85798aa4acf2f5b7ced8f2",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice60zg-height-weight",
+  "known_official_targets": [],
+  "known_procedure_targets": [
+    {
+      "catalog_item_id": "procedure:d001-height-weight-screening",
+      "covered_action_kinds": [
+        "perform_height_measurement",
+        "perform_weight_measurement"
+      ],
+      "label": "筛选访视测量身高及体重",
+      "position": 41,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "semantic_family": "anthropometry",
+      "source_excerpts": [
+        "身高和体重：筛选访视进行身高和体重测量，其余访视点进行体重测量。",
+        "身高及体重^6 | X | （X） | X | X | X | X | X",
+        "身高及体重^6 | X | （X） | X | X | X | X | X",
+        "身高及体重^6 | X | （X） | X | X | X | X | X",
+        "身高及体重^6 | X | （X） | X | X | X | X | X",
+        "身高及体重^6 | X | （X） | X | X | X | X | X",
+        "身高及体重^6 | X | （X） | X | X | X | X | X",
+        "身高及体重^6 | X | （X） | X | X | X | X | X",
+        "身高及体重^6 | X | （X） | X | X | X | X | X"
+      ],
+      "source_span_ids": [
+        "body.p320",
+        "body.t5.r9.c0.p0",
+        "body.t5.r9.c1.p0",
+        "body.t5.r9.c2.p0",
+        "body.t5.r9.c5.p0",
+        "body.t5.r9.c6.p0",
+        "body.t5.r9.c7.p0",
+        "body.t5.r9.c8.p0",
+        "body.t5.r9.c9.p0"
+      ],
+      "visit_instance": "筛选访视"
+    },
+    {
+      "catalog_item_id": "procedure:d001-weight-baseline",
+      "covered_action_kinds": [
+        "perform_weight_measurement"
+      ],
+      "label": "基线访视测量体重",
+      "position": 42,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": "anthropometry",
+      "source_excerpts": [
+        "身高和体重：筛选访视进行身高和体重测量，其余访视点进行体重测量。"
+      ],
+      "source_span_ids": [
+        "body.p320"
+      ],
+      "visit_instance": "基线访视"
+    }
+  ],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {
+    "su-aa806e7b2b57f6af1d9f7f3f": [
+      "anthropometry"
+    ]
+  },
+  "owned_required_action_kinds_by_structure_unit_id": {
+    "su-0e5c3500cb73085d8b990849": [
+      "prepare_participant",
+      "use_calibrated_device"
+    ],
+    "su-6af83a5c76871758c86bec93": [
+      "position_participant"
+    ],
+    "su-7c602e313830d7581c1c65e7": [
+      "operate_measurement_device",
+      "position_participant",
+      "record_with_precision"
+    ],
+    "su-8466dea30dff2fcc83c7378a": [
+      "record_with_precision"
+    ],
+    "su-a1f84bf1ba0cf4376dd845f8": [
+      "prepare_participant"
+    ],
+    "su-aa806e7b2b57f6af1d9f7f3f": [
+      "perform_height_measurement",
+      "perform_weight_measurement"
+    ],
+    "su-ce7ccebb336d512eef464f8a": [
+      "position_participant",
+      "use_calibrated_device"
+    ]
+  },
+  "owned_source_span_ids": [
+    "body.p774",
+    "body.p775",
+    "body.p776",
+    "body.p777",
+    "body.p778",
+    "body.p779",
+    "body.p780",
+    "body.p781",
+    "body.p782",
+    "body.p783"
+  ],
+  "owned_structure_unit_ids": [
+    "su-c465f830037f389324359a97",
+    "su-aa806e7b2b57f6af1d9f7f3f",
+    "su-58a4b6ded2e4612fc44a42ed",
+    "su-a1f84bf1ba0cf4376dd845f8",
+    "su-ce7ccebb336d512eef464f8a",
+    "su-6af83a5c76871758c86bec93",
+    "su-7c602e313830d7581c1c65e7",
+    "su-ea8f37d7db811c4a286a96e5",
+    "su-0e5c3500cb73085d8b990849",
+    "su-8466dea30dff2fcc83c7378a"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "身高及体重",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "身高及体重"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p774"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25310,
+      "source_ref": "body.p774",
+      "source_span_ids": [
+        "body.p774"
+      ],
+      "structure_unit_id": "su-c465f830037f389324359a97",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "筛选访视进行身高和体重测量，其余访视点进行体重测量。测量要求如下：",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "身高及体重"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p775"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25320,
+      "source_ref": "body.p775",
+      "source_span_ids": [
+        "body.p775"
+      ],
+      "structure_unit_id": "su-aa806e7b2b57f6af1d9f7f3f",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "身高",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "身高及体重"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p776"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25330,
+      "source_ref": "body.p776",
+      "source_span_ids": [
+        "body.p776"
+      ],
+      "structure_unit_id": "su-58a4b6ded2e4612fc44a42ed",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "要求参与者脱掉鞋子并摘掉头饰。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "身高及体重"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p777"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25340,
+      "source_ref": "body.p777",
+      "source_span_ids": [
+        "body.p777"
+      ],
+      "structure_unit_id": "su-a1f84bf1ba0cf4376dd845f8",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "要求参与者站在校准过的身高测量板（身高测量器）上，或靠墙站立双脚并拢、膝盖伸直、脚后跟背靠身高测量板或身高测量器或墙壁。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "身高及体重"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p778"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25350,
+      "source_ref": "body.p778",
+      "source_span_ids": [
+        "body.p778"
+      ],
+      "structure_unit_id": "su-ce7ccebb336d512eef464f8a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "要求参与者向前平视，不要仰头。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "身高及体重"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p779"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25360,
+      "source_ref": "body.p779",
+      "source_span_ids": [
+        "body.p779"
+      ],
+      "structure_unit_id": "su-6af83a5c76871758c86bec93",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "要求参与者吸气并站直。如果使用身高测量器或固定式测量仪，轻轻将仪器的测量臂移动至参与者头顶上。记录参与者的身高，单位为厘米（cm），保留整数。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "身高及体重"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p780"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25370,
+      "source_ref": "body.p780",
+      "source_span_ids": [
+        "body.p780"
+      ],
+      "structure_unit_id": "su-7c602e313830d7581c1c65e7",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "体重",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "身高及体重"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p781"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25380,
+      "source_ref": "body.p781",
+      "source_span_ids": [
+        "body.p781"
+      ],
+      "structure_unit_id": "su-ea8f37d7db811c4a286a96e5",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "使用校准过的秤（机械或电子称均可）以统一的方式进行。参与者的每次体重测量均应在参与者排空膀胱后进行。测量体重时，参与者应脱去外套/外裤/帽子/围巾/项链/腰带等增加重量的衣物服饰，仅着单衣（限一件上衣和一件下衣），并脱掉鞋子。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "身高及体重"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p782"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25390,
+      "source_ref": "body.p782",
+      "source_span_ids": [
+        "body.p782"
+      ],
+      "structure_unit_id": "su-0e5c3500cb73085d8b990849",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "单位为千克（kg），保留小数点后1位。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "身高及体重"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p783"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25400,
+      "source_ref": "body.p783",
+      "source_span_ids": [
+        "body.p783"
+      ],
+      "structure_unit_id": "su-8466dea30dff2fcc83c7378a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {
+    "su-aa806e7b2b57f6af1d9f7f3f": "筛选访视"
+  },
+  "pre_enrollment_structure_unit_ids": [
+    "su-aa806e7b2b57f6af1d9f7f3f",
+    "su-a1f84bf1ba0cf4376dd845f8",
+    "su-ce7ccebb336d512eef464f8a",
+    "su-6af83a5c76871758c86bec93",
+    "su-7c602e313830d7581c1c65e7",
+    "su-0e5c3500cb73085d8b990849",
+    "su-8466dea30dff2fcc83c7378a"
+  ],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "study_phase": "phase_ii"
+}

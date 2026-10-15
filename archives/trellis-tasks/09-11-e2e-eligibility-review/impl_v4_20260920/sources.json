@@ -1,0 +1,185 @@
+{
+  "commit": "60f5bb8fe67ac14d44af9ceab0801a9b2a42120b",
+  "sources": [
+    {
+      "id": "S01",
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/prd.md",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/.trellis/tasks/09-11-e2e-eligibility-review/prd.md",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S02",
+      "path": "app/services/page_review_execution.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/services/page_review_execution.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S03",
+      "path": "app/llm/page_review_harness.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/llm/page_review_harness.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S04",
+      "path": "app/domain/page_source_association.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/domain/page_source_association.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S05",
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/AGENT_ASSIGNMENTS_V3_20260917.md",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/.trellis/tasks/09-11-e2e-eligibility-review/AGENT_ASSIGNMENTS_V3_20260917.md",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S06",
+      "path": "app/llm/predicate_binding_candidates.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/llm/predicate_binding_candidates.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S07",
+      "path": "app/services/predicate_binding_job.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/services/predicate_binding_job.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S08",
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/CHECKPOINT_20260920_ABC_B_DONE_C_BINDING_LLM_BLOCKED.md",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/.trellis/tasks/09-11-e2e-eligibility-review/CHECKPOINT_20260920_ABC_B_DONE_C_BINDING_LLM_BLOCKED.md",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S09",
+      "path": "app/llm/page_reader_capabilities.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/llm/page_reader_capabilities.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S10",
+      "path": "app/config.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/config.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S11",
+      "path": "app/services/page_review_job_executor.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/services/page_review_job_executor.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S12",
+      "path": "app/projections/evidence_expectations.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/projections/evidence_expectations.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S13",
+      "path": "app/services/evidence_expectation_projection_service.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/services/evidence_expectation_projection_service.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S14",
+      "path": "app/services/frozen_review_calculation.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/services/frozen_review_calculation.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S15",
+      "path": "frontend/src/pages/EligibilityWorkbenchPage.tsx",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/frontend/src/pages/EligibilityWorkbenchPage.tsx",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S16",
+      "path": "tests/v2/llm/test_predicate_binding_candidates.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/tests/v2/llm/test_predicate_binding_candidates.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S17",
+      "path": "tests/v2/conftest.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/tests/v2/conftest.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S18",
+      "path": "app/evidence/page_processor.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/evidence/page_processor.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S19",
+      "path": "app/evidence/ocr_adapter.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/evidence/ocr_adapter.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S20",
+      "path": "app/services/prepared_review_workflow.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/services/prepared_review_workflow.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S21",
+      "path": "app/domain/expression.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/domain/expression.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S22",
+      "path": "app/domain/page_reconciliation.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/domain/page_reconciliation.py",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S23",
+      "path": "AGENTS.md",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/AGENTS.md",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S24",
+      "path": "DOCUMENTS_MAP.md",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/DOCUMENTS_MAP.md",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S25",
+      "path": "pyproject.toml",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/pyproject.toml",
+      "provenance": "first_review_fixed_commit_source_index"
+    },
+    {
+      "id": "S26",
+      "path": "app/services/fact_normalization_source_adapter.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/services/fact_normalization_source_adapter.py",
+      "provenance": "connector_source_read"
+    },
+    {
+      "id": "S27",
+      "path": "app/services/page_review_runtime.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/services/page_review_runtime.py",
+      "provenance": "connector_source_read"
+    },
+    {
+      "id": "S28",
+      "path": "app/llm/page_review_admission.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/60f5bb8fe67ac14d44af9ceab0801a9b2a42120b/app/llm/page_review_admission.py",
+      "provenance": "connector_source_read"
+    },
+    {
+      "id": "X01",
+      "url": "https://docs.cloud.google.com/document-ai/docs/enterprise-document-ocr",
+      "provenance": "official_documentation",
+      "access_date": "2026-09-20"
+    },
+    {
+      "id": "X02",
+      "url": "https://docs.langchain.com/oss/python/langgraph/persistence",
+      "provenance": "official_documentation",
+      "access_date": "2026-09-20"
+    }
+  ]
+}

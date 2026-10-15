@@ -1,0 +1,49 @@
+{
+  "mode": "bundled_baseline_source_extract",
+  "review_baseline": "60f5bb8fe67ac14d44af9ceab0801a9b2a42120b",
+  "source_path": "/mnt/data/enrollment_review_audit/source_extracts/predicate_binding_candidates_extract.py",
+  "read_source_sha256": "55c26a44ec71966712a2776681f70a2884470b3be2c0eed6e182c250e19d649e",
+  "global_maximum": 262144,
+  "limitations": [
+    "No application imports, database, clinical data, or live model calls",
+    "No repository pytest suite, frontend, or end-to-end execution",
+    "Acceptance here means payload-helper acceptance, not clinical publication"
+  ],
+  "observations": [
+    {
+      "case": "length_budget_path",
+      "initial_budget": 65536,
+      "sent_budgets": [
+        65536,
+        131072
+      ],
+      "error": "对应任务输出不完整（finish_reason=length，model=synthetic-reader），保留原回答待处理",
+      "reached_global_maximum": false
+    },
+    {
+      "case": "length_budget_path",
+      "initial_budget": 131072,
+      "sent_budgets": [
+        131072,
+        262144
+      ],
+      "error": "对应任务输出不完整（finish_reason=length，model=synthetic-reader），保留原回答待处理",
+      "reached_global_maximum": true
+    },
+    {
+      "case": "length_budget_path",
+      "initial_budget": 262144,
+      "sent_budgets": [],
+      "error": "对应任务输出额度须在65536至131072之间",
+      "reached_global_maximum": false
+    },
+    {
+      "case": "response_model_mismatch",
+      "requested_model": "requested-reader",
+      "response_model": "different-returned-reader",
+      "helper_accepted_payload": true,
+      "error": null,
+      "not_a_clinical_publication_test": true
+    }
+  ]
+}

@@ -1,0 +1,230 @@
+{
+  "attached_source_refs": [
+    "body.t5.r19",
+    "body.p329",
+    "body.p649",
+    "body.p650",
+    "body.p651",
+    "body.p652",
+    "body.p653",
+    "body.p655"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-tb-cross-chapter",
+  "notes": [
+    "结核评估与官方EX-09、流程必做15跨章节闭合。",
+    "随机前4周与首次给药前4周是不同时间锚点，不得合并。",
+    "只读目标来自原始DOCX自动结构化产物，不以人工预处理文本替代。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p806",
+    "body.p807",
+    "body.p808",
+    "body.p809",
+    "body.p810",
+    "body.p811",
+    "body.p812",
+    "body.p813"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "flow15_screening_igra": "pending_codex"
+      },
+      "frozen_excerpt": "结核检测^15 | X",
+      "lookup": "coverage_manifest",
+      "role": "attached",
+      "source_ref": "body.t5.r19",
+      "structure_unit_id": "su-74055dea573dbae7cabc7a42"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "flow15_igra_definition": "pending_codex"
+      },
+      "frozen_excerpt": "结核检测：筛选期进行γ干扰素释放试验（即QFT或T-SPOT试验）。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p329",
+      "structure_unit_id": "su-24562813606f5d9a905063ca"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "ex09_source_closure": "pending_codex"
+      },
+      "frozen_excerpt": "符合以下任一项结核筛查标准：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p649",
+      "structure_unit_id": "su-376fc536183856c602caa314"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "有活动性结核感染的现病史或既往病史；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p650",
+      "structure_unit_id": "su-46f3d44024412edbe15dc40a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "在筛选期间，研究者判断存在活动性结核病的体征或症状；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p651",
+      "structure_unit_id": "su-e7314e4bfec0ea521d0b12e2"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "胸部CT提示当前或既往活动性结核感染；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p652",
+      "structure_unit_id": "su-516de913310cb49c084d575f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "γ-干扰素释放试验结果显示潜伏性结核感染证据，定义为：筛选时γ-干扰素释放试验检测呈阳性或连续两次γ-干扰素释放试验结果不确定，且无临床症状。除非有记录表明参与者已经完成充分的结核潜伏感染的治疗，或者在首次给药前至少4周开始预防性治疗，并且同意完成后续预防性治疗疗程，预防措施的整个疗程不必在首次给药前完成。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p653",
+      "structure_unit_id": "su-d09623f8a5a17c75a3e742cc"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "ex09_rifamycin_ban": "pending_codex"
+      },
+      "frozen_excerpt": "不允许使用利福平或利福喷丁进行结核预防。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p655",
+      "structure_unit_id": "su-3ba3e4239d7e72e031bc06be"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "结核筛查",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p806",
+      "structure_unit_id": "su-038b2b277113e42b60b36f72"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "igra_positive_requires_ct": "pending_codex"
+      },
+      "frozen_excerpt": "如果γ-干扰素释放试验为阳性，则必须通过胸部CT进一步评估以确认结核状态（活动性或潜伏性）。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p807",
+      "structure_unit_id": "su-7f53927513e2fea7b60619c3"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "active_tb_blocks_randomization": "pending_codex"
+      },
+      "frozen_excerpt": "−有活动性结核证据的参与者不得被随机分组；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p808",
+      "structure_unit_id": "su-df28162a093632765e150d0a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "latent_tb_randomization_gate_4w": "pending_codex"
+      },
+      "frozen_excerpt": "−有潜伏性结核证据的参与者不得被随机分组，除非在随机分组前已完成至少4周的适当治疗疗程。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p809",
+      "structure_unit_id": "su-46e60f29a998dc32549efb92"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "注：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p810",
+      "structure_unit_id": "su-4bf2b42795a5d8578ec4644f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "latent_prophylaxis_first_dose_4w": "pending_codex"
+      },
+      "frozen_excerpt": "在筛选时，如果参与者有潜伏性结核感染的证据，必须在首次给药前至少4周开始预防性治疗，并且同意完成后续预防性治疗疗程；预防措施的整个疗程不必在首次给药前完成。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p811",
+      "structure_unit_id": "su-c07db5fdf0c3f1acc7545649"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "rifampin_rifapentine_ban": "pending_codex"
+      },
+      "frozen_excerpt": "不允许使用利福平或利福喷丁进行结核预防。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p812",
+      "structure_unit_id": "su-9b53b022c1020197079693ea"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "igra_indeterminate_retest_cap_1": "pending_codex"
+      },
+      "frozen_excerpt": "如结核检测结果为不确定者，可进行1次复测。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p813",
+      "structure_unit_id": "su-0d7e3607dad6cd383ba337ca"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice59n-20260827",
+  "worker": "worker_02"
+}

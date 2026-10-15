@@ -1,0 +1,810 @@
+"""Phase 5 事实事务发布。
+
+本服务只组装已通过最终事务门禁的候选，所有写入仍经正式仓储复核
+权威元组、来源强度、定位并集和事实引用闭包。事务边界由持久任务执行器拥有；
+本服务不 commit、rollback，也不直接写 ORM 表。
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import TypeVar
+
+from sqlalchemy.orm import Session
+
+from app.domain.contracts.enums import FactGate, GateOutcome, ProfileLane, SourceStrength
+from app.domain.contracts.facts import (
+    ClinicalConflictGroupV2,
+    ClinicalEventCandidateV2,
+    ClinicalEventV2,
+    ClinicalFactCandidateV2,
+    ClinicalFactV2,
+    FactAuthority,
+    MedicationExposureCandidateV2,
+    MedicationExposureV2,
+    clinical_event_stable_identity,
+    clinical_fact_stable_identity,
+    clinical_fact_object_key,
+    medication_exposure_stable_identity,
+)
+from app.domain.gates.fact_evidence_closure import resolve_source_strength_for_candidate
+from app.domain.gates.fact_batch_orchestration import detect_semantic_conflicts
+from app.domain.publication import canonical_hash
+from app.storage.evidence_locator_repositories import (
+    CompleteEvidenceProcessingRevisionRepository,
+)
+from app.storage.fact_authority import FactAuthorityError, FactAuthorityValidator
+from app.storage.fact_correction_repository import FactCorrectionRepository
+from app.storage.fact_repositories import (
+    ClinicalConflictGroupV2Repository,
+    ClinicalEventV2Repository,
+    ClinicalFactV2Repository,
+    FactGateResultRepository,
+    FactNormalizationCandidateRepository,
+    FactNormalizationRunRepository,
+    MedicationExposureV2Repository,
+)
+
+
+class FactPublicationError(RuntimeError):
+    """发布输入不完整或跨实体引用无法闭合。"""
+
+
+class FactPublicationStaleAuthorityError(FactPublicationError):
+    """活动权威指针已变化，拒绝陈旧发布。"""
+
+
+@dataclass(frozen=True)
+class FactPublicationResult:
+    run_id: str
+    authority: FactAuthority
+    fact_ids: list[str]
+    event_ids: list[str]
+    exposure_ids: list[str]
+    conflict_group_ids: list[str]
+    is_replay: bool = False
+
+
+CandidateT = TypeVar(
+    "CandidateT",
+    ClinicalFactCandidateV2,
+    ClinicalEventCandidateV2,
+    MedicationExposureCandidateV2,
+)
+
+
+def _group_by_identity(candidates: list[CandidateT], identity_for):
+    grouped: dict[str, list[CandidateT]] = {}
+    for candidate in candidates:
+        grouped.setdefault(identity_for(candidate), []).append(candidate)
+    return {
+        identity: sorted(group, key=lambda item: item.candidate_id)
+        for identity, group in sorted(grouped.items())
+    }
+
+
+def _reject_profile_lane_conflicts(
+    candidates,
+    existing,
+    authority,
+    semantic_identity_for,
+    existing_semantic_identity_for,
+    label: str,
+) -> None:
+    """Reject duplicate clinical semantics assigned to different Profile lanes.
+
+    ``profile_lane`` participates in the published stable identity so that a lane change is
+    revision-significant. It must not, however, turn one semantic candidate into duplicate
+    published entities. Existing entities under the same frozen authority are included, so a
+    later run cannot duplicate a fact/event merely by moving it. Ambiguous classification is
+    an explicit normalization defect, not a second clinical fact/event.
+    """
+    lanes_by_semantic_identity: dict[str, set[ProfileLane]] = {}
+    for entity in existing:
+        if entity.authority == authority:
+            lanes_by_semantic_identity.setdefault(
+                existing_semantic_identity_for(entity), set()
+            ).add(entity.profile_lane)
+    for candidate in candidates:
+        lanes_by_semantic_identity.setdefault(
+            semantic_identity_for(candidate), set()
+        ).add(candidate.profile_lane)
+    conflicts = [
+        sorted(lane.value for lane in lanes)
+        for lanes in lanes_by_semantic_identity.values()
+        if len(lanes) > 1
+    ]
+    if conflicts:
+        rendered = ", ".join("/".join(lanes) for lanes in sorted(conflicts))
+        raise FactPublicationError(
+            f"同一{label}候选的 Patient Profile 主题归属冲突：{rendered}"
+        )
+
+
+def _locator_union(candidates) -> list[str]:
+    return sorted(
+        {locator_id for candidate in candidates for locator_id in candidate.locator_ids}
+    )
+
+
+def _requirement_union(candidates: list[ClinicalFactCandidateV2]) -> list[str]:
+    return sorted(
+        {
+            requirement_id
+            for candidate in candidates
+            for requirement_id in candidate.supported_requirement_ids
+        }
+    )
+
+
+def _common_record_time(candidates):
+    values = {candidate.record_time for candidate in candidates}
+    return next(iter(values)) if len(values) == 1 else None
+
+
+def _source_strength(session, revision, candidates) -> SourceStrength:
+    rank = {
+        SourceStrength.UNVERIFIABLE: 0,
+        SourceStrength.SCREENING_RECORD_TRANSCRIPTION: 1,
+        SourceStrength.CURRENT_STUDY_CHART: 2,
+        SourceStrength.HISTORICAL_PRIMARY: 3,
+        SourceStrength.CONTEMPORANEOUS_OBJECTIVE: 4,
+    }
+    return max(
+        (
+            resolve_source_strength_for_candidate(session, candidate, revision)
+            for candidate in candidates
+        ),
+        key=rank.__getitem__,
+    )
+
+
+def _next_revision(entities, stable_identity: str) -> int:
+    chain = [item.revision for item in entities if item.stable_identity == stable_identity]
+    return max(chain, default=0) + 1
+
+
+def _entity_id(run_id: str, kind: str, stable_identity: str, revision: int) -> str:
+    return f"{kind}:" + canonical_hash(
+        {"run_id": run_id, "stable_identity": stable_identity, "revision": revision}
+    )[:32]
+
+
+class FactPublicationService:
+    """将最终门禁已接受的候选发布为不可变实体。"""
+
+    def publish(self, session: Session, run_id: str) -> FactPublicationResult:
+        run = FactNormalizationRunRepository(session).get(run_id)
+        authority = run.authority
+        validator = FactAuthorityValidator(session)
+        try:
+            validator.validate(authority)
+        except FactAuthorityError as exc:
+            raise FactPublicationStaleAuthorityError(str(exc)) from exc
+        revision = CompleteEvidenceProcessingRevisionRepository(session).get(
+            authority.complete_processing_revision_id
+        )
+
+        repository_options = {
+            "authority_validator": validator,
+            "complete_revision": revision,
+        }
+        fact_repository = ClinicalFactV2Repository(session, **repository_options)
+        event_repository = ClinicalEventV2Repository(session, **repository_options)
+        exposure_repository = MedicationExposureV2Repository(session, **repository_options)
+        conflict_repository = ClinicalConflictGroupV2Repository(
+            session, **repository_options
+        )
+        existing_facts = fact_repository.list_by_episode(authority.review_episode_id)
+        existing_events = event_repository.list_by_episode(authority.review_episode_id)
+        existing_exposures = exposure_repository.list_by_episode(authority.review_episode_id)
+        existing_conflicts = conflict_repository.list_by_episode(authority.review_episode_id)
+        superseded_entity_ids = {
+            item.target_id
+            for item in FactCorrectionRepository(session).list_by_authority(authority)
+        }
+        candidates = FactNormalizationCandidateRepository(session).list_by_run(run_id)
+        gate_results = FactGateResultRepository(session).list_by_run(run_id)
+        final_gates = [
+            result for result in gate_results if result.gate == FactGate.TRANSACTIONAL_PUBLISH
+        ]
+        gate_by_candidate = {result.candidate_id: result for result in final_gates}
+        if len(gate_by_candidate) != len(final_gates) or set(gate_by_candidate) != {
+            candidate.candidate_id for candidate in candidates
+        }:
+            raise FactPublicationError(
+                "最终事务发布门禁必须不重不漏覆盖当前运行全部候选"
+            )
+        accepted = [
+            candidate
+            for candidate in candidates
+            if gate_by_candidate[candidate.candidate_id].outcome == GateOutcome.ACCEPTED
+        ]
+        replay = self._replay_if_published(
+            session,
+            run_id,
+            authority,
+            accepted,
+            existing_facts,
+            existing_events,
+            existing_exposures,
+            existing_conflicts,
+        )
+        if replay is not None:
+            validator.validate(authority)
+            return replay
+        existing_events = [
+            item for item in existing_events if item.event_id not in superseded_entity_ids
+        ]
+        existing_exposures = [
+            item for item in existing_exposures
+            if item.exposure_id not in superseded_entity_ids
+        ]
+        fact_candidates = [
+            item for item in accepted if isinstance(item, ClinicalFactCandidateV2)
+        ]
+        event_candidates = [
+            item for item in accepted if isinstance(item, ClinicalEventCandidateV2)
+        ]
+        exposure_candidates = [
+            item for item in accepted if isinstance(item, MedicationExposureCandidateV2)
+        ]
+        created_at = datetime.now(UTC)
+
+        published_facts, candidate_to_fact = self._publish_facts(
+            session=session,
+            authority=authority,
+            run_id=run_id,
+            revision=revision,
+            candidates=fact_candidates,
+            gates=gate_by_candidate,
+            existing=existing_facts,
+            created_at=created_at,
+            repository=fact_repository,
+        )
+        published_events, candidate_to_event = self._publish_events(
+            session=session,
+            authority=authority,
+            run_id=run_id,
+            revision=revision,
+            candidates=event_candidates,
+            gates=gate_by_candidate,
+            facts=published_facts,
+            candidate_to_fact=candidate_to_fact,
+            existing=existing_events,
+            created_at=created_at,
+            repository=event_repository,
+        )
+        published_exposures, candidate_to_exposure = self._publish_exposures(
+            session=session,
+            authority=authority,
+            run_id=run_id,
+            revision=revision,
+            candidates=exposure_candidates,
+            gates=gate_by_candidate,
+            candidate_to_fact=candidate_to_fact,
+            existing=existing_exposures,
+            created_at=created_at,
+            repository=exposure_repository,
+        )
+        published_conflicts = []
+        has_inherited_sources = any(fact.inherited_from_fact_id is not None for fact in published_facts)
+        if has_inherited_sources:
+            from app.services.source_reference_successors import append_source_reference_successors
+            successor_events, successor_exposures = append_source_reference_successors(
+                session, authority=authority, run_id=run_id,
+                facts=published_facts, created_at=created_at,
+            )
+            published_events.extend(successor_events)
+            published_exposures.extend(successor_exposures)
+            from app.services.source_conflict_successors import append_source_conflict_successors
+            published_conflicts.extend(append_source_conflict_successors(
+                session, authority=authority, run_id=run_id, facts=published_facts,
+                events=successor_events, exposures=successor_exposures, created_at=created_at,
+            ))
+        published_conflicts.extend(self._publish_conflicts(
+            authority=authority, run_id=run_id, fact_candidates=fact_candidates,
+            event_candidates=event_candidates, exposure_candidates=exposure_candidates,
+            candidate_to_fact=candidate_to_fact, candidate_to_event=candidate_to_event,
+            candidate_to_exposure=candidate_to_exposure, facts=published_facts,
+            events=published_events, exposures=published_exposures,
+            gate_by_candidate=gate_by_candidate, created_at=created_at,
+            repository=conflict_repository, source_successors=published_conflicts,
+        ))
+        if has_inherited_sources:
+            # Reject any dependent reference that could not be explicitly rebuilt.
+            from app.services.patient_profile_service import (
+                PatientProfileProjectionError,
+                PatientProfileService,
+            )
+            profile = PatientProfileService()
+            source_options = ({"include_rule_revision_sources": True}
+                              if revision.source_qualification_mode == "scoped_text_v1" else {})
+            try:
+                profile._validate_referential_closure(
+                    facts=profile._published_facts(session, authority, **source_options),
+                    events=profile._published_events(session, authority, **source_options),
+                    exposures=profile._published_exposures(session, authority, **source_options),
+                    conflicts=profile._published_conflicts(session, authority, **source_options),
+                    expectations=profile._latest_expectations(session, authority),
+                )
+            except PatientProfileProjectionError as exc:
+                raise FactPublicationError(
+                    "新增来源尚未与既有病史、用药及审核记录衔接，拒绝发布"
+                ) from exc
+        validator.validate(authority)
+        return FactPublicationResult(
+            run_id=run_id,
+            authority=authority,
+            fact_ids=sorted(fact.fact_id for fact in published_facts),
+            event_ids=sorted(event.event_id for event in published_events),
+            exposure_ids=sorted(item.exposure_id for item in published_exposures),
+            conflict_group_ids=sorted(
+                group.conflict_group_id for group in published_conflicts
+            ),
+        )
+
+    @staticmethod
+    def _replay_if_published(
+        session, run_id, authority, accepted_candidates, facts, events, exposures, conflicts
+    ):
+        run_facts = [item for item in facts if item.run_id == run_id]
+        run_events = [item for item in events if item.run_id == run_id]
+        run_exposures = [item for item in exposures if item.run_id == run_id]
+        run_conflicts = [item for item in conflicts if item.run_id == run_id]
+        if not any((run_facts, run_events, run_exposures, run_conflicts)):
+            return None
+        published_candidate_ids = {
+            candidate_id
+            for entity in (*run_facts, *run_events, *run_exposures)
+            if getattr(entity, "source_revision_of", None) is None
+            for candidate_id in entity.source_candidate_ids
+        }
+        inherited_candidate_ids = {
+            candidate_id
+            for fact in run_facts
+            if fact.inherited_from_fact_id is not None
+            for candidate_id in ClinicalFactV2Repository(session).get(
+                fact.inherited_from_fact_id
+            ).source_candidate_ids
+        }
+        published_candidate_ids -= inherited_candidate_ids
+        accepted_candidate_ids = {
+            candidate.candidate_id for candidate in accepted_candidates
+        }
+        if published_candidate_ids != accepted_candidate_ids:
+            raise FactPublicationError(
+                f"运行 {run_id} 已发布后候选集发生变化，拒绝将新候选"
+                "静默忽略或并入旧结果"
+            )
+        return FactPublicationResult(
+            run_id=run_id,
+            authority=authority,
+            fact_ids=sorted(item.fact_id for item in run_facts),
+            event_ids=sorted(item.event_id for item in run_events),
+            exposure_ids=sorted(item.exposure_id for item in run_exposures),
+            conflict_group_ids=sorted(item.conflict_group_id for item in run_conflicts),
+            is_replay=True,
+        )
+
+    @staticmethod
+    def _publication_ids(candidates, gates):
+        candidate_ids = sorted(candidate.candidate_id for candidate in candidates)
+        gate_ids = sorted(gates[item].gate_result_id for item in candidate_ids)
+        return candidate_ids, gate_ids
+
+    def _publish_facts(
+        self, *, session, authority, run_id, revision, candidates, gates, existing,
+        created_at, repository
+    ):
+        def semantic_identity(candidate):
+            return clinical_fact_stable_identity(
+                authority=authority,
+                fact_type=candidate.fact_type,
+                profile_lane=ProfileLane.EVIDENCE_QUALITY,
+                asserted_object=candidate.asserted_object,
+                polarity=candidate.polarity,
+                value=candidate.canonical_value,
+                unit=candidate.unit,
+                date_range=candidate.date_range,
+                assertion_basis=candidate.assertion_basis,
+                variable_id=candidate.variable_id,
+                date_role=candidate.date_role,
+            )
+        _reject_profile_lane_conflicts(
+            candidates,
+            existing,
+            authority,
+            semantic_identity,
+            lambda fact: clinical_fact_stable_identity(
+                authority=authority,
+                fact_type=fact.fact_type,
+                profile_lane=ProfileLane.EVIDENCE_QUALITY,
+                asserted_object=fact.asserted_object,
+                polarity=fact.polarity,
+                value=fact.value,
+                unit=fact.unit,
+                date_range=fact.date_range,
+                assertion_basis=fact.assertion_basis,
+                variable_id=fact.variable_id,
+                date_role=fact.date_role,
+            ),
+            "事实",
+        )
+        groups = _group_by_identity(
+            candidates,
+            lambda candidate: clinical_fact_stable_identity(
+                authority=authority,
+                fact_type=candidate.fact_type,
+                profile_lane=candidate.profile_lane,
+                asserted_object=candidate.asserted_object,
+                polarity=candidate.polarity,
+                value=candidate.canonical_value,
+                unit=candidate.unit,
+                date_range=candidate.date_range,
+                assertion_basis=candidate.assertion_basis,
+                variable_id=candidate.variable_id,
+                date_role=candidate.date_role,
+            ),
+        )
+        published: list[ClinicalFactV2] = []
+        candidate_to_fact: dict[str, str] = {}
+        from app.domain.risk_flags import fact_risk_flags
+        from app.domain.variables.dictionary import load_dictionary
+        from app.storage.repositories import get_rule_set
+        from app.services.protocol_variable_binding import component_predicates
+        from app.domain.gates.fact_evidence_closure import _fetch_locator, _localized_locator_text, _prepare_blocking_ocr_context
+        definitions = {}
+        thresholds = {}
+        date_sensitive = set()
+        source_pages = {entry.page_artifact_id: entry.ocr_page_id for entry in revision.manifest}
+        ocr_context = None
+        if candidates and revision.source_qualification_mode == "scoped_text_v1":
+            ocr_context = _prepare_blocking_ocr_context(session, revision)
+        if any(item.variable_id is not None for item in candidates):
+            rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
+            definitions = load_dictionary(rule_set.variable_definitions or ())
+            if ocr_context is None:
+                ocr_context = _prepare_blocking_ocr_context(session, revision)
+            for rule in rule_set.rules:
+                for component in rule.components:
+                    for predicate in component_predicates(component):
+                        for requirement in component.evidence_requirements:
+                            if predicate.predicate_id in requirement.predicate_ids and requirement.variable_id:
+                                definition = definitions[requirement.variable_id]
+                                values = predicate.value if isinstance(predicate.value, list) else [predicate.value]
+                                thresholds.setdefault(requirement.variable_id, []).extend(
+                                    definition.convert(value, predicate.unit or definition.canonical_unit)
+                                    for value in values
+                                    if definition.value_type == "number" and isinstance(value, (int, float, Decimal))
+                                    and not isinstance(value, bool))
+                                if requirement.source_validity_window is not None or requirement.control_validity_constraint is not None:
+                                    date_sensitive.add(requirement.variable_id)
+        for stable_identity, group in groups.items():
+            candidate_ids, gate_ids = self._publication_ids(group, gates)
+            primary_gate_id = gate_ids[0]
+            prior = max(
+                (item for item in existing if item.stable_identity == stable_identity),
+                key=lambda item: item.revision,
+                default=None,
+            )
+            if prior is not None:
+                if prior.fact_id in FactCorrectionRepository(session).superseded_entity_ids(authority):
+                    raise FactPublicationError("该事实最新版本已经更正，不能从旧版本恢复来源")
+                inherited = [
+                    FactNormalizationCandidateRepository(session).get(item)
+                    for item in prior.source_candidate_ids
+                ]
+                group = sorted(group + inherited, key=lambda item: item.candidate_id)
+                candidate_ids = sorted(set(candidate_ids) | set(prior.source_candidate_ids))
+                gate_ids = sorted(set(gate_ids) | set(prior.gate_ids))
+            representative = group[0]
+            risks = set(flag for item in group for flag in item.risk_flags)
+            for item in group:
+                if item.variable_id is None and revision.source_qualification_mode != "scoped_text_v1":
+                    continue
+                if item.variable_id is not None and item.variable_id not in definitions:
+                    raise FactPublicationError("事实引用了已发布字典外的数据项目")
+                definition = definitions.get(item.variable_id)
+                if item.assertion_basis is not None and definition is not None and definition.value_type == "number":
+                    try:
+                        definition.convert(item.canonical_value, item.unit or "")
+                    except ValueError as exc:
+                        raise FactPublicationError("事实的数值或单位与已发布数据项目不符") from exc
+                if isinstance(item.canonical_value, (int, float)) and not isinstance(item.canonical_value, bool):
+                    from app.domain.risk_flags import same_numeric_reading
+                    if not same_numeric_reading(item.raw_value, item.canonical_value):
+                        raise FactPublicationError("事实不得使用由模型改写的原始读数")
+                locator = _fetch_locator(session, item.assertion_basis.locator_id
+                                         if item.assertion_basis is not None else item.locator_ids[0])
+                text = _localized_locator_text(session, locator, revision, ocr_context[3]) or ""
+                locators = [_fetch_locator(session, locator_id) for locator_id in item.locator_ids]
+                risks.update(fact_risk_flags(item, definition, text=text,
+                    low_ocr=any(ocr_context[1].get(source_pages.get(entry.page_artifact_id)) for entry in locators),
+                    weak_source=_source_strength(session, revision, [item]) == SourceStrength.UNVERIFIABLE,
+                    thresholds=thresholds.get(item.variable_id, ()), date_sensitive=item.variable_id in date_sensitive))
+            fact_revision = _next_revision(existing, stable_identity)
+            fact = ClinicalFactV2(
+                fact_id=_entity_id(run_id, "fact", stable_identity, fact_revision),
+                inherited_from_fact_id=prior.fact_id if prior is not None else None,
+                run_id=run_id,
+                gate_id=primary_gate_id,
+                source_candidate_ids=candidate_ids,
+                source_observation_refs=sorted(
+                    {ref for item in group for ref in item.source_observation_refs}
+                    | (set(prior.source_observation_refs) if prior is not None else set())
+                ),
+                gate_ids=gate_ids,
+                authority=authority,
+                fact_type=representative.fact_type,
+                variable_id=representative.variable_id,
+                date_role=representative.date_role,
+                risk_flags=sorted(risks, key=lambda item: item.value),
+                profile_lane=representative.profile_lane,
+                supported_requirement_ids=_requirement_union(group),
+                polarity=representative.polarity,
+                asserted_object=representative.asserted_object,
+                value=representative.canonical_value,
+                unit=representative.unit,
+                source_strength=_source_strength(session, revision, group),
+                date_range=representative.date_range,
+                record_time=_common_record_time(group),
+                locator_ids=_locator_union(group),
+                assertion_basis=representative.assertion_basis,
+                stable_identity=stable_identity,
+                revision=fact_revision,
+                created_at=created_at,
+            )
+            repository.create(fact)
+            published.append(fact)
+            candidate_to_fact.update({item: fact.fact_id for item in candidate_ids})
+        return published, candidate_to_fact
+
+    def _publish_events(
+        self, *, session, authority, run_id, revision, candidates, gates, facts,
+        candidate_to_fact, existing, created_at, repository
+    ):
+        facts_by_id = {fact.fact_id: fact for fact in facts}
+
+        def identity(candidate):
+            fact_ids = self._resolved_fact_ids(candidate, candidate_to_fact)
+            objects = sorted(
+                {clinical_fact_object_key(facts_by_id[item].fact_type, facts_by_id[item].asserted_object,
+                                          facts_by_id[item].assertion_basis) for item in fact_ids}
+            )
+            return clinical_event_stable_identity(
+                authority=authority,
+                event_type=candidate.event_type,
+                profile_lane=candidate.profile_lane,
+                referenced_fact_objects=objects,
+                start_range=candidate.start_range,
+                end_range=candidate.end_range,
+                duration_status=candidate.duration_status,
+            )
+
+        def semantic_identity(candidate):
+            fact_ids = self._resolved_fact_ids(candidate, candidate_to_fact)
+            objects = sorted(
+                {
+                    clinical_fact_object_key(facts_by_id[item].fact_type, facts_by_id[item].asserted_object,
+                                             facts_by_id[item].assertion_basis)
+                    for item in fact_ids
+                }
+            )
+            return clinical_event_stable_identity(
+                authority=authority,
+                event_type=candidate.event_type,
+                profile_lane=ProfileLane.EVIDENCE_QUALITY,
+                referenced_fact_objects=objects,
+                start_range=candidate.start_range,
+                end_range=candidate.end_range,
+                duration_status=candidate.duration_status,
+            )
+
+        _reject_profile_lane_conflicts(
+            candidates,
+            existing,
+            authority,
+            semantic_identity,
+            lambda event: clinical_event_stable_identity(
+                authority=authority,
+                event_type=event.event_type,
+                profile_lane=ProfileLane.EVIDENCE_QUALITY,
+                referenced_fact_objects=event.referenced_fact_objects,
+                start_range=event.start_range,
+                end_range=event.end_range,
+                duration_status=event.duration_status,
+            ),
+            "事件",
+        )
+        groups = _group_by_identity(candidates, identity)
+        published = []
+        candidate_to_event: dict[str, str] = {}
+        for stable_identity, group in groups.items():
+            representative = group[0]
+            candidate_ids, gate_ids = self._publication_ids(group, gates)
+            fact_ids = sorted(
+                {
+                    item
+                    for candidate in group
+                    for item in self._resolved_fact_ids(candidate, candidate_to_fact)
+                }
+            )
+            objects = sorted(
+                {clinical_fact_object_key(facts_by_id[item].fact_type, facts_by_id[item].asserted_object,
+                                          facts_by_id[item].assertion_basis) for item in fact_ids}
+            )
+            entity_revision = _next_revision(existing, stable_identity)
+            event = ClinicalEventV2(
+                event_id=_entity_id(run_id, "event", stable_identity, entity_revision),
+                run_id=run_id,
+                gate_id=gate_ids[0],
+                source_candidate_ids=candidate_ids,
+                gate_ids=gate_ids,
+                authority=authority,
+                event_type=representative.event_type,
+                profile_lane=representative.profile_lane,
+                start_range=representative.start_range,
+                end_range=representative.end_range,
+                duration_status=representative.duration_status,
+                record_time=_common_record_time(group),
+                fact_ids=fact_ids,
+                referenced_fact_objects=objects,
+                locator_ids=_locator_union(group),
+                source_strength=_source_strength(session, revision, group),
+                stable_identity=stable_identity,
+                revision=entity_revision,
+                created_at=created_at,
+            )
+            repository.create(event)
+            published.append(event)
+            candidate_to_event.update({item: event.event_id for item in candidate_ids})
+        return published, candidate_to_event
+
+    def _publish_exposures(
+        self, *, session, authority, run_id, revision, candidates, gates,
+        candidate_to_fact, existing, created_at, repository
+    ):
+        groups = _group_by_identity(
+            candidates,
+            lambda candidate: medication_exposure_stable_identity(
+                authority=authority,
+                medication_name=candidate.medication_name,
+                category=candidate.category,
+                indication=candidate.indication,
+                dose=candidate.dose,
+                unit=candidate.unit,
+                frequency=candidate.frequency,
+                route=candidate.route,
+                start_range=candidate.start_range,
+                end_range=candidate.end_range,
+                duration_status=candidate.duration_status,
+            ),
+        )
+        published = []
+        candidate_to_exposure: dict[str, str] = {}
+        for stable_identity, group in groups.items():
+            representative = group[0]
+            candidate_ids, gate_ids = self._publication_ids(group, gates)
+            fact_ids = sorted(
+                {
+                    item
+                    for candidate in group
+                    for item in self._resolved_fact_ids(candidate, candidate_to_fact)
+                }
+            )
+            entity_revision = _next_revision(existing, stable_identity)
+            exposure = MedicationExposureV2(
+                exposure_id=_entity_id(run_id, "exposure", stable_identity, entity_revision),
+                run_id=run_id,
+                gate_id=gate_ids[0],
+                source_candidate_ids=candidate_ids,
+                gate_ids=gate_ids,
+                authority=authority,
+                medication_name=representative.medication_name,
+                category=representative.category,
+                indication=representative.indication,
+                dose=representative.dose,
+                unit=representative.unit,
+                frequency=representative.frequency,
+                route=representative.route,
+                start_range=representative.start_range,
+                end_range=representative.end_range,
+                duration_status=representative.duration_status,
+                record_time=_common_record_time(group),
+                fact_ids=fact_ids,
+                locator_ids=_locator_union(group),
+                source_strength=_source_strength(session, revision, group),
+                stable_identity=stable_identity,
+                revision=entity_revision,
+                created_at=created_at,
+            )
+            repository.create(exposure)
+            published.append(exposure)
+            candidate_to_exposure.update(
+                {item: exposure.exposure_id for item in candidate_ids}
+            )
+        return published, candidate_to_exposure
+
+    @staticmethod
+    def _resolved_fact_ids(candidate, candidate_to_fact):
+        missing = sorted(set(candidate.fact_candidate_ids) - set(candidate_to_fact))
+        if missing:
+            raise FactPublicationError(
+                f"候选 {candidate.candidate_id} 引用的事实候选未通过最终发布门禁：{missing}"
+            )
+        return sorted({candidate_to_fact[item] for item in candidate.fact_candidate_ids})
+
+    @staticmethod
+    def _publish_conflicts(
+        *, authority, run_id, fact_candidates, event_candidates, exposure_candidates,
+        candidate_to_fact, candidate_to_event, candidate_to_exposure,
+        facts, events, exposures, gate_by_candidate, created_at, repository, source_successors=()
+    ):
+        semantic_conflicts = detect_semantic_conflicts(
+            authority=authority,
+            fact_candidates=fact_candidates,
+            event_candidates=event_candidates,
+            exposure_candidates=exposure_candidates,
+        )
+        mappings = {
+            "fact": candidate_to_fact,
+            "event": candidate_to_event,
+            "exposure": candidate_to_exposure,
+        }
+        entities = {
+            "fact": {item.fact_id: item for item in facts},
+            "event": {item.event_id: item for item in events},
+            "exposure": {item.exposure_id: item for item in exposures},
+        }
+        published = []
+        preserved_members = {
+            (group.member_kind, tuple(getattr(group, {
+                "fact": "fact_ids", "event": "event_ids", "exposure": "exposure_ids",
+            }[group.member_kind])))
+            for group in source_successors
+        }
+        for conflict in semantic_conflicts:
+            member_ids = sorted(
+                {mappings[conflict.semantic_type][candidate_id]
+                 for candidate_id in conflict.candidate_ids}
+            )
+            if len(member_ids) < 2:
+                raise FactPublicationError(
+                    f"冲突 {conflict.semantic_key} 发布后不足两个不同成员"
+                )
+            if (conflict.semantic_type, tuple(member_ids)) in preserved_members:
+                continue
+            locator_ids = sorted(
+                {
+                    locator_id
+                    for member_id in member_ids
+                    for locator_id in entities[conflict.semantic_type][member_id].locator_ids
+                }
+            )
+            group = ClinicalConflictGroupV2(
+                conflict_group_id="conflict:" + canonical_hash(
+                    {
+                        "run_id": run_id,
+                        "semantic_type": conflict.semantic_type,
+                        "semantic_key": conflict.semantic_key,
+                        "member_ids": member_ids,
+                    }
+                )[:32],
+                run_id=run_id,
+                gate_id=min(
+                    gate_by_candidate[item].gate_result_id
+                    for item in conflict.candidate_ids
+                ),
+                authority=authority,
+                member_kind=conflict.semantic_type,
+                fact_ids=member_ids if conflict.semantic_type == "fact" else [],
+                event_ids=member_ids if conflict.semantic_type == "event" else [],
+                exposure_ids=member_ids if conflict.semantic_type == "exposure" else [],
+                locator_ids=locator_ids,
+                created_at=created_at,
+            )
+            repository.create(group)
+            published.append(group)
+        return published

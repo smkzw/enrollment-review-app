@@ -1,0 +1,1186 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "issues": [],
+      "outcome": "parsed",
+      "output": {
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "results": [
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-f2e823e75ad360a4e8848f56",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-b56e140e53d55865281c2777"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-b56e140e53d55865281c2777",
+                "excerpt": "概要",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.p303"
+                ],
+                "source_structure_unit_ids": [
+                  "su-e37ae963890b2dbb63dbb4e9"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-a8d4a8f1914892c5aefd1201",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-e37ae963890b2dbb63dbb4e9",
+            "unresolved_reason": null
+          },
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-1acf0a6db190c68344946697",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-4000ca0ba287b546fda53c42"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-4000ca0ba287b546fda53c42",
+                "excerpt": "标题",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.t4.r0.c0.p0"
+                ],
+                "source_structure_unit_ids": [
+                  "su-a9c231402eeccf6fab4671fe"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-812e915ddf0ec653b65c3580",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-a9c231402eeccf6fab4671fe",
+            "unresolved_reason": null
+          },
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-77a836c845ed11f471a2b0d1",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-fd9d461ca5a9ebfe8a238537"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-fd9d461ca5a9ebfe8a238537",
+                "excerpt": "评价CMS-D001片治疗中度至重度斑块状银屑病成人患者的有效性和安全性的多中心、随机、双盲、安慰剂对照Ⅱ/Ⅲ期临床研究",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.t4.r0.c1.p0"
+                ],
+                "source_structure_unit_ids": [
+                  "su-132207c775c264916adadc87"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-08e9cd4e00af17b62b8a53e9",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-132207c775c264916adadc87",
+            "unresolved_reason": null
+          },
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-06ac3c03d2611826b9004d6c",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-8a39694779e4a47112608e54"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-8a39694779e4a47112608e54",
+                "excerpt": "阶段",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.t4.r1.c0.p0"
+                ],
+                "source_structure_unit_ids": [
+                  "su-4ef7557d8cd60ae9fda655bb"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-1f44d6a1ba7acb29860b1648",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-4ef7557d8cd60ae9fda655bb",
+            "unresolved_reason": null
+          },
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-a826e690676ac3e9e69e1836",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-4f5e5551fc5d2a07e0e6ca0d"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-4f5e5551fc5d2a07e0e6ca0d",
+                "excerpt": "Ⅱ/Ⅲ期",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.t4.r1.c1.p0"
+                ],
+                "source_structure_unit_ids": [
+                  "su-bb55be07447cff6d766db6c9"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-07d5c5ae6e322a997e2b3c43",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-bb55be07447cff6d766db6c9",
+            "unresolved_reason": null
+          },
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-6bee7efeaadfc74e7750d101",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-8ba2f1987761f957bd8be32a"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-8ba2f1987761f957bd8be32a",
+                "excerpt": "目的",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.t4.r2.c0.p0"
+                ],
+                "source_structure_unit_ids": [
+                  "su-fde683aeb47832aa66ffc0e1"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-ffee41795c905777b9d7181b",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-fde683aeb47832aa66ffc0e1",
+            "unresolved_reason": null
+          },
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-62c8c034fc3106f153e35cea",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-6c31c5dcdef5fd3f3fc32949"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-6c31c5dcdef5fd3f3fc32949",
+                "excerpt": "终点",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.t4.r3.c0.p0"
+                ],
+                "source_structure_unit_ids": [
+                  "su-eddf0b0f6fbb442eda6ade3d"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-ba38826656b3251d53e9328f",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-eddf0b0f6fbb442eda6ade3d",
+            "unresolved_reason": null
+          },
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-7765cc29821dc2fcdf07d240",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-d3256fcc57d69f545c7acc82"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-d3256fcc57d69f545c7acc82",
+                "excerpt": "试验设计",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.t4.r4.c0.p0"
+                ],
+                "source_structure_unit_ids": [
+                  "su-30f03f6c1991cdb48c1e5f9e"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-e60494aed3335d8e17d56f07",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-30f03f6c1991cdb48c1e5f9e",
+            "unresolved_reason": null
+          },
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-cd86cf9633ea9f1b675e793d",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-a990d4ff7ae67388481c2171"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-a990d4ff7ae67388481c2171",
+                "excerpt": "本研究采用多中心、随机、双盲、安慰剂对照的Ⅱ/Ⅲ期操作无缝适应性设计，评价CMS-D001片治疗中度至重度斑块状银屑病患者的有效性、安全性和耐受性。试验由两个部分组成，包括Ⅱ期临床研究阶段和Ⅲ期临床研究阶段。",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.t4.r4.c1.p0"
+                ],
+                "source_structure_unit_ids": [
+                  "su-4b9805cc7ce84a60408b6bfd"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-44f19a0afd6cbca0a49b6013",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-4b9805cc7ce84a60408b6bfd",
+            "unresolved_reason": null
+          },
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-4248c4ecb460b0feb7b0a171",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-0bd8e570387c8af92ba407d9"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-0bd8e570387c8af92ba407d9",
+                "excerpt": "参与者参与试验的持续时间",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.t4.r5.c0.p0"
+                ],
+                "source_structure_unit_ids": [
+                  "su-d6ff40387ed596f201c96470"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-fe4a2f810f43815e2b4581ce",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-d6ff40387ed596f201c96470",
+            "unresolved_reason": null
+          },
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-7faeee53f811912d027dc0ce",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-1a3111f26d035f667c0e3f29"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-1a3111f26d035f667c0e3f29",
+                "excerpt": "研究人群 | 中度至重度银屑病成人患者",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.t4.r6.c0.p0",
+                  "body.t4.r6.c1.p0"
+                ],
+                "source_structure_unit_ids": [
+                  "su-cf637ce7283674989cbe123c"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-ce389777b27b12ade0f849ca",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-cf637ce7283674989cbe123c",
+            "unresolved_reason": null
+          },
+          {
+            "candidate_evaluations": [
+              {
+                "candidate_id": "pac-7f3f5649311150863b3ecd60",
+                "opposing_evidence_ids": [],
+                "schema_version": "phase5/v1",
+                "scope": "shared",
+                "supporting_evidence_ids": [
+                  "pae-724f7d17e7ac8bafc4d6402f"
+                ],
+                "unresolved_evidence_ids": []
+              }
+            ],
+            "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+            "evidence": [
+              {
+                "evidence_id": "pae-724f7d17e7ac8bafc4d6402f",
+                "excerpt": "参与者入选/排除标准 | 入选标准： | 参与者必须符合下列所有标准才能参加试验： | 自愿签署知情同意书（ICF），能够和研究者进行良好的沟通，并且理解和遵守本研究的各项要求和限制条件； | 签署ICF时年龄≥18周岁且≤75周岁，性别不限； | 筛选时，由研究者评估患有斑块状银屑病，病史≥6个月，且处于稳定期； | 筛选和基线时研究者评估斑块状银屑病病情满足以下要求： | 银屑病面积与严重程度指数（PASI）评分≥12分； | 医生整体评价（PGA）评分≥3分； | 受累的体表面积（BSA）≥10%； | 研究者判断符合光疗或系统性治疗条件； | 有生育能力的参与者自签署知情同意书至研究末次给药后至少3个月无怀孕或捐精计划，必须遵守避孕的相关规定，采取高效或可接受的避孕方法避孕（见附录1）。 | 排除标准： | 必须排除符合下列任一排除标准的参与者： | 基线前3个月内存在非斑块状银屑病（如点滴型、脓疱型、红皮病型或反向型银屑病）； | 筛选或基线时，存在其它皮肤病病史或当前状态（如湿疹），经研究者判断可能影响研究评估； | 有药物（如β-受体阻滞剂、钙离子通道阻滞剂、抗疟药物或锂剂）诱发或加重的银屑病既往病史或现病史； | 有严重带状疱疹或严重单纯疱疹既往史（包括但不限于播散型带状疱疹、泛发型带状疱疹、中枢神经系统带状疱疹、眼带状疱疹、复发性带状疱疹（2年内发生2次或以上））或有单纯疱疹、带状疱疹感染现病史； | 首次给药前3个月内存在需住院或静脉抗感染治疗的严重细菌、真菌或病毒感染史； | 首次给药前4周内存在需口服抗感染治疗的细菌、真菌或病毒感染史； | 首次给药前7天内，存在活动性感染或急性疾病状态（如发热、恶心、呕吐或腹泻）； | 筛选或基线时，存在慢性或复发性感染性疾病者，包括但不限于慢性肾脏感染、复发性尿路感染、慢性胸部感染、真菌感染（指甲浅表真菌感染除外）或感染性的皮肤伤口或溃疡，经研究者评估可能增加参与者安全性风险； | 符合以下任一项结核筛查标准： | 有活动性结核感染的现病史或既往病史； | 在筛选期间，研究者判断存在活动性结核病的体征或症状； | 胸部CT提示当前或既往活动性结核感染； | γ-干扰素释放试验结果显示潜伏性结核感染证据，定义为：筛选时γ-干扰素释放试验检测呈阳性或连续两次γ-干扰素释放试验结果不确定，且无临床症状。除非有记录表明参与者已经完成充分的结核潜伏感染的治疗，或者在首次给药前至少4周开始预防性治疗，并且同意完成后续预防性治疗疗程，预防措施的整个疗程不必在首次给药前完成。 | 注： | 不允许使用利福平或利福喷丁进行结核预防。 | 如结核检测结果为不确定者，可进行1次复测。 | 首次给药前4周内接种减毒活疫苗，或计划在治疗期间的任何时间或研究完成后8周内接种减毒活疫苗者； | 首次给药前6个月内存在重大或不稳定的消化/肝胆、肾脏/泌尿、心血管、呼吸、内分泌、血液、免疫、中枢神经系统疾病者，根据研究者判断不具备临床研究条件者，例如但不限于胰腺炎、不稳定型心绞痛、心肌梗死、症状性充血性心力衰竭（纽约心脏病协会III级或IV级）、需要治疗的心律失常、肺动脉高压、呼吸衰竭、脑卒中（包含短暂性脑缺血发作）、肝硬化、静脉血栓栓塞症等； | 首次给药前5年内患有恶性肿瘤（经过彻底治疗且没有任何复发迹象的皮肤原位鳞癌、基底细胞癌和原位宫颈癌除外）或淋巴组织增生性疾病； | 目前患有其它自身免疫性疾病（如类风湿性关节炎、系统性红斑狼疮、炎症性肠病等）； | 患有或疑似先天性或获得性免疫缺陷病史者，或研究者认为会损害参与者免疫状态的情况（如脾切除术史、原发性免疫缺陷）； | 患有精神相关疾病或病史（如抑郁症），影响用药依从性或研究者从临床上判断有自杀风险者； | 既往使用过IL-12、IL-17和/或IL-23靶向药物且经研究者评估疗效不佳者，包括但不限于：Tildrakizumab（替瑞奇珠单抗）、Guselkumab（古塞奇尤单抗）、Ustekinumab（乌司奴单抗）、Secukinumab（司库奇尤单抗）、Ixekizumab（依奇珠单抗）、Brodalumab（布罗利尤单抗）等； | 既往使用过TYK2抑制剂治疗者，或既往接受过系统性JAK1/2/3抑制剂治疗且疗效不佳或因安全性原因停药的参与者； | 首次给药前，规定的时间内接受了以下任何一种治疗者： | 2周内使用可能影响银屑病病情的局部用药/治疗（包括但不限于：糖皮质激素、维A酸类、维生素D3衍生物、钙调磷酸酶抑制剂、本维莫德、抗人IL-8单克隆抗体乳膏、焦油、水杨酸、地蒽酚等）或含有上述成分的洗浴产品，或可能影响银屑病病情的中成药外用剂、中医非药物疗法； | 4 周内使用可能影响银屑病病情的非生物制剂系统治疗，包括但不限于JAKs抑制剂、糖皮质激素、维A酸类、环孢素、甲氨蝶呤、黄芪、雷公藤、苦参、复方甘草酸铵、硫唑嘌呤、吗替麦考酚酯、中成药及传统中草药（对于无明确临床证据可能改善银屑病病情的中成药或传统中草药，可缩短为给药前2周内）、抗疟药、干扰素或锂制剂等； | 4周内接受过肝药酶调节相关的中药治疗（如甘草、五味子等）； | 4 周内进行物理治疗，包括但不限于：紫外线疗法、光化学疗法、采用日光浴床自我治疗等； | 3个月或5个半衰期内（以时间较长者为准）接受除靶向IL-12、IL-17和/或IL-23外的其他生物制剂治疗； | 6个月内接受靶向IL-12、IL-17和/或IL-23的生物制剂治疗； | 6个月内接受过利妥昔单抗或其他免疫细胞耗竭治疗； | 24个月内接受过来氟米特（经来氟米特药物清除剂进行洗脱者可缩短至6个月）； | 首次给药前3个月或5个半衰期内（以时间较长者为准）使用其他临床试验药物或目前正在参加其他临床研究者； | 筛选或基线时，存在以下任何一种实验室检查异常： | 外周血白细胞计数＜3×10^9/L； | 淋巴细胞计数＜0.5×10^9/L； | 中性粒细胞计数＜1.5×10^9/L； | 血小板＜100×10^9/L； | 血红蛋白＜100 g/L； | 估算的肾小球滤过率（eGFR）≤60 mL/min/1.73 m^2（使用慢性肾脏病流行病学协作方程，CKD-EPI，详见附录2）； | 丙氨酸转氨酶（ALT）或天冬氨酸转氨酶（AST）或总胆红素≥1.5×ULN； | 任何其它实验室检查结果异常且有临床意义，经研究者评估如果参与研究将可能对参与者构成不可接受的风险； | 筛选或基线时，生命体征、体格检查、12-导联心电图、胸部CT（可接受1个月内的CT检查结果）异常且有临床意义，经研究者评估如果参与研究将可能对参与者构成不可接受的风险； | 筛选访视时存在下列任一感染者： | 乙型肝炎：表面抗原（HBsAg）阳性，或核心抗体（HBcAb）阳性且乙型肝炎病毒脱氧核糖核酸（HBV-DNA）拷贝数阳性（定义为超过研究中心检测值正常范围上限）； | 丙型肝炎（HCV）抗体阳性，且HCV-RNA拷贝数阳性（定义为超过研究中心检测值正常范围上限）； | 人类免疫缺陷病毒抗体（HIV Ab）阳性； | 梅毒特异性抗体试验阳性（梅毒非特异性抗体RPR或TRUST结果为阴性，并经研究者判断为过去曾感染梅毒但已治愈的参与者除外）； | 筛选前3个月内有酗酒史和/或药物滥用史； | 存在任何可能影响药物吸收的情况者，包括但不限于：吸收不良综合征、乳糜泻、胃切除术、肠切除术（阑尾切除术除外）； | 首次给药前4周或5个半衰期（以时间较长者为准）内使用过或在研究期间不能避免使用CYP3A强诱导剂或抑制剂的药物（见附录3）者； | 首次给药前7天内食用了圣·约翰草（贯叶连翘）制品、葡萄柚，或拒绝在整个研究期间（包括随访期）避免食用此类物质者； | 筛选前3个月内献血或失血≥ 400 mL或计划在研究期间献血者； | 已知或怀疑对试验药物中任何一种成分过敏者，或任何其他显著的药物过敏（如过敏性休克或肝毒性）； | 妊娠或哺乳期女性； | 研究者认为不合适参加本研究的其他原因。",
+                "polarity": "supports",
+                "rationale": "该段为方案摘要中",
+                "schema_version": "phase5/v1",
+                "source_span_ids": [
+                  "body.t4.r7.c0.p0",
+                  "body.t4.r7.c1.p0",
+                  "body.t4.r7.c1.p1",
+                  "body.t4.r7.c1.p10",
+                  "body.t4.r7.c1.p11",
+                  "body.t4.r7.c1.p12",
+                  "body.t4.r7.c1.p13",
+                  "body.t4.r7.c1.p14",
+                  "body.t4.r7.c1.p15",
+                  "body.t4.r7.c1.p16",
+                  "body.t4.r7.c1.p17",
+                  "body.t4.r7.c1.p18",
+                  "body.t4.r7.c1.p19",
+                  "body.t4.r7.c1.p2",
+                  "body.t4.r7.c1.p20",
+                  "body.t4.r7.c1.p21",
+                  "body.t4.r7.c1.p22",
+                  "body.t4.r7.c1.p23",
+                  "body.t4.r7.c1.p24",
+                  "body.t4.r7.c1.p25",
+                  "body.t4.r7.c1.p26",
+                  "body.t4.r7.c1.p27",
+                  "body.t4.r7.c1.p28",
+                  "body.t4.r7.c1.p29",
+                  "body.t4.r7.c1.p3",
+                  "body.t4.r7.c1.p30",
+                  "body.t4.r7.c1.p31",
+                  "body.t4.r7.c1.p32",
+                  "body.t4.r7.c1.p33",
+                  "body.t4.r7.c1.p34",
+                  "body.t4.r7.c1.p35",
+                  "body.t4.r7.c1.p36",
+                  "body.t4.r7.c1.p37",
+                  "body.t4.r7.c1.p38",
+                  "body.t4.r7.c1.p39",
+                  "body.t4.r7.c1.p4",
+                  "body.t4.r7.c1.p40",
+                  "body.t4.r7.c1.p41",
+                  "body.t4.r7.c1.p42",
+                  "body.t4.r7.c1.p43",
+                  "body.t4.r7.c1.p44",
+                  "body.t4.r7.c1.p45",
+                  "body.t4.r7.c1.p46",
+                  "body.t4.r7.c1.p47",
+                  "body.t4.r7.c1.p48",
+                  "body.t4.r7.c1.p49",
+                  "body.t4.r7.c1.p5",
+                  "body.t4.r7.c1.p50",
+                  "body.t4.r7.c1.p51",
+                  "body.t4.r7.c1.p52",
+                  "body.t4.r7.c1.p53",
+                  "body.t4.r7.c1.p54",
+                  "body.t4.r7.c1.p55",
+                  "body.t4.r7.c1.p56",
+                  "body.t4.r7.c1.p57",
+                  "body.t4.r7.c1.p58",
+                  "body.t4.r7.c1.p59",
+                  "body.t4.r7.c1.p6",
+                  "body.t4.r7.c1.p60",
+                  "body.t4.r7.c1.p61",
+                  "body.t4.r7.c1.p62",
+                  "body.t4.r7.c1.p63",
+                  "body.t4.r7.c1.p64",
+                  "body.t4.r7.c1.p65",
+                  "body.t4.r7.c1.p66",
+                  "body.t4.r7.c1.p67",
+                  "body.t4.r7.c1.p68",
+                  "body.t4.r7.c1.p69",
+                  "body.t4.r7.c1.p7",
+                  "body.t4.r7.c1.p8",
+                  "body.t4.r7.c1.p9"
+                ],
+                "source_structure_unit_ids": [
+                  "su-8b8580b78515c0931d978751"
+                ]
+              }
+            ],
+            "final_disposition": "cross_phase_shared",
+            "manual_overrides": [],
+            "opposite_phase": "phase_iii",
+            "package_id": "pap-ee7e41c64baddeffd4a6d726",
+            "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+            "rationale": "该段为方案摘要中",
+            "resolution_id": "par-e0fae01396a40f00d84336e0",
+            "schema_version": "phase5/v1",
+            "selected_phase": "phase_ii",
+            "semantic_disposition": "cross_phase_shared",
+            "structure_unit_id": "su-8b8580b78515c0931d978751",
+            "unresolved_reason": null
+          }
+        ],
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii"
+      },
+      "raw_output_sha256": "6f4d20b8792d6d3673f248db44e08b6823b966ab9c1476404ac7811cd35a91c3",
+      "rejected_structure_unit_ids": [],
+      "rejected_unit_indexes": [],
+      "session_id": "phase-applicability-chat-d595b11a1c8c4f12b6f30f748253d287"
+    }
+  ],
+  "final_output": {
+    "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+    "opposite_phase": "phase_iii",
+    "package_id": "pap-ee7e41c64baddeffd4a6d726",
+    "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+    "results": [
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-f2e823e75ad360a4e8848f56",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-b56e140e53d55865281c2777"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-b56e140e53d55865281c2777",
+            "excerpt": "概要",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.p303"
+            ],
+            "source_structure_unit_ids": [
+              "su-e37ae963890b2dbb63dbb4e9"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-a8d4a8f1914892c5aefd1201",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-e37ae963890b2dbb63dbb4e9",
+        "unresolved_reason": null
+      },
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-1acf0a6db190c68344946697",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-4000ca0ba287b546fda53c42"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-4000ca0ba287b546fda53c42",
+            "excerpt": "标题",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.t4.r0.c0.p0"
+            ],
+            "source_structure_unit_ids": [
+              "su-a9c231402eeccf6fab4671fe"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-812e915ddf0ec653b65c3580",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-a9c231402eeccf6fab4671fe",
+        "unresolved_reason": null
+      },
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-77a836c845ed11f471a2b0d1",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-fd9d461ca5a9ebfe8a238537"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-fd9d461ca5a9ebfe8a238537",
+            "excerpt": "评价CMS-D001片治疗中度至重度斑块状银屑病成人患者的有效性和安全性的多中心、随机、双盲、安慰剂对照Ⅱ/Ⅲ期临床研究",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.t4.r0.c1.p0"
+            ],
+            "source_structure_unit_ids": [
+              "su-132207c775c264916adadc87"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-08e9cd4e00af17b62b8a53e9",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-132207c775c264916adadc87",
+        "unresolved_reason": null
+      },
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-06ac3c03d2611826b9004d6c",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-8a39694779e4a47112608e54"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-8a39694779e4a47112608e54",
+            "excerpt": "阶段",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.t4.r1.c0.p0"
+            ],
+            "source_structure_unit_ids": [
+              "su-4ef7557d8cd60ae9fda655bb"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-1f44d6a1ba7acb29860b1648",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-4ef7557d8cd60ae9fda655bb",
+        "unresolved_reason": null
+      },
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-a826e690676ac3e9e69e1836",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-4f5e5551fc5d2a07e0e6ca0d"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-4f5e5551fc5d2a07e0e6ca0d",
+            "excerpt": "Ⅱ/Ⅲ期",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.t4.r1.c1.p0"
+            ],
+            "source_structure_unit_ids": [
+              "su-bb55be07447cff6d766db6c9"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-07d5c5ae6e322a997e2b3c43",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-bb55be07447cff6d766db6c9",
+        "unresolved_reason": null
+      },
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-6bee7efeaadfc74e7750d101",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-8ba2f1987761f957bd8be32a"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-8ba2f1987761f957bd8be32a",
+            "excerpt": "目的",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.t4.r2.c0.p0"
+            ],
+            "source_structure_unit_ids": [
+              "su-fde683aeb47832aa66ffc0e1"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-ffee41795c905777b9d7181b",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-fde683aeb47832aa66ffc0e1",
+        "unresolved_reason": null
+      },
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-62c8c034fc3106f153e35cea",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-6c31c5dcdef5fd3f3fc32949"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-6c31c5dcdef5fd3f3fc32949",
+            "excerpt": "终点",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.t4.r3.c0.p0"
+            ],
+            "source_structure_unit_ids": [
+              "su-eddf0b0f6fbb442eda6ade3d"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-ba38826656b3251d53e9328f",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-eddf0b0f6fbb442eda6ade3d",
+        "unresolved_reason": null
+      },
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-7765cc29821dc2fcdf07d240",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-d3256fcc57d69f545c7acc82"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-d3256fcc57d69f545c7acc82",
+            "excerpt": "试验设计",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.t4.r4.c0.p0"
+            ],
+            "source_structure_unit_ids": [
+              "su-30f03f6c1991cdb48c1e5f9e"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-e60494aed3335d8e17d56f07",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-30f03f6c1991cdb48c1e5f9e",
+        "unresolved_reason": null
+      },
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-cd86cf9633ea9f1b675e793d",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-a990d4ff7ae67388481c2171"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-a990d4ff7ae67388481c2171",
+            "excerpt": "本研究采用多中心、随机、双盲、安慰剂对照的Ⅱ/Ⅲ期操作无缝适应性设计，评价CMS-D001片治疗中度至重度斑块状银屑病患者的有效性、安全性和耐受性。试验由两个部分组成，包括Ⅱ期临床研究阶段和Ⅲ期临床研究阶段。",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.t4.r4.c1.p0"
+            ],
+            "source_structure_unit_ids": [
+              "su-4b9805cc7ce84a60408b6bfd"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-44f19a0afd6cbca0a49b6013",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-4b9805cc7ce84a60408b6bfd",
+        "unresolved_reason": null
+      },
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-4248c4ecb460b0feb7b0a171",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-0bd8e570387c8af92ba407d9"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-0bd8e570387c8af92ba407d9",
+            "excerpt": "参与者参与试验的持续时间",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.t4.r5.c0.p0"
+            ],
+            "source_structure_unit_ids": [
+              "su-d6ff40387ed596f201c96470"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-fe4a2f810f43815e2b4581ce",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-d6ff40387ed596f201c96470",
+        "unresolved_reason": null
+      },
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-7faeee53f811912d027dc0ce",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-1a3111f26d035f667c0e3f29"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-1a3111f26d035f667c0e3f29",
+            "excerpt": "研究人群 | 中度至重度银屑病成人患者",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.t4.r6.c0.p0",
+              "body.t4.r6.c1.p0"
+            ],
+            "source_structure_unit_ids": [
+              "su-cf637ce7283674989cbe123c"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-ce389777b27b12ade0f849ca",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-cf637ce7283674989cbe123c",
+        "unresolved_reason": null
+      },
+      {
+        "candidate_evaluations": [
+          {
+            "candidate_id": "pac-7f3f5649311150863b3ecd60",
+            "opposing_evidence_ids": [],
+            "schema_version": "phase5/v1",
+            "scope": "shared",
+            "supporting_evidence_ids": [
+              "pae-724f7d17e7ac8bafc4d6402f"
+            ],
+            "unresolved_evidence_ids": []
+          }
+        ],
+        "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+        "evidence": [
+          {
+            "evidence_id": "pae-724f7d17e7ac8bafc4d6402f",
+            "excerpt": "参与者入选/排除标准 | 入选标准： | 参与者必须符合下列所有标准才能参加试验： | 自愿签署知情同意书（ICF），能够和研究者进行良好的沟通，并且理解和遵守本研究的各项要求和限制条件； | 签署ICF时年龄≥18周岁且≤75周岁，性别不限； | 筛选时，由研究者评估患有斑块状银屑病，病史≥6个月，且处于稳定期； | 筛选和基线时研究者评估斑块状银屑病病情满足以下要求： | 银屑病面积与严重程度指数（PASI）评分≥12分； | 医生整体评价（PGA）评分≥3分； | 受累的体表面积（BSA）≥10%； | 研究者判断符合光疗或系统性治疗条件； | 有生育能力的参与者自签署知情同意书至研究末次给药后至少3个月无怀孕或捐精计划，必须遵守避孕的相关规定，采取高效或可接受的避孕方法避孕（见附录1）。 | 排除标准： | 必须排除符合下列任一排除标准的参与者： | 基线前3个月内存在非斑块状银屑病（如点滴型、脓疱型、红皮病型或反向型银屑病）； | 筛选或基线时，存在其它皮肤病病史或当前状态（如湿疹），经研究者判断可能影响研究评估； | 有药物（如β-受体阻滞剂、钙离子通道阻滞剂、抗疟药物或锂剂）诱发或加重的银屑病既往病史或现病史； | 有严重带状疱疹或严重单纯疱疹既往史（包括但不限于播散型带状疱疹、泛发型带状疱疹、中枢神经系统带状疱疹、眼带状疱疹、复发性带状疱疹（2年内发生2次或以上））或有单纯疱疹、带状疱疹感染现病史； | 首次给药前3个月内存在需住院或静脉抗感染治疗的严重细菌、真菌或病毒感染史； | 首次给药前4周内存在需口服抗感染治疗的细菌、真菌或病毒感染史； | 首次给药前7天内，存在活动性感染或急性疾病状态（如发热、恶心、呕吐或腹泻）； | 筛选或基线时，存在慢性或复发性感染性疾病者，包括但不限于慢性肾脏感染、复发性尿路感染、慢性胸部感染、真菌感染（指甲浅表真菌感染除外）或感染性的皮肤伤口或溃疡，经研究者评估可能增加参与者安全性风险； | 符合以下任一项结核筛查标准： | 有活动性结核感染的现病史或既往病史； | 在筛选期间，研究者判断存在活动性结核病的体征或症状； | 胸部CT提示当前或既往活动性结核感染； | γ-干扰素释放试验结果显示潜伏性结核感染证据，定义为：筛选时γ-干扰素释放试验检测呈阳性或连续两次γ-干扰素释放试验结果不确定，且无临床症状。除非有记录表明参与者已经完成充分的结核潜伏感染的治疗，或者在首次给药前至少4周开始预防性治疗，并且同意完成后续预防性治疗疗程，预防措施的整个疗程不必在首次给药前完成。 | 注： | 不允许使用利福平或利福喷丁进行结核预防。 | 如结核检测结果为不确定者，可进行1次复测。 | 首次给药前4周内接种减毒活疫苗，或计划在治疗期间的任何时间或研究完成后8周内接种减毒活疫苗者； | 首次给药前6个月内存在重大或不稳定的消化/肝胆、肾脏/泌尿、心血管、呼吸、内分泌、血液、免疫、中枢神经系统疾病者，根据研究者判断不具备临床研究条件者，例如但不限于胰腺炎、不稳定型心绞痛、心肌梗死、症状性充血性心力衰竭（纽约心脏病协会III级或IV级）、需要治疗的心律失常、肺动脉高压、呼吸衰竭、脑卒中（包含短暂性脑缺血发作）、肝硬化、静脉血栓栓塞症等； | 首次给药前5年内患有恶性肿瘤（经过彻底治疗且没有任何复发迹象的皮肤原位鳞癌、基底细胞癌和原位宫颈癌除外）或淋巴组织增生性疾病； | 目前患有其它自身免疫性疾病（如类风湿性关节炎、系统性红斑狼疮、炎症性肠病等）； | 患有或疑似先天性或获得性免疫缺陷病史者，或研究者认为会损害参与者免疫状态的情况（如脾切除术史、原发性免疫缺陷）； | 患有精神相关疾病或病史（如抑郁症），影响用药依从性或研究者从临床上判断有自杀风险者； | 既往使用过IL-12、IL-17和/或IL-23靶向药物且经研究者评估疗效不佳者，包括但不限于：Tildrakizumab（替瑞奇珠单抗）、Guselkumab（古塞奇尤单抗）、Ustekinumab（乌司奴单抗）、Secukinumab（司库奇尤单抗）、Ixekizumab（依奇珠单抗）、Brodalumab（布罗利尤单抗）等； | 既往使用过TYK2抑制剂治疗者，或既往接受过系统性JAK1/2/3抑制剂治疗且疗效不佳或因安全性原因停药的参与者； | 首次给药前，规定的时间内接受了以下任何一种治疗者： | 2周内使用可能影响银屑病病情的局部用药/治疗（包括但不限于：糖皮质激素、维A酸类、维生素D3衍生物、钙调磷酸酶抑制剂、本维莫德、抗人IL-8单克隆抗体乳膏、焦油、水杨酸、地蒽酚等）或含有上述成分的洗浴产品，或可能影响银屑病病情的中成药外用剂、中医非药物疗法； | 4 周内使用可能影响银屑病病情的非生物制剂系统治疗，包括但不限于JAKs抑制剂、糖皮质激素、维A酸类、环孢素、甲氨蝶呤、黄芪、雷公藤、苦参、复方甘草酸铵、硫唑嘌呤、吗替麦考酚酯、中成药及传统中草药（对于无明确临床证据可能改善银屑病病情的中成药或传统中草药，可缩短为给药前2周内）、抗疟药、干扰素或锂制剂等； | 4周内接受过肝药酶调节相关的中药治疗（如甘草、五味子等）； | 4 周内进行物理治疗，包括但不限于：紫外线疗法、光化学疗法、采用日光浴床自我治疗等； | 3个月或5个半衰期内（以时间较长者为准）接受除靶向IL-12、IL-17和/或IL-23外的其他生物制剂治疗； | 6个月内接受靶向IL-12、IL-17和/或IL-23的生物制剂治疗； | 6个月内接受过利妥昔单抗或其他免疫细胞耗竭治疗； | 24个月内接受过来氟米特（经来氟米特药物清除剂进行洗脱者可缩短至6个月）； | 首次给药前3个月或5个半衰期内（以时间较长者为准）使用其他临床试验药物或目前正在参加其他临床研究者； | 筛选或基线时，存在以下任何一种实验室检查异常： | 外周血白细胞计数＜3×10^9/L； | 淋巴细胞计数＜0.5×10^9/L； | 中性粒细胞计数＜1.5×10^9/L； | 血小板＜100×10^9/L； | 血红蛋白＜100 g/L； | 估算的肾小球滤过率（eGFR）≤60 mL/min/1.73 m^2（使用慢性肾脏病流行病学协作方程，CKD-EPI，详见附录2）； | 丙氨酸转氨酶（ALT）或天冬氨酸转氨酶（AST）或总胆红素≥1.5×ULN； | 任何其它实验室检查结果异常且有临床意义，经研究者评估如果参与研究将可能对参与者构成不可接受的风险； | 筛选或基线时，生命体征、体格检查、12-导联心电图、胸部CT（可接受1个月内的CT检查结果）异常且有临床意义，经研究者评估如果参与研究将可能对参与者构成不可接受的风险； | 筛选访视时存在下列任一感染者： | 乙型肝炎：表面抗原（HBsAg）阳性，或核心抗体（HBcAb）阳性且乙型肝炎病毒脱氧核糖核酸（HBV-DNA）拷贝数阳性（定义为超过研究中心检测值正常范围上限）； | 丙型肝炎（HCV）抗体阳性，且HCV-RNA拷贝数阳性（定义为超过研究中心检测值正常范围上限）； | 人类免疫缺陷病毒抗体（HIV Ab）阳性； | 梅毒特异性抗体试验阳性（梅毒非特异性抗体RPR或TRUST结果为阴性，并经研究者判断为过去曾感染梅毒但已治愈的参与者除外）； | 筛选前3个月内有酗酒史和/或药物滥用史； | 存在任何可能影响药物吸收的情况者，包括但不限于：吸收不良综合征、乳糜泻、胃切除术、肠切除术（阑尾切除术除外）； | 首次给药前4周或5个半衰期（以时间较长者为准）内使用过或在研究期间不能避免使用CYP3A强诱导剂或抑制剂的药物（见附录3）者； | 首次给药前7天内食用了圣·约翰草（贯叶连翘）制品、葡萄柚，或拒绝在整个研究期间（包括随访期）避免食用此类物质者； | 筛选前3个月内献血或失血≥ 400 mL或计划在研究期间献血者； | 已知或怀疑对试验药物中任何一种成分过敏者，或任何其他显著的药物过敏（如过敏性休克或肝毒性）； | 妊娠或哺乳期女性； | 研究者认为不合适参加本研究的其他原因。",
+            "polarity": "supports",
+            "rationale": "该段为方案摘要中",
+            "schema_version": "phase5/v1",
+            "source_span_ids": [
+              "body.t4.r7.c0.p0",
+              "body.t4.r7.c1.p0",
+              "body.t4.r7.c1.p1",
+              "body.t4.r7.c1.p10",
+              "body.t4.r7.c1.p11",
+              "body.t4.r7.c1.p12",
+              "body.t4.r7.c1.p13",
+              "body.t4.r7.c1.p14",
+              "body.t4.r7.c1.p15",
+              "body.t4.r7.c1.p16",
+              "body.t4.r7.c1.p17",
+              "body.t4.r7.c1.p18",
+              "body.t4.r7.c1.p19",
+              "body.t4.r7.c1.p2",
+              "body.t4.r7.c1.p20",
+              "body.t4.r7.c1.p21",
+              "body.t4.r7.c1.p22",
+              "body.t4.r7.c1.p23",
+              "body.t4.r7.c1.p24",
+              "body.t4.r7.c1.p25",
+              "body.t4.r7.c1.p26",
+              "body.t4.r7.c1.p27",
+              "body.t4.r7.c1.p28",
+              "body.t4.r7.c1.p29",
+              "body.t4.r7.c1.p3",
+              "body.t4.r7.c1.p30",
+              "body.t4.r7.c1.p31",
+              "body.t4.r7.c1.p32",
+              "body.t4.r7.c1.p33",
+              "body.t4.r7.c1.p34",
+              "body.t4.r7.c1.p35",
+              "body.t4.r7.c1.p36",
+              "body.t4.r7.c1.p37",
+              "body.t4.r7.c1.p38",
+              "body.t4.r7.c1.p39",
+              "body.t4.r7.c1.p4",
+              "body.t4.r7.c1.p40",
+              "body.t4.r7.c1.p41",
+              "body.t4.r7.c1.p42",
+              "body.t4.r7.c1.p43",
+              "body.t4.r7.c1.p44",
+              "body.t4.r7.c1.p45",
+              "body.t4.r7.c1.p46",
+              "body.t4.r7.c1.p47",
+              "body.t4.r7.c1.p48",
+              "body.t4.r7.c1.p49",
+              "body.t4.r7.c1.p5",
+              "body.t4.r7.c1.p50",
+              "body.t4.r7.c1.p51",
+              "body.t4.r7.c1.p52",
+              "body.t4.r7.c1.p53",
+              "body.t4.r7.c1.p54",
+              "body.t4.r7.c1.p55",
+              "body.t4.r7.c1.p56",
+              "body.t4.r7.c1.p57",
+              "body.t4.r7.c1.p58",
+              "body.t4.r7.c1.p59",
+              "body.t4.r7.c1.p6",
+              "body.t4.r7.c1.p60",
+              "body.t4.r7.c1.p61",
+              "body.t4.r7.c1.p62",
+              "body.t4.r7.c1.p63",
+              "body.t4.r7.c1.p64",
+              "body.t4.r7.c1.p65",
+              "body.t4.r7.c1.p66",
+              "body.t4.r7.c1.p67",
+              "body.t4.r7.c1.p68",
+              "body.t4.r7.c1.p69",
+              "body.t4.r7.c1.p7",
+              "body.t4.r7.c1.p8",
+              "body.t4.r7.c1.p9"
+            ],
+            "source_structure_unit_ids": [
+              "su-8b8580b78515c0931d978751"
+            ]
+          }
+        ],
+        "final_disposition": "cross_phase_shared",
+        "manual_overrides": [],
+        "opposite_phase": "phase_iii",
+        "package_id": "pap-ee7e41c64baddeffd4a6d726",
+        "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+        "rationale": "该段为方案摘要中",
+        "resolution_id": "par-e0fae01396a40f00d84336e0",
+        "schema_version": "phase5/v1",
+        "selected_phase": "phase_ii",
+        "semantic_disposition": "cross_phase_shared",
+        "structure_unit_id": "su-8b8580b78515c0931d978751",
+        "unresolved_reason": null
+      }
+    ],
+    "schema_version": "phase5/v1",
+    "selected_phase": "phase_ii"
+  },
+  "package_id": "pap-ee7e41c64baddeffd4a6d726",
+  "session_id": "phase-applicability-chat-d595b11a1c8c4f12b6f30f748253d287",
+  "status": "已解析"
+}

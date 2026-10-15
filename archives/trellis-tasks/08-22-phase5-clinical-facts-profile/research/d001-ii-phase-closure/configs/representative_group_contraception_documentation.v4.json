@@ -1,0 +1,12 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_contraception_documentation.v3.json",
+  "task_id": "phase5-slice60l-20260828",
+  "artifact_dir_name": "phase5-slice60l-d001-contraception-documentation-replay-time-anchor-guidance-20260828",
+  "notes": [
+    "原始DOCX产品链直接提取，用户无需预处理方案文本。",
+    "完整时间区间必须同时保留起点语义和末次给药后的尾段锚点，不得把尾段时长错误附到知情同意日期。",
+    "已知目标已完整覆盖的持续避孕义务不得重复发布，只保留附录中真正新增的禁止、沟通和记录要求。",
+    "父级临床验收继续逐条核对body.p1325、body.p1326及IN-06去重，不以技术门绿色替代临床接受。"
+  ]
+}

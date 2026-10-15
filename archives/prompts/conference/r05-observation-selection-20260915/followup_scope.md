@@ -1,0 +1,9 @@
+Continue the same read-only review session under the original boundaries. Do not run tests or modify any file.
+
+Owner rejects D2 as sufficient completeness proof: all qualified records and requirement-level written-judgment search coverage do not establish all eligible observations, especially when a candidate was omitted or a known date remains unqualified. Also retest-count <= maximum does not prove trigger, authorized relationship, timing, or replacement semantics. D3's >= permits tied same-day different observations and does not prove unique dominance. Please revise against concrete code, not confidence.
+
+Find the minimum source-bound scope proof achievable with existing frozen facts/locators, dual qualification/proposition tasks and published requirements. Identify exactly which inputs and outputs must change and where complete relevant candidate enumeration can be checked; distinguish completeness within uploaded material from complete clinical history. A source statement about the latest result may itself be useful evidence but must not be manufactured from page coverage. No new parallel scheduler or patient-specific heuristic.
+
+Include official any/all in the eventual implementation scope rather than dropping it indefinitely. A bounded first coherent implementation may handle single selection but must state the remaining required steps. For retest distinguish simple source-authorized replacement from unsupported complex logic, preserving explicit unresolved reasons without pretending merely limiting count solves it.
+
+Give a revised minimum coherent contract and source-to-consumer sequence with exact file references. No requirement to approve the owner's approach: identify a better alternative if warranted. Existing no-staged-tests instruction forbids new unit tests now; final validation is deferred. Return the same report heading with an addendum, not a duplicate broad audit.

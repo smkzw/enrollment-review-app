@@ -1,0 +1,10 @@
+{
+  "batch_count": 217,
+  "checkpoint": "execution/d001-ii-phase-closure-20260825-slice58e.json",
+  "coverage_unit_count": 1840,
+  "expected_agent_unit_count": 1298,
+  "input_scope_sha256": "079a645d65fa21f47de5746078a043028b7f20cf547c4e731a09bf33c1075c79",
+  "prompt_template_sha256": "bcca3f3898e9338f999d3aabfc328fab551f56b5fef128b447e6357a72337279",
+  "run_id": "d001-ii-phase-closure-20260825-slice58e",
+  "status": "planned"
+}

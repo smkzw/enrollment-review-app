@@ -1,0 +1,252 @@
+{
+  "attached_source_refs": [
+    "body.p1084",
+    "body.p1085",
+    "body.p1086",
+    "body.p997",
+    "body.p998",
+    "body.p999",
+    "body.p1000",
+    "body.p1001",
+    "body.p1014"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package89-table8-severity-grading-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第89包六个拥有单元全部为表8不良事件严重程度分级内容（body.t13.r0-r5）：r0为三列表头并仅作结构，r1-r5为1-5级治疗后分级语义行并保持post_treatment_execution处置；全部禁止升格为预筛、筛选或基线入排门槛。required_candidate_source_refs显式为空，任何候选发射都构成越界。",
+    "三列结构必须保持：r1-r3的分级、类型、定义三个有值单元格按行绑定；r4/r5的c1类型单元格在源文档中为空，仅c0分级与c2定义有值，不得虚构类型、串列、错位，也不得把空单元格解释为类型与定义列合并。",
+    "OR语义必须保持：表头'定义（满足列举的任一情况）'使每个等级定义内的分号分支保持OR；1级三个分支、2级治疗要求与工具性ADL受限、3级四个分支、4级危及生命与需要紧急治疗均为并列备选，不得强化为全部同时满足。",
+    "分支限定不得外溢：3级'但不会立即危及生命'仅修饰第一分支，不得扩展到住院、致残或自理性活动受限分支；'并未卧床不起'仅修饰自理性日常生活活动受限分支（括号内限定），不得扩展到其他分支或整级。",
+    "等级文本不得删改：5级必须保留'与不良事件相关'限定，不得删去或改写为'死亡'；4级不得删去'危及生命'或'需要紧急治疗'任一分支。",
+    "严重程度与SAE严重性必须分离：表8 3级'严重/住院/重要医学意义'、4级'危及生命'、5级'死亡'是严重程度分级描述，不能机械等同或替代第78-79包SAE判定（p997 OR总纲、p998死亡、p999实际危及生命定义、p1000永久或严重残疾或功能丧失标准、p1001需要住院治疗或延长住院时间标准、p1014其他有重要意义的医学事件判断）；SAE判定归第78-79包，本包不得改写。",
+    "只读附加来源（9）：第88包p1084-p1086（严重程度评估标题、CTCAE 6.0参考与回退方法、表8入口标题）仅用于闭合表格用途和适用路径；第78包p997/p998/p999/p1000/p1001与第79包p1014仅用于阻断表8等级和SAE严重性机械等同。全部只读，不改变所有权与候选发射权；拥有来源和只读附加来源全部禁止发射候选。",
+    "第88包防回吸：p1085的CTCAE 6.0版本锚点、'可参考'义务与回退层级（CTCAE已收录AE→1-5级特定描述；未收录AE→方案定义优先；无方案定义→表8通用准则）归第88包，本包只以只读闭包承接'下列准则'所指的表8内容，不重新拥有或改写第88包语义。",
+    "第87/90/91/92/93包防吞并：死亡、药物过量、给药错误记录规则（body.p1074-p1083）、因果关系共同判断（p1087-p1097）、因果判定表（body.t14.r0-r7）、预期性评估（p1098-p1101）、应报告事件类型与随访流程（p1102-p1112）均归各自包，本包不提前吞并或处置；p1083不附加，因为p1084-p1086与表8拥有单元的标题路径已完整闭合层级。",
+    "官方入排与流程矩阵不含任何以body.t13为锚点的行，也不含不良事件/TEAE/SAE控制行；本包不合成任何IN/EX官方规则。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.t13.r0",
+    "body.t13.r1",
+    "body.t13.r2",
+    "body.t13.r3",
+    "body.t13.r4",
+    "body.t13.r5"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：SAE严重性判定依据归第78-79包；表8严重程度等级不得机械等同SAE OR标准，本包不得改写SAE判定": "pending_codex",
+        "第78包拥有：SAE是符合下列标准任何一项的不良事件（OR总纲），只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件（Serious Adverse Event，SAE）是指符合下列标准任何一项的不良事件：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p997",
+      "structure_unit_id": "su-40348e74c63d71c5b6319be0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：SAE死亡结果判定标准；表8 5级'与不良事件相关的死亡'是严重程度分级结果，不等同该标准；本包不得重新拥有死亡判定": "pending_codex",
+        "第78包拥有：导致死亡（SAE死亡结果标准），只读": "pending_codex"
+      },
+      "frozen_excerpt": "导致死亡：当一个事件的结果为“死亡”，则可明确地作为严重不良事件进行记录和报告。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p998",
+      "structure_unit_id": "su-e2f80718a15f7b296906c055"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：用于区分表8 4级严重程度描述与SAE实际危及生命标准；所有权归第78包，本包不得改写或发射候选": "pending_codex",
+        "第78包拥有：危及生命是指不良事件发生时参与者已经处于死亡危险中，只读": "pending_codex"
+      },
+      "frozen_excerpt": "危及生命：在此是指在发生不良事件时参与者已经处于死亡的危险中，并不是指假设该不良事件如果更严重可能导致死亡。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p999",
+      "structure_unit_id": "su-b0f87a9a0d490bd216d0c969"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：SAE严重性标准之一；表8 3级'致残'措辞不得机械等同该标准；所有权归第78包": "pending_codex",
+        "第78包拥有：永久或严重残疾或功能丧失标准，只读": "pending_codex"
+      },
+      "frozen_excerpt": "永久或者严重的残疾或者功能丧失：指不良事件结果可能对参与者正常生活和活动造成严重不便或干扰。相对较小医学意义的经历，如单纯的头痛、恶心、呕吐、腹泻、流感和意外创伤（如脚踝扭伤），这些经历可能干扰或阻碍日常生活功能，但不构成重大干扰。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1000",
+      "structure_unit_id": "su-c793fa7c755ac66919c14e7b"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：SAE严重性标准之一；表8 3级'导致住院或者延长住院时间'措辞不得机械等同该标准；所有权归第78包": "pending_codex",
+        "第78包拥有：需要住院治疗或延长住院时间标准，只读": "pending_codex"
+      },
+      "frozen_excerpt": "需要住院治疗或延长住院时间^*：不良事件导致参与者不得不住院接受治疗或本来已经准备出院但由于发生了不良事件而导致住院时间延长；需明确导致该状况的原因是由于不良事件所致，而非因择期手术、非医疗原因等导致入院。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1001",
+      "structure_unit_id": "su-ea42820da3887b01efc1bab4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：需运用医学和科学判断决定是否加速报告；与表8 3级'具有重要医学意义'措辞是不同层级规则，不得混同；所有权归第79包": "pending_codex",
+        "第79包拥有：其他有重要意义的医学事件判断，只读": "pending_codex"
+      },
+      "frozen_excerpt": "其他有重要意义的医学事件：必须运用医学和科学的判断决定是否对其他的情况加速报告，如重要医学事件可能不会立即危及生命、死亡或住院，但如需要采取医学措施来预防如上情形之一的发生，也通常被视为是严重的。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1014",
+      "structure_unit_id": "su-7558abeb46e72593ce9f912c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：第88包严重程度评估标题，仅用于闭合表格用途和适用路径（表8位于其下）；所有权仍归第88包，不得转移": "pending_codex",
+        "第88包拥有：不良事件的严重程度评估（结构标题），只读": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件的严重程度评估",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1084",
+      "structure_unit_id": "su-6f2fa269778fdc0ed80b1dac"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：'使用下列准则'由本包表8（body.t13.r0-r5）闭合；CTCAE版本6.0、'可参考'义务与回退层级归第88包，本包不重新拥有或改写": "pending_codex",
+        "第88包拥有：研究者可参考CTCAE 6.0评估AE严重程度与回退方法，只读": "pending_codex"
+      },
+      "frozen_excerpt": "研究者可参考美国国家癌症研究所发布的“不良事件通用术语标准”（CTCAE，版本6.0）评估AE严重程度。CTCAE基于以下基本准则对每个收录的不良事件的严重程度从1级至5级作了特定的描述。对于未收录至CTCAE中的不良事件，如果方案有具体定义，则按相关定义进行评估；如果方案没有具体定义，则使用下列准则对严重程度进行评估：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1085",
+      "structure_unit_id": "su-a58a1b920fb0b98aa8324f1c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：表8入口标题，具体1-5级定义由本包拥有（body.t13.r0-r5）；入口标题不得被第88包或其他包再拥有": "pending_codex",
+        "第88包拥有：表 8 不良事件严重程度分级（结构标题/表格入口），只读": "pending_codex"
+      },
+      "frozen_excerpt": "表 8 不良事件严重程度分级",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1086",
+      "structure_unit_id": "su-b383dd1755bfd733fc89f743"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第89包拥有：表8表头（分级｜类型｜定义（满足列举的任一情况）），三列表头": "pending_codex",
+        "表头必须保持三列：分级、类型、定义；'定义（满足列举的任一情况）'是各级定义内分号分支保持OR的语义锚点，不得删改或把'任一情况'改为'全部同时满足'；表头只闭合列语义，不独立形成控制点": "pending_codex"
+      },
+      "frozen_excerpt": "分级 | 类型 | 定义（满足列举的任一情况）",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t13.r0",
+      "structure_unit_id": "su-a43976bf1f0f5616eef0f8f3"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "1级三个分号分支是并列备选（任一情况即满足），不得强化为全部同时满足；不得把类型'轻度'与定义互换或把'无症状或轻微'改写成'无症状且轻微'": "pending_codex",
+        "第89包拥有：1级轻度定义（无症状或轻微；仅为临床或诊断所见；无需治疗。）": "pending_codex"
+      },
+      "frozen_excerpt": "1级 | 轻度 | 无症状或轻微；仅为临床或诊断所见；无需治疗。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t13.r1",
+      "structure_unit_id": "su-ff87596f185809977f360493"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "2级治疗要求与工具性日常生活活动受限是并列备选，不得改为同时满足；类型必须保持'中度'，不得与定义错位": "pending_codex",
+        "第89包拥有：2级中度定义（需要较小、局部或非侵入性治疗；与年龄相当的工具性日常生活活动受限）": "pending_codex"
+      },
+      "frozen_excerpt": "2级 | 中度 | 需要较小、局部或非侵入性治疗；与年龄相当的工具性日常生活活动受限（指做饭、购买衣物、使用电话、理财等。）",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t13.r2",
+      "structure_unit_id": "su-ac0301376c37d8b831a3e4e5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "3级四个分号分支是并列备选，不得强化为全部同时满足；'并未卧床不起'仅修饰自理性日常生活活动受限分支（括号内限定），不得外溢到整级或作为整级否定条件；'严重/住院/致残'是严重程度分级描述，不得机械等同第78-79包SAE严重性标准": "pending_codex",
+        "第89包拥有：3级重度定义（严重或者具有重要医学意义但不会立即危及生命；导致住院或者延长住院时间；致残；自理性日常生活活动受限）": "pending_codex"
+      },
+      "frozen_excerpt": "3级 | 重度 | 严重或者具有重要医学意义但不会立即危及生命；导致住院或者延长住院时间；致残；自理性日常生活活动受限（指洗澡、穿脱衣、吃饭、盥洗、服药等，并未卧床不起。）",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t13.r3",
+      "structure_unit_id": "su-877730c146d38d5244004250"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "4级'危及生命'与'需要紧急治疗'是并列备选；是严重程度分级，不等同第78包SAE'危及生命'判定标准（body.p999）": "pending_codex",
+        "第89包拥有：4级定义（危及生命；需要紧急治疗。）": "pending_codex"
+      },
+      "frozen_excerpt": "4级 | 危及生命；需要紧急治疗。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t13.r4",
+      "structure_unit_id": "su-092a2c63a4b74f16a8175d26"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "5级必须保留'与不良事件相关'限定，不得删去；是严重程度分级结果，不等同第78包SAE死亡结果判定（body.p998）": "pending_codex",
+        "第89包拥有：5级定义（与不良事件相关的死亡。）": "pending_codex"
+      },
+      "frozen_excerpt": "5级 | 与不良事件相关的死亡。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t13.r5",
+      "structure_unit_id": "su-f358febe8073d0027587ed4c"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61ca-20260830",
+  "worker": "codebuddy-worker_02"
+}

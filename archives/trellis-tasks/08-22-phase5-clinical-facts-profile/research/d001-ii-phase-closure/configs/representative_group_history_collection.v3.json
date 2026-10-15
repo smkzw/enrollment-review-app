@@ -1,0 +1,16 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_history_collection.v2.json",
+  "group_id": "d001-ii-history-treatment-collection-v3",
+  "task_id": "phase5-slice60q-20260828",
+  "artifact_dir_name": "phase5-slice60q-d001-history-treatment-collection-replay-readonly-context-20260828",
+  "ids": {
+    "manifest_id": "manifest:slice60q-history-treatment-reps",
+    "catalog_id": "catalog:slice60q-history-treatment-reps"
+  },
+  "notes": [
+    "v1与v2真实模型结果保持不可变，均因回放器未把声明附件送入Agent而不作为临床接受证据。",
+    "v3仅修复系统级只读上下文装配：4个正文单元保持唯一处置对象，10个跨章节来源进入context_units。",
+    "只读上下文不能成为候选来源，人工检查清单仍只用于父级事后验收。"
+  ]
+}

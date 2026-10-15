@@ -1,0 +1,34 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral.v1.json",
+  "group_id": "d001-ii-virology-p803-p805-closure",
+  "task_id": "phase5-slice60zx-virology-source-closure-20260828",
+  "worker": "worker_02",
+  "artifact_dir_name": "phase5-slice60zx-virology-source-closure-20260828",
+  "owned_source_refs": [
+    "body.p803",
+    "body.p804",
+    "body.p805"
+  ],
+  "attached_source_refs": [
+    "body.t5.r18",
+    "body.p328",
+    "body.p685",
+    "body.p686",
+    "body.p687",
+    "body.p688",
+    "body.p689"
+  ],
+  "required_candidate_source_refs": [
+    "body.p804",
+    "body.p805"
+  ],
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "package-72 virology owned p803-p805 only; EX-22 and flow14 as read-only authority targets"
+  },
+  "notes": [
+    "Slice60zx worker_02 dry-run: immutable product prepare for body.p803-p805 only.",
+    "Excludes body.p802 and TB units; no matrix completion; no model call."
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "package_id": "1001V1-EXEC-01",
+  "round_id": "1001V1",
+  "created_date": "2026-10-01",
+  "repository": "smkzw/enrollment-review-app",
+  "baseline_head": "60a849e603f69ffa669b8d57a661bcee47d3cd3c",
+  "reported_product_code_commit": "d04a199ad4d4c1dc550399716b99ba87927bc022",
+  "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
+  "candidate_mechanism": "RV1001-FLOW",
+  "comparison_baseline": "RV1001-BASELINE",
+  "requires_new_model": false,
+  "candidate_direction_approved": true,
+  "default_migration_verified": false,
+  "product_claims_complete": false,
+  "models_executed_in_package_creation": false,
+  "repo_modified_in_package_creation": false,
+  "preserved_visual_trial": "RV29-NATIVE-VISUAL",
+  "artifact_scope": "规划与指令；仅包自身结构检查，非产品或临床验收。",
+  "files": [
+    {
+      "path": "00_START_HERE.md",
+      "bytes": 5819,
+      "sha256": "39b375ae8b954345c022491c5ffab0bc2310c7a89aab78d3d31a69cec8a48528"
+    },
+    {
+      "path": "01_PASTE_TO_AGENT.md",
+      "bytes": 8550,
+      "sha256": "d081f1a7f0d7c1780537ab98d226eb8dd6458fd3ebfbc51486523c42e5932c57"
+    },
+    {
+      "path": "02_WORKFLOW_AND_RECOVERY.md",
+      "bytes": 10018,
+      "sha256": "0bdd41b53929cf4ad0506c241c9fcd46129d22b1c01af679953ffd667e702558"
+    },
+    {
+      "path": "03_SAME_MODEL_EVALUATION.md",
+      "bytes": 7928,
+      "sha256": "bcba9b5a9ff91ccf60180a27eb448ff4e1db1216a5098246b49e3b6587c0123c"
+    },
+    {
+      "path": "04_DOCS_SYNC.md",
+      "bytes": 8175,
+      "sha256": "e99c6a93ce03791658a0a94fcd23018123d3a3779835ce401008d90fba8f44d3"
+    },
+    {
+      "path": "05_HANDOFF_STANDARD_AND_TEMPLATE.md",
+      "bytes": 6651,
+      "sha256": "3b79afa88155d0de3f3ca4d263c02d44cebd7ecaede6482483db0857c19fa39b"
+    },
+    {
+      "path": "acceptance_cases.json",
+      "bytes": 5832,
+      "sha256": "76c5c813ae81ffbf603aa81cca1528f287db7d4f7826a486b4f9cd786510a737"
+    },
+    {
+      "path": "templates/review_index.template.json",
+      "bytes": 909,
+      "sha256": "1e16ba32f98171228b7857f9d49ee602df0096313b4cc4e4c4500e6e64d79bcf"
+    }
+  ]
+}

@@ -1,0 +1,380 @@
+{
+  "batch_id": "pcb-48fc68da5b3631ce84f784a7",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [],
+  "context_structure_unit_ids": [],
+  "context_units": [],
+  "coverage_manifest_id": "manifest:slice61cy-package112-reference-list-evidence-authority-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1295",
+    "body.p1296",
+    "body.p1297",
+    "body.p1298",
+    "body.p1299",
+    "body.p1300",
+    "body.p1301",
+    "body.p1302",
+    "body.p1303",
+    "body.p1304",
+    "body.p1305",
+    "body.p1306"
+  ],
+  "owned_structure_unit_ids": [
+    "su-26d914047d29578e097cdf6c",
+    "su-a4010e85bdd682dfe1a1cad9",
+    "su-a3df49d7b4a625b94bec2965",
+    "su-bd9722972cf3d9ea9548497a",
+    "su-11d958ae625456cbf0b39873",
+    "su-17f26c68b700c79efac66fdf",
+    "su-13fd924febd87d13779f5fd4",
+    "su-a5b3e2ab044bf7ba937ed3c7",
+    "su-5b0e11423fee24e9254b5c8f",
+    "su-c1ee98b152405239320575e9",
+    "su-9b690a6ae52c33ffa397f9a3",
+    "su-2a86c798e2ce7adce426c896"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "参考文献",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1295"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31910,
+      "source_ref": "body.p1295",
+      "source_span_ids": [
+        "body.p1295"
+      ],
+      "structure_unit_id": "su-26d914047d29578e097cdf6c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "中华医学会皮肤性病学分会银屑病专业委员会. 中国银屑病诊疗指南（2023版）[J]. 中华皮肤科杂志, 2023,56(7):573-625.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1296"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31920,
+      "source_ref": "body.p1296",
+      "source_span_ids": [
+        "body.p1296"
+      ],
+      "structure_unit_id": "su-a4010e85bdd682dfe1a1cad9",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "黄丹,陈崑.银屑病相关流行病学调查进展[J].诊断学理论与实践,2021,20(01):48-52.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1297"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31930,
+      "source_ref": "body.p1297",
+      "source_span_ids": [
+        "body.p1297"
+      ],
+      "structure_unit_id": "su-a3df49d7b4a625b94bec2965",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "李慧贤,胡丽,郑焱,等.基于全球疾病负担(GBD)大数据的中国银屑病流行病学负担分析[J].中国皮肤性病学杂志,2021,35(04):386-392.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1298"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31940,
+      "source_ref": "body.p1298",
+      "source_span_ids": [
+        "body.p1298"
+      ],
+      "structure_unit_id": "su-bd9722972cf3d9ea9548497a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "Griffiths CEM, Armstrong AW, Gudjonsson JE, et al. Psoriasis. The Lancet. 2021;397:1301–15.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1299"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31950,
+      "source_ref": "body.p1299",
+      "source_span_ids": [
+        "body.p1299"
+      ],
+      "structure_unit_id": "su-11d958ae625456cbf0b39873",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "Armstrong AW, Read C. Pathophysiology, Clinical Presentation, and Treatment of Psoriasis: A Review. JAMA. 2020;323:1945–60.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1300"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31960,
+      "source_ref": "body.p1300",
+      "source_span_ids": [
+        "body.p1300"
+      ],
+      "structure_unit_id": "su-17f26c68b700c79efac66fdf",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "Xin P, Xu X, Deng C, et al. The role of JAK/STAT signaling pathway and its inhibitors in diseases. Int Immunopharmacol. 2020 Mar;80:106210.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1301"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31970,
+      "source_ref": "body.p1301",
+      "source_span_ids": [
+        "body.p1301"
+      ],
+      "structure_unit_id": "su-13fd924febd87d13779f5fd4",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "Krueger JG, McInnes IB, Blauvelt A. Tyrosine kinase 2 and Janus kinase‒signal transducer and activator of transcription signaling and inhibition in plaque psoriasis. J Am Acad Dermatol. 2022;86:148–57.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1302"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31980,
+      "source_ref": "body.p1302",
+      "source_span_ids": [
+        "body.p1302"
+      ],
+      "structure_unit_id": "su-a5b3e2ab044bf7ba937ed3c7",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "Deucravacitinib. FDA Multi-Discipline Review. 2022.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1303"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31990,
+      "source_ref": "body.p1303",
+      "source_span_ids": [
+        "body.p1303"
+      ],
+      "structure_unit_id": "su-5b0e11423fee24e9254b5c8f",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "Feldman SR, Krueger GG. Psoriasis assessment tools in clinical trials. Ann Rheum Dis. 2005;64 Suppl 2:ii65-8; discussion ii69-73.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1304"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32000,
+      "source_ref": "body.p1304",
+      "source_span_ids": [
+        "body.p1304"
+      ],
+      "structure_unit_id": "su-c1ee98b152405239320575e9",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "Bożek A, Reich A. The reliability of three psoriasis assessment tools: Psoriasis area and severity index, body surface area and physician global assessment. Adv Clin Exp Med. 2017;26:851–6.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1305"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32010,
+      "source_ref": "body.p1305",
+      "source_span_ids": [
+        "body.p1305"
+      ],
+      "structure_unit_id": "su-9b690a6ae52c33ffa397f9a3",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "Thomas CL, Finlay AY. The “handprint” approximates to 1% of the total body surface area whereas the “palm minus the fingers” does not. Br J Dermatol. 2007;157:1080–1.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1306"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32020,
+      "source_ref": "body.p1306",
+      "source_span_ids": [
+        "body.p1306"
+      ],
+      "structure_unit_id": "su-2a86c798e2ce7adce426c896",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-26d914047d29578e097cdf6c"
+  ],
+  "study_phase": "phase_ii"
+}

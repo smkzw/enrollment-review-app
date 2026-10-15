@@ -1,0 +1,205 @@
+{
+  "task_id": "phase5-slice61bi-mtplx-structured-output-diagnosis",
+  "role_id": "worker_02",
+  "target_endpoint": "http://127.0.0.1:8002/v1/chat/completions",
+  "model": "mtplx-qwen38-27b-optimized-quality",
+  "timestamp_utc": "2026-08-29T13:30:00Z",
+  "matrix_sets": {
+    "set1_prompt_length_isolation": [
+      {
+        "label": "Set1_Length_micro",
+        "status_code": 200,
+        "elapsed_s": 7.21,
+        "prompt_chars": 200,
+        "reasoning_chars": 980,
+        "content_chars": 37,
+        "prompt_tokens": 38,
+        "completion_tokens": 212,
+        "error": null,
+        "content_preview": "{\n  \"count\": 1,\n  \"status\": \"ready\"\n}",
+        "reasoning_preview": "The user is asking me to act as an automated software architecture and configuration validation engine. They want me to "
+      },
+      {
+        "label": "Set1_Length_short",
+        "status_code": 200,
+        "elapsed_s": 16.31,
+        "prompt_chars": 1000,
+        "reasoning_chars": 2185,
+        "content_chars": 36,
+        "prompt_tokens": 369,
+        "completion_tokens": 789,
+        "error": null,
+        "content_preview": "{\n  \"count\": 4,\n  \"status\": \"FAIL\"\n}",
+        "reasoning_preview": "The user is asking me to act as an automated software architecture and configuration validation engine. They've provided"
+      },
+      {
+        "label": "Set1_Length_medium",
+        "status_code": 200,
+        "elapsed_s": 26.52,
+        "prompt_chars": 5000,
+        "reasoning_chars": 2702,
+        "content_chars": 0,
+        "prompt_tokens": 2034,
+        "completion_tokens": 1024,
+        "error": null,
+        "content_preview": "",
+        "reasoning_preview": "The user wants me to act as an automated software architecture and configuration validation engine. I need to parse the "
+      },
+      {
+        "label": "Set1_Length_long",
+        "status_code": 200,
+        "elapsed_s": 31.31,
+        "prompt_chars": 15000,
+        "reasoning_chars": 2046,
+        "content_chars": 0,
+        "prompt_tokens": 6198,
+        "completion_tokens": 1024,
+        "error": null,
+        "content_preview": "",
+        "reasoning_preview": "The user wants me to validate a distributed system configuration specification. Let me analyze the descriptors provided."
+      },
+      {
+        "label": "Set1_Length_prod_31k",
+        "status_code": 200,
+        "elapsed_s": 40.79,
+        "prompt_chars": 31000,
+        "reasoning_chars": 2575,
+        "content_chars": 0,
+        "prompt_tokens": 12858,
+        "completion_tokens": 1024,
+        "error": null,
+        "content_preview": "",
+        "reasoning_preview": "Let me analyze this configuration specification carefully.\n\nI have 140 descriptors (Descriptor-0000 through Descriptor-0"
+      }
+    ],
+    "set2_schema_complexity_isolation": [
+      {
+        "label": "Set2_Schema_S0_None",
+        "status_code": 200,
+        "elapsed_s": 49.8,
+        "prompt_chars": 31000,
+        "reasoning_chars": 1905,
+        "content_chars": 0,
+        "prompt_tokens": 12849,
+        "completion_tokens": 1024,
+        "error": null,
+        "content_preview": "",
+        "reasoning_preview": "The user wants me to validate a set of distributed system configuration descriptors. Let me analyze them concisely.\n\nKey"
+      },
+      {
+        "label": "Set2_Schema_S1_JsonObject",
+        "status_code": 200,
+        "elapsed_s": 28.71,
+        "prompt_chars": 31000,
+        "reasoning_chars": 1905,
+        "content_chars": 0,
+        "prompt_tokens": 12849,
+        "completion_tokens": 1024,
+        "error": null,
+        "content_preview": "",
+        "reasoning_preview": "The user wants me to validate a set of distributed system configuration descriptors. Let me analyze them concisely.\n\nKey"
+      },
+      {
+        "label": "Set2_Schema_S2_Small",
+        "status_code": 200,
+        "elapsed_s": 28.78,
+        "prompt_chars": 31000,
+        "reasoning_chars": 1905,
+        "content_chars": 0,
+        "prompt_tokens": 12849,
+        "completion_tokens": 1024,
+        "error": null,
+        "content_preview": "",
+        "reasoning_preview": "The user wants me to validate a set of distributed system configuration descriptors. Let me analyze them concisely.\n\nKey"
+      },
+      {
+        "label": "Set2_Schema_S3_Medium",
+        "status_code": 200,
+        "elapsed_s": 28.5,
+        "prompt_chars": 31000,
+        "reasoning_chars": 1905,
+        "content_chars": 0,
+        "prompt_tokens": 12849,
+        "completion_tokens": 1024,
+        "error": null,
+        "content_preview": "",
+        "reasoning_preview": "The user wants me to validate a set of distributed system configuration descriptors. Let me analyze them concisely.\n\nKey"
+      },
+      {
+        "label": "Set2_Schema_S4_Full_Wire_V1",
+        "status_code": 200,
+        "elapsed_s": 28.89,
+        "prompt_chars": 31000,
+        "reasoning_chars": 1905,
+        "content_chars": 0,
+        "prompt_tokens": 12849,
+        "completion_tokens": 1024,
+        "error": null,
+        "content_preview": "",
+        "reasoning_preview": "The user wants me to validate a set of distributed system configuration descriptors. Let me analyze them concisely.\n\nKey"
+      }
+    ],
+    "set3_thinking_guidance_isolation": [
+      {
+        "label": "Set3_Concise_Thinking_Full_Wire_V1",
+        "status_code": 200,
+        "elapsed_s": 28.89,
+        "prompt_chars": 31000,
+        "reasoning_chars": 1905,
+        "content_chars": 0,
+        "error": null
+      },
+      {
+        "label": "Set3_Verbose_Reasoning_Full_Wire_V1",
+        "status_code": 200,
+        "elapsed_s": 129.95,
+        "prompt_chars": 31159,
+        "reasoning_chars": 4000,
+        "content_chars": 8809,
+        "error": null,
+        "note": "Hard-capped at exactly 4000 chars by PRELUDE_TEXT: /(.|\\n){0,4000}/ before JSON transition"
+      }
+    ],
+    "set4_exact_boundary_simulation": [
+      {
+        "setting": "MTPLX_THINK_PRELUDE_MAX_CHARS=default(4000)",
+        "fed_tokens": 3000,
+        "status": "CRASHED",
+        "crashed_at_step": 2149,
+        "crashed_at_total_chars": 3999,
+        "error_type": "RuntimeError",
+        "error_msg": "constrained decoding desync on token 109064: Parser Error: token \"设定\" doesn't satisfy the grammar; byte 'å' fails parse",
+        "root_cause": "Token crossed 4000 char threshold (3999 + 2 = 4001 chars), regex rejected transition"
+      },
+      {
+        "setting": "MTPLX_THINK_PRELUDE_MAX_CHARS=16000",
+        "fed_tokens": 3000,
+        "status": "COMPLETED_NO_CRASH",
+        "final_step": 3000,
+        "final_total_chars": 5584,
+        "error_type": null,
+        "error_msg": null
+      },
+      {
+        "setting": "MTPLX_THINK_PRELUDE_MAX_CHARS=0(unbounded)",
+        "fed_tokens": 5000,
+        "status": "COMPLETED_NO_CRASH",
+        "final_step": 5000,
+        "final_total_chars": 9306,
+        "error_type": null,
+        "error_msg": null
+      }
+    ]
+  },
+  "conclusions": {
+    "is_prompt_length_culprit": false,
+    "is_schema_size_culprit": false,
+    "is_kv_cache_culprit": false,
+    "root_cause_mechanism": "Server-side constrained decoding think prelude bound (_THINK_PRELUDE_DEFAULT_MAX_CHARS=4000) causes llguidance parser rejection when complex prompts induce deep reasoning exceeding 4000 characters, leading to unhandled RuntimeError and HTTP 500.",
+    "verified_remediations": [
+      "Setting MTPLX_THINK_PRELUDE_MAX_CHARS=0 (unbounded reasoning prelude) in server environment",
+      "Setting MTPLX_THINK_PRELUDE_MAX_CHARS=16000 (proportionately expanded reasoning budget) in server environment",
+      "Prompt engineering / system contract enforcement to keep reasoning under 4000 characters if server cannot be reconfigured"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+同会话源码续审，仍只读，不改文件/运行测试/产品模型/库/浏览器/另派发。读取变更完整定义和相邻消费者，返回报告由runner保存。
+
+S4已按独立字段修复：ControlObligationOutcome.unverified_evidence携带PropositionPairGap，空字段不序列化保留旧载荷；ControlReviewOutcome v2，v1禁止新疑问；ReviewControlRepository按原fact/locator/identity验证未决来源而不写used_fact_ids。历史service/API/前端decoder/FrozenReviewReport/frozenReviewExport已分开待核实原件；当前采用定位未扩大。不再混入locator_ids。核完整链。
+
+S1已源码实现但不启用：proposition_evidence/v4新增assertion_extent（individual/universal_over_declared_scope/unresolved）、scope_population（nonempty/empty/unresolved）及逐字population_quote。extent/population进双路agreement_key；仅any/all允许universal，非universal不得声明population。提示量词含义严格是每个P成立或每个P不成立，不是对聚合结论的关系；不从‘全部’推存在，不对自述一刀切，而按既有来源资格。模型中立、同一次现有双读，不额外请求。
+qualified_binding_selection将全部该identity内容候选配对与已核实关系pair集合比较，scope_candidates_complete是候选核对完备性，不是临床范围证明。最终反方向必须无gap/UNKNOWN/来源冲突，所有truth同向、有双路universal+scope原文；ALL正面另要nonempty与原文。universal不作为单例见证，因为全称不能在空集上推出存在；普通单向见证保留，但若有明确相反的universal记录，保留proposition_relation_conflict不自动选边。single旧逻辑保留。
+
+核心完整读取：app/domain/contracts/proposition_evidence.py、app/llm/proposition_evidence.py、app/services/qualified_binding_selection.py、app/services/qualified_proposition_evidence.py、app/projections/control_calculation_experiment.py、app/projections/control_review_outcome.py、app/domain/contracts/control_review_outcome.py、app/storage/review_control_repository.py。相关历史API/decoder/导出按需追踪。
+版本：prompt4/consumer3/selection-consumer9/experiment9/evaluator13/outcome2；本轮尚未调用产品或持久化新临床记录，不需为每次未运行的小改动再递增。版本和回执/工作流仍须拒绝旧方法混用。评测/用户采信批准尚无，不声称临床验收。
+
+请优先查：量词前后向错误、旧单观察行为误伤、同fact多pair缺口、不同时间/来源及未决输入被掩盖、存储与前端显示形状不一致、旧payload哈希改变。不要将‘仅编译、未运行’当已通过。返回具体文件行和最小建议，不泛化增加另一套harness。

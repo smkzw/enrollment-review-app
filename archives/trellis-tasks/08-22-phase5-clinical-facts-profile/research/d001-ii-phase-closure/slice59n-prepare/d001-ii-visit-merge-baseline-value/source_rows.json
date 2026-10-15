@@ -1,0 +1,57 @@
+[
+  {
+    "excerpt": "如果筛选访视和D1访视间隔≤7天，则筛选和基线访视可合并进行，两次访视中相同的评估事项可只进行一次。如果筛选访视和D1访视间隔＞7天，则需在D1天前7天内进行基线访视。以给药前最近一次评估结果作为基线值。生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "owned",
+    "source_ref": "body.p316",
+    "source_span_ids": [
+      "body.p316"
+    ],
+    "structure_unit_id": "su-97caf64d089af9677d378f82",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "注：筛选期相关检查，经研究者评估如有必要可重复检查以确认参与者入选资格。如果筛选访视和D1访视间隔≤7天，则筛选和基线访视可合并进行，两次访视中相同的评估事项可只进行一次。如果筛选访视和D1访视间隔＞7天，则需在D1天前7天内进行基线访视，以给药前最近一次检查值作为基线。",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "筛选期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p868",
+    "source_span_ids": [
+      "body.p868"
+    ],
+    "structure_unit_id": "su-653ee0cf1f5b64a9f40e72c4",
+    "unit_kind": "footnote_or_annotation"
+  },
+  {
+    "excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "治疗期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p885",
+    "source_span_ids": [
+      "body.p885"
+    ],
+    "structure_unit_id": "su-8c8a34eb18d0139b009c191d",
+    "unit_kind": "footnote_or_annotation"
+  }
+]

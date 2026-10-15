@@ -1,0 +1,8 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral.v1.json",
+  "artifact_dir_name": "phase5-slice59n-d001-viral-control-replay-contract-v4-20260828",
+  "notes": [
+    "验证后续锚点在早期节点只提前关注、最终判定节点与到期最低证据一致，并按最终决定阶段拆分候选语义。"
+  ]
+}

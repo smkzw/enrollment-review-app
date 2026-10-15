@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="23" time="6.128" timestamp="2026-10-09T04:53:29.734907+02:00" hostname="MacBook-Pro-4.local"><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_saved_source_review_identity_includes_stage_and_sequence_basis[affected_stage-\u7b5b\u9009\u671f]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_saved_source_review_identity_includes_stage_and_sequence_basis[eligibility_sequence_quote-\u786e\u5b9a\u5165\u6392\u8d44\u683c\u4e4b\u540e]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_target_review_packet_deduplicates_text_without_merging_visits[None]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_target_review_packet_deduplicates_text_without_merging_visits[visit-a]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_target_review_packet_keeps_different_or_missing_source_layers[text]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_target_review_packet_keeps_different_or_missing_source_layers[position]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_target_review_packet_keeps_different_or_missing_source_layers[missing]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_target_review_prompt_supplies_force_without_declaring_coverage" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[None]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[source]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[target]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[unknown]" time="0.001" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_selects_exact_source_not_coverage[single]" time="0.000" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[covered]" time="0.016"><failure message="AssertionError: [['已保存的局部草稿重新通过来源与原批次门禁'], [], ['同单元关系已局部复核；兄弟保持，仍需整批采用核验'], [&quot;逐项来源与已有目标核对未通过：cannot access local variable 'repaired_review_indexes' where it is not associated with a value&quot;]]&#10;assert '需要核对' == '已解析'&#10;  &#10;  - 已解析&#10;  + 需要核对">response_kind = 'covered'
+
+    @pytest.mark.parametrize("response_kind", ["covered", "additional", "foreign", "failure"])
+    def test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure(response_kind):
+        batch, inventory, wire, review = _owned_context_target_example()
+        coverage = source_statement_coverage(batch, inventory, wire)
+        validate_source_target_review(batch, inventory, coverage, review)
+        original = wire.model_dump_json(), inventory.model_dump_json(), review.model_dump_json()
+        answer = review.items[0].model_copy(deep=True)
+        if response_kind == "covered":
+            answer.decision, answer.unresolved_aspects = "covered_by_official", []
+        elif response_kind == "foreign":
+            answer.statement_index = 1
+    
+        class ContextTransport(_FakeTransport):
+            calls = 0
+            def start_source_target_review(self, *, prompt):
+                self.calls += 1
+                assert "本条完整原文关系上下文：" in prompt
+                if response_kind == "failure":
+                    raise RuntimeError("isolated transport failure")
+                return ProtocolControlAgentResponse(session_id="context-recheck",
+                    text=SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[answer]).model_dump_json())
+    
+        transport = ContextTransport([])
+        result = ProtocolControlAgentRunner(max_schema_repairs=0, max_transport_retries=0).run(
+            batch, transport, resume_wire=wire, resume_source_interpretation=inventory,
+            resume_source_target_review=review, resume_source_statement_coverage=coverage,
+            resume_session_id="saved", output_validator=lambda _output: None)
+        assert transport.calls == 1
+        assert (wire.model_dump_json(), inventory.model_dump_json(), review.model_dump_json()) == original
+        assert result.source_target_review.items[1] == review.items[1]
+        if response_kind == "covered":
+&gt;           assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
+E           AssertionError: [['已保存的局部草稿重新通过来源与原批次门禁'], [], ['同单元关系已局部复核；兄弟保持，仍需整批采用核验'], ["逐项来源与已有目标核对未通过：cannot access local variable 'repaired_review_indexes' where it is not associated with a value"]]
+E           assert '需要核对' == '已解析'
+E             
+E             - 已解析
+E             + 需要核对
+
+tests/v2/protocols/test_slice58c_control_deconstructor.py:13879: AssertionError</failure></testcase><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[additional]" time="0.013" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[foreign]" time="0.012" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_owned_context_target_recheck_runner_keeps_siblings_and_original_on_failure[failure]" time="0.013" /><testcase classname="tests.v2.protocols.test_slice58c_control_deconstructor" name="test_target_review_keeps_native_position_without_claiming_coverage" time="0.001" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_manual_retry_reuses_saved_source_review_without_partial_wire[False]" time="0.834" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_manual_retry_reuses_saved_source_review_without_partial_wire[True]" time="1.113" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_partial_resume_reuses_saved_source_review_and_keeps_source_history" time="0.803" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_continuation_plan_refreshes_a_changed_saved_source_review" time="0.757" /><testcase classname="tests.v2.services.test_protocol_control_execution" name="test_gate_only_change_revalidates_reusable_batch_without_model_call" time="1.084"><failure message="AssertionError: assert 'phase5/contr...view-scope/v3' == 'phase5/contr...view-scope/v3'&#10;  &#10;  Skipping 220 identical leading characters in diff, use -v to show&#10;  - -cause/v1/procedure-source-restricted-retention/v3/procedure-source-context-completeness/v3/relative-stage-frozen-target-preflight/v1/relative-stage-source-dimension/v1/native-row-source-normalization/v1/native-table-scope-recovery/v4/native-table-visit-correspondence/v1/reviewed-source-type-field-recovery/v1/validated-snapshot-scoped-session/v1/phase5/source-function-field-repair/v1/native-author-note-projection-and-procedure-row-gate/v1/invalid-wire-scoped-post-enrollment-repair/v1/native-row-action-co...&#10;  &#10;  ...Full output truncated (3 lines hidden), use '-vv' to show">data_paths = DataPaths(root=PosixPath('/private/var/folders/yb/31r9763x6_54mdxswxk36c4w0000gn/T/pytest-of-smkzw/pytest-1922/test_ga...Path('/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/projects'),)))
+session_factory = sessionmaker(class_='Session', bind=Engine(sqlite:////private/var/folders/yb/31r9763x6_54mdxswxk36c4w0000gn/T/pytest-o...est-1922/test_gate_only_change_revalida0/data_v2/enrollment-review-v2.sqlite3), autoflush=True, expire_on_commit=False)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x115b44560&gt;
+
+    def test_gate_only_change_revalidates_reusable_batch_without_model_call(
+        data_paths, session_factory, monkeypatch,
+    ):
+        seed = _seed_frozen_source(data_paths, session_factory, key="gate-only-reuse")
+        deep = _DeepTransport(seed.source_span_excerpts)
+        service = _build_service(data_paths, session_factory, seed)
+        source = service.create_from_deconstruction(
+            source_job_id=seed.source_job_id, idempotency_key="gate-only-source",
+        )
+        runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+        assert runner.run_job(source.job_id)
+        calls_before = deep.start_calls
+        original = JobStore.get_last_checkpoint
+        old_gate = "phase5/control-publication-gate/v31"
+    
+        def previous_gate_checkpoint(self, job_id, step_id):
+            checkpoint = original(self, job_id, step_id)
+            if job_id != source.job_id or step_id != "deep_0001" or checkpoint is None:
+                return checkpoint
+            checkpoint_id, saved = checkpoint
+            saved = dict(saved)
+            saved["component_identity"] = dict(saved["component_identity"], validator_version=old_gate)
+            return checkpoint_id, saved
+    
+        monkeypatch.setattr(JobStore, "get_last_checkpoint", previous_gate_checkpoint)
+        adopted = service.create_from_deconstruction(
+            source_job_id=seed.source_job_id,
+            idempotency_key="gate-only-adopted",
+            deep_source_job_id=source.job_id,
+        )
+        _, payload = _job_snapshot_and_payload(session_factory, adopted.job_id)
+        assert {entry["decision"] for entry in payload["deep_reuse_plan"]["decisions"].values()} == {"reusable"}
+        assert runner.run_job(adopted.job_id)
+        assert deep.start_calls == calls_before
+        with session_factory() as session:
+            checkpoint = JobStore(session, now=_now).get_last_checkpoint(adopted.job_id, "deep_0001")
+        assert checkpoint is not None
+        assert checkpoint[1]["revalidated_from_gate_version"] == old_gate
+&gt;       assert checkpoint[1]["component_identity"]["validator_version"] == (
+            "/".join((protocol_control_execution_module.CONTROL_PUBLICATION_GATE_VERSION,
+                      protocol_control_execution_module.RESTRICTED_DEFINITION_VALIDATION_VERSION,
+                      protocol_control_execution_module.SOURCE_COVERAGE_VALIDATION_VERSION,
+                      protocol_control_execution_module.SOURCE_ATTRIBUTION_VALIDATION_VERSION,
+                      protocol_control_execution_module.SOURCE_TARGET_REVIEW_VALIDATION_VERSION,
+                      protocol_control_execution_module.SOURCE_TARGET_REVIEW_GAP_VERSION,
+                      protocol_control_execution_module.PROCEDURE_RESTRICTION_VALIDATION_VERSION,
+                      protocol_control_execution_module.PROCEDURE_SOURCE_CONTEXT_VERSION,
+                      protocol_control_execution_module.RELATIVE_STAGE_PREFLIGHT_VERSION,
+                      protocol_control_execution_module.RELATIVE_STAGE_SOURCE_DIMENSION_VERSION,
+                      "native-row-source-normalization/v1",
+                      "native-table-scope-recovery/v4",
+                      "native-table-visit-correspondence/v1",
+                      "reviewed-source-type-field-recovery/v1",
+                      "validated-snapshot-scoped-session/v1",
+                      "phase5/source-function-field-repair/v1",
+                      "native-author-note-projection-and-procedure-row-gate/v1",
+                      "invalid-wire-scoped-post-enrollment-repair/v1",
+                      "native-row-action-coverage/v2",
+                      "native-scope-source-runtime-separation/v1",
+                      "native-table-review-scope/v3"))
+        )
+E       AssertionError: assert 'phase5/contr...view-scope/v3' == 'phase5/contr...view-scope/v3'
+E         
+E         Skipping 220 identical leading characters in diff, use -v to show
+E         - -cause/v1/procedure-source-restricted-retention/v3/procedure-source-context-completeness/v3/relative-stage-frozen-target-preflight/v1/relative-stage-source-dimension/v1/native-row-source-normalization/v1/native-table-scope-recovery/v4/native-table-visit-correspondence/v1/reviewed-source-type-field-recovery/v1/validated-snapshot-scoped-session/v1/phase5/source-function-field-repair/v1/native-author-note-projection-and-procedure-row-gate/v1/invalid-wire-scoped-post-enrollment-repair/v1/native-row-action-co...
+E         
+E         ...Full output truncated (3 lines hidden), use '-vv' to show
+
+tests/v2/services/test_protocol_control_execution.py:6238: AssertionError</failure></testcase></testsuite></testsuites>

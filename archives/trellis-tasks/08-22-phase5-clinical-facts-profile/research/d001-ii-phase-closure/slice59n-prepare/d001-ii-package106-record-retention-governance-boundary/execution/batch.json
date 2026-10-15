@@ -1,0 +1,171 @@
+{
+  "batch_id": "pcb-5e09cf645ddca755c03af0ed",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1247"
+  ],
+  "context_structure_unit_ids": [
+    "su-bc16d234790709eeb0d797cf"
+  ],
+  "context_units": [
+    {
+      "excerpt": "用于验证eCRFs输入数据正确性和完整性的源文件不得被清除或销毁，且必须按照第9.4节中描述的记录保存要求保存。为方便于源数据验证，研究者和机构必须允许申办者因为研究相关的监查、申办者稽查和 机构审查委员会/伦理委员会（Institutional Review Board/Ethics Committee，IRB/EC）审查而直接访问源文件和报告（如得到法律允许，也可以复制）。研究中心还必须允许监管当局对源数据/源文件进行检查。",
+      "heading_path": [
+        "数据采集与管理",
+        "源数据/源文件"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1247"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31100,
+      "source_ref": "body.p1247",
+      "source_span_ids": [
+        "body.p1247"
+      ],
+      "structure_unit_id": "su-bc16d234790709eeb0d797cf",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61cs-package106-record-retention-governance-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1248",
+    "body.p1249",
+    "body.p1250"
+  ],
+  "owned_structure_unit_ids": [
+    "su-3bea7a3f1b0a3fa198b14eaf",
+    "su-ff08a701df6f28b7ac543dd7",
+    "su-9b4a8c64e74545f1e46fd9fe"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "记录/文件的保存",
+      "heading_path": [
+        "数据采集与管理",
+        "记录/文件的保存"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1248"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31110,
+      "source_ref": "body.p1248",
+      "source_span_ids": [
+        "body.p1248"
+      ],
+      "structure_unit_id": "su-3bea7a3f1b0a3fa198b14eaf",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "临床研究文件需按照GCP等相关法律法规的要求进行保存和管理。研究中心和申办者应保存研究必备文件至试验药物被批准上市后至少5年或至临床试验结束后至少5年（以较长时间为准）。研究文件应合理保存，以便日后访问或数据溯源。申办者、研究者和临床试验机构应当确认均有保存临床试验必备文件的场所和条件。",
+      "heading_path": [
+        "数据采集与管理",
+        "记录/文件的保存"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1249"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31120,
+      "source_ref": "body.p1249",
+      "source_span_ids": [
+        "body.p1249"
+      ],
+      "structure_unit_id": "su-ff08a701df6f28b7ac543dd7",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "研究文件的转移、保管人的变更、研究文件的销毁等，必须得到申办者的书面许可。",
+      "heading_path": [
+        "数据采集与管理",
+        "记录/文件的保存"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1250"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31130,
+      "source_ref": "body.p1250",
+      "source_span_ids": [
+        "body.p1250"
+      ],
+      "structure_unit_id": "su-9b4a8c64e74545f1e46fd9fe",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-3bea7a3f1b0a3fa198b14eaf"
+  ],
+  "study_phase": "phase_ii"
+}

@@ -1,0 +1,110 @@
+# 历史记录 2026-09-22：muse-spark 守望期交接（禁止按此恢复）
+
+> 本文件只保留当时发生过的情况，不是当前恢复指令。旧守望脚本已停用；
+> 任何恢复、重试和续跑均须通过应用内正式任务执行，不得启动后台轮询脚本。
+
+## 一句话状态
+
+31001 补证重放已完成 95%，最后一步（新模型组合下的页判读→事实重整→投影对齐）
+因 opencode 供应商 muse-spark 上游持续不可用（已中断 6 小时以上）而等待中；
+守望脚本在后台自动探测（14 天窗口），恢复后无需人工介入即自动跑完全链。
+
+## 恢复后的自动链（守望脚本自动执行，无需人工）
+
+1. 探测 muse-spark 可用 → 自动提交页判读（muse-spark + cms-model 双路，25 页）
+2. 页判读完成 → 自动提交事实重整 → 记录终态到 /tmp/muse_spark_watch.log
+3. **人工/下次会话仅剩一步**：按 REPLAY_LOG.md 末节步骤，读取投影、记录
+   新哈希与决策分布、追加闭包总表、提交推送。
+
+## 关键文件与位置
+
+- 守望日志：/tmp/muse_spark_watch.log
+- 重放日志（闭包总表/接手步骤）：runs/execution/wp08-singleton-replay-20260921/REPLAY_LOG.md
+- 状态快照基线：runs/execution/wp08-singleton-replay-20260921/wp08_*.json
+- 采集脚本：scripts/wp08_capture_state.py
+- 恢复守望：scripts/wp08_muse_spark_watch.sh
+
+## 当前模型路由（用户裁定，已生效）
+
+| 节点 | 路由 | 密钥来源 |
+|---|---|---|
+| OCR 主读 | 本地 oMLX:8001 / GLM-OCR-bf16 | oMLX 应用 |
+| 页判读 main-A | opencode-go / muse-spark-1.3-contributor(high) | .env 的 OPENCODE_API_KEY（用户填写） |
+| 页判读 main-B | cms-router:20128 / cms-model(xhigh) | .env 的 CMS_SMK_API_KEY |
+| 事实规范化 | ollama-cloud / deepseek-v4.1-flash(max) | OMP 凭据库 ollama-cloud 行 |
+| 绑定/资格/检索/判断等双路 | main-A 同上 + main-B 同上 | 同上 |
+
+## 踩坑与修复（本轮全部已修）
+
+1. payload-only 合同字段 + ORM 镜像比对 → 历史覆盖记录误判不一致（已修）。
+2. native_text 定位核验缺工件库 → 首个带文字层的补证页暴露（已修）。
+3. 模型目录 401 导致预检拒绝启动（已修：显式模型名不强依赖目录）。
+4. 同值事实多发布通道（demographics vs demographic_age）→ 单点更正不影响判定，
+   需按提示逐一更正（产品改进建议，已记录未实现）。
+5. cms 网关对最长页的流式判读间歇截断 → 重试是当前唯一对策（网关侧待配置）。
+6. 元数据确认晚于页判读 → 完整修订重建导致页判读返工（操作顺序：先确认后判读）。
+7. 遗留 .env 与最新决策漂移引发两次返工（模型分配已写入长期记忆）。
+8. 旧失败任务重试会沿用旧模型配置 → 换模型后应创建新任务而非 retry 旧任务。
+
+## 下一步（按优先级）
+
+1. muse-spark 恢复后：守望自动完成页判读+事实重整 → 读取投影、追加闭包总表、
+   提交推送（REPLAY_LOG.md 末节有逐步说明）。
+2. 配额 2026-09-25 20:14 重置（定时核查 automation-6fba2572 已就位）。
+3. 30 页级规模验证：等用户提供真实脱敏受试者文件文件夹 →
+   build_scale_validation_set.py → run_scale_validation.py。
+4. 用户接手：gold 标注 → 方法采用签字 → 官方报告发布（工具链已备）。
+5. 跨方案验证（另一研究方案文档走 A 链）。
+
+## 0922专家纠偏包执行进度（更新）
+
+| 项 | 状态 | 提交 |
+|---|---|---|
+| F01/P0 明文密钥 | ✅ 移除+推送；**待用户轮换密钥** | 284fb7f1 |
+| F02 资格语义内核 | ✅ 拒绝/未决配对不再升级为可用值 | 07f9abca |
+| F03 全库LIMIT5 | ✅ 完整scope全量过滤+稳定排序 | 07f9abca |
+| F08 队列严重性顺序无关 | ✅ 取成员最高档 | c13ee9fc |
+| F06 规模驱动错误信封 | ✅ 错误绝不伪报成功 | d64d371a |
+| F07 料集内容寻址/源码树外/全媒体 | ✅ | d64d371a |
+| F10 响应身份闭环 | ✅ 记录绑定实际返回model+请求名并存（A/B无回归） | 967b313a |
+| main-A 切 mimo-v2.6-flash | ✅（用户指令：muse-spark不可用时的后备）实测high档对话成功+预检通过 | .env |
+| F04 单观察更正同源派生失效 | ⏳ 待做（产品级谱系失效设计） | — |
+| F05 恢复编排迁JobStore | ⏳ 待做 | — |
+| F09 前端紧凑导航/源化要点 | ⏳ 待做 | — |
+| muse-spark 上游 | ❌ 仍不可用（探至06:23），mimo-v2.6-flash已按用户指令顶替main-A | — |
+
+## 重要行为变化说明
+- 语义内核生效后：资格核对中"双路一致但方向为拒绝/未决"的配对不再进入
+  运算，投影从"1满足+68未决"回到"69全未决"——这是F02纠偏的正确结果
+  （此前IN-01的"满足"建立在降档资格上）。待重新绑定+资格核对+方法采用后
+  恢复有据判定。
+
+## F09（部分完成）+ F05 规划
+
+- F09 已完成项：无深链时默认选中问题队列最高优先项（16927e6d）。
+- F05 设计决定：muse-spark 恢复后不再用外部脚本提交页判读；改由现有
+  JobStore + PreparedReviewContinuation 基础设施接管恢复编排（具备持久
+  状态/幂等/scope验证/有界重试）。守望脚本降级为纯探测记录工具，
+  不再负责提交任务。恢复编排的入口由 PreparedReviewContinuation 的
+  recovery 流程统一处理。
+
+## mimo-v2.6-flash 页判读 400 诊断结论
+
+页判读 bdcbc920（main-A=mimo-v2.6-flash）完成但全部25页main-A失败。
+错误类型：BadRequestError(400)，每页一致，elapsed 2-5秒（服务端快速拒绝）。
+
+排除项：
+- max_tokens=65536 → 单独测试通过
+- reasoning_effort=high → 单独测试通过
+- response_format json_object → 单独测试通过
+- 视觉（小图base64）→ 单独测试通过
+
+可能根因：页判读完整请求 = base64大图像 + 复杂临床prompt + 高max_tokens
++ response_format + reasoning_effort 的组合触发了 opencode-go 端点限制。
+opencode-go 对 mimo-v2.6-flash 的多模态大请求支持需供应商侧排查。
+
+## 当前系统状态
+- main-A（mimo）暂不可用于页判读，main-B（cms-model）正常但单路不够
+- 页判读需要重跑 → 事实重整 → 投影对齐 → 闭包推送
+- 前置条件：muse-spark 恢复 或 mimo 400 问题解决 或 用户指定其他可用的
+  main-A 模型

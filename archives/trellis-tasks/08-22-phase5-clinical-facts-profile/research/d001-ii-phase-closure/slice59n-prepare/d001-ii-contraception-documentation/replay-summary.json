@@ -1,0 +1,18 @@
+{
+  "attached_count": 1,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-45d969b431b7c4d8a7cbeee2",
+  "group_id": "d001-ii-contraception-documentation",
+  "lookup_counts": {
+    "frozen_plan_owned": 3
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-contraception-documentation",
+  "owned_count": 2,
+  "prompt_char_count": 23156,
+  "prompt_sha256": "3a34ffba33017a56dc9346f1b0dfb0f5b16ae3b77c0a4c71fb1d892a82f6ba72",
+  "task_id": "phase5-slice60m-20260828",
+  "unit_count": 3,
+  "worker": "worker_02"
+}

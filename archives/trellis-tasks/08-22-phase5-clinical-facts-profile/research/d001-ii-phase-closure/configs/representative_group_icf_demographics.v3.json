@@ -1,0 +1,61 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_icf_demographics.v2.json",
+  "group_id": "d001-ii-icf-demographics-v3",
+  "task_id": "phase5-slice60za-20260828",
+  "artifact_dir_name": "phase5-slice60za-d001-icf-demographics-replay-action-gate-20260828",
+  "owned_required_action_kinds_by_source_ref": {
+    "body.p768": [
+      "explain_information",
+      "obtain_signature"
+    ],
+    "body.p770": [
+      "collect_data"
+    ]
+  },
+  "known_targets": {
+    "required_procedures": [
+      {
+        "catalog_item_id": "procedure:d001-icf-screening",
+        "label": "筛选前签署知情同意书",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 37,
+        "semantic_family": "informed_consent",
+        "covered_action_kinds": [
+          "obtain_signature"
+        ],
+        "source_span_ids": [
+          "span-256a4cdd18240eba234318556286eec1",
+          "span-413463d039fc6db079a2b7aa84dc65a7",
+          "span-96728348c04be6cf0d9812e3e5f4fa3e"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:d001-demographics-screening",
+        "label": "筛选访视采集人口学资料",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 38,
+        "semantic_family": "demographics",
+        "covered_action_kinds": [
+          "collect_data"
+        ],
+        "source_span_ids": [
+          "span-3ef1d50a4d1e02de59263a9e2738fa2c",
+          "span-7eae629b2bbdb070b807541676f2c8a8",
+          "span-93aa61df9bc1ade127778271638c611c"
+        ]
+      }
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60za-icf-demographics",
+    "catalog_id": "catalog:slice60za-icf-demographics"
+  },
+  "notes": [
+    "v2真实结果保留为第二份不可变诊断证据；单纯增强提示词仍未阻止动作语义压缩。",
+    "v3将流程目标实际覆盖的动作与原文必需动作分别冻结，由确定性门禁检查集合覆盖。",
+    "动作冻结属于通用结构合同，不依赖项目、条款编号或理由文本关键词。"
+  ]
+}

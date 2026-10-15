@@ -1,0 +1,19 @@
+{
+  "attached_count": 12,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-91e7ec362f99a229e00a4bc9",
+  "group_id": "d001-ii-package86-dili-evaluation-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 1,
+    "frozen_plan_owned": 18
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package86-dili-evaluation-boundary",
+  "owned_count": 7,
+  "prompt_char_count": 36744,
+  "prompt_sha256": "94636c6432233091a5071f46d37a9504bffb79de3d43c9ad9e1aa09af8c22867",
+  "task_id": "phase5-slice61bx-20260830",
+  "unit_count": 19,
+  "worker": "codebuddy-worker_02"
+}

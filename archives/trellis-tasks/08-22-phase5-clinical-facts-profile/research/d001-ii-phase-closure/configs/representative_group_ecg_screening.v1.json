@@ -1,0 +1,166 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral_tb.v1.json",
+  "group_id": "d001-ii-ecg-screening",
+  "task_id": "phase5-slice61as-20260829",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice61as-d001-ecg-screening-20260829",
+  "owned_source_refs": [
+    "body.p789",
+    "body.p790",
+    "body.p792",
+    "body.p793",
+    "body.p794"
+  ],
+  "attached_source_refs": [
+    "body.t5.r21",
+    "body.p331",
+    "body.p684"
+  ],
+  "required_candidate_source_refs": [
+    "body.p790"
+  ],
+  "forbidden_candidate_source_refs": [
+    "body.p789",
+    "body.p792"
+  ],
+  "pre_enrollment_source_refs": [
+    "body.p790",
+    "body.p793",
+    "body.p794"
+  ],
+  "structural_only_source_refs": [
+    "body.p789",
+    "body.p792"
+  ],
+  "owned_procedure_semantic_families_by_source_ref": {
+    "body.p790": [
+      "electrocardiography"
+    ]
+  },
+  "owned_required_action_kinds_by_source_ref": {
+    "body.p790": [
+      "calculate_qtcf",
+      "perform_ecg",
+      "prepare_participant",
+      "record_ecg_measurements"
+    ]
+  },
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "只处置心电图检查专章的检查前准备、测量字段和QTcF计算要求；流程表及排除标准作为只读权威边界。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "当前冻结来源适用于Ⅱ期筛选和基线入排审核，并提供后续访视共用的心电图操作要求。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-dd9da8fd97941b8b7d8753e2",
+        "official_code": "EX-21",
+        "label": "检查异常、临床意义与不可接受风险",
+        "position": 27,
+        "source_span_ids": [
+          "span-b8dc988a09b4247d8fe2e581a5d983ad"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "procedure:d001-ecg-screening",
+        "label": "筛选访视12-导联心电图",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 53,
+        "semantic_family": "electrocardiography",
+        "covered_action_kinds": [
+          "perform_ecg",
+          "record_ecg_measurements"
+        ],
+        "source_span_ids": [
+          "span-5b5271ad0ad6efc866127c5fffce2e42",
+          "span-7568269371001b4827ebe55092eff7ec",
+          "span-7ff19f011e1b0b59c3e7b5b5c22d0856",
+          "span-8e7d7d106126cd8ccb2a7be3b1ffcbb1",
+          "span-a200d89636c6992d8cd3751fa11a5730",
+          "span-b0a31571f842394a48c8085ad1991513",
+          "span-b0d61da470293d65cf7423b7aa136cfb",
+          "span-b333a0da0c1f99f9cfb465903772fb31",
+          "span-ca36b7416e915bd967b3dc8e65570c59",
+          "span-ed9a431c2bd075d4bf39133daeb971e9"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:d001-ecg-baseline",
+        "label": "基线访视12-导联心电图",
+        "visit_instance": "基线访视",
+        "review_stage": "baseline",
+        "position": 54,
+        "semantic_family": "electrocardiography",
+        "covered_action_kinds": [
+          "perform_ecg",
+          "record_ecg_measurements"
+        ],
+        "source_span_ids": [
+          "span-5b5271ad0ad6efc866127c5fffce2e42",
+          "span-7568269371001b4827ebe55092eff7ec",
+          "span-7ff19f011e1b0b59c3e7b5b5c22d0856",
+          "span-8e7d7d106126cd8ccb2a7be3b1ffcbb1",
+          "span-a200d89636c6992d8cd3751fa11a5730",
+          "span-b0a31571f842394a48c8085ad1991513",
+          "span-b0d61da470293d65cf7423b7aa136cfb",
+          "span-b333a0da0c1f99f9cfb465903772fb31",
+          "span-ca36b7416e915bd967b3dc8e65570c59",
+          "span-ed9a431c2bd075d4bf39133daeb971e9"
+        ]
+      }
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61as-ecg-screening",
+    "catalog_id": "catalog:slice61as-ecg-screening"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p790": [
+      "检查前至少静息10分钟",
+      "心率及PR、RR、QRS、QT间期和诊断结果均需记录",
+      "QTcF按Fridericia公式计算",
+      "检查必做要求不得被改写为异常即排除"
+    ],
+    "body.p684": [
+      "异常且有临床意义与研究者不可接受风险判断必须同时成立",
+      "单纯心电图异常不得触发排除",
+      "筛选与基线两个审核节点均保留"
+    ],
+    "body.t5.r21": [
+      "流程表中的筛选及条件性基线检查不得重复发布"
+    ],
+    "body.p331": [
+      "摘要中的测量字段与静息要求不得重复发布"
+    ]
+  },
+  "notes": [
+    "原始DOCX产品链直接提取，用户无需预处理方案文本。",
+    "本组用于验证心电图操作要求与入排判定条件能够分层表达。",
+    "EX-21是合取条件：异常、具有临床意义、研究者判断参与研究将构成不可接受风险必须同时成立。",
+    "心率、PR、RR、QRS、QT、QTcF和诊断结果是检查记录要求，不是各自独立的排除阈值。"
+  ]
+}

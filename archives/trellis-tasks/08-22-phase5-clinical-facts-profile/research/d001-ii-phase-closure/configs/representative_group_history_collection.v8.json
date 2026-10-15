@@ -1,0 +1,16 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_history_collection.v7.json",
+  "group_id": "d001-ii-history-treatment-collection-v8",
+  "task_id": "phase5-slice60v-20260828",
+  "artifact_dir_name": "phase5-slice60v-d001-history-treatment-collection-replay-family-closure-20260828",
+  "ids": {
+    "manifest_id": "manifest:slice60v-history-treatment-reps",
+    "catalog_id": "catalog:slice60v-history-treatment-reps"
+  },
+  "notes": [
+    "v7技术绿色结果保持不可变；父级拒绝其在‘病史及诊治情况’中只链接病史、遗漏同访视治疗史目录。",
+    "v8使用通用资料家族闭包：只要求原文明示且同一精确访视已有冻结目录的家族，不注入项目目录编号。",
+    "该检查不以候选数量作为验收目标，仍允许四个单元全部由既有流程目录覆盖。"
+  ]
+}
