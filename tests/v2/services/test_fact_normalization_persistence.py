@@ -26,6 +26,7 @@ from app.agents.evidence_normalizer import (
 )
 from app.domain.contracts.agents import ModelConfigContract, PromptVersion
 from app.domain.contracts.evidence_normalizer import EvidenceNormalizerOutput, EvidenceNormalizerUnresolvedItem
+from app.domain.contracts.ocr import OcrRiskFlag
 from app.domain.contracts.facts import (
     AssertionBasis,
     ClinicalFactCandidateV2,
@@ -103,6 +104,8 @@ def _seed_chain(
     first_excerpt: str = "ALT 5",
     document_type: str = "检验报告",
     source_party: str = "研究者所在机构",
+    source_qualification_mode: str = "strict",
+    risk_flags: tuple[OcrRiskFlag, ...] = (),
 ) -> dict[str, str]:
     from app.domain.contracts.enums import (
         DisambiguationOutcome,
@@ -348,8 +351,8 @@ def _seed_chain(
             ocr_page_id=ocr_page_id,
             raw_text_sha256=source_hash,
             scanner_rule_version=scanner_rule_version,
-            flags=[],
-            flags_sha256=canonical_hash([]),
+            flags=list(risk_flags),
+            flags_sha256=canonical_hash([flag.model_dump(mode="json") for flag in risk_flags]),
             coverage_status="complete",
             created_at=NOW,
         )
@@ -357,6 +360,7 @@ def _seed_chain(
     producer_id = f"{prefix}-processing-candidate"
     selected_locator_ids = sorted([locator_id, locator_id_2])
     attempt_manifest = ProcessingCandidateAttemptManifest(
+        source_qualification_mode=source_qualification_mode,
         metadata_revision_ids=metadata_ids,
         risk_scan_ids=[scan_id],
         locator_ids=selected_locator_ids,
@@ -404,6 +408,8 @@ def _seed_chain(
     complete_repo = CompleteEvidenceProcessingRevisionRepository(session)
     incomplete_hash = "0" * 64
     complete = CompleteEvidenceProcessingRevision(
+        source_qualification_mode=source_qualification_mode,
+        unresolved_blocking_risk_ids=sorted(f"{scan_id}:{flag.risk_id}" for flag in risk_flags if flag.level.value == "blocking"),
         evidence_processing_revision_id=complete_revision_id,
         evidence_snapshot_id=snapshot_id,
         project_id=project_id,

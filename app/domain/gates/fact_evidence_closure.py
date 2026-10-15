@@ -314,12 +314,15 @@ def _validate_assertion_text_closure(
     source = " ".join(localized.split())
     if basis.asserted_object not in assertion:
         return ["断言文本未包含被断言对象，不能借用邻近句"]
-    if candidate.variable_id is not None:
-        from app.domain.risk_flags import number_in_excerpt
+    if candidate.variable_id is not None or getattr(revision, "source_qualification_mode", None) == "scoped_text_v1":
+        from app.domain.risk_flags import number_in_excerpt, same_numeric_reading
         if basis.assertion_text not in localized:
             return ["断言摘录未逐字出现在当前定位有效原文内"]
         if not number_in_excerpt(candidate.raw_value, basis.assertion_text):
             return ["事实原始数值未出现在断言摘录中"]
+        if isinstance(candidate.canonical_value, (int, float)) and not isinstance(candidate.canonical_value, bool):
+            if not same_numeric_reading(candidate.raw_value, candidate.canonical_value):
+                return ["事实规范值不得改变原始读数"]
     if candidate.polarity == FactPolarity.NEGATED:
         if assertion not in source:
             return ["否定断言文本不在当前定位有效原文内"]
@@ -608,6 +611,8 @@ def validate_blocking_ocr_for_candidate(
     blocked_locators: set[str] = set()
     reasons: list[str] = []
     source_error = False
+    unreadable_source = False
+    from app.evidence.risk import allows_risk_review
 
     for lid in locator_ids:
         try:
@@ -630,6 +635,7 @@ def validate_blocking_ocr_for_candidate(
             blocked_locators.add(lid)
             continue
         flags = blocking_by_page.get(ocr_pid, [])
+        unreadable_source |= any(not allows_risk_review(flag) for _, flag in flags)
         if requires_clear_source_page and flags:
             reasons.append(f"定位 {lid} 所在原件页仍有未核实读数，候选数值或日期尚无逐项来源核实依据")
             blocked_locators.add(lid)
@@ -663,9 +669,11 @@ def validate_blocking_ocr_for_candidate(
                 )
                 blocked_locators.add(lid)
     if reasons:
-        if isinstance(candidate, ClinicalFactCandidateV2) and candidate.variable_id is not None:
+        if isinstance(candidate, ClinicalFactCandidateV2) and (
+            candidate.variable_id is not None or revision.source_qualification_mode == "scoped_text_v1"
+        ):
             # Source identity failures are never converted into OCR warnings.
-            if not source_error:
+            if not source_error and not unreadable_source:
                 return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
         return GateOutcome.BLOCKED, reasons, sorted(blocked_locators)
     return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))

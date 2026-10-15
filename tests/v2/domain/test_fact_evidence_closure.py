@@ -153,13 +153,24 @@ def test_affirmed_object_may_span_adjacent_same_page_locators(monkeypatch):
     ("ALT 5.6 mmol/L", 5.6, True), ("ALT 55.6 mmol/L", 5.6, False),
     ("ALT 5.6 mmol/L 正常", 5.6, False), ("ALT 5.6 mmol/L", 9.6, False),
 ])
-def test_targeted_fact_checks_complete_literal_and_raw_number(monkeypatch, text, raw_value, accepted):
+@pytest.mark.parametrize("variable_id,mode", [("alt", None), (None, "scoped_text_v1")])
+def test_targeted_fact_checks_complete_literal_and_raw_number(monkeypatch, text, raw_value, accepted, variable_id, mode):
     from app.domain.gates import fact_evidence_closure as closure
     monkeypatch.setattr(closure, "_fetch_cached", lambda *_args: SimpleNamespace())
     monkeypatch.setattr(closure, "_localized_locator_text", lambda *_args: RAW_TEXT)
-    item = _make_fact_candidate().model_copy(update={"variable_id": "alt", "raw_value": raw_value})
+    item = _make_fact_candidate().model_copy(update={"variable_id": variable_id, "raw_value": raw_value})
     item.assertion_basis.assertion_text = text
-    assert (closure._validate_assertion_text_closure(None, item, None) == []) is accepted
+    revision = SimpleNamespace(source_qualification_mode=mode) if mode else None
+    assert (closure._validate_assertion_text_closure(None, item, revision) == []) is accepted
+
+
+@pytest.mark.parametrize("variable_id", [None, "alt"])
+def test_scoped_numeric_canonical_value_cannot_change_a_literal_reading(monkeypatch, variable_id):
+    from app.domain.gates import fact_evidence_closure as closure
+    monkeypatch.setattr(closure, "_fetch_cached", lambda *_args: SimpleNamespace())
+    monkeypatch.setattr(closure, "_localized_locator_text", lambda *_args: RAW_TEXT)
+    item = _make_fact_candidate().model_copy(update={"variable_id": variable_id, "canonical_value": 55.6})
+    assert closure._validate_assertion_text_closure(None, item, SimpleNamespace(source_qualification_mode="scoped_text_v1")) == ["事实规范值不得改变原始读数"]
 
 # --------------------------------------------------------------------------- 辅助：资料与页
 def _make_authority(
@@ -1285,7 +1296,14 @@ def test_locator_not_in_manifest_page(migrated_session):
         session.rollback()
 
 # --------------------------------------------------------------------------- OCR 阻断
-def test_ocr_blocking_unresolved_blocks(migrated_session):
+@pytest.mark.parametrize("mode,variable_id,risk_kind,expected", [
+    ("strict", None, OcrRiskKind.LOW_CONFIDENCE, GateOutcome.BLOCKED),
+    ("scoped_text_v1", None, OcrRiskKind.NUMERIC_VALUE, GateOutcome.ACCEPTED),
+    ("scoped_text_v1", "alt", OcrRiskKind.NUMERIC_VALUE, GateOutcome.ACCEPTED),
+    ("scoped_text_v1", None, OcrRiskKind.OUTPUT_REPETITION, GateOutcome.BLOCKED),
+    ("scoped_text_v1", "alt", OcrRiskKind.OUTPUT_REPETITION, GateOutcome.BLOCKED),
+])
+def test_ocr_blocking_unresolved_blocks(migrated_session, mode, variable_id, risk_kind, expected):
     factory = migrated_session
     with factory() as session:
         from tests.v2.storage.test_ocr_repositories import make_blob, make_version, make_snapshot, make_artifact, make_ocr_page, make_profile
@@ -1341,7 +1359,7 @@ def test_ocr_blocking_unresolved_blocks(migrated_session):
         except Exception:
             pass
         # Create blocking risk flag overlapping 0-3
-        _insert_risk_scan_direct(session, scan_id="scan-1", op_id="op-1", raw_sha=op1.raw_text_sha256, flags=[{"risk_id": "r1", "kind": OcrRiskKind.LOW_CONFIDENCE, "level": OcrRiskLevel.BLOCKING, "text": RAW_TEXT[0:3], "text_start": 0, "text_end": 3}])
+        _insert_risk_scan_direct(session, scan_id="scan-1", op_id="op-1", raw_sha=op1.raw_text_sha256, flags=[{"risk_id": "r1", "kind": risk_kind, "level": OcrRiskLevel.BLOCKING, "text": RAW_TEXT[0:3], "text_start": 0, "text_end": 3}])
         rev = _make_revision(
             manifest_entries=[("doc-1", 1, "pa-1", "op-1")],
             locator_ids=["loc-1"],
@@ -1349,10 +1367,11 @@ def test_ocr_blocking_unresolved_blocks(migrated_session):
             risk_review_ids=[],
             correction_ids=[],
         )
-        cand = _make_fact_candidate(candidate_id="fact-1", locator_ids=["loc-1"], basis_locator="loc-1", basis_hash=op1.raw_text_sha256)
+        rev = rev.model_copy(update={"source_qualification_mode": mode})
+        cand = _make_fact_candidate(candidate_id="fact-1", locator_ids=["loc-1"], basis_locator="loc-1", basis_hash=op1.raw_text_sha256).model_copy(update={"variable_id": variable_id})
         outcome, reasons, affected = validate_blocking_ocr_for_candidate(session, cand, rev)
-        assert outcome == GateOutcome.BLOCKED
-        assert any("阻断级" in r for r in reasons)
+        assert outcome == expected
+        assert bool(reasons) == (expected == GateOutcome.BLOCKED)
         assert "loc-1" in affected
         session.rollback()
 
@@ -1739,7 +1758,7 @@ def test_ocr_blocking_scoped_only_affected_candidate(migrated_session, source_mo
         cand_ok = _make_fact_candidate(candidate_id="fact-2", locator_ids=["loc-2"], basis_locator="loc-2", basis_hash=op2.raw_text_sha256)
         b1, _, _ = validate_blocking_ocr_for_candidate(session, cand_blocked, rev)
         b2, _, _ = validate_blocking_ocr_for_candidate(session, cand_ok, rev)
-        assert b1 == GateOutcome.BLOCKED
+        assert b1 == (GateOutcome.BLOCKED if source_mode == "strict" else GateOutcome.ACCEPTED)
         assert b2 == GateOutcome.ACCEPTED
         session.rollback()
 
