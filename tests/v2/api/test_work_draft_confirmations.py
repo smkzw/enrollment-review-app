@@ -110,6 +110,51 @@ def seed_saved_work_draft(client, monkeypatch):
     return factory, chain, frozen, run, rows
 
 
+def test_prepared_step_can_queue_real_work_draft_and_freeze_input(client, monkeypatch):
+    """Real start/prepare/JobStore under the runner; typed synthetic source assembly only.
+
+    Semantic selection is empty in this transaction-boundary test; no model,
+    correction approval, or child clinical calculation is simulated as passed.
+    """
+    from app.services import review_context_assembly, review_preparation_command
+    from app.services.work_draft_review import WorkDraftReviewService
+    from app.storage.review_context_repository import ReviewContextV2Repository
+    from app.storage.codecs import verify_payload_sha256
+    from app.workflow.jobstore import JobStore
+    from app.workflow.runner import PreparedStepResult
+    factory, chain, _, old_run, _ = seed_saved_work_draft(client, monkeypatch)
+    assemble = review_context_assembly.assemble_review_context
+    def source_assembly(session, store, **kwargs):
+        kwargs.setdefault("context_id", "synthetic-preview")
+        return assemble(session, store, **kwargs)
+    monkeypatch.setattr(review_context_assembly, "assemble_review_context", source_assembly)
+    monkeypatch.setattr(review_preparation_command, "assemble_review_context", source_assembly)
+    monkeypatch.setattr("app.services.work_draft_semantics.targets_for_review", lambda *args: [])
+    with factory() as session, session.begin():
+        store = JobStore(session)
+        store.create_job(job_id="actual-child-queue-parent", job_type="synthetic-queue", progress_total=1)
+        store.create_step(job_id="actual-child-queue-parent", step_id="work_draft", name="启动更新结果")
+    def execute(context):
+        checkpoint = {}
+        def queue(session):
+            child = WorkDraftReviewService(factory, client.app.state.artifact_store).start(
+                subject_id=chain["subject_id"], review_episode_id=chain["review_episode_id"], session=session)
+            checkpoint["work_draft_job_id"] = child["job_id"]
+        return PreparedStepResult(checkpoint=checkpoint, apply=queue)
+    assert JobRunner(factory, {"synthetic-queue": execute}, worker_id="synthetic-owner").run_job("actual-child-queue-parent")
+    with factory() as session:
+        store = JobStore(session)
+        assert store.get_job("actual-child-queue-parent").state == "completed"
+        _, checkpoint = store.get_last_checkpoint("actual-child-queue-parent", "work_draft")
+        child = store.get_job(checkpoint["work_draft_job_id"])
+        assert child.job_type == JOB_TYPE and child.state == "queued"
+        payload = verify_payload_sha256(child.payload_json, child.payload_sha256)
+        context = ReviewContextV2Repository(session).get(payload["context_id"])
+        assert context.work_draft and context.authority == chain["authority"]
+        assert context.review_run_id != old_run.review_run_id
+        assert AppendRepository(session, REVIEW_RUN_CONFIG).get(old_run.review_run_id) == old_run
+
+
 def test_confirmation_api_real_job_history_and_repeat_are_append_only(client, monkeypatch):
     factory, chain, frozen, old_run, old_items = seed_saved_work_draft(client, monkeypatch)
     subject, episode = chain["subject_id"], chain["review_episode_id"]
