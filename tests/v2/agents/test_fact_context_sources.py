@@ -168,7 +168,10 @@ def test_pending_pages_keep_ancestor_header_questions_without_rereading_complete
     assert pending_normalization_pages(session, "child") == set()
     outcomes.pop()
     candidate.assertion_basis.contextual_qualifiers[0].kind = "assessment"
-    assert pending_normalization_pages(session, "child") == set()
+    # A context question may be selected for rereading, not automatically adopted.
+    assert pending_normalization_pages(session, "child") == {("doc", 2)}
+    from app.domain.gates.fact_candidate_gates import gate_fact_candidate
+    assert gate_fact_candidate(candidate)[FactGate.POLARITY_AND_ASSERTED_OBJECT].outcome != GateOutcome.ACCEPTED
 
 
 @pytest.mark.parametrize("compact", [False, True])

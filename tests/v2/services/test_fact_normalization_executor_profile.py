@@ -291,6 +291,14 @@ def test_failed_page_continuation_preserves_old_terminal_and_has_derived_scope(s
     assert payload["targeted_extraction"] and payload["candidate_partition_policy"]
     assert service.create_or_reuse_from_source(**kwargs).job_id == continued.job_id
     assert service.get_job(original.job_id) == before
+    selected_pages = [(row["logical_document_id"], page) for row in payload["calls"] for page in row["page_numbers"]]
+    limited = service.create_or_reuse_from_source(**kwargs, retry_pages=selected_pages)
+    limited_payload = service.get_job(limited.job_id)["payload"]
+    assert limited.job_id != continued.job_id
+    assert limited_payload["retry_pages"] == [list(page) for page in selected_pages]
+    assert service.create_or_reuse_from_source(**kwargs, retry_pages=selected_pages).job_id == limited.job_id
+    with pytest.raises(InvalidJobDefinitionError, match="待核页面"):
+        service.create_or_reuse_from_source(**kwargs, retry_pages=[("other-document", 1)])
     from app.services.fact_normalization_job_service import FactNormalizationCallSpec, _validate_call_specs
     separated = [FactNormalizationCallSpec(logical_document_id="doc", page_numbers=[page], input_sha256="a" * 64)
                  for page in (3, 8)]
@@ -302,6 +310,12 @@ def test_failed_page_continuation_preserves_old_terminal_and_has_derived_scope(s
     from app.services.fact_normalization_executor import _load_frozen_agent_config
     from app.agents.evidence_normalizer import DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE
     with session_factory() as session:
+        _load_frozen_agent_config(session, payload=limited_payload, run_id=limited.run_id,
+            authority=chain["authority"], prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE)
+        with pytest.raises(StepFailure, match="冻结身份"):
+            _load_frozen_agent_config(session, payload=limited_payload | {"retry_pages": [["other-document", 1]]},
+                run_id=limited.run_id, authority=chain["authority"],
+                prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE)
         _load_frozen_agent_config(session, payload=payload, run_id=continued.run_id,
             authority=chain["authority"], prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE)
         with pytest.raises(StepFailure, match="冻结身份"):

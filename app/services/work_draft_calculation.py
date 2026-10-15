@@ -253,6 +253,10 @@ def comparison_reading(fact, definition, predicate, *, definitions=None):
         if not isinstance(value, str) or fact.polarity != FactPolarity.AFFIRMED:
             raise ValueError("检验定性结果未明确")
         literal = re.sub(r"\s+", "", unicodedata.normalize("NFKC", value))
+        # Explicit non-detection is a reported qualitative result, not a
+        # negative inferred from a concentration or a quantification limit.
+        if literal in {"未检出", "未检测到靶基因"}:
+            return "阴性", "unitless"
         match = re.fullmatch(r"(?:[<>≤≥=]?\d+(?:\.\d+)?)?(阳性|阴性)(?:\(([+-])\))?", literal)
         if match is None or match[2] and match[2] != ("+" if match[1] == "阳性" else "-"):
             raise ValueError("检验定性结果包含未核实或相互矛盾的文字")

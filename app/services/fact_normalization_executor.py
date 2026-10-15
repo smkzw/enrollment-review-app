@@ -421,7 +421,8 @@ def _load_frozen_agent_config(
     if payload.get("retry_failed_from_run_id") is not None:
         precondition = payload.get("retry_failed_precondition_sha256")
         if (not isinstance(precondition, str) or canonical_hash({"input_scope_sha256": precondition,
-                "retry_failed_from_run_id": payload["retry_failed_from_run_id"]}) != chain_scope):
+                "retry_failed_from_run_id": payload["retry_failed_from_run_id"],
+                **({"retry_pages": payload["retry_pages"]} if "retry_pages" in payload else {})}) != chain_scope):
             raise StepFailure(retryable=False, error_code="INVALID_AUTHORITY", detail="失败页续读来源与冻结身份不一致。")
         chain_scope = precondition
     if payload.get("targeted_extraction"):

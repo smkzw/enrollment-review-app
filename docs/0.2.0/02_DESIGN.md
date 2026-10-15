@@ -136,6 +136,8 @@ WP5补充要求复用内层草稿及发布`RuleSet.scope_supplement`可选字段
 
 ### 4.5 事实与规则包版本解耦（重要）
 
+局部失败续读复用`FactNormalizationJobService.create_or_reuse_from_source(..., retry_failed_from_run_id, retry_pages=[(logical_document_id, page_number)])`：选择必须非空、无重复且完全属于原已终结任务的待核页；不传时仍是全部失败范围。所选页进入输入hash、实际payload及执行期前置验证，篡改选择拒绝；原Job和成功兄弟不重开，未选待核项仍未完成。规则修订后仅在既有`rule_revision_source_is_reusable`核实同原件及相容变量时允许新读取，仍按当前规则生产并完整校验，不借旧批准。背景归属受阻的检验候选可被选中重读，但不因此变成可采用事实。已采用的检验原文明确写“未检出／未检测到靶基因”时，定性比较使用阴性含义而保存原值；单纯数值、低于定量下限、未检测、弱阳性或互相矛盾的标记仍不做该转换。
+
 现状：`FactAuthority`（`app/domain/contracts/facts.py:94-111`）把每个已发布事实绑定到 `rule_set_id`／`rule_set_revision`／`episode_revision`／`evidence_snapshot_v2_id`；`fact_rule_index`（`app/domain/contracts/fact_rule_index.py` 文件头注释与 `:66-112`）和 `evidence_expectations`（`app/projections/evidence_expectations.py:221-225`）会丢弃权威元组不一致的事实。照此，规则包每重新发布一次、每补传一份资料，31001 的全部事实都会失效，必须整例重抽。
 
 0.2.0 的做法：

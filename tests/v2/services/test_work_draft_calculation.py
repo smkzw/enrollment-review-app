@@ -844,7 +844,7 @@ def test_qualitative_lab_comparison_keeps_original_reading_and_unit(reading, exp
     assert fact.model_dump_json() == before and reading in result.reason_text
 
 
-@pytest.mark.parametrize("reading", ["0.04", "超出正常值范围", "阴性(+)", "阳性但待复核", "未见阳性", "弱阳性"])
+@pytest.mark.parametrize("reading", ["0.04", "超出正常值范围", "阴性(+)", "阳性但待复核", "未见阳性", "弱阳性", "低于定量下限", "未检测", "<20 IU/mL"])
 def test_unresolved_lab_label_is_not_a_negative_result(reading):
     rules, _, component = clause(kind=RuleKind.EXCLUSION)
     predicate = component.expression.predicate
@@ -854,6 +854,20 @@ def test_unresolved_lab_label_is_not_a_negative_result(reading):
     result = calculate_work_component(project_clause_pack(rules).clauses[0],
         frozen([material(value=reading, variable_id="hiv_antibody", unit=None)]), rules, evidence_refs={})
     assert result.decision is None and result.system_issue is not None
+
+
+@pytest.mark.parametrize("reading", ["未检出", "未检测到靶基因"])
+def test_explicit_report_nondetection_is_not_guessed_from_detection_limit(reading):
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    predicate = component.expression.predicate
+    predicate.comparator, predicate.value, predicate.unit = Comparator.EQ, "阳性", "unitless"
+    component.evidence_requirements[0].variable_id = "hiv_antibody"
+    rules.variable_definitions = [load_dictionary()["hiv_antibody"]]
+    fact = material(value=reading, variable_id="hiv_antibody", unit=None)
+    before = fact.model_dump_json()
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([fact]), rules, evidence_refs={})
+    assert result.decision == D.EXCLUSION_NOT_TRIGGERED and reading in result.reason_text
+    assert fact.model_dump_json() == before
 
 
 def test_prescription_string_does_not_prove_current_medication_use():

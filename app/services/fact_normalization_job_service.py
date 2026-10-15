@@ -66,10 +66,9 @@ FACT_NORMALIZATION_FINALIZE_STEP_ID = "finalize"
 
 
 def pending_normalization_pages(session: Session, run_id: str) -> set[tuple[str, int]]:
-    """Only failed reads or literal readings blocked solely by optional headers."""
+    """Failed reads/context attribution may be reread; this grants no fact adoption."""
     from app.domain.contracts.enums import FactGate, GateOutcome
     from app.domain.contracts.facts import ClinicalFactCandidateV2
-    from app.domain.contracts.fact_context import has_standalone_measurement
     from app.storage.fact_repositories import FactGateResultRepository, FactNormalizationCandidateRepository
     authority = FactNormalizationRunRepository(session).get(run_id).authority
     pending_pages, seen_pages, seen_runs = set(), set(), set()
@@ -90,7 +89,8 @@ def pending_normalization_pages(session: Session, run_id: str) -> set[tuple[str,
                 pending.update(checkpoint[1].get("accounting_issue_call_ids", ()))
         gates = FactGateResultRepository(session).list_by_run(run_id)
         for candidate in FactNormalizationCandidateRepository(session).list_by_run(run_id):
-            if not isinstance(candidate, ClinicalFactCandidateV2) or not has_standalone_measurement(candidate):
+            if (not isinstance(candidate, ClinicalFactCandidateV2) or candidate.assertion_basis is None
+                    or not candidate.variable_id or candidate.profile_lane.value != "test_exam_score"):
                 continue
             candidate_gates = [gate for gate in gates if gate.candidate_id == candidate.candidate_id]
             blocked = {gate.gate for gate in candidate_gates if gate.outcome == GateOutcome.BLOCKED}
@@ -352,6 +352,7 @@ class FactNormalizationJobService:
         allow_candidate_partition: bool = False,
         allow_question_classification_repair: bool = False,
         retry_failed_from_run_id: str | None = None,
+        retry_pages: list[tuple[str, int]] | None = None,
     ) -> CreateNormalizationJobResult:
         """从活动完整处理修订生成计划，避免调用方自行拼接页组或输入哈希。
 
@@ -375,6 +376,9 @@ class FactNormalizationJobService:
             PatientProfileService,
         )
 
+        if retry_pages is not None and (not retry_failed_from_run_id or not retry_pages
+                or len(set(retry_pages)) != len(retry_pages)):
+            raise InvalidJobDefinitionError("局部续读须指定原失败任务及不重复的待核页面")
         if account_source_text and page_review_coverage_id is not None:
             raise InvalidJobDefinitionError("文字整理覆盖不能代替原件观察核对")
         verified_vision_scope = (
@@ -392,8 +396,10 @@ class FactNormalizationJobService:
             if retry_failed_from_run_id:
                 previous = FactNormalizationRunRepository(session).get(retry_failed_from_run_id)
                 previous_record = session.get(FactNormalizationRunRecord, previous.run_id)
-                if (previous.authority.model_dump(exclude={"episode_revision"})
-                        != authority.model_dump(exclude={"episode_revision"})
+                same_source = (previous.authority.model_dump(exclude={"episode_revision"})
+                        == authority.model_dump(exclude={"episode_revision"})
+                    or FactAuthorityValidator(session).rule_revision_source_is_reusable(previous.authority, authority))
+                if (not same_source
                         or previous.status.value not in {"partial", "succeeded"} or not previous_record.job_id
                         or self._store(session).get_job(previous_record.job_id).state != "completed"):
                     raise InvalidJobDefinitionError("仅能继续整理同一资料范围内已终结的部分失败任务")
@@ -445,6 +451,10 @@ class FactNormalizationJobService:
                 if not targeted:
                     raise InvalidJobDefinitionError("仅能继续整理同一资料范围内已终结的部分失败任务")
                 failed_pages = pending_normalization_pages(session, previous.run_id)
+                if retry_pages is not None:
+                    if not set(retry_pages) <= failed_pages:
+                        raise InvalidJobDefinitionError("局部续读只允许选择原任务待核页面")
+                    failed_pages = set(retry_pages)
                 if not failed_pages:
                     raise InvalidJobDefinitionError("原任务没有失败页面，不能重复读取已完成资料")
                 planned_pages = {(call.logical_document_id, page) for call in plan.calls for page in call.page_numbers}
@@ -558,6 +568,7 @@ class FactNormalizationJobService:
                 allow_question_classification_repair=allow_question_classification_repair,
                 targeted_extraction=targeted,
                 retry_failed_from_run_id=retry_failed_from_run_id,
+                retry_pages=retry_pages,
                 retained_reads=retained_reads or None,
             )
         stitched_scope = _compute_input_scope_sha256(
@@ -582,6 +593,8 @@ class FactNormalizationJobService:
             allow_candidate_partition=allow_candidate_partition,
             allow_question_classification_repair=allow_question_classification_repair,
             targeted_extraction=targeted,
+            retry_failed_from_run_id=retry_failed_from_run_id,
+            retry_pages=retry_pages,
             retained_reads=retained_reads or None,
         )
 
@@ -607,6 +620,7 @@ class FactNormalizationJobService:
         allow_question_classification_repair: bool = False,
         targeted_extraction: bool = False,
         retry_failed_from_run_id: str | None = None,
+        retry_pages: list[tuple[str, int]] | None = None,
         retained_reads: list[dict] | None = None,
     ) -> CreateNormalizationJobResult:
         """幂等创建规范化 Job 与冻结的 FactNormalizationRun。
@@ -704,10 +718,14 @@ class FactNormalizationJobService:
             effective_scope = canonical_hash({"input_scope_sha256": effective_scope,
                                               "targeted_extraction": True})
         retry_scope = None
+        retry_selection = {"retry_pages": [list(page) for page in sorted(retry_pages)]} if retry_pages is not None else {}
+        if retry_pages is not None and (not retry_failed_from_run_id or not retry_pages
+                or len(set(retry_pages)) != len(retry_pages)):
+            raise InvalidJobDefinitionError("局部续读须指定原失败任务及不重复的待核页面")
         if retry_failed_from_run_id is not None:
             retry_scope = effective_scope
             effective_scope = canonical_hash({"input_scope_sha256": effective_scope,
-                                               "retry_failed_from_run_id": retry_failed_from_run_id})
+                                               "retry_failed_from_run_id": retry_failed_from_run_id, **retry_selection})
         retained_scope = None
         if retained_reads is not None:
             if not targeted_extraction or retry_failed_from_run_id is not None or visual_observation_scope_sha256 is not None:
@@ -741,6 +759,7 @@ class FactNormalizationJobService:
         if retry_failed_from_run_id is not None:
             job_request_payload["retry_failed_from_run_id"] = retry_failed_from_run_id
             job_request_payload["retry_failed_precondition_sha256"] = retry_scope
+            job_request_payload.update(retry_selection)
         if retained_reads is not None:
             job_request_payload["retained_reads"] = retained_reads
             job_request_payload["retained_read_precondition_sha256"] = retained_scope
@@ -795,10 +814,16 @@ class FactNormalizationJobService:
                 previous = FactNormalizationRunRepository(session).get(retry_failed_from_run_id)
                 previous_row = session.get(FactNormalizationRunRecord, previous.run_id)
                 expected_pages = pending_normalization_pages(session, previous.run_id)
+                if retry_pages is not None:
+                    if not set(retry_pages) <= expected_pages:
+                        raise InvalidJobDefinitionError("局部续读只允许选择原任务待核页面")
+                    expected_pages = set(retry_pages)
                 requested_pages = {(call.logical_document_id, page) for call in calls for page in call.page_numbers}
+                same_source = (previous.authority.model_dump(exclude={"episode_revision"})
+                        == authority.model_dump(exclude={"episode_revision"})
+                    or FactAuthorityValidator(session).rule_revision_source_is_reusable(previous.authority, authority))
                 if (not targeted_extraction or not expected_pages or requested_pages != expected_pages
-                        or previous.authority.model_dump(exclude={"episode_revision"})
-                            != authority.model_dump(exclude={"episode_revision"})
+                        or not same_source
                         or previous.status.value not in {"partial", "succeeded"} or not previous_row.job_id
                         or self._store(session).get_job(previous_row.job_id).state != "completed"):
                     raise InvalidJobDefinitionError("失败页续读必须恰好覆盖原任务失败页，不能读取成功页或借用其他来源")
@@ -882,6 +907,7 @@ class FactNormalizationJobService:
             if retry_failed_from_run_id is not None:
                 job_payload["retry_failed_from_run_id"] = retry_failed_from_run_id
                 job_payload["retry_failed_precondition_sha256"] = retry_scope
+                job_payload.update(retry_selection)
             if retained_reads is not None:
                 job_payload["retained_reads"] = retained_reads
                 job_payload["retained_read_precondition_sha256"] = retained_scope
