@@ -2015,7 +2015,7 @@ def _episode_columns(payload: dict[str, Any], scope: dict[str, Any] | None) -> d
 
 
 class EpisodeRepository:
-    MUTABLE_FIELDS = frozenset({"stage", "due_at", "evidence_snapshot_id", "anchor_dates"})
+    MUTABLE_FIELDS = frozenset({"stage", "due_at", "evidence_snapshot_id", "anchor_dates", "evidence_cutoff_date"})
 
     #: 活动版本成对指针只允许通过未来 WP-44B 的原子激活事务修改；
     #: 通用 save/update 一律拒绝触碰，防止绕过激活门禁。

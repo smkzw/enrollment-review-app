@@ -527,7 +527,7 @@ def clause(*, time=None, kind=RuleKind.INCLUSION):
 
 def frozen(facts, anchors=None):
     return SimpleNamespace(authority=facts[0].authority, facts=facts, review_run_id="working-run",
-        review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, anchor_dates=anchors or {},
+        review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, anchor_dates=anchors or {}, evidence_cutoff_date=None,
             model_dump=lambda **_: {"anchor_dates": {key.value: val.model_dump(mode="json") for key, val in (anchors or {}).items()}}))
 
 
@@ -1156,12 +1156,17 @@ def test_numeric_threshold_is_converted_with_the_fact_not_just_displayed():
     assert result.decision == D.INCLUSION_MET and result.confidence == "low"
 
 
-@pytest.mark.parametrize("sampling,expected", [(date(2025, 8, 15), D.INDETERMINATE), (date(2025, 8, 8), D.REQUIREMENT_MET)])
-def test_procedure_completion_respects_date_and_does_not_assert_unspecified_fields(sampling, expected):
+@pytest.mark.parametrize("sampling,cutoff,expected", [
+    (date(2025, 8, 15), None, D.INDETERMINATE),
+    (date(2025, 8, 8), None, D.REQUIREMENT_MET),
+    (date(2025, 8, 15), date(2025, 8, 15), D.REQUIREMENT_MET),
+    (date(2025, 8, 16), date(2025, 8, 15), D.INDETERMINATE)])
+def test_procedure_completion_respects_date_and_does_not_assert_unspecified_fields(sampling, cutoff, expected):
     from app.services.work_draft_calculation import calculate_procedures
     rules, _, component = clause()
     fact = material(day=sampling)
     frame = frozen([fact], {AnchorType.SCREENING_DATE: DateValue(value=date(2025, 8, 8), precision=DatePrecision.DAY)})
+    frame.review_episode.evidence_cutoff_date = cutoff
     requirement = component.evidence_requirements[0].model_copy(update={"procedure_catalog_item_id": "procedure"})
     frame.procedure_catalog = SimpleNamespace(items=[SimpleNamespace(item_id="procedure", official_code=None,
         position=0, source_excerpts=["完成检查"], label="检查", model_dump=lambda **_: {"label": "检查"})])
@@ -1172,3 +1177,21 @@ def test_procedure_completion_respects_date_and_does_not_assert_unspecified_fiel
         assert result[0].confidence is None
     else:
         assert "未据此确认报告内所有结果齐全" in result[0].reason_text
+
+
+@pytest.mark.parametrize("explicit_window,expected", [(False, True), (True, False)])
+def test_repeat_within_declared_material_scope_does_not_move_protocol_window(explicit_window, expected):
+    window = TimeConstraint(anchor_type=AnchorType.SCREENING_DATE, direction=TimeDirection.BEFORE,
+        upper_bound_days=7) if explicit_window else None
+    rules, _, component = clause(time=window)
+    first = material(day=date(2025, 8, 8), snapshot="first")
+    repeat = material(day=date(2025, 8, 15), snapshot="repeat")
+    later = material(day=date(2025, 8, 16), snapshot="later")
+    anchors = {AnchorType.SCREENING_DATE: DateValue(value=date(2025, 8, 8), precision=DatePrecision.DAY)}
+    before = [item.model_dump_json() for item in (first, repeat, later)]
+    selected = select_by_variable(component, [first, repeat, later], anchors, authority=first.authority,
+        definitions=load_dictionary(), evidence_cutoff_date=date(2025, 8, 15))
+    assert (repeat.fact_id in selected["age-limit"].fact_ids) == expected
+    assert later.fact_id not in selected["age-limit"].considered_fact_ids
+    assert anchors[AnchorType.SCREENING_DATE].value == date(2025, 8, 8)
+    assert [item.model_dump_json() for item in (first, repeat, later)] == before

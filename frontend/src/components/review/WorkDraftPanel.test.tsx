@@ -72,7 +72,7 @@ it("连续保存日期使用回执修订，外部新修订也同步", async () =
   const dated = {...episode, anchorDates: {screening_date: {value: "2025-08-08", precision: "day"}}};
   const view = render(<WorkDraftPanel episode={dated} />);
   fireEvent.click(screen.getByRole("button", {name: "保存日期"}));
-  await screen.findByText("日期已保存，请按此日期更新工作稿。");
+  await screen.findByText("日期已保存，请按此范围更新工作稿。");
   fireEvent.click(screen.getByRole("button", {name: "保存日期"}));
   await waitFor(() => expect(fetched).toHaveBeenCalledTimes(2));
   expect(JSON.parse(fetched.mock.calls[1][1].body).expected_revision).toBe(2);
@@ -81,6 +81,22 @@ it("连续保存日期使用回执修订，外部新修订也同步", async () =
   fireEvent.click(screen.getByRole("button", {name: "保存日期"}));
   await waitFor(() => expect(fetched).toHaveBeenCalledTimes(3));
   expect(JSON.parse(fetched.mock.calls[2][1].body).expected_revision).toBe(3);
+});
+
+it("资料截至日单独保存，不移动筛选开始日；切换节点不带旧范围", async () => {
+  const fetched = vi.fn().mockResolvedValue({ok: true, json: async () => ({revision: 2})});
+  vi.stubGlobal("fetch", fetched);
+  const dated = {...episode, anchorDates: {screening_date: {value: "2025-08-08", precision: "day"}}};
+  const view = render(<WorkDraftPanel episode={dated} />);
+  fireEvent.change(screen.getByLabelText("本次资料截至"), {target: {value: "2025-08-15"}});
+  fireEvent.click(screen.getByRole("button", {name: "保存资料范围"}));
+  await screen.findByText("日期已保存，请按此范围更新工作稿。");
+  expect(fetched.mock.calls[0][0]).toMatch(/\/evidence-cutoff$/);
+  expect(JSON.parse(fetched.mock.calls[0][1].body)).toEqual({evidence_cutoff_date: "2025-08-15", expected_revision: 1});
+  expect(screen.getByLabelText("本节点开始日")).toHaveValue("2025-08-08");
+  view.rerender(<WorkDraftPanel episode={{...episode, reviewEpisodeId: "another"}} />);
+  expect(screen.getByLabelText("本次资料截至")).toHaveValue("");
+  expect(screen.queryByText("日期已保存，请按此范围更新工作稿。")).not.toBeInTheDocument();
 });
 
 

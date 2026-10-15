@@ -17,12 +17,15 @@ export function WorkDraftPanel({ episode, onCompleted, initialJob, onSettled }: 
   const anchorKey = episode.stage === "baseline" ? "baseline_date" : "screening_date";
   const storedAnchor = episode.anchorDates[anchorKey] as { value?: string } | undefined;
   const [nodeDate, setNodeDate] = useState(storedAnchor?.value ?? "");
+  const [cutoffDate, setCutoffDate] = useState(episode.evidenceCutoffDate ?? "");
   const [nodeRevision, setNodeRevision] = useState(episode.revision);
   const [dateSaved, setDateSaved] = useState(false);
   useEffect(() => {
     setNodeRevision(current => Math.max(current, episode.revision));
     setNodeDate(storedAnchor?.value ?? "");
-  }, [episode.reviewEpisodeId, episode.revision, storedAnchor?.value]);
+    setCutoffDate(episode.evidenceCutoffDate ?? "");
+    setDateSaved(false);
+  }, [episode.reviewEpisodeId, episode.revision, storedAnchor?.value, episode.evidenceCutoffDate]);
   const prefix = `/api/v2/subjects/${encodeURIComponent(episode.subjectId)}/review-episodes/${encodeURIComponent(episode.reviewEpisodeId)}/work-draft-jobs`;
   const storageKey = `work-draft-job:${episode.reviewEpisodeId}`;
   useEffect(() => {
@@ -72,12 +75,12 @@ export function WorkDraftPanel({ episode, onCompleted, initialJob, onSettled }: 
     } catch (e) { setError(e instanceof Error ? e.message : "暂时无法开始审核。"); }
     finally { setBusy(false); }
   }
-  async function saveDate() {
+  async function saveDate(cutoff = false) {
     setBusy(true); setError(null); setDateSaved(false);
     try {
-      const response = await fetch(prefix.replace("work-draft-jobs", "node-date"), {
+      const response = await fetch(prefix.replace("work-draft-jobs", cutoff ? "evidence-cutoff" : "node-date"), {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ node_date: nodeDate, expected_revision: nodeRevision }),
+        body: JSON.stringify({ ...(cutoff ? {evidence_cutoff_date: cutoffDate || null} : {node_date: nodeDate}), expected_revision: nodeRevision }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error?.detail ?? "日期未保存，请核对当前资料处理状态。");
@@ -88,10 +91,14 @@ export function WorkDraftPanel({ episode, onCompleted, initialJob, onSettled }: 
   }
   const pending = job !== null && !["completed", "failed_final", "cancelled"].includes(job.state);
   return <section className="eligibility-context-bar" aria-label="生成工作稿">
-    <label>本节点日期 <input type="date" value={nodeDate} disabled={busy || pending}
+    <label>本节点开始日 <input type="date" value={nodeDate} disabled={busy || pending}
       onChange={event => { setNodeDate(event.target.value); setDateSaved(false); }} /></label>
     <button type="button" className="button button--quiet" disabled={!nodeDate || busy || pending} onClick={() => void saveDate()}>保存日期</button>
-    {dateSaved && <span role="status">日期已保存，请按此日期更新工作稿。</span>}
+    <label>本次资料截至 <input type="date" value={cutoffDate} min={nodeDate || undefined} disabled={busy || pending}
+      onChange={event => { setCutoffDate(event.target.value); setDateSaved(false); }} /></label>
+    <button type="button" className="button button--quiet" disabled={busy || pending} onClick={() => void saveDate(true)}>保存资料范围</button>
+    {dateSaved && <span role="status">日期已保存，请按此范围更新工作稿。</span>}
+    <small>开始日用于方案时间窗；资料截至日用于本次资料范围，留空时仅核至开始日。</small>
     <p role="status">{job?.state === "completed" ? "工作稿已保存，未签发。" : job?.state === "cancel_requested" ? "正在停止本次处理，原件与已有结果保留。" : job?.state === "cancelled" ? "本次处理已停止，原件与已有结果保留。" : job?.state === "waiting_user" ? "本次处理需要人工核对，请查看任务详情。" : pending ? "正在核对已有记录并生成工作稿。" : "根据当前方案和已提供资料生成工作稿。"}</p>
     <button type="button" className="button button--primary" disabled={busy || pending || !episode.activeEvidenceProcessingRevisionId} onClick={() => void start()}>
       {job?.state === "completed" ? <RefreshCw size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}

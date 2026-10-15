@@ -378,11 +378,15 @@ def test_future_visit_page_not_borrowed_from_later_node():
     from app.domain.contracts.common import DateValue
     from app.domain.contracts.enums import AnchorType, DatePrecision, ReviewStage
     from app.services.work_draft_semantics import source_pages_for_review
-    frame = SimpleNamespace(review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+    frame = SimpleNamespace(review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, evidence_cutoff_date=None,
         anchor_dates={AnchorType.SCREENING_DATE: DateValue(value=date(2026, 1, 1), precision=DatePrecision.DAY)}),
         source_pages=[page("就诊时间:2026-01-01\n当前病历。"),
                       page("就诊时间:2026-01-15\n后续病历。", key="future")])
     assert [p.page_artifact_id for p in source_pages_for_review(frame)] == ["page"]
+    frame.source_pages.append(page("采样时间:2026-01-08\n本次复查。", key="repeat"))
+    frame.review_episode.evidence_cutoff_date = date(2026, 1, 8)
+    assert [p.page_artifact_id for p in source_pages_for_review(frame)] == ["page", "repeat"]
+    assert frame.review_episode.anchor_dates[AnchorType.SCREENING_DATE].value == date(2026, 1, 1)
 
 
 def test_default_work_graph_compatible_and_multiple_batches_durable():
@@ -420,7 +424,7 @@ def test_source_reader_retries_only_bad_target_and_preserves_first_answer():
     from app.services.work_draft_semantics import read_source_relations
     other = {**target(), "target_id": "component:other"}
     model = SimpleNamespace(model_dump=lambda **_: {"provider": "synthetic", "model": "fixture"})
-    frame = SimpleNamespace(source_pages=[page()], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+    frame = SimpleNamespace(source_pages=[page()], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, evidence_cutoff_date=None,
         anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
     prompts = []
     class Transport:
@@ -485,7 +489,7 @@ def test_exact_scope_echo_is_not_a_missing_target_but_other_fields_still_rejecte
             source_result_envelope({**payload, **change}, material)
 
 
-@pytest.mark.parametrize("mutation", [None, "wrap", "disagreement", "old_scope_schema", "normalizer_metadata", "source", "target", "policy", "model", "truncated"])
+@pytest.mark.parametrize("mutation", [None, "wrap", "disagreement", "old_scope_schema", "normalizer_metadata", "source", "target", "policy", "model", "truncated", "cutoff"])
 def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutation):
     import json
     from app.domain.contracts.agents import ModelConfigContract
@@ -495,8 +499,11 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
         reasoning_effort="high", parameters={"max_tokens": 65536, "prompt_version": "new-format"})
     source = page("病历记载：否认近期\n感染。") if mutation == "wrap" else page()
     if mutation == "disagreement": source = page("近期感染。否认近期感染。")
-    frame = SimpleNamespace(source_pages=[source], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+    frame = SimpleNamespace(source_pages=[source], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, evidence_cutoff_date=None,
         anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
+    if mutation == "cutoff":
+        frame.review_episode.evidence_cutoff_date = date(2026, 1, 8)
+        frame.review_episode.model_dump = lambda **_: {"anchor_dates": {}, "evidence_cutoff_date": "2026-01-08"}
     material = {"version": "input-v3", "stage": "screening", "anchor_dates": {}, "targets": [target()], "pages": [{
         "page_artifact_id": "page", "page_number": 1, "category": "study_chart", "text": source.effective_text}],
         "output_schema": SourceRelations.model_json_schema()}
@@ -548,7 +555,7 @@ def test_uncertain_classification_is_not_direction_disagreement_or_confirmed_pat
     from app.services.work_draft_semantics import revalidate_saved_source_read, SEMANTIC_INSTRUCTIONS, SourceRelations, SourceQuote
     model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
     sources = [page("否认严重感染。曾有感染，严重程度未记载。"), page("另一处记录尚需核实。", key="other")]
-    frame = SimpleNamespace(source_pages=sources, review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+    frame = SimpleNamespace(source_pages=sources, review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, evidence_cutoff_date=None,
         anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
     material = {"version": "frozen", "stage": "screening", "anchor_dates": {}, "targets": [target()],
         "pages": [{"page_artifact_id": p.page_artifact_id, "page_number": p.page_number,
@@ -720,7 +727,7 @@ def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request
         current = [{**previous[0], "correspondence_check": "按原文核对事件、期间与结果关系"}, previous[1]]
     model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
     source = page()
-    frame = SimpleNamespace(source_pages=[source], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+    frame = SimpleNamespace(source_pages=[source], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, evidence_cutoff_date=None,
         anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
     material = {"version": "old", "stage": "screening", "anchor_dates": {}, "targets": previous,
         "pages": [{"page_artifact_id": "page", "page_number": 1, "category": "study_chart", "text": source.effective_text}],

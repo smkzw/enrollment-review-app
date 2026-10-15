@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import Field, model_serializer, model_validator
@@ -121,6 +121,7 @@ class ReviewEpisode(RevisionedModel):
     active_evidence_snapshot_id: str | None = None
     active_evidence_processing_revision_id: str | None = None
     anchor_dates: dict[AnchorType, DateValue] = Field(default_factory=dict)
+    evidence_cutoff_date: date | None = Field(default=None, exclude_if=lambda value: value is None)
     due_at: datetime | None = None
 
     @model_serializer(mode="wrap")
@@ -151,6 +152,11 @@ class ReviewEpisode(RevisionedModel):
             raise ValueError("审核节点的活动证据快照与处理修订必须同时存在或同时为空")
         if self.due_at is not None:
             _require_utc(self.due_at, "ReviewEpisode.due_at")
+        anchor_type = AnchorType.BASELINE_DATE if self.stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE
+        anchor = self.anchor_dates.get(anchor_type)
+        if self.evidence_cutoff_date is not None and anchor is not None and anchor.value is not None:
+            if self.evidence_cutoff_date < anchor.value:
+                raise ValueError("资料截至日不能早于本节点开始日")
         return self
 
 

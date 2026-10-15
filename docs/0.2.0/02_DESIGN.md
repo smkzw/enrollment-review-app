@@ -123,6 +123,8 @@ WP5补充要求复用内层草稿及发布`RuleSet.scope_supplement`可选字段
 
 ### 4.4 审核侧
 
+**资料范围与时间窗分离（D26）**：`ReviewEpisode.evidence_cutoff_date: date | None`保存本节点本次已提供资料截至日，空值不序列化，旧合同哈希不变。`PUT .../review-episodes/{id}/evidence-cutoff`接收`{evidence_cutoff_date, expected_revision}`，返回新`revision`；与节点日期共用同受试者、乐观锁及活动整理／更正／工作稿互斥，早于开始日拒绝。字段随既有节点payload与冻结上下文保存，无新表或迁移。前端开始日／资料截至分开保存；`source_pages_for_review`、`select_by_variable`及`calculate_procedures`共用`review_source_cutoff`，未设置时维持旧开始日上界。条款相对窗仍只用`anchor_dates`，同节点归属仍核冻结快照。开始日1日／截至8日：8日复查可用、9日不可用；明确“开始日前”仍拒绝8日结果。实际关系请求保存截至日，旧22页证明不等同24页检索。API／保存／消费／复用反例见`test_work_draft_evidence_cutoff.py`、`test_work_draft_calculation.py`、`test_work_draft_source_relations.py`及`WorkDraftPanel.test.tsx`。禁止通过移动开始日或删除未来记录保护来纳入复查。
+
 | 改动 | 位置 | 说明 |
 |---|---|---|
 | `ReviewRun.run_kind: Literal["work_draft","formal"]` | `app/domain/contracts/review.py:156-165`；`app/storage/models.py` 加列，默认 `formal` 兼容历史 | 工作稿与签发分开 |

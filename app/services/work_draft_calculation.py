@@ -117,7 +117,16 @@ def review_anchor_dates(anchor_dates, stage):
     return result
 
 
-def select_by_variable(component, facts, anchor_dates, *, authority, definitions, stage=ReviewStage.SCREENING, evidence_refs=None, source_pages=()):
+def review_source_cutoff(anchor_dates, stage, evidence_cutoff_date=None):
+    """Source availability is separate from protocol-relative time anchors."""
+    if evidence_cutoff_date is not None:
+        return evidence_cutoff_date
+    anchor_type = AnchorType.BASELINE_DATE if stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE
+    anchor = anchor_dates.get(anchor_type)
+    return anchor.value if anchor is not None else None
+
+
+def select_by_variable(component, facts, anchor_dates, *, authority, definitions, stage=ReviewStage.SCREENING, evidence_refs=None, source_pages=(), evidence_cutoff_date=None):
     """Variable identity is explicit; display labels never select clinical evidence."""
     bindings = {}
     for requirement in component.evidence_requirements:
@@ -157,15 +166,13 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                 # Unknown windows are retained as questions, not made usable by guessing a date.
                 if temporal.truth == TruthValue.UNKNOWN:
                     continue
-                anchor = base.anchor_dates.get(atom.time_constraint.anchor_type) if atom.time_constraint else (
-                    base.anchor_dates.get(AnchorType.BASELINE_DATE if stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE)
-                )
-                if anchor is not None and anchor.value is not None and fact.date_range is not None:
+                cutoff = review_source_cutoff(anchor_dates, stage, evidence_cutoff_date)
+                if cutoff is not None and fact.date_range is not None:
                     lower = fact.date_range.lower_bound
-                    if lower is not None and lower > anchor.value:
+                    if lower is not None and lower > cutoff:
                         continue
                 recorded = source_record_date(fact, evidence_refs, source_pages)
-                if fact.date_range is None and recorded is not None and anchor is not None and anchor.value is not None and recorded > anchor.value:
+                if recorded is not None and cutoff is not None and recorded > cutoff:
                     continue
                 if definition is not None and definition.reference_ratio_of is not None:
                     try:
@@ -313,7 +320,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
         "facts": [fact.model_dump(mode="json") for fact in frozen.facts
                   if fact.variable_id in bound_variables],
         "calculations": [definitions[key].model_dump(mode="json") for key in sorted(bound_variables) if key in definitions],
-        "anchors": frozen.review_episode.model_dump(mode="json")["anchor_dates"]})
+        "anchors": frozen.review_episode.model_dump(mode="json")["anchor_dates"],
+        **({"evidence_cutoff_date": frozen.review_episode.evidence_cutoff_date.isoformat()}
+            if frozen.review_episode.evidence_cutoff_date is not None else {})})
     input_hash = canonical_hash({"calculation_input": input_hash,
         "source_pages": [(page.source_document_version_id, page.page_artifact_id, page.effective_text_sha256)
                          for page in getattr(frozen, "source_pages", ())],
@@ -358,7 +367,8 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
     try:
         selection = select_by_variable(component, frozen.facts, frozen.review_episode.anchor_dates,
             authority=frozen.authority, definitions=definitions, stage=frozen.review_episode.stage,
-            evidence_refs=evidence_refs, source_pages=getattr(frozen, "source_pages", ()))
+            evidence_refs=evidence_refs, source_pages=getattr(frozen, "source_pages", ()),
+            evidence_cutoff_date=frozen.review_episode.evidence_cutoff_date)
         dated_selection = dict(selection)
         needs_source = {p.predicate_id for p in predicates if p.requires_professional_judgment
             or p.semantic_proposition or p.applicable_population or p.prospective_period or p.prospective_window}
@@ -761,6 +771,8 @@ def calculate_procedures(frozen, rule_set, *, evidence_refs, source_results=None
             input_hash=canonical_hash({"catalog_item": item.model_dump(mode="json"),
                 "requirements": [req.model_dump(mode="json") for req in requirements],
                 "review": review.model_dump(mode="json") if review else None,
+                **({"evidence_cutoff_date": frozen.review_episode.evidence_cutoff_date.isoformat()}
+                    if frozen.review_episode.evidence_cutoff_date is not None else {}),
                 "facts": [fact.model_dump(mode="json") for fact in frozen.facts
                     if fact.variable_id in {req.variable_id for req in requirements} | set(review.result_variables if review else ())]}))
         if review is not None and review.note == "excluded":
@@ -772,9 +784,13 @@ def calculate_procedures(frozen, rule_set, *, evidence_refs, source_results=None
         required_ids = {req.variable_id for req in due if req.variable_id}
         anchor_type = AnchorType.BASELINE_DATE if frozen.review_episode.stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE
         anchor = frozen.review_episode.anchor_dates.get(anchor_type)
+        cutoff = review_source_cutoff(frozen.review_episode.anchor_dates, frozen.review_episode.stage,
+            frozen.review_episode.evidence_cutoff_date)
         def in_node_scope(fact):
-            return not (anchor is not None and anchor.value is not None and fact.date_range is not None
-                and fact.date_range.lower_bound is not None and fact.date_range.lower_bound > anchor.value)
+            recorded = source_record_date(fact, evidence_refs, getattr(frozen, "source_pages", ()))
+            return not (cutoff is not None and (recorded is not None and recorded > cutoff
+                or fact.date_range is not None and fact.date_range.lower_bound is not None
+                and fact.date_range.lower_bound > cutoff))
         scoped = [fact for fact in frozen.facts if in_node_scope(fact)]
         relation = (source_results or {}).get(f"procedure:{item.item_id}")
         if relation:

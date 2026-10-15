@@ -23,7 +23,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v33"
+CALCULATION_VERSION = "work-draft/0.2.0-v34"
 
 
 def confirmation_allowed(item, items):
@@ -289,6 +289,7 @@ class WorkDraftReviewService:
                 "clinical_facts": [item.model_dump(mode="json") for item in preview.facts],
                 "system_issues": [item.model_dump(mode="json") for item in preview.system_issues],
                 "source_pages": [item.model_dump(mode="json") for item in preview.source_pages],
+                "evidence_cutoff_date": preview.review_episode.model_dump(mode="json").get("evidence_cutoff_date"),
                 "calculation_version": CALCULATION_VERSION,
                 "semantic_model": model.model_dump(mode="json") if model else None,
                 "semantic_targets": targets,
@@ -335,6 +336,14 @@ class WorkDraftReviewService:
 
     def update_anchor(self, *, subject_id, review_episode_id, value, expected_revision):
         """User-entered node date; never fills dates inside clinical facts."""
+        return self._update_episode_date(subject_id=subject_id, review_episode_id=review_episode_id,
+            value=value, expected_revision=expected_revision, cutoff=False)
+
+    def update_evidence_cutoff(self, *, subject_id, review_episode_id, value, expected_revision):
+        return self._update_episode_date(subject_id=subject_id, review_episode_id=review_episode_id,
+            value=value, expected_revision=expected_revision, cutoff=True)
+
+    def _update_episode_date(self, *, subject_id, review_episode_id, value, expected_revision, cutoff):
         from app.domain.contracts.common import DateValue
         from app.domain.contracts.enums import AnchorType, DatePrecision, ReviewStage
         from app.storage.repositories import EpisodeRepository
@@ -344,14 +353,23 @@ class WorkDraftReviewService:
             episode = EpisodeRepository(session).get(review_episode_id)
             if episode.subject_id != subject_id:
                 raise ScopeViolationError("审核节点不属于当前受试者")
-            for job in session.scalars(select(JobRecord).where(JobRecord.job_type.in_({"fact_normalization", JOB_TYPE}),
+            for job in session.scalars(select(JobRecord).where(JobRecord.job_type.in_({"fact_normalization", "fact_correction", JOB_TYPE}),
                     JobRecord.state.in_({"queued", "running", "failed_retryable"}))):
                 data = verify_payload_sha256(job.payload_json, job.payload_sha256)
                 owner = data.get("review_episode_id") or (data.get("authority") or {}).get("review_episode_id")
                 if owner == review_episode_id:
-                    raise ScopeViolationError("当前资料或工作稿正在整理，请完成后再修改节点日期；不会停止已有处理。")
+                    raise ScopeViolationError("当前资料或工作稿正在整理，请完成后再修改日期；不会停止已有处理。")
+            if cutoff:
+                anchor_type = AnchorType.BASELINE_DATE if episode.stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE
+                anchor = episode.anchor_dates.get(anchor_type)
+                if value is not None and anchor is not None and anchor.value is not None and value < anchor.value:
+                    raise ScopeViolationError("资料截至日不能早于本节点开始日")
+                return EpisodeRepository(session).update(review_episode_id, expected_revision,
+                    {"evidence_cutoff_date": value}).revision
             key = AnchorType.BASELINE_DATE if episode.stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE
             anchors = dict(episode.anchor_dates)
+            if episode.evidence_cutoff_date is not None and value > episode.evidence_cutoff_date:
+                raise ScopeViolationError("本节点开始日不能晚于资料截至日")
             anchors[key] = DateValue(value=value, precision=DatePrecision.DAY, source_text="构建者或审核人员从原件核对后填写")
             return EpisodeRepository(session).update(review_episode_id, expected_revision, {"anchor_dates": anchors}).revision
 

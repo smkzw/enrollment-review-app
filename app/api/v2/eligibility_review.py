@@ -258,6 +258,24 @@ class NodeDateRequest(BaseModel):
     expected_revision: int = Field(ge=1)
 
 
+class EvidenceCutoffRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    evidence_cutoff_date: date | None
+    expected_revision: int = Field(ge=1)
+
+
+@router.put("/subjects/{subject_id}/review-episodes/{review_episode_id}/evidence-cutoff")
+def update_evidence_cutoff(subject_id: str, review_episode_id: str, body: EvidenceCutoffRequest, request: Request):
+    _read(request).require_subject_episode(subject_id, review_episode_id)
+    try:
+        revision = request.app.state.work_draft_review_service.update_evidence_cutoff(
+            subject_id=subject_id, review_episode_id=review_episode_id,
+            value=body.evidence_cutoff_date, expected_revision=body.expected_revision)
+        return {"revision": revision}
+    except Exception as exc:
+        _raise_translated(exc)
+
+
 @router.put("/subjects/{subject_id}/review-episodes/{review_episode_id}/node-date")
 def update_node_date(subject_id: str, review_episode_id: str, body: NodeDateRequest, request: Request):
     _read(request).require_subject_episode(subject_id, review_episode_id)
