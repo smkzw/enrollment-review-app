@@ -225,6 +225,88 @@ def test_product_reuse_across_rule_revision_requires_same_patient_source_visit_a
     assert bool(accepted) == bool(proofs) == bool(seen) == expected
 
 
+@pytest.mark.parametrize("change,expected", [
+    (None, True), ("incomplete", True), ("not_found_incomplete", False),
+    ("text", False), ("document", False), ("page", False), ("category", False),
+    ("subject", False), ("project", False), ("episode", False), ("snapshot", False),
+    ("protocol", False), ("rules", False), ("rules_hash", False), ("formal", False),
+    ("anchor", False), ("cutoff", False), ("target", False), ("damaged", False),
+])
+def test_metadata_processing_revision_reuses_only_same_literal_read_not_old_qualification(monkeypatch, change, expected):
+    import json
+    from app.domain.contracts.agents import ModelConfigContract
+    from app.domain.contracts.enums import ReviewStage
+    from app.domain.contracts.facts import FactAuthority
+    from app.services import work_draft_review as service, work_draft_semantics as semantics
+    import app.storage.fact_authority as authority_module
+
+    old_authority = FactAuthority(project_id="project", subject_id="subject", review_episode_id="episode", episode_revision=1,
+        protocol_version_id="protocol", rule_set_id="rules", rule_set_revision=1,
+        evidence_snapshot_v2_id="snapshot", complete_processing_revision_id="old-processing")
+    changes = {"episode_revision": 2, "complete_processing_revision_id": "new-processing"}
+    field = {"subject": "subject_id", "project": "project_id", "episode": "review_episode_id",
+             "snapshot": "evidence_snapshot_v2_id", "protocol": "protocol_version_id", "rules": "rule_set_id"}.get(change)
+    if field:
+        changes[field] = "other"
+    current_authority = old_authority.model_copy(update=changes)
+    old_page, current_page = page(), page(complete=change not in {"incomplete", "not_found_incomplete"})
+    if change == "text": current_page = page("病历明确记载近期感染。")
+    if change == "document": current_page = current_page.model_copy(update={"source_document_version_id": "other-document"})
+    if change == "page": current_page = current_page.model_copy(update={"page_number": 2})
+    if change == "category": current_page = page(category="historical_record")
+    def episode():
+        return SimpleNamespace(stage=ReviewStage.SCREENING, anchor_dates={}, evidence_cutoff_date=None,
+            model_dump=lambda **_: {"anchor_dates": {}})
+    previous = SimpleNamespace(authority=old_authority, source_pages=[old_page], rule_set_sha256="same-rules",
+        work_draft=True, review_episode=episode())
+    current = SimpleNamespace(authority=current_authority, source_pages=[current_page],
+        rule_set_sha256="changed-rules" if change == "rules_hash" else "same-rules",
+        work_draft=change != "formal", review_episode=episode())
+    if change == "anchor": current.review_episode.model_dump = lambda **_: {"anchor_dates": {"screening_date": "2026-01-08"}}
+    if change == "cutoff": current.review_episode.model_dump = lambda **_: {"anchor_dates": {}, "evidence_cutoff_date": "2026-01-08"}
+    actual_target = target("inclusion") if change == "target" else target()
+    model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
+    material = {"version": "input-v3", "stage": "screening", "anchor_dates": {}, "targets": [target()],
+        "pages": [{"page_artifact_id": "page", "page_number": 1, "category": "study_chart", "text": old_page.effective_text}],
+        "output_schema": semantics.SourceRelations.model_json_schema()}
+    request = {"messages": [{"role": "user", "content": semantics.SEMANTIC_INSTRUCTIONS +
+        "每个target_id恰好一次。\n" + json.dumps(material, ensure_ascii=False)}]}
+    source_row = row(relation="not_found", quotes=[]) if change == "not_found_incomplete" else row()
+    saved = {"model": model.model_dump(mode="json"), "text": json.dumps({"results": [source_row.model_dump()]}, ensure_ascii=False),
+        "calls": [{"finish_reason": "stop", "response_model": "fixture", "request_artifact_sha256": "request"}]}
+    class Artifacts:
+        def read(self, _): return json.dumps(saved, ensure_ascii=False).encode()
+        def read_by_sha(self, *_): return json.dumps(request, ensure_ascii=False).encode()
+    payload = json.dumps({"context_id": "previous"})
+    job = SimpleNamespace(job_id="old-job", payload_json=payload, payload_sha256=sha256(payload.encode()).hexdigest())
+    session = SimpleNamespace(scalars=lambda _: SimpleNamespace(all=lambda: [job]))
+    monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: previous))
+    rules = SimpleNamespace(variable_definitions=[], study_phase="same")
+    monkeypatch.setattr(service, "get_rule_set", lambda *_: rules)
+    monkeypatch.setattr(service, "AppendRepository", lambda *_: SimpleNamespace(get=lambda _: SimpleNamespace(sha256="same")))
+    checked = []
+    class Validator:
+        def __init__(self, *_): pass
+        def validate_frozen_source(self, authority):
+            checked.append(authority)
+            if change == "damaged": raise service.ScopeViolationError("历史来源损坏")
+    monkeypatch.setattr(authority_module, "FactAuthorityValidator", Validator)
+    original = relation_inputs(source_row, target(), [old_page])
+    store = SimpleNamespace(list_steps=lambda _: [SimpleNamespace(step_id="semantic")],
+        get_last_checkpoint=lambda *_: ("checkpoint", {"raw_refs": ["response"], "results": {"component:infection": original}}))
+    if change == "damaged":
+        with pytest.raises(service.ScopeViolationError, match="历史来源损坏"):
+            service._reusable_source_reads(session, store, current, [actual_target], model, Artifacts())
+        return
+    accepted, proofs = service._reusable_source_reads(session, store, current, [actual_target], model, Artifacts())
+    assert bool(accepted) == bool(proofs) == expected
+    if expected:
+        assert checked == [old_authority, current_authority]
+        assert accepted["component:infection"]["truth"] == "false"
+        assert proofs["component:infection"]["request_sha256"] == "request"
+    assert original == relation_inputs(source_row, target(), [old_page])
+
+
 def test_unique_line_wrap_restores_exact_original_quote_without_a_new_model_answer():
     from app.services.work_draft_semantics import split_valid_relations
     original = page("病历记载：否认近期\n感染。")
