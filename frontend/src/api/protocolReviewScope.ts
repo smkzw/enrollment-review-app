@@ -39,6 +39,7 @@ export interface ReviewScopeView {
   candidates: ScopeCandidate[]; source_records: ScopeRecord[]; diagnostics: ScopeDiagnostic[];
   additional_source_records: ScopeRecord[];
   editable: boolean; selection: ScopeSelection | null;
+  drug_classes?: Record<string, string[]>;
 }
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("审核范围格式不完整。");
@@ -61,6 +62,7 @@ export function decodeReviewScope(value: unknown, jobId: string, revisionId: str
         !(row.visit_instance === null || typeof row.visit_instance === "string")) throw new Error("审核范围条目不完整。");
   }
   const additional = view.additional_source_records ?? [];
+  if (view.drug_classes != null && Object.values(record(view.drug_classes)).some(value => !strings(value))) throw new Error("用药类别清单不完整。");
   if (!Array.isArray(additional)) throw new Error("手工选择的原文不完整。");
   for (const value of [...view.source_records, ...additional]) {
     const row = record(value);

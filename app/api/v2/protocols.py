@@ -60,6 +60,7 @@ from pydantic import Field
 from app.domain.contracts.common import ContractModel
 from app.services.protocol_variable_binding import VariableBindingProposal
 from app.domain.contracts.protocol_drafts import ReviewScopeProposal
+from app.protocols.medication_restrictions import MedicationRestrictionProposal
 
 
 class VariableBindingRequest(ContractModel):
@@ -74,6 +75,12 @@ class VariableSuggestionRequest(ContractModel):
 class ReviewScopeRequest(ContractModel):
     expected_revision_id: str = Field(min_length=1)
     proposal: ReviewScopeProposal
+
+
+class MedicationRestrictionRequest(ContractModel):
+    expected_revision_id: str = Field(min_length=1)
+    proposal: MedicationRestrictionProposal
+    proposal_ref: str | None = Field(default=None, pattern=r"^artifacts/evaluation_manifest/[0-9a-f]{64}$")
 
 router = APIRouter(prefix="/api/v2/protocol/deconstructions", tags=["v2-protocol"])
 projects_router = APIRouter(prefix="/api/v2/protocol", tags=["v2-protocol"])
@@ -105,6 +112,17 @@ def save_review_scope(job_id: str, body: ReviewScopeRequest, request: Request):
 def save_variables(job_id: str, body: VariableBindingRequest, request: Request):
     return _draft_dto(_service(request).save_variable_bindings(job_id,
         expected_revision_id=body.expected_revision_id, proposal=body.proposal))
+
+
+@router.post("/{job_id}/draft/medications/suggest")
+async def suggest_medications(job_id: str, body: VariableSuggestionRequest, request: Request):
+    return await _service(request).suggest_medication_restrictions(job_id, expected_revision_id=body.expected_revision_id)
+
+
+@router.put("/{job_id}/draft/medications", response_model=DraftRevisionResponse)
+def save_medications(job_id: str, body: MedicationRestrictionRequest, request: Request):
+    return _draft_dto(_service(request).save_medication_restrictions(job_id,
+        expected_revision_id=body.expected_revision_id, proposal=body.proposal, proposal_ref=body.proposal_ref))
 
 
 @router.post("/{job_id}/draft/variables/suggest")

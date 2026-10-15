@@ -15,7 +15,7 @@ export interface RuleReviewRecord {
 }
 export interface RuleReviewEntry {
   official_code: string;
-  kind: "rule" | "procedure";
+  kind: "rule" | "procedure" | "medication" | "scope";
   label: string;
   rule_content_hash: string;
   source_refs: string[];
@@ -55,7 +55,7 @@ export function decodeRuleReviews(value: unknown, jobId: string): RuleReviews {
     const entry = record(value);
     if (typeof entry.official_code !== "string" || typeof entry.label !== "string" ||
         typeof entry.rule_content_hash !== "string" || !/^[a-f0-9]{64}$/.test(entry.rule_content_hash) ||
-        !["rule", "procedure"].includes(String(entry.kind)) || !Array.isArray(entry.source_refs) ||
+        !["rule", "procedure", "medication", "scope"].includes(String(entry.kind)) || !Array.isArray(entry.source_refs) ||
         !entry.source_refs.every(ref => typeof ref === "string") || !Array.isArray(entry.issue_refs) ||
         !entry.issue_refs.every(ref => typeof ref === "string")) throw new Error("条目审定信息不完整，请刷新。");
     const review = entry.review === null ? null : readReview(entry.review);

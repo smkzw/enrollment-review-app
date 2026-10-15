@@ -1439,7 +1439,9 @@ class ProtocolWorkbenchService:
         editable = (revision.status in {DraftRevisionStatus.DRAFT, DraftRevisionStatus.SAVED, DraftRevisionStatus.RESTORED_FROM}
             and status.state == "waiting_user" and not status.cancel_requested
             and any(step.step_id in {STEP_AWAIT_REVIEW, STEP_PUBLISH} and step.state == "waiting_user" for step in status.steps))
+        from app.domain.variables.dictionary import load_drug_classes
         return {"job_id": job_id, "draft_revision_id": revision.revision_id, **view, "editable": editable,
+            "drug_classes": load_drug_classes(),
             "selection": revision.review_scope_selection.model_dump(mode="json") if revision.review_scope_selection else None}
 
     def get_review_scope_options(self, job_id: str, *, query: str, offset: int = 0) -> dict[str, Any]:
@@ -1491,6 +1493,91 @@ class ProtocolWorkbenchService:
             raise ProtocolWorkbenchError("REVIEW_SCOPE_SELECTION_INVALID", title="范围选择未保存",
                 detail=str(exc), recovery="请核对所选原文、关联条款及移除理由。") from exc
         return self.get_review_scope(job_id)
+
+    def medication_scope_context(self, job_id: str, expected_revision_id: str):
+        view = self.get_review_scope(job_id)
+        revision = self.get_draft_detail(job_id).revision
+        if not view["editable"] or revision.revision_id != expected_revision_id or view["draft_revision_id"] != expected_revision_id:
+            raise ProtocolWorkbenchError("DRAFT_REVISION_CONFLICT", title="草稿不可编辑或已更新",
+                detail="未读取或保存旧版补充要求。", recovery="请刷新当前草稿。")
+        if revision.review_scope_selection is None:
+            raise ProtocolWorkbenchError("REVIEW_SCOPE_SELECTION_MISSING", title="请先保存范围选择",
+                detail="用药要求只读取本次明确保留的原文。", recovery="请在审核范围中核对并保存。")
+        return view, revision
+
+    async def suggest_medication_restrictions(self, job_id: str, *, expected_revision_id: str, completion=None):
+        from app.agents.protocol_medication_author import author_medications, medication_reader_identity
+        from app.protocols.medication_restrictions import (MedicationRestrictionProposal, build_scope_supplement,
+            medication_input_hash, selected_scope_material)
+        view, revision = self.medication_scope_context(job_id, expected_revision_id)
+        existing = revision.content.scope_supplement
+        _, _, readable = selected_scope_material(view, revision.review_scope_selection)
+        if (existing is not None and existing.input_sha256 == medication_input_hash(revision.study_phase.value, readable)
+                and existing.reader_identity == medication_reader_identity()):
+            proposal = MedicationRestrictionProposal(medications=[item.model_dump(exclude={"item_id"}) for item in existing.medications],
+                source_dispositions=existing.source_dispositions)
+            rebound = build_scope_supplement(proposal=proposal, view=view, selection=revision.review_scope_selection,
+                phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules})
+            if rebound.input_sha256 == existing.input_sha256:
+                rebound.request_refs, rebound.response_refs, rebound.reader_identity = existing.request_refs, existing.response_refs, existing.reader_identity
+                return {"job_id": job_id, "draft_revision_id": expected_revision_id,
+                    "scope_content_hash": view["scope_content_hash"], "supplement": rebound.model_dump(mode="json"),
+                    "receipts": [], "system_issue": None, "proposal_ref": None, "reused": True}
+        with self.session_factory() as session:
+            checkpoint = JobStore(session).get_last_checkpoint(job_id, STEP_AWAIT_REVIEW)
+        previous_ref = (checkpoint[1] if checkpoint else {}).get("medication_proposal_ref")
+        if previous_ref:
+            saved = json.loads(ArtifactStore(self.data_paths).read(previous_ref))
+            if (saved.get("job_id") == job_id and saved.get("draft_revision_id") == expected_revision_id
+                    and saved.get("scope_content_hash") == view["scope_content_hash"] and saved.get("supplement")
+                    and saved["supplement"].get("reader_identity") == medication_reader_identity()):
+                return {**saved, "proposal_ref": previous_ref, "reused": True}
+        result = await author_medications(view=view, selection=revision.review_scope_selection,
+            phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules},
+            data_paths=self.data_paths, **({"completion": completion} if completion else {}))
+        result = {"job_id": job_id, "draft_revision_id": expected_revision_id,
+                  "scope_content_hash": view["scope_content_hash"], **result}
+        stored = ArtifactStore(self.data_paths).put("evaluation_manifest", json.dumps(result, ensure_ascii=False).encode())
+        # The bounded request has finished. Recheck cancellation and head before making it a current proposal.
+        self.medication_scope_context(job_id, expected_revision_id)
+        with self.session_factory() as session, session.begin():
+            current = JobStore(session).get_last_checkpoint(job_id, STEP_AWAIT_REVIEW)
+            JobRepository(session).create_checkpoint(checkpoint_id=uuid.uuid4().hex, job_id=job_id,
+                step_id=STEP_AWAIT_REVIEW, payload={**(current[1] if current else {}),
+                    "medication_proposal_ref": stored.storage_ref})
+        return {**result, "proposal_ref": stored.storage_ref, "reused": False}
+
+    def save_medication_restrictions(self, job_id: str, *, expected_revision_id: str, proposal, proposal_ref=None):
+        from app.protocols.medication_restrictions import build_scope_supplement
+        view, revision = self.medication_scope_context(job_id, expected_revision_id)
+        receipts = []
+        if proposal_ref:
+            original = json.loads(ArtifactStore(self.data_paths).read(proposal_ref))
+            if (original.get("job_id") != job_id or original.get("draft_revision_id") != expected_revision_id
+                    or original.get("scope_content_hash") != view["scope_content_hash"] or not original.get("supplement")):
+                raise ProtocolWorkbenchError("MEDICATION_PROPOSAL_MISMATCH", title="补充建议与草稿不一致",
+                    detail="未借用其他版本的模型回执。", recovery="请刷新本次建议。")
+            receipts = original["receipts"]
+        try:
+            supplement = build_scope_supplement(proposal=proposal, view=view, selection=revision.review_scope_selection,
+                phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules}, receipts=receipts)
+            if proposal_ref:
+                supplement.reader_identity = original["supplement"].get("reader_identity")
+            elif revision.content.scope_supplement is not None and supplement.input_sha256 == revision.content.scope_supplement.input_sha256:
+                previous = revision.content.scope_supplement
+                supplement.request_refs, supplement.response_refs, supplement.reader_identity = previous.request_refs, previous.response_refs, previous.reader_identity
+            with self.session_factory() as session, session.begin():
+                job = JobStore(session).get_job(job_id)
+                if job.state != "waiting_user" or job.cancel_requested:
+                    raise ValueError("本次草稿已离开编辑步骤或正在取消。")
+                saved = ProtocolDraftService(session).save_scope_supplement(draft_id=revision.draft_id,
+                    supplement=supplement, expected_revision_id=expected_revision_id,
+                    actor=self.operator_name(), created_at=self.now())
+                self._update_draft_checkpoint(session, job_id, saved)
+        except ValueError as exc:
+            raise ProtocolWorkbenchError("MEDICATION_PROPOSAL_INVALID", title="用药要求未保存",
+                detail=str(exc), recovery="请核对时间、类别及逐字来源；原规则保留。") from exc
+        return self.get_draft_detail(job_id)
 
     def save_variable_bindings(self, job_id: str, *, expected_revision_id: str, proposal):
         merged = self._merged_payload(job_id)

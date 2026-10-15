@@ -3,11 +3,30 @@ import type { RuleReviewPresentation } from "../../domain/protocolRuleReview";
 import { reviewObjects } from "../../domain/protocolRuleReview";
 import { ExpressionView } from "../review/ExpressionView";
 import { GitBranch, CalendarDays } from "lucide-react";
+import { decodeScopeSupplement, medicationStages } from "../../api/protocolMedications";
+import { formatTimeConstraint } from "../../domain/mappers";
 
 export function ProtocolReviewLogic({ item, content, bindings }: {
   item: RuleReviewPresentation; content: Record<string, unknown>; bindings: BindingView | null;
 }) {
   const raw = reviewObjects(content.proposed_rules).find(rule => rule.official_code === item.entry.official_code);
+  if (item.entry.kind === "medication" || item.entry.kind === "scope") {
+    try {
+      const supplement = decodeScopeSupplement(content.scope_supplement);
+      const restriction = supplement.medications.find(value => value.item_id === item.entry.official_code);
+      return <section className="protocol-review-logic" aria-label="逻辑解析"><h4>限制与适用范围</h4>
+        {restriction ? <dl>
+          <div><dt>限制对象</dt><dd>{restriction.drug_text}</dd></div>
+          <div><dt>适用阶段</dt><dd>{restriction.applicable_stages.map(value => medicationStages[value]).join("、") || "尚待核清"}</dd></div>
+          <div><dt>时间范围</dt><dd>{restriction.window ? formatTimeConstraint(restriction.window) : restriction.period === "study_period" ? "整个研究期间" : restriction.period === "treatment_period" ? "治疗期间" : "尚待核清"}</dd></div>
+          {restriction.exception_excerpt && <div><dt>例外</dt><dd>{restriction.exception_excerpt}</dd></div>}
+          {restriction.unresolved_reason && <div><dt>未决</dt><dd>{restriction.unresolved_reason}</dd></div>}
+          {restriction.applies_to_rule && <div><dt>关联条款</dt><dd>{restriction.applies_to_rule}</dd></div>}
+        </dl> : <><p>核对补充原文的范围及未形成限制的内容，不改官方入排编号。</p>
+          <ul>{supplement.source_dispositions.filter(value => value.disposition === "unresolved").map(value => <li key={value.source_span_id}>{value.reason}</li>)}</ul></>}
+      </section>;
+    } catch { return <p role="alert">补充要求尚不能完整展示，请重新读取本版草稿。</p>; }
+  }
   return <section className="protocol-review-logic" aria-label="逻辑解析">
     <h4>逻辑解析</h4>
     {item.rule ? <>

@@ -58,6 +58,13 @@ def review_entries(source: ProtocolDeconstructionInput, draft: ProtocolDeconstru
         interpretations = _interpretation_payload(source, draft, {rule.rule_id, rule.official_code})
         if interpretations:
             payload["interpretations"] = interpretations
+        if draft.scope_supplement is not None:
+            contexts = [section for section in draft.scope_supplement.sections
+                if section.scope_kind == "referenced_source" and rule.official_code in section.official_codes]
+            context_refs = {key for section in contexts for key in section.source_span_ids}
+            if context_refs:
+                payload["referenced_context"] = [quote.model_dump(mode="json")
+                    for quote in draft.scope_supplement.sources if quote.source_span_id in context_refs]
         entries.append({"official_code": rule.official_code, "kind": "rule", "label": rule.source_text,
                         "rule_content_hash": canonical_hash(payload),
                         "source_refs": refs, "issue_refs": [rule.rule_id, rule.official_code, *sorted(ids), *refs]})
@@ -88,6 +95,18 @@ def review_entries(source: ProtocolDeconstructionInput, draft: ProtocolDeconstru
         entries.append({"official_code": item.item_id, "kind": "procedure", "label": item.label,
                         "rule_content_hash": canonical_hash(payload), "source_refs": list(item.source_span_ids),
                         "issue_refs": [item.item_id, *item.source_span_ids]})
+    supplement = draft.scope_supplement
+    if supplement is not None:
+        for item in supplement.medications:
+            refs = list(dict.fromkeys(quote.source_span_id for quote in item.source_quotes))
+            entries.append({"official_code": item.item_id, "kind": "medication", "label": item.drug_text,
+                "rule_content_hash": canonical_hash(item.model_dump(mode="json")),
+                "source_refs": refs, "issue_refs": [item.item_id, *refs]})
+        scope_payload = supplement.model_dump(mode="json", exclude={"medications", "request_refs", "response_refs", "reader_identity"})
+        refs = [quote.source_span_id for quote in supplement.sources]
+        entries.append({"official_code": "scope:" + canonical_hash(scope_payload)[:24], "kind": "scope",
+            "label": "补充原文范围及非限制内容的处置", "rule_content_hash": canonical_hash(scope_payload),
+            "source_refs": refs, "issue_refs": refs})
     if len({entry["official_code"] for entry in entries}) != len(entries):
         raise ValueError("规则与检查项目的审定身份重复")
     return entries

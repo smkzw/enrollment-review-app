@@ -14,6 +14,7 @@ export interface RuleReviewAdvice {
 
 /** Suggestions are review directions, never edits or model-calibrated probabilities. */
 export function ruleReviewAdvice(item: RuleReviewPresentation, content: Record<string, unknown>): RuleReviewAdvice[] {
+  if (item.entry.kind === "medication" || item.entry.kind === "scope") return [];
   const components = getEditableProtocolComponents(content).filter(value =>
     item.rule?.components.some(component => component.componentId === value.componentId));
   const rule = reviewObjects(content.proposed_rules).find(value => value.official_code === item.entry.official_code);
@@ -153,11 +154,17 @@ export function ruleReviewPresentations(entries: RuleReviewEntry[], content: Rec
         reviewObjects(node.children).forEach(inspect);
       }
       reviewObjects(raw?.components).forEach(item => { inspect(item.expression); inspect(item.exception_expression); });
-    } else if (!needed.length) reasons.push("流程表操作尚未对应到审核要求，请核对节点及必需内容。");
+    } else if (entry.kind === "procedure" && !needed.length) reasons.push("流程表操作尚未对应到审核要求，请核对节点及必需内容。");
+    if (entry.kind === "medication") {
+      const supplement = reviewObjects([content.scope_supplement])[0];
+      const medication = reviewObjects(supplement?.medications).find(value => value.item_id === entry.official_code);
+      if (medication?.exception_excerpt) reasons.push("含用药例外，请核对适用对象及期间。");
+      if (typeof medication?.unresolved_reason === "string") reasons.push(medication.unresolved_reason);
+    }
     return { entry, rule, category: entry.kind === "rule" && rule?.kind !== "required_procedure"
       ? rule?.kind === "inclusion" || entry.official_code.startsWith("IN-") ? "inclusion" : "exclusion"
-      : procedureCategory,
-      medicationRelated: domains.has("medication"), title: rule?.components[0]?.title ?? entry.label,
+      : entry.kind === "medication" || entry.kind === "scope" ? "medication" : procedureCategory,
+      medicationRelated: entry.kind === "medication" || entry.kind === "scope" || domains.has("medication"), title: rule?.components[0]?.title ?? entry.label,
       reasons: [...new Set(reasons)], requirements: [...new Map(needed.map(item => [JSON.stringify([item.due_stage, item.description]), {
         description: String(item.description ?? ""), stage: stageLabels[String(item.due_stage)] ?? "节点尚未明确",
       }])).values()] };

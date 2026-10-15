@@ -15,7 +15,7 @@ from app.storage.repositories import JobRepository
 from tests.v2.protocols.slice4_helpers import NOW, confirmed_fixture
 
 
-def preserved_scope(app, data_paths, *, original_job=False, unresolved=False):
+def preserved_scope(app, data_paths, *, original_job=False, unresolved=False, medication_text=None):
     source, draft, spans = confirmed_fixture()
     if unresolved:
         referenced = source.parent_rule_catalog.items[0].source_span_ids[0]
@@ -31,7 +31,7 @@ def preserved_scope(app, data_paths, *, original_job=False, unresolved=False):
     heading = StructureBlock(source_ref="body.p400", document_part="body", block_order=400,
         kind=BlockKind.PARAGRAPH, text="合并用药", outline_level=0)
     sentence = StructureBlock(source_ref="body.p401", document_part="body", block_order=401,
-        kind=BlockKind.PARAGRAPH, text="筛选期间的治疗要求以本节为准。")
+        kind=BlockKind.PARAGRAPH, text=medication_text or "筛选期间的治疗要求以本节为准。")
     blocks.extend([heading, sentence])
     for block in (heading, sentence):
         span_id = f"{source.extraction_snapshot_id}::{block.source_ref}"

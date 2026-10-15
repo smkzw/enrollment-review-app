@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { requestReviewScope, saveReviewScope, scopeLabels, type ReviewScopeView, type ScopeKind, type ScopeProposal } from "../../api/protocolReviewScope";
 import { ProtocolScopeSourcePicker } from "./ProtocolScopeSourcePicker";
+import { ProtocolMedicationRestrictions } from "./ProtocolMedicationRestrictions";
 
 const diagnosticLabels: Record<string, string> = {
   reference_unresolved: "尚未找到对应章节",
@@ -15,8 +16,9 @@ const diagnosticLabels: Record<string, string> = {
   source_geometry_inconsistent: "来源位置与原文结构不一致",
 };
 
-export function ProtocolReviewScope({ jobId, revisionId, onSaved, expanded, onExpandedChange }: {
+export function ProtocolReviewScope({ jobId, revisionId, content, onSaved, expanded, onExpandedChange }: {
   jobId: string; revisionId: string; onSaved?: () => void;
+  content?: Record<string, unknown>;
   expanded?: boolean; onExpandedChange?: (value: boolean) => void;
 }) {
   const [localOpen, setLocalOpen] = useState(false);
@@ -148,6 +150,8 @@ export function ProtocolReviewScope({ jobId, revisionId, onSaved, expanded, onEx
           <button type="button" className="button button--primary" disabled={saving || !dirty || missingReason}
             title={missingReason ? "请说明移除范围的理由" : undefined} onClick={() => void save()}>{saving ? "正在保存…" : "保存范围选择"}</button>
         </>}
+        {editable && content && current.selection && <ProtocolMedicationRestrictions
+          jobId={jobId} revisionId={revisionId} content={content} drugClasses={current.drug_classes ?? {}} onSaved={onSaved!} />}
       </>}
     </div>}
   </details>;

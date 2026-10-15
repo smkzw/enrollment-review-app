@@ -1,0 +1,96 @@
+"""Product endpoints with fictional sources and an injected completion, never real API fees."""
+import json
+from types import SimpleNamespace
+
+from fastapi.testclient import TestClient
+
+from app.domain.contracts.page_review import PageReviewLane
+from app.llm.page_review_harness import PageReaderRoute
+from tests.v2.api.test_protocol_review_scope import preserved_scope, scope_proposal
+
+
+def save_scope(client):
+    path = "/api/v2/protocol/deconstructions/scope-current/draft"
+    view = client.get(path + "/review-scope").json()
+    response = client.put(path + "/review-scope", json={"expected_revision_id": view["draft_revision_id"], "proposal": scope_proposal(view)})
+    assert response.status_code == 200
+    return path, response.json()
+
+
+def install_completion(monkeypatch, *, fail_first=False):
+    from app.agents import protocol_medication_author as author
+    route = PageReaderRoute(PageReviewLane.MAIN_A, "fixture", "http://fixture.invalid/v1", "fixture-not-secret", "fixture-model", "high", 65536, 1)
+    monkeypatch.setattr(author, "medication_author_route", lambda: route)
+    real_author = author.author_medications
+    calls = []
+
+    async def completion(route, messages, max_tokens):
+        payload = json.loads(messages[1]["content"])
+        calls.append(payload)
+        assert max_tokens == 65536
+        assert len(payload["sources"]) == 2
+        assert len({row["source_span_id"] for row in payload["sources"]}) == 2
+        heading = next(row for row in payload["sources"] if row["excerpt"] == "合并用药")
+        clause = next(row for row in payload["sources"] if row != heading)
+        proposal = {"medications": [{"drug_text": "药物甲", "drug_class_id": None,
+            "window": {"anchor_type": "screening_date", "direction": "before", "upper_bound": {"value": 3 if fail_first and len(calls) == 1 else 4, "unit": "week"}},
+            "period": None, "applicable_stages": ["screening"], "exception_excerpt": None,
+            "unresolved_reason": None, "source_quotes": [clause], "applies_to_rule": None}],
+            "source_dispositions": [{"source_span_id": heading["source_span_id"], "disposition": "heading", "reason": "章节标题"}]}
+        return SimpleNamespace(text=json.dumps(proposal), finish_reason="stop", usage={"total_tokens": 123},
+            response_model="fixture-model", response_id="fixture-response", output_lengths={})
+
+    async def injected(**kwargs):
+        return await real_author(**kwargs, completion=completion)
+    monkeypatch.setattr(author, "author_medications", injected)
+    return calls
+
+
+def test_product_proposal_bounded_retry_save_readback_and_existing_review_entry_consumer(build_app, data_paths, monkeypatch):
+    calls = install_completion(monkeypatch, fail_first=True)
+    app = build_app()
+    with TestClient(app) as client:
+        preserved_scope(app, data_paths, medication_text="筛选前4周内禁止使用药物甲。")
+        path, scope = save_scope(client)
+        before = client.get(path).json()
+        response = client.post(path + "/medications/suggest", json={"expected_revision_id": scope["draft_revision_id"]})
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result["supplement"] is not None and len(calls) == 2
+        assert len(result["receipts"]) == 2
+        assert client.post(path + "/medications/suggest", json={"expected_revision_id": scope["draft_revision_id"]}).json()["reused"] is True
+        assert len(calls) == 2
+        supplement = result["supplement"]
+        proposal = {"medications": [{key: value for key, value in row.items() if key != "item_id"} for row in supplement["medications"]],
+            "source_dispositions": supplement["source_dispositions"]}
+        saved = client.put(path + "/medications", json={"expected_revision_id": scope["draft_revision_id"],
+            "proposal": proposal, "proposal_ref": result["proposal_ref"]})
+        assert saved.status_code == 200, saved.text
+        after = client.get(path).json()
+        assert after["revision_id"] != before["revision_id"]
+        assert after["content"]["proposed_rules"] == before["content"]["proposed_rules"]
+        assert after["content"].get("variable_definitions") == before["content"].get("variable_definitions")
+        assert after["content"]["scope_supplement"]["request_refs"]
+        entries = client.get(path + "/reviews").json()["entries"]
+        medications = [row for row in entries if row["kind"] == "medication"]
+        assert len(medications) == 1 and medications[0]["label"] == "药物甲" and medications[0]["review"] is None
+        assert len([row for row in entries if row["kind"] == "scope"]) == 1
+        assert client.post(path + "/medications/suggest", json={"expected_revision_id": after["revision_id"]}).json()["reused"] is True
+        assert len(calls) == 2
+
+
+def test_bad_quote_or_stale_revision_cannot_write_medications(build_app, data_paths, monkeypatch):
+    calls = install_completion(monkeypatch)
+    app = build_app()
+    with TestClient(app) as client:
+        preserved_scope(app, data_paths, medication_text="筛选前4周内禁止使用药物甲。")
+        path, scope = save_scope(client)
+        result = client.post(path + "/medications/suggest", json={"expected_revision_id": scope["draft_revision_id"]}).json()
+        proposal = {"medications": [{key: value for key, value in result["supplement"]["medications"][0].items() if key != "item_id"}],
+            "source_dispositions": result["supplement"]["source_dispositions"]}
+        proposal["medications"][0]["source_quotes"][0]["excerpt"] = "伪造的原文"
+        rejected = client.put(path + "/medications", json={"expected_revision_id": scope["draft_revision_id"], "proposal": proposal})
+        assert rejected.status_code == 409
+        assert client.get(path).json()["revision_id"] == scope["draft_revision_id"]
+        stale = client.post(path + "/medications/suggest", json={"expected_revision_id": "old"})
+        assert stale.status_code == 409 and len(calls) == 1

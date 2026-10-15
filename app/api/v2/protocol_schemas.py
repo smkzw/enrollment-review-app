@@ -355,7 +355,7 @@ class PublishResponse(_StrictModel):
 
 class RuleReviewEntryDTO(_StrictModel):
     official_code: str
-    kind: Literal["rule", "procedure"]
+    kind: Literal["rule", "procedure", "medication", "scope"]
     label: str
     rule_content_hash: str
     source_refs: list[str]

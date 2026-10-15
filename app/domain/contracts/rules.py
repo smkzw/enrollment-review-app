@@ -170,6 +170,78 @@ class TimeConstraint(ContractModel):
         return self.upper_bound
 
 
+class ProtocolScopeQuote(ContractModel):
+    source_span_id: str = Field(min_length=1)
+    excerpt: str
+
+
+class MedicationRestriction(ContractModel):
+    """Source-authored meaning; host assigns identity only after source checks."""
+
+    drug_text: str = Field(min_length=1)
+    drug_class_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
+    window: TimeConstraint | None = None
+    period: ProtocolPeriod | None = None
+    applicable_stages: list[ReviewStage]
+    exception_excerpt: str | None = Field(default=None, min_length=1)
+    unresolved_reason: str | None = Field(default=None, min_length=1)
+    source_quotes: list[ProtocolScopeQuote] = Field(min_length=1)
+    applies_to_rule: str | None = Field(default=None, pattern=r"^(IN|EX)-\d{2}$")
+
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if len(self.applicable_stages) != len(set(self.applicable_stages)):
+            raise ValueError("用药限制的审核阶段不能重复")
+        if self.window is not None and self.period is not None:
+            raise ValueError("相对时间窗与整个期间不能混作同一限制")
+        if self.unresolved_reason is None and (not self.applicable_stages or
+                (self.window is None and self.period is None)):
+            raise ValueError("用药限制须有明确阶段和时间范围；未知不能默认补入")
+        if any(not quote.excerpt.strip() for quote in self.source_quotes):
+            raise ValueError("用药限制的来源摘录不能为空")
+        return self
+
+
+class ProhibitedMedicationItem(MedicationRestriction):
+    item_id: str = Field(pattern=r"^med:[0-9a-f]{24}$")
+
+
+class ProtocolScopeSection(ContractModel):
+    scope_kind: Literal["referenced_source", "medication_section"]
+    source_span_ids: list[str] = Field(min_length=1)
+    official_codes: list[str] = Field(default_factory=list)
+
+
+class MedicationSourceDisposition(ContractModel):
+    source_span_id: str = Field(min_length=1)
+    disposition: Literal["heading", "permission", "other_phase", "background", "unresolved"]
+    reason: str = Field(min_length=1)
+
+
+class ProtocolScopeSupplement(ContractModel):
+    """Frozen sources and reviewed additions inside the existing rule package."""
+
+    selection_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    input_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    structure_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reader_identity: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    sections: list[ProtocolScopeSection]
+    sources: list[ProtocolScopeQuote]
+    medications: list[ProhibitedMedicationItem]
+    source_dispositions: list[MedicationSourceDisposition]
+    request_refs: list[str] = Field(default_factory=list)
+    response_refs: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_identity(self):
+        for values in ([item.source_span_id for item in self.sources],
+                       [item.item_id for item in self.medications],
+                       [item.source_span_id for item in self.source_dispositions]):
+            if len(values) != len(set(values)):
+                raise ValueError("补充范围的来源、条目或处置身份不能重复")
+        return self
+
+
 class FrequencyRelativeHorizon(ContractModel):
     """Finite source-declared calendar range, without unrelated washout fields."""
 
@@ -740,11 +812,12 @@ class RuleSet(RevisionedModel):
     verification_only: bool | None = None
     review_records: list["RuleReviewRecord"] | None = None
     variable_definitions: list["VariableDef"] | None = None
+    scope_supplement: ProtocolScopeSupplement | None = None
 
     @model_serializer(mode="wrap")
     def preserve_historical_review_payload(self, handler):
         data = handler(self)
-        for key in ("verification_only", "review_records", "variable_definitions"):
+        for key in ("verification_only", "review_records", "variable_definitions", "scope_supplement"):
             if getattr(self, key) is None:
                 data.pop(key, None)
         return data

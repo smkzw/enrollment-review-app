@@ -135,7 +135,7 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
         {Object.entries(reviewCategories).map(([key, label]) => <button key={key} type="button" aria-pressed={category === key}
           onClick={() => setCategory(key as ReviewCategory)} disabled={busy}>{label} {items.filter(item => item.category === key || key === "medication" && item.medicationRelated).length}</button>)}
       </div>
-      {category === "medication" && <p>官方入排标准中的用药条件仍按原编号审定；此视图不新增条目，不代表其他用药章节已完整纳入。</p>}
+      {category === "medication" && <p>官方入排条件按原编号保留，补充章节的用药限制单独列出。</p>}
       <div className="protocol-review-filters">
         <label>审定范围 <select value={filter} disabled={busy} onChange={event => setFilter(event.target.value)}>
           <option value="pending">待审定</option><option value="focus">重点核对</option><option value="all">全部条目</option><option value="approved">已审定</option>
@@ -177,7 +177,7 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
           <ul>{selectedItem.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
         </details>}
         <ProtocolReviewLogic item={selectedItem} content={content} bindings={bindings} />
-        {selectedItem.reasons.length > 0 && <details className="protocol-review-advice" aria-label="备选解释与处理" key={entry.official_code}>
+        {adviceGroups.length > 0 && <details className="protocol-review-advice" aria-label="备选解释与处理" key={entry.official_code}>
           <summary><SlidersHorizontal size={16} aria-hidden="true" /> 比较备选解释与手动调整</summary>
           {adviceGroups.map((advice, groupIndex) => {
             const choiceKey = `${entry.official_code}:${advice.componentId ?? advice.title}`;
@@ -233,7 +233,7 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
       {!!selectedBatch.filter(item => item.reasons.length).length && <p>其中 {selectedBatch.filter(item => item.reasons.length).length} 项标为重点核对；请确认已对照原文与解析。</p>}
       <ul>{selectedBatch.map(item => {
         const settings = batchSettings(item);
-        return <li key={item.entry.official_code}>{item.entry.kind === "rule" ? item.entry.official_code : "检查项目"} · {item.entry.label} · {[...new Set(item.requirements.map(value => value.stage))].join("、")}
+        return <li key={item.entry.official_code}>{item.entry.kind === "rule" ? item.entry.official_code : item.entry.kind === "procedure" ? "检查项目" : "补充用药要求"} · {item.entry.label} · {[...new Set(item.requirements.map(value => value.stage))].join("、")}
           {item.rule && <p>本次审定包含此条的 {item.rule.components.length + item.rule.restrictedComponents.length} 个子项。</p>}
           {item.entry.kind === "procedure" && <p>{settings.note === "excluded" ? "不作为入组前必需" : settings.result_variables.length
             ? `必需结果：${settings.result_variables.map(id => dictionary.find(value => value.variable_id === id)?.label_zh ?? "项目名称待核对").join("、")}`

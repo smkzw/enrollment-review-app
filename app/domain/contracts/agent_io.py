@@ -21,6 +21,7 @@ from .review import AssessmentCandidate
 from .rules import (
     EvidenceRequirement,
     Rule,
+    ProtocolScopeSupplement,
     RuleComponent,
     RuleExpression,
     RepeatTriggerCondition,
@@ -300,6 +301,7 @@ class ProtocolDeconstructionInput(VersionedModel):
 
 class ProtocolDeconstructionDraft(VersionedModel):
     variable_definitions: list[VariableDef] | None = None
+    scope_supplement: ProtocolScopeSupplement | None = None
     draft_id: str = Field(min_length=1)
     project_id: str = Field(min_length=1)
     protocol_version_id: str = Field(min_length=1)
@@ -324,6 +326,8 @@ class ProtocolDeconstructionDraft(VersionedModel):
         value = handler(self)
         if self.variable_definitions is None:
             value.pop("variable_definitions", None)
+        if self.scope_supplement is None:
+            value.pop("scope_supplement", None)
         return value
 
     @model_validator(mode="after")

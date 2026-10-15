@@ -768,6 +768,8 @@ def enforce_draft_edit_boundary(
       成员与流程结构（由 ProtocolDeconstructionGate 的 source_coverage /
       parent_catalog / workflow_coverage 把关）。
     """
+    if previous.scope_supplement != current.scope_supplement:
+        _fail_boundary("SCOPE_SUPPLEMENT_REWRITTEN", "补充范围的要求须从其专用核对入口保存，不能随其他修订改写。")
     if (
         previous.draft_id != current.draft_id
         or previous.project_id != current.project_id
@@ -1127,6 +1129,15 @@ class ProtocolDraftService:
             feedback_note="审核范围选择已保存，尚未纳入规则。", actor=actor, created_at=created_at,
             review_scope_selection=selection)
 
+    def save_scope_supplement(self, *, draft_id, supplement, expected_revision_id, actor, created_at):
+        head = self._require_head(draft_id, expected_revision_id)
+        if head.review_scope_selection is None:
+            raise DraftEditBoundaryError("SCOPE_SELECTION_MISSING", "请先保存本次审核范围。")
+        return self._append_revision(head.content.model_copy(update={"scope_supplement": supplement}),
+            expected_revision_id=expected_revision_id, reason=DraftRevisionReason.MANUAL_EDIT,
+            feedback_kind=None, feedback_note="已保存补充范围的用药要求，尚未审定或发布。",
+            actor=actor, created_at=created_at, scope_supplement=supplement)
+
     def apply_manual_edit(
         self,
         draft: ProtocolDeconstructionDraft,
@@ -1311,6 +1322,7 @@ class ProtocolDraftService:
         variable_bindings=None,
         reviewed_stage_assignment: bool = False,
         review_scope_selection: ReviewScopeSelection | None = None,
+        scope_supplement=None,
     ) -> ProtocolDraftRevision:
         head = self._require_head(draft.draft_id, expected_revision_id)
         if head.status == DraftRevisionStatus.CANCELLED:
@@ -1323,7 +1335,11 @@ class ProtocolDraftService:
                 "DRAFT_PUBLISHED",
                 "已发布的草稿 revision 不能继续编辑；请基于新草稿重新解构。",
             )
-        if reviewed_stage_assignment:
+        if scope_supplement is not None:
+            expected = head.content.model_copy(update={"scope_supplement": scope_supplement})
+            if draft != expected or feedback_kind is not None or variable_bindings is not None or reviewed_stage_assignment:
+                _fail_boundary("SCOPE_SUPPLEMENT_SCOPE_CHANGED", "补充要求不能改写已有规则、变量、节点或原文。")
+        elif reviewed_stage_assignment:
             expected = head.content.model_copy(deep=True)
             new_stages = {stage.workflow_stage_id: stage for stage in draft.proposed_workflow_stages}
             assignments = {}

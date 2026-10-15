@@ -526,7 +526,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           sources={redoReview.state.data.sources}
           saving={saveBusy}
           publicationBlocked={publicationBlocked || publishBusy}
-          supplementaryRequirements={repo.kind === "http" ? <><ProtocolReviewScope jobId={jobId} revisionId={comparison.state.data.candidate.revisionId} onSaved={onBindingsSaved} expanded={scopeExpanded} onExpandedChange={setScopeExpanded} /><ProtocolWorkflowStagePanel jobId={jobId} draft={comparison.state.data.candidate} onSaved={onBindingsSaved} /><ProtocolVariableBindingPanel
+          supplementaryRequirements={repo.kind === "http" ? <><ProtocolReviewScope jobId={jobId} revisionId={comparison.state.data.candidate.revisionId} content={comparison.state.data.candidate.content} onSaved={onBindingsSaved} expanded={scopeExpanded} onExpandedChange={setScopeExpanded} /><ProtocolWorkflowStagePanel jobId={jobId} draft={comparison.state.data.candidate} onSaved={onBindingsSaved} /><ProtocolVariableBindingPanel
             jobId={jobId} revisionId={comparison.state.data.candidate.revisionId} onSaved={onBindingsSaved} /><ProtocolRuleReviewPanel
             jobId={jobId} revisionId={comparison.state.data.candidate.revisionId}
             content={comparison.state.data.candidate.content}
@@ -623,7 +623,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           }}
           saving={saveBusy}
           publicationBlocked={publicationBlocked}
-          supplementaryRequirements={repo.kind === "http" ? <><ProtocolReviewScope jobId={jobId} revisionId={draft.revisionId} onSaved={onBindingsSaved} expanded={scopeExpanded} onExpandedChange={setScopeExpanded} /><ProtocolWorkflowStagePanel jobId={jobId} draft={draft} onSaved={onBindingsSaved} /><ProtocolVariableBindingPanel
+          supplementaryRequirements={repo.kind === "http" ? <><ProtocolReviewScope jobId={jobId} revisionId={draft.revisionId} content={draft.content} onSaved={onBindingsSaved} expanded={scopeExpanded} onExpandedChange={setScopeExpanded} /><ProtocolWorkflowStagePanel jobId={jobId} draft={draft} onSaved={onBindingsSaved} /><ProtocolVariableBindingPanel
             jobId={jobId} revisionId={draft.revisionId} onSaved={onBindingsSaved} /><ProtocolRuleReviewPanel
             jobId={jobId} revisionId={draft.revisionId} integrity={integrity}
             content={draft.content}
