@@ -27,6 +27,15 @@ function wire() {
 }
 
 describe("冻结报告中的方案限制", () => {
+  it("保留当次资料日期，不用当前节点覆盖历史；不接受无效日历日期", () => {
+    const input = wire();
+    const dated = {...input, context: {...input.context, node_start_date: "2025-08-08", evidence_cutoff_date: "2025-08-15"}};
+    const saved = decodeReviewHistoryRunDetail(dated);
+    expect(saved.context.nodeStartDate).toBe("2025-08-08");
+    expect(saved.context.evidenceCutoffDate).toBe("2025-08-15");
+    expect(decodeReviewHistoryRunDetail(input).context.evidenceCutoffDate).toBeNull();
+    expect(() => decodeReviewHistoryRunDetail({...dated, context: {...dated.context, evidence_cutoff_date: "2025-02-30"}})).toThrow();
+  });
   it("工作稿携带独立记录类型和冻结绑定，不接受空结果、跨患者或正式结论混用", () => {
     const input = wire();
     const working = { ...input, run: { ...input.run, run_kind: "work_draft" }, source_file_names: { doc: "病例.pdf" },

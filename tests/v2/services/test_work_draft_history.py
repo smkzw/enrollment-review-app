@@ -77,6 +77,24 @@ def frozen_history(monkeypatch):
     return run, context, rows, locator, documents
 
 
+def test_report_dates_come_from_frozen_node_not_live_settings(frozen_history):
+    from datetime import date
+    from app.domain.contracts.common import DateValue
+    from app.domain.contracts.enums import AnchorType, DatePrecision, ReviewStage
+    from app.api.v2.review_history import _context_dto
+    _, context, _, _, _ = frozen_history
+    original = context.model_dump_json()
+    key = AnchorType.BASELINE_DATE if context.review_episode.stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE
+    episode = context.review_episode.model_copy(update={"anchor_dates": {
+        key: DateValue(value=date(2025, 8, 8), precision=DatePrecision.DAY)},
+        "evidence_cutoff_date": date(2025, 8, 15)})
+    saved = context.model_copy(update={"review_episode": episode})
+    dto = _context_dto(saved)
+    assert dto.node_start_date == date(2025, 8, 8)
+    assert dto.evidence_cutoff_date == date(2025, 8, 15)
+    assert context.model_dump_json() == original
+
+
 def test_saved_history_reads_all_parents_children_and_procedures_without_signing(frozen_history):
     run, context, rows, _, _ = frozen_history
     before = canonical_hash(context.model_dump(mode="json")), [canonical_hash(row.model_dump(mode="json")) for row in rows]

@@ -17,7 +17,7 @@
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Request
@@ -37,6 +37,7 @@ from app.domain.contracts.enums import (
     ReviewStage,
     RuleKind,
     TruthValue,
+    AnchorType,
 )
 from app.domain.contracts.review_context_v2 import ReviewContextSnapshotV2
 from app.domain.contracts.review import ReviewRun
@@ -125,6 +126,8 @@ class ReviewHistoryContextDTO(BaseModel):
     center_name: str | None
     official_protocol_version: str = Field(min_length=1)
     workflow_stage_label: str = Field(min_length=1)
+    node_start_date: date | None = None
+    evidence_cutoff_date: date | None = None
 
 
 class ReviewHistoryUnselectedObservationDTO(BaseModel):
@@ -432,6 +435,8 @@ def _run_dto(
 
 def _context_dto(context: ReviewContextSnapshotV2) -> ReviewHistoryContextDTO:
     authority = context.authority
+    anchor = context.review_episode.anchor_dates.get(AnchorType.BASELINE_DATE
+        if context.review_episode.stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE)
     return ReviewHistoryContextDTO(
         context_id=context.context_id,
         review_run_id=context.review_run_id,
@@ -457,6 +462,8 @@ def _context_dto(context: ReviewContextSnapshotV2) -> ReviewHistoryContextDTO:
         judgment_search_count=len(context.judgment_search_results),
         subject_code=context.subject.subject_code,
         project_name=context.project_name,
+        node_start_date=anchor.value if anchor is not None else None,
+        evidence_cutoff_date=context.review_episode.evidence_cutoff_date,
         center_code=context.subject.center_code,
         center_name=context.subject.center_name,
         official_protocol_version=context.protocol_document.official_version,

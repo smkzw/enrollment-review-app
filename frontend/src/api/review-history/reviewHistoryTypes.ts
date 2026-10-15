@@ -124,6 +124,8 @@ export interface ReviewHistoryRunSummaryView {
 
 /** 冻结输入快照的身份、来源指纹与内容规模；不含重新解释或推导结论。 */
 export interface ReviewHistoryContextView {
+  nodeStartDate?: string | null;
+  evidenceCutoffDate?: string | null;
   contextId: string;
   reviewRunId: string;
   createdAt: string;

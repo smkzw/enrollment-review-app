@@ -40,6 +40,9 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
     `研究项目：${context.projectName}`, `受试者：${context.subjectCode}`,
     `中心：${[context.centerCode, context.centerName].filter(Boolean).join(" · ") || "未登记"}`,
     `审核节点：${context.workflowStageLabel}`, `方案版本：${context.officialProtocolVersion}`,
+    ...(context.nodeStartDate ? [`节点开始日：${context.nodeStartDate}`] : []),
+    ...(context.evidenceCutoffDate || context.nodeStartDate
+      ? [`本次资料截至：${context.evidenceCutoffDate ?? context.nodeStartDate}`] : []),
     `审核完成时间：${time(run.completedAt)}`, `导出时间：${time(exportedAt.toISOString())}`,
     reviewEvidenceScopeNote,
     report.workDraft ? "本工作稿保留当时的结果，尚未签发，不代替研究者最终入组决定。"

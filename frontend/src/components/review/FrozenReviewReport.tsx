@@ -114,6 +114,10 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
         <p className="reports-print__reason">{reviewEvidenceScopeNote}</p>
         <table className="reports-print__table reports-print__subject-table"><tbody>
           <tr><th scope="row">中心</th><td>{center}</td><th scope="row">审核节点</th><td>{context.workflowStageLabel}</td></tr>
+          {(context.nodeStartDate || context.evidenceCutoffDate) && <tr>
+            <th scope="row">节点开始日</th><td>{context.nodeStartDate ?? "未填写"}</td>
+            <th scope="row">本次资料截至</th><td>{context.evidenceCutoffDate ?? context.nodeStartDate ?? "未填写"}</td>
+          </tr>}
           <tr><th scope="row">审核时间</th><td>{reviewTime(run.completedAt ?? run.startedAt)}</td>
             <th scope="row">审核情况</th><td>{complete ? draft ? "工作稿已保存，未签发" : "已完成，逐项结果见下表" : "尚未完成，不作为正式报告"}</td></tr>
         </tbody></table>

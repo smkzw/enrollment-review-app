@@ -256,6 +256,7 @@ const CONTEXT_KEYS = [
   "judgment_search_count",
   "subject_code", "project_name", "center_code", "center_name",
   "official_protocol_version", "workflow_stage_label",
+  "node_start_date", "evidence_cutoff_date",
 ] as const;
 
 const ASSESSMENT_KEYS = [
@@ -409,6 +410,8 @@ function decodeContext(value: unknown, path: string): ReviewHistoryContextView {
   const row = objectValue(value, path);
   exactKeys(row, CONTEXT_KEYS, path);
   return {
+    nodeStartDate: calendarDate(row.node_start_date, `${path}.node_start_date`),
+    evidenceCutoffDate: calendarDate(row.evidence_cutoff_date, `${path}.evidence_cutoff_date`),
     subjectCode: requiredString(field(row, "subject_code", path), `${path}.subject_code`),
     projectName: requiredString(field(row, "project_name", path), `${path}.project_name`),
     centerCode: nullableString(field(row, "center_code", path), `${path}.center_code`),
@@ -484,6 +487,15 @@ function decodeContext(value: unknown, path: string): ReviewHistoryContextView {
       `${path}.judgment_search_count`,
     ),
   };
+}
+
+function calendarDate(value: unknown, path: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)
+    || Number.isNaN(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) {
+    throw new ReviewHistoryDecodeError(`${path} 日期不完整或不合法`);
+  }
+  return value;
 }
 
 function decodeUnselected(value: unknown, path: string) {
