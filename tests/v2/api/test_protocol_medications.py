@@ -1,7 +1,9 @@
 """Product endpoints with fictional sources and an injected completion, never real API fees."""
 import json
+from copy import deepcopy
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.domain.contracts.page_review import PageReviewLane
@@ -214,3 +216,92 @@ def test_selected_scope_source_damage_blocks_publication_instead_of_hiding_missi
         finally:
             structure.write_bytes(original)
         assert client.get(path).json()["revision_id"] == saved.json()["revision_id"]
+
+
+def test_manual_class_members_save_review_hash_and_publication_retain_frozen_meaning(build_app, data_paths, monkeypatch):
+    from app.domain.variables import dictionary
+    from app.storage.repositories import get_rule_set
+    calls = install_completion(monkeypatch)
+    app = build_app(run_runner=False)
+    with TestClient(app) as client:
+        preserved_scope(app, data_paths, medication_text="筛选前4周内禁止使用药物甲。")
+        path, scope = save_scope(client)
+        result = client.post(path + "/medications/suggest", json={"expected_revision_id": scope["draft_revision_id"]}).json()
+        supplement = result["supplement"]
+        classes = supplement["drug_classes"]
+        class_id = next(iter(classes))
+        one = {key: value for key, value in supplement["medications"][0].items() if key != "item_id"}
+        one["window_interpretation"] = "prohibited_interval"
+        sibling = deepcopy(one)
+        one["drug_class_id"] = class_id
+        proposal = {"medications": [one, sibling], "source_dispositions": supplement["source_dispositions"]}
+        initial = client.put(path + "/medications", json={"expected_revision_id": scope["draft_revision_id"],
+            "proposal": proposal, "proposal_ref": result["proposal_ref"]})
+        assert initial.status_code == 200, initial.text
+        revision = initial.json()
+        reviews = client.get(path + "/reviews").json()
+        entries = [{"official_code": row["official_code"], "rule_content_hash": row["rule_content_hash"],
+            "note": "excluded" if row["kind"] == "procedure" else None,
+            "result_variables": ["eos"] if row["kind"] == "procedure" else []} for row in reviews["entries"]]
+        assert client.post(path + "/reviews", json={"expected_revision_id": revision["revision_id"],
+            "reviewer_kind": "builder_verification", "entries": entries}).status_code == 200
+        monkeypatch.setattr(dictionary, "load_drug_classes", lambda: {"new_global": ["不应替换原类别"]})
+        unchanged = client.put(path + "/medications", json={"expected_revision_id": revision["revision_id"], "proposal": proposal})
+        assert unchanged.status_code == 200, unchanged.text
+        current = unchanged.json()
+        assert current["content"]["scope_supplement"]["drug_classes"] == classes
+        assert current["content"]["scope_supplement"]["request_refs"] == supplement["request_refs"]
+        changed = deepcopy(classes)
+        changed[class_id].append("合成品种乙")
+        saved = client.put(path + "/medications", json={"expected_revision_id": current["revision_id"],
+            "proposal": proposal, "drug_classes": changed})
+        assert saved.status_code == 200, saved.text
+        after = saved.json()
+        assert after["content"]["scope_supplement"]["drug_classes"] == changed
+        assert after["content"]["scope_supplement"]["input_sha256"] != supplement["input_sha256"]
+        assert after["content"]["scope_supplement"]["request_refs"] == []
+        assert initial.json()["content"]["scope_supplement"]["drug_classes"] == classes
+        reviewed = client.get(path + "/reviews").json()
+        medication_rows = [row for row in reviewed["entries"] if row["kind"] == "medication"]
+        assert medication_rows[0]["review"] is None
+        assert medication_rows[1]["review"] is not None
+        assert all(row["review"] is not None for row in reviewed["entries"] if row["kind"] in {"rule", "procedure"})
+        rejected = client.post(path.removesuffix("/draft") + "/publish", json={"idempotency_key": "changed-class-unreviewed"})
+        assert rejected.status_code == 409
+        pending = [{"official_code": row["official_code"], "rule_content_hash": row["rule_content_hash"]}
+            for row in reviewed["entries"] if row["review"] is None]
+        assert client.post(path + "/reviews", json={"expected_revision_id": after["revision_id"],
+            "reviewer_kind": "builder_verification", "entries": pending}).status_code == 200
+        published = client.post(path.removesuffix("/draft") + "/publish", json={"idempotency_key": "class-reviewed"})
+        assert published.status_code == 200, published.text
+        assert published.json()["verification_only"] is True
+        with app.state.session_factory() as session:
+            rules = get_rule_set(session, published.json()["rule_set_id"], published.json()["rule_set_revision"])
+            assert rules.scope_supplement.drug_classes == changed
+        assert len(calls) == 1
+
+
+@pytest.mark.parametrize("fault", ["key", "empty", "blank", "duplicate", "false_receipt"])
+def test_bad_class_member_changes_never_write_or_borrow_old_reading(build_app, data_paths, monkeypatch, fault):
+    calls = install_completion(monkeypatch)
+    app = build_app(run_runner=False)
+    with TestClient(app) as client:
+        preserved_scope(app, data_paths, medication_text="筛选前4周内禁止使用药物甲。")
+        path, scope = save_scope(client)
+        result = client.post(path + "/medications/suggest", json={"expected_revision_id": scope["draft_revision_id"]}).json()
+        supplement = result["supplement"]
+        proposal = {"medications": [{key: value for key, value in row.items() if key != "item_id"}
+            for row in supplement["medications"]], "source_dispositions": supplement["source_dispositions"]}
+        classes = deepcopy(supplement["drug_classes"])
+        class_id = next(iter(classes))
+        if fault == "key": classes = {"wrong": ["药物甲"]}
+        elif fault == "empty": classes[class_id] = []
+        elif fault == "blank": classes[class_id] = [" "]
+        elif fault == "duplicate": classes[class_id] = ["药物甲", "药物甲"]
+        else: classes[class_id].append("合成品种乙")
+        response = client.put(path + "/medications", json={"expected_revision_id": scope["draft_revision_id"],
+            "proposal": proposal, "drug_classes": classes,
+            **({"proposal_ref": result["proposal_ref"]} if fault == "false_receipt" else {})})
+        assert response.status_code == 409, response.text
+        assert client.get(path).json()["revision_id"] == scope["draft_revision_id"]
+        assert len(calls) == 1

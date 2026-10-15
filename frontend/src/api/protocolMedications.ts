@@ -70,6 +70,8 @@ export async function medicationRequest(jobId: string, revisionId: string, propo
     method: proposal ? "PUT" : "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ expected_revision_id: revisionId, ...(proposal ? {
       proposal: { medications: proposal.medications.map(({ item_id: _id, ...item }) => item), source_dispositions: proposal.source_dispositions },
+      ...(proposal.drug_classes == null ? {} : { drug_classes: Object.fromEntries(Object.entries(proposal.drug_classes)
+        .map(([id, members]) => [id, members.map(name => name.trim()).filter(Boolean)])) }),
       proposal_ref: proposalRef ?? null } : {}) }),
   });
   const data: unknown = await response.json();

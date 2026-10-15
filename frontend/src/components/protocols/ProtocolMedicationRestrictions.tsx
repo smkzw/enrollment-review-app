@@ -101,6 +101,14 @@ export function ProtocolMedicationRestrictions({ jobId, revisionId, content, dru
       {!draft && <p>整理已选原文中的用药限制、适用期间及例外。</p>}
       {draft && <>
         <p>{changed ? reused ? "已核对保存的原答，未重新读取；本次建议尚未保存。" : "本次建议尚未保存。" : "已保存为草稿，审定后才可用于规则包。"}</p>
+        <details><summary>补充药物类别中的药名</summary>
+          {Object.entries(draft.drug_classes ?? drugClasses).map(([id, members], index) => <label key={id} className="protocol-review-scope__class-members">
+            {draft.medications.filter(item => item.drug_class_id === id).map(item => item.drug_text).join("、") || members.filter(Boolean).slice(0, 3).join("、") || "药名待补充"}
+            <textarea aria-label={`类别${index + 1}的药名，每行一个`} disabled={busy} value={members.join("\n")}
+              onChange={event => { setDraft({ ...draft, drug_classes: { ...(draft.drug_classes ?? drugClasses),
+                [id]: event.target.value.split("\n") } }); setChanged(true); }} />
+          </label>)}
+        </details>
         {draft.medications.map((item, index) => <details className="protocol-review-scope__group" key={index}>
           <summary>{item.drug_text || "新增用药限制"} · <CalendarDays size={14} aria-hidden="true" /> {item.window ? Object.hasOwn(anchors, item.window.anchor_type) ? formatTimeConstraint(item.window) : "时间起点尚未核清" : item.period === "study_period" ? "整个研究期间" : item.period === "treatment_period" ? "治疗期间" : "时间尚待核清"}
             {item.exception_excerpt && " · 含例外"}</summary>

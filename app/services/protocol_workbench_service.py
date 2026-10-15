@@ -1565,7 +1565,7 @@ class ProtocolWorkbenchService:
                     "medication_proposal_ref": stored.storage_ref})
         return {**result, "proposal_ref": stored.storage_ref, "reused": bool(previous_ref)}
 
-    def save_medication_restrictions(self, job_id: str, *, expected_revision_id: str, proposal, proposal_ref=None):
+    def save_medication_restrictions(self, job_id: str, *, expected_revision_id: str, proposal, proposal_ref=None, drug_classes=None):
         from app.protocols.medication_restrictions import build_scope_supplement
         view, revision = self.medication_scope_context(job_id, expected_revision_id)
         receipts = []
@@ -1583,8 +1583,20 @@ class ProtocolWorkbenchService:
                 raise ProtocolWorkbenchError("MEDICATION_PROPOSAL_MISMATCH", title="读取依据不完整",
                     detail="补充建议的请求与原答未能对应。", recovery="请核对已保存的读取记录。")
         try:
+            from app.domain.variables.dictionary import load_drug_classes
+            previous = revision.content.scope_supplement
+            frozen_classes = previous.drug_classes if previous is not None else load_drug_classes()
+            classes = frozen_classes if drug_classes is None else drug_classes
+            if set(classes) != set(frozen_classes):
+                raise ValueError("本次只调整已有类别中的药名，不能改换类别身份。")
+            for members in classes.values():
+                if not members or any(not name.strip() or name != name.strip() for name in members):
+                    raise ValueError("每个药物类别至少保留一个非空药名，名称两侧不能带空格。")
+                if len(members) != len(set(members)):
+                    raise ValueError("同一药物类别中的药名不能重复。")
             supplement = build_scope_supplement(proposal=proposal, view=view, selection=revision.review_scope_selection,
-                phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules}, receipts=receipts)
+                phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules},
+                receipts=receipts, drug_classes=classes)
             if proposal_ref:
                 if original["supplement"]["input_sha256"] != supplement.input_sha256:
                     raise ValueError("所选原文或类别表已变化，不能把旧请求当作本次读取。")

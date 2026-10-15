@@ -81,6 +81,7 @@ class MedicationRestrictionRequest(ContractModel):
     expected_revision_id: str = Field(min_length=1)
     proposal: MedicationRestrictionProposal
     proposal_ref: str | None = Field(default=None, pattern=r"^artifacts/evaluation_manifest/[0-9a-f]{64}$")
+    drug_classes: dict[str, list[str]] | None = None
 
 router = APIRouter(prefix="/api/v2/protocol/deconstructions", tags=["v2-protocol"])
 projects_router = APIRouter(prefix="/api/v2/protocol", tags=["v2-protocol"])
@@ -122,7 +123,8 @@ async def suggest_medications(job_id: str, body: VariableSuggestionRequest, requ
 @router.put("/{job_id}/draft/medications", response_model=DraftRevisionResponse)
 def save_medications(job_id: str, body: MedicationRestrictionRequest, request: Request):
     return _draft_dto(_service(request).save_medication_restrictions(job_id,
-        expected_revision_id=body.expected_revision_id, proposal=body.proposal, proposal_ref=body.proposal_ref))
+        expected_revision_id=body.expected_revision_id, proposal=body.proposal, proposal_ref=body.proposal_ref,
+        drug_classes=body.drug_classes))
 
 
 @router.post("/{job_id}/draft/variables/suggest")

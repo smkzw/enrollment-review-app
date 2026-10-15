@@ -171,3 +171,25 @@ it("取消补充引用不改原文，不允许移除最后一处依据，查无�
   await user.clear(screen.getByLabelText("查找方案原文"));
   expect(within(picker).getAllByRole("checkbox")).toHaveLength(2);
 });
+
+it("补充类别药名沿原保存入口提交，空行不冒充药名，不触发读取或批准", async () => {
+  const user = userEvent.setup();
+  const content = { ...supplement(), drug_classes: { internal_class_hidden: ["通用名甲"] } };
+  const request = vi.fn(async (_url: string, options: RequestInit) => {
+    const body = JSON.parse(String(options.body));
+    expect(options.method).toBe("PUT");
+    expect(body.drug_classes).toEqual({ internal_class_hidden: ["通用名甲", "制剂乙"] });
+    expect(body.proposal.medications).toEqual(content.medications.map(({ item_id: _id, ...item }) => item));
+    return new Response(JSON.stringify({ revision_id: "next" }));
+  });
+  vi.stubGlobal("fetch", request);
+  render(<ProtocolMedicationRestrictions jobId="job" revisionId="revision" content={{ scope_supplement: content }} drugClasses={{ other: ["不可替换当前类别"] }} onSaved={vi.fn()} />);
+  await user.click(screen.getByText(/用药与伴随治疗限制/));
+  await user.click(screen.getByText("补充药物类别中的药名"));
+  await user.type(screen.getByLabelText("类别1的药名，每行一个"), "\n 制剂乙 \n");
+  expect(request).not.toHaveBeenCalled();
+  expect(screen.queryByText("internal_class_hidden")).not.toBeInTheDocument();
+  expect(screen.queryByDisplayValue("不可替换当前类别")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "保存补充要求" }));
+  expect(request).toHaveBeenCalledOnce();
+});
