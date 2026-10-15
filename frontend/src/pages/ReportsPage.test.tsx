@@ -253,6 +253,8 @@ describe("报告", () => {
         const details = [...document.querySelectorAll("details")].find(node => node.querySelector("summary")?.textContent === "分项核对（1）");
         expect(details?.hasAttribute("open")).toBe(false);
         expect(details?.textContent).toContain("基线期还未到");
+        expect(document.querySelector(".source-index")?.textContent).toContain("检验报告.pdf · 第 3 页");
+        expect(content).toContain("details:not([open]):not(.report-sources)");
         expect(content).toContain('addEventListener("beforeprint"');
         expect(content).toContain('addEventListener("afterprint"');
       } else {
