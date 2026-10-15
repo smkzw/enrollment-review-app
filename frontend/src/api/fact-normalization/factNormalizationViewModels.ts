@@ -90,6 +90,7 @@ export interface NormalizationUnresolvedPageView {
   isCurrent: boolean;
   textAccountingApplied: boolean;
   canRevalidateSaved?: boolean;
+  revalidationSourceRunId?: string;
   evidenceSnapshotId: string;
   processingRevisionId: string;
   items: { itemId: string; kind: "unquoted_text" | "reading_uncertainty"; message: string; reason: string; sourceExcerpt?: string; sources: NormalizationSourceView[] }[];
@@ -188,6 +189,7 @@ export function decodeNormalizationUnresolved(payload: unknown): NormalizationUn
     hasMore: requiredBoolean(row.has_more, "has_more"), isCurrent: requiredBoolean(row.is_current, "is_current"),
     textAccountingApplied: requiredBoolean(row.text_accounting_applied, "text_accounting_applied"),
     canRevalidateSaved: row.can_revalidate_saved === undefined ? false : requiredBoolean(row.can_revalidate_saved, "can_revalidate_saved"),
+    revalidationSourceRunId: row.revalidation_source_run_id == null ? undefined : requiredString(row.revalidation_source_run_id, "revalidation_source_run_id"),
     evidenceSnapshotId: requiredString(row.evidence_snapshot_id, "evidence_snapshot_id"),
     processingRevisionId: requiredString(row.processing_revision_id, "processing_revision_id"),
     items: row.items.map((value: unknown) => {

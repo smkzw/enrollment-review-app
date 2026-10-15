@@ -417,8 +417,10 @@ def _seed_chain(
     fact_gate_outcome: GateOutcome = GateOutcome.ACCEPTED,
     supported_requirement_ids=None,
     source_observation_refs=None,
+    source_qualification_mode: str = "strict",
 ) -> dict[str, str]:
-    chain = seed_valid_fact_chain(session, prefix, create_run=True)
+    chain = seed_valid_fact_chain(session, prefix, create_run=True,
+        source_qualification_mode=source_qualification_mode)
     run_id = chain["run_id"]
     call_id = chain["call_id"]
     candidate_id = f"{prefix}-cand"
@@ -632,6 +634,64 @@ def test_same_fact_semantics_with_different_profile_lanes_are_rejected(session):
             ClinicalFactV2Record.run_id == chain["run_id"]
         )
     ).scalars().all() == []
+
+
+def test_source_growth_keeps_qualified_prior_scope_in_expectation_and_profile(session):
+    from app.domain.contracts.enums import ExpectationStatus, ReviewStage
+    from app.domain.contracts.evidence_expectations_v2 import EvidenceExpectationV2
+    from app.storage.evidence_expectation_repository import EvidenceExpectationV2Repository
+    from app.services.patient_profile_service import PatientProfileService
+    from tests.v2.projections.test_evidence_expectations import _template
+
+    chain = _seed_chain(session, "mixed-source-history", supported_requirement_ids=["slice54-mixed"],
+        source_qualification_mode="scoped_text_v1")
+    from app.domain.variables.dictionary import load_dictionary
+    from app.storage.repositories import get_rule_set
+    rules = get_rule_set(session, chain["rule_set_id"], 1)
+    _bind_payload(session.get(RuleSetRecord, (chain["rule_set_id"], 1)),
+        rules.model_copy(update={"variable_definitions": [load_dictionary()["age"]]}))
+    session.flush()
+    first = FactPublicationService().publish(session, chain["run_id"])
+    old_fact = ClinicalFactV2Repository(session).get(first.fact_ids[0])
+    _update_episode(session, session.get(ReviewEpisodeRecord, chain["review_episode_id"]), revision=2)
+    authority = _authority(chain, episode_revision=2)
+    original_candidate = FactNormalizationCandidateRepository(session).get(chain["fact_candidate_id"])
+
+    def new_batch(label):
+        run_id, call_id = label + "-run", label + "-call"
+        scope = _sha(label)
+        FactNormalizationRunRepository(session).create_or_reuse(FactNormalizationRun(
+            run_id=run_id, authority=authority,
+            idempotency_key=fact_run_idempotency_key(authority=authority,
+                prompt_version_id=chain["prompt_version_id"], model_config_id=chain["model_config_id"], input_scope_sha256=scope),
+            prompt_version_id=chain["prompt_version_id"], model_config_id=chain["model_config_id"],
+            input_scope_sha256=scope, status=FactNormalizationRunStatus.SUCCEEDED, created_at=NOW, created_by="tester"))
+        FactNormalizationCallRepository(session).create(FactNormalizationCall(call_id=call_id,
+            run_id=run_id, logical_document_id=chain["logical_document_id"], page_numbers=[1],
+            status=FactCallStatus.SUCCEEDED, input_sha256=scope, created_at=NOW))
+        candidate = original_candidate.model_copy(update={"candidate_id": label + "-candidate",
+            "run_id": run_id, "call_id": call_id})
+        FactNormalizationCandidateRepository(session).create(call_id, candidate)
+        FactGateResultRepository(session).create(FactGateResult(gate_result_id=label + "-gate", run_id=run_id,
+            call_id=call_id, candidate_id=candidate.candidate_id, gate=FactGate.TRANSACTIONAL_PUBLISH,
+            outcome=GateOutcome.ACCEPTED, reasons=[], created_at=NOW))
+        return FactPublicationService().publish(session, run_id)
+
+    current = new_batch("current-source")
+    current_fact = ClinicalFactV2Repository(session).get(current.fact_ids[0])
+    template = _template(session, chain, requirement_id="mixed", fact_type="vital_sign", due_stage=ReviewStage.SCREENING)
+    old_expectation = EvidenceExpectationV2Repository(session).project(EvidenceExpectationV2(
+        expectation_id="mixed-current-expectation", authority=authority, template_id=template.template_id,
+        status=ExpectationStatus.OBSERVED, revision=1, source_coverage="complete", input_gap_signals=[],
+        locator_ids=sorted(set(old_fact.locator_ids + current_fact.locator_ids)),
+        coverage_fact_ids=sorted([old_fact.fact_id, current_fact.fact_id]), created_at=NOW))
+    successor = new_batch("new-source")
+    expected = EvidenceExpectationV2Repository(session).latest_by_template(chain["review_episode_id"], template.template_id)
+    assert expected.source_revision_of == old_expectation.expectation_id
+    assert expected.coverage_fact_ids == sorted([old_fact.fact_id, *successor.fact_ids])
+    assert EvidenceExpectationV2Repository(session).get(old_expectation.expectation_id) == old_expectation
+    assert ClinicalFactV2Repository(session).get(old_fact.fact_id) == old_fact
+    PatientProfileService().validate_published_references(session, authority, include_rule_revision_sources=True)
 
 
 @pytest.mark.parametrize("same_lane", [

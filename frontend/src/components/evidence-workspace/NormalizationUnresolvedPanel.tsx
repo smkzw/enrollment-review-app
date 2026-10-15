@@ -83,7 +83,7 @@ function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onCon
         {data.isCurrent && data.canRevalidateSaved && data.runId && onRevalidate &&
           <button className="button" type="button" disabled={continuing} onClick={async () => {
             setContinuing(true);
-            try { await onRevalidate(data.runId!); } finally { setContinuing(false); }
+            try { await onRevalidate(data.revalidationSourceRunId ?? data.runId!); } finally { setContinuing(false); }
           }}><RefreshCw size={16} />{continuing ? "正在提交" : "重新核验已读记录（不重读原件）"}</button>}
         <ul>{questions.map(renderItem)}</ul>
         {otherText.length > 0 && <details className="normalization-unresolved__other">

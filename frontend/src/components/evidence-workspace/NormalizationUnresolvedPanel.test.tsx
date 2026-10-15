@@ -34,7 +34,7 @@ async function openOtherText() {
 
 describe("NormalizationUnresolvedPanel", () => {
   it("已读记录可单独重新核验，历史或新核验结果不再提供递归入口", async () => {
-    read.mockResolvedValue({ ...page(1), runId: "saved-run", canRevalidateSaved: true });
+    read.mockResolvedValue({ ...page(1), runId: "failed-new-run", revalidationSourceRunId: "saved-run", canRevalidateSaved: true });
     const onRevalidate = vi.fn().mockResolvedValue("new-job");
     const view = render(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="j" onRevalidate={onRevalidate} />);
     const button = await screen.findByRole("button", {name: "重新核验已读记录（不重读原件）", hidden: true});

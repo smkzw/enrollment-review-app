@@ -35,10 +35,12 @@ function makeRepo(options: {
   start?: FactNormalizationRepository["startFactNormalization"];
   getStatus?: FactNormalizationRepository["getFactNormalizationJobStatus"];
   retry?: FactNormalizationRepository["retryFactNormalizationJob"];
+  unresolved?: FactNormalizationRepository["getNormalizationUnresolved"];
 }): FactNormalizationRepository {
   return {
     kind: "http",
     getCurrentFactNormalizationJob: options.current ?? vi.fn(async () => null),
+    getNormalizationUnresolved: options.unresolved,
     startFactNormalization:
       options.start ??
       (vi.fn(async () => ({
@@ -104,6 +106,52 @@ function Harness({
 }
 
 describe("个例档案整理任务恢复与文案", () => {
+  it("刷新后重试已读核验仍回到原读取，不回退成新模型整理", async () => {
+    const failed = status({state: "failed_final", stateLabel: "未完成", recoveryAction: "原记录保留"});
+    const start = vi.fn(async () => ({jobId: "verified-new", runId: "verified-run", created: true,
+      state: "queued" as const, stateLabel: "等待处理", recoveryAction: "无需操作"}));
+    const retry = vi.fn();
+    const unresolved = vi.fn(async () => ({jobId: failed.jobId, contentSha256: "a".repeat(64),
+      runId: "failed-validation", revalidationSourceRunId: "original-reading", canRevalidateSaved: true,
+      total: 0, offset: 0, hasMore: false, isCurrent: true, textAccountingApplied: true,
+      evidenceSnapshotId: "snapshot", processingRevisionId: "revision", items: []}));
+    setFactNormalizationRepository(makeRepo({current: vi.fn(async () => failed), start, retry, unresolved,
+      getStatus: vi.fn(async () => status({jobId: "verified-new", state: "completed", stateLabel: "已完成", recoveryAction: ""}))}));
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(await screen.findByRole("button", {name: "重新整理个例档案"}));
+    await waitFor(() => expect(start).toHaveBeenCalledOnce());
+    expect(start).toHaveBeenCalledWith("subject-1", "episode-1", expect.objectContaining({revalidateFromRunId: "original-reading"}));
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("重试入口失败不会自动新建完整模型读取", async () => {
+    const failed = status({state: "failed_final", stateLabel: "未完成", recoveryAction: "原记录保留"});
+    const start = vi.fn();
+    setFactNormalizationRepository(makeRepo({current: vi.fn(async () => failed), start,
+      retry: vi.fn(async () => {throw new Error("network");})}));
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(await screen.findByRole("button", {name: "重新整理个例档案"}));
+    await screen.findByText("个例档案整理未完成");
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("核验问题尚未修复时保留失败，不反复提交或改作完整读取", async () => {
+    const failed = status({state: "failed_final", stateLabel: "未完成", recoveryAction: "原记录保留"});
+    const start = vi.fn(), retry = vi.fn();
+    setFactNormalizationRepository(makeRepo({current: vi.fn(async () => failed), start, retry,
+      unresolved: vi.fn(async () => ({jobId: failed.jobId, contentSha256: "a".repeat(64),
+        runId: "failed-validation", revalidationSourceRunId: "original-reading", canRevalidateSaved: false,
+        total: 0, offset: 0, hasMore: false, isCurrent: true, textAccountingApplied: true,
+        evidenceSnapshotId: "snapshot", processingRevisionId: "revision", items: []}))}));
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(await screen.findByRole("button", {name: "重新整理个例档案"}));
+    await screen.findByText("本次核验仍有未解决问题。");
+    expect(start).not.toHaveBeenCalled();
+    expect(retry).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     window.localStorage.clear();
   });

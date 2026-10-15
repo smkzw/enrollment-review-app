@@ -193,6 +193,7 @@ class EvidenceExpectationV2Repository:
             validate_source_fact_references(
                 self.session, expectation.authority,
                 prior.coverage_fact_ids, expectation.coverage_fact_ids,
+                allow_retained_unchanged=True,
             )
         template = self._require_bound_template(expectation)
         self._require_coverage_facts(expectation, template, facts)

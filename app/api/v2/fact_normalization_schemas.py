@@ -66,6 +66,7 @@ class NormalizationUnresolvedPageDTO(_StrictModel):
     is_current: bool
     text_accounting_applied: bool
     can_revalidate_saved: bool = False
+    revalidation_source_run_id: str | None = None
     evidence_snapshot_id: str
     processing_revision_id: str
     items: list[NormalizationUnresolvedDTO]
