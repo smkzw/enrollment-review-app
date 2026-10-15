@@ -931,6 +931,9 @@ def test_nearest_date_and_same_day_conflict():
     (date(2025, 8, 8), 51, date(2025, 8, 8), 52, date(2025, 8, 8), D.CONFLICT),
     (date(2024, 12, 31), 51, date(2025, 1, 1), 52, date(2025, 1, 1), D.INCLUSION_MET),
     (date(2023, 2, 28), 51, date(2024, 2, 28), 51, date(2024, 2, 28), D.INCLUSION_MET),
+    (date(2024, 2, 28), 40, date(2026, 8, 8), 41, date(2026, 8, 8), D.CONFLICT),
+    (date(2026, 2, 28), 30, date(2026, 3, 1), 32, date(2026, 3, 1), D.CONFLICT),
+    (date(2024, 2, 28), 50, date(2025, 2, 28), 52, date(2025, 2, 28), D.INCLUSION_MET),
     (date(2025, 8, 9), 51, date(2025, 8, 15), 52, date(2025, 8, 8), D.INDETERMINATE),
 ])
 def test_age_uses_dated_documents_at_node_and_checks_chronology_without_redating_facts(
@@ -983,6 +986,42 @@ def test_undated_other_age_remains_visible_and_low_confidence():
     assert result.decision == D.INCLUSION_MET and result.confidence == "low"
     assert "单据日期尚未核实" in result.confidence_reason
     assert {ref.fact_id for ref in result.evidence_refs} == {first.fact_id, other.fact_id}
+
+
+@pytest.mark.parametrize("label,source_day,decision", [
+    ("报告日期", date(2025, 8, 10), D.INCLUSION_MET),
+    ("报告日期", date(2025, 8, 20), D.INCLUSION_MET),
+    ("采样时间", date(2025, 8, 10), D.CONFLICT),
+    ("就诊时间", date(2025, 8, 10), D.INCLUSION_MET),
+])
+def test_age_saved_sampling_date_is_not_conflicted_by_a_different_role_header(label, source_day, decision):
+    from app.domain.contracts.work_draft import WorkDraftSourcePage
+    rules, projected, _ = clause()
+    fact = material(value=51, day=date(2025, 8, 8))
+    frame = frozen([fact], {AnchorType.SCREENING_DATE:
+        DateValue(value=date(2025, 8, 8), precision=DatePrecision.DAY)})
+    text = f"{label}:{source_day.isoformat()}\n{fact.assertion_basis.assertion_text}"
+    frame.review_episode.evidence_cutoff_date = date(2025, 8, 15)
+    frame.source_pages = [WorkDraftSourcePage(source_document_version_id="doc", page_artifact_id="page",
+        page_number=1, effective_text=text, effective_text_sha256=sha256(text.encode()).hexdigest(), extraction_complete=True)]
+    refs = {fact.fact_id: [WorkDraftEvidenceRef(fact_id=fact.fact_id, locator_id=fact.locator_ids[0],
+        source_document_version_id="doc", page_artifact_id="page", page_number=1, excerpt=fact.assertion_basis.assertion_text)]}
+    assert calculate_work_component(projected, frame, rules, evidence_refs=refs).decision == decision
+
+
+def test_older_age_outside_rule_window_still_checks_chronology_without_becoming_an_operand():
+    time = TimeConstraint(anchor_type=AnchorType.SCREENING_DATE, direction=TimeDirection.BEFORE, upper_bound_days=30)
+    rules, projected, component = clause(time=time)
+    older = material(value=40, day=date(2024, 8, 8), snapshot="older")
+    current = material(value=30, day=date(2026, 8, 8), snapshot="current")
+    frame = frozen([older, current], {AnchorType.SCREENING_DATE:
+        DateValue(value=date(2026, 8, 8), precision=DatePrecision.DAY)})
+    result = calculate_work_component(projected, frame, rules, evidence_refs={})
+    assert result.decision == D.CONFLICT and "年龄记录" in result.reason_text
+    correct_older = material(value=28, day=date(2024, 8, 8), snapshot="correct-older")
+    selected = select_by_variable(component, [correct_older, current], frame.review_episode.anchor_dates,
+        authority=frame.authority, definitions=load_dictionary())["age-limit"]
+    assert not selected.conflict and selected.fact_ids == (current.fact_id,)
 
 
 @pytest.mark.parametrize("label,decision", [("采样时间", D.INCLUSION_MET),

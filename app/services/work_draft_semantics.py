@@ -91,7 +91,7 @@ def source_result_envelope(payload, material):
     extra = set(payload) - {"results"}
     if not extra <= {"version", "stage", "anchor_dates", "evidence_cutoff_date"}:
         raise ValueError("原文核对返回了未授权的结果字段")
-    if any(payload[key] != material[key] for key in extra):
+    if any(key not in material or payload[key] != material[key] for key in extra):
         raise ValueError("原文核对回执的版本、节点或日期与本次输入不一致")
     return {"results": payload["results"]}
 

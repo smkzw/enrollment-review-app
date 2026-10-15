@@ -1,5 +1,6 @@
 """Deterministic working results from frozen variable bindings and original facts."""
 from dataclasses import dataclass
+from calendar import isleap
 from datetime import date
 from hashlib import sha256
 import re
@@ -91,10 +92,11 @@ class VariableSelection:
     chronology_conflict: bool = False
 
 
-def source_record_date(fact, evidence_refs, source_pages, *, allow_report_date=False):
+def source_record_date(fact, evidence_refs, source_pages, *, allow_report_date=False, date_role=None):
     """Explicit visit/sample headers may exclude future records, not date an event."""
     pages = {(page.source_document_version_id, page.page_number, page.page_artifact_id): page for page in source_pages}
-    labels = ["采样时间|就诊时间"] + (["报告日期|报告时间"] if allow_report_date else [])
+    labels = [{"sampling": "采样时间", "visit": "就诊时间"}.get(date_role, "采样时间|就诊时间")]
+    labels += ["报告日期|报告时间"] if allow_report_date else []
     for label in labels:
         values = set()
         for ref in (evidence_refs or {}).get(fact.fact_id, ()):
@@ -120,10 +122,12 @@ def age_record_chronology(facts, evidence_refs, source_pages, definition, predic
             continue
         explicit = (fact.date_range.lower_bound if fact.date_range is not None
             and fact.date_range.precision.value == "day" and fact.date_role in {"sampling", "visit"} else None)
-        document_date = source_record_date(fact, evidence_refs, source_pages, allow_report_date=True)
+        document_date = source_record_date(fact, evidence_refs, source_pages,
+            date_role=fact.date_role if explicit is not None else None)
         if explicit is not None and document_date is not None and explicit != document_date:
             return dates, True
-        recorded = explicit or document_date
+        recorded = explicit or document_date or source_record_date(
+            fact, evidence_refs, source_pages, allow_report_date=True)
         if recorded is not None:
             dates[fact.fact_id] = recorded
             value, _ = comparison_reading(fact, definition, predicate)
@@ -136,9 +140,13 @@ def age_record_chronology(facts, evidence_refs, source_pages, definition, predic
             first_day, last_day = (earlier.month, earlier.day), (later.month, later.day)
             minimum = years - (last_day < first_day)
             maximum = years + (last_day > first_day)
-            # Leap-day birthday conventions can differ; do not adjudicate them.
-            if earlier != later and any(month == 2 and day in {28, 29} for month, day in (first_day, last_day)):
-                minimum, maximum = max(0, minimum - 1), maximum + 1
+            # Only a February-28 anniversary across a leap-year boundary can
+            # shift this bound. Never tolerate an extra year over arbitrary dates.
+            if earlier != later and first_day == last_day == (2, 28):
+                if not isleap(earlier.year) and isleap(later.year):
+                    minimum -= 1
+                elif isleap(earlier.year) and not isleap(later.year):
+                    maximum += 1
             if not minimum <= later_age - age <= maximum:
                 return dates, True
     return dates, False
@@ -186,7 +194,9 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
             accepted_variables = {variable_id}
             if definition is not None and definition.reference_ratio_of is not None:
                 accepted_variables.add(definition.reference_ratio_of)
-            eligible = []
+            is_age = (variable_id == "age" and definition is not None and definition.value_type == "number"
+                and definition.domain == "demographic" and definition.canonical_unit == "周岁")
+            eligible, chronology_facts = [], []
             invalid_calculations = []
             for fact in facts:
                 if (fact.authority.project_id, fact.authority.subject_id, fact.authority.review_episode_id) != (
@@ -197,13 +207,6 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                 from app.domain.contracts.enums import FactPolarity
                 if fact.polarity == FactPolarity.UNKNOWN or fact.value is None:
                     continue
-                adapted = adapt_clinical_fact_v2(fact)
-                temporal = _evaluate_time(atom, adapted, base)
-                if temporal.truth == TruthValue.FALSE:
-                    continue
-                # Unknown windows are retained as questions, not made usable by guessing a date.
-                if temporal.truth == TruthValue.UNKNOWN:
-                    continue
                 cutoff = review_source_cutoff(anchor_dates, stage, evidence_cutoff_date)
                 if cutoff is not None and fact.date_range is not None:
                     lower = fact.date_range.lower_bound
@@ -211,6 +214,18 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                         continue
                 recorded = source_record_date(fact, evidence_refs, source_pages)
                 if recorded is not None and cutoff is not None and recorded > cutoff:
+                    continue
+                if is_age:
+                    explicit_age_date = (fact.date_range is not None and fact.date_range.precision.value == "day"
+                        and fact.date_role in {"sampling", "visit"})
+                    age_recorded = (fact.date_range.lower_bound if explicit_age_date else
+                        source_record_date(fact, evidence_refs, source_pages, allow_report_date=True))
+                    if cutoff is not None and age_recorded is not None and age_recorded > cutoff:
+                        continue
+                    chronology_facts.append(fact)
+                adapted = adapt_clinical_fact_v2(fact)
+                temporal = _evaluate_time(atom, adapted, base)
+                if temporal.truth in {TruthValue.FALSE, TruthValue.UNKNOWN}:
                     continue
                 if definition is not None and definition.reference_ratio_of is not None:
                     try:
@@ -227,10 +242,10 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                     value, unit = comparison_reading(fact, definition, atom.predicate, definitions=definitions)
                     return canonical_hash({"value": value, "unit": unit, "polarity": fact.polarity.value})
                 return canonical_hash({"value": fact.value, "unit": fact.unit, "polarity": fact.polarity.value})
-            is_age = (variable_id == "age" and definition is not None and definition.value_type == "number"
-                and definition.domain == "demographic" and definition.canonical_unit == "周岁")
-            age_dates, chronology_conflict = (age_record_chronology(eligible, evidence_refs, source_pages,
+            age_dates, chronology_conflict = (age_record_chronology(chronology_facts, evidence_refs, source_pages,
                 definition, atom.predicate) if is_age else ({}, False))
+            if chronology_conflict:
+                eligible = chronology_facts
             conflict = chronology_conflict
             for index, fact in enumerate(eligible):
                 for other in eligible[index + 1:]:
@@ -247,7 +262,8 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                     same_report = bool(set(fact.locator_ids) & set(other.locator_ids)) and not distinct_samples
                     if (same_day or same_report) and value_key(fact) != value_key(other):
                         conflict = True
-            selection_dates = (age_dates if is_age else {fact.fact_id: fact.date_range.lower_bound
+            selection_dates = ({fact.fact_id: age_dates[fact.fact_id] for fact in eligible if fact.fact_id in age_dates}
+                if is_age else {fact.fact_id: fact.date_range.lower_bound
                 for fact in eligible if fact.date_range is not None and fact.date_range.lower_bound is not None})
             node_anchor = base.anchor_dates.get(AnchorType.REVIEW_NODE_DATE)
             if is_age and node_anchor is not None and node_anchor.value is not None:

@@ -516,7 +516,8 @@ def test_exact_scope_echo_is_not_a_missing_target_but_other_fields_still_rejecte
     material = {"version": "scope", "stage": "screening", "anchor_dates": {"screening_date": "2026-01-01"}}
     payload = {**material, "results": []}
     assert source_result_envelope(payload, material) == {"results": []}
-    for change in ({"stage": "baseline"}, {"version": "different"}, {"exclusion_triggered": False}):
+    for change in ({"stage": "baseline"}, {"version": "different"}, {"exclusion_triggered": False},
+                   {"evidence_cutoff_date": None}):
         with pytest.raises(ValueError):
             source_result_envelope({**payload, **change}, material)
 
