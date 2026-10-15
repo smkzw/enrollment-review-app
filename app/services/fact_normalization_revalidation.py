@@ -24,7 +24,8 @@ def qualification_identity() -> str:
              "domain/risk_flags.py", "services/fact_publication_service.py", "services/fact_normalization_revalidation.py",
              "agents/evidence_normalizer.py", "agents/evidence_candidate_partition.py",
              "services/fact_normalization_executor.py", "services/fact_normalization_source_adapter.py",
-             "projections/normalizer_text_accounting.py")
+             "projections/normalizer_text_accounting.py", "storage/source_reference_successors.py",
+             "storage/evidence_expectation_repository.py")
     return canonical_hash({path: hashlib.sha256((root / path).read_bytes()).hexdigest() for path in paths})
 
 

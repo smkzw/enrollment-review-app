@@ -140,6 +140,7 @@ export function useFactNormalizationJob(
   const onSucceededRef = useRef(onSucceeded);
   const startInFlight = useRef<Promise<string | null> | null>(null);
   const idempotencyRef = useRef<string | null>(null);
+  const revalidationRef = useRef<string | null>(null);
   const succeededNotified = useRef<string | null>(null);
   const afterPages = useRef<() => void>(() => {});
   const pageReview = usePageReviewJob({ subjectId, reviewEpisodeId,
@@ -207,6 +208,7 @@ export function useFactNormalizationJob(
   useEffect(() => {
     jobIdRef.current = null;
     idempotencyRef.current = null;
+    revalidationRef.current = null;
     startInFlight.current = null;
     succeededNotified.current = null;
     setState({ status: "idle" });
@@ -290,6 +292,7 @@ export function useFactNormalizationJob(
         idempotencyRef.current ??
         newIdempotencyKey(`profile-organize:${reviewEpisodeId}`);
       idempotencyRef.current = key;
+      revalidationRef.current = revalidateFromRunId ?? null;
 
       const pending = (async () => {
         try {
@@ -322,7 +325,7 @@ export function useFactNormalizationJob(
             status: "error",
             message: ui.message,
             recoveryHint: ui.recoveryHint,
-            canRetry: true,
+            canRetry: !revalidateFromRunId,
           });
           return null;
         } finally {
@@ -339,6 +342,10 @@ export function useFactNormalizationJob(
 
   const retry = useCallback(async () => {
     if (subjectId === null || reviewEpisodeId === null) return;
+    if (revalidationRef.current && !(state.status === "active" && state.phase === "failed")) {
+      await start(undefined, false, undefined, revalidationRef.current);
+      return;
+    }
     if (pageReview.state.status !== "idle") {
       await pageReview.retry();
       return;
@@ -352,18 +359,32 @@ export function useFactNormalizationJob(
 
     const jobId = jobIdRef.current;
     try {
+      const read = getFactNormalizationRepository().getNormalizationUnresolved;
+      if (read) {
+        const source = await read(subjectId, reviewEpisodeId, jobId, 0);
+        if (currentScope.current !== scopeKey) return;
+        if (source.revalidationSourceRunId) {
+          if (!source.canRevalidateSaved) {
+            setState({status: "error", message: "本次核验仍有未解决问题。",
+              recoveryHint: "原来的读取结果已保留；修复后可从资料页重新核验，不会重新调用模型。", canRetry: false});
+            return;
+          }
+          await start(undefined, false, undefined, source.revalidationSourceRunId);
+          return;
+        }
+      }
       const action = await getFactNormalizationRepository().retryFactNormalizationJob(jobId);
       if (currentScope.current !== scopeKey) return;
       const job = await getFactNormalizationRepository().getFactNormalizationJobStatus(
         action.jobId,
       );
       if (currentScope.current === scopeKey) applyJob(job);
-    } catch {
+    } catch (error) {
       if (currentScope.current !== scopeKey) return;
-      idempotencyRef.current = newIdempotencyKey(`profile-organize-retry:${reviewEpisodeId}`);
-      await start(idempotencyRef.current);
+      const ui = toUiError(error);
+      setState({status: "error", ...ui, canRetry: false});
     }
-  }, [applyJob, reviewEpisodeId, start, state.status, subjectId, pageReview.state.status, pageReview.retry, scopeKey]);
+  }, [applyJob, reviewEpisodeId, start, state, subjectId, pageReview.state.status, pageReview.retry, scopeKey]);
 
   return { state: restoring ? { status: "idle" } : pageReview.state.status === "idle" ? state : pageReview.state,
     restoring,

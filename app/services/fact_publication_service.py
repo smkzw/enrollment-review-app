@@ -319,12 +319,14 @@ class FactPublicationService:
                 PatientProfileService,
             )
             profile = PatientProfileService()
+            source_options = ({"include_rule_revision_sources": True}
+                              if revision.source_qualification_mode == "scoped_text_v1" else {})
             try:
                 profile._validate_referential_closure(
-                    facts=profile._published_facts(session, authority),
-                    events=profile._published_events(session, authority),
-                    exposures=profile._published_exposures(session, authority),
-                    conflicts=profile._published_conflicts(session, authority),
+                    facts=profile._published_facts(session, authority, **source_options),
+                    events=profile._published_events(session, authority, **source_options),
+                    exposures=profile._published_exposures(session, authority, **source_options),
+                    conflicts=profile._published_conflicts(session, authority, **source_options),
                     expectations=profile._latest_expectations(session, authority),
                 )
             except PatientProfileProjectionError as exc:

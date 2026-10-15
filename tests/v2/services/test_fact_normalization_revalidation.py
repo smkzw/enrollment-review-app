@@ -155,6 +155,12 @@ def test_saved_source_damage_never_reads_again_or_publishes(session_factory, dat
         artifact_store=artifacts, transport_fn=forbid))
     JobRunner(session_factory, {"fact_normalization": executor}).run_job(created.job_id)
     assert service.get_job(created.job_id)["state"] == "failed_final"
+    if fault == "changed_gate":
+        from app.services.evidence_api_read_service import EvidenceApiReadService
+        view = EvidenceApiReadService(session_factory, artifacts).normalization_unresolved(
+            chain["subject_id"], chain["episode_id"], created.job_id)
+        assert view["revalidation_source_run_id"] == original.run_id
+        assert view["can_revalidate_saved"] is True
     with session_factory() as session:
         assert not session.scalars(select(FactNormalizationCallRecord).where(
             FactNormalizationCallRecord.run_id == created.run_id)).all()

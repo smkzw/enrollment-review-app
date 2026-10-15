@@ -35,6 +35,7 @@ def seed_valid_fact_chain(
     *,
     fixture_index: int = 0,
     create_run: bool = True,
+    source_qualification_mode: str = "strict",
 ) -> dict[str, object]:
     """创建经正式仓储验证的快照、OCR、定位、元数据和完整修订。"""
     chain = _seed_phase4_chain(
@@ -42,6 +43,7 @@ def seed_valid_fact_chain(
         prefix,
         fixture_index=fixture_index,
         include_metadata=True,
+        source_qualification_mode=source_qualification_mode,
     )
     workflow_stage_id = session.execute(
         select(WorkflowStageRecord.workflow_stage_id).where(

@@ -284,6 +284,16 @@ class EvidenceApiReadService:
                 })
             from app.services.fact_normalization_revalidation import supports_saved_source
             saved_calls = FactNormalizationCallRepository(session).list_by_run(run.run_id)
+            revalidation_source = (payload.get("source_revalidation") or {}).get("source_run_id")
+            can_revalidate = bool(job.state == "completed" and payload.get("targeted_extraction")
+                and not revalidation_source and not payload.get("page_review_coverage_id")
+                and not payload.get("retained_reads") and saved_calls
+                and all(supports_saved_source(call) for call in saved_calls))
+            if revalidation_source and job.state == "failed_final":
+                from app.services.fact_normalization_revalidation import qualification_identity
+                original = FactNormalizationRunRepository(session).get(revalidation_source)
+                can_revalidate = (original.authority == authority and original.status.value in {"partial", "succeeded"}
+                    and payload["source_revalidation"]["qualification_sha256"] != qualification_identity())
             return {
                 "job_id": job_id, "run_id": run.run_id, "total": len(items), "offset": offset,
                 "content_sha256": content_sha256,
@@ -294,10 +304,8 @@ class EvidenceApiReadService:
                 "is_current": (episode.active_evidence_snapshot_id == authority.evidence_snapshot_v2_id
                                and episode.active_evidence_processing_revision_id == authority.complete_processing_revision_id),
                 "text_accounting_applied": payload.get("text_accounting_policy") is not None,
-                "can_revalidate_saved": bool(job.state == "completed" and payload.get("targeted_extraction")
-                    and not payload.get("source_revalidation") and not payload.get("page_review_coverage_id")
-                    and not payload.get("retained_reads") and bool(saved_calls)
-                    and all(supports_saved_source(call) for call in saved_calls)),
+                "can_revalidate_saved": can_revalidate,
+                "revalidation_source_run_id": revalidation_source,
             }
 
     @app_error_boundary

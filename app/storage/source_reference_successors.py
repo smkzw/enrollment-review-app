@@ -29,11 +29,16 @@ def source_successor_origin_run(session, entity, repository, *, id_field):
     return FactGateResultRepository(session).get(prior.gate_id).run_id
 
 
-def validate_source_fact_references(session, authority, prior_ids, current_ids):
+def validate_source_fact_references(session, authority, prior_ids, current_ids, *, allow_retained_unchanged=False):
     from app.storage.fact_repositories import ClinicalFactV2Repository, FactCrossEntityError
 
-    excluded = FactCorrectionRepository(session).superseded_entity_ids(authority)
+    corrections = FactCorrectionRepository(session)
+    excluded = corrections.superseded_entity_ids(authority)
+    if allow_retained_unchanged:
+        excluded |= {item.target_id for item in corrections.list_by_review_episode(authority.review_episode_id)}
     facts = ClinicalFactV2Repository(session)
+    from app.storage.fact_authority import FactAuthorityValidator
+    validator = FactAuthorityValidator(session)
     unmatched = set(prior_ids)
     for target_id in current_ids:
         target = facts.get(target_id)
@@ -55,7 +60,12 @@ def validate_source_fact_references(session, authority, prior_ids, current_ids):
             ):
                 raise FactCrossEntityError("事实继承路径改变了内容或丢失来源")
             target = parent
-        if target.fact_id in excluded or target.authority != authority:
+        if target.authority != authority:
+            # Expectations may already contain qualified retained facts. Keep
+            # those exact references; this does not authorize cross-scope replacement.
+            if (not allow_retained_unchanged or not validator.retained_fact_source_is_reusable(target, authority)):
+                raise FactCrossEntityError("不能衔接已更正或其他节点的事实")
+        if target.fact_id in excluded:
             raise FactCrossEntityError("不能衔接已更正或其他节点的事实")
         unmatched.remove(target.fact_id)
     if unmatched or current_ids == prior_ids:
