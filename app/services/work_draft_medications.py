@@ -87,9 +87,12 @@ def calculate_medications(frozen, rule_set, *, evidence_refs):
                         and exposure.start_range.upper_bound is not None
                         and exposure.record_time is not None
                         and exposure.start_range.upper_bound <= bounds[0] <= exposure.record_time.date()) else None
+                    if use_date is None and exposure.start_range is not None and exposure.start_range.lower_bound is not None:
+                        use_date = DateValue(value=exposure.start_range.lower_bound, precision=exposure.start_range.precision)
                 else:
-                    bound = exposure.end_range if exposure.duration_status == DurationStatus.ENDED else (
-                        exposure.start_range if exposure.duration_status == DurationStatus.SINGLE else None)
+                    # A known start proves use on that date, not the last dose.
+                    # A date outside the window never establishes a negative below.
+                    bound = exposure.end_range if exposure.duration_status == DurationStatus.ENDED else exposure.start_range
                     use_date = DateValue(value=bound.lower_bound, precision=bound.precision
                     ) if bound is not None and bound.lower_bound is not None else None
                 use_bounds = date_bounds(use_date, allow_partial=True) if use_date else None
@@ -110,7 +113,7 @@ def calculate_medications(frozen, rule_set, *, evidence_refs):
                 if restriction.exception_excerpt:
                     reason = "已有记录落在限制时间内，但方案另有例外，尚需核对该例外是否适用。"
                 else:
-                    decision, reason = D.EXCLUSION_TRIGGERED, "已核实的用药记录落在本条限制时间内。"
+                    decision, reason = D.EXCLUSION_TRIGGERED, "已有来源依据的用药日期落在本条限制时间内；不据此推断完整疗程或停药日期。"
             elif observed:
                 reason = ("已有用药记录的时间未落入限制窗口；完整用药史及未归类用药尚未核清，暂不认定未触发。"
                     if all(row.truth == TruthValue.FALSE for row in observed)

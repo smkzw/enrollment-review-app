@@ -16,10 +16,10 @@ from tests.v2.protocols.test_medication_restrictions import frozen_medications, 
 from tests.v2.services.test_work_draft_calculation import material, clause
 
 
-def medication_context():
+def medication_context(*, use_day=date(2026, 3, 4)):
     authority = material().authority
-    day = PartialDateRange(precision="day", lower_bound=date(2026, 3, 4), upper_bound=date(2026, 3, 4))
-    text = "2026年3月4日用药物甲一次。"
+    day = PartialDateRange(precision="day", lower_bound=use_day, upper_bound=use_day)
+    text = f"{use_day:%Y年%m月%d日}用药物甲一次。"
     fields = dict(authority=authority, fact_type="medication_history", profile_lane=ProfileLane.MEDICATION,
         asserted_object="药物甲", polarity=FactPolarity.AFFIRMED, value=True, unit=None, date_range=day,
         assertion_basis=AssertionBasis(asserted_object="药物甲", assertion_text=text,
@@ -65,7 +65,7 @@ def test_published_single_use_reaches_saved_contract_projection_and_preserves_in
 
 
 @pytest.mark.parametrize("fault", ["missing_fact", "other_locator", "future_record", "wrong_source_scope",
-    "no_exposure", "different_name", "prescription_fact_only", "unknown_duration", "missing_anchor"])
+    "no_exposure", "different_name", "prescription_fact_only", "missing_anchor"])
 def test_unqualified_or_missing_record_never_becomes_negative_or_fabricated_exposure(fault):
     frame, rules, refs = medication_context()
     if fault == "missing_fact": refs = {}
@@ -74,7 +74,6 @@ def test_unqualified_or_missing_record_never_becomes_negative_or_fabricated_expo
     elif fault == "wrong_source_scope": frame.source_pages = []
     elif fault == "no_exposure" or fault == "prescription_fact_only": frame.medication_exposures = []
     elif fault == "different_name": frame.medication_exposures[0] = frame.medication_exposures[0].model_copy(update={"medication_name": "药物乙"})
-    elif fault == "unknown_duration": frame.medication_exposures[0] = frame.medication_exposures[0].model_copy(update={"duration_status": DurationStatus.UNKNOWN})
     else: frame.review_episode.anchor_dates = {}
     row, = calculate_medications(frame, rules, evidence_refs=refs)
     assert row.decision == D.INDETERMINATE and row.confidence is None
@@ -100,10 +99,45 @@ def test_exact_frozen_class_exception_and_conflict_remain_independent():
 
 
 def test_ongoing_does_not_invent_continuation_to_a_future_anchor():
-    frame, rules, refs = medication_context()
+    frame, rules, refs = medication_context(use_day=date(2026, 2, 1))
     frame.medication_exposures[0] = frame.medication_exposures[0].model_copy(update={"duration_status": DurationStatus.ONGOING,
-        "record_time": datetime(2026, 3, 4, tzinfo=UTC)})
+        "record_time": datetime(2026, 2, 1, tzinfo=UTC)})
     assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.INDETERMINATE
+
+
+@pytest.mark.parametrize("status", [DurationStatus.UNKNOWN, DurationStatus.INTERMITTENT, DurationStatus.ONGOING])
+def test_dated_start_inside_prohibited_window_is_a_low_confidence_positive_not_invented_cessation(status):
+    frame, rules, refs = medication_context()
+    frame.medication_exposures[0] = frame.medication_exposures[0].model_copy(update={"duration_status": status,
+        "record_time": datetime(2026, 3, 4, tzinfo=UTC)})
+    before = frame.medication_exposures[0].model_dump_json()
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.EXCLUSION_TRIGGERED and row.confidence == "low"
+    assert row.evidence_refs == refs["med-fact"]
+    assert "停药日期" in row.reason_text
+    assert frame.medication_exposures[0].model_dump_json() == before
+
+
+@pytest.mark.parametrize("status", [DurationStatus.UNKNOWN, DurationStatus.INTERMITTENT, DurationStatus.ONGOING])
+def test_start_outside_window_never_proves_a_sufficient_washout_or_no_recent_use(status):
+    frame, rules, refs = medication_context(use_day=date(2026, 2, 1))
+    frame.medication_exposures[0] = frame.medication_exposures[0].model_copy(update={"duration_status": status,
+        "record_time": datetime(2026, 2, 1, tzinfo=UTC)})
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.INDETERMINATE and row.confidence is None
+
+
+@pytest.mark.parametrize("use_day,expected", [(date(2026, 3, 4), D.EXCLUSION_TRIGGERED),
+    (date(2026, 2, 1), D.INDETERMINATE), (date(2026, 4, 1), D.INDETERMINATE)])
+def test_unknown_course_start_respects_minimum_gap_and_does_not_read_after_cutoff(use_day, expected):
+    frame, rules, refs = medication_context(use_day=use_day)
+    medication = rules.scope_supplement.medications[0]
+    medication.window = medication.window.model_copy(update={"lower_bound": medication.window.upper_bound, "upper_bound": None})
+    medication.window_interpretation = "minimum_washout"
+    frame.medication_exposures[0] = frame.medication_exposures[0].model_copy(update={"duration_status": DurationStatus.UNKNOWN})
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == expected
+    assert row.confidence == ("low" if expected == D.EXCLUSION_TRIGGERED else None)
 
 
 def test_known_single_use_date_does_not_require_a_second_record_date():
