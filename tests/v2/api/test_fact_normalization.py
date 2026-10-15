@@ -51,6 +51,23 @@ def test_v2_app_registers_fact_normalization_command_service(client):
     assert client.app.state.fact_normalization_command_service is not None
 
 
+def test_saved_read_revalidation_is_a_current_scope_product_command(client, data_paths):
+    from tests.v2.services.test_fact_normalization_revalidation import successful_reading
+
+    chain, _, original, _ = successful_reading(client.app.state.session_factory, data_paths)
+    path = _endpoint(chain["subject_id"], chain["episode_id"])
+    result = client.post(path, json={"revalidate_from_run_id": original.run_id})
+    assert result.status_code == 201, result.text
+    assert result.json()["run_id"] != original.run_id
+    again = client.post(path, json={"revalidate_from_run_id": original.run_id})
+    assert again.status_code == 200 and again.json()["job_id"] == result.json()["job_id"]
+    assert client.get(path).json()["job_id"] == result.json()["job_id"]
+    assert client.post(_endpoint("another-subject", chain["episode_id"]),
+        json={"revalidate_from_run_id": original.run_id}).status_code == 404
+    assert client.post(path, json={"revalidate_from_run_id": original.run_id,
+        "retry_failed_from_run_id": original.run_id}).status_code == 422
+
+
 def test_current_normalization_read_discovers_newer_scope_without_creating_or_retrying_work(client):
     from sqlalchemy import func, select
     from app.storage.models import JobRecord

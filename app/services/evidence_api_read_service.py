@@ -282,6 +282,8 @@ class EvidenceApiReadService:
                                 for entry in sorted(page_by_id.values(), key=lambda value: (
                                     value.source_document_version_id, value.page_number))],
                 })
+            from app.services.fact_normalization_revalidation import supports_saved_source
+            saved_calls = FactNormalizationCallRepository(session).list_by_run(run.run_id)
             return {
                 "job_id": job_id, "run_id": run.run_id, "total": len(items), "offset": offset,
                 "content_sha256": content_sha256,
@@ -292,6 +294,10 @@ class EvidenceApiReadService:
                 "is_current": (episode.active_evidence_snapshot_id == authority.evidence_snapshot_v2_id
                                and episode.active_evidence_processing_revision_id == authority.complete_processing_revision_id),
                 "text_accounting_applied": payload.get("text_accounting_policy") is not None,
+                "can_revalidate_saved": bool(job.state == "completed" and payload.get("targeted_extraction")
+                    and not payload.get("source_revalidation") and not payload.get("page_review_coverage_id")
+                    and not payload.get("retained_reads") and bool(saved_calls)
+                    and all(supports_saved_source(call) for call in saved_calls)),
             }
 
     @app_error_boundary

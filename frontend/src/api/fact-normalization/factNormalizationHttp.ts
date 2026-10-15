@@ -87,7 +87,7 @@ export function createFactNormalizationHttp(
     async startFactNormalization(
       subjectId: string,
       reviewEpisodeId: string,
-      input: { idempotencyKey: string; retryFailedFromRunId?: string },
+      input: { idempotencyKey: string; retryFailedFromRunId?: string; revalidateFromRunId?: string },
       options?: { signal?: AbortSignal },
     ): Promise<FactNormalizationCommandView> {
       return request(
@@ -96,7 +96,8 @@ export function createFactNormalizationHttp(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ idempotency_intent: input.idempotencyKey,
-            ...(input.retryFailedFromRunId ? {retry_failed_from_run_id: input.retryFailedFromRunId} : {}) }),
+            ...(input.retryFailedFromRunId ? {retry_failed_from_run_id: input.retryFailedFromRunId} : {}),
+            ...(input.revalidateFromRunId ? {revalidate_from_run_id: input.revalidateFromRunId} : {}) }),
           signal: options?.signal,
         },
         decodeFactNormalizationCommand,

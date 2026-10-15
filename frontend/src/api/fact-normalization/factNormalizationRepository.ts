@@ -24,6 +24,7 @@ export interface FactNormalizationStartInput {
   /** 客户端幂等意图；服务端仍从活动权威派生真实幂等键。 */
   idempotencyKey: string;
   retryFailedFromRunId?: string;
+  revalidateFromRunId?: string;
 }
 
 export interface FactNormalizationRepository {

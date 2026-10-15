@@ -336,6 +336,62 @@ class FactNormalizationJobService:
     def _store(self, session: Session) -> JobStore:
         return JobStore(session, now=self.now, lease_ttl=self.lease_ttl, backoff=self.backoff)
 
+    def create_revalidation_from_run(self, *, authority: FactAuthority, source_run_id: str,
+                                     artifact_store, created_by: str) -> CreateNormalizationJobResult:
+        """Recheck saved readings in a new run; no model request is permitted."""
+        from app.domain.contracts.facts import FactNormalizationRun
+        from app.domain.contracts.enums import JobEventType
+        from app.services.fact_normalization_revalidation import saved_readings, qualification_identity
+
+        with self.session_factory() as session, session.begin():
+            original, readings = saved_readings(session, run_id=source_run_id, authority=authority,
+                artifacts=artifact_store, prompt_template=self.prompt_template)
+            proof = {row[0]["call_id"]: row[1] for row in readings}
+            selection = {"source_run_id": source_run_id, "qualification_sha256": qualification_identity(),
+                         "source_calls": proof}
+            scope = canonical_hash({"input_scope_sha256": original["input_scope_sha256"],
+                                    "source_revalidation": selection})
+            key = fact_run_idempotency_key(authority=authority, prompt_version_id=original["prompt_version_id"],
+                model_config_id=original["model_config_id"], input_scope_sha256=scope)
+            job_id = uuid4().hex
+            resolved, created = IdempotencyRepository(session).resolve(scope=FACT_NORMALIZATION_IDEMPOTENCY_SCOPE,
+                idempotency_key=key, submitted_hash=canonical_hash(selection),
+                result_type="fact_normalization_job", result_id=job_id)
+            store = self._store(session)
+            if not created:
+                job = store.get_job(resolved.result_id)
+                current = verify_payload_sha256(job.payload_json, job.payload_sha256)
+                return CreateNormalizationJobResult(job_id=job.job_id, run_id=current["run_id"],
+                    idempotency_key=key, created=False, status=job.state)
+            run_id = uuid4().hex
+            run = FactNormalizationRun(run_id=run_id, authority=authority, idempotency_key=key,
+                prompt_version_id=original["prompt_version_id"], model_config_id=original["model_config_id"],
+                input_scope_sha256=scope, status=FactNormalizationRunStatus.RUNNING,
+                created_at=_now_utc(), created_by=created_by)
+            persisted = FactNormalizationRunRepository(session).create_or_reuse(run)
+            if persisted.run_id != run_id:
+                raise InvalidJobDefinitionError("核验运行已有其他任务身份，请核对保存记录")
+            calls = [{**spec, "call_id": uuid4().hex} for spec, _, _ in readings]
+            payload = {**original, "run_id": run_id, "idempotency_key": key,
+                "input_scope_sha256": scope, "calls": calls, "source_revalidation": {
+                    **selection, "calls": {call["call_id"]: row[1] for call, row in zip(calls, readings, strict=True)}}}
+            steps = _build_step_specs([FactNormalizationCallSpec(
+                logical_document_id=call["logical_document_id"], page_numbers=call["page_numbers"],
+                input_sha256=call["input_sha256"]) for call in calls], targeted_extraction=True)
+            store.create_job(job_id=job_id, job_type=FACT_NORMALIZATION_JOB_TYPE, payload=payload, progress_total=len(steps))
+            for step in steps:
+                store.create_step(step_id=step["step_id"], job_id=job_id, name=step["name"],
+                    max_attempts=1, retryable=False)
+            for step in steps:
+                if step.get("depends_on"):
+                    store.add_step_dependencies(job_id=job_id, step_id=step["step_id"], depends_on=tuple(step["depends_on"]))
+            store.append_event(store.make_event(job_id=job_id, event_type=JobEventType.CREATED,
+                progress_total=len(steps), payload={"job_type": FACT_NORMALIZATION_JOB_TYPE,
+                    "run_id": run_id, "model_called": False, "source_run_id": source_run_id}))
+            self._link_run_job_if_empty(session, run_id, job_id)
+            return CreateNormalizationJobResult(job_id=job_id, run_id=run_id,
+                idempotency_key=key, created=True, status="queued")
+
     def create_or_reuse_from_source(
         self,
         *,

@@ -82,6 +82,7 @@ def create_fact_normalization_job(
             review_episode_id=review_episode_id,
             idempotency_intent=body.idempotency_intent,
             retry_failed_from_run_id=body.retry_failed_from_run_id,
+            **({"revalidate_from_run_id": body.revalidate_from_run_id} if body.revalidate_from_run_id else {}),
         )
     except Exception as exc:  # noqa: BLE001 - 边界统一翻译
         _raise_translated(exc)

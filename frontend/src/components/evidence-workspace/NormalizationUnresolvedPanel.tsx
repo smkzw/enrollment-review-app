@@ -4,14 +4,15 @@ import { RouteLink } from "../../app/router";
 import { getFactNormalizationRepository } from "../../api/fact-normalization";
 import type { NormalizationUnresolvedPageView } from "../../api/fact-normalization/factNormalizationViewModels";
 
-interface Props { subjectId: string; episodeId: string; jobId: string; onContinue?: (runId: string) => Promise<unknown> }
+interface Props { subjectId: string; episodeId: string; jobId: string; onContinue?: (runId: string) => Promise<unknown>;
+  onRevalidate?: (runId: string) => Promise<unknown> }
 
-export function NormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onContinue }: Props) {
+export function NormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onContinue, onRevalidate }: Props) {
   return <ScopedNormalizationUnresolvedPanel key={`${subjectId}:${episodeId}:${jobId}`}
-    subjectId={subjectId} episodeId={episodeId} jobId={jobId} onContinue={onContinue} />;
+    subjectId={subjectId} episodeId={episodeId} jobId={jobId} onContinue={onContinue} onRevalidate={onRevalidate} />;
 }
 
-function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onContinue }: Props) {
+function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onContinue, onRevalidate }: Props) {
   const [data, setData] = useState<NormalizationUnresolvedPageView | null>(null);
   const [offset, setOffset] = useState(0);
   const [retry, setRetry] = useState(0);
@@ -79,6 +80,11 @@ function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onCon
       {data.total === 0 && <p>暂无待核对记录。入排结论仍以审核结果为准。</p>}
       {data.total > 0 && <details className="normalization-unresolved__other">
         <summary>查看原件读取提示</summary>
+        {data.isCurrent && data.canRevalidateSaved && data.runId && onRevalidate &&
+          <button className="button" type="button" disabled={continuing} onClick={async () => {
+            setContinuing(true);
+            try { await onRevalidate(data.runId!); } finally { setContinuing(false); }
+          }}><RefreshCw size={16} />{continuing ? "正在提交" : "重新核验已读记录（不重读原件）"}</button>}
         <ul>{questions.map(renderItem)}</ul>
         {otherText.length > 0 && <details className="normalization-unresolved__other">
           <summary>其他待核对文字（{data.hasMore ? "已加载" : ""}{otherText.length}项）</summary>
