@@ -93,7 +93,8 @@ def test_publication_assembly_keeps_contexts_separate_and_repeated_reading_merge
     stored = []
     gates = {item.candidate_id: SimpleNamespace(gate_result_id=f"gate-{item.candidate_id}") for item in candidates}
     facts, mapping = publication.FactPublicationService()._publish_facts(
-        session=None, authority=_context_fact().authority, run_id="run-1", revision=None,
+        session=None, authority=_context_fact().authority, run_id="run-1",
+        revision=SimpleNamespace(manifest=[], source_qualification_mode="strict"),
         candidates=candidates, gates=gates, existing=[], created_at=_UTC,
         repository=SimpleNamespace(create=stored.append))
     assert len(facts) == len(stored) == 2

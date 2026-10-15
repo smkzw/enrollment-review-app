@@ -14,6 +14,7 @@ from app.domain.contracts.rules import AtomicExpression, AtomicPredicate, Eviden
 from app.domain.contracts.enums import LogicalOperator
 from app.domain.contracts.work_draft import SystemIssue, WorkDraftItem
 from app.domain.variables.dictionary import load_dictionary
+from app.domain.risk_flags import RiskFlag
 from app.graph.subject_graph import SUBJECT_GRAPH, work_draft_steps
 from app.projections.clause_pack import project_clause_pack
 from app.services.work_draft_calculation import calculate_work_component, compose_parent, select_by_variable
@@ -695,8 +696,39 @@ def test_ocr_warning_is_not_a_high_confidence_success_or_a_missing_patient_recor
     before = fact.model_dump_json()
     result = calculate_work_component(projected, frozen([fact]), rules, evidence_refs={})
     assert result.decision == D.INCLUSION_MET and result.confidence == "low"
-    assert "识别或归属标记" in result.confidence_reason
+    assert result.confidence_reason == "识别可能有误"
     assert result.system_issue is None and fact.model_dump_json() == before
+
+
+@pytest.mark.parametrize("flag,label", [
+    ("NEAR_THRESHOLD", "临近阈值"), ("HANDWRITTEN", "手写内容"),
+    ("LOW_OCR_CONFIDENCE", "识别可能有误"), ("DATE_ROLE_UNCLEAR", "日期含义不清"),
+    ("UNIT_INFERRED", "单位为推定"), ("PARTIAL_DATE", "日期不完整"),
+    ("PRESCRIPTION_ONLY", "仅有处方记录"), ("SINGLE_WEAK_SOURCE", "来源较弱"),
+    ("IMPLAUSIBLE_VALUE", "数值不合理，请核对原件"), ("ATTRIBUTION_UNCERTAIN", "数值归属需核对"),
+])
+def test_confidence_names_the_actual_saved_risk_without_changing_the_decision(flag, label):
+    rules, projected, _ = clause()
+    fact = material().model_copy(update={"risk_flags": [RiskFlag(flag)]})
+    result = calculate_work_component(projected, frozen([fact]), rules, evidence_refs={})
+    assert result.decision == D.INCLUSION_MET and result.confidence == "low"
+    assert result.confidence_reason == label and fact.risk_flags == [RiskFlag(flag)]
+
+
+def test_specific_threshold_warning_precedes_generic_ocr_warning_regardless_of_list_order():
+    rules, projected, _ = clause()
+    fact = material().model_copy(update={"risk_flags": [RiskFlag.LOW_OCR_CONFIDENCE, RiskFlag.NEAR_THRESHOLD]})
+    result = calculate_work_component(projected, frozen([fact]), rules, evidence_refs={})
+    assert result.confidence_reason == "临近阈值" and result.confidence == "low"
+
+
+def test_unknown_result_does_not_claim_a_low_confidence_conclusion():
+    rules, projected, _ = clause()
+    frame = frozen([material()])
+    frame.facts = []
+    result = calculate_work_component(projected, frame, rules, evidence_refs={})
+    assert result.decision == D.INDETERMINATE and result.confidence is None
+    assert result.confidence_reason is None
 
 def test_outer_all_does_not_become_any_because_one_inner_group_is_any():
     rules, _, component = clause()
@@ -1117,6 +1149,29 @@ def test_bad_primary_quote_is_omitted_without_losing_other_fact_refs(monkeypatch
     refs = service._fact_refs(object(), frozen([a, b]))
     assert set(refs) == {a.fact_id}
     assert refs[a.fact_id][0].excerpt == a.assertion_basis.assertion_text
+
+
+@pytest.mark.parametrize("bad_primary", [False, True])
+def test_primary_value_quote_precedes_auxiliary_date_without_borrowing_its_validity(monkeypatch, bad_primary):
+    from app.services import work_draft_review as service
+    import app.domain.gates.fact_evidence_closure as closure
+    from app.storage.fact_authority import FactAuthorityValidator
+    fact = material()
+    fact = fact.model_copy(update={"locator_ids": ["a-date", "z-value"],
+        "assertion_basis": fact.assertion_basis.model_copy(update={"locator_id": "z-value"})})
+    texts = {"a-date": "2026年10月12日", "z-value": "另一条原文" if bad_primary else fact.assertion_basis.assertion_text}
+    monkeypatch.setattr(FactAuthorityValidator, "validate_frozen_source", lambda *_: object())
+    monkeypatch.setattr(closure, "_localized_locator_text", lambda _session, loc, _revision: texts[loc.locator_id])
+    monkeypatch.setattr(service.EvidenceLocatorRepository, "get", lambda _self, key: SimpleNamespace(
+        locator_id=key, source_document_version_id="document", page_artifact_id="page", page_number=1))
+    before = fact.model_dump_json()
+    refs = service._fact_refs(object(), frozen([fact]))
+    if bad_primary:
+        assert not refs
+    else:
+        assert [r.locator_id for r in refs[fact.fact_id]] == ["z-value", "a-date"]
+        assert refs[fact.fact_id][0].excerpt == fact.assertion_basis.assertion_text
+    assert fact.model_dump_json() == before
 
 
 def test_unfinished_written_judgment_search_is_not_reported_as_missing_record():

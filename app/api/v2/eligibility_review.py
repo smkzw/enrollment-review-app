@@ -56,7 +56,7 @@ class EligibilityClauseDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     rule_component_id: str = Field(min_length=1)
-    rule_code: str = Field(pattern=r"^(IN|EX|REQ)-\d{2}$")
+    rule_code: str = Field(pattern=r"^(?:(?:IN|EX|REQ)-\d{2}|用药\d{2,})$")
     rule_kind: Literal["inclusion", "exclusion", "required_procedure", "medication"]
     text_summary: str = Field(min_length=1)
     source_text: str = Field(min_length=1)
@@ -97,6 +97,10 @@ class EligibilityClauseDTO(BaseModel):
 
     @model_validator(mode="after")
     def validate_reason_part_identity(self):
+        if (self.rule_kind == "medication") != self.rule_code.startswith("用药"):
+            raise ValueError("用药要求的编号与条目类型不一致")
+        if self.rule_kind == "medication" and self.parent_rule_code is not None:
+            raise ValueError("用药要求不能冒充入排条款的分项")
         if len({part.condition_id for part in self.reason_parts}) != len(self.reason_parts):
             raise ValueError("判断依据的条件身份不得重复")
         return self

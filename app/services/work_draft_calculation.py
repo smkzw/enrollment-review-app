@@ -11,6 +11,7 @@ from app.domain.contracts.work_draft import SystemIssue, WorkDraftItem, WorkDraf
 from app.domain.expression import EvaluationContext, _evaluate_time, _compare
 from app.domain.policies import STAGE_RANK
 from app.domain.publication import canonical_hash
+from app.domain.risk_flags import RiskFlag
 from app.domain.variables.dictionary import load_dictionary
 from app.services.component_review import calculate_component_review
 from app.services.eligibility_review_projection import adapt_clinical_fact_v2
@@ -23,6 +24,19 @@ LABELS = {D.INCLUSION_MET: "满足", D.INCLUSION_NOT_MET: "不满足",
           D.REQUIREMENT_MET: "满足", D.REQUIREMENT_NOT_MET: "不满足",
           D.INDETERMINATE: "证据不足", D.PROFESSIONAL_JUDGMENT: "需研究者判断",
           D.CONFLICT: "资料矛盾", D.NOT_DUE: "未到期", D.NOT_APPLICABLE: "不适用"}
+
+_RISK_REASONS = {
+    RiskFlag.NEAR_THRESHOLD: "临近阈值", RiskFlag.HANDWRITTEN: "手写内容",
+    RiskFlag.LOW_OCR_CONFIDENCE: "识别可能有误", RiskFlag.DATE_ROLE_UNCLEAR: "日期含义不清",
+    RiskFlag.UNIT_INFERRED: "单位为推定", RiskFlag.PARTIAL_DATE: "日期不完整",
+    RiskFlag.PRESCRIPTION_ONLY: "仅有处方记录", RiskFlag.SINGLE_WEAK_SOURCE: "来源较弱",
+    RiskFlag.IMPLAUSIBLE_VALUE: "数值不合理，请核对原件", RiskFlag.ATTRIBUTION_UNCERTAIN: "数值归属需核对",
+}
+
+
+def _risk_reason(facts):
+    flags = {flag for fact in facts for flag in fact.risk_flags}
+    return next((label for flag, label in _RISK_REASONS.items() if flag in flags), None)
 
 
 def atomic_expressions(expression):
@@ -636,9 +650,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
         if outcome.evaluation.exception is not None and outcome.evaluation.trigger.truth == TruthValue.TRUE:
             used_ids.update(outcome.evaluation.exception.used_fact_ids)
         used = [fact for fact in selected if fact.fact_id in used_ids]
-        low_reason = next(("所用记录有需要核对的识别或归属标记。" for fact in used if fact.risk_flags), None)
+        low_reason = _risk_reason(used)
         if low_reason is None and relations:
-            low_reason = "依据病历原文关系核对；请重点查看所列摘录及资料范围。"
+            low_reason = "依据原文作出的含义判断，尚未经人工核实。"
         if low_reason is None and any(value.calculation_unverified_ids for value in selection.values()):
             low_reason = "另有相关检验记录的参考范围未核实，本结论仅依据已有完整读数。"
         age_date_uncertain = any(predicate_variables.get(key) == "age" and value.date_uncertain
@@ -777,7 +791,8 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                             requires_attention=True))
         return WorkDraftItem(**common, decision=outcome.decision,
             confidence=("low" if low_reason else "high") if outcome.decision in DETERMINATE else None,
-            confidence_reason=low_reason, reason_text=reason, reason_parts=reason_parts,
+            confidence_reason=low_reason if outcome.decision in DETERMINATE else None,
+            reason_text=reason, reason_parts=reason_parts,
             policy_group="not_seen_in_supplied_records" if any(row["policy"] for row in relations.values()) else None,
             evidence_refs=[ref for fact in used for ref in evidence_refs.get(fact.fact_id, ())]
                 if outcome.decision in DETERMINATE and not age_date_uncertain else available_refs)
@@ -902,7 +917,7 @@ def calculate_procedures(frozen, rule_set, *, evidence_refs, source_results=None
                 result.append(WorkDraftItem(**common, decision=D.INDETERMINATE, reason_text=reason, source_read_refs=source_refs))
             else:
                 result.append(WorkDraftItem(**common, decision=decision, confidence="low",
-                    confidence_reason="依据病历或报告的完成记录核对，结果合格性由各自条款独立判断。",
+                    confidence_reason="依据完成记录作出的含义判断，尚未经人工核实。",
                     reason_text=relation["reason"], source_read_refs=source_refs))
             continue
         if not facts:
@@ -922,7 +937,7 @@ def calculate_procedures(frozen, rule_set, *, evidence_refs, source_results=None
                 for fact in not_completed)
             result.append(WorkDraftItem(**common, decision=D.REQUIREMENT_NOT_MET,
                 confidence="low" if low else "high",
-                confidence_reason="记录的时间、识别或归属尚需核对。" if low else None,
+                confidence_reason=(_risk_reason(not_completed) or "记录的节点时间尚需核对。") if low else None,
                 reason_text="已有记录明确记载本项未完成。", evidence_refs=refs))
             continue
         requested = set(review.result_variables if review else ())
@@ -939,7 +954,7 @@ def calculate_procedures(frozen, rule_set, *, evidence_refs, source_results=None
         low = any(fact.risk_flags or fact.date_range is None or fact.date_range.precision.value != "day"
                   or fact.date_role not in {"sampling", "visit"} for fact in values) or anchor is None or anchor.value is None
         result.append(WorkDraftItem(**common, decision=D.REQUIREMENT_MET, confidence="low" if low else "high",
-            confidence_reason="所用记录仍有识别、归属或节点时间需核对。" if low else None,
+            confidence_reason=(_risk_reason(values) or "记录的节点时间尚需核对。") if low else None,
             reason_text=("已找到本项完成记录，审定时指定的结果字段已提供。" if requested else
                 "已找到本项完成记录；本次审定未指定必需结果字段，未据此确认报告内所有结果齐全。")
                 + "结果是否符合入排阈值由对应条款另行判断。",
