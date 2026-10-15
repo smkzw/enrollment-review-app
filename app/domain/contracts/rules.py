@@ -180,6 +180,8 @@ class MedicationRestriction(ContractModel):
 
     drug_text: str = Field(min_length=1)
     drug_class_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
+    class_scope: Literal["all_members", "qualified"] | None = Field(
+        default=None, exclude_if=lambda value: value is None)
     window: TimeConstraint | None = None
     window_interpretation: Literal["prohibited_interval", "minimum_washout"] | None = Field(
         default=None, exclude_if=lambda value: value is None)
@@ -192,6 +194,8 @@ class MedicationRestriction(ContractModel):
 
     @model_validator(mode="after")
     def validate_scope(self):
+        if self.class_scope is not None and self.drug_class_id is None:
+            raise ValueError("类别适用范围必须对应明确药物类别")
         if len(self.applicable_stages) != len(set(self.applicable_stages)):
             raise ValueError("用药限制的审核阶段不能重复")
         if self.window is not None and self.period is not None:
