@@ -88,22 +88,60 @@ class VariableSelection:
     conflict: bool = False
     date_uncertain: bool = False
     calculation_unverified_ids: tuple[str, ...] = ()
+    chronology_conflict: bool = False
 
 
-def source_record_date(fact, evidence_refs, source_pages):
+def source_record_date(fact, evidence_refs, source_pages, *, allow_report_date=False):
     """Explicit visit/sample headers may exclude future records, not date an event."""
     pages = {(page.source_document_version_id, page.page_number, page.page_artifact_id): page for page in source_pages}
-    values = set()
-    for ref in (evidence_refs or {}).get(fact.fact_id, ()):
-        page = pages.get((ref.source_document_version_id, ref.page_number, ref.page_artifact_id))
-        if page is None:
+    labels = ["采样时间|就诊时间"] + (["报告日期|报告时间"] if allow_report_date else [])
+    for label in labels:
+        values = set()
+        for ref in (evidence_refs or {}).get(fact.fact_id, ()):
+            page = pages.get((ref.source_document_version_id, ref.page_number, ref.page_artifact_id))
+            if page is None:
+                continue
+            for match in re.finditer(r"(?m)^\s*(?:" + label + r")\s*[:：]\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)", page.effective_text):
+                try:
+                    values.add(date(*(int(value) for value in match.groups())))
+                except ValueError:
+                    return None
+        if values:
+            return next(iter(values)) if len(values) == 1 else None
+    return None
+
+
+def age_record_chronology(facts, evidence_refs, source_pages, definition, predicate):
+    """Compare dated age readings without inventing an event date or birth date."""
+    from app.domain.contracts.enums import FactPolarity
+    dates, readings = {}, []
+    for fact in facts:
+        if fact.polarity != FactPolarity.AFFIRMED:
             continue
-        for match in re.finditer(r"(?m)^\s*(?:采样时间|就诊时间)\s*[:：]\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)", page.effective_text):
-            try:
-                values.add(date(*(int(value) for value in match.groups())))
-            except ValueError:
-                return None
-    return next(iter(values)) if len(values) == 1 else None
+        explicit = (fact.date_range.lower_bound if fact.date_range is not None
+            and fact.date_range.precision.value == "day" and fact.date_role in {"sampling", "visit"} else None)
+        document_date = source_record_date(fact, evidence_refs, source_pages, allow_report_date=True)
+        if explicit is not None and document_date is not None and explicit != document_date:
+            return dates, True
+        recorded = explicit or document_date
+        if recorded is not None:
+            dates[fact.fact_id] = recorded
+            value, _ = comparison_reading(fact, definition, predicate)
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and float(value).is_integer():
+                readings.append((recorded, int(value)))
+    readings.sort()
+    for index, (earlier, age) in enumerate(readings):
+        for later, later_age in readings[index + 1:]:
+            years = later.year - earlier.year
+            first_day, last_day = (earlier.month, earlier.day), (later.month, later.day)
+            minimum = years - (last_day < first_day)
+            maximum = years + (last_day > first_day)
+            # Leap-day birthday conventions can differ; do not adjudicate them.
+            if earlier != later and any(month == 2 and day in {28, 29} for month, day in (first_day, last_day)):
+                minimum, maximum = max(0, minimum - 1), maximum + 1
+            if not minimum <= later_age - age <= maximum:
+                return dates, True
+    return dates, False
 
 
 def review_anchor_dates(anchor_dates, stage):
@@ -189,7 +227,11 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                     value, unit = comparison_reading(fact, definition, atom.predicate, definitions=definitions)
                     return canonical_hash({"value": value, "unit": unit, "polarity": fact.polarity.value})
                 return canonical_hash({"value": fact.value, "unit": fact.unit, "polarity": fact.polarity.value})
-            conflict = False
+            is_age = (variable_id == "age" and definition is not None and definition.value_type == "number"
+                and definition.domain == "demographic" and definition.canonical_unit == "周岁")
+            age_dates, chronology_conflict = (age_record_chronology(eligible, evidence_refs, source_pages,
+                definition, atom.predicate) if is_age else ({}, False))
+            conflict = chronology_conflict
             for index, fact in enumerate(eligible):
                 for other in eligible[index + 1:]:
                     same_day = (fact.date_range is not None and other.date_range is not None
@@ -205,25 +247,34 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                     same_report = bool(set(fact.locator_ids) & set(other.locator_ids)) and not distinct_samples
                     if (same_day or same_report) and value_key(fact) != value_key(other):
                         conflict = True
-            dated = [fact for fact in eligible if fact.date_range is not None and fact.date_range.lower_bound is not None]
+            selection_dates = (age_dates if is_age else {fact.fact_id: fact.date_range.lower_bound
+                for fact in eligible if fact.date_range is not None and fact.date_range.lower_bound is not None})
+            node_anchor = base.anchor_dates.get(AnchorType.REVIEW_NODE_DATE)
+            if is_age and node_anchor is not None and node_anchor.value is not None:
+                # A later birthday does not change age at the protocol's node date.
+                selection_dates = {key: day for key, day in selection_dates.items() if day <= node_anchor.value}
+            dated = [fact for fact in eligible if fact.fact_id in selection_dates]
             if dated:
-                nearest = max(fact.date_range.lower_bound for fact in dated)
-                chosen = [fact for fact in dated if fact.date_range.lower_bound == nearest]
+                nearest = max(selection_dates[fact.fact_id] for fact in dated)
+                chosen = [fact for fact in dated if selection_dates[fact.fact_id] == nearest]
             else:
-                chosen = eligible
+                chosen = [] if is_age and age_dates else eligible
             undated_choice_unclear = not conflict and not dated and len({value_key(fact) for fact in chosen}) > 1
             if undated_choice_unclear:
                 chosen = []
+            undated_age_difference = is_age and dated and any(
+                fact.fact_id not in age_dates and value_key(fact) not in {value_key(row) for row in chosen}
+                for fact in eligible)
             result[atom.predicate.predicate_id] = VariableSelection(
                 tuple(sorted(fact.fact_id for fact in (eligible if conflict else chosen))),
                 tuple(sorted(fact.fact_id for fact in eligible)), conflict,
-                undated_choice_unclear or (not base.anchor_dates.get(AnchorType.BASELINE_DATE if stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE)
+                undated_choice_unclear or bool(undated_age_difference) or ((not base.anchor_dates.get(AnchorType.BASELINE_DATE if stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE)
                  or base.anchor_dates[AnchorType.BASELINE_DATE if stage == ReviewStage.BASELINE else AnchorType.SCREENING_DATE].value is None
                  or any(fact.date_range is None or fact.date_range.precision.value != "day"
                     or fact.date_role not in {"sampling", "visit"} for fact in chosen)
                  )
-                if atom.time_constraint or definition is not None and definition.domain in {"lab", "vital", "score", "procedure"} else False,
-                tuple(sorted(invalid_calculations)))
+                if atom.time_constraint or definition is not None and definition.domain in {"lab", "vital", "score", "procedure"} else False),
+                tuple(sorted(invalid_calculations)), chronology_conflict)
     return result
 
 
@@ -392,7 +443,10 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             issue = _issue(clause.official_code, "已找到原始检验结果，但参考范围或同排单位关系尚未核实，暂不能计算本条所需倍数。")
             return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
         if any(value.conflict for value in selection.values()):
-            return WorkDraftItem(**common, decision=D.CONFLICT, reason_text="同一采样日或同一来源位置的记录不一致，未自动择优。",
+            detail = ("年龄记录与单据日期前后不一致，存在倒退或明显不合理的增长，未自动择优。"
+                if any(value.chronology_conflict for value in selection.values()) else
+                "同一采样日或同一来源位置的记录不一致，未自动择优。")
+            return WorkDraftItem(**common, decision=D.CONFLICT, reason_text=detail,
                 evidence_refs=[ref for fact in selected for ref in evidence_refs.get(fact.fact_id, ())])
         adapted = []
         for fact in selected:
@@ -571,6 +625,10 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             low_reason = "依据病历原文关系核对；请重点查看所列摘录及资料范围。"
         if low_reason is None and any(value.calculation_unverified_ids for value in selection.values()):
             low_reason = "另有相关检验记录的参考范围未核实，本结论仅依据已有完整读数。"
+        age_date_uncertain = any(predicate_variables.get(key) == "age" and value.date_uncertain
+            for key, value in selection.items())
+        if low_reason is None and age_date_uncertain:
+            low_reason = "另有年龄记录的单据日期尚未核实，当前结论仅依据日期明确的记录。"
         if low_reason is None and any(value.date_uncertain for value in selection.values()):
             low_reason = "时间依据只记到部分日期，或采样与报告日期尚未明确区分。"
         if low_reason is None:
@@ -706,7 +764,7 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             confidence_reason=low_reason, reason_text=reason, reason_parts=reason_parts,
             policy_group="not_seen_in_supplied_records" if any(row["policy"] for row in relations.values()) else None,
             evidence_refs=[ref for fact in used for ref in evidence_refs.get(fact.fact_id, ())]
-                if outcome.decision in DETERMINATE else available_refs)
+                if outcome.decision in DETERMINATE and not age_date_uncertain else available_refs)
     except (ValueError, TypeError) as exc:
         issue = _issue(clause.official_code, "系统暂不能按已保存的数据项目、单位或条件结构核对本条。")
         return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)

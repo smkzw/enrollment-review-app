@@ -922,6 +922,94 @@ def test_nearest_date_and_same_day_conflict():
     assert select_by_variable(component, [b, c], {}, authority=b.authority, definitions=load_dictionary())["age-limit"].conflict
 
 
+@pytest.mark.parametrize("first_day,first_age,last_day,last_age,anchor,decision", [
+    (date(2023, 8, 8), 49, date(2025, 8, 8), 51, date(2025, 8, 8), D.INCLUSION_MET),
+    (date(2025, 8, 8), 51, date(2025, 8, 15), 52, date(2025, 8, 8), D.INCLUSION_MET),
+    (date(2025, 8, 8), 17, date(2025, 8, 15), 18, date(2025, 8, 8), D.INCLUSION_NOT_MET),
+    (date(2023, 8, 8), 53, date(2025, 8, 8), 51, date(2025, 8, 8), D.CONFLICT),
+    (date(2025, 7, 1), 51, date(2025, 8, 8), 54, date(2025, 8, 8), D.CONFLICT),
+    (date(2025, 8, 8), 51, date(2025, 8, 8), 52, date(2025, 8, 8), D.CONFLICT),
+    (date(2024, 12, 31), 51, date(2025, 1, 1), 52, date(2025, 1, 1), D.INCLUSION_MET),
+    (date(2023, 2, 28), 51, date(2024, 2, 28), 51, date(2024, 2, 28), D.INCLUSION_MET),
+    (date(2025, 8, 9), 51, date(2025, 8, 15), 52, date(2025, 8, 8), D.INDETERMINATE),
+])
+def test_age_uses_dated_documents_at_node_and_checks_chronology_without_redating_facts(
+        first_day, first_age, last_day, last_age, anchor, decision):
+    from app.domain.contracts.work_draft import WorkDraftSourcePage
+    rules, projected, component = clause()
+    facts = [material(value=first_age, snapshot="old"), material(value=last_age, snapshot="new")]
+    before = [fact.model_dump_json() for fact in facts]
+    refs, pages = {}, []
+    for fact, day in zip(facts, [first_day, last_day], strict=True):
+        text = f"采样时间:{day.isoformat()}\n{fact.assertion_basis.assertion_text}"
+        page = WorkDraftSourcePage(source_document_version_id=f"doc-{fact.fact_id}",
+            page_artifact_id=f"page-{fact.fact_id}", page_number=1, effective_text=text,
+            effective_text_sha256=sha256(text.encode()).hexdigest(), extraction_complete=True)
+        pages.append(page)
+        refs[fact.fact_id] = [WorkDraftEvidenceRef(fact_id=fact.fact_id, locator_id=fact.locator_ids[0],
+            source_document_version_id=page.source_document_version_id, page_artifact_id=page.page_artifact_id,
+            page_number=1, excerpt=fact.assertion_basis.assertion_text)]
+    anchors = {AnchorType.SCREENING_DATE: DateValue(value=anchor, precision=DatePrecision.DAY)}
+    frame = frozen(facts, anchors)
+    frame.source_pages = pages
+    frame.review_episode.evidence_cutoff_date = max(first_day, last_day)
+    result = calculate_work_component(projected, frame, rules, evidence_refs=refs)
+    assert result.decision == decision and result.system_issue is None
+    selection = select_by_variable(component, facts, anchors, authority=frame.authority,
+        definitions=load_dictionary(), evidence_refs=refs, source_pages=pages,
+        evidence_cutoff_date=frame.review_episode.evidence_cutoff_date)["age-limit"]
+    if decision == D.CONFLICT:
+        assert selection.chronology_conflict and {ref.fact_id for ref in result.evidence_refs} == {f.fact_id for f in facts}
+    elif decision == D.INDETERMINATE:
+        assert not selection.fact_ids
+    else:
+        expected = facts[0] if last_day > anchor else facts[1]
+        assert selection.fact_ids == (expected.fact_id,) and not selection.conflict
+        assert {ref.fact_id for ref in result.evidence_refs} == {expected.fact_id}
+    assert [fact.model_dump_json() for fact in facts] == before
+    assert all(fact.date_range is None for fact in facts)
+
+
+def test_undated_other_age_remains_visible_and_low_confidence():
+    rules, projected, _ = clause()
+    first = material(value=51, day=date(2025, 8, 8), snapshot="dated")
+    other = material(value=52, snapshot="undated")
+    frame = frozen([first, other], {AnchorType.SCREENING_DATE:
+        DateValue(value=date(2025, 8, 8), precision=DatePrecision.DAY)})
+    refs = {fact.fact_id: [WorkDraftEvidenceRef(fact_id=fact.fact_id, locator_id=fact.locator_ids[0],
+        source_document_version_id=f"doc-{fact.fact_id}", page_artifact_id=f"page-{fact.fact_id}",
+        page_number=1, excerpt=fact.assertion_basis.assertion_text)] for fact in (first, other)}
+    result = calculate_work_component(projected, frame, rules, evidence_refs=refs)
+    assert result.decision == D.INCLUSION_MET and result.confidence == "low"
+    assert "单据日期尚未核实" in result.confidence_reason
+    assert {ref.fact_id for ref in result.evidence_refs} == {first.fact_id, other.fact_id}
+
+
+@pytest.mark.parametrize("label,decision", [("采样时间", D.INCLUSION_MET),
+    ("报告日期", D.INCLUSION_MET), ("打印时间", D.INDETERMINATE)])
+def test_age_date_source_is_explicit_not_upload_or_print_time(label, decision):
+    from app.domain.contracts.work_draft import WorkDraftSourcePage
+    rules, projected, _ = clause()
+    facts = [material(value=49, snapshot="old"), material(value=51, snapshot="current")]
+    frame = frozen(facts, {AnchorType.SCREENING_DATE:
+        DateValue(value=date(2025, 8, 8), precision=DatePrecision.DAY)})
+    frame.source_pages, refs = [], {}
+    for fact, day in zip(facts, [date(2023, 8, 8), date(2025, 8, 8)], strict=True):
+        text = f"{label}:{day.isoformat()}\n{fact.assertion_basis.assertion_text}"
+        page = WorkDraftSourcePage(source_document_version_id=f"doc-{fact.fact_id}",
+            page_artifact_id=f"page-{fact.fact_id}", page_number=1, effective_text=text,
+            effective_text_sha256=sha256(text.encode()).hexdigest(), extraction_complete=True)
+        frame.source_pages.append(page)
+        refs[fact.fact_id] = [WorkDraftEvidenceRef(fact_id=fact.fact_id, locator_id=fact.locator_ids[0],
+            source_document_version_id=page.source_document_version_id, page_artifact_id=page.page_artifact_id,
+            page_number=1, excerpt=fact.assertion_basis.assertion_text)]
+    result = calculate_work_component(projected, frame, rules, evidence_refs=refs)
+    assert result.decision == decision and result.system_issue is None
+    assert all(fact.date_range is None for fact in facts)
+    if decision == D.INCLUSION_MET:
+        assert {ref.fact_id for ref in result.evidence_refs} == {facts[1].fact_id}
+
+
 def test_shared_locator_does_not_merge_distinct_dated_collections():
     _, _, component = clause()
     a = material(value=52, day=date(2025, 8, 1), snapshot="first")
@@ -1198,9 +1286,12 @@ def test_repeat_within_declared_material_scope_does_not_move_protocol_window(exp
     window = TimeConstraint(anchor_type=AnchorType.SCREENING_DATE, direction=TimeDirection.BEFORE,
         upper_bound_days=7) if explicit_window else None
     rules, _, component = clause(time=window)
-    first = material(day=date(2025, 8, 8), snapshot="first")
-    repeat = material(day=date(2025, 8, 15), snapshot="repeat")
-    later = material(day=date(2025, 8, 16), snapshot="later")
+    # This is a lab repeat; age is instead evaluated at the node date.
+    component.evidence_requirements[0].variable_id = "alt"
+    component.expression.predicate.unit = "U/L"
+    first = material(variable_id="alt", unit="U/L", day=date(2025, 8, 8), snapshot="first")
+    repeat = material(variable_id="alt", unit="U/L", day=date(2025, 8, 15), snapshot="repeat")
+    later = material(variable_id="alt", unit="U/L", day=date(2025, 8, 16), snapshot="later")
     anchors = {AnchorType.SCREENING_DATE: DateValue(value=date(2025, 8, 8), precision=DatePrecision.DAY)}
     before = [item.model_dump_json() for item in (first, repeat, later)]
     selected = select_by_variable(component, [first, repeat, later], anchors, authority=first.authority,

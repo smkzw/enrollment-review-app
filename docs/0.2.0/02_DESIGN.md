@@ -125,6 +125,8 @@ WP5补充要求复用内层草稿及发布`RuleSet.scope_supplement`可选字段
 
 **资料范围与时间窗分离（D26）**：`ReviewEpisode.evidence_cutoff_date: date | None`保存本节点本次已提供资料截至日，空值不序列化，旧合同哈希不变。`PUT .../review-episodes/{id}/evidence-cutoff`接收`{evidence_cutoff_date, expected_revision}`，返回新`revision`；与节点日期共用同受试者、乐观锁及活动整理／更正／工作稿互斥，早于开始日拒绝。字段随既有节点payload与冻结上下文保存，无新表或迁移。前端开始日／资料截至分开保存；`source_pages_for_review`、`select_by_variable`及`calculate_procedures`共用`review_source_cutoff`，未设置时维持旧开始日上界。条款相对窗仍只用`anchor_dates`，同节点归属仍核冻结快照。开始日1日／截至8日：8日复查可用、9日不可用；明确“开始日前”仍拒绝8日结果。实际关系请求保存截至日，旧22页证明不等同24页检索。API／保存／消费／复用反例见`test_work_draft_evidence_cutoff.py`、`test_work_draft_calculation.py`、`test_work_draft_source_relations.py`及`WorkDraftPanel.test.tsx`。禁止通过移动开始日或删除未来记录保护来纳入复查。
 
+**年龄时间逻辑（D27）**：只对显式核心变量`age`、人口学域、整周岁量纲核查年龄随记录日期的关系，不向其他数值变量套用单调增长。`age_record_chronology`复用已保存事实及准确来源页：先用已存精确采样／就诊日期，否则取同页明确采样／就诊标题；都无时允许明确报告日期，不使用打印／上传日期、文件名或另一页猜日期。记录日期仅用于本次选择，不写回事实、也不生成出生日期。整数年龄的增量按两日期的年及月日范围确定，生日未知与闰日惯例保守保留；倒退、同日不同值、明显不合理增长为资料矛盾。符合时间逻辑的不同年份记录不是矛盾，本节点采用开始日之前或当天最近一条；后续年龄仅参与一致性核查，不改变节点年龄。另有日期未知的不同年龄时保留原件、给低置信；只有后续记录或全无日期而不同值时仍未知，不按“所有数值都在阈值内”绕开选择。既有数值／时间／复查消费者不变；计算版本v35，旧稿不改，语义证明仅在实际来源／目标相容时复用，不新增模型调用。
+
 | 改动 | 位置 | 说明 |
 |---|---|---|
 | `ReviewRun.run_kind: Literal["work_draft","formal"]` | `app/domain/contracts/review.py:156-165`；`app/storage/models.py` 加列，默认 `formal` 兼容历史 | 工作稿与签发分开 |
@@ -137,6 +139,8 @@ WP5补充要求复用内层草稿及发布`RuleSet.scope_supplement`可选字段
 ### 4.5 事实与规则包版本解耦（重要）
 
 局部失败续读复用`FactNormalizationJobService.create_or_reuse_from_source(..., retry_failed_from_run_id, retry_pages=[(logical_document_id, page_number)])`：选择必须非空、无重复且完全属于原已终结任务的待核页；不传时仍是全部失败范围。所选页进入输入hash、实际payload及执行期前置验证，篡改选择拒绝；原Job和成功兄弟不重开，未选待核项仍未完成。规则修订后仅在既有`rule_revision_source_is_reusable`核实同原件及相容变量时允许新读取，仍按当前规则生产并完整校验，不借旧批准。背景归属受阻的检验候选可被选中重读，但不因此变成可采用事实。已采用的检验原文明确写“未检出／未检测到靶基因”时，定性比较使用阴性含义而保存原值；单纯数值、低于定量下限、未检测、弱阳性或互相矛盾的标记仍不做该转换。
+
+同次资料期望保存使用`EvidenceExpectationV2Repository.project_many`：源权威与定位并集只在该调用内核一次，旧来源相容性按实际旧权威核实，覆盖事实逐项从仓储读取、核要求绑定及定位闭包；全部条目先校验再追加。保留原Runner事务所有权，不在`PreparedStepResult.apply`内提交或释放会触发提交事件的Session savepoint，不接受外部`verified`开关，不跨调用沿用本批相容证明。普通单项`project`沿同一入口处理；同内容幂等，旧行不覆盖，后批仍重新检查当前来源。
 
 现状：`FactAuthority`（`app/domain/contracts/facts.py:94-111`）把每个已发布事实绑定到 `rule_set_id`／`rule_set_revision`／`episode_revision`／`evidence_snapshot_v2_id`；`fact_rule_index`（`app/domain/contracts/fact_rule_index.py` 文件头注释与 `:66-112`）和 `evidence_expectations`（`app/projections/evidence_expectations.py:221-225`）会丢弃权威元组不一致的事实。照此，规则包每重新发布一次、每补传一份资料，31001 的全部事实都会失效，必须整例重抽。
 
