@@ -91,25 +91,44 @@ def _reusable_source_reads(session, store, frozen, targets, model, artifact_stor
                     or saved is not None and saved[1]["review_run_id"] != previous.review_run_id
                     or job.state == "completed" and saved is None):
                 raise ScopeViolationError("自动工作稿与原任务、资料或保存结果不一致，未复用其病例核对结果")
-        if previous.source_pages != frozen.source_pages:
+        # Reading receipts bind the submitted page material. Extraction status
+        # is host policy, rechecked below; it is not another model observation.
+        old_material = [page.model_dump(mode="json", exclude={"extraction_complete"}) for page in previous.source_pages]
+        new_material = [page.model_dump(mode="json", exclude={"extraction_complete"}) for page in frozen.source_pages]
+        if old_material != new_material:
             continue
         previous_targets = None
         if previous.authority != frozen.authority:
-            old_rules = get_rule_set(session, previous.authority.rule_set_id, previous.authority.rule_set_revision)
-            current_rules = get_rule_set(session, frozen.authority.rule_set_id, frozen.authority.rule_set_revision)
-            protocols = AppendRepository(session, PROTOCOL_DOC_CONFIG)
-            if not clinical_source_scope_is_compatible(previous.authority, frozen.authority, old_rules, current_rules,
-                    protocols.get(previous.authority.protocol_version_id), protocols.get(frozen.authority.protocol_version_id)):
-                continue
-            old_stages = list_workflow_stages_for_rule_set(session, old_rules.rule_set_id, old_rules.revision)
-            current_stages = list_workflow_stages_for_rule_set(session, current_rules.rule_set_id, current_rules.revision)
-            old_stage = next((s for s in old_stages if s.workflow_stage_id == previous.review_episode.workflow_stage_id), None)
-            current_stage = next((s for s in current_stages if s.workflow_stage_id == frozen.review_episode.workflow_stage_id), None)
-            excluded = {"workflow_stage_id", "due_requirement_ids"}
-            if (old_stage is None or current_stage is None
-                    or old_stage.model_dump(exclude=excluded) != current_stage.model_dump(exclude=excluded)):
-                continue
-            previous_targets = targets_for_review(previous, old_rules)
+            same_reading_scope = (
+                previous.authority.model_dump(exclude={"episode_revision", "complete_processing_revision_id"})
+                    == frozen.authority.model_dump(exclude={"episode_revision", "complete_processing_revision_id"})
+                and previous.rule_set_sha256 == frozen.rule_set_sha256
+                and previous.work_draft and frozen.work_draft
+            )
+            if same_reading_scope:
+                # Metadata-only processing revisions may retain the literal
+                # reading, never its former adoption/qualification. Both real
+                # revisions must still validate; do not synthesize an authority.
+                from app.storage.fact_authority import FactAuthorityValidator
+                validator = FactAuthorityValidator(session, artifact_store)
+                validator.validate_frozen_source(previous.authority)
+                validator.validate_frozen_source(frozen.authority)
+            else:
+                old_rules = get_rule_set(session, previous.authority.rule_set_id, previous.authority.rule_set_revision)
+                current_rules = get_rule_set(session, frozen.authority.rule_set_id, frozen.authority.rule_set_revision)
+                protocols = AppendRepository(session, PROTOCOL_DOC_CONFIG)
+                if not clinical_source_scope_is_compatible(previous.authority, frozen.authority, old_rules, current_rules,
+                        protocols.get(previous.authority.protocol_version_id), protocols.get(frozen.authority.protocol_version_id)):
+                    continue
+                old_stages = list_workflow_stages_for_rule_set(session, old_rules.rule_set_id, old_rules.revision)
+                current_stages = list_workflow_stages_for_rule_set(session, current_rules.rule_set_id, current_rules.revision)
+                old_stage = next((s for s in old_stages if s.workflow_stage_id == previous.review_episode.workflow_stage_id), None)
+                current_stage = next((s for s in current_stages if s.workflow_stage_id == frozen.review_episode.workflow_stage_id), None)
+                excluded = {"workflow_stage_id", "due_requirement_ids"}
+                if (old_stage is None or current_stage is None
+                        or old_stage.model_dump(exclude=excluded) != current_stage.model_dump(exclude=excluded)):
+                    continue
+                previous_targets = targets_for_review(previous, old_rules)
         for step in store.list_steps(job.job_id):
             if not step.step_id.startswith("semantic"):
                 continue
