@@ -110,6 +110,7 @@ export interface UseFactNormalizationJobResult {
   /** 发起或幂等复用整理任务。 */
   start: (idempotencyKey?: string) => Promise<string | null>;
   retryFailedPages: (runId: string) => Promise<string | null>;
+  revalidateSaved: (runId: string) => Promise<string | null>;
   /** 失败后重试失败范围，或陈旧时重新下发命令。 */
   retry: () => Promise<void>;
   /** 恢复服务端当前范围的已持久任务，不启动读取。 */
@@ -280,7 +281,7 @@ export function useFactNormalizationJob(
   }, [profileStale]);
 
   const start = useCallback(
-    async (idempotencyKey?: string, allowPageRead = true, retryFailedFromRunId?: string): Promise<string | null> => {
+    async (idempotencyKey?: string, allowPageRead = true, retryFailedFromRunId?: string, revalidateFromRunId?: string): Promise<string | null> => {
       if (subjectId === null || reviewEpisodeId === null) return null;
       if (startInFlight.current !== null) return startInFlight.current;
 
@@ -295,7 +296,8 @@ export function useFactNormalizationJob(
           const command = await getFactNormalizationRepository().startFactNormalization(
             subjectId,
             reviewEpisodeId,
-            { idempotencyKey: key, ...(retryFailedFromRunId ? {retryFailedFromRunId} : {}) },
+            { idempotencyKey: key, ...(retryFailedFromRunId ? {retryFailedFromRunId} : {}),
+              ...(revalidateFromRunId ? {revalidateFromRunId} : {}) },
           );
           writeStoredJobId(reviewEpisodeId, command.jobId);
           if (currentScope.current !== scopeKey) return command.jobId;
@@ -366,7 +368,8 @@ export function useFactNormalizationJob(
   return { state: restoring ? { status: "idle" } : pageReview.state.status === "idle" ? state : pageReview.state,
     restoring,
     completedReview: pageReview.completedReview, start, retry,
-    retryFailedPages: (runId: string) => start(undefined, false, runId), resumeFromStorage };
+    retryFailedPages: (runId: string) => start(undefined, false, runId),
+    revalidateSaved: (runId: string) => start(undefined, false, undefined, runId), resumeFromStorage };
 }
 
 export function clearFactNormalizationJobStorage(reviewEpisodeId: string): void {

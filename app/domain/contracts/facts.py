@@ -845,7 +845,8 @@ class FactNormalizationCall(Phase5Model):
     status: FactCallStatus
     input_sha256: str = Field(pattern=_SHA256)
     raw_output_sha256: str | None = Field(default=None, pattern=_SHA256)
-    reading_method: Literal["model_response", "adapter_response", "retained_pending"] | None = None
+    reading_method: Literal["model_response", "adapter_response", "retained_pending", "saved_source_revalidation"] | None = None
+    source_revalidation_sha256: str | None = Field(default=None, pattern=_SHA256)
     candidate_partition_sha256: str | None = Field(default=None, pattern=_SHA256)
     question_classification_sha256: str | None = Field(default=None, pattern=_SHA256)
     response_recovery_sha256: str | None = Field(default=None, pattern=_SHA256)
@@ -856,6 +857,8 @@ class FactNormalizationCall(Phase5Model):
         value = handler(self)
         if self.reading_method is None:
             value.pop("reading_method", None)
+        if self.source_revalidation_sha256 is None:
+            value.pop("source_revalidation_sha256", None)
         if self.candidate_partition_sha256 is None:
             value.pop("candidate_partition_sha256", None)
         if self.question_classification_sha256 is None:
@@ -879,6 +882,8 @@ class FactNormalizationCall(Phase5Model):
             raise ValueError("限定疑问恢复必须属于有原答身份的模型读取")
         if self.response_recovery_sha256 is not None and self.reading_method != "model_response":
             raise ValueError("保存原答恢复必须携带实际模型读取依据")
+        if (self.reading_method == "saved_source_revalidation") != (self.source_revalidation_sha256 is not None):
+            raise ValueError("重新核验已读记录必须携带原读取证明，不得冒充新的模型读取")
         return self
 
 

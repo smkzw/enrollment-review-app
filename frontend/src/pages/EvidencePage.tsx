@@ -1695,7 +1695,8 @@ export function EvidencePage() {
         (factNormalization.state.phase === "succeeded" || factNormalization.state.phase === "failed") &&
         <NormalizationUnresolvedPanel key={`${subjectId}:${reviewEpisodeId}:${factNormalization.state.jobId}`}
           subjectId={subjectId} episodeId={reviewEpisodeId} jobId={factNormalization.state.jobId}
-          onContinue={runId => factNormalization.retryFailedPages(runId)} />}
+          onContinue={runId => factNormalization.retryFailedPages(runId)}
+          onRevalidate={runId => factNormalization.revalidateSaved(runId)} />}
       {factNormalization.completedReview && <RouteLink className="button" to="/tasks" params={{
         job: factNormalization.completedReview.jobId, subject: factNormalization.completedReview.subjectId,
         episode: factNormalization.completedReview.reviewEpisodeId,

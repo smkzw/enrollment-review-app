@@ -412,6 +412,19 @@ def _load_frozen_agent_config(
     """确保审计记录中的冻结配置就是本次实际执行配置。"""
     run = FactNormalizationRunRepository(session).get(run_id)
     chain_scope = run.input_scope_sha256
+    if payload.get("source_revalidation") is not None:
+        selection = payload["source_revalidation"]
+        source_run = FactNormalizationRunRepository(session).get(selection["source_run_id"])
+        frozen_selection = {key: value for key, value in selection.items() if key != "calls"}
+        from app.services.fact_normalization_revalidation import qualification_identity
+        if (source_run.authority != authority or selection.get("qualification_sha256") != qualification_identity()
+                or canonical_hash({"input_scope_sha256": source_run.input_scope_sha256,
+                    "source_revalidation": frozen_selection}) != chain_scope
+                or set(selection.get("calls", {})) != {item["call_id"] for item in payload["calls"]}
+                or sorted(selection["calls"].values(), key=lambda row: row["source_call_id"])
+                    != sorted(selection.get("source_calls", {}).values(), key=lambda row: row["source_call_id"])):
+            raise StepFailure(retryable=False, error_code="INVALID_AUTHORITY", detail="已读记录核验的来源或实现身份不一致。")
+        chain_scope = source_run.input_scope_sha256
     if payload.get("retained_reads") is not None:
         precondition = payload.get("retained_read_precondition_sha256")
         if (not isinstance(precondition, str) or not payload.get("targeted_extraction")
@@ -808,6 +821,8 @@ def _validate_call_checkpoint_replay(
             or checkpoint.get("response_recovery_sha256") != persisted_call.response_recovery_sha256):
         raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
                           detail="读取方式或原答身份与持久记录不一致，不能复用为已读资料依据。")
+    if checkpoint.get("source_revalidation_sha256") != persisted_call.source_revalidation_sha256:
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail="已读记录核验的证明不一致。")
     persisted_candidate_ids = sorted(
         session.execute(
             select(FactNormalizationCandidateRecord.candidate_id).where(
@@ -852,6 +867,9 @@ def _validate_call_checkpoint_replay(
         raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
                           detail=f"已保存候选的来源未通过复验：{exc}") from exc
     _validate_saved_text_accounting(session, payload, authority, run_id, [persisted_call])
+    if persisted_call.source_revalidation_sha256 is not None:
+        _validate_source_revalidation_replay(session, payload, authority, run, persisted_call,
+            artifact_store, prompt_template=prompt_template)
     if persisted_call.response_recovery_sha256 is not None:
         _validate_response_recovery_replay(session, payload, authority, run, persisted_call, artifact_store,
                                           prompt_template=prompt_template)
@@ -859,6 +877,21 @@ def _validate_call_checkpoint_replay(
         _validate_question_classification_replay(session, payload, authority, run, persisted_call, artifact_store)
     elif persisted_call.candidate_partition_sha256 is not None:
         _validate_partition_replay(session, payload, authority, run, persisted_call, artifact_store)
+
+
+def _validate_source_revalidation_replay(session, payload, authority, run, call, artifact_store, *, prompt_template):
+    from app.services.fact_normalization_revalidation import revalidated_output
+    try:
+        spec = next(item for item in payload["calls"] if item["call_id"] == call.call_id)
+        output, proof = revalidated_output(session, payload=payload, call=spec, authority=authority,
+            artifacts=artifact_store, prompt_template=prompt_template)
+        if json.loads(artifact_store.read_by_sha("evaluation_manifest", call.source_revalidation_sha256)) != proof:
+            raise ValueError("重新核验证明与原来实际读取不一致")
+        evidence = _build_input(session, authority, run.run_id, spec,
+            max_pages_per_call=payload["max_pages_per_call"], created_at=run.created_at)
+        _validate_saved_output_matches(session, payload, run, call, evidence, output)
+    except Exception as exc:
+        raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail=f"已读记录核验不能复用：{exc}") from exc
 
 
 def _validate_question_classification_replay(session, payload, authority, run, call, artifact_store):
@@ -1149,6 +1182,9 @@ def _rebuild_call_checkpoint_from_persisted(
     }
     if persisted_call.reading_method is not None:
         checkpoint["reading_method"] = persisted_call.reading_method
+    if persisted_call.source_revalidation_sha256 is not None:
+        checkpoint["source_revalidation_sha256"] = persisted_call.source_revalidation_sha256
+        checkpoint["model_called"] = False
     if persisted_call.candidate_partition_sha256 is not None:
         checkpoint["candidate_partition_sha256"] = persisted_call.candidate_partition_sha256
     if persisted_call.response_recovery_sha256 is not None:
@@ -1355,6 +1391,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
         partition_sha = None
         question_sha = None
         recovery_sha = None
+        revalidation_sha = None
         reference_aliases = None
         if strategy is not None or text_strategy is not None:
             from app.agents.evidence_normalizer import evidence_normalizer_reference_aliases
@@ -1394,7 +1431,20 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             raise StepFailure(retryable=False, error_code="NORMALIZATION_POLICY_INVALID",
                               detail="本次资料整理方式无法识别，请保留作业并检查版本。")
         pending_output = pending_only_output(evidence_input) if policy is not None else None
-        if pending_output is not None:
+        if payload.get("source_revalidation") is not None:
+            from app.services.fact_normalization_revalidation import revalidated_output
+            try:
+                with config.session_factory() as session:
+                    output, proof = revalidated_output(session, payload=payload, call=call, authority=authority,
+                        artifacts=config.artifact_store, prompt_template=config.prompt_template)
+                reading_method = "saved_source_revalidation"
+                raw_sha = proof["raw_output_sha256"]
+                revalidation_sha = config.artifact_store.put("evaluation_manifest", json.dumps(
+                    proof, ensure_ascii=False, sort_keys=True).encode()).sha256
+            except Exception as exc:
+                raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE,
+                                  detail=f"已读记录不能重新核验：{exc}") from exc
+        elif pending_output is not None:
             reading_method = "retained_pending"
             output = validate_evidence_normalizer_output(pending_output, evidence_input)
             raw_sha = _sha256(json.dumps(output.model_dump(mode="json"), ensure_ascii=False, sort_keys=True))
@@ -1581,6 +1631,9 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
         if recovery_sha is not None:
             checkpoint["response_recovery_sha256"] = recovery_sha
             checkpoint["model_called"] = False
+        if revalidation_sha is not None:
+            checkpoint["source_revalidation_sha256"] = revalidation_sha
+            checkpoint["model_called"] = False
         if pending_output is not None:
             checkpoint["normalization_method"] = policy
             checkpoint["model_called"] = False
@@ -1596,6 +1649,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 candidate_partition_sha256=partition_sha,
                 question_classification_sha256=question_sha,
                 response_recovery_sha256=recovery_sha,
+                source_revalidation_sha256=revalidation_sha,
                 created_at=completed_at,
             )
             call_repository = FactNormalizationCallRepository(session)
@@ -1653,6 +1707,9 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                         detail="汇总检查点与已持久化运行状态不一致。",
                     )
                 for saved_call in FactNormalizationCallRepository(session).list_by_run(run_id):
+                    if saved_call.source_revalidation_sha256 is not None:
+                        _validate_source_revalidation_replay(session, payload, authority, run, saved_call,
+                            config.artifact_store, prompt_template=config.prompt_template)
                     if saved_call.response_recovery_sha256 is not None:
                         _validate_response_recovery_replay(session, payload, authority, run, saved_call,
                             config.artifact_store, prompt_template=config.prompt_template)
@@ -1689,6 +1746,10 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             if {call.call_id for call in calls} != {str(call["call_id"]) for call in expected_calls}:
                 raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail="规范化调用未全部形成可验证结果。")
             for saved_call in calls:
+                if saved_call.source_revalidation_sha256 is not None:
+                    _validate_source_revalidation_replay(session, payload, authority,
+                        FactNormalizationRunRepository(session).get(run_id), saved_call,
+                        config.artifact_store, prompt_template=config.prompt_template)
                 if saved_call.response_recovery_sha256 is not None:
                     _validate_response_recovery_replay(session, payload, authority,
                         FactNormalizationRunRepository(session).get(run_id), saved_call, config.artifact_store,
@@ -1722,6 +1783,9 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             accounting_issues = _validate_saved_text_accounting(session, payload, authority, run_id, calls)
             checkpoint["accounting_issue_call_ids"] = [call.call_id for call in accounting_issues]
             final_status = FactNormalizationRunStatus.SUCCEEDED
+            if payload.get("source_revalidation") and FactNormalizationRunRepository(session).get(
+                    payload["source_revalidation"]["source_run_id"]).status == FactNormalizationRunStatus.PARTIAL:
+                final_status = FactNormalizationRunStatus.PARTIAL
             if any(FactNormalizationRunRepository(session).get(call.run_id).status == FactNormalizationRunStatus.PARTIAL
                     for call in retained_calls):
                 final_status = FactNormalizationRunStatus.PARTIAL

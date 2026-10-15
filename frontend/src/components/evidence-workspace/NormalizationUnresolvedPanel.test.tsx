@@ -33,6 +33,20 @@ async function openOtherText() {
 }
 
 describe("NormalizationUnresolvedPanel", () => {
+  it("已读记录可单独重新核验，历史或新核验结果不再提供递归入口", async () => {
+    read.mockResolvedValue({ ...page(1), runId: "saved-run", canRevalidateSaved: true });
+    const onRevalidate = vi.fn().mockResolvedValue("new-job");
+    const view = render(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="j" onRevalidate={onRevalidate} />);
+    const button = await screen.findByRole("button", {name: "重新核验已读记录（不重读原件）", hidden: true});
+    expect(button).not.toBeVisible();
+    fireEvent.click(screen.getByText("查看原件读取提示"));
+    expect(button).toBeVisible();
+    fireEvent.click(button);
+    await waitFor(() => expect(onRevalidate).toHaveBeenCalledWith("saved-run"));
+    read.mockResolvedValue({ ...page(1), jobId: "new-job", runId: "new-run", canRevalidateSaved: false });
+    view.rerender(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="new-job" onRevalidate={onRevalidate} />);
+    await waitFor(() => expect(screen.queryByRole("button", {name: /重新核验已读记录/, hidden: true})).not.toBeInTheDocument());
+  });
   it("读取提示默认收起，展开后具体疑问优先、其他文字可逐项回源", async () => {
     const result = page(3);
     read.mockResolvedValue({ ...result, items: [

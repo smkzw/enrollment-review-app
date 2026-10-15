@@ -558,6 +558,7 @@ class FactNormalizationCommandService:
         idempotency_intent: str | None = None,
         created_by: str | None = None,
         retry_failed_from_run_id: str | None = None,
+        revalidate_from_run_id: str | None = None,
     ) -> CreateNormalizationJobResult:
         """从当前活动证据派生权威并创建/复用持久任务。
 
@@ -571,6 +572,16 @@ class FactNormalizationCommandService:
             authority = authority_from_active_episode(session, review_episode_id)
             if authority.subject_id != subject_id:
                 raise AppNotFoundError("找不到该受试者下的审核节点。")
+            if revalidate_from_run_id:
+                if retry_failed_from_run_id:
+                    raise AppFactNormalizationRejectedError("继续读取和核验已读记录不能混用。")
+                from app.storage.fact_authority import FactAuthorityValidator
+                artifacts = FactAuthorityValidator(session)._require_artifact_store()
+                try:
+                    return self.job_service.create_revalidation_from_run(authority=authority,
+                        source_run_id=revalidate_from_run_id, artifact_store=artifacts, created_by=operator)
+                except InvalidJobDefinitionError as exc:
+                    raise AppFactNormalizationRejectedError(str(exc)) from exc
             coverage_id = None
             if self.require_page_review:
                 from app.services.page_review_coverage_selection import select_normalizer_coverage
