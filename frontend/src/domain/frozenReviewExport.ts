@@ -3,7 +3,7 @@ import { actionStateLabel, actionTargetLabel, decisionLabel, gapTypeLabel, stage
 import { reviewConditionNotes } from "./reviewConditionNotes";
 import type { LocatorView } from "../api/evidence";
 
-interface ReportSection { title: string; paragraphs: string[]; sources?: string[]; children?: ReportSection[] }
+interface ReportSection { title: string; paragraphs: string[]; sources?: string[]; sourcePages?: string[]; children?: ReportSection[] }
 export function reviewSystemIssueLabel(issue: { affectedCodes: string[]; pageNumber?: number | null }): string {
   return issue.affectedCodes.join("、") || (issue.pageNumber ? `原件第 ${issue.pageNumber} 页` : "尚未关联条款的记录");
 }
@@ -57,21 +57,26 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
     for (const parent of parents) {
       const group: ReportSection[] = [];
       for (const item of [parent, ...(report.workDraft.componentClauses?.filter(child => child.parentRuleCode === parent.ruleCode) ?? [])]) {
+        const sourcePages: string[] = [];
         const sources = [
           ...((item === parent || item.sourceText !== parent.sourceText) ? [`方案要求：${item.sourceText ?? item.textSummary}`] : []),
           ...item.factRefs.map(ref => {
             const locator = report.evidenceLocators.find(position => position.locatorId === ref.locatorId);
             if (!locator) throw new Error("工作稿引用的原件位置不完整，请刷新后重试。");
+            sourcePages.push(`${report.sourceFileNames?.[locator.sourceDocumentVersionId] ?? "原始资料"} · 第 ${locator.pageNumber} 页`);
             return `${report.sourceFileNames?.[locator.sourceDocumentVersionId] ?? "原始资料"} · 第 ${locator.pageNumber} 页：${ref.excerpt ?? "本处未保存文字摘录"}`;
           }),
-          ...(item.sourceReadRefs ?? []).map(ref =>
-            `${report.sourceFileNames?.[ref.sourceDocumentVersionId] ?? "原始资料"} · 第 ${ref.pageNumber} 页 · ${ref.disposition === "not_seen" ? "本页未见相关记录，不代表明确否认" : ref.disposition === "unresolved" ? "原文尚待核清" : "原文摘录"}：${ref.excerpt ?? "本处未保存文字摘录，请核对原件"}`),
+          ...(item.sourceReadRefs ?? []).map(ref => {
+            sourcePages.push(`${report.sourceFileNames?.[ref.sourceDocumentVersionId] ?? "原始资料"} · 第 ${ref.pageNumber} 页`);
+            return `${report.sourceFileNames?.[ref.sourceDocumentVersionId] ?? "原始资料"} · 第 ${ref.pageNumber} 页 · ${ref.disposition === "not_seen" ? "本页未见相关记录，不代表明确否认" : ref.disposition === "unresolved" ? "原文尚待核清" : "原文摘录"}：${ref.excerpt ?? "本处未保存文字摘录，请核对原件"}`;
+          }),
         ];
         group.push({ title: `${item.ruleCode} · ${item.textSummary}`, paragraphs: [
           `审核结果：${item.decisionLabel}${item.confidence ? ` · ${item.confidence === "high" ? "高置信" : "低置信"}` : ""}${item.confirmationKind ? ` · ${item.confirmationKind === "medical_manager" ? "医学经理已核实" : "构建者试用核实，非正式医学核实"}` : ""}`,
           ...item.reason.split(/(?<=；)|(?<=。)|\n+/u).filter(part => part.trim() && part.trim() !== "；")
             .map((part, index) => `${index === 0 ? "判定依据：" : ""}${part}`),
-        ], sources: [...new Set(sources)].filter(source => item === parent || !group[0].sources?.includes(source)) });
+        ], sources: [...new Set(sources)].filter(source => item === parent || !group[0].sources?.includes(source)),
+        sourcePages: [...new Set(sourcePages)] });
       }
       result.push({ ...group[0], children: group.slice(1) });
     }
@@ -192,8 +197,7 @@ function renderDocument(title: string, content: ReportSection[], format: "md" | 
     return `<p>${colon > 0 && colon < 64 ? `<strong>${htmlText(text.slice(0, colon + 1))}</strong>${htmlText(text.slice(colon + 1))}` : htmlText(text)}</p>`;
   };
   const htmlSection = (section: ReportSection, level: number): string => {
-    const pages = [...new Set((section.sources ?? []).filter(text => !text.startsWith("方案要求："))
-      .map(text => text.split("：")[0]))];
+    const pages = section.sourcePages ?? [];
     return `<section><h${level}>${htmlText(section.title)}</h${level}>${section.paragraphs.map(paragraph).join("")}${pages.length ? `<p class="source-index"><strong>原件：</strong>${pages.map(htmlText).join("；")}</p>` : ""}${section.sources?.length ? `<details class="report-sources"><summary>方案及原件依据</summary>${section.sources.map(paragraph).join("")}</details>` : ""}${section.children?.length ? `<details><summary>分项核对（${section.children.length}）</summary>${section.children.map(child => htmlSection(child, level + 1)).join("")}</details>` : ""}</section>`;
   };
   return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>${htmlText(title)}</title><style>body{font-family:system-ui,"PingFang SC",sans-serif;color:#24312c;margin:3rem auto;padding:0 2rem;max-width:72rem;line-height:1.8}h1{font-size:1.75rem}h2{font-size:1.15rem;border-bottom:1px solid #d5ded9;padding-bottom:.5rem}h3{font-size:1rem}section{margin-block:2rem}details section{margin:1rem 0;padding-left:1rem}summary{cursor:pointer;font-weight:600}p{white-space:pre-wrap;overflow-wrap:anywhere;margin:.5rem 0}.source-index{font-size:.9em;color:#52615c}@media print{body{margin:0;max-width:none;font-size:10.5pt;line-height:1.5}section{margin-block:1rem}h2,h3{break-after:avoid}p{margin:.25rem 0;orphans:3;widows:3}.report-sources:not([open]){display:none}}</style><body><h1>${htmlText(title)}</h1>${content.map(section => htmlSection(section, 2)).join("")}<script>let folded=[];addEventListener("beforeprint",()=>{folded=[...document.querySelectorAll("details:not([open]):not(.report-sources)")];folded.forEach(item=>{item.open=true})});addEventListener("afterprint",()=>{folded.forEach(item=>{item.open=false});folded=[]});</script></body></html>`;
