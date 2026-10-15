@@ -1093,7 +1093,7 @@ class EvidenceApiReadService:
         ordered_ids = list(dict.fromkeys(locator_ids))
         if not ordered_ids:
             return {}
-        with self.session_factory() as session:
+        with self.session_factory() as session, retain_read_records(session):
             complete = self._load_complete(session, complete_processing_revision_id)
             outside = sorted(set(ordered_ids) - set(complete.locator_ids))
             try:

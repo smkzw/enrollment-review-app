@@ -289,6 +289,36 @@ def test_latest_profile_returns_complete_dto_with_lanes(client) -> None:
     assert fact["value"] == "120/80"
 
 
+@pytest.mark.parametrize("corrupt", ["fact", "locator"])
+@pytest.mark.parametrize("view", ["current", "history", "frozen"])
+def test_read_retention_never_reuses_a_previous_requests_validation(client, corrupt, view):
+    from fastapi.testclient import TestClient
+    from sqlalchemy import update
+    from app.storage.facts_models import ClinicalFactV2Record
+
+    chain = _seed(client)
+    revision = _generate(client, chain, profile_lane=ProfileLane.TARGET_DISEASE)
+    url = (_latest_url(chain) if view == "current" else
+           _latest_url(chain) + "/history" if view == "history" else
+           f"/api/v2/subjects/{chain['subject_id']}/patient-profile-revisions/{revision.patient_profile_revision_id}")
+    first = client.get(url)
+    assert first.status_code == 200, first.text
+    assert client.get(url).json() == first.json()
+    with client.app.state.session_factory() as session, session.begin():
+        if corrupt == "fact":
+            identity = next(item.source_id for item in profile_items(revision) if item.kind.value == "fact")
+            session.execute(update(ClinicalFactV2Record).where(ClinicalFactV2Record.fact_id == identity)
+                            .values(payload_sha256="0" * 64))
+        else:
+            session.execute(update(EvidenceLocatorArtifactRecord)
+                            .where(EvidenceLocatorArtifactRecord.locator_id == chain["locator_id"])
+                            .values(payload_sha256="0" * 64))
+    # Observe the HTTP failure without allowing TestClient to re-raise its server exception.
+    failed = TestClient(client.app, raise_server_exceptions=False).get(url)
+    assert failed.status_code == 500
+    assert failed.content != first.content
+
+
 def test_profile_date_role_comes_from_frozen_fact_without_rewriting_profile(client) -> None:
     chain = _seed(client, "date-role")
     with client.app.state.session_factory() as session:
