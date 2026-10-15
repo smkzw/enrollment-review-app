@@ -86,6 +86,11 @@ def test_replay_rejects_missing_remainder_and_unknown_policy(session_factory):
         with pytest.raises(StepFailure, match="核对"):
             _validate_saved_text_accounting(session, payload, chain["authority"], current.run_id,
                 FactNormalizationCallRepository(session).list_by_run(current.run_id))
+        # The 0.2.0 path retains a page-local technical issue, not a fabricated
+        # complete reading. Corrupted source/range checks below still fail closed.
+        diagnosed = _validate_saved_text_accounting(session, payload | {"targeted_extraction": True},
+            chain["authority"], current.run_id, FactNormalizationCallRepository(session).list_by_run(current.run_id))
+        assert len(diagnosed) == 1
     from app.workflow.runner import StepContext
     payload["text_accounting_policy"] = "normalizer-text-accounting/unsupported"
     with pytest.raises(StepFailure) as exc:

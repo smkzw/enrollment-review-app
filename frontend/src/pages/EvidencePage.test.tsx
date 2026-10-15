@@ -706,6 +706,7 @@ describe("证据工作台", () => {
     await openValid(user);
     const band = screen.getByLabelText("当前资料上下文");
     expect(band).toHaveTextContent("界面试用项目 · Ⅲ期");
+    expect(within(band).getByTitle("界面试用项目")).toHaveTextContent("界面试用项目 · Ⅲ期");
     expect(band).toHaveTextContent("UAT-01");
     expect(band).toHaveTextContent("筛选期");
     expect(band).toHaveTextContent("V1.0");
@@ -1776,13 +1777,22 @@ describe("证据工作台", () => {
       await waitFor(() => expect(fns.getOcrPage).toHaveBeenCalledWith("ocr-page-1",
         "base-revision-1", expect.objectContaining({ signal: expect.any(AbortSignal) })));
       expect(await screen.findByText("已保存的日期校对")).toBeInTheDocument();
+      fns.buildProcessingRevision.mockResolvedValue({ candidateId: "candidate-updated", jobId: "job-updated",
+        candidateStatus: "staged", candidateStatusLabel: "等待处理", candidateEventSeq: null,
+        completeRevisionId: null, created: true, revision: null });
+      await user.click(screen.getByRole("button", { name: "检查核对结果并生成资料版本" }));
+      await waitFor(() => expect(fns.buildProcessingRevision).toHaveBeenCalledWith(expect.objectContaining({
+        evidence_snapshot_id: "snap-active", base_processing_revision_id: "base-revision-1",
+        source_qualification_mode: "scoped_text_v1", selected_locator_ids: [],
+      })));
+      await waitFor(() => expect(screen.getByRole("button", { name: "返回已启用资料" })).toBeEnabled());
       await user.click(screen.getByRole("button", { name: "返回已启用资料" }));
       await waitFor(() => expect(window.location.hash).not.toContain("ocrRevision"));
       await waitFor(() => expect(fns.getOcrPage).toHaveBeenLastCalledWith("ocr-page-1",
         "processing-revision-1", expect.objectContaining({ signal: expect.any(AbortSignal) })));
     }
     expect(fns.activateProcessingRevision).not.toHaveBeenCalled();
-    expect(fns.buildProcessingRevision).not.toHaveBeenCalled();
+    expect(fns.buildProcessingRevision).toHaveBeenCalledTimes(candidateSnapshot === "wrong-snapshot" ? 0 : 1);
     expect(fns.createCorrection).not.toHaveBeenCalled();
   });
 

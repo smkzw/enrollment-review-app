@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from .agent_io import ProtocolDeconstructionDraft
-from .common import VersionedModel
+from .common import ContractModel, VersionedModel
 from .enums import StableEnum, StudyPhase
 
 
@@ -151,6 +151,59 @@ class ProtocolDraftRevisionDiff(VersionedModel):
     rule_diffs: list[ParentRuleDiff] = Field(default_factory=list)
 
 
+class ReviewScopeExclusion(ContractModel):
+    candidate_key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reason: str = Field(min_length=1)
+
+
+class ReviewScopeAddition(ContractModel):
+    scope_kind: Literal["referenced_source", "medication_section"]
+    source_span_ids: list[str] = Field(min_length=1)
+    official_codes: list[str] = Field(default_factory=list)
+    resolves_references: list[str] = Field(default_factory=list)
+    reason: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_sources(self):
+        if (len(set(self.source_span_ids)) != len(self.source_span_ids)
+                or any(not value.strip() for value in self.source_span_ids)
+                or len(set(self.official_codes)) != len(self.official_codes)
+                or len(set(self.resolves_references)) != len(self.resolves_references)
+                or not self.reason.strip()):
+            raise ValueError("新增范围的来源、关联条款或理由不完整或重复")
+        if self.scope_kind == "referenced_source" and not self.official_codes:
+            raise ValueError("引用说明需选择其对应的入排条款")
+        if self.resolves_references and self.scope_kind != "referenced_source":
+            raise ValueError("待定位引用只能由对应的引用说明指定")
+        return self
+
+
+class ReviewScopeProposal(ContractModel):
+    scope_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    included_candidate_keys: list[str]
+    exclusions: list[ReviewScopeExclusion] = Field(default_factory=list)
+    additions: list[ReviewScopeAddition] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_choices(self):
+        keys = self.included_candidate_keys
+        removed = [item.candidate_key for item in self.exclusions]
+        if len(set(keys)) != len(keys) or len(set(removed)) != len(removed) or set(keys) & set(removed):
+            raise ValueError("范围选择或排除不得重复或相互冲突")
+        if any(not item.reason.strip() for item in self.exclusions):
+            raise ValueError("移除范围需说明理由")
+        additions = [(item.scope_kind, tuple(item.source_span_ids), tuple(item.official_codes)) for item in self.additions]
+        if len(set(additions)) != len(additions):
+            raise ValueError("新增范围不得重复")
+        return self
+
+
+class ReviewScopeSelection(ReviewScopeProposal):
+    snapshot_id: str = Field(min_length=1)
+    saved_by: str = Field(min_length=1)
+    saved_at: datetime
+
+
 class ProtocolDraftRevision(VersionedModel):
     """一份已保存草稿的不可变历史版本。
 
@@ -175,6 +228,14 @@ class ProtocolDraftRevision(VersionedModel):
     content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     diff: ProtocolDraftRevisionDiff = Field(default_factory=ProtocolDraftRevisionDiff)
     created_at: datetime
+    review_scope_selection: ReviewScopeSelection | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_historical_scope_payloads(self, handler):
+        payload = handler(self)
+        if self.review_scope_selection is None:
+            payload.pop("review_scope_selection", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_chain(self) -> "ProtocolDraftRevision":

@@ -195,7 +195,7 @@ export function makeExposureItem(
     ...makeFactItem({
       item_id: "item-exposure-1",
       lane: "medication",
-      lane_label: "药物暴露",
+      lane_label: "用药与治疗",
       kind: "exposure",
       kind_label: "用药暴露",
       source_id: "exposure-source-1",
@@ -282,7 +282,7 @@ export function laneLabelFor(lane: ProfileLaneWire): string {
     target_disease: "目标疾病",
     symptoms_signs: "症状体征",
     medical_history: "病史",
-    medication: "药物暴露",
+    medication: "用药与治疗",
     non_drug_treatment: "非药物治疗/操作",
     test_exam_score: "检验检查/评分",
     allergy_infection_immune: "过敏/感染/免疫",

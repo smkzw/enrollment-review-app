@@ -61,6 +61,17 @@ class FactLocatorReferenceError(RepositoryError):
     """定位引用不在当前审核节点/活动快照/处理修订闭包内（跨节点/跨快照/跨修订）。"""
 
 
+def clinical_source_scope_is_compatible(previous, authority, old_rules, current_rules, old_protocol, current_protocol):
+    """A rule-only revision can reuse source readings, not its former conclusions."""
+    identity_fields = {"episode_revision", "protocol_version_id", "rule_set_revision"}
+    old_variables = {item.variable_id: item.model_dump(mode="json") for item in old_rules.variable_definitions or ()}
+    current_variables = {item.variable_id: item.model_dump(mode="json") for item in current_rules.variable_definitions or ()}
+    return (previous.model_dump(exclude=identity_fields) == authority.model_dump(exclude=identity_fields)
+        and old_protocol.sha256 == current_protocol.sha256
+        and old_rules.study_phase == current_rules.study_phase
+        and all(current_variables.get(key) == value for key, value in old_variables.items()))
+
+
 class FactAuthorityValidator:
     """把不可变权威元组与数据库当前状态确定性核对。
 
@@ -71,6 +82,7 @@ class FactAuthorityValidator:
     def __init__(self, session: Session, artifact_store=None) -> None:
         self.session = session
         self.artifact_store = artifact_store
+        self._retained_documents = {}
 
     def _require_artifact_store(self):
         """native_text 定位闭包核验需要内容寻址工件库；惰性构建避免循环导入。"""
@@ -103,6 +115,119 @@ class FactAuthorityValidator:
         """
         self._validate_snapshot(authority)
         return self._validate_complete_revision(authority)
+
+    def rule_revision_source_is_reusable(self, previous: FactAuthority, current: FactAuthority) -> bool:
+        """Verify retained material for 0.2.0; current writes still require validate()."""
+        if previous == current:
+            return True
+        identity_fields = {"episode_revision", "protocol_version_id", "rule_set_revision"}
+        if previous.model_dump(exclude=identity_fields) != current.model_dump(exclude=identity_fields):
+            return False
+        from app.storage.repositories import AppendRepository, PROTOCOL_DOC_CONFIG, get_rule_set
+        old_rules = get_rule_set(self.session, previous.rule_set_id, previous.rule_set_revision)
+        current_rules = get_rule_set(self.session, current.rule_set_id, current.rule_set_revision)
+        if not old_rules.variable_definitions or not current_rules.variable_definitions:
+            return False
+        protocols = AppendRepository(self.session, PROTOCOL_DOC_CONFIG)
+        if not clinical_source_scope_is_compatible(previous, current, old_rules, current_rules,
+                protocols.get(previous.protocol_version_id), protocols.get(current.protocol_version_id)):
+            return False
+        self.validate_frozen_source(previous)
+        self.validate_frozen_source(current)
+        return True
+
+    def retained_source_documents(self, previous: FactAuthority, current: FactAuthority) -> frozenset[str]:
+        """Prove unchanged document inputs along the actual incremental snapshot chain.
+
+        This is source reuse, not a new fact, model read or rule approval. Replaced
+        files, changed text/locators/classification and unrelated snapshots do not
+        qualify. Corrupt retained records remain errors, not cache misses.
+        """
+        cache_key = (previous.model_dump_json(), current.model_dump_json())
+        if cache_key in self._retained_documents:
+            return self._retained_documents[cache_key][0]
+        if any(getattr(previous, key) != getattr(current, key) for key in (
+                "project_id", "subject_id", "review_episode_id", "rule_set_id")):
+            return frozenset()
+        from app.storage.repositories import AppendRepository, PROTOCOL_DOC_CONFIG, get_rule_set
+        old_rules = get_rule_set(self.session, previous.rule_set_id, previous.rule_set_revision)
+        new_rules = get_rule_set(self.session, current.rule_set_id, current.rule_set_revision)
+        protocols = AppendRepository(self.session, PROTOCOL_DOC_CONFIG)
+        old_protocol, new_protocol = (protocols.get(key) for key in (previous.protocol_version_id, current.protocol_version_id))
+        variables = {row.variable_id: row.model_dump(mode="json") for row in new_rules.variable_definitions or ()}
+        if (not old_rules.variable_definitions or old_protocol.sha256 != new_protocol.sha256
+                or old_rules.study_phase != new_rules.study_phase
+                or any(variables.get(row.variable_id) != row.model_dump(mode="json") for row in old_rules.variable_definitions)):
+            return frozenset()
+        chain = set()
+        key = current.evidence_snapshot_v2_id
+        while key is not None:
+            if key in chain:
+                raise FactAuthorityError("资料版本链重复，不能复用旧读取")
+            chain.add(key)
+            snapshot = EvidenceSnapshotRepository(self.session).get(key)
+            if (snapshot.project_id, snapshot.subject_id, snapshot.review_episode_id) != (
+                    current.project_id, current.subject_id, current.review_episode_id):
+                raise FactAuthorityError("资料版本链属于其他个例或节点")
+            key = snapshot.prior_snapshot_id
+        if previous.evidence_snapshot_v2_id not in chain:
+            return frozenset()
+        old_revision, new_revision = (self.validate_frozen_source(row) for row in (previous, current))
+        if (old_revision.source_qualification_mode != new_revision.source_qualification_mode
+                or old_revision.referenced_document_revision_ids != new_revision.referenced_document_revision_ids
+                or old_revision.resolution_revision_ids != new_revision.resolution_revision_ids):
+            return frozenset()
+        from app.services.fact_normalization_source_adapter import build_doc_version_to_logical_map, build_effective_text_map
+        from app.storage.evidence_repositories import SourceDocumentMetadataRevisionRepository
+        old_docs, old_meta = build_doc_version_to_logical_map(self.session, old_revision)
+        new_docs, new_meta = build_doc_version_to_logical_map(self.session, new_revision)
+        old_pages = build_effective_text_map(self.session, old_revision, doc_version_to_logical=old_docs)
+        new_pages = build_effective_text_map(self.session, new_revision, doc_version_to_logical=new_docs)
+        from app.storage.evidence_locator_repositories import OCRRiskScanRepository, OCRRiskReviewRepository
+        def risk_scopes(revision):
+            scans = OCRRiskScanRepository(self.session).get_many(revision.risk_scan_ids)
+            reviews = OCRRiskReviewRepository(self.session).get_many(revision.risk_review_ids)
+            result = {}
+            for document in {page.source_document_version_id for page in revision.manifest}:
+                pages = {page.ocr_page_id for page in revision.manifest if page.source_document_version_id == document}
+                selected = [scan for scan in scans if scan.ocr_page_id in pages]
+                flags = {flag.risk_id for scan in selected for flag in scan.flags}
+                result[document] = (sorted(scan.scan_id for scan in selected),
+                    sorted(review.review_id for review in reviews if review.risk_flag_id in flags),
+                    sorted(flags & set(revision.unresolved_blocking_risk_ids)))
+            return result
+        old_risks, new_risks = risk_scopes(old_revision), risk_scopes(new_revision)
+        metadata = SourceDocumentMetadataRevisionRepository(self.session)
+        selected = set()
+        for document in old_docs.keys() & new_docs.keys():
+            logical = old_docs[document]
+            if new_docs[document] != logical or logical not in old_meta or logical not in new_meta:
+                continue
+            old = metadata.get(old_meta[logical])
+            new = metadata.get(new_meta[logical])
+            if any(getattr(old, key) != getattr(new, key) for key in (
+                    "document_type", "source_party", "document_category", "source_category")):
+                continue
+            prior = {key: value for key, value in old_pages.items() if key[0] == document}
+            present = {key: value for key, value in new_pages.items() if key[0] == document}
+            if prior and prior == present and old_risks[document] == new_risks[document]:
+                selected.add(document)
+        result = frozenset(selected)
+        self._retained_documents[cache_key] = result, frozenset(new_revision.locator_ids)
+        return result
+
+    def retained_fact_source_is_reusable(self, fact, current: FactAuthority) -> bool:
+        if self.rule_revision_source_is_reusable(fact.authority, current):
+            return True
+        documents = self.retained_source_documents(fact.authority, current)
+        if not documents or not fact.locator_ids:
+            return False
+        from app.storage.evidence_locator_repositories import EvidenceLocatorRepository
+        locators = EvidenceLocatorRepository(self.session).get_many(fact.locator_ids)
+        if any(locator.source_document_version_id not in documents for locator in locators):
+            return False
+        _, current_locators = self._retained_documents[(fact.authority.model_dump_json(), current.model_dump_json())]
+        return set(fact.locator_ids) <= current_locators
 
     def _validate_snapshot(self, authority: FactAuthority) -> None:
         snapshot = self.session.get(

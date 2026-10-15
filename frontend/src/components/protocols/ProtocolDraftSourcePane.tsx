@@ -12,14 +12,21 @@ interface ProtocolDraftSourcePaneProps {
   component: ProtocolDraftItemView | null;
   locators: ReadonlyArray<ProtocolSourceLocatorView>;
   fileName: string | null;
+  selectionLabel?: string;
 }
 
 export function ProtocolDraftSourcePane({
   component,
   locators,
   fileName,
+  selectionLabel,
 }: ProtocolDraftSourcePaneProps) {
-  if (component === null) {
+  const groups = new Map<string, ProtocolSourceLocatorView[]>();
+  for (const locator of locators) {
+    const key = JSON.stringify([locator.sourceRef, locator.pageLabel, locator.precision]);
+    groups.set(key, [...(groups.get(key) ?? []), locator]);
+  }
+  if (component === null && !selectionLabel) {
     return (
       <EmptyState
         message="请选择规则子项以查看来源定位"
@@ -33,7 +40,7 @@ export function ProtocolDraftSourcePane({
       <header className="protocol-source-pane__head">
         <h3 className="protocol-source-pane__title">来源定位</h3>
         <p className="protocol-source-pane__meta">
-          {fileName ?? "方案文件"} · {component.displayCode}
+          {fileName ?? "方案文件"} · {selectionLabel ?? component?.displayCode}
         </p>
       </header>
 
@@ -41,21 +48,24 @@ export function ProtocolDraftSourcePane({
         <EmptyState message="当前子项暂无来源定位" hint="请核对草稿映射或等待结构提取完成。" />
       ) : (
         <ul className="protocol-source-pane__list">
-          {locators.map((locator) => (
-            <li key={locator.sourceSpanId} className="protocol-source-card">
+          {[...groups.entries()].map(([key, entries]) => (
+            <li key={key} className="protocol-source-card">
               <div className="protocol-source-card__head">
-                <span className="protocol-source-card__ref">{locator.sourceRef}</span>
-                {locator.pageLabel !== null && (
-                  <span className="protocol-source-card__page">{locator.pageLabel}</span>
+                <span className="protocol-source-card__ref">{entries[0]?.sourceRef}</span>
+                {entries[0]?.pageLabel !== null && (
+                  <span className="protocol-source-card__page">{entries[0]?.pageLabel}</span>
                 )}
-                <PrecisionBadge precision={locator.precision} />
+                {entries[0] && <PrecisionBadge precision={entries[0].precision} />}
               </div>
-              <blockquote className="protocol-source-card__excerpt">{locator.excerpt}</blockquote>
+              {entries.map(locator => <div key={locator.sourceSpanId}>
+              {locator.excerpt ? <blockquote className="protocol-source-card__excerpt">{locator.excerpt}</blockquote>
+                : <p>此位置为整体页或表格定位，没有单独的文字摘录。</p>}
               {locator.degradationReason !== null && (
                 <p className="protocol-source-card__degraded">
                   {UI_PHRASES.degradationPrefix}：{locator.degradationReason}
                 </p>
               )}
+              </div>)}
             </li>
           ))}
         </ul>

@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { FactCorrectionRequestInput } from "./factCorrectionTypes";
 import { createPatientProfileHttp } from "./patientProfileHttp";
+import { decodeFactCorrectionWorkDraftLink } from "./factCorrectionViewModels";
+
+it("更正／重算关联按节点校验，不把排队或缺结果视为完成", async () => {
+  const link = { job_id: "correction-job", subject_id: "subject", review_episode_id: "episode", enabled: true,
+    correction_applied: true, work_draft_job_id: "working-job", work_draft_state: "queued", review_run_id: null };
+  expect(decodeFactCorrectionWorkDraftLink(link).workDraftState).toBe("queued");
+  for (const changed of [
+    { ...link, correction_applied: false }, { ...link, work_draft_state: "completed" },
+    { ...link, work_draft_job_id: null }, { ...link, enabled: false }, { ...link, review_run_id: "not-yet-saved" },
+  ]) expect(() => decodeFactCorrectionWorkDraftLink(changed)).toThrow();
+  const repo = createPatientProfileHttp({ fetchImpl: async () => jsonResponse({ ...link, subject_id: "other-patient" }) });
+  await expect(repo.getFactCorrectionWorkDraftLink!("subject", "episode", "correction-job")).rejects.toThrow("不属于");
+});
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -123,6 +136,31 @@ const requestInput: FactCorrectionRequestInput = {
 };
 
 describe("Patient Profile fact-correction HTTP contract", () => {
+  it("读取明确记录的中文项目选择，拒绝异患者、重复身份及未知类型", async () => {
+    const payload = { subject_id: "subject", review_episode_id: "episode", target_id: "fact", target_revision: 1,
+      variable_id: null, variables: [{ variable_id: "reading", label_zh: "测量读数", value_type: "number", canonical_unit: "mg/L" }] };
+    const repo = createPatientProfileHttp({ fetchImpl: async () => jsonResponse(payload) });
+    const result = await repo.getFactCorrectionOptions!("subject", "episode", "fact");
+    expect(result.variables[0]).toEqual({ variableId: "reading", label: "测量读数", valueType: "number", unit: "mg/L" });
+    for (const altered of [{ ...payload, subject_id: "other" }, { ...payload, target_id: "other" },
+      { ...payload, variables: [...payload.variables, ...payload.variables] },
+      { ...payload, variables: [{ ...payload.variables[0], value_type: "guess" }] }]) {
+      const invalid = createPatientProfileHttp({ fetchImpl: async () => jsonResponse(altered) });
+      await expect(invalid.getFactCorrectionOptions!("subject", "episode", "fact")).rejects.toThrow();
+    }
+  });
+
+  it("明确清除关联时发送null，未改关联时沿用旧请求", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const repo = createPatientProfileHttp({ fetchImpl: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body))); return jsonResponse(correctionPreview());
+    } });
+    await repo.previewFactCorrection("subject", "episode", requestInput);
+    await repo.previewFactCorrection("subject", "episode", { ...requestInput, updates: { ...requestInput.updates, variableId: null } });
+    expect(bodies[0]).not.toHaveProperty("variable_id");
+    expect(bodies[1]).toHaveProperty("variable_id", null);
+  });
+
   it("maps a preview request and keeps preview read-only", async () => {
     const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
     const repo = createPatientProfileHttp({

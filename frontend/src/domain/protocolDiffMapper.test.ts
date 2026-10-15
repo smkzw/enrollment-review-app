@@ -392,6 +392,34 @@ describe("mapProtocolDraftDiff", () => {
     expect(() => normalizeProtocolDraftDiff({ ...completeDiff(), rule_diffs: [rule] })).toThrow(/无法核对/);
   });
 
+  it.each(["previous", "current"])("保留%s侧的未解析子项，不伪装成可执行条件", side => {
+    const wire = structuredClone(DIFF);
+    const held = { kind: "restricted", limitation_kind: "interpretation_unresolved",
+      unresolved_dimensions: ["回溯起点尚未明确"] } as const;
+    wire.rule_diffs![0].logic_changes[0][side as "previous" | "current"] = {
+      ...held, unresolved_dimensions: [...held.unresolved_dimensions],
+    };
+    const parsed = normalizeProtocolDraftDiff(wire);
+    expect(parsed.rule_diffs![0].logic_changes[0][side as "previous" | "current"]).toEqual(held);
+    const view = mapProtocolDraftDiff(parsed);
+    expect(view.ruleDiffs[0].changes.find(row => row.category === "logic")?.[side as "previous" | "current"]).toEqual(held);
+  });
+
+  it.each([
+    { kind: "restricted", limitation_kind: "unknown", unresolved_dimensions: ["待核内容"] },
+    { kind: "restricted", limitation_kind: "consumer_unavailable", unresolved_dimensions: [] },
+    { kind: "restricted", limitation_kind: "consumer_unavailable", unresolved_dimensions: [" "] },
+    { kind: "restricted", limitation_kind: "interpretation_unresolved", unresolved_dimensions: ["待核内容"], predicate: {} },
+    { kind: "logical", operator: "not", children: [
+      { kind: "restricted", limitation_kind: "interpretation_unresolved", unresolved_dimensions: ["待核内容"] },
+    ] },
+  ])("拒绝缺少说明、混入执行字段或嵌入逻辑树的未解析状态", held => {
+    const wire = structuredClone(DIFF);
+    const target = wire.rule_diffs![0].logic_changes[0];
+    Object.assign(target, { previous: held });
+    expect(() => normalizeProtocolDraftDiff(wire)).toThrow(/无法核对/);
+  });
+
   it("新增/删除整条父规则正常映射", () => {
     const view = mapProtocolDraftDiff(completeDiff({
       added_rule_codes: ["IN-09"],

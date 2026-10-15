@@ -41,15 +41,15 @@ from app.services.phase_applicability_execution import (
 _SHA = "a" * 64
 _WORKTREE = Path(__file__).resolve().parents[3]
 _D001_MANIFEST = _WORKTREE / (
-    ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/"
+    "archives/trellis-tasks/08-22-phase5-clinical-facts-profile/research/"
     "d001-ii-phase-closure/coverage_manifest.json"
 )
 _D001_HISTORICAL_PLAN = _WORKTREE / (
-    ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/"
+    "archives/trellis-tasks/08-22-phase5-clinical-facts-profile/research/"
     "d001-ii-phase-closure/frozen_phase_plan.json"
 )
 _D001_HISTORICAL_EXECUTION = _WORKTREE / (
-    ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/"
+    "archives/trellis-tasks/08-22-phase5-clinical-facts-profile/research/"
     "d001-ii-phase-closure/execution/"
     "d001-ii-phase-closure-20260825-slice58e.json"
 )

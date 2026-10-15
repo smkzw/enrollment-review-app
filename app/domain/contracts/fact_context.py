@@ -20,7 +20,7 @@ class FactContextSource(FactContextSourceDraft):
 
 
 class FactContextQualifierDraft(ContractModel):
-    kind: Literal["assessment", "specimen", "method", "body_site", "laterality", "other"]
+    kind: Literal["assessment", "specimen", "method", "body_site", "laterality", "reference_range", "other"]
     label: str = Field(min_length=1)
     source: FactContextSourceDraft | None = Field(default=None, exclude_if=lambda value: value is None)
 
@@ -56,6 +56,36 @@ def validate_context_excerpt(qualifiers: Sequence[FactContextQualifierDraft], as
 
 def context_source_ids(qualifiers: Sequence[FactContextQualifierDraft]) -> set[str]:
     return {item.source.locator_id for item in qualifiers if item.source is not None}
+
+
+def has_standalone_measurement(candidate) -> bool:
+    """A literal field reading can stand alone; separate headers remain unadopted."""
+    basis = candidate.assertion_basis
+    if not candidate.variable_id or basis is None or isinstance(candidate.canonical_value, bool):
+        return False
+    external = [item for item in basis.contextual_qualifiers if item.source is not None]
+    if not external or any(item.kind not in {"specimen", "method"} for item in external):
+        return False
+    if candidate.profile_lane.value != "test_exam_score":
+        return False
+    value = candidate.canonical_value
+    from decimal import Decimal
+    from app.domain.risk_flags import _NUMBER, _REFERENCE_RANGE
+    for line in basis.assertion_text.splitlines():
+        if candidate.asserted_object not in line:
+            continue
+        reading = line.split(candidate.asserted_object, 1)[1].lstrip(" \t:：=")
+        if isinstance(value, str) and reading.startswith(value):
+            return True
+        if isinstance(value, (int, float)) and not _REFERENCE_RANGE.match(reading):
+            match = _NUMBER.match(reading)
+            if match and Decimal(match.group()) == Decimal(str(value)):
+                suffix = reading[match.end():].lstrip()
+                if suffix.startswith(("/", "-")):
+                    continue
+                if candidate.unit in (None, "unitless") or suffix.startswith(candidate.unit):
+                    return True
+    return False
 
 
 def validate_context_source_excerpt(excerpt: str, localized_text: str | None) -> None:

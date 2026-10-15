@@ -160,6 +160,8 @@ def test_local_explicit_credential_is_used():
 
 @pytest.mark.parametrize("visual", [True, False])
 def test_mtplx_main_reader_requires_visual_identity_and_does_not_vote_twice(monkeypatch, visual):
+    monkeypatch.setattr("app.llm.mtplx_model_lifecycle.configured_mtplx_owner", lambda: None)
+    monkeypatch.setattr("app.llm.mtplx_model_lifecycle._external_shared_mtplx_available", lambda *_: True)
     routes = require_page_reader_routes({
         "PAGE_REVIEW_MAIN_A_PROVIDER": "zhipu-coding-plan",
             "PAGE_REVIEW_MAIN_A_API_KEY": "a", "PAGE_REVIEW_MAIN_B_PROVIDER": "mtplx",

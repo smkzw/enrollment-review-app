@@ -90,6 +90,7 @@ class FactRuleLinkV2Repository:
                 requirement_id=requirement.requirement_id,
                 rule_component_id=requirement.rule_component_id,
                 fact_type=requirement.fact_type,
+                variable_id=requirement.variable_id,
             )
             for requirement in contracts
         ]

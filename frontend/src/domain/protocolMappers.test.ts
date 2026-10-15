@@ -1,8 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { draftRevisionFixture } from "../fixtures/protocol-deconstruction-workbench";
-import { mapProtocolDraftRules, mapProtocolSourceLocators } from "./protocolMappers";
+import { displayProtocolSourceLocators, mapProtocolDraftRules, mapProtocolSourceLocators } from "./protocolMappers";
 
 describe("方案草稿来源映射", () => {
+  it("仅折叠同一快照同一原文位置的重复展示，不以相同文字合并不同页或不同单元", () => {
+    const source = { snapshot_id: "snapshot", source_ref: "body.p1", render_artifact_id: "render", render_page: 1,
+      text_start: 3, text_end: 7, excerpt: "相同原文", precision: "text_range" };
+    const spans = { a: source, copy: { ...source }, page: { ...source, render_page: 2 },
+      unit: { ...source, source_ref: "body.p2" }, position: { ...source, text_start: 8 },
+      version: { ...source, snapshot_id: "another" }, unknown: { excerpt: "相同原文" } };
+    const refs = ["a", "a", "copy", "page", "unit", "position", "version", "unknown"];
+    expect(displayProtocolSourceLocators(spans, refs).map(value => value.sourceSpanId))
+      .toEqual(["a", "page", "unit", "position", "version", "unknown"]);
+    expect(mapProtocolSourceLocators(spans, refs)).toHaveLength(8);
+    expect(refs).toHaveLength(8);
+    expect(spans.copy).toEqual(source);
+  });
   it("按子组件 ID 保留同一父规则下各自的来源", () => {
     const content = structuredClone(draftRevisionFixture.content) as Record<string, unknown>;
     const rules = content.proposed_rules as Array<Record<string, unknown>>;

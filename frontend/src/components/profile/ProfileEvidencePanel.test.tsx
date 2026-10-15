@@ -7,7 +7,7 @@
  * - 冲突条目按并列记录展示，不合成坐标。
  */
 
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -253,7 +253,11 @@ describe("ProfileEvidencePanel", () => {
     const model = loadModel();
     render(<ProfileEvidencePanel model={model} item={openItem(model)} onClose={vi.fn()} />);
     await screen.findByText("120 mmHg");
-    expect(screen.getByText(/不代表独立测量次数/)).toBeInTheDocument();
+    const details = screen.getByLabelText("已保存的来源读数");
+    expect(details).not.toHaveAttribute("open");
+    await userEvent.click(within(details).getByText("查看提取记录"));
+    expect(details).toHaveAttribute("open");
+    expect(screen.queryByText(/测量次数/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看这处原文" })).toBeInTheDocument();
   });
 
@@ -282,6 +286,42 @@ describe("ProfileEvidencePanel", () => {
     const boxes = screen.getAllByLabelText(/^重点标注/);
     expect(boxes).toHaveLength(1);
     expect(boxes[0]).toHaveClass("original-evidence-page__box--selected");
+  });
+
+  it("普通事实只铺开当前摘录，其他依据可选择；定位说明不重复占主区", async () => {
+    const wire = makeRevision();
+    const first = wire.evidence_locators[0]!;
+    wire.evidence_locators.push({ ...first, locator_id: "loc-second", excerpt: "第二处原文" });
+    wire.lanes.find(lane => lane.lane === "demographics")!.items[0]!.locator_ids.push("loc-second");
+    const model = adaptPatientProfile(decodePatientProfileRevision(wire));
+    const { container } = render(<ProfileEvidencePanel model={model} item={openItem(model)} onClose={vi.fn()} />);
+    const choices = await screen.findByRole("combobox", { name: "原文依据" });
+    expect(within(choices).getAllByRole("option")).toHaveLength(2);
+    expect(container.querySelectorAll("article.profile-locator")).toHaveLength(1);
+    expect(screen.getByText("定位说明").closest("details")).not.toHaveAttribute("open");
+    await userEvent.selectOptions(choices, "loc-second");
+    expect(container.querySelector(".profile-locator__excerpt")).toHaveTextContent("第二处原文");
+    expect(screen.getAllByLabelText(/^重点标注/).filter(node => node.classList.contains("original-evidence-page__box--selected"))).toHaveLength(1);
+  });
+
+  it("文字来源优先当前项目而非孤立日期，突出项目且其他依据仍可选择", async () => {
+    const wire = makeRevision();
+    const first = { ...wire.evidence_locators[0]!, precision: "page_only" as const,
+      authenticity: "degraded" as const, bbox: null, coordinate_frame: null, excerpt: "2026-03",
+      degradation_reason: "仅能定位页面" };
+    wire.evidence_locators[0] = first;
+    wire.evidence_locators.push({ ...first, locator_id: "object-excerpt", excerpt: "血压 120/80 mmHg，未见其他异常" });
+    wire.lanes.find(lane => lane.lane === "demographics")!.items[0]!.locator_ids.push("object-excerpt");
+    const model = adaptPatientProfile(decodePatientProfileRevision(wire));
+    const { container } = render(<ProfileEvidencePanel model={model} item={openItem(model)} onClose={vi.fn()} />);
+    const choices = await screen.findByRole("combobox", { name: "原文依据" });
+    await waitFor(() => expect(choices).toHaveValue("object-excerpt"));
+    const quote = container.querySelector(".profile-locator__excerpt")!;
+    expect(quote.textContent).toBe("血压 120/80 mmHg，未见其他异常");
+    expect(quote.querySelector("mark")).toHaveTextContent("血压");
+    expect(screen.queryByLabelText(/^重点标注/)).not.toBeInTheDocument();
+    await userEvent.selectOptions(choices, first.locator_id);
+    expect(container.querySelector(".profile-locator__excerpt")).toHaveTextContent("2026-03");
   });
 
   it("定位页码或资料版本与实际页不一致时停止精确定位且不画框", async () => {

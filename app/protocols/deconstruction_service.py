@@ -40,7 +40,7 @@ from app.domain.contracts.protocol_metadata import (
     StudyPhaseSelection,
 )
 from app.protocols.catalogs import freeze_official_parent_rules
-from app.protocols.docx_structure import StructureBlock, StructureExtraction
+from app.protocols.docx_structure import StructureBlock, StructureExtraction, native_source_text
 from app.protocols.phase_detection import (
     PhaseDetectionResult,
     project_single_phase,
@@ -411,22 +411,7 @@ def _build_source_materials(
         block = blocks_by_ref.get(span.source_ref)
         if block is None:
             _fail("source_block_missing", f"来源片段没有对应的结构原文：{span.source_ref}。")
-        source_text = block.text
-        if not source_text.strip():
-            # A table root is a legitimate formal structural anchor but its
-            # own StructureBlock intentionally has no prose.  Preserve the
-            # root's structural original by joining its immutable descendants
-            # in source order; do not fall back to the whole protocol.
-            prefix = f"{block.source_ref}."
-            descendants = sorted(
-                (
-                    candidate
-                    for candidate in blocks_by_ref.values()
-                    if candidate.source_ref.startswith(prefix) and candidate.text.strip()
-                ),
-                key=lambda candidate: (candidate.block_order, candidate.source_ref),
-            )
-            source_text = "\n".join(candidate.text for candidate in descendants)
+        source_text = native_source_text(block, blocks_by_ref)
         if not source_text.strip():
             _fail(
                 "source_material_empty",

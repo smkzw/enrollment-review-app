@@ -120,7 +120,8 @@ describe("protocolWorkbenchHttp", () => {
       expect(init?.body).toBeInstanceOf(FormData);
       const form = init?.body as FormData;
       expect(form.get("idempotency_key")).toBe("upload-key-1");
-      expect(form.get("actor")).toBe("用户");
+      // 审定人由本机配置产生，上传端不再硬编码“用户”。
+      expect(form.get("actor")).toBeNull();
       return jsonResponse(201, {
         job_id: "job-new-1",
         state: "await_identity",

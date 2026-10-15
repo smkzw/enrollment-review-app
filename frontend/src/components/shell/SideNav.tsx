@@ -1,10 +1,11 @@
 /**
  * 侧栏导航：由 app/routes.tsx 注册表派生（spec: state-management §URL 状态）。
  * 只显示已实现入口；worker 03 注册页面后自动出现，不产生假入口。
- * 窄屏为抽屉：菜单按钮打开、遮罩/Escape 关闭、焦点返回触发按钮（合同 §7.1）。
+ * 宽屏默认图标轨；悬停或键盘聚焦时叠加展开，也可固定展开。
  */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useState } from "react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import {
   NAV_GROUPS,
   implementedRoutes,
@@ -14,9 +15,7 @@ import { BROWSE_ROUTES, useApplicationMode } from "../../app/applicationMode";
 import {
   ActionsIcon,
   BoardIcon,
-  CloseIcon,
   HelpIcon,
-  MenuIcon,
   ProtocolIcon,
   ReportsIcon,
   SubjectsIcon,
@@ -75,12 +74,13 @@ function NavList({ currentPath }: NavListProps) {
                       to={route.path}
                       className={`side-nav__item${active ? " side-nav__item--active" : ""}`}
                       ariaCurrent={active ? "page" : undefined}
-                      title={route.description}
+                      title={route.label}
+                      ariaLabel={route.label}
                     >
                       <span className="side-nav__icon" aria-hidden="true">
                         {routeIcon(route.path)}
                       </span>
-                      <span>{route.label}</span>
+                      <span className="side-nav__label">{route.label}</span>
                     </RouteLink>
                   </li>
                 );
@@ -98,73 +98,29 @@ interface SideNavProps {
 }
 
 export function SideNav({ currentPath }: SideNavProps) {
-  const [open, setOpen] = useState(false);
-  const closeButtonId = useId();
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const drawerRef = useRef<HTMLDivElement>(null);
-
-  const close = () => {
-    setOpen(false);
-    menuButtonRef.current?.focus();
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    // 打开时把焦点移入抽屉
-    document.getElementById(closeButtonId)?.focus();
-    return () => document.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, closeButtonId]);
+  const [pinned, setPinned] = useState(false);
 
   return (
-    <>
-      <button
-        ref={menuButtonRef}
-        type="button"
-        className="icon-button side-nav__menu-button"
-        aria-label="打开菜单"
-        title="打开菜单"
-        aria-expanded={open}
-        onClick={() => setOpen(true)}
-      >
-        <MenuIcon />
-      </button>
-      {open && (
-        <div
-          className="side-nav__scrim"
-          aria-hidden="true"
-          onClick={close}
-        />
-      )}
       <aside
-        ref={drawerRef}
-        className={`side-nav${open ? " side-nav--open" : ""}`}
+        className={`side-nav${pinned ? " side-nav--pinned" : ""}`}
         aria-label="主要功能"
       >
         <div className="side-nav__head">
           <span className="side-nav__brand">入排审核工作台</span>
           <button
-            id={closeButtonId}
             type="button"
-            className="icon-button side-nav__close-button"
-            aria-label="关闭菜单"
-            title="关闭菜单"
-            onClick={close}
+            className="icon-button side-nav__pin"
+            aria-label={pinned ? "收起导航" : "固定展开导航"}
+            title={pinned ? "收起导航" : "固定展开导航"}
+            aria-expanded={pinned}
+            onClick={() => setPinned(value => !value)}
           >
-            <CloseIcon />
+            {pinned ? <PanelLeftClose size={19} /> : <PanelLeftOpen size={19} />}
           </button>
         </div>
         <nav aria-label="主要功能">
           <NavList currentPath={currentPath} />
         </nav>
       </aside>
-    </>
   );
 }

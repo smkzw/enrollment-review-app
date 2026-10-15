@@ -1986,6 +1986,8 @@ def test_component_feedback_mixed_branch_publishes_independent_unresolved_requir
                 feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
                 feedback_note="将独立专项评估单列待核", actor="医学监查员", created_at=NOW,
             )
+    from tests.v2.protocols.slice4_helpers import approve_fixture_entries
+    approve_fixture_entries(factory, source_input, saved.content)
     published = ProtocolPublicationService(factory, now=lambda: NOW).publish(
         ProtocolPublicationRequest(
             idempotency_key="mixed-feedback-publication", draft_revision_id=saved.revision_id,
@@ -2053,6 +2055,8 @@ def test_component_feedback_restricted_conversion_accepts_source_bound_separate_
                 feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
                 feedback_note="EX-01：核对专项评估原文", actor="医学监查员", created_at=NOW,
             )
+    from tests.v2.protocols.slice4_helpers import approve_fixture_entries
+    approve_fixture_entries(factory, source_input, saved.content)
     published = ProtocolPublicationService(factory, now=lambda: NOW).publish(
         ProtocolPublicationRequest(
             idempotency_key="restricted-feedback-publication",
@@ -2193,6 +2197,8 @@ def test_restricted_child_feedback_can_restore_one_executable_with_same_identity
                 feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
                 feedback_note="IN-01：核对年龄要求", actor="医学监查员", created_at=NOW,
             )
+    from tests.v2.protocols.slice4_helpers import approve_fixture_entries
+    approve_fixture_entries(factory, source_input, saved.content)
     published = ProtocolPublicationService(factory, now=lambda: NOW).publish(
         ProtocolPublicationRequest(
             idempotency_key="restricted-restored-publication",
@@ -3984,7 +3990,8 @@ def test_stalled_parent_does_not_stop_another_parent_repair(
         ).model_dump_json()) for rule in repair_rules],
     ])
     template = "按正式方案原文进行结构化解构。"
-    result = ProtocolDeconstructorRunner().run(
+    from tests.v2.protocols.gate_assertions import HistoricalSemanticGate
+    result = ProtocolDeconstructorRunner(gate=HistoricalSemanticGate()).run(
         source_input, prompt_version=_prompt_version(template),
         prompt_template=template, transport=transport, source_spans=spans,
     )

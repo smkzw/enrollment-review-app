@@ -1,15 +1,16 @@
 /**
  * 固定上下文带（design.md §8.2）：项目、受试者、审核节点、方案版本、
  * 当前资料版本与待处理数量，上传与确认全过程不消失。
- * 浅色表面 + 橙色身份线；返回入口保留受试者上下文。
+ * 紧凑项目名，完整名称保留悬停查看；返回入口保留受试者上下文。
  */
 
 import { RouteLink } from "../../app/router";
 import { BackIcon } from "../shell/icons";
 
 export interface ContextBandProps {
-  /** 中文项目展示名（projectDisplayLabel 派生，不暴露内部代号） */
+  /** 正式方案编号或演示项目名，不显示内部项目ID。 */
   projectLabel: string;
+  projectTitle?: string;
   protocolVersion: string;
   subjectCode: string;
   /** 中心代号 + 名称，如 “001 中心名称” */
@@ -26,6 +27,7 @@ export interface ContextBandProps {
 
 export function ContextBand({
   projectLabel,
+  projectTitle,
   protocolVersion,
   subjectCode,
   centerLabel,
@@ -39,7 +41,7 @@ export function ContextBand({
       <dl className="evidence-band__items">
         <div className="evidence-band__item evidence-band__item--project">
           <dt>项目</dt>
-          <dd title={projectLabel}>{projectLabel}</dd>
+          <dd title={projectTitle ?? projectLabel}>{projectLabel}</dd>
         </div>
         <div className="evidence-band__item">
           <dt>受试者</dt>

@@ -275,6 +275,32 @@ def test_edit_cannot_rewrite_workflow_visit_structure(session) -> None:
         assert exc_info.value.code == "WORKFLOW_VISIT_REWRITTEN"
 
 
+def test_reviewed_stage_assignment_changes_only_linked_due_stage(session) -> None:
+    with session.begin():
+        r1, draft = _save_initial(session)
+        edited = draft.model_copy(deep=True)
+        target = edited.proposed_workflow_stages[0]
+        target.stage = ReviewStage.RUN_IN
+        ids = set(target.due_requirement_ids)
+        components = [component for rule in edited.proposed_rules for component in rule.components]
+        components.extend(item.proposed_component for item in edited.component_drafts)
+        requirements = [requirement for component in components for requirement in component.evidence_requirements]
+        requirements.extend(item.proposed_requirement for item in edited.evidence_requirement_drafts)
+        for requirement in requirements:
+            if requirement.requirement_id in ids:
+                requirement.due_stage = ReviewStage.RUN_IN
+        illegal = edited.model_copy(deep=True)
+        illegal.proposed_workflow_stages[0].visit_instance = "改写原访视"
+        with pytest.raises(DraftEditBoundaryError):
+            _service(session).apply_manual_edit(illegal, expected_revision_id=r1.revision_id,
+                actor="构建者验证", created_at=NOW, reviewed_stage_assignment=True)
+        changed = _service(session).apply_manual_edit(edited, expected_revision_id=r1.revision_id,
+            actor="构建者验证", created_at=NOW, reviewed_stage_assignment=True)
+        assert changed.content.proposed_workflow_stages[0].stage == ReviewStage.RUN_IN
+        assert changed.content.proposed_workflow_stages[0].visit_instance == draft.proposed_workflow_stages[0].visit_instance
+        assert changed.content.proposed_workflow_stages[1] == draft.proposed_workflow_stages[1]
+
+
 def test_clarification_feedback_cannot_change_threshold(session) -> None:
     with session.begin():
         r1, draft = _save_initial(session)

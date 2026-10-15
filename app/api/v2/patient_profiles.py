@@ -83,7 +83,9 @@ def _revision_dto(
             revision.authority.complete_processing_revision_id
         ),
     )
-    return profile_revision_dto(revision, locators=locators)
+    with _session(request) as session:
+        metadata = _profile(request).fact_display_metadata(session, revision)
+    return profile_revision_dto(revision, locators=locators, fact_metadata=metadata)
 
 
 @router.get(

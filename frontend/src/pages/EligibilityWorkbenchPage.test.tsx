@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEvidenceRepository, type ProcessingRevisionPageView } from "../api/evidence";
+import { getCatalogRepository } from "../api/catalog";
 import {
+  EligibilityReviewApiError,
   setEligibilityReviewRepository,
   type EligibilityClauseView,
   type EligibilityReviewView,
@@ -142,7 +144,305 @@ function installSourcePages() {
   }) });
 }
 
+async function openOriginal() {
+  await userEvent.click(await screen.findByRole("button", { name: "查看原件" }));
+}
+
 describe("入排审核工作台", () => {
+  it("明确核实无需收集理由，试用身份保存后选中同一条的新版本", async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal");
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function(this: HTMLDialogElement) { this.open = true; } });
+    try {
+      window.location.hash = "#/workbench?view=all&component=old:parent";
+      const base = { ...review.clauses[2]!, ruleComponentId: "old:parent", confidence: "low" as const, canConfirm: true };
+      let saved: EligibilityReviewView = { ...review, reviewRunId: "old", clauses: [base] };
+      const confirm = vi.fn().mockImplementation(async () => {
+        saved = { ...saved, reviewRunId: "new", clauses: [{ ...base, ruleComponentId: "new:parent", canConfirm: false,
+          confidence: "high", confirmationKind: "builder_verification" }] };
+        return { job_id: "confirmed", state: "completed", review_run_id: "new" };
+      });
+      setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => saved, confirmWorkDraft: confirm });
+      render(<EligibilityWorkbenchPage />);
+      await userEvent.click(await screen.findByRole("button", { name: "我已核实本条依据" }));
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).queryByRole("textbox")).not.toBeInTheDocument();
+      await userEvent.click(within(dialog).getByText("构建验证"));
+      await userEvent.click(within(dialog).getByRole("button", { name: "仅作试用核实" }));
+      await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+      expect(confirm.mock.calls[0]![2]).toEqual({ review_run_id: "old", item_id: "old:parent", confirmed: true, actor_kind: "builder_verification" });
+      await screen.findByText("试用已核实");
+      await waitFor(() => expect(window.location.hash).toContain("component=new%3Aparent"));
+      expect(screen.queryByRole("button", { name: "我已核实本条依据" })).not.toBeInTheDocument();
+    } finally {
+      if (descriptor) Object.defineProperty(HTMLDialogElement.prototype, "showModal", descriptor);
+      else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal;
+    }
+  });
+  it("原件侧栏按当前条款强调相关原文，保留否定、读数和其余文字", async () => {
+    installSourcePages();
+    const excerpt = "血小板计数 180；未见该项异常，另有其他记录。";
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review, clauses: [{ ...review.clauses[0]!, textSummary: "血小板计数应符合阈值",
+        factRefs: [{ factId: "platelet", excerpt, locatorId: "locator-b", pageNumber: 1,
+          sourceDocumentVersionId: "document-b", pageArtifactId: "page-b" }] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await openOriginal();
+    await screen.findByRole("button", { name: "检验报告.pdf 第 1 页" });
+    const quote = screen.getByRole("complementary", { name: "原件面板" })
+      .querySelector("blockquote.eligibility-evidence__excerpt")!;
+    expect(quote.textContent).toBe(excerpt);
+    expect(quote.querySelector("mark")).toHaveTextContent("血小板计数");
+    expect(quote.textContent).toContain("未见该项异常");
+  });
+
+  it("长核对说明默认保留首句，完整限定可展开，不改判断", async () => {
+    const condition = { ...review.clauses[0]!, decision: "indeterminate" as const, decisionLabel: "证据不足",
+      reason: "对应关系尚未核清。", reasonParts: [
+        { conditionId: "therapy", conditionText: "治疗与疗效对应", requiresAttention: true,
+          reasonText: "治疗有记录但对应期间未明确。后续治疗不能反推本节点。2018年用药不单独证明疗效。" },
+      ] };
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review, clauses: [condition] }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByText("治疗有记录但对应期间未明确。");
+    const summary = screen.getByText("展开核对说明");
+    const detail = summary.closest("details")!;
+    expect(detail).not.toHaveAttribute("open");
+    expect(screen.getByText("治疗有记录但对应期间未明确。").closest("details")).toBeNull();
+    expect(within(detail).getByText("后续治疗不能反推本节点。")).toBeInTheDocument();
+    expect(within(detail).getByText("2018年用药不单独证明疗效。")).toBeInTheDocument();
+    await userEvent.click(summary);
+    expect(detail).toHaveAttribute("open");
+  });
+  it("组合条件先展示真正待核的对应关系，已有条件与原汇总可展开保留", async () => {
+    const compound = { ...review.clauses[0]!, decision: "indeterminate" as const,
+      decisionLabel: "证据不足", reason: "治疗有记录，但其对应疗效尚无依据。",
+      reasonParts: [
+        { conditionId: "compound:therapy", conditionText: "当前或既往治疗", reasonText: "治疗记录已找到。", requiresAttention: false },
+        { conditionId: "compound:response", conditionText: "与该次治疗对应的疗效", reasonText: "记录不能对应到同次治疗。", requiresAttention: true },
+      ] };
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review, clauses: [compound] }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByText("尚需核对的条件");
+    expect(screen.getByText("记录不能对应到同次治疗。").closest("details")).toBeNull();
+    const other = screen.getByText("其他条件及依据（1）").closest("details")!;
+    expect(other).not.toHaveAttribute("open");
+    expect(within(other).getByText("治疗记录已找到。")).toBeInTheDocument();
+    const summary = screen.getByText("完整汇总说明").closest("details")!;
+    expect(summary).not.toHaveAttribute("open");
+    expect(within(summary).getByText(compound.reason)).toBeInTheDocument();
+    await userEvent.click(screen.getByText("其他条件及依据（1）"));
+    expect(other).toHaveAttribute("open");
+    expect(screen.getAllByText("证据不足").length).toBeGreaterThan(0);
+  });
+  it("审核方式更新后旧条目链接不遮住更新入口，不把旧条目猜映到新结果", async () => {
+    window.location.hash = "#/workbench?component=retired-result";
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review, workDraftState: "method_changed", reviewRunId: null,
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByLabelText("审核方式已更新");
+    expect(screen.queryByText("链接中的审核要点不存在，请重新选择。")).not.toBeInTheDocument();
+    expect(window.location.hash).toContain("component=retired-result");
+    expect(screen.getByText("工作稿操作与节点日期")).toBeInTheDocument();
+  });
+  it("整组尚未核清时不把整段综合说明误标成具体缺失依据", async () => {
+    const first = review.clauses[0]!;
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [first], componentClauses: [{ ...first, ruleComponentId: "compound", parentRuleCode: first.ruleCode }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByText("判定依据");
+    expect(screen.queryByText("尚缺的依据")).not.toBeInTheDocument();
+  });
+  it("未决汇总先显示具体缺口，完整理由可展开，选择子项时不带兄弟理由", async () => {
+    const first = review.clauses[0]!;
+    const missing = { ...first, ruleComponentId: "missing", parentRuleCode: first.ruleCode,
+      decision: "indeterminate" as const, decisionLabel: "证据不足", reason: "同次治疗的疗效尚无对应依据。" };
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...first, decision: "indeterminate", reason: "已核对治疗史。还需核对应疗效。" }],
+      componentClauses: [missing, { ...missing, ruleComponentId: "met", decision: "inclusion_met",
+        decisionLabel: "满足", reason: "已有记录支持治疗史。" }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByText("尚缺的依据");
+    const summary = screen.getByText("完整汇总说明");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    await userEvent.click(summary);
+    expect(summary.closest("details")).toHaveAttribute("open");
+    await userEvent.click(screen.getByText("逐项条件与依据"));
+    await userEvent.click(screen.getByRole("button", { name: /目标人群符合方案要求 · 证据不足/ }));
+    expect(screen.queryByText("尚缺的依据")).not.toBeInTheDocument();
+    expect(screen.queryByText("完整汇总说明")).not.toBeInTheDocument();
+  });
+  it("规则更新导致读取拒绝时，可由用户更新工作稿，不自动调用或沿用旧结果链接", async () => {
+    localStorage.clear();
+    const catalog = getCatalogRepository();
+    const projects = await catalog.listProjects();
+    const subjects = await catalog.listSubjects(projects[0]!.projectId);
+    const episodes = await catalog.listEpisodes(subjects[0]!.subjectId);
+    const episode = { ...episodes[0]!, activeEvidenceProcessingRevisionId: "processing-1" };
+    vi.spyOn(catalog, "listProjects").mockResolvedValue([{ ...projects[0]!, ruleSetRevision: 2 }]);
+    vi.spyOn(catalog, "listEpisodes").mockResolvedValue([episode]);
+    window.location.hash = `#/workbench?component=old-result&episode=${episode.reviewEpisodeId}`;
+    let updated = false;
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => {
+      if (!updated) throw new EligibilityReviewApiError("SCOPE_VIOLATION", "读取失败",
+        "本节点的方案版本与现行已发布规则不同", "请核对方案。", 409);
+      return review;
+    } });
+    const fetched = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      if (options?.method === "POST") updated = true;
+      return new Response(JSON.stringify({ job_id: "new-job", state: "completed", review_run_id: "new-result" }));
+    });
+    render(<EligibilityWorkbenchPage />);
+    const action = await screen.findByRole("button", { name: "开始审核" });
+    expect(fetched).not.toHaveBeenCalled();
+    expect(screen.getByText("本节点尚未使用最新规则包，旧版工作稿保留。")).toBeInTheDocument();
+    await userEvent.click(action);
+    await screen.findByLabelText("审核要点列表");
+    expect(window.location.hash).not.toContain("old-result");
+    expect(fetched.mock.calls[0]![0]).toBe(`/api/v2/subjects/${episode.subjectId}/review-episodes/${episode.reviewEpisodeId}/work-draft-jobs`);
+    expect(fetched.mock.calls[0]![1]?.method).toBe("POST");
+    localStorage.clear();
+  });
+
+  it("同版规则下的来源错误不显示规则更新入口", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => {
+      throw new EligibilityReviewApiError("SCOPE_VIOLATION", "读取失败", "文件哈希不符", "请核对原件。", 409);
+    } });
+    const fetched = vi.spyOn(globalThis, "fetch");
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByText("文件哈希不符");
+    expect(screen.queryByLabelText("采用已发布的新规则")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "开始审核" })).not.toBeInTheDocument();
+    expect(fetched).not.toHaveBeenCalled();
+  });
+
+  it("未见记录的检索范围默认收起，仍可展开回到每页原件", async () => {
+    installSourcePages();
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, sourceReadRefs: [{
+        sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
+        excerpt: null, disposition: "not_seen",
+      }] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await openOriginal();
+    const summary = await screen.findByText("已核对 1 页，未见相关记录 · 查看范围");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    await userEvent.click(summary);
+    const reference = screen.getByRole("button", { name: /本页未见相关记录/ });
+    await userEvent.click(reference);
+    expect(within(screen.getByLabelText("原始资料查看区"))
+      .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+  });
+  it("未采用原件记录与系统故障分别计数，均保留内容及回源入口", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      systemIssues: [
+        { kind: "excerpt_unverified", affectedCodes: [], detail: "这处记录尚未核实。", alternative: "原件保留。",
+          pageArtifactId: "original-page", pageNumber: 4 },
+        { kind: "component_unstructured", affectedCodes: ["EX-01"], detail: "当前条件暂不能完整核对。", alternative: "请查看方案原文。" },
+        { kind: "model_output_invalid", affectedCodes: ["IN-02"], detail: "本条病历核对未完成。", alternative: "保留其他结果。" },
+      ],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const technical = await screen.findByLabelText("系统问题");
+    const records = screen.getByLabelText("尚未用于判断的原件记录");
+    expect(within(technical).getByText("系统问题（2）")).toBeInTheDocument();
+    expect(within(records).getByText("尚未用于判断的原件记录（1）")).toBeInTheDocument();
+    expect(technical).not.toHaveAttribute("open");
+    expect(records).not.toHaveAttribute("open");
+    await userEvent.click(within(records).getByText("尚未用于判断的原件记录（1）"));
+    expect(within(records).getByText(/这处记录尚未核实/)).toBeVisible();
+    expect(within(records).getByRole("link", { name: "查看相关原件第4页" })).toHaveAttribute("href", expect.stringContaining("sourcePage=original-page"));
+    await userEvent.click(within(technical).getByText("系统问题（2）"));
+    expect(within(technical).getByText(/当前条件暂不能完整核对/)).toBeVisible();
+    expect(within(technical).getByText(/本条病历核对未完成/)).toBeVisible();
+  });
+  it("已核病历依据可回源但不伪装成已发布事实", async () => {
+    installSourcePages();
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, decision: "exclusion_not_triggered", decisionLabel: "未触发",
+        confidence: "low", determinationMode: "semantic", factRefs: [], sourceReadRefs: [{
+          sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
+          excerpt: "病历明确否认相关事件", disposition: "mentioned",
+        }] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await openOriginal();
+    await userEvent.click(await screen.findByText("病历依据与核对范围（1）"));
+    const button = await screen.findByRole("button", { name: /本次判断的病历依据/ });
+    await userEvent.click(button);
+    expect(screen.queryByText("当前条款没有已采用事实，可浏览全部原件页核实。")).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("原始资料查看区"))
+      .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+  });
+  it("仅合并相同来源展示，保留不同页或处置；点击摘录不继续显示别的事实", async () => {
+    installSourcePages();
+    const source = { sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
+      excerpt: "该项目与前次记录存在差异", disposition: "mentioned" as const };
+    const scope = { sourceDocumentVersionId: "document-a", pageArtifactId: "page-a", pageNumber: 1,
+      excerpt: null, disposition: "not_seen" as const };
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, decision: "conflict", decisionLabel: "资料矛盾",
+        factRefs: [{ factId: "fact", locatorId: "locator-b", sourceDocumentVersionId: "document-b",
+          pageArtifactId: "page-b", pageNumber: 1, excerpt: "已采用的另一项检验" }],
+        sourceReadRefs: [source, { ...source }, { ...source, disposition: "unresolved" },
+          { ...source, sourceDocumentVersionId: "document-a", pageArtifactId: "page-a" }, scope, { ...scope }],
+      }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await openOriginal();
+    const summary = await screen.findByText("病历依据与核对范围（4）");
+    expect(summary.closest("details")).toHaveAttribute("open");
+    const range = screen.getByText("查看其余检索范围").closest("details")!;
+    expect(range).not.toHaveAttribute("open");
+    const refs = screen.getAllByRole("button", { name: /已找到相关原文，待核清/ });
+    expect(refs).toHaveLength(2); // Same excerpt in another document is not a duplicate.
+    expect(screen.getByRole("button", { name: /本页尚未核清/ })).toBeInTheDocument();
+    await userEvent.click(refs[0]!);
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    const panel = screen.getByLabelText("原件面板");
+    expect(panel.querySelector(".eligibility-evidence__excerpt")).toHaveTextContent(source.excerpt);
+    expect(within(panel).queryByText("已采用的另一项检验")).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("原始资料查看区"))
+      .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+    await userEvent.click(screen.getByRole("button", { name: "返回本条依据页" }));
+    expect(panel.querySelector(".eligibility-evidence__excerpt")).toHaveTextContent("已采用的另一项检验");
+  });
+  it("无摘录的未核清页面不显示成已核对未见记录", async () => {
+    installSourcePages();
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, factRefs: [], sourceReadRefs: [{
+        sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
+        excerpt: null, disposition: "unresolved",
+      }] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await openOriginal();
+    await screen.findByText("已检索 1 页，部分尚未核清 · 查看范围");
+    expect(screen.queryByText("已核对 1 页，未见相关记录 · 查看范围")).not.toBeInTheDocument();
+  });
+  it("不适用无需置信等级，已核人群依据仍可回源且不显示成待核", async () => {
+    installSourcePages();
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, decision: "not_applicable", decisionLabel: "不适用",
+        confidence: null, determinationMode: "semantic", factRefs: [], sourceReadRefs: [{
+          sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
+          excerpt: "本节点病历明确记录适用人群", disposition: "mentioned",
+        }] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "全部条款" }));
+    await openOriginal();
+    await userEvent.click(await screen.findByText("病历依据与核对范围（1）"));
+    await userEvent.click(await screen.findByRole("button", { name: /本次判断的病历依据/ }));
+    expect(screen.queryByText("当前条款没有已采用事实，可浏览全部原件页核实。")).not.toBeInTheDocument();
+    expect(screen.queryByText("已找到相关原文，待核清")).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("原始资料查看区"))
+      .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+  });
   it("检索发现可打开正确原件但不会显示成已采用事实", async () => {
     installSourcePages();
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
@@ -152,11 +452,66 @@ describe("入排审核工作台", () => {
       }] }],
     }) });
     render(<EligibilityWorkbenchPage />);
+    await openOriginal();
+    await userEvent.click(await screen.findByText("病历依据与核对范围（1）"));
     const button = await screen.findByRole("button", { name: /已找到相关原文，待核清/ });
     await userEvent.click(button);
     expect(await screen.findByText("当前条款没有已采用事实，可浏览全部原件页核实。")).toBeInTheDocument();
     expect(within(screen.getByLabelText("原始资料查看区"))
       .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+  });
+  it("低置信只留标记，理由分点但不改数值否定；收起列表后保留当前对象和原件", async () => {
+    const reason = "检验结果：1.2 mmol/L，未超过界值；研究者判断：尚无明确记载。";
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, confidence: "low", confidenceReason: "重复的低置信长说明", reason }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const detail = await screen.findByLabelText("审核要点详情");
+    expect(within(detail).getByText("低置信")).toHaveAttribute("title", "重复的低置信长说明");
+    expect(within(detail).queryByText("重复的低置信长说明")).not.toBeInTheDocument();
+    const reasons = detail.querySelector(".eligibility-reason-lines");
+    expect(reasons?.children).toHaveLength(2);
+    expect(reasons?.textContent).toBe(reason);
+    expect(screen.queryByLabelText("原件面板")).not.toBeInTheDocument();
+    await openOriginal();
+    await userEvent.click(screen.getByRole("button", { name: "关闭原件" }));
+    await userEvent.click(screen.getByRole("button", { name: "收起条款列表" }));
+    expect(screen.queryByLabelText("审核要点列表")).not.toBeInTheDocument();
+    expect(detail).toBeInTheDocument();
+    await openOriginal();
+    expect(screen.getByLabelText("原件面板")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "关闭原件" }));
+    await userEvent.click(screen.getByRole("button", { name: "显示条款列表" }));
+    expect(screen.getByLabelText("审核要点列表")).toBeInTheDocument();
+  });
+  it("已判定的低置信条款与真正未决分别计数，低置信组默认收起仍可查看", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, decision: "indeterminate", confidence: "low" },
+        { ...review.clauses[1]!, decision: "inclusion_met", confidence: "low", confidenceReason: "来源提醒" }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const queue = await screen.findByLabelText("问题队列");
+    expect(within(queue).getByText(/1 条存在风险或未决。另有 1 条已判定，保留低置信标记。/)).toBeInTheDocument();
+    const heading = within(queue).getByText("已判定 · 低置信");
+    const group = heading.closest("details")!;
+    expect(group).not.toHaveAttribute("open");
+    await userEvent.click(heading);
+    expect(group).toHaveAttribute("open");
+    expect(within(group).getByRole("button")).toBeInTheDocument();
+  });
+
+  it("待处理的不同风险组都默认展开，标识与数字开头的标题保留分隔", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]! }, { ...review.clauses[1]!, ruleCode: "REQ-14", textSummary: "12导联心电图",
+        decision: "indeterminate", decisionLabel: "证据不足", gapType: null }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const queue = await screen.findByLabelText("问题队列");
+    const groups = [...queue.querySelectorAll("details")];
+    expect(groups).toHaveLength(2);
+    expect(groups.every(value => value.open)).toBe(true);
+    const item = within(queue).getByRole("button", { name: /REQ-14/ });
+    expect(item.querySelector(".eligibility-clause__identity")?.textContent).toBe("REQ-14 12导联心电图");
   });
   it("核对方法未支持时显示处理方向，不要求研究者替软件作判断", async () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
@@ -222,6 +577,7 @@ describe("入排审核工作台", () => {
     installSourcePages();
     const user = userEvent.setup();
     render(<EligibilityWorkbenchPage />);
+    await openOriginal();
     const reference = await screen.findByRole("button", { name: "检验报告.pdf 第 1 页" });
     expect(screen.queryByText("private-fact-id")).not.toBeInTheDocument();
     expect(screen.getAllByText("检查结果见原件")).toHaveLength(2);
@@ -233,9 +589,11 @@ describe("入排审核工作台", () => {
     expect(reference).not.toHaveAttribute("aria-current");
     expect(screen.queryByLabelText(/^重点标注/)).not.toBeInTheDocument();
     const panel = screen.getByRole("complementary", { name: "原件面板" });
-    await user.click(within(panel).getByRole("button", { name: "返回事实来源页" }));
+    expect(panel.querySelector(".eligibility-evidence__excerpt")).toBeNull();
+    await user.click(within(panel).getByRole("button", { name: "返回本条依据页" }));
     expect(reference).toHaveAttribute("aria-current", "page");
     expect(adjacent).not.toHaveAttribute("aria-current");
+    expect(panel.querySelector(".eligibility-evidence__excerpt")).toHaveTextContent("检查结果见原件");
   });
   it("同一官方编号的两个要点可独立选择并生成各自链接", async () => {
     const first = { ...review.clauses[0]!, ruleComponentId: "component-a", parentRuleCode: "IN-01", textSummary: "第一个审核要点" };
@@ -296,7 +654,7 @@ describe("入排审核工作台", () => {
   it("问题队列只聚合风险/冲突/未决条款，已满足与未到期不进入队列", async () => {
     render(<EligibilityWorkbenchPage />);
     await screen.findByRole("heading", { name: "待处理要点" });
-    expect(screen.getByText(/1 条条款需要处理，按问题类型归为 1 类/)).toBeInTheDocument();
+    expect(screen.getByText("1 条存在风险或未决。")).toBeInTheDocument();
     expect(screen.getByText("待研究者判断")).toBeInTheDocument();
     expect(screen.getByText("影响 1 条")).toBeInTheDocument();
     // 已满足/未触发/尚未到期的条款不属于问题。
@@ -442,6 +800,33 @@ describe("入排审核工作台", () => {
       actionDetail: null,
       actionEvidence: null,
       ...overrides,
+    });
+
+    it("低置信确定结果留在待处理，高置信正常结果不增加卡片", () => {
+      const groups = buildEligibilityIssueGroups([
+        clause({ ruleComponentId: "low", decision: "inclusion_met", confidence: "low", confidenceReason: "日期需核对" }),
+        clause({ ruleComponentId: "high", decision: "inclusion_met", confidence: "high" }),
+      ]);
+      expect(groups).toHaveLength(1);
+      expect(groups[0]!.label).toBe("已判定 · 低置信");
+      expect(groups[0]!.clauses.map(item => item.ruleComponentId)).toEqual(["low"]);
+    });
+
+    it("大量低置信正常项不遮住风险与真正未决，全部项目仍保留", () => {
+      const normal = Array.from({ length: 35 }, (_, index) => clause({
+        ruleComponentId: `normal-${index}`, decision: "exclusion_not_triggered", confidence: "low",
+      }));
+      const groups = buildEligibilityIssueGroups([...normal,
+        clause({ ruleComponentId: "missing", gapType: "observation_unverified" }),
+        clause({ ruleComponentId: "conflict", decision: "conflict", gapType: "source_conflict" }),
+        clause({ ruleComponentId: "restricted", determinationMode: "restricted", limitationKind: "interpretation_unresolved" }),
+      ]);
+      expect(groups.map(group => group.key)).toEqual([
+        "source_conflict", "protocol_meaning_unresolved", "observation_unverified", "low_confidence",
+      ]);
+      expect(groups.reduce((count, group) => count + group.clauses.length, 0)).toBe(38);
+      expect(groups.at(-1)?.clauses).toHaveLength(35);
+      expect(normal.every(item => item.confidence === "low" && item.decision === "exclusion_not_triggered")).toBe(true);
     });
 
     it("按根因聚合、按严重度排序且全量保留", () => {

@@ -40,6 +40,61 @@ function reviewBody() {
 }
 
 describe("eligibility review HTTP repository", () => {
+  it("合并用药要求独立读取，不伪装官方入排编号", async () => {
+    const body = reviewBody();
+    body.clauses[0] = { ...body.clauses[0]!, rule_kind: "medication", rule_code: "用药01",
+      determination_mode: "deterministic", decision: "exclusion_triggered", decision_label: "已触发" };
+    const repo = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
+    const view = await repo.getEligibilityReview("subject", "episode");
+    expect(view.clauses[0]?.ruleKind).toBe("medication");
+    expect(view.clauses[0]?.ruleCode).toBe("用药01");
+    body.clauses[0]!.rule_code = "EX-01";
+    await expect(repo.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+  });
+  it("明确核实走独立命令，拒绝假完成和不完整回执", async () => {
+    let receipt: unknown = { job_id: "job", state: "queued", review_run_id: null };
+    const requests: RequestInit[] = [];
+    const repo = createEligibilityReviewHttp({ fetchImpl: (async (_url, options) => {
+      requests.push(options!); return response(receipt);
+    }) as typeof fetch });
+    const input = { review_run_id: "saved", item_id: "saved:parent", confirmed: true as const, actor_kind: "builder_verification" as const };
+    expect(await repo.confirmWorkDraft!("subject", "episode", input)).toEqual(receipt);
+    expect(JSON.parse(requests[0]!.body as string)).toEqual(input);
+    for (const bad of [{ job_id: "job", state: "completed", review_run_id: null },
+      { job_id: "job", state: "queued", review_run_id: "unsaved" }, { job_id: "", state: "queued", review_run_id: null }]) {
+      receipt = bad;
+      await expect(repo.confirmWorkDraft!("subject", "episode", input)).rejects.toThrow("记录不完整");
+    }
+  });
+  it("保留逐条件依据，不把字符串核对状态或重复条件当成合法记录", async () => {
+    const part = { condition_id: "condition", condition_text: "对应疗效", reason_text: "关系尚未核清", requires_attention: true };
+    const body = { ...reviewBody(), clauses: [{ ...reviewBody().clauses[0], reason_parts: [part] }] };
+    const repository = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
+    expect((await repository.getEligibilityReview("subject", "episode")).clauses[0]?.reasonParts).toEqual([
+      { conditionId: "condition", conditionText: "对应疗效", reasonText: "关系尚未核清", requiresAttention: true },
+    ]);
+    body.clauses[0]!.reason_parts.push({ ...part });
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+    body.clauses[0]!.reason_parts.pop();
+    Object.assign(part, { requires_attention: "false" });
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+    Object.assign(part, { requires_attention: false, condition_text: "" });
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+    const legacy = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(reviewBody()))) as typeof fetch });
+    expect((await legacy.getEligibilityReview("subject", "episode")).clauses[0]?.reasonParts).toEqual([]);
+  });
+  it("保留工作稿子条件及验证身份，不把低置信当成未决或签发", async () => {
+    const body = { ...reviewBody(), verification_only: true, review_run_id: "working-run",
+      component_clauses: [{ ...reviewBody().clauses[0], rule_component_id: "child-1", parent_rule_code: "IN-01",
+        decision: "inclusion_met", decision_label: "满足", confidence: "low", confidence_reason: "日期需核对" }] };
+    const repository = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
+    const view = await repository.getEligibilityReview("subject", "episode");
+    expect(view.verificationOnly).toBe(true);
+    expect(view.componentClauses?.[0]?.confidence).toBe("low");
+    expect(view.reviewRunId).toBe("working-run");
+    body.component_clauses[0]!.rule_component_id = body.clauses[0]!.rule_component_id;
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+  });
   it("将检索原文与采用事实分开，并拒绝无法回源的页码", async () => {
     const body = { ...reviewBody(), clauses: [{ ...reviewBody().clauses[0], source_read_refs: [{
       source_document_version_id: "document", page_artifact_id: "page", page_number: 2,

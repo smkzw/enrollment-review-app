@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -163,6 +164,17 @@ class StructureBlock(BaseModel):
     part_kind: HeaderFooterKind | None = None
     # 页眉/页脚部件适用的全部 section 序号；正文块为 None。
     section_indexes: tuple[int, ...] | None = None
+
+
+def native_source_text(block: StructureBlock, blocks_by_ref: Mapping[str, StructureBlock]) -> str:
+    """A blank structural anchor carries its ordered descendants, never a different table."""
+    if block.text.strip():
+        return block.text
+    prefix = f"{block.source_ref}."
+    descendants = sorted((candidate for candidate in blocks_by_ref.values()
+        if candidate.source_ref.startswith(prefix) and candidate.text.strip()),
+        key=lambda candidate: (candidate.block_order, candidate.source_ref))
+    return "\n".join(candidate.text for candidate in descendants)
 
 
 @dataclass(frozen=True)

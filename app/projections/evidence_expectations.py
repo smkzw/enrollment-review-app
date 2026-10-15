@@ -174,12 +174,14 @@ def _matching_observations(
     template: EvidenceExpectationTemplate,
     authority: FactAuthority,
     observations: Sequence[CoverageObservation],
+    retained_fact_authorities: dict[str, FactAuthority] | None = None,
 ) -> list[CoverageObservation]:
     """覆盖观察过滤：同权威元组 + 明确资料要求绑定。"""
     return [
         observation
         for observation in observations
-        if observation.fact.authority == authority
+        if (observation.fact.authority == authority or
+            (retained_fact_authorities or {}).get(observation.fact.fact_id) == observation.fact.authority)
         and template.requirement_id in observation.fact.supported_requirement_ids
     ]
 
@@ -210,6 +212,7 @@ def project_expectation(
     revision: int = 1,
     created_at: datetime | None = None,
     validity_anchor: DateValue | None = None,
+    retained_fact_authorities: dict[str, FactAuthority] | None = None,
 ) -> EvidenceExpectationV2:
     """投影单个模板的受试者级期望（纯函数，不做持久化）。
 
@@ -224,6 +227,12 @@ def project_expectation(
             f"模板 {template.template_id} 不属于权威元组的规则集修订 "
             f"({authority.rule_set_id} r{authority.rule_set_revision})，拒绝投影"
         )
+    excluded = {"episode_revision", "protocol_version_id", "rule_set_revision", "evidence_snapshot_v2_id", "complete_processing_revision_id"}
+    facts = {row.fact.fact_id: row.fact for row in observations}
+    for identity, source in (retained_fact_authorities or {}).items():
+        if (identity not in facts or facts[identity].authority != source
+                or source.model_dump(exclude=excluded) != authority.model_dump(exclude=excluded)):
+            raise ProjectionInputError("保留记录的来源不属于当前个例及审核节点")
     signals = _signals_for(template, gap_signals)
     #: 冻结本次投影实际接收、适用于本模板的输入信号（含 fallback_only）：
     #: 每个返回路径都携带同一份 provenance，供后续修订重投影区分
@@ -269,7 +278,7 @@ def project_expectation(
         )
 
     # 2/3. 覆盖观察：同权威元组 + 显式资料要求绑定的已发布事实。
-    matching = _matching_observations(template, authority, observations)
+    matching = _matching_observations(template, authority, observations, retained_fact_authorities)
     if template.source_validity_window is not None and matching:
         dated = [
             (item, source_validity(item.fact.date_range, template.source_validity_window, validity_anchor))

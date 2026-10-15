@@ -121,6 +121,7 @@ function episodeOf(value: unknown): CatalogEpisodeView {
       typeof anchors === "object" && anchors !== null && !Array.isArray(anchors)
         ? (anchors as Record<string, unknown>)
         : {},
+    evidenceCutoffDate: nullableText(item, "evidence_cutoff_date"),
     dueAt: nullableText(item, "due_at"),
     revision: numberValue(item, "revision"),
   };

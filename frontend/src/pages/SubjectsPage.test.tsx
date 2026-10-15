@@ -3,7 +3,7 @@
  * 受试者与 Patient Profile 页面测试（Phase 5.6）：
  * - 正式项目目录（catalog）选择项目/受试者/审核节点；
  * - 读取真实 Profile（严格解码后的视图），首屏只展示后端 highlights；
- * - "全部历时信息"展开 13 条泳道；
+ * - "按类型查看"展开 13 条泳道；
  * - 生成中/失败/陈旧/空态显式区分；
  * - 去除旧总体结论与旧 fixture 文案，不显示 Phase 6/7 结论或行动。
  */
@@ -175,18 +175,17 @@ describe("受试者与 Patient Profile 页", () => {
     setFactNormalizationRepository(null);
   });
 
-  it("默认选择首个项目/受试者/审核节点并读取真实档案，首屏只显示后端 highlights", async () => {
+  it("默认选择项目/受试者/节点，异常检验以项目及读数紧凑显示", async () => {
     render(<SubjectsPage />);
     // 正式目录：项目、受试者、审核节点
-    expect(await screen.findByRole("heading", { name: "受试者" })).toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "切换受试者" })).toBeInTheDocument();
     const projectSelect = screen.getByRole("combobox", { name: "选择项目" });
     expect(projectSelect).toHaveValue(PROJECT_ID);
 
     // 首屏标题与后端 highlight 原因（来自 makeRevision 默认 highlight：原报告异常）
-    expect(await screen.findByRole("heading", { name: /首屏重点/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /临床时间线/ })).toBeInTheDocument();
     expect(screen.getByText("原报告异常")).toBeInTheDocument();
-    // 突出条目标题来自档案
-    expect(screen.getByText("基线血压 120/80 mmHg")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /血压.*120\/80.*mmHg.*原报告异常/ })).toBeInTheDocument();
     // 首屏不应直接展开 13 条泳道
     expect(screen.queryByRole("heading", { name: /生育/ })).not.toBeInTheDocument();
     // 审核节点选择存在
@@ -213,37 +212,37 @@ describe("受试者与 Patient Profile 页", () => {
       };
     }));
     render(<SubjectsPage />);
-    expect(await screen.findByText("来源待确认 1 项")).toBeInTheDocument();
-    expect(screen.getByTitle(/不能直接用于入排判断/)).toBeInTheDocument();
+    expect(await screen.findByText("来源提示 1 项")).toBeInTheDocument();
+    expect(screen.getByText(/来源提示 1 项/).closest("details")).not.toHaveAttribute("open");
   });
 
-  it("“全部历时信息”展开 13 条泳道，空泳道不判为资料缺口", async () => {
+  it("“按类型查看”展开 13 条泳道，空泳道不判为资料缺口", async () => {
     const user = userEvent.setup();
     render(<SubjectsPage />);
-    await screen.findByRole("heading", { name: /首屏重点/ });
-    await user.click(screen.getByRole("button", { name: "全部历时信息" }));
+    await screen.findByRole("heading", { name: /临床时间线/ });
+    await user.click(screen.getByRole("button", { name: "按类型查看" }));
     // 泳道标题（含空泳道）
     expect(await screen.findByRole("heading", { name: /人口学\/基线/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /生育/ })).toBeInTheDocument();
-    expect(screen.getByText(/分区暂无记录不代表正常或否认/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /生育/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/分区暂无记录不代表正常或否认/)).not.toBeInTheDocument();
     expect(screen.queryByText(/按资料缺口处理/)).not.toBeInTheDocument();
   });
 
   it("切换受试者后重新读取该受试者档案，URL 记录新 subject", async () => {
     const user = userEvent.setup();
     render(<SubjectsPage />);
-    await screen.findByRole("heading", { name: /首屏重点/ });
-    await user.click(screen.getByRole("button", { name: /UAT-03/ }));
-    await screen.findByRole("heading", { name: /首屏重点/ });
+    await screen.findByRole("heading", { name: /临床时间线/ });
+    await user.selectOptions(screen.getByRole("combobox", { name: "切换受试者" }), SUBJECT_UAT03);
+    await screen.findByRole("heading", { name: /临床时间线/ });
     expect(window.location.hash).toContain(`subject=${SUBJECT_UAT03}`);
   });
 
   it("切换审核节点后重新读取档案，URL 记录新 episode", async () => {
     const user = userEvent.setup();
     render(<SubjectsPage />);
-    await screen.findByRole("heading", { name: /首屏重点/ });
+    await screen.findByRole("heading", { name: /临床时间线/ });
     await user.click(screen.getByRole("button", { name: "基线/随机前" }));
-    await screen.findByRole("heading", { name: /首屏重点/ });
+    await screen.findByRole("heading", { name: /临床时间线/ });
     expect(window.location.hash).toContain(`episode=${EP_UAT01_BASELINE}`);
   });
 
@@ -256,7 +255,7 @@ describe("受试者与 Patient Profile 页", () => {
     expect(await screen.findByText(/正在整理已核实的病史、用药和检查记录/)).toBeInTheDocument();
     expect(screen.getByText("生成中", { exact: true })).toBeInTheDocument();
     expect(screen.queryByText("基线血压 120/80 mmHg")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "全部历时信息" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "按类型查看" })).not.toBeInTheDocument();
   });
 
   it("失败状态：提示生成失败（role=alert）", async () => {
@@ -279,8 +278,8 @@ describe("受试者与 Patient Profile 页", () => {
     expect(await screen.findByText(/档案待重新生成/)).toBeInTheDocument();
     expect(screen.getByText(/资料已更新，档案待重新生成/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重新整理个例档案" })).toBeInTheDocument();
-    // 仍展示历史内容（首屏重点）
-    expect(screen.getByText("基线血压 120/80 mmHg")).toBeInTheDocument();
+    // 仍展示历史内容（临床时间线）
+    expect(screen.getByRole("button", { name: /血压.*120\/80.*原报告异常/ })).toBeInTheDocument();
   });
 
   it("已生成空态：区分于生成中/失败", async () => {
@@ -326,24 +325,26 @@ describe("受试者与 Patient Profile 页", () => {
 
   it("不显示旧 fixture 文案、旧总体结论或 Phase 6/7 结论/行动", async () => {
     render(<SubjectsPage />);
-    await screen.findByRole("heading", { name: /首屏重点/ });
+    await screen.findByRole("heading", { name: /临床时间线/ });
     expect(screen.queryByText(/界试用：展示合成示例数据/)).not.toBeInTheDocument();
     expect(screen.queryByText(/关键事件与风险/)).not.toBeInTheDocument();
     expect(screen.queryByText(/入排结论|行动数量|负责方|通过|不通过/)).not.toBeInTheDocument();
     expect(screen.queryByText(/后续节点关注/)).not.toBeInTheDocument();
   });
 
-  it("资料页元信息使用中文项目展示名，不暴露原始项目代号", async () => {
+  it("资料页使用方案编号和版本，不铺开完整研究名称或内部项目ID", async () => {
     render(<SubjectsPage />);
-    expect(await screen.findByText(/界面试用项目 · Ⅲ期/)).toBeInTheDocument();
-    expect(screen.queryByText(/SYNTHETIC-001-III/)).not.toBeInTheDocument();
+    expect((await screen.findAllByText(/SYNTHETIC-001-III · Ⅲ期/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/界面试用项目 · Ⅲ期/)).not.toBeInTheDocument();
+    expect(screen.queryByText(PROJECT_ID)).not.toBeInTheDocument();
+    expect(screen.queryByText(/资料版本/)).not.toBeInTheDocument();
   });
 
   it("待核对数与生成时间来自真实档案模型", async () => {
     render(<SubjectsPage />);
-    await screen.findByRole("heading", { name: /首屏重点/ });
+    await screen.findByRole("heading", { name: /临床时间线/ });
     expect(screen.getByText(/待核对 0 项/)).toBeInTheDocument();
-    expect(screen.getByText(/生成时间 2026年8月22日 20:00（北京时间）/)).toBeInTheDocument();
+    expect(screen.getByText(/2026年8月22日 20:00（北京时间）/).closest("details")).not.toHaveAttribute("open");
   });
 
   it("点击待办组时展开全部泳道并滚动到对应首条目", async () => {
@@ -357,7 +358,7 @@ describe("受试者与 Patient Profile 页", () => {
 
     try {
       render(<SubjectsPage />);
-      await screen.findByRole("heading", { name: /首屏重点/ });
+      await screen.findByRole("heading", { name: /临床时间线/ });
       await user.click(screen.getByRole("button", { name: "待补资料 1 项" }));
 
       expect(
@@ -473,7 +474,7 @@ describe("受试者与 Patient Profile 页", () => {
     );
 
     render(<SubjectsPage />);
-    expect(await screen.findByText(GENERATED_TITLE)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /血压.*130\/85.*原报告异常/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /修订记录/ }));
     expect(await screen.findByText("本次修订形成档案第 3 版。")).toBeInTheDocument();
     expect(
@@ -492,13 +493,13 @@ describe("受试者与 Patient Profile 页", () => {
     expect(screen.queryByRole("complementary", { name: "受试者列表" })).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "切换受试者" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "关闭原文证据" }));
-    expect(screen.getByRole("complementary", { name: "受试者列表" })).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "切换受试者" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "关闭原件" }));
+    expect(screen.queryByRole("complementary", { name: "受试者列表" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "切换受试者" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "查看原文" }));
     await screen.findByLabelText("该条目的原文证据与定位");
     await user.selectOptions(screen.getByRole("combobox", { name: "切换受试者" }), SUBJECT_UAT03);
-    await screen.findByRole("heading", { name: /首屏重点/ });
+    await screen.findByRole("heading", { name: /临床时间线/ });
     expect(window.location.hash).toContain(`subject=${SUBJECT_UAT03}`);
     expect(screen.queryByLabelText("该条目的原文证据与定位")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "修订记录" })).not.toBeInTheDocument();

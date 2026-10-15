@@ -35,7 +35,8 @@ describe("重新解构并列差异工作台", () => {
   it("展示目标项目与正式版本摘要", () => {
     renderWorkbench();
     expect(screen.getByRole("heading", { name: /并列比较差异/ })).toBeInTheDocument();
-    expect(screen.getAllByText(/测试研究/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(protocolRedoSessionFixture.targetProjectCode!, { exact: false }).length).toBeGreaterThan(0);
+    expect(screen.queryByText(protocolRedoSessionFixture.targetProjectName!, { exact: true })).not.toBeInTheDocument();
     expect(screen.getAllByText("当前正式版本", { exact: true }).length).toBeGreaterThan(0);
     expect(screen.getAllByText("新草稿", { exact: true }).length).toBeGreaterThan(0);
   });

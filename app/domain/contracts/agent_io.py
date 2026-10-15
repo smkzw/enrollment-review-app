@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from pydantic import Field, model_serializer, model_validator
+from app.domain.variables.dictionary import VariableDef
 
 from .agents import AgentCallContract, CriticRun, GateResult, ModelConfigContract, PromptVersion
 from .common import ContractModel, VersionedModel
@@ -20,6 +21,7 @@ from .review import AssessmentCandidate
 from .rules import (
     EvidenceRequirement,
     Rule,
+    ProtocolScopeSupplement,
     RuleComponent,
     RuleExpression,
     RepeatTriggerCondition,
@@ -298,6 +300,8 @@ class ProtocolDeconstructionInput(VersionedModel):
 
 
 class ProtocolDeconstructionDraft(VersionedModel):
+    variable_definitions: list[VariableDef] | None = None
+    scope_supplement: ProtocolScopeSupplement | None = None
     draft_id: str = Field(min_length=1)
     project_id: str = Field(min_length=1)
     protocol_version_id: str = Field(min_length=1)
@@ -316,6 +320,15 @@ class ProtocolDeconstructionDraft(VersionedModel):
     unresolved_items: list[UnresolvedItem] = Field(default_factory=list)
     source_refs: list[str] = Field(min_length=1)
     created_by_agent_call_id: str = Field(min_length=1)
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_variables(self, handler):
+        value = handler(self)
+        if self.variable_definitions is None:
+            value.pop("variable_definitions", None)
+        if self.scope_supplement is None:
+            value.pop("scope_supplement", None)
+        return value
 
     @model_validator(mode="after")
     def validate_mapping_identity(self) -> "ProtocolDeconstructionDraft":

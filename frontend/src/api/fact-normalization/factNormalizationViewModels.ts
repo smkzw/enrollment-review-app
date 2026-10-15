@@ -81,6 +81,8 @@ export interface NormalizationSourceView {
 
 export interface NormalizationUnresolvedPageView {
   jobId: string;
+  runId?: string;
+  failedPageCount?: number;
   contentSha256: string;
   total: number;
   offset: number;
@@ -89,7 +91,7 @@ export interface NormalizationUnresolvedPageView {
   textAccountingApplied: boolean;
   evidenceSnapshotId: string;
   processingRevisionId: string;
-  items: { itemId: string; kind: "unquoted_text" | "reading_uncertainty"; message: string; reason: string; sources: NormalizationSourceView[] }[];
+  items: { itemId: string; kind: "unquoted_text" | "reading_uncertainty"; message: string; reason: string; sourceExcerpt?: string; sources: NormalizationSourceView[] }[];
 }
 
 /** 前端展示用精简相位（不向用户暴露内部枚举名）。 */
@@ -178,6 +180,8 @@ export function decodeNormalizationUnresolved(payload: unknown): NormalizationUn
   if (!Array.isArray(row.items)) throw new FactNormalizationDecodeError("待核对内容应为列表。");
   const result = {
     jobId: requiredString(row.job_id, "job_id"),
+    runId: row.run_id === undefined ? undefined : requiredString(row.run_id, "run_id"),
+    failedPageCount: row.failed_page_count === undefined ? 0 : nonNegativeInteger(row.failed_page_count, "failed_page_count"),
     contentSha256: requiredString(row.content_sha256, "content_sha256"),
     total: nonNegativeInteger(row.total, "total"), offset: nonNegativeInteger(row.offset, "offset"),
     hasMore: requiredBoolean(row.has_more, "has_more"), isCurrent: requiredBoolean(row.is_current, "is_current"),
@@ -190,6 +194,8 @@ export function decodeNormalizationUnresolved(payload: unknown): NormalizationUn
       if (item.kind !== "unquoted_text" && item.kind !== "reading_uncertainty")
         throw new FactNormalizationDecodeError("待核对内容类型不明确。");
       return { itemId: requiredString(item.item_id, "item_id"), kind: item.kind as "unquoted_text" | "reading_uncertainty", message: requiredString(item.message, "message"),
+        sourceExcerpt: item.source_text_range == null ? undefined
+          : requiredString(record(item.source_text_range, "source_text_range").excerpt, "source_text_range.excerpt"),
         reason: requiredString(item.reason, "reason"), sources: item.sources.map((value: unknown) => {
           const source = record(value, "source");
           const pageNumber = nonNegativeInteger(source.page_number, "page_number");
@@ -331,7 +337,7 @@ export function factNormalizationPhaseTitle(phase: FactNormalizationDisplayPhase
     case "running":
       return "正在整理个例档案";
     case "succeeded":
-      return "个例档案已整理完成";
+      return "本次资料整理结果已保存";
     case "failed":
       return "个例档案整理未完成";
     case "stale":

@@ -26,6 +26,8 @@ Slice 5.1 硬不变量：发布对象必须绑定不可变权威元组；未知�
 """
 from __future__ import annotations
 
+from app.domain.risk_flags import RiskFlag
+
 import calendar
 import math
 from datetime import date, datetime
@@ -259,6 +261,9 @@ class ClinicalFactCandidateV2(Phase5Model):
     call_id: str = Field(min_length=1)
     candidate_kind: Literal["fact"] = "fact"
     fact_type: str = Field(min_length=1)
+    variable_id: str | None = Field(default=None, min_length=1, exclude_if=lambda value: value is None)
+    date_role: Literal["sampling", "report", "visit", "unknown"] | None = Field(default=None, exclude_if=lambda value: value is None)
+    risk_flags: list[RiskFlag] = Field(default_factory=list, exclude_if=lambda value: not value)
     profile_lane: ProfileLane = ProfileLane.EVIDENCE_QUALITY
     supported_requirement_ids: list[str] = Field(default_factory=list)
     polarity: FactPolarity
@@ -405,6 +410,9 @@ class ClinicalFactV2(Phase5Model):
     gate_ids: list[str] = Field(default_factory=list)
     authority: FactAuthority
     fact_type: str = Field(min_length=1)
+    variable_id: str | None = Field(default=None, min_length=1, exclude_if=lambda value: value is None)
+    date_role: Literal["sampling", "report", "visit", "unknown"] | None = Field(default=None, exclude_if=lambda value: value is None)
+    risk_flags: list[RiskFlag] = Field(default_factory=list, exclude_if=lambda value: not value)
     profile_lane: ProfileLane = ProfileLane.EVIDENCE_QUALITY
     supported_requirement_ids: list[str] = Field(default_factory=list)
     polarity: FactPolarity
@@ -461,6 +469,8 @@ class ClinicalFactV2(Phase5Model):
             unit=self.unit,
             date_range=self.date_range,
             assertion_basis=self.assertion_basis,
+            variable_id=self.variable_id,
+            date_role=self.date_role,
         )
         if self.stable_identity != expected:
             raise ValueError("发布事实稳定身份与权威元组/类型/对象/极性/规范值/单位/日期范围不一致")
@@ -672,6 +682,8 @@ def clinical_fact_stable_identity(
     date_range: PartialDateRange | None,
     profile_lane: ProfileLane = ProfileLane.EVIDENCE_QUALITY,
     assertion_basis: AssertionBasis | None = None,
+    variable_id: str | None = None,
+    date_role: str | None = None,
 ) -> str:
     """临床事实稳定重复键：包含被断言对象，排除置信度与定位。"""
     from app.domain.publication import canonical_hash
@@ -689,6 +701,10 @@ def clinical_fact_stable_identity(
     }
     if assertion_basis is not None and assertion_basis.contextual_qualifiers:
         material["contextual_qualifiers"] = semantic_context(assertion_basis.contextual_qualifiers)
+    if variable_id is not None:
+        material["variable_id"] = variable_id
+    if date_role is not None:
+        material["date_role"] = date_role
     return canonical_hash(material)
 
 

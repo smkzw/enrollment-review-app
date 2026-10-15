@@ -19,12 +19,11 @@ export function ProfileLaneList({
   onOpenEvidence,
   onRequestCorrection,
 }: ProfileLaneListProps) {
+  const lanes = clinicalDisplayLanes(model).filter(lane => !lane.isEmpty);
   return (
     <div className="profile-lane-list">
-      <p className="profile-lane-list__note">
-        分区暂无记录不代表正常或否认；是否存在资料缺漏，请以本审核节点的资料核对结果为准。
-      </p>
-      {clinicalDisplayLanes(model).map((lane) => (
+      {lanes.length === 0 && <p>暂无已整理的临床记录</p>}
+      {lanes.map((lane) => (
         <section key={lane.lane} className="profile-lane" aria-label={lane.laneLabel}>
           <h4 className="profile-lane__title">
             {lane.laneLabel}

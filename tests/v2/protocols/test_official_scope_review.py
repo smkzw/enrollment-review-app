@@ -5,6 +5,7 @@ import hashlib
 import json
 
 import pytest
+from tests.v2.protocols.gate_assertions import assert_diagnostic_requires_review
 
 from app.agents.protocol_deconstructor import ProtocolAgentResponse, protocol_output_response_format
 from app.domain.contracts.agent_io import ProtocolDeconstructionDraft
@@ -249,7 +250,7 @@ def test_heading_witness_is_shared_within_the_verified_item_not_duplicated(tmp_p
              if binding.proposed_component.rule_component_id == component.rule_component_id
              ).proposed_component.source_scope_review_ref = legacy_ref
     result = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, historical, source_spans=spans)
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
     assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_REJECTED" for check in result.checks for issue in check.issues)
     assert all(store.read(ref) == content for ref, content in raw_bytes.items())
 
@@ -324,7 +325,7 @@ def test_shared_heading_witness_does_not_remove_source_or_scope_boundaries(tmp_p
     if fault == "changed_source":
         source.source_materials[0].text += "来源修订"
     result = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, reviewed, source_spans=spans)
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
     assert any(issue.issue_code in {"SOURCE_SCOPE_REVIEW_REJECTED", "SOURCE_SCOPE_REVIEW_INVALID"}
                for check in result.checks for issue in check.issues)
 
@@ -350,7 +351,7 @@ def test_old_relationship_cannot_release_changed_or_unverifiable_scope(tmp_path,
         target.write_bytes(b'{"status":"not a response"}')
     reader = None if change == "missing_store" else store.read
     result = ProtocolDeconstructionGate(artifact_reader=reader).evaluate(source, reviewed, source_spans=spans)
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
     assert any(item.issue_code == "SOURCE_SCOPE_REVIEW_INVALID" for check in result.checks for item in check.issues)
 
 
@@ -360,10 +361,10 @@ def test_common_heading_does_not_clear_an_actual_missing_node(tmp_path):
     reviewed = review_official_source_scope(source, draft, official_code="IN-01",
         transport=ScopeReader(relation="governing", stages=["screening", "baseline"]), store=store)
     gate = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, reviewed, source_spans=spans)
-    assert not gate.publishable
+    assert_diagnostic_requires_review(gate)
     assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_REJECTED" for check in gate.checks for issue in check.issues)
     assert draft.proposed_rules[0].components[0].source_scope_review_ref is None
-    assert not ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans).publishable
+    assert_diagnostic_requires_review(ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans))
 
 
 def test_all_rejected_completed_review_supersedes_old_clearance(tmp_path):
@@ -379,7 +380,7 @@ def test_all_rejected_completed_review_supersedes_old_clearance(tmp_path):
     assert previous.model_dump_json() == previous_bytes
     assert len(reader.prompts) == 2
     gate = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, current, source_spans=spans)
-    assert not gate.publishable
+    assert_diagnostic_requires_review(gate)
     rejected = {ref for check in gate.checks for issue in check.issues
                 if issue.issue_code == "SOURCE_SCOPE_REVIEW_REJECTED" for ref in issue.affected_refs}
     assert rejected == {component.rule_component_id for component in current.proposed_rules[0].components}
@@ -418,7 +419,7 @@ def test_heading_layout_does_not_invent_an_extra_clinical_predicate(tmp_path, se
     source, draft, spans = scope_fixture("筛选时和基线时需满足以下标准：" + separator)
     store = ArtifactStore(resolve_data_paths(str(tmp_path / "data")))
     unreviewed = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
-    assert not unreviewed.publishable
+    assert_diagnostic_requires_review(unreviewed)
     reviewed = review_official_source_scope(source, draft, official_code="IN-01", transport=ScopeReader(), store=store)
     assert ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, reviewed, source_spans=spans).publishable
 
@@ -446,7 +447,7 @@ def test_unresolved_sibling_does_not_rewrite_or_discard_a_verified_item(tmp_path
     assert updated.model_copy(update={"source_scope_review_ref": None}) == sibling
     assert updated.source_scope_review_ref
     gate = ProtocolDeconstructionGate(artifact_reader=ArtifactStore(resolve_data_paths(str(tmp_path / "data"))).read)
-    assert not gate.evaluate(source, result, source_spans=spans).publishable
+    assert_diagnostic_requires_review(gate.evaluate(source, result, source_spans=spans))
     assert draft.proposed_rules[0].components[0].source_scope_review_ref is None
 
 
@@ -466,7 +467,8 @@ def test_completed_unknown_supersedes_previous_clearance_without_rewriting_histo
     assert updated.component_drafts[-1].proposed_component == updated.proposed_rules[0].components[-1]
     before_gate = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, cleared, source_spans=spans)
     after_gate = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, updated, source_spans=spans)
-    assert before_gate.publishable and not after_gate.publishable
+    assert before_gate.publishable
+    assert_diagnostic_requires_review(after_gate)
     unresolved = [issue for check in after_gate.checks for issue in check.issues if issue.issue_code == "SOURCE_SCOPE_REVIEW_UNRESOLVED"]
     assert len(unresolved) == (2 if all_unknown else 1)
     assert all("原文尚不能确认" in issue.problem for issue in unresolved)
@@ -479,7 +481,7 @@ def test_disagreement_is_a_completed_unresolved_outcome_not_a_transport_failure(
     updated = review_official_source_scope(source, draft, official_code="IN-01",
         transport=ScopeReader(agree=False), store=store)
     gate = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, updated, source_spans=spans)
-    assert not gate.publishable
+    assert_diagnostic_requires_review(gate)
     assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_UNRESOLVED" for check in gate.checks for issue in check.issues)
 
 
@@ -504,7 +506,7 @@ def test_receipt_identity_and_terminal_evidence_are_required(tmp_path, fault):
     component.source_scope_review_ref = store.put("evaluation_manifest", json.dumps(record).encode()).storage_ref
     reviewed.component_drafts[0].proposed_component = component.model_copy(deep=True)
     gate = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, reviewed, source_spans=spans)
-    assert not gate.publishable
+    assert_diagnostic_requires_review(gate)
     assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_INVALID" for check in gate.checks for issue in check.issues)
 
 
@@ -567,7 +569,7 @@ def test_two_agreeing_labels_cannot_remove_an_unresolved_common_duty(tmp_path, r
     reviewed = review_official_source_scope(source, draft, official_code="IN-01",
         transport=ScopeReader(relation=relation), store=store)
     gate = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, reviewed, source_spans=spans)
-    assert not gate.publishable
+    assert_diagnostic_requires_review(gate)
     assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_REJECTED" for check in gate.checks for issue in check.issues)
     assert draft.proposed_rules[0].components[0].source_scope_review_ref is None
 
@@ -581,7 +583,7 @@ def test_distinct_children_do_not_erase_a_substantive_common_prefix(tmp_path, he
     store = ArtifactStore(resolve_data_paths(str(tmp_path / "data")))
     reviewed = review_official_source_scope(source, draft, official_code="IN-01", transport=ScopeReader(), store=store)
     gate = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, reviewed, source_spans=spans)
-    assert not gate.publishable
+    assert_diagnostic_requires_review(gate)
     assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_REJECTED" for check in gate.checks for issue in check.issues)
     assert all(component.source_scope_review_ref is None for component in draft.proposed_rules[0].components)
 
@@ -623,7 +625,7 @@ def test_descriptive_prompt_and_actual_messages_must_be_the_same_request(tmp_pat
     receipt["response_ref"] = store.put("raw_response", json.dumps(response).encode()).storage_ref
     component.source_scope_review_ref = store.put("evaluation_manifest", json.dumps(record).encode()).storage_ref
     result.component_drafts[0].proposed_component = component.model_copy(deep=True)
-    assert not ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, result, source_spans=spans).publishable
+    assert_diagnostic_requires_review(ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, result, source_spans=spans))
 
 
 def test_changed_frozen_visit_source_invalidates_scope_review_without_a_model_call(tmp_path):
@@ -695,7 +697,7 @@ def test_preserved_sibling_proof_is_revalidated_against_the_current_parent_basis
         assert any(issue.issue_code == "REVIEW_STAGE_SCOPE_UNVERIFIED"
                    and selected.rule_component_id in issue.affected_refs for issue in issues)
         assert not any(old_sibling.rule_component_id in issue.affected_refs for issue in issues)
-    assert not gate.publishable
+    assert_diagnostic_requires_review(gate)
     assert store.read(old_sibling.source_scope_review_ref) == old_proof
     assert reviewed.model_dump(mode="json") == frozen
     assert len(reader.prompts) == 2
@@ -742,7 +744,7 @@ def test_source_node_equivalence_diagnoses_a_real_binding_error_without_clearing
     reader = JointVisitScopeReader()
     reviewed = review_official_source_scope(source, draft, official_code="IN-01", transport=reader, store=store)
     gate = ProtocolDeconstructionGate(artifact_reader=store.read).evaluate(source, reviewed, source_spans=spans)
-    assert not gate.publishable
+    assert_diagnostic_requires_review(gate)
     assert any(issue.issue_code == "SOURCE_SCOPE_REVIEW_NODE_BINDING_MISMATCH"
                and issue.affected_refs == [draft.proposed_rules[0].components[0].rule_component_id]
                for check in gate.checks for issue in check.issues)
@@ -777,7 +779,7 @@ def test_rejected_source_assignment_does_not_clear_itself_or_block_verified_sibl
     rejected = [issue for check in gate.checks for issue in check.issues
                 if issue.issue_code == "SOURCE_SCOPE_REVIEW_REJECTED"]
     assert rejected and all(issue.affected_refs == ["component-in-baseline"] for issue in rejected)
-    assert not gate.publishable
+    assert_diagnostic_requires_review(gate)
     assert not any(issue.issue_code.startswith("SOURCE_SCOPE_REVIEW")
                    and draft.proposed_rules[0].components[0].rule_component_id in issue.affected_refs
                    for check in gate.checks for issue in check.issues)

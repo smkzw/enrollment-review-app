@@ -190,6 +190,7 @@ class EvidenceApiReadService:
         from app.storage.models import JobRecord
         from app.storage.fact_repositories import (
             FactNormalizationRunRepository, FactNormalizationUnresolvedItemRepository,
+            FactNormalizationCallRepository,
         )
         from app.services.fact_normalization_source_adapter import build_doc_version_to_logical_map
 
@@ -212,6 +213,8 @@ class EvidenceApiReadService:
                 authority.complete_processing_revision_id)
             doc_to_logical, _ = build_doc_version_to_logical_map(session, revision)
             items = FactNormalizationUnresolvedItemRepository(session).list_by_run(run.run_id)
+            from app.services.fact_normalization_job_service import pending_normalization_pages
+            failed_page_count = len(pending_normalization_pages(session, run.run_id))
             content_sha256 = canonical_hash([item.model_dump(mode="json") for item in items])
             if ((offset > 0 or expected_content_sha256 is not None)
                     and expected_content_sha256 != content_sha256):
@@ -239,7 +242,9 @@ class EvidenceApiReadService:
                 rows.append({
                     "item_id": saved.unresolved_item_id, "message": item.message,
                     "kind": "unquoted_text" if item.source_text_range is not None else "reading_uncertainty",
-                    "reason": item.reason, "source_text_range": item.source_text_range,
+                    "reason": ("本页读取未完成；已整理的资料保留。服务恢复后可只重读未完成页。"
+                               if item.code == "extraction_failed" else item.reason),
+                    "source_text_range": item.source_text_range,
                     "sources": [{"source_document_version_id": entry.source_document_version_id,
                                  "page_artifact_id": entry.page_artifact_id, "page_number": entry.page_number,
                                  "file_name": documents.get(entry.source_document_version_id).file_name}
@@ -249,6 +254,7 @@ class EvidenceApiReadService:
             return {
                 "job_id": job_id, "run_id": run.run_id, "total": len(items), "offset": offset,
                 "content_sha256": content_sha256,
+                "failed_page_count": failed_page_count,
                 "items": rows, "has_more": offset + len(rows) < len(items),
                 "evidence_snapshot_id": authority.evidence_snapshot_v2_id,
                 "processing_revision_id": authority.complete_processing_revision_id,

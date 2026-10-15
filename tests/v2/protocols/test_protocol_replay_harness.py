@@ -455,12 +455,19 @@ def test_d001_p803_p805_read_only_checkpoint_rebuilds(tmp_path):
     repo_root = Path(__file__).resolve().parents[3]
     checkpoint_dir = (
         repo_root
-        / ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/"
+        / "archives/trellis-tasks/08-22-phase5-clinical-facts-profile/research/"
         "d001-ii-phase-closure/checkpoints"
     )
     config = load_replay_harness_config(
         checkpoint_dir / "p803-p805-model-free-replay-config.v1.json"
-    ).model_copy(update={"out_dir": str(tmp_path / "pack")})
+    )
+    config = config.model_copy(update={
+        "out_dir": str(tmp_path / "pack"),
+        "protocol_path": str(
+            Path("archives/trellis-tasks")
+            / Path(config.protocol_path).relative_to(".trellis/tasks")
+        ),
+    })
     checkpoint = json.loads(
         (
             checkpoint_dir / "p803-p805-model-free-replay-checkpoint.v4.json"
@@ -493,7 +500,7 @@ def test_d001_p803_p805_read_only_checkpoint_rebuilds(tmp_path):
 def test_previous_d001_replay_checkpoint_remains_immutable_history() -> None:
     checkpoint_dir = (
         Path(__file__).resolve().parents[3]
-        / ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/"
+        / "archives/trellis-tasks/08-22-phase5-clinical-facts-profile/research/"
         "d001-ii-phase-closure/checkpoints"
     )
     previous = json.loads(

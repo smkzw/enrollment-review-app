@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Check, FileSearch, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import type { WorkDraftJobView } from "../api/eligibility-review/eligibilityReviewRepository";
+import { EvidenceReader } from "../components/evidence/EvidenceReader";
+import { SourceExcerpt } from "../components/evidence/SourceExcerpt";
 import {
   getCatalogRepository,
   getEvidenceRepository,
@@ -15,7 +19,10 @@ import {
 } from "../api/eligibility-review";
 import { updateParams, useHashRoute, RouteLink } from "../app/router";
 import { useLoad } from "../app/useLoad";
+import { useApplicationMode } from "../app/applicationMode";
 import { OriginalEvidenceViewer } from "../components/evidence-workspace/OriginalEvidenceViewer";
+import { WorkDraftPanel } from "../components/review/WorkDraftPanel";
+import { ReasonText } from "../components/review/ReasonText";
 import { ErrorState, EmptyState, LoadingState } from "../components/shell/Feedback";
 import { BarrierIcon, AttentionIcon, CheckIcon, ConflictIcon, JudgmentIcon } from "../components/shell/icons";
 import { StatusBadge, type Tone } from "../components/shell/StatusBadge";
@@ -34,6 +41,34 @@ type EligibilityListMode = "pending" | "all";
 const CLAUSE_PAGE_SIZES = [25, 50, 100] as const;
 
 type EligibilityWorkItem = EligibilityClauseView & { controlId?: string; controlStatement?: string; continuingNote?: string | null };
+
+function ConfirmationDialog({ clause, verificationOnly, busy, onConfirm, onClose }: {
+  clause: EligibilityWorkItem; verificationOnly: boolean; busy: boolean;
+  onConfirm: (actor: "medical_manager" | "builder_verification") => void; onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.showModal();
+    return () => previous?.focus();
+  }, []);
+  return <dialog ref={dialog} className="work-draft-confirmation-dialog" aria-labelledby="work-draft-confirmation-title"
+    onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
+    <h2 id="work-draft-confirmation-title">核实 {clause.ruleCode} 的当前依据</h2>
+    <p><strong>{clause.decisionLabel}</strong> · {clause.textSummary}</p>
+    <p>确认已对照原件？只更新置信标记，原值、结论及旧版保持。</p>
+    <div className="work-draft-confirmation-actions">
+      <button type="button" className="button button--quiet" disabled={busy} onClick={onClose}>取消</button>
+      <button type="button" className="button button--primary" disabled={busy}
+        onClick={() => onConfirm(verificationOnly ? "builder_verification" : "medical_manager")}>
+        {busy ? "正在提交" : verificationOnly ? "保存试用核实" : "保存核实结果"}</button>
+    </div>
+    {!verificationOnly && <details><summary>构建验证</summary>
+      <button type="button" className="button button--quiet" disabled={busy} onClick={() => onConfirm("builder_verification")}>仅作试用核实</button>
+      <small>保留试用标记，不代替正式医学核实。</small>
+    </details>}
+  </dialog>;
+}
 
 function controlWorkItems(controls: ReadonlyArray<EligibilityControlView>): EligibilityWorkItem[] {
   return controls.flatMap((control) => control.obligations.map((obligation) => ({
@@ -86,6 +121,8 @@ function clauseKindLabel(kind: EligibilityClauseView["ruleKind"]): string {
       return "排除标准";
     case "required_procedure":
       return "流程要求";
+    case "medication":
+      return "合并用药与治疗要求";
   }
 }
 
@@ -93,8 +130,13 @@ function workItemKindLabel(item: EligibilityWorkItem): string {
   return item.controlId ? "方案补充要求" : clauseKindLabel(item.ruleKind);
 }
 
+function hasJudgedSource(clause: EligibilityClauseView): boolean {
+  return (Boolean(clause.confidence) || clause.decision === "not_applicable")
+    && (clause.sourceReadRefs ?? []).some((ref) => ref.disposition === "mentioned" && ref.excerpt);
+}
+
 export function isUndeterminedDecision(decision: EligibilityDecision): boolean {
-  return decision === "professional_judgment" || decision === "indeterminate" || decision === "conflict";
+  return decision === "professional_judgment" || decision === "indeterminate" || decision === "conflict" || decision === "system_issue";
 }
 
 function decisionMatchesFilter(
@@ -138,6 +180,7 @@ function decisionTone(decision: EligibilityDecision): Tone {
       return "danger";
     case "professional_judgment":
     case "indeterminate":
+    case "system_issue":
       return "info";
     case "not_due":
     case "not_applicable":
@@ -157,6 +200,7 @@ function decisionIcon(decision: EligibilityDecision): ReactNode {
       return <BarrierIcon size={13} />;
     case "professional_judgment":
     case "indeterminate":
+    case "system_issue":
       return <JudgmentIcon size={13} />;
     case "conflict":
       return <ConflictIcon size={13} />;
@@ -178,7 +222,7 @@ function episodeLabel(episode: CatalogEpisodeView): string {
 }
 
 function projectOption(project: CatalogProjectView): string {
-  return `${project.projectName} · ${project.studyPhaseLabel} · 方案 ${project.officialVersion}`;
+  return `${project.projectCode} · ${project.studyPhaseLabel} · 方案 ${project.officialVersion}`;
 }
 
 interface EligibilitySelectionProps {
@@ -270,6 +314,7 @@ function EligibilityClauseList({
     { kind: "inclusion", title: "入选标准" },
     { kind: "exclusion", title: "排除标准" },
     { kind: "required_procedure", title: "流程要求" },
+    { kind: "medication", title: "合并用药与治疗要求" },
     { kind: "control", title: "方案补充要求" },
   ];
   return (
@@ -310,6 +355,7 @@ function EligibilityClauseList({
                         hint={clause.reason}
                         icon={decisionIcon(clause.decision)}
                       />
+                      {clause.confidence === "low" && <span title={clause.confidenceReason ?? undefined}>低置信</span>}
                     </button>
                   </li>
                 );
@@ -351,7 +397,7 @@ const FALLBACK_ISSUE_LABELS: Record<string, string> = {
 /** 队列成员：风险（已触发/未满足）、冲突、未决；已满足/未触发/未到期不算问题。 */
 function clauseIsIssue(clause: EligibilityClauseView): boolean {
   const tone = decisionTone(clause.decision);
-  return tone === "danger" || tone === "info";
+  return tone === "danger" || tone === "info" || clause.confidence === "low";
 }
 
 /** 根因键：优先投影缺口类型；未归类时按判定回退，绝不静默丢失。 */
@@ -359,6 +405,9 @@ function clauseIssueKey(clause: EligibilityClauseView): {
   key: string;
   severity: IssueSeverity;
 } {
+  if (clause.confidence === "low" && decisionTone(clause.decision) === "ok") {
+    return { key: "low_confidence", severity: "attention" };
+  }
   if (clause.determinationMode === "restricted") {
     return {
       key: clause.limitationKind === "consumer_unavailable" ? "review_method_unavailable"
@@ -381,6 +430,7 @@ function clauseIssueKey(clause: EligibilityClauseView): {
 }
 
 function issueGroupLabel(key: string): string {
+  if (key === "low_confidence") return "已判定 · 低置信";
   const labels = gapTypeLabel as Record<string, string>;
   return labels[key] ?? FALLBACK_ISSUE_LABELS[key] ?? key;
 }
@@ -411,6 +461,7 @@ export function buildEligibilityIssueGroups(
   }
   return [...byKey.values()].sort(
     (a, b) =>
+      Number(a.key === "low_confidence") - Number(b.key === "low_confidence") ||
       ISSUE_SEVERITY_ORDER[a.severity] - ISSUE_SEVERITY_ORDER[b.severity] ||
       b.clauses.length - a.clauses.length ||
       a.key.localeCompare(b.key),
@@ -421,13 +472,12 @@ function compareEligibilityClauses(
   left: EligibilityClauseView,
   right: EligibilityClauseView,
 ): number {
-  const leftSeverity = clauseIsIssue(left)
-    ? ISSUE_SEVERITY_ORDER[clauseIssueKey(left).severity]
-    : 3;
-  const rightSeverity = clauseIsIssue(right)
-    ? ISSUE_SEVERITY_ORDER[clauseIssueKey(right).severity]
-    : 3;
-  return leftSeverity - rightSeverity
+  const leftIssue = clauseIsIssue(left) ? clauseIssueKey(left) : null;
+  const rightIssue = clauseIsIssue(right) ? clauseIssueKey(right) : null;
+  const leftSeverity = leftIssue ? ISSUE_SEVERITY_ORDER[leftIssue.severity] : 3;
+  const rightSeverity = rightIssue ? ISSUE_SEVERITY_ORDER[rightIssue.severity] : 3;
+  return Number(leftIssue?.key === "low_confidence") - Number(rightIssue?.key === "low_confidence")
+    || leftSeverity - rightSeverity
     || left.ruleCode.localeCompare(right.ruleCode, "zh-CN", { numeric: true })
     || left.ruleComponentId.localeCompare(right.ruleComponentId);
 }
@@ -458,21 +508,23 @@ function EligibilityIssueQueue({
     );
   }
   const totalIssues = groups.reduce((sum, group) => sum + group.clauses.length, 0);
+  const lowConfidence = groups.find(group => group.key === "low_confidence")?.clauses.length ?? 0;
   return (
     <section className="eligibility-issue-queue" aria-label="问题队列">
       <p className="eligibility-issue-queue__summary">
-        {totalIssues} 条条款需要处理，按问题类型归为 {groups.length} 类。
+        {totalIssues - lowConfidence} 条存在风险或未决。
+        {lowConfidence > 0 && `另有 ${lowConfidence} 条已判定，保留低置信标记。`}
       </p>
-      {groups.map((group, index) => {
+      {groups.map((group) => {
         const meta = ISSUE_SEVERITY_META[group.severity];
         return (
           <details
             key={group.key}
             className="eligibility-issue-queue__group"
-            open={index === 0}
+            open={group.key !== "low_confidence"}
           >
             <summary>
-              <StatusBadge tone={meta.tone} text={meta.text} />
+              <StatusBadge tone={meta.tone} text={group.key === "low_confidence" ? "低置信" : meta.text} />
               <strong>{group.label}</strong>
               <span className="eligibility-issue-queue__count">
                 影响 {group.clauses.length} 条
@@ -490,7 +542,7 @@ function EligibilityIssueQueue({
                       onClick={() => onSelect(clause.ruleComponentId)}
                     >
                       <span className="eligibility-clause__identity">
-                        <strong>{clause.ruleCode}</strong>
+                        <strong>{clause.ruleCode}</strong>{" "}
                         <span
                           className="eligibility-clause__summary"
                           title={clause.textSummary}
@@ -504,6 +556,7 @@ function EligibilityIssueQueue({
                         hint={clause.reason}
                         icon={decisionIcon(clause.decision)}
                       />
+                      {clause.confidence === "low" && <span title={clause.confidenceReason ?? undefined}>低置信</span>}
                     </button>
                   </li>
                 );
@@ -518,15 +571,20 @@ function EligibilityIssueQueue({
 
 interface EligibilityClauseDetailProps {
   clause: EligibilityWorkItem;
+  unresolvedConditions?: ReadonlyArray<EligibilityClauseView>;
   selectedFactIndex: number;
   onSelectFact: (index: number) => void;
 }
 
 function EligibilityClauseDetail({
   clause,
+  unresolvedConditions = [],
   selectedFactIndex,
   onSelectFact,
 }: EligibilityClauseDetailProps) {
+  const parts = clause.reasonParts ?? [];
+  const pendingParts = isUndeterminedDecision(clause.decision)
+    ? parts.filter(part => part.requiresAttention) : [];
   return (
     <div className="eligibility-clause-detail">
       <div className="eligibility-clause-detail__decision">
@@ -536,11 +594,28 @@ function EligibilityClauseDetail({
           hint={clause.reason}
           icon={decisionIcon(clause.decision)}
         />
+        {clause.confidence && <span className="eligibility-confidence" title={clause.confidenceReason ?? undefined}>
+          {clause.confidence === "low" ? "低置信" : "高置信"}</span>}
+        {clause.confirmationKind && <span title={clause.confirmationKind === "medical_manager" ? "医学经理已核实本条依据" : "构建者试用验证，非正式医学核实"}>
+          {clause.confirmationKind === "medical_manager" ? "已核实" : "试用已核实"}</span>}
       </div>
       <ul className="eligibility-clause-detail__bullets" aria-label="条款详情">
         <li className="eligibility-detail-bullet">
-          <strong>判定依据</strong>
-          <span>{clause.reason}</span>
+          <strong>{pendingParts.length ? "尚需核对的条件" : unresolvedConditions.length ? "尚缺的依据" : "判定依据"}</strong>
+          {pendingParts.length > 0 ? <dl className="eligibility-reason-parts">{pendingParts.map(part => <div key={part.conditionId}>
+            <dt><strong>{part.conditionText}</strong></dt><dd><ReasonText text={part.reasonText} compact /></dd>
+          </div>)}</dl> : <ReasonText compact text={unresolvedConditions.length
+            ? unresolvedConditions.map(item => item.reason).join("\n") : clause.reason} />}
+          {pendingParts.length > 0 && parts.some(part => !part.requiresAttention) && <details>
+            <summary>其他条件及依据（{parts.filter(part => !part.requiresAttention).length}）</summary>
+            <dl className="eligibility-reason-parts">{parts.filter(part => !part.requiresAttention).map(part => <div key={part.conditionId}>
+              <dt><strong>{part.conditionText}</strong></dt><dd><ReasonText text={part.reasonText} /></dd>
+            </div>)}</dl>
+          </details>}
+          {(pendingParts.length > 0 || unresolvedConditions.length > 0) && <details>
+            <summary>完整汇总说明</summary>
+            <ReasonText text={clause.reason} />
+          </details>}
         </li>
         {clause.continuingNote && <li className="eligibility-detail-bullet">
           <strong>后续持续要求</strong>
@@ -573,10 +648,12 @@ function EligibilityClauseDetail({
           方案原文定位待补齐，请核对方案版本及条款来源。
         </p>
       )}
-      <section className="eligibility-detail-section" aria-labelledby="eligibility-facts-title">
-        <h3 id="eligibility-facts-title">关联事实的原件位置</h3>
+      <details className="eligibility-detail-section">
+        <summary>关联事实的原件位置（{clause.factRefs.length}）</summary>
         {clause.factRefs.length === 0 ? (
-          <p className="eligibility-muted">{clause.determinationMode === "restricted"
+          <p className="eligibility-muted">{hasJudgedSource(clause)
+            ? "本次判断依据病历原文，可打开原件查看。"
+            : clause.determinationMode === "restricted"
             ? "方案要求尚待核清，暂不据此判定病历事实。"
             : "当前条款没有关联事实。"}</p>
         ) : (
@@ -600,10 +677,10 @@ function EligibilityClauseDetail({
             ))}
           </ul>
         )}
-      </section>
-      {!clause.controlId && <p className="eligibility-clause-detail__mode">
-        {determinationModeLabel(clause)}
-      </p>}
+      </details>
+      {!clause.controlId && <details className="eligibility-clause-detail__mode"><summary>核对方式</summary>
+        <p>{determinationModeLabel(clause)}</p>
+      </details>}
     </div>
   );
 }
@@ -636,7 +713,7 @@ function EligibilityEvidencePanel({
   selectedFactIndex,
   onSelectFact,
 }: EligibilityEvidencePanelProps) {
-  const [browsedPage, setBrowsedPage] = useState<{ context: string; entryId: string } | null>(null);
+  const [browsedPage, setBrowsedPage] = useState<{ context: string; entryId: string; sourceKey?: string } | null>(null);
   const [navigationAttempt, setNavigationAttempt] = useState(0);
   const returnToReference = () => {
     setBrowsedPage(null);
@@ -668,8 +745,18 @@ function EligibilityEvidencePanel({
     );
   }, [snapshot.state]);
   const selectedFact = clause.factRefs[selectedFactIndex] ?? clause.factRefs[0] ?? null;
+  // Display duplicates only; all source records remain in the saved review.
+  const sourceRefs = useMemo(() => [...new Map((clause.sourceReadRefs ?? []).map(ref =>
+    [JSON.stringify(ref), ref])).values()], [clause.sourceReadRefs]);
+  const quotedRefs = sourceRefs.filter(ref => ref.excerpt);
+  const scopeRefs = sourceRefs.filter(ref => !ref.excerpt);
+  const sourcePageCount = new Set(sourceRefs.map(ref => JSON.stringify([
+    ref.sourceDocumentVersionId, ref.pageArtifactId, ref.pageNumber]))).size;
+  const selectedSource = quotedRefs[0] ?? null;
   const referencePage = selectedFact === null
-    ? null
+    ? selectedSource === null ? null : pages.find((page) => page.pageNumber === selectedSource.pageNumber
+        && page.sourceDocumentVersionId === selectedSource.sourceDocumentVersionId
+        && page.pageArtifactId === selectedSource.pageArtifactId) ?? null
     : selectedFact.pageNumber === null
       ? null
       : pages.find((page) => page.pageNumber === selectedFact.pageNumber
@@ -679,11 +766,14 @@ function EligibilityEvidencePanel({
     review.completeProcessingRevisionId, clause.ruleComponentId,
     selectedFact?.factId, selectedFact?.locatorId, selectedFact?.sourceDocumentVersionId,
     selectedFact?.pageArtifactId, selectedFact?.pageNumber,
+    selectedSource?.pageArtifactId, selectedSource?.excerpt,
   ]);
   const selectedPage = browsedPage?.context === sourceContext
     ? pages.find((page) => page.entryId === browsedPage.entryId) ?? referencePage
     : referencePage ?? pages[0] ?? null;
-  const isReferencePage = referencePage !== null && selectedPage?.entryId === referencePage.entryId;
+  const browsedSource = browsedPage?.context === sourceContext && browsedPage.sourceKey
+    ? sourceRefs.find(ref => JSON.stringify(ref) === browsedPage.sourceKey) ?? null : null;
+  const isReferencePage = browsedSource === null && referencePage !== null && selectedPage?.entryId === referencePage.entryId;
   const locatorPage = useLoad(
     (signal) => selectedPage?.ocrPageId
       ? getEvidenceRepository().getOcrPage(selectedPage.ocrPageId, review.completeProcessingRevisionId, { signal })
@@ -702,6 +792,25 @@ function EligibilityEvidencePanel({
     locator.precision === "bbox" && locator.authenticity === "authenticated"
     && locator.bbox !== null && locator.coordinateFrame !== null);
 
+  const sourceButtons = (refs: typeof sourceRefs) => refs.map(ref => {
+    const key = JSON.stringify(ref);
+    const page = pages.find(item => item.sourceDocumentVersionId === ref.sourceDocumentVersionId
+      && item.pageArtifactId === ref.pageArtifactId && item.pageNumber === ref.pageNumber);
+    return <li key={key}>
+      <button type="button" className="eligibility-evidence__ref" disabled={!page}
+        aria-pressed={browsedSource !== null && JSON.stringify(browsedSource) === key}
+        onClick={event => {
+          if (!page) return;
+          setBrowsedPage({ context: sourceContext, entryId: page.entryId, sourceKey: key });
+          event.currentTarget.closest(".eligibility-evidence__sources")?.removeAttribute("open");
+        }}>
+        <strong>{ref.disposition === "mentioned" ? hasJudgedSource(clause) ? "本次判断的病历依据" : "已找到相关原文，待核清" : ref.disposition === "not_seen" ? "本页未见相关记录" : "本页尚未核清"}</strong>
+        {ref.excerpt && <span>{ref.excerpt}</span>}
+        <span>{documentNames.get(ref.sourceDocumentVersionId) ?? "原始资料"} · 第 {ref.pageNumber} 页</span>
+      </button>
+    </li>;
+  });
+
   return (
     <aside className="eligibility-evidence" aria-label="原件面板">
       <header className="workbench-pane__head">
@@ -712,36 +821,43 @@ function EligibilityEvidencePanel({
       </header>
       {selectedPage !== null && (
         <div className="eligibility-evidence__state" role="status">
-          <strong>{isReferencePage ? "事实来源页" : "浏览原件"}</strong>
+          <strong>{browsedSource ? browsedSource.disposition === "unresolved" || !hasJudgedSource(clause)
+            ? "待核原文页" : "病历依据页" : isReferencePage ? selectedFact === null ? "病历依据页" : "事实来源页" : "浏览原件"}</strong>
           <span>
             {documentNames.get(selectedPage.sourceDocumentVersionId) ?? "原始资料"}
             {` · 第 ${selectedPage.pageNumber} 页`}
           </span>
         </div>
       )}
-      {clause.factRefs.length === 0 && (
+      {clause.factRefs.length === 0 && !hasJudgedSource(clause) && (
         <p className="eligibility-muted">当前条款没有已采用事实，可浏览全部原件页核实。</p>
       )}
-      {(clause.sourceReadRefs ?? []).length > 0 && (
+      {browsedSource?.excerpt && <blockquote className="eligibility-evidence__excerpt"><SourceExcerpt text={browsedSource.excerpt} context={clause.textSummary} /></blockquote>}
+      {isReferencePage && selectedFact === null && selectedSource?.excerpt
+        && <blockquote className="eligibility-evidence__excerpt"><SourceExcerpt text={selectedSource.excerpt} context={clause.textSummary} /></blockquote>}
+      {sourceRefs.length > 0 && (
+        <details className="eligibility-evidence__sources" key={`sources:${clause.ruleComponentId}`} open={clause.decision === "conflict"}>
+          <summary>{quotedRefs.length
+            ? `病历依据与核对范围（${sourceRefs.length}）`
+            : scopeRefs.some(ref => ref.disposition === "unresolved")
+              ? `已检索 ${sourcePageCount} 页，部分尚未核清 · 查看范围`
+              : `已核对 ${sourcePageCount} 页，未见相关记录 · 查看范围`}</summary>
         <ul className="eligibility-evidence__refs" aria-label="检索范围与待核原文">
-          {(clause.sourceReadRefs ?? []).map((ref, index) => {
-            const page = pages.find((item) => item.sourceDocumentVersionId === ref.sourceDocumentVersionId
-              && item.pageArtifactId === ref.pageArtifactId && item.pageNumber === ref.pageNumber);
-            return <li key={`${ref.pageArtifactId}-${index}`}>
-              <button type="button" className="eligibility-evidence__ref" disabled={!page}
-                onClick={() => page && setBrowsedPage({ context: sourceContext, entryId: page.entryId })}>
-                <strong>{ref.disposition === "mentioned" ? "已找到相关原文，待核清" : ref.disposition === "not_seen" ? "本页未见相关记录" : "本页尚未核清"}</strong>
-                {ref.excerpt && <span>{ref.excerpt}</span>}
-                <span>{documentNames.get(ref.sourceDocumentVersionId) ?? "原始资料"} · 第 {ref.pageNumber} 页</span>
-              </button>
-            </li>;
-          })}
+          {sourceButtons(quotedRefs.length ? quotedRefs : scopeRefs)}
         </ul>
+        {quotedRefs.length > 0 && scopeRefs.length > 0 && <details>
+          <summary>查看其余检索范围</summary>
+          <ul className="eligibility-evidence__refs">{sourceButtons(scopeRefs)}</ul>
+        </details>}
+        </details>
       )}
       {(
         <>
+          {isReferencePage && selectedFact?.excerpt && <blockquote className="eligibility-evidence__excerpt"><SourceExcerpt text={selectedFact.excerpt} context={clause.textSummary} /></blockquote>}
+          {clause.factRefs.length > 1 && <details className="eligibility-evidence__sources" key={`facts:${clause.ruleComponentId}`}>
+          <summary>选择其他依据（{clause.factRefs.length - 1}）</summary>
           <ul className="eligibility-evidence__refs" aria-label="关联事实的原件位置">
-            {clause.factRefs.map((fact, index) => (
+            {clause.factRefs.map((fact, index) => index === selectedFactIndex ? null : (
               <li key={`${fact.factId}-${fact.locatorId ?? "no-locator"}-${index}`}>
                 {fact.pageNumber === null ? (
                   <span className="eligibility-evidence__ref eligibility-evidence__ref--unavailable">
@@ -762,6 +878,7 @@ function EligibilityEvidencePanel({
               </li>
             ))}
           </ul>
+          </details>}
           {selectedFact?.pageNumber === null && (
             <p className="eligibility-evidence__empty" role="status">
               该事实未附页码定位，暂时无法打开对应原件页。
@@ -784,7 +901,7 @@ function EligibilityEvidencePanel({
             <>
             {!isReferencePage && referencePage !== null ? (
               <button type="button" className="button button--quiet" onClick={returnToReference}>
-                返回事实来源页
+                返回本条依据页
               </button>
             ) : null}
             {isReferencePage && locatorPage.state.status === "error" ? (
@@ -833,6 +950,15 @@ export function EligibilityWorkbenchPage() {
   const requestedPage = Number.isSafeInteger(requestedPageValue) && requestedPageValue >= 0
     ? requestedPageValue : 0;
   const [selectedFactIndex, setSelectedFactIndex] = useState(0);
+  const [queueVisible, setQueueVisible] = useState(true);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [evidenceVisited, setEvidenceVisited] = useState(false);
+  const [confirmationJob, setConfirmationJob] = useState<{ episodeId: string; job: WorkDraftJobView } | null>(null);
+  const [confirmationBusy, setConfirmationBusy] = useState(false);
+  const [confirmationError, setConfirmationError] = useState<string | null>(null);
+  const [confirmedRule, setConfirmedRule] = useState<{ episodeId: string; ruleCode: string; previousRun: string } | null>(null);
+  const [confirmingClause, setConfirmingClause] = useState<EligibilityWorkItem | null>(null);
+  const { canModify } = useApplicationMode();
 
   const projects = useLoad((signal) => getCatalogRepository().listProjects(signal), []);
   const projectList = projects.state.status === "success" ? projects.state.data : [];
@@ -884,7 +1010,21 @@ export function EligibilityWorkbenchPage() {
 
   useEffect(() => {
     setSelectedFactIndex(0);
+    setEvidenceOpen(false);
+    setEvidenceVisited(false);
   }, [selectedEpisode?.reviewEpisodeId, componentParam]);
+
+  useEffect(() => {
+    setConfirmationError(null); setConfirmingClause(null);
+  }, [selectedEpisode?.reviewEpisodeId]);
+
+  useEffect(() => {
+    if (review.state.status !== "success" || !confirmedRule || selectedEpisode?.reviewEpisodeId !== confirmedRule.episodeId
+        || review.state.data.reviewRunId === confirmedRule.previousRun) return;
+    const target = review.state.data.clauses.find(item => item.ruleCode === confirmedRule.ruleCode);
+    if (target) updateParams({ component: target.ruleComponentId, view: "all", filter: null, page: null });
+    setConfirmedRule(null);
+  }, [review.state, confirmedRule, selectedEpisode?.reviewEpisodeId]);
 
   const setProject = (projectId: string) =>
     updateParams({ project: projectId, subject: null, episode: null, component: null });
@@ -892,6 +1032,29 @@ export function EligibilityWorkbenchPage() {
     updateParams({ subject: subjectId, episode: null, component: null });
   const setEpisode = (episodeId: string) =>
     updateParams({ episode: episodeId, component: null });
+  const refreshWorkDraft = () => {
+    if (!confirmedRule) updateParams({ component: null, page: null });
+    setConfirmationJob(null);
+    episodes.retry();
+    review.retry();
+  };
+
+  async function confirmClause(clause: EligibilityWorkItem, actor: "medical_manager" | "builder_verification") {
+    const repo = getEligibilityReviewRepository();
+    if (!canModify || review.state.status !== "success" || !review.state.data.reviewRunId || !selectedSubject || !selectedEpisode || !repo.confirmWorkDraft) return;
+    setConfirmationBusy(true); setConfirmationError(null);
+    try {
+      const job = await repo.confirmWorkDraft(selectedSubject.subjectId, selectedEpisode.reviewEpisodeId, {
+        review_run_id: review.state.data.reviewRunId, item_id: clause.ruleComponentId, confirmed: true,
+        actor_kind: actor });
+      setConfirmingClause(null);
+      setConfirmedRule({ episodeId: selectedEpisode.reviewEpisodeId, ruleCode: clause.ruleCode, previousRun: review.state.data.reviewRunId });
+      localStorage.setItem(`work-draft-job:${selectedEpisode.reviewEpisodeId}`, job.job_id);
+      if (job.state === "completed") { episodes.retry(); review.retry(); }
+      else setConfirmationJob({ episodeId: selectedEpisode.reviewEpisodeId, job });
+    } catch (error) { setConfirmationError(error instanceof Error ? error.message : "本条尚未核实，请稍后重试。"); }
+    finally { setConfirmationBusy(false); }
+  }
 
   if (projects.state.status === "loading") return <LoadingState />;
   if (projects.state.status === "error") {
@@ -925,16 +1088,30 @@ export function EligibilityWorkbenchPage() {
   }
   if (review.state.status === "loading") return <LoadingState />;
   if (review.state.status === "error") {
-    return <ErrorState message={review.state.message} onRetry={review.retry} />;
+    const newerRules = selectedEpisode.ruleSetId === selectedProject.ruleSetId
+      && selectedEpisode.ruleSetRevision < selectedProject.ruleSetRevision;
+    return <div className="eligibility-workbench workbench">
+      <ErrorState message={review.state.message} onRetry={review.retry} />
+      {newerRules && <section aria-label="采用已发布的新规则">
+        <h2>{selectedSubject.subjectCode} · {episodeLabel(selectedEpisode)}</h2>
+        <p>本节点尚未使用最新规则包，旧版工作稿保留。</p>
+        <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode} onCompleted={refreshWorkDraft} />
+      </section>}
+    </div>;
   }
 
   const reviewData = review.state.data;
+  const issueGroups = [
+    { label: "系统问题", issues: (reviewData.systemIssues ?? []).filter(issue => issue.kind !== "excerpt_unverified") },
+    { label: "尚未用于判断的原件记录", issues: (reviewData.systemIssues ?? []).filter(issue => issue.kind === "excerpt_unverified") },
+  ];
   const allClauses: EligibilityWorkItem[] = [
     ...reviewData.clauses, ...controlWorkItems(reviewData.controls),
   ];
   const requestedClause = componentParam === null
-    ? null : allClauses.find((clause) => clause.ruleComponentId === componentParam);
-  if (componentParam !== null && requestedClause === undefined) {
+    ? null : [...allClauses, ...(reviewData.componentClauses ?? [])].find((clause) => clause.ruleComponentId === componentParam);
+  if (componentParam !== null && requestedClause === undefined
+      && reviewData.workDraftState !== "method_changed" && reviewData.workDraftState !== "source_changed") {
     return <ErrorState message="链接中的审核要点不存在，请重新选择。" onRetry={() => updateParams({ component: null })} />;
   }
   const matches = (clause: EligibilityWorkItem, mode: EligibilityListMode, decisionFilter: EligibilityDecisionFilter) =>
@@ -983,11 +1160,11 @@ export function EligibilityWorkbenchPage() {
   });
 
   return (
-    <div className="eligibility-workbench workbench">
+    <div className={`eligibility-workbench workbench${queueVisible ? "" : " eligibility-workbench--reading"}`}>
       <header className="page-head">
         <h1 className="page-head__title">入排审核工作台</h1>
         <p className="page-head__note">
-          {subjectLabel} · {selectedProject.projectName} · {episodeLabel(selectedEpisode)} · 方案 {selectedProject.officialVersion}
+          {subjectLabel} · {selectedProject.projectCode} · {episodeLabel(selectedEpisode)} · 方案 {selectedProject.officialVersion}
         </p>
       </header>
       <EligibilitySelection
@@ -1002,6 +1179,12 @@ export function EligibilityWorkbenchPage() {
         onEpisodeChange={setEpisode}
       />
       <div className="eligibility-context-bar">
+        <button type="button" className="icon-button" aria-label={queueVisible ? "收起条款列表" : "显示条款列表"}
+          title={queueVisible ? "收起条款列表，扩大依据与原件" : "显示条款列表"} aria-expanded={queueVisible}
+          onClick={() => setQueueVisible(value => !value)}>
+          {queueVisible ? <PanelLeftClose size={17} aria-hidden="true" /> : <PanelLeftOpen size={17} aria-hidden="true" />}
+        </button>
+        {reviewData.verificationOnly && <span>验证用规则包</span>}
         <span
           className="eligibility-undetermined"
           role="status"
@@ -1026,6 +1209,28 @@ export function EligibilityWorkbenchPage() {
           打开报告
         </RouteLink>
       </div>
+      <details className="eligibility-work-draft-tools"><summary>工作稿操作与节点日期</summary>
+        <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode} onCompleted={refreshWorkDraft}
+          initialJob={confirmationJob?.episodeId === selectedEpisode.reviewEpisodeId ? confirmationJob.job : null}
+          onSettled={job => {
+            if (job.state !== "completed" && confirmationJob?.episodeId === selectedEpisode.reviewEpisodeId) {
+              setConfirmationJob(null); setConfirmedRule(null);
+              setConfirmationError("新版尚未保存，旧版未改变。请在任务详情查看原因，处理后再试。");
+            }
+          }} />
+      </details>
+      {issueGroups.filter(group => group.issues.length).map(group => <details key={group.label}
+        aria-label={group.label} className="eligibility-context-bar">
+        <summary>{group.label}（{group.issues.length}）</summary>
+        <ul>{group.issues.map((issue, index) => <li key={index}>
+          {issue.affectedCodes.join("、")} {issue.detail} {issue.alternative}
+          {issue.pageArtifactId && <RouteLink to={`/subjects/${encodeURIComponent(selectedSubject.subjectId)}/evidence`}
+            params={{ episode: selectedEpisode.reviewEpisodeId, sourcePage: issue.pageArtifactId }}
+            className="button button--quiet" ariaLabel={`查看相关原件第${issue.pageNumber ?? "对应"}页`}>
+            查看相关原件{issue.pageNumber ? `第${issue.pageNumber}页` : ""}
+          </RouteLink>}
+        </li>)}</ul>
+      </details>)}
       {(reviewData.workDraftState === "source_changed" || reviewData.workDraftState === "method_changed") && (
         <section className="eligibility-context-bar" role="status"
           aria-label={reviewData.workDraftState === "method_changed" ? "审核方式已更新" : "审核资料已变化"}>
@@ -1050,7 +1255,7 @@ export function EligibilityWorkbenchPage() {
         </section>
       )}
       <div className="workbench-panes">
-        <aside className="workbench-col eligibility-workbench__clauses" aria-label="审核要点列表">
+        {queueVisible && <aside className="workbench-col eligibility-workbench__clauses" aria-label="审核要点列表">
           <div className="workbench-pane">
             <header className="workbench-pane__head">
               <div>
@@ -1103,7 +1308,7 @@ export function EligibilityWorkbenchPage() {
               </nav>
             )}
           </div>
-        </aside>
+        </aside>}
         <section className="workbench-col eligibility-workbench__detail" aria-label="审核要点详情">
           <div className="workbench-pane">
             <header className="workbench-pane__head">
@@ -1112,28 +1317,55 @@ export function EligibilityWorkbenchPage() {
                   <span className="workbench-pane__code">{selectedClause?.ruleCode ?? "审核要点"}</span>
                   <span>{selectedClause ? workItemKindLabel(selectedClause) : ""}</span>
                 </h2>
-                <p className="workbench-pane__subtitle">审核要点详情</p>
               </div>
             </header>
             {selectedClause ? <EligibilityClauseDetail
               clause={selectedClause}
+              unresolvedConditions={selectedClause.parentRuleCode === null && isUndeterminedDecision(selectedClause.decision)
+                && reviewData.componentClauses?.some(item => item.ruleCode === selectedClause.ruleCode
+                  && item.ruleComponentId !== selectedClause.ruleComponentId && !isUndeterminedDecision(item.decision))
+                ? reviewData.componentClauses?.filter(item => item.ruleCode === selectedClause.ruleCode
+                  && item.ruleComponentId !== selectedClause.ruleComponentId && isUndeterminedDecision(item.decision)) : []}
               selectedFactIndex={selectedFactIndex}
-              onSelectFact={setSelectedFactIndex}
+              onSelectFact={index => { setSelectedFactIndex(index); setEvidenceVisited(true); setEvidenceOpen(true); }}
             /> : <p className="eligibility-muted">当前筛选没有符合条件的审核要点。</p>}
+            {canModify && selectedClause?.canConfirm && getEligibilityReviewRepository().confirmWorkDraft && <button type="button" className="button button--quiet"
+              disabled={confirmationBusy || confirmationJob?.episodeId === selectedEpisode.reviewEpisodeId}
+              onClick={() => setConfirmingClause(selectedClause)}><Check size={16} aria-hidden="true" />我已核实本条依据</button>}
+            {confirmationJob?.episodeId === selectedEpisode.reviewEpisodeId && <p role="status">已收到核实，正在保存新版工作稿。</p>}
+            {confirmationError && <p role="alert">{confirmationError}</p>}
+            {confirmingClause && <ConfirmationDialog clause={confirmingClause} verificationOnly={reviewData.verificationOnly ?? false}
+              busy={confirmationBusy} onClose={() => setConfirmingClause(null)}
+              onConfirm={actor => void confirmClause(confirmingClause, actor)} />}
+            {selectedClause && <button type="button" className="button button--primary eligibility-open-source"
+              onClick={() => { setEvidenceVisited(true); setEvidenceOpen(true); }}>
+              <FileSearch size={17} aria-hidden="true" /> 查看原件
+            </button>}
+            {selectedClause && !!reviewData.componentClauses?.some(item => item.ruleCode === selectedClause.ruleCode) &&
+              <details className="eligibility-clause-detail">
+                <summary>逐项条件与依据</summary>
+                <ul>{reviewData.componentClauses.filter(item => item.ruleCode === selectedClause.ruleCode).map(item =>
+                  <li key={item.ruleComponentId}>
+                    <button type="button" className="button button--quiet" onClick={() => selectClause(item.ruleComponentId)}>
+                      {item.textSummary} · {item.decisionLabel}{item.confidence === "low" ? " · 低置信" : ""}
+                    </button>
+                    <ReasonText text={item.reason} />
+                  </li>)}</ul>
+              </details>}
           </div>
         </section>
-        <section className="workbench-col eligibility-workbench__evidence">
-          {selectedClause && <EligibilityEvidencePanel
+        {selectedClause && evidenceVisited && <EvidenceReader title={`${selectedClause.ruleCode} · 原始资料`}
+          open={evidenceOpen} onClose={() => setEvidenceOpen(false)}>
+          <EligibilityEvidencePanel
             review={reviewData}
             clause={selectedClause}
             selectedFactIndex={selectedFactIndex}
             onSelectFact={setSelectedFactIndex}
-          />}
-        </section>
+          />
+        </EvidenceReader>}
       </div>
       <footer className="eligibility-workbench__footnote">
         规则修订：{formatSnapshotVersion(reviewData.ruleSetRevision, null)} · 节点修订：{formatSnapshotVersion(selectedEpisode.revision, null)}
-        {` · 资料快照：${reviewData.evidenceSnapshotV2Id.slice(0, 8)}`}
       </footer>
     </div>
   );

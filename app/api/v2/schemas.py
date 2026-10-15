@@ -1,7 +1,7 @@
 """V2 API 请求/响应契约：只做协议转换，中文词汇由 vocabulary 提供。"""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -149,6 +149,7 @@ class EpisodeDTO(_StrictModel):
     active_evidence_snapshot_id: str | None = None
     active_evidence_processing_revision_id: str | None = None
     anchor_dates: dict[str, Any] = Field(default_factory=dict)
+    evidence_cutoff_date: date | None = None
     due_at: datetime | None = None
     revision: int
 

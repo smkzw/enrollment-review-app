@@ -22,8 +22,8 @@ import {
 const DOC_DIR = path.resolve(
   process.cwd(),
   "..",
-  ".trellis",
-  "tasks",
+  "archives",
+  "trellis-tasks",
   "archive",
   "2026-08",
   "08-13-phase1-5-uat-readiness",

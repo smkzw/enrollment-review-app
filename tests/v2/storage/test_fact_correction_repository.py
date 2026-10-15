@@ -84,7 +84,7 @@ def _seed_valid_chain(session, prefix: str, fixture_index: int = 0) -> dict:
     return _seed_storage_chain(session, prefix, fixture_index=fixture_index)
 
 
-def _create_fact_with_candidate(session, seed: dict, fact_id: str, run_id: str, call_id: str, gate_id: str, cand_id: str, *, value: str = "120/80", asserted_object: str = "血压", assertion_text: str | None = None, revision: int = 1, source_observation_refs: list[str] | None = None) -> ClinicalFactV2:
+def _create_fact_with_candidate(session, seed: dict, fact_id: str, run_id: str, call_id: str, gate_id: str, cand_id: str, *, value: str = "120/80", asserted_object: str = "血压", assertion_text: str | None = None, revision: int = 1, source_observation_refs: list[str] | None = None, include_source_candidates: bool = False) -> ClinicalFactV2:
     authority = seed["authority"]
     # The storage seed already owns one run/call/fact candidate/gate for the
     # same prefix; publish corrections need a second real upstream chain.
@@ -111,7 +111,7 @@ def _create_fact_with_candidate(session, seed: dict, fact_id: str, run_id: str, 
     FactGateResultRepository(session).create(FactGateResult(gate_result_id=gate_id, run_id=run_id, call_id=call_id, candidate_id=cand_id, gate=FactGate.TRANSACTIONAL_PUBLISH, outcome=GateOutcome.ACCEPTED, reasons=[], created_at=NOW))
     # 创建事实，语义与候选完全一致
     stable = clinical_fact_stable_identity(authority=authority, fact_type="vital_sign", asserted_object=asserted_object, polarity=FactPolarity.AFFIRMED, value=value, unit="unitless", date_range=date_range, profile_lane=ProfileLane.EVIDENCE_QUALITY)
-    fact = ClinicalFactV2(fact_id=fact_id, run_id=run_id, gate_id=gate_id, source_candidate_ids=[], source_observation_refs=source_observation_refs or [], gate_ids=[gate_id], authority=authority, fact_type="vital_sign", profile_lane=ProfileLane.EVIDENCE_QUALITY, supported_requirement_ids=[], polarity=FactPolarity.AFFIRMED, asserted_object=asserted_object, value=value, unit="unitless", source_strength=SourceStrength.CONTEMPORANEOUS_OBJECTIVE, date_range=date_range, record_time=NOW, locator_ids=[seed["locator_id"]], assertion_basis=basis, stable_identity=stable, revision=revision, created_at=UTC_NOW)
+    fact = ClinicalFactV2(fact_id=fact_id, run_id=run_id, gate_id=gate_id, source_candidate_ids=[cand_id] if include_source_candidates else [], source_observation_refs=source_observation_refs or [], gate_ids=[gate_id], authority=authority, fact_type="vital_sign", profile_lane=ProfileLane.EVIDENCE_QUALITY, supported_requirement_ids=[], polarity=FactPolarity.AFFIRMED, asserted_object=asserted_object, value=value, unit="unitless", source_strength=SourceStrength.CONTEMPORANEOUS_OBJECTIVE, date_range=date_range, record_time=NOW, locator_ids=[seed["locator_id"]], assertion_basis=basis, stable_identity=stable, revision=revision, created_at=UTC_NOW)
     ClinicalFactV2Repository(session).create(fact)
     return fact
 

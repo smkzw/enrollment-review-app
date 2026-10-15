@@ -396,6 +396,20 @@ EVIDENCE_NORMALIZER_TEMPERATURE = (
     if _evidence_normalizer_temperature
     else None
 )
+# Chart-to-condition review has its own role; overriding it does not rerun or
+# reroute evidence normalization. Unset values preserve the existing role.
+WORK_DRAFT_SEMANTIC_PROVIDER = os.getenv(
+    "WORK_DRAFT_SEMANTIC_PROVIDER", EVIDENCE_NORMALIZER_PROVIDER
+).strip().lower()
+WORK_DRAFT_SEMANTIC_MODEL = os.getenv(
+    "WORK_DRAFT_SEMANTIC_MODEL", EVIDENCE_NORMALIZER_MODEL
+).strip()
+WORK_DRAFT_SEMANTIC_REASONING_EFFORT = os.getenv(
+    "WORK_DRAFT_SEMANTIC_REASONING_EFFORT", EVIDENCE_NORMALIZER_REASONING_EFFORT
+).strip().lower()
+WORK_DRAFT_SEMANTIC_MAX_TOKENS = int(os.getenv(
+    "WORK_DRAFT_SEMANTIC_MAX_TOKENS", str(EVIDENCE_NORMALIZER_MAX_TOKENS)
+))
 # Legacy GLM-specific Normalizer profile remains available for saved jobs.
 # New work uses the provider-neutral EVIDENCE_NORMALIZER_* profile above.
 EVIDENCE_NORMALIZER_GLM_BASE_URL = os.getenv(

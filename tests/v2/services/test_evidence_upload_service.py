@@ -483,6 +483,25 @@ def test_intra_preview_duplicate_content_classified_duplicate(env):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("name,label", [
+    ("purchase_record.jpg", "用药与治疗记录"),
+    ("药房购药凭证.png", "用药与治疗记录"),
+    ("prescription.pdf", "用药与治疗记录"),
+    ("medical_record.pdf", "病历资料"),
+    ("medical-record.pdf", "病历资料"),
+    ("tracking_record.pdf", "其他资料（待确认）"),
+    ("activities.pdf", "其他资料（待确认）"),
+    ("bacteria.pdf", "其他资料（待确认）"),
+    ("laboratory-results.pdf", "实验室检验结果"),
+    ("ＳＡＭＰＬＥ＿ＬＡＢ.pdf", "实验室检验结果"),
+    ("胸部CT资料.pdf", "检查报告"),
+    ("病历及检验.pdf", "混合临床资料"),
+    ("dose_score_record.pdf", "评分与量表"),
+])
+def test_filename_metadata_is_only_a_bounded_type_hint(name, label):
+    assert EvidenceUploadService._suggest_initial_metadata(name) == (label, "来源待核对")
+
+
 def test_confirm_full_creates_snapshot_commit_job_in_one_transaction(env):
     service = env["service"]
     project_id, subject_id, episode_id = env["scope"]
@@ -526,6 +545,13 @@ def test_confirm_full_creates_snapshot_commit_job_in_one_transaction(env):
             .is_auto_suggestion
             for version_id in members
         )
+        from app.domain.gates.fact_evidence_closure import derive_source_strength_from_metadata
+        for version_id in members:
+            metadata = SourceDocumentMetadataRevisionRepository(session).head(version_id)
+            assert metadata.source_party == "来源待核对"
+            assert metadata.source_category == "unknown"
+            assert derive_source_strength_from_metadata(metadata.document_type, metadata.source_party,
+                source_category=metadata.source_category).value == "unverifiable_source"
     # blob 文件落盘且可读。
     for blob in result.snapshot.members:
         with env["factory"]() as session:
@@ -547,7 +573,7 @@ def test_confirm_full_creates_snapshot_commit_job_in_one_transaction(env):
 
         job = JobStore(session).get_job(result.job_id)
         payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
-        assert payload["preparation_policy"] == DIRECT_VISION_PREPARATION
+        assert "preparation_policy" not in payload  # 0.2.0 uses native text / shared OCR.
         assert payload["ocr_inheritance_contract"] == "confirmed-ocr/v1"
         assert payload["inherited_processing_revision_id"] is None
 

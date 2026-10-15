@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 全局壳组件测试：无登录导航、默认首屏、页面切换、移动抽屉键盘路径。
+ * 全局壳组件测试：无登录导航、默认首屏、页面切换、宽屏导航固定／收起。
  * 使用真实 stub 仓储（fixture/v1），覆盖工作项验收“navigation”行为。
  */
 
@@ -57,17 +57,18 @@ describe("全局壳与导航", () => {
     ).toHaveTextContent("项目看板");
   });
 
-  it("移动抽屉：菜单按钮打开，Escape 关闭并返回焦点", async () => {
+  it("宽屏导航可以固定展开或收起，所有入口保留可访问名称", async () => {
     const user = await renderApp();
-    const menuButton = screen.getByRole("button", { name: "打开菜单" });
+    const menuButton = screen.getByRole("button", { name: "固定展开导航" });
     expect(menuButton).toHaveAttribute("aria-expanded", "false");
     await user.click(menuButton);
     expect(menuButton).toHaveAttribute("aria-expanded", "true");
-    expect(document.querySelector(".side-nav__scrim")).toBeInTheDocument();
-    await user.keyboard("{Escape}");
+    expect(document.querySelector(".side-nav--pinned")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "入排工作台" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "收起导航" }));
     await waitFor(() => {
       expect(menuButton).toHaveAttribute("aria-expanded", "false");
-      expect(document.querySelector(".side-nav__scrim")).not.toBeInTheDocument();
+      expect(document.querySelector(".side-nav--pinned")).not.toBeInTheDocument();
     });
     expect(menuButton).toHaveFocus();
   });

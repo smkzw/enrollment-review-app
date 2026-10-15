@@ -128,6 +128,11 @@ function formatPredicate(raw: Record<string, unknown>): string | null {
 }
 
 function formatLogic(raw: Record<string, unknown>, depth = 0): string[] {
+  if (raw.kind === "restricted") {
+    return [raw.limitation_kind === "consumer_unavailable" ? "系统尚不能完成该项判断" : "原文解读尚待核对",
+      ...(Array.isArray(raw.unresolved_dimensions) ? raw.unresolved_dimensions.map(String) : []),
+      "尚未解析为可执行条件"];
+  }
   const predicate = formatPredicate(raw);
   if (predicate !== null) {
     const computation = recordOf(recordOf(raw.predicate)?.source_computation);

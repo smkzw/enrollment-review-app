@@ -39,7 +39,8 @@ describe("页面宽度合同：无页面级宽度上限", () => {
 
   it("全局壳主工作区为容器查询全宽，无 max-width 声明", () => {
     const css = read("./shell.css");
-    expect(maxWidthDeclarations(css)).toEqual([]);
+    // Only the modal reader has a viewport bound; the page itself must remain full-width.
+    expect(maxWidthDeclarations(css.replace(/\.evidence-reader\s*\{[^}]*\}/g, ""))).toEqual([]);
     const contentRule =
       css.match(/\.app-shell__content\s*\{[^}]*\}/)?.[0] ?? "";
     expect(contentRule).toMatch(/container-type:\s*inline-size/);

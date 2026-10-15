@@ -125,9 +125,8 @@ describe("ProfileTodoSummaryCard", () => {
       <ProfileTodoSummaryCard model={emptyModel()} onNavigate={() => undefined} />,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "本次提交资料中，暂无待补资料、待判断、矛盾或待核对事项",
-    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("profile-todo-summary")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 

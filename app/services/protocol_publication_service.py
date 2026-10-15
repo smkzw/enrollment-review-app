@@ -62,6 +62,7 @@ from app.domain.publication import canonical_hash
 from app.evidence.artifacts import ArtifactStore
 from app.storage.config import DB_FILENAME, resolve_data_paths
 from app.services.protocol_integrity_payload import protocol_integrity_payload
+from app.services.protocol_rule_review import current_reviews
 from app.projections.evidence_expectation_templates import (
     project_evidence_expectation_templates,
 )
@@ -71,7 +72,8 @@ from app.protocols.deconstruction_gate import (
 )
 from app.storage.codecs import PersistedContractInvalid, utc_now
 from app.storage.idempotency import IdempotencyRepository, request_hash
-from app.storage.models import IdempotencyRecordRow, ProjectRecord, RuleSetRecord
+from app.storage.models import IdempotencyRecordRow, ProjectRecord, RuleSetRecord, RuleSetVariablesRecord
+from app.services.protocol_variable_binding import validate_publication_bindings
 from app.storage.repositories import (
     AppendRepository,
     AUTHORITY_CONFIRMATION_CONFIG,
@@ -163,6 +165,7 @@ class ProtocolPublicationResult:
     published_revision_id: str
     template_count: int
     replay: bool = False
+    verification_only: bool = False
 
     def to_stored_id(self) -> str:
         return json.dumps(
@@ -179,6 +182,7 @@ class ProtocolPublicationResult:
                 "integrity_gate_result_id": self.integrity_gate_result_id,
                 "published_revision_id": self.published_revision_id,
                 "template_count": self.template_count,
+                "verification_only": self.verification_only,
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -233,6 +237,32 @@ class ProtocolPublicationService:
 
         revisions = ProtocolDraftRevisionRepository(session)
         revision = revisions.get(request.draft_revision_id)
+        if revision.review_scope_selection is not None:
+            if revision.content.scope_supplement is None:
+                raise ProtocolPublicationError("review_scope_not_applied",
+                    "新增范围尚未形成对应要求，本次选择已保存，但不能当作完整规则包发布。")
+            from app.protocols.medication_restrictions import validate_scope_supplement
+            from app.services.protocol_review_scope_service import (load_scope_structure,
+                review_scope_view, scope_source_snapshot, validate_scope_proposal)
+            database = session.get_bind().engine.url.database
+            if not database or Path(database).name != DB_FILENAME:
+                raise ProtocolPublicationError("review_scope_source_missing", "补充范围未对应本次资料目录，不能发布。")
+            paths = resolve_data_paths(str(Path(database).resolve().parent))
+            try:
+                snapshot = scope_source_snapshot(session, request.source_input, None)
+                selection = revision.review_scope_selection
+                if selection.snapshot_id != request.source_input.extraction_snapshot_id:
+                    raise ValueError("范围选择不属于当前方案结构")
+                spans = list(request.source_spans.values())
+                view = review_scope_view(source=request.source_input, spans=spans, snapshot=snapshot,
+                    data_paths=paths, additional_ids=[span_id for addition in selection.additions for span_id in addition.source_span_ids])
+                validate_scope_proposal(selection, view, request.source_input, spans, load_scope_structure(snapshot, paths))
+                validate_scope_supplement(revision.content.scope_supplement, view=view, selection=selection,
+                    phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules})
+            except (ValueError, OSError) as exc:
+                raise ProtocolPublicationError("review_scope_source_invalid", "补充范围与已保存原文未能核对一致，原规则保留。") from exc
+        elif revision.content.scope_supplement is not None:
+            raise ProtocolPublicationError("review_scope_selection_missing", "补充要求缺少其原文范围选择，不能发布。")
         head = revisions.get_head(revision.draft_id)
         if head is None or head.revision_id != revision.revision_id:
             from app.services.protocol_draft_service import head_stale_error
@@ -380,6 +410,22 @@ class ProtocolPublicationService:
         if not gate_result.publishable:
             raise PublicationGateError(gate_result)
 
+        entries, _ = current_reviews(session, request.source_input, draft)
+        missing = [entry["official_code"] for entry in entries if entry["review"] is None]
+        if missing:
+            raise ProtocolPublicationError(
+                "rule_reviews_incomplete", "尚未审定或已修改的条目：" + "、".join(missing),
+            )
+        reviews = [entry["review"] for entry in entries]
+        verification_only = any(record.reviewer_kind == "builder_verification" for record in reviews)
+        # Historical builder-only packets remain inspectable. A current bound
+        # packet or any formal publication must pass the complete data contract.
+        if draft.variable_definitions is not None or not verification_only:
+            try:
+                validate_publication_bindings(draft)
+            except ValueError as exc:
+                raise ProtocolPublicationError("variable_bindings_invalid", str(exc)) from exc
+
         # 2) 组装正式权威链对象（方案版本记录在最后一步按真实引用创建）。
         #    版本身份已被上方校验绑定到草稿/输入；此处直接取草稿版本 id。
         version_id = draft.protocol_version_id
@@ -387,6 +433,9 @@ class ProtocolPublicationService:
         rule_set = self._build_rule_set(
             session, draft, version_id=version_id, target_project=target_project
         )
+        rule_set = rule_set.model_copy(update={
+            "verification_only": verification_only, "review_records": reviews,
+        })
         # 发布工件中的审核节点 ID 按 (rule_set, revision) 命名空间化，
         # 同一草稿在重新发布时不会与旧 revision 的节点行冲突。
         published_stages = self._published_workflow_stages(draft, rule_set)
@@ -508,6 +557,7 @@ class ProtocolPublicationService:
             authority_gate_result_id=authority_gate.gate_result_id,
             integrity_gate_result_id=integrity_gate.gate_result_id,
             published_revision_id=revision.revision_id,
+            verification_only=verification_only,
             template_count=len(
                 self._templates(
                     rule_set, published_stages, procedure_requirements
@@ -631,6 +681,8 @@ class ProtocolPublicationService:
             protocol_version_id=version_id,
             study_phase=draft.selected_phase,
             rules=draft.proposed_rules,
+            variable_definitions=draft.variable_definitions,
+            scope_supplement=draft.scope_supplement,
             revision=revision,
         )
 
@@ -800,6 +852,9 @@ class ProtocolPublicationService:
                 for ref in refs
             }
         )
+        if draft.scope_supplement is not None:
+            all_refs = sorted(set(all_refs) | {f"{version_id}:{ref}" for ref in self._source_refs(
+                [quote.source_span_id for quote in draft.scope_supplement.sources], request.source_spans)})
         source_records = [
             build_protocol_source_record(
                 source_ref=ref,
@@ -1011,6 +1066,12 @@ class ProtocolPublicationService:
             rule_set,
             procedure_requirements=procedure_requirements,
         )
+        if rule_set.variable_definitions is not None:
+            payload = [item.model_dump(mode="json") for item in rule_set.variable_definitions]
+            session.add(RuleSetVariablesRecord(
+                rule_set_id=rule_set.rule_set_id, revision=rule_set.revision,
+                payload_json=json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                payload_sha256=canonical_hash(payload), created_at=request.published_at or self.now()))
         stage_repo = AppendRepository(session, WORKFLOW_STAGE_CONFIG)
         for stage in workflow_stages:
             stage_repo.save(

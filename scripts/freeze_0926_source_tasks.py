@@ -20,7 +20,7 @@ SOURCE_DATABASE = Path(
     "enrollment-review-v2.sqlite3"
 )
 DEFAULT_OUTPUT = Path(
-    ".trellis/tasks/09-11-e2e-eligibility-review/evaluation/"
+    "output/"
     "0926v1-source-tasks-24.json"
 )
 

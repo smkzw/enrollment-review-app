@@ -26,6 +26,7 @@ from app.domain.contracts.protocol_drafts import (
     ParentRuleDiff,
     ProtocolDraftRevision,
     ProtocolDraftRevisionDiff,
+    ReviewScopeSelection,
 )
 from app.domain.contracts.rules import (
     RestrictedRuleComponent,
@@ -767,6 +768,8 @@ def enforce_draft_edit_boundary(
       成员与流程结构（由 ProtocolDeconstructionGate 的 source_coverage /
       parent_catalog / workflow_coverage 把关）。
     """
+    if previous.scope_supplement != current.scope_supplement:
+        _fail_boundary("SCOPE_SUPPLEMENT_REWRITTEN", "补充范围的要求须从其专用核对入口保存，不能随其他修订改写。")
     if (
         previous.draft_id != current.draft_id
         or previous.project_id != current.project_id
@@ -1104,6 +1107,37 @@ class ProtocolDraftService:
         )
         return self.revisions.save(revision)
 
+    def apply_variable_bindings(self, *, draft_id, proposal, expected_revision_id, actor, created_at):
+        from app.services.protocol_variable_binding import apply_variable_bindings
+        head = self._require_head(draft_id, expected_revision_id)
+        draft = apply_variable_bindings(head.content, proposal)
+        return self._append_revision(draft, expected_revision_id=expected_revision_id,
+            reason=DraftRevisionReason.MANUAL_EDIT, feedback_kind=None, feedback_note=None,
+            actor=actor, created_at=created_at, variable_bindings=proposal)
+
+    def save_review_scope(self, *, draft_id: str, selection: ReviewScopeSelection,
+                          expected_revision_id: str, actor: str, created_at: datetime) -> ProtocolDraftRevision:
+        head = self._require_head(draft_id, expected_revision_id)
+        if head.status not in {DraftRevisionStatus.DRAFT, DraftRevisionStatus.SAVED, DraftRevisionStatus.RESTORED_FROM}:
+            raise DraftEditBoundaryError("DRAFT_NOT_EDITABLE", "已发布或已取消的草稿不能修改范围。")
+        if head.review_scope_selection is not None:
+            previous = head.review_scope_selection.model_dump(exclude={"saved_at", "saved_by"})
+            if previous == selection.model_dump(exclude={"saved_at", "saved_by"}):
+                return head
+        return self._append_revision(head.content, expected_revision_id=expected_revision_id,
+            reason=DraftRevisionReason.MANUAL_EDIT, feedback_kind=None,
+            feedback_note="审核范围选择已保存，尚未纳入规则。", actor=actor, created_at=created_at,
+            review_scope_selection=selection)
+
+    def save_scope_supplement(self, *, draft_id, supplement, expected_revision_id, actor, created_at):
+        head = self._require_head(draft_id, expected_revision_id)
+        if head.review_scope_selection is None:
+            raise DraftEditBoundaryError("SCOPE_SELECTION_MISSING", "请先保存本次审核范围。")
+        return self._append_revision(head.content.model_copy(update={"scope_supplement": supplement}),
+            expected_revision_id=expected_revision_id, reason=DraftRevisionReason.MANUAL_EDIT,
+            feedback_kind=None, feedback_note="已保存补充范围的用药要求，尚未审定或发布。",
+            actor=actor, created_at=created_at, scope_supplement=supplement)
+
     def apply_manual_edit(
         self,
         draft: ProtocolDeconstructionDraft,
@@ -1111,6 +1145,7 @@ class ProtocolDraftService:
         expected_revision_id: str,
         actor: str,
         created_at: datetime,
+        reviewed_stage_assignment: bool = False,
     ) -> ProtocolDraftRevision:
         return self._append_revision(
             draft,
@@ -1120,6 +1155,7 @@ class ProtocolDraftService:
             feedback_note=None,
             actor=actor,
             created_at=created_at,
+            reviewed_stage_assignment=reviewed_stage_assignment,
         )
 
     def apply_feedback(
@@ -1195,6 +1231,7 @@ class ProtocolDraftService:
             status=DraftRevisionStatus.RESTORED_FROM,
             reason=DraftRevisionReason.RESTORE,
             actor=actor,
+            review_scope_selection=source.review_scope_selection,
             content=restored_content,
             content_sha256=canonical_hash(restored_content.model_dump(mode="json")),
             diff=compute_draft_diff(head.content, restored_content),
@@ -1282,6 +1319,10 @@ class ProtocolDraftService:
         feedback_note: str | None,
         actor: str,
         created_at: datetime,
+        variable_bindings=None,
+        reviewed_stage_assignment: bool = False,
+        review_scope_selection: ReviewScopeSelection | None = None,
+        scope_supplement=None,
     ) -> ProtocolDraftRevision:
         head = self._require_head(draft.draft_id, expected_revision_id)
         if head.status == DraftRevisionStatus.CANCELLED:
@@ -1294,9 +1335,42 @@ class ProtocolDraftService:
                 "DRAFT_PUBLISHED",
                 "已发布的草稿 revision 不能继续编辑；请基于新草稿重新解构。",
             )
-        enforce_draft_edit_boundary(
-            head.content, draft, feedback_kind=feedback_kind
-        )
+        if scope_supplement is not None:
+            expected = head.content.model_copy(update={"scope_supplement": scope_supplement})
+            if draft != expected or feedback_kind is not None or variable_bindings is not None or reviewed_stage_assignment:
+                _fail_boundary("SCOPE_SUPPLEMENT_SCOPE_CHANGED", "补充要求不能改写已有规则、变量、节点或原文。")
+        elif reviewed_stage_assignment:
+            expected = head.content.model_copy(deep=True)
+            new_stages = {stage.workflow_stage_id: stage for stage in draft.proposed_workflow_stages}
+            assignments = {}
+            for stage in expected.proposed_workflow_stages:
+                submitted = new_stages.get(stage.workflow_stage_id)
+                if submitted is None:
+                    _fail_boundary("WORKFLOW_VISIT_REWRITTEN", "节点核对不能删除原访视。")
+                if submitted.stage != stage.stage:
+                    for requirement_id in stage.due_requirement_ids:
+                        assignments[requirement_id] = submitted.stage
+                    stage.stage = submitted.stage
+            for stage in expected.proposed_workflow_stages:
+                if any(requirement_id in assignments and assignments[requirement_id] != stage.stage
+                       for requirement_id in stage.due_requirement_ids):
+                    _fail_boundary("WORKFLOW_VISIT_REWRITTEN", "同一要求关联多个不同阶段，请先核对原文范围。")
+            components = [component for rule in expected.proposed_rules for component in rule.components]
+            components.extend(item.proposed_component for item in expected.component_drafts)
+            requirements = [requirement for component in components for requirement in component.evidence_requirements]
+            requirements.extend(item.proposed_requirement for item in expected.evidence_requirement_drafts)
+            for requirement in requirements:
+                if requirement.requirement_id in assignments:
+                    requirement.due_stage = assignments[requirement.requirement_id]
+            if draft != expected or feedback_kind is not None or variable_bindings is not None:
+                _fail_boundary("WORKFLOW_VISIT_REWRITTEN", "节点核对仅允许调整阶段与其明确关联要求，不得改写原文、时间窗或其他条件。")
+        elif variable_bindings is None:
+            enforce_draft_edit_boundary(head.content, draft, feedback_kind=feedback_kind)
+        else:
+            from app.services.protocol_variable_binding import apply_variable_bindings
+            expected = apply_variable_bindings(head.content, variable_bindings)
+            if draft != expected:
+                _fail_boundary("VARIABLE_BINDING_SCOPE_CHANGED", "数据对应关系不得改写原条件或来源")
         next_number = head.revision_number + 1
         # 规范化内层草稿链：content.draft_revision 与 previous_draft_id 必须
         # 与外层 ProtocolDraftRevision 链一致，杜绝「外层 revision=2、内层仍=1」
@@ -1324,6 +1398,7 @@ class ProtocolDraftService:
             feedback_note=feedback_note,
             actor=actor,
             content=normalized_content,
+            review_scope_selection=review_scope_selection or head.review_scope_selection,
             content_sha256=canonical_hash(normalized_content.model_dump(mode="json")),
             diff=compute_draft_diff(head.content, normalized_content),
             created_at=created_at,

@@ -94,6 +94,25 @@ def test_incomplete_semantic_snapshot_is_rejected():
         )
 
 
+@pytest.mark.parametrize("variable", [None, "pressure_record"])
+def test_variable_snapshots_extend_legacy_without_rewriting_it(variable):
+    _correction()  # The historical snapshot format remains valid and byte-identical.
+    old = canonical_json({**json.loads(OLD_JSON), "variable_id": variable})
+    new = canonical_json({**json.loads(NEW_JSON), "variable_id": None})
+    result = _correction(old_snapshot_json=old, old_snapshot_sha256=hashlib.sha256(old.encode()).hexdigest(),
+                         new_snapshot_json=new, new_snapshot_sha256=hashlib.sha256(new.encode()).hexdigest())
+    assert result.old_snapshot_json == old and result.new_snapshot_json == new
+    with pytest.raises(ValidationError, match="范围必须一致"):
+        _correction(old_snapshot_json=old, old_snapshot_sha256=hashlib.sha256(old.encode()).hexdigest())
+
+
+@pytest.mark.parametrize("variable", ["", "  ", 12, True])
+def test_variable_snapshot_rejects_missing_identity(variable):
+    old = canonical_json({**json.loads(OLD_JSON), "variable_id": variable})
+    with pytest.raises(ValidationError, match="数据项目"):
+        _correction(old_snapshot_json=old, old_snapshot_sha256=hashlib.sha256(old.encode()).hexdigest())
+
+
 def _correction(**overrides):
     auth = overrides.pop("authority", _authority())
     impact = overrides.pop("impact_scope", _impact())

@@ -12,6 +12,7 @@ from app.domain.contracts.protocol_drafts import (
     DraftFeedbackKind,
     ProtocolDraftRevisionDiff,
 )
+from app.domain.contracts.rule_reviews import RuleReviewRecord, ReviewerKind
 from app.domain.contracts.protocol_metadata import InterpretationSource
 
 
@@ -104,6 +105,7 @@ class DraftComparisonSideResponse(_StrictModel):
     is_formal_baseline: bool
     content: dict[str, Any]
     source_refs: list[str]
+    review_scope_pending: bool = False
 
 
 class DraftComparisonResponse(_StrictModel):
@@ -117,6 +119,8 @@ class DraftComparisonResponse(_StrictModel):
 
 
 class ProtocolSessionResponse(_StrictModel):
+    operator_name: str = "本机医学经理"
+    verification_only: bool | None = None
     job_id: str
     job_type: str
     state: str
@@ -235,6 +239,7 @@ class DraftRevisionResponse(_StrictModel):
     reason: str
     reason_label: str
     imported_unpublished_proposal: bool = False
+    review_scope_pending: bool = False
     actor: str
     created_at: datetime
     study_phase: StudyPhase
@@ -251,6 +256,7 @@ class ManualEditRequest(_StrictModel):
     expected_revision_id: str = Field(min_length=1, max_length=128)
     draft: ProtocolDeconstructionDraft
     actor: str = Field(default="用户", min_length=1, max_length=128)
+    reviewed_stage_assignment: bool = False
 
 
 class GenerationPreviewResponse(_StrictModel):
@@ -344,3 +350,45 @@ class PublishResponse(_StrictModel):
     rule_set_id: str
     rule_set_revision: int
     replay: bool
+    verification_only: bool = False
+
+
+class RuleReviewEntryDTO(_StrictModel):
+    official_code: str
+    kind: Literal["rule", "procedure", "medication", "scope"]
+    label: str
+    rule_content_hash: str
+    source_refs: list[str]
+    issue_refs: list[str]
+    review: RuleReviewRecord | None
+    reviewed_content_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class RuleReviewResponse(_StrictModel):
+    job_id: str
+    draft_revision_id: str
+    operator_name: str
+    all_reviewed: bool
+    entries: list[RuleReviewEntryDTO]
+    history: list[RuleReviewRecord]
+
+
+class RuleReviewRequest(_StrictModel):
+    expected_revision_id: str = Field(min_length=1)
+    rule_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reviewer_kind: ReviewerKind
+    note: str | None = None
+    result_variables: list[str] = Field(default_factory=list)
+
+
+class RuleBatchReviewItem(_StrictModel):
+    official_code: str = Field(min_length=1)
+    rule_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    note: str | None = None
+    result_variables: list[str] = Field(default_factory=list)
+
+
+class RuleBatchReviewRequest(_StrictModel):
+    expected_revision_id: str = Field(min_length=1)
+    reviewer_kind: ReviewerKind
+    entries: list[RuleBatchReviewItem] = Field(min_length=1, max_length=1000)

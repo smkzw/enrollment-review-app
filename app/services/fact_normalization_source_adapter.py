@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import hashlib
+import json
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -108,6 +110,7 @@ def _load_normalizer_context(
     revision: CompleteEvidenceProcessingRevision,
     doc_version_to_logical: dict[str, str],
     logical_to_metadata_revision: dict[str, str],
+    allow_unconfirmed_metadata: bool = False,
 ) -> tuple[dict[str, EvidenceNormalizerContextInput], tuple[EvidenceRequirement, ...]]:
     """读取当前审核节点、资料元数据与本节点已到期的资料要求。"""
     from app.storage.evidence_repositories import (
@@ -146,10 +149,10 @@ def _load_normalizer_context(
             raise FactPlanningSourceError(
                 f"逻辑文档 {logical_document_id} 的元数据修订与活动资料版本不一致"
             )
-        # R14修复：有据的自动建议可直接采用，不构成隐藏人工门禁。
-        # 仅当document_type为完全未知的占位值时才阻断——
-        # "其他资料（待确认）"表示系统无法识别文件类型。
-        if metadata.is_auto_suggestion and "待确认" in (metadata.document_type or ""):
+        # Variable-directed reads preserve unknown metadata instead of asking
+        # the user to classify every file. Legacy readers keep their old boundary.
+        if (not allow_unconfirmed_metadata and metadata.is_auto_suggestion
+                and "待确认" in (metadata.document_type or "")):
             raise UnconfirmedDocumentMetadataError(
                 f"逻辑文档 {logical_document_id} 的资料类型无法自动识别（仍为待确认），"
                 "需人工确认后才能进入证据规范化"
@@ -426,13 +429,20 @@ def build_fact_normalization_plan(
     doc_version_to_logical, logical_to_meta = build_doc_version_to_logical_map(
         session, revision
     )
+    from app.storage.repositories import get_rule_set
+    from app.domain.variables.extraction import build_extraction_targets
+    rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
     contexts, related_requirements = _load_normalizer_context(
         session,
         authority=authority,
         revision=revision,
         doc_version_to_logical=doc_version_to_logical,
         logical_to_metadata_revision=logical_to_meta,
+        allow_unconfirmed_metadata=bool(rule_set.variable_definitions),
     )
+    stage = next(iter(contexts.values())).current_review_stage
+    targets = build_extraction_targets(rule_set, stage, list(related_requirements))
+    related_requirements = targets.requirements
     page_inputs = build_effective_text_map(
         session, revision, doc_version_to_logical=doc_version_to_logical,
         allow_image_only=allow_image_only,
@@ -454,6 +464,7 @@ def build_fact_normalization_plan(
         related_requirements=list(related_requirements),
         max_pages_per_call=max_pages_per_call,
         contract_version=contract_version,
+        variable_definitions=targets.variables,
     )
     return plan, adapter_result
 
@@ -471,15 +482,15 @@ def build_evidence_normalizer_input(
     max_pages_per_call: int = 20,
     created_at: datetime | None = None,
     include_visual_sources: bool = False,
+    planned_source: tuple[FactNormalizationPlan, FactSourceAdapterResult] | None = None,
 ) -> EvidenceNormalizerInput:
     """从当前完整处理修订重建并核对一次模型调用的完整输入。"""
-    plan, source = build_fact_normalization_plan(
-        session,
-        authority=authority,
-        revision_id=authority.complete_processing_revision_id,
+    plan, source = planned_source or build_fact_normalization_plan(
+        session, authority=authority, revision_id=authority.complete_processing_revision_id,
         max_pages_per_call=max_pages_per_call,
-        allow_image_only=include_visual_sources and page_review_coverage_id is not None,
-    )
+        allow_image_only=include_visual_sources and page_review_coverage_id is not None)
+    if plan.authority != authority or source.revision.evidence_processing_revision_id != authority.complete_processing_revision_id:
+        raise FactPlanningSourceError("预备读取计划不属于当前个例资料")
     matches = [
         call
         for call in plan.calls
@@ -558,6 +569,7 @@ def build_evidence_normalizer_input(
             logical_document_id=logical_document_id,
             context=planned.context,
             related_requirements=list(planned.related_requirements),
+            variable_definitions=planned.variable_definitions,
             manifest_sha256=source.revision.manifest_sha256,
             completion_manifest_sha256=source.revision.completion_manifest_sha256,
             page_numbers=page_numbers,
@@ -580,6 +592,7 @@ def build_evidence_normalizer_input(
         logical_document_id=logical_document_id,
         context=planned.context,
         related_requirements=list(planned.related_requirements),
+        variable_definitions=list(planned.variable_definitions),
         manifest_sha256=source.revision.manifest_sha256,
         completion_manifest_sha256=source.revision.completion_manifest_sha256,
         page_numbers=page_numbers,
@@ -590,6 +603,148 @@ def build_evidence_normalizer_input(
         input_scope_sha256=input_scope_sha256,
         created_at=created_at or datetime.now(UTC),
     )
+
+
+def retained_normalization_reads(
+    session: Session, *, authority: FactAuthority, prompt_version_id: str,
+    model_config_id: str, prompt_template: str, artifact_store=None,
+) -> list[dict]:
+    """Reuse actual successful reads only when their original request still matches.
+
+    Source ancestry alone is insufficient: this checks the saved request (including
+    stage, extraction targets, prompt and schema), response binding and checkpoint.
+    No new call or approval is manufactured. Missing historical receipts do not
+    prove coverage; referenced but damaged receipts remain hard errors.
+    """
+    from app.agents.evidence_normalizer import build_evidence_normalizer_prompt, evidence_normalizer_reference_aliases, validate_evidence_normalizer_model_config, _compact_schema
+    from app.domain.contracts.enums import FactCallStatus
+    from app.projections.normalizer_reference_aliases import NormalizerReferenceAliases
+    from app.storage.codecs import verify_payload_sha256
+    from app.storage.fact_authority import FactAuthorityValidator
+    from app.storage.fact_repositories import FactNormalizationRunRepository, FactNormalizationCallRepository
+    from app.storage.facts_models import FactNormalizationRunRecord
+    from app.storage.repositories import AppendRepository, MODEL_CONFIG_CONFIG, PROMPT_VERSION_CONFIG
+    from app.workflow.jobstore import JobStore
+
+    validator = FactAuthorityValidator(session, artifact_store)
+    store = artifact_store or validator._require_artifact_store()
+    configs = AppendRepository(session, MODEL_CONFIG_CONFIG)
+    prompts = AppendRepository(session, PROMPT_VERSION_CONFIG)
+    current_prompt = prompts.get(prompt_version_id)
+    configs.get(model_config_id)  # New requests keep today's selected model; old receipts keep theirs.
+    result, covered, plans = [], set(), {}
+    runs = FactNormalizationRunRepository(session).list_by_episode(authority.review_episode_id)
+    for run in reversed(runs):
+        if (run.authority.evidence_snapshot_v2_id == authority.evidence_snapshot_v2_id
+                and run.authority.complete_processing_revision_id == authority.complete_processing_revision_id):
+            continue
+        documents = validator.retained_source_documents(run.authority, authority)
+        if not documents:
+            continue
+        saved_prompt = prompts.get(run.prompt_version_id)
+        if (saved_prompt.template_sha256 != current_prompt.template_sha256
+                or saved_prompt.schema_version_id != current_prompt.schema_version_id
+                or saved_prompt.node != current_prompt.node):
+            continue
+        model = configs.get(run.model_config_id)
+        validate_evidence_normalizer_model_config(model)
+        record = session.get(FactNormalizationRunRecord, run.run_id)
+        if not record.job_id:
+            continue
+        job_store = JobStore(session)
+        job = job_store.get_job(record.job_id)
+        payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+        if (job.state != "completed" or not payload.get("targeted_extraction")
+                or payload.get("page_review_coverage_id") or payload.get("visual_observation_scope_sha256")):
+            continue
+        page_limit = int(payload.get("max_pages_per_call", 20))
+        if page_limit not in plans:
+            plans[page_limit] = build_fact_normalization_plan(session, authority=authority,
+                revision_id=authority.complete_processing_revision_id, max_pages_per_call=page_limit)
+        plan, source = plans[page_limit]
+        planned = {(row.logical_document_id, row.page_numbers): row for row in plan.calls}
+        final = job_store.get_last_checkpoint(job.job_id, "finalize")
+        if final is None:
+            continue
+        accounting = set(final[1].get("accounting_issue_call_ids", ()))
+        steps = job_store.list_steps(job.job_id)
+        checkpoints = [job_store.get_last_checkpoint(job.job_id, step.step_id) for step in steps]
+        checkpoints = {row[1].get("call_id"): row[1] for row in checkpoints if row}
+        for call in FactNormalizationCallRepository(session).list_by_run(run.run_id):
+            selected = planned.get((call.logical_document_id, tuple(call.page_numbers)))
+            pages = {(call.logical_document_id, page) for page in call.page_numbers}
+            if (call.status != FactCallStatus.SUCCEEDED or call.call_id in accounting or selected is None
+                    or pages & covered or any(page.source_document_version_id not in documents for page in selected.page_inputs)):
+                continue
+            checkpoint = checkpoints.get(call.call_id, {})
+            if (checkpoint.get("input_sha256") != call.input_sha256
+                    or checkpoint.get("raw_output_sha256") != call.raw_output_sha256):
+                continue
+            evidence_input = build_evidence_normalizer_input(session, authority=authority,
+                run_id="retained-source-check", call_id="retained-source-check",
+                logical_document_id=call.logical_document_id, page_numbers=call.page_numbers,
+                expected_input_sha256=selected.input_sha256,
+                max_pages_per_call=page_limit, planned_source=(plan, source))
+            for receipt_sha in checkpoint.get("transport_receipt_sha256", ()):
+                receipt = json.loads(store.read_by_sha("raw_response", receipt_sha))
+                if (receipt.get("call_id") != call.call_id or receipt.get("run_id") != run.run_id
+                        or receipt.get("job_id") != job.job_id or receipt.get("finish_reason") != "stop"
+                        or str(receipt.get("response_model") or "").casefold() != model.model.casefold()
+                        or not isinstance(receipt.get("raw_text"), str)
+                        or hashlib.sha256(receipt["raw_text"].encode()).hexdigest() != call.raw_output_sha256):
+                    continue
+                request_sha = receipt.get("request_artifact_sha256")
+                if not request_sha:
+                    continue
+                request = json.loads(store.read_by_sha("raw_request", request_sha))
+                body = request.get("request_body", {})
+                body_sha = hashlib.sha256(json.dumps(body, ensure_ascii=False, sort_keys=True,
+                    separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+                if (request.get("call_id") != call.call_id or request.get("run_id") != run.run_id
+                        or request.get("job_id") != job.job_id or request.get("provider") != model.provider
+                        or body.get("model") != model.model or receipt.get("request_sha256") != body_sha):
+                    raise FactPlanningSourceError("旧读取回执与实际请求身份不一致")
+                schema = body.get("response_format", {}).get("json_schema", {}).get("schema")
+                if schema is not None and schema != json.loads(_compact_schema(
+                        [row.variable_id for row in evidence_input.variable_definitions])):
+                    continue
+                aliases = (NormalizerReferenceAliases(receipt["reference_aliases"])
+                    if receipt.get("reference_aliases") is not None else None)
+                if aliases is not None and aliases != evidence_normalizer_reference_aliases(evidence_input):
+                    raise FactPlanningSourceError("旧读取的短引用与当前真实来源不一致")
+                prompt = build_evidence_normalizer_prompt(evidence_input, prompt_template=prompt_template,
+                    include_output_schema=schema is None, reference_aliases=aliases,
+                    include_source_categories=model.parameters.get("include_source_categories", False))
+                if not any(row.get("role") == "user" and row.get("content") == prompt for row in body.get("messages", ())):
+                    continue
+                result.append({"run_id": run.run_id, "call_id": call.call_id,
+                    "prompt_version_id": run.prompt_version_id, "model_config_id": run.model_config_id,
+                    "logical_document_id": call.logical_document_id, "page_numbers": call.page_numbers,
+                    "source_document_version_id": selected.page_inputs[0].source_document_version_id,
+                    "input_sha256": call.input_sha256, "raw_output_sha256": call.raw_output_sha256,
+                    "receipt_sha256": receipt_sha, "request_artifact_sha256": request_sha,
+                    "current_prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest()})
+                covered.update(pages)
+                break
+    return sorted(result, key=lambda row: row["call_id"])
+
+
+def validated_retained_normalization_calls(session: Session, payload: dict, *, prompt_template: str, artifact_store=None):
+    """Recheck the frozen proof before publishing or consuming retained coverage."""
+    frozen = payload.get("retained_reads")
+    if frozen is None:
+        return []
+    if not payload.get("targeted_extraction") or not frozen:
+        raise FactPlanningSourceError("保留读取的任务范围不合法")
+    proven = {row["call_id"]: row for row in retained_normalization_reads(session,
+        authority=FactAuthority.model_validate(payload["authority"]),
+        prompt_version_id=payload["prompt_version_id"], model_config_id=payload["model_config_id"],
+        prompt_template=prompt_template, artifact_store=artifact_store)}
+    if (len({row["call_id"] for row in frozen}) != len(frozen)
+            or any(proven.get(row["call_id"]) != row for row in frozen)):
+        raise FactPlanningSourceError("保留读取的原件、请求或回执已不再相容")
+    from app.storage.fact_repositories import FactNormalizationCallRepository
+    return [FactNormalizationCallRepository(session).get(row["call_id"]) for row in frozen]
 
 
 def build_page_review_normalizer_input(

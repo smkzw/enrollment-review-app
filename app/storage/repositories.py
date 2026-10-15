@@ -464,6 +464,8 @@ def _check_run_scope(session: Session, run: ReviewRun) -> None:
         )
         FactAuthorityValidator(session).validate(authority)
         context = ReviewContextV2Repository(session).get(run.context_id)
+        if (run.run_kind == "work_draft") != context.work_draft:
+            raise ScopeViolationError("工作稿与正式审核上下文不能互相替代")
         if context.requirements_scope_version != "review-requirements-scope/v1":
             raise ScopeViolationError("新审核须先核实方案要求是否齐全，不能沿用未完成该核实的历史输入")
         if (
@@ -503,6 +505,8 @@ def _check_assessment_scope(session: Session, assessment: FinalAssessment) -> No
             f"FinalAssessment {assessment.assessment_id} 的 rule_set_revision 与 episode 不一致"
         )
     run = AppendRepository(session, REVIEW_RUN_CONFIG).get(assessment.review_run_id)
+    if run.run_kind == "work_draft":
+        raise ScopeViolationError("工作稿不能写入正式签发结论")
     if run.review_episode_id != assessment.review_episode_id:
         raise ScopeViolationError(
             f"FinalAssessment {assessment.assessment_id} 的 run 超出其 episode"
@@ -1238,6 +1242,8 @@ REVIEW_RUN_CONFIG = _config(
         **_REVIEW_V2_COLUMNS,
         "context_id": "context_id",
         "review_run_id": "review_run_id",
+        "run_kind": "run_kind",
+        "system_issues": "system_issues",
         "review_episode_id": "review_episode_id",
         "protocol_version_id": "protocol_version_id",
         "rule_set_revision": "rule_set_revision",
@@ -1250,6 +1256,8 @@ REVIEW_RUN_CONFIG = _config(
     scope_check=lambda session, contract, payload: _check_run_scope(session, contract),
     mirrors={
         **_REVIEW_V2_COLUMNS,
+        "run_kind": "run_kind",
+        "system_issues": "system_issues",
         "context_id": "context_id",
         "review_episode_id": "review_episode_id",
         "protocol_version_id": "protocol_version_id",
@@ -2007,7 +2015,7 @@ def _episode_columns(payload: dict[str, Any], scope: dict[str, Any] | None) -> d
 
 
 class EpisodeRepository:
-    MUTABLE_FIELDS = frozenset({"stage", "due_at", "evidence_snapshot_id", "anchor_dates"})
+    MUTABLE_FIELDS = frozenset({"stage", "due_at", "evidence_snapshot_id", "anchor_dates", "evidence_cutoff_date"})
 
     #: 活动版本成对指针只允许通过未来 WP-44B 的原子激活事务修改；
     #: 通用 save/update 一律拒绝触碰，防止绕过激活门禁。
@@ -2095,6 +2103,35 @@ class EpisodeRepository:
             mutable_fields=set(self.MUTABLE_FIELDS),
             entity_type="ReviewEpisode",
         )
+        return cast(ReviewEpisode, new_contract)
+
+    def adopt_published_rule_set(self, review_episode_id: str, expected_revision: int) -> ReviewEpisode:
+        """Move the current node only; frozen contexts and prior reports stay immutable."""
+        episode = self.get(review_episode_id)
+        project, revision = get_project_row(self.session, episode.project_id)
+        if (episode.rule_set_id, episode.rule_set_revision, episode.protocol_version_id) == (
+                project.rule_set_id, revision, project.protocol_version.protocol_version_id):
+            return episode
+        old_protocol = AppendRepository(self.session, PROTOCOL_DOC_CONFIG).get(episode.protocol_version_id)
+        if (old_protocol.sha256 != project.protocol_version.sha256
+                or episode.study_phase != project.study_phase or episode.rule_set_id != project.rule_set_id):
+            raise ScopeViolationError("方案原件或研究期别已变化，不能自动沿用原节点资料；请核对新的适用范围。")
+        old_stages = list_workflow_stages_for_rule_set(self.session, episode.rule_set_id, episode.rule_set_revision)
+        old_stage = next((item for item in old_stages if item.workflow_stage_id == episode.workflow_stage_id), None)
+        if old_stage is None:
+            raise ScopeViolationError("原节点缺少已发布的访视来源，暂不能更新规则。")
+        scope = old_stage.model_dump(exclude={"workflow_stage_id", "due_requirement_ids"})
+        matches = [item for item in list_workflow_stages_for_rule_set(self.session, project.rule_set_id, revision)
+            if item.model_dump(exclude={"workflow_stage_id", "due_requirement_ids"}) == scope]
+        if len(matches) != 1:
+            raise ScopeViolationError("新旧规则的审核节点不能唯一对应，请核对访视和时间范围；旧结果保留。")
+        changes = dict(rule_set_id=project.rule_set_id, rule_set_revision=revision,
+            protocol_version_id=project.protocol_version.protocol_version_id,
+            workflow_stage_id=matches[0].workflow_stage_id)
+        _check_episode_scope(self.session, episode.model_copy(update=changes))
+        new_contract, _ = apply_revisioned_update(self.session, ReviewEpisodeRecord, ReviewEpisode,
+            review_episode_id, expected_revision, changes, column_builder=_episode_columns,
+            mutable_fields=set(changes), entity_type="ReviewEpisode")
         return cast(ReviewEpisode, new_contract)
 
     def list_by_subject(

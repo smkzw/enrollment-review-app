@@ -32,6 +32,7 @@ import {
 } from "../api/evidence";
 import { matchRouteParams } from "../app/routes";
 import { RouteLink, updateParams, useHashRoute } from "../app/router";
+import { isInterfaceTrialMode } from "../app/runtimeMode";
 import { useLoad, type UseLoadResult } from "../app/useLoad";
 import {
   EmptyState,
@@ -1002,6 +1003,7 @@ export function EvidencePage() {
         idempotency_key: idempotencyKeyFor(action),
         actor: "本地用户",
         selected_locator_ids: [],
+        source_qualification_mode: "scoped_text_v1",
       });
       completeAction(action);
       currentCandidateId.current = result.candidateId;
@@ -1500,7 +1502,7 @@ export function EvidencePage() {
     subject.centerCode !== null && subject.centerName !== null
       ? `${subject.centerCode}｜${subject.centerName}`
       : (subject.centerCode ?? subject.centerName ?? "中心信息尚未填写");
-  const projectLabel = `${project.projectName} · ${project.studyPhaseLabel}`;
+  const projectLabel = `${isInterfaceTrialMode() ? project.projectName : project.protocolCode} · ${project.studyPhaseLabel}`;
   const pendingCount = pendingCountOf(preview);
   const viewedPairConsistent = viewedRevisionConsistent;
   const viewedMemberByVersionId = new Map(
@@ -1683,10 +1685,16 @@ export function EvidencePage() {
           window.location.hash = `#/subjects?subject=${encodeURIComponent(subjectId)}&episode=${encodeURIComponent(reviewEpisodeId)}`;
         }}
       />
+      {episode?.activeEvidenceSnapshotId && factNormalization.state.status === "idle" && (
+        <button className="button" type="button" onClick={() => void factNormalization.start()}>
+          整理个例档案
+        </button>
+      )}
       {subjectId && reviewEpisodeId && factNormalization.state.status === "active" &&
         (factNormalization.state.phase === "succeeded" || factNormalization.state.phase === "failed") &&
         <NormalizationUnresolvedPanel key={`${subjectId}:${reviewEpisodeId}:${factNormalization.state.jobId}`}
-          subjectId={subjectId} episodeId={reviewEpisodeId} jobId={factNormalization.state.jobId} />}
+          subjectId={subjectId} episodeId={reviewEpisodeId} jobId={factNormalization.state.jobId}
+          onContinue={runId => factNormalization.retryFailedPages(runId)} />}
       {factNormalization.completedReview && <RouteLink className="button" to="/tasks" params={{
         job: factNormalization.completedReview.jobId, subject: factNormalization.completedReview.subjectId,
         episode: factNormalization.completedReview.reviewEpisodeId,
@@ -1709,7 +1717,7 @@ export function EvidencePage() {
             <div>
               <strong>核对后的资料版本已生成</strong>
               <p>
-                启用后将固定本节点的资料与核对结果，并自动开始整理个例档案；入排规则匹配将在下一阶段开放。
+                启用后自动整理个例资料；完成后可到入排工作台查看结果。
               </p>
             </div>
             <button
@@ -1904,6 +1912,7 @@ export function EvidencePage() {
       </header>
       <ContextBand
         projectLabel={projectLabel}
+        projectTitle={project.projectName}
         protocolVersion={project.officialVersion}
         subjectCode={subjectCode}
         centerLabel={centerLabel}
@@ -1932,7 +1941,8 @@ export function EvidencePage() {
           ? "正在查看已保存、尚未启用的校对内容；当前有效资料和原报告未改变。"
           : "正在查看所选识别结果，原报告未改变。"}</strong>
         <button type="button" className="button" disabled={buildBusy} onClick={() => setReprocessedView(null)}>返回已启用资料</button>
-        {selectedSnapshot && viewedRevisionConsistent && processingCandidate === null && <button type="button" className="button button--primary" disabled={buildBusy}
+        {selectedSnapshot && viewedRevisionConsistent && (processingCandidate === null ||
+          (viewingPendingCorrections && processingCandidate.candidateStatus === "needs_attention")) && <button type="button" className="button button--primary" disabled={buildBusy}
           onClick={() => void buildReviewableRevision(selectedSnapshot, viewedProcessingRevisionId!)}>检查核对结果并生成资料版本</button>}
       </div>}
       {!viewingReprocessed && processingCandidate?.candidateStatus === "needs_attention" &&

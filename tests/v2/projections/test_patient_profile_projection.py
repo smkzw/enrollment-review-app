@@ -333,6 +333,32 @@ def _project(**kwargs):
     return project_patient_profile(**kwargs)
 
 
+def test_rule_only_fact_source_identity_is_preserved_in_profile_projection():
+    previous = AUTHORITY.model_copy(update={"episode_revision": 2, "rule_set_revision": 3})
+    fact = _fact(authority=previous)
+    before = fact.model_dump(mode="json")
+    result = _project(facts=[fact], lane_assignments=[_assign_fact(fact.fact_id)],
+        fact_source_authorities={fact.fact_id: previous})
+    assert result.authority == AUTHORITY
+    assert [item.source_id for item in profile_items(result)] == [fact.fact_id]
+    assert fact.model_dump(mode="json") == before
+    with pytest.raises(ProjectionInputError):
+        _project(facts=[fact], lane_assignments=[_assign_fact(fact.fact_id)])
+    with pytest.raises(ProjectionInputError, match="不存在"):
+        _project(facts=[fact], lane_assignments=[_assign_fact(fact.fact_id)],
+            fact_source_authorities={fact.fact_id: previous, "absent": previous})
+
+
+@pytest.mark.parametrize("field", ["project_id", "subject_id", "review_episode_id", "rule_set_id",
+    "evidence_snapshot_v2_id", "complete_processing_revision_id"])
+def test_profile_source_identity_map_cannot_authorize_another_patient_or_material(field):
+    previous = AUTHORITY.model_copy(update={field: "different"})
+    fact = _fact(authority=previous)
+    with pytest.raises(ProjectionInputError, match="原件版本"):
+        _project(facts=[fact], lane_assignments=[_assign_fact(fact.fact_id)],
+            fact_source_authorities={fact.fact_id: previous})
+
+
 def _items_by_lane(rev):
     return {section.lane: section.items for section in rev.lanes}
 

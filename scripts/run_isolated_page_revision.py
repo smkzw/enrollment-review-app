@@ -116,7 +116,7 @@ def run(source, output, source_job, *, normalize=False, normalize_only=False, ve
     shutil.copytree(Path("app"), output / "product-code",
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     shutil.copy2(__file__, output / "runner.py")
-    shutil.copy2("plans/REARCHITECTURE_RECOVERY_IMPLEMENTATION_PLAN_20260905.md",
+    shutil.copy2("archives/plans/REARCHITECTURE_RECOVERY_IMPLEMENTATION_PLAN_20260905.md",
                  output / "test-plan.md")
     verified_pages = verify_page_inputs(output, payload["pages"])
     snapshot_hash = hashlib.sha256((output / database.name).read_bytes()).hexdigest()

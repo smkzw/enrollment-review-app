@@ -4938,6 +4938,8 @@ def test_joint_publication_persists_source_bound_rules_and_controls_for_consumer
         checkpoint = JobStore(session, now=_now).get_last_checkpoint(result.job_id, "gate")
     assert checkpoint is not None
     service = ProtocolPublicationService(session_factory, now=_now)
+    from tests.v2.protocols.slice4_helpers import approve_fixture_entries
+    approve_fixture_entries(session_factory, source, draft)
     request = ProtocolPublicationRequest(
         idempotency_key="joint-publish", draft_revision_id=revision.revision_id,
         source_input=source, source_spans=spans, actor="test", published_at=NOW,

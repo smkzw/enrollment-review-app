@@ -71,18 +71,18 @@ describe("ProfileLaneList", () => {
     values.forEach((_, index) => expect(screen.getByText(`临床批注${index}`)).toBeInTheDocument());
   });
 
-  it("13 条泳道按稳定顺序全部展示（含空泳道）", () => {
+  it("只展示有记录的分类，完整13类仍保留在原模型", () => {
     const model = adaptPatientProfile(decodePatientProfileRevision(makeRevision()));
     render(<ProfileLaneList model={model} />);
     // 每个泳道 section 带 aria-label，可独立定位
     const sections = screen.getAllByRole("region");
-    expect(sections).toHaveLength(13);
-    PROFILE_LANE_ORDER.forEach((lane, index) => {
-      expect(sections[index]).toHaveAccessibleName(laneLabelFor(lane));
-    });
+    const nonempty = model.lanes.filter(lane => !lane.isEmpty);
+    expect(sections).toHaveLength(nonempty.length);
+    nonempty.forEach((lane, index) => expect(sections[index]).toHaveAccessibleName(laneLabelFor(lane.lane)));
+    expect(model.lanes.map(lane => lane.lane)).toEqual(PROFILE_LANE_ORDER);
   });
 
-  it("空泳道保留说明，不判为资料缺口", () => {
+  it("没有记录时只留一条中性空态，不列13个空分区或制造缺口", () => {
     const model = adaptPatientProfile(
       decodePatientProfileRevision(
         makeRevision({
@@ -93,10 +93,8 @@ describe("ProfileLaneList", () => {
       ),
     );
     render(<ProfileLaneList model={model} />);
-    expect(
-      screen.getByText(/分区暂无记录不代表正常或否认/),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("暂无已整理记录")).toHaveLength(13);
+    expect(screen.getByText("暂无已整理的临床记录")).toBeInTheDocument();
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
     expect(screen.queryByText(/按资料缺口处理/)).not.toBeInTheDocument();
   });
 

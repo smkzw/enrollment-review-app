@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { DraftRevisionView, IntegrityView, ProtocolSessionView, SourcesView } from "../../api/protocolWorkbenchTypes";
 import { updateParams } from "../../app/router";
-import { mapProtocolDraftRules, mapProtocolSourceLocators } from "../../domain/protocolMappers";
+import { mapProtocolDraftRules, displayProtocolSourceLocators } from "../../domain/protocolMappers";
 import type { RuleComponentId } from "../../domain/ids";
 import { ProtocolDeconstructionRuleTree } from "./ProtocolDeconstructionRuleTree";
 import { ProtocolDraftEditPane } from "./ProtocolDraftEditPane";
@@ -79,7 +79,7 @@ export function ProtocolDraftWorkbench({
 
   const locators = useMemo(() => {
     if (selectedComponent === null) return [];
-    return mapProtocolSourceLocators(sources.sourceSpans, selectedComponent.sourceRefs);
+    return displayProtocolSourceLocators(sources.sourceSpans, selectedComponent.sourceRefs);
   }, [selectedComponent, sources.sourceSpans]);
 
   const revisionLabel = `草稿第 ${draft.revisionNumber} 稿 · ${draft.statusLabel}`;
@@ -140,7 +140,7 @@ export function ProtocolDraftWorkbench({
             type="button"
             className="button button--primary"
             disabled={saving || publishing || !integrity.publishable || publicationBlocked}
-            title={integrity.publishable ? "发布正式项目与规则版本" : "请先处理完整性检查中的问题"}
+            title={draft.reviewScopePending ? "补充范围尚未形成已审定要求" : publicationBlocked ? "请先完成全部条目审定" : integrity.publishable ? "发布已审定规则版本" : "请先处理结构性问题"}
             onClick={onPublish}
           >
             {publishing ? "正在发布…" : "发布"}

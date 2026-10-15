@@ -33,8 +33,8 @@ _SHA = "a" * 64
 _BAD_SUMMARY_FRAGMENT = "该段为方案摘要中"
 _REAL_PROBE_DIR = (
     Path(__file__).resolve().parents[3]
-    / ".trellis"
-    / "tasks"
+    / "archives"
+    / "trellis-tasks"
     / "08-22-phase5-clinical-facts-profile"
     / "research"
     / "d001-ii-phase-closure"

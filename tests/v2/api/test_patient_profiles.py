@@ -289,6 +289,44 @@ def test_latest_profile_returns_complete_dto_with_lanes(client) -> None:
     assert fact["value"] == "120/80"
 
 
+def test_profile_date_role_comes_from_frozen_fact_without_rewriting_profile(client) -> None:
+    chain = _seed(client, "date-role")
+    with client.app.state.session_factory() as session:
+        from app.domain.contracts.facts import clinical_fact_stable_identity
+        original = _fact(chain)
+        identity = clinical_fact_stable_identity(authority=original.authority, fact_type=original.fact_type,
+            profile_lane=original.profile_lane, asserted_object=original.asserted_object,
+            polarity=original.polarity, value=original.value, unit=original.unit,
+            date_range=original.date_range, assertion_basis=original.assertion_basis, date_role="report")
+        ClinicalFactV2Repository(session).create(_fact(chain, date_role="report", stable_identity=identity))
+        revision = PatientProfileService().generate(session, authority=_authority(chain), created_at=NOW, generated_at=NOW)
+        before = revision.model_dump_json()
+        session.commit()
+    response = client.get(_latest_url(chain))
+    assert response.status_code == 200, response.text
+    item = next(item for lane in response.json()["lanes"] for item in lane["items"] if item["kind"] == "fact")
+    assert item["date_role"] == "report"
+    assert item["start_range"]["source_text"] == "2026-03-01"
+    with client.app.state.session_factory() as session:
+        assert PatientProfileService().get(session, revision.patient_profile_revision_id).model_dump_json() == before
+    assert client.get(_latest_url(chain).replace(chain["subject_id"], "other-subject", 1)).status_code == 404
+
+
+def test_medication_fact_label_is_not_an_exposure_or_a_new_approval(client):
+    from app.api.v2.patient_profile_schemas import profile_item_dto
+    chain = _seed(client, "medication-label")
+    with client.app.state.session_factory() as session:
+        ClinicalFactV2Repository(session).create(_fact(chain))
+        revision = PatientProfileService().generate(session, authority=_authority(chain))
+        item = next(row for row in profile_items(revision) if row.kind.value == "fact")
+        before = item.model_dump_json()
+        labeled = profile_item_dto(item.model_copy(update={"lane": ProfileLane.MEDICATION}), record_label="购药记录")
+        assert labeled.kind == "fact" and labeled.kind_label == "购药记录"
+        assert labeled.lane_label == "用药与治疗"
+        assert labeled.source_strength == item.source_strength.value
+        assert item.model_dump_json() == before
+
+
 def test_profile_fact_source_readings_keep_raw_candidate_and_revision_scope(client) -> None:
     chain = _seed(client, "source-readings")
     with client.app.state.session_factory() as session:

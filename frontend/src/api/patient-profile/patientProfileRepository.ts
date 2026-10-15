@@ -17,6 +17,8 @@ import type {
   FactCorrectionJobStatusView,
   FactCorrectionPreviewView,
   FactCorrectionSubmitView,
+  FactCorrectionWorkDraftLinkView,
+  FactCorrectionOptionsView,
 } from "./factCorrectionViewModels";
 
 export {
@@ -55,6 +57,9 @@ export interface PatientProfileRepository {
     options?: PatientProfileRequestOptions,
   ): Promise<FactSourceReadingView[]>;
   /** POST .../fact-corrections/preview：只读预览，不创建修订或任务。 */
+  getFactCorrectionOptions?(
+    subjectId: string, reviewEpisodeId: string, factId: string, options?: PatientProfileRequestOptions,
+  ): Promise<FactCorrectionOptionsView>;
   previewFactCorrection(
     subjectId: string,
     reviewEpisodeId: string,
@@ -79,6 +84,9 @@ export interface PatientProfileRepository {
     jobId: string,
     options?: PatientProfileRequestOptions,
   ): Promise<FactCorrectionJobStatusView>;
+  getFactCorrectionWorkDraftLink?(
+    subjectId: string, reviewEpisodeId: string, jobId: string, options?: PatientProfileRequestOptions,
+  ): Promise<FactCorrectionWorkDraftLinkView>;
   /** POST /api/v2/jobs/{job_id}/cancel：持久停止请求。 */
   cancelFactCorrectionJob(
     jobId: string,

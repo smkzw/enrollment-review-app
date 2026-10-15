@@ -531,7 +531,22 @@ function normalizeEvidence(value: unknown, field: string): ProtocolEvidencePaylo
 function normalizePayload(value: unknown, category: DiffChangeField, field: string): ProtocolDiffPayload | null {
   if (value === null) return null;
   if (category === "original_text_changes") return normalizeOriginalText(value, field);
-  if (category === "logic_changes" || category === "exception_changes") return normalizeLogicPayload(value, field);
+  if (category === "logic_changes" || category === "exception_changes") {
+    const row = requireRecord(value, field);
+    if (category === "logic_changes" && row.kind === "restricted") {
+      if (["predicate", "operator", "children"].some(key => key in row)) {
+        invalidDiff(field, "未解析的子项不能同时携带可执行条件");
+      }
+      const limitation_kind = requireOneOf(row.limitation_kind,
+        ["interpretation_unresolved", "consumer_unavailable"] as const, `${field}.limitation_kind`);
+      const unresolved_dimensions = requireStringList(row.unresolved_dimensions, `${field}.unresolved_dimensions`);
+      if (!unresolved_dimensions.length || unresolved_dimensions.some(text => !text.trim())) {
+        invalidDiff(field, "未解析的子项须说明具体待核内容");
+      }
+      return { kind: "restricted", limitation_kind, unresolved_dimensions };
+    }
+    return normalizeLogicPayload(value, field);
+  }
   if (category === "time_window_changes") {
     return requireArray<unknown>(value, field).map((item, index) => normalizeTimeEntry(item, `${field}[${index}]`));
   }
@@ -717,6 +732,8 @@ export function normalizeStartDeconstruction(
 export function normalizeSession(wire: unknown): ProtocolSessionView {
   const row = requireRecord(wire, "session");
   return {
+    operatorName: optionalString(row.operator_name) ?? "本机医学经理",
+    verificationOnly: row.verification_only === true,
     jobId: requireString(row.job_id, "job_id"),
     jobType: requireString(row.job_type, "job_type"),
     state: requireString(row.state, "state"),
@@ -869,6 +886,7 @@ export function normalizeDraftRevision(wire: unknown): DraftRevisionView {
     reasonLabel: requireString(row.reason_label, "reason_label"),
     importedUnpublishedProposal: row.imported_unpublished_proposal === undefined
       ? false : requireBoolean(row.imported_unpublished_proposal, "imported_unpublished_proposal"),
+    reviewScopePending: row.review_scope_pending === undefined ? false : requireBoolean(row.review_scope_pending, "review_scope_pending"),
     actor: requireString(row.actor, "actor"),
     createdAt: requireString(row.created_at, "created_at"),
     studyPhase: requireStudyPhase(row.study_phase, "study_phase"),
@@ -966,6 +984,7 @@ export function normalizeGenerationPreview(wire: unknown): GenerationPreviewView
 export function normalizePublishResult(wire: unknown): PublishResultView {
   const row = requireRecord(wire, "publish");
   return {
+    verificationOnly: row.verification_only === true,
     jobId: requireString(row.job_id, "job_id"),
     projectId: requireString(row.project_id, "project_id"),
     protocolVersionId: requireString(row.protocol_version_id, "protocol_version_id"),
@@ -1060,6 +1079,7 @@ function normalizeDraftComparisonSide(raw: unknown): DraftComparisonSideView {
     ruleCount: requireNumber(row.rule_count, "rule_count"),
     workflowStageCount: requireNumber(row.workflow_stage_count, "workflow_stage_count"),
     isFormalBaseline: row.is_formal_baseline === true,
+    reviewScopePending: row.review_scope_pending === undefined ? false : requireBoolean(row.review_scope_pending, "review_scope_pending"),
     content: requireRecord(row.content, "content"),
     sourceRefs: requireArray<unknown>(row.source_refs, "source_refs").map((value) =>
       requireString(value, "source_refs[]"),
@@ -1098,5 +1118,6 @@ export function encodeManualEdit(input: ManualEditInput): Record<string, unknown
     expected_revision_id: input.expectedRevisionId,
     draft: input.draft,
     actor: input.actor ?? "用户",
+    ...(input.reviewedStageAssignment ? { reviewed_stage_assignment: true } : {}),
   };
 }

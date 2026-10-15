@@ -23,7 +23,8 @@ import { useLoad } from "../app/useLoad";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
 import { ProfileStatusBanner } from "../components/profile/ProfileStatusBanner";
 import { ProfileNormalizationStatus } from "../components/profile/ProfileNormalizationStatus";
-import { ProfileHighlights } from "../components/profile/ProfileHighlights";
+import { ProfileTimeline } from "../components/profile/ProfileTimeline";
+import { EvidenceReader } from "../components/evidence/EvidenceReader";
 import {
   ProfileTodoSummaryCard,
   firstProfileTodoItemId,
@@ -436,16 +437,12 @@ export function SubjectsPage() {
     <div className="subjects">
       <header className="page-head">
         <h1 className="page-head__title">{path === "/profiles" ? "个例档案" : "受试者与资料"}</h1>
-        <p className="page-head__note">
-          按项目和受试者选择审核节点，查看已生成的病历档案。首屏显示系统整理的重点条目，完整历时信息按需展开。
-        </p>
       </header>
 
       <section className="catalog-selection" aria-labelledby="profile-project-title">
         <div className="catalog-selection__head">
           <div>
             <h2 id="profile-project-title">选择项目</h2>
-            <p>方案中包含多个研究期别时，每个已选择期别都是独立项目。</p>
           </div>
           <select
             aria-label="选择项目"
@@ -454,41 +451,17 @@ export function SubjectsPage() {
           >
             {projectList.map((project) => (
               <option key={project.projectId} value={project.projectId}>
-                {project.projectName} · {project.studyPhaseLabel} · 方案 {project.officialVersion}
+                {project.protocolCode} · {project.studyPhaseLabel} · 方案 {project.officialVersion}
               </option>
             ))}
           </select>
         </div>
       </section>
 
-      <div className={`subjects-layout${evidenceItem !== null ? " subjects-layout--with-evidence" : ""}`}>
-        {evidenceItem === null && (
-        <aside className="subjects-list" aria-label="受试者列表">
-          <h2 className="subjects-list__title">受试者</h2>
-          <ul>
-            {subjectList.map((subject: CatalogSubjectView) => {
-              const isActive = subject.subjectId === selectedSubject?.subjectId;
-              return (
-                <li key={subject.subjectId}>
-                  <button
-                    type="button"
-                    className={`subjects-list__item${isActive ? " subjects-list__item--active" : ""}`}
-                    aria-pressed={isActive}
-                    onClick={() => setSubject(subject.subjectId)}
-                  >
-                    <span className="subjects-list__code">{subject.subjectCode}</span>
-                    <span className="subjects-list__center">{centerLabel(subject)}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </aside>
-        )}
+      <div className="subjects-layout subjects-layout--timeline">
 
         <section className="profile" aria-label="个例全景">
           <div className="profile-nodes" role="group" aria-label="审核节点">
-            {evidenceItem !== null && (
               <label className="profile-subject-switch">
                 <span>受试者</span>
                 <select
@@ -503,7 +476,6 @@ export function SubjectsPage() {
                   ))}
                 </select>
               </label>
-            )}
             {episodeList.map((episode) => {
               const isActive = episode.reviewEpisodeId === selectedEpisode?.reviewEpisodeId;
               return (
@@ -596,12 +568,12 @@ export function SubjectsPage() {
                 </button>
               </div>
             )}
-            <JudgmentSearchCard
+            <details className="profile-section"><summary>查找病历中的研究者判断</summary><JudgmentSearchCard
               subjectId={selectedSubject.subjectId}
               reviewEpisodeId={selectedEpisode.reviewEpisodeId}
               evidenceNavigation={profile.state.data.evidenceNavigation}
               onSelectCandidate={openJudgmentSearchCandidate}
-            />
+            /></details>
             </>
           )}
           {historyOpen && (
@@ -615,9 +587,6 @@ export function SubjectsPage() {
                       : 0}
                   </span>
                 </h3>
-                <p className="profile-section__note">
-                  每条记录都保留修改前后内容、来源定位和影响范围；既有档案版本不会被覆盖。
-                </p>
               </header>
               <ProfileCorrectionHistory
                 state={correctionHistory.state}
@@ -629,12 +598,15 @@ export function SubjectsPage() {
         </section>
 
         {evidenceItem !== null && evidenceModel !== null && (
+          <EvidenceReader title="原始资料" onClose={closeEvidence}>
           <ProfileEvidencePanel
             model={evidenceModel}
             item={evidenceItem}
             initialPageArtifactId={evidencePageArtifactId}
             onClose={closeEvidence}
+            showClose={false}
           />
+          </EvidenceReader>
         )}
         {correctionItem !== null && correctionKind !== null && correctionModel !== null && (
           <ProfileFactCorrectionDialog
@@ -761,21 +733,16 @@ function ProfileBody({
           <h2 className="profile-head__subject">{subjectCode}</h2>
           <p className="profile-head__meta">
             {project !== null
-              ? `${project.projectName} · ${project.studyPhaseLabel} · 方案 ${project.officialVersion}`
+              ? `${project.protocolCode} · ${project.studyPhaseLabel} · 方案 ${project.officialVersion}`
               : ""}
             {center !== "" ? ` · ${center}` : ""}
           </p>
         </div>
         <div className="profile-head__node">
-          <span className="count-chip">档案第 {model.revision} 版</span>
-          <span className="count-chip">资料版本 {episode.revision}</span>
-          <span className="count-chip">生成时间 {formatProfileDateTime(model.generatedAt) ?? "未记录"}</span>
-          <span className="count-chip">待核对 {model.pendingReviewCount} 项</span>
-          {unverifiedSourceCount > 0 && (
-            <span className="count-chip" title="这些内容已从原件整理，但来源尚未确认，不能直接用于入排判断">
-              来源待确认 {unverifiedSourceCount} 项
-            </span>
-          )}
+          <details className="profile-head__record-info"><summary>资料信息</summary>
+            <p>档案第 {model.revision} 版 · {formatProfileDateTime(model.generatedAt) ?? "生成时间未记录"}</p>
+            <p>档案待核对 {model.pendingReviewCount} 项{unverifiedSourceCount > 0 && <> · <span>来源提示 {unverifiedSourceCount} 项</span></>}</p>
+          </details>
           <RouteLink
             to={`/subjects/${subjectId}/evidence`}
             params={{ episode: episode.reviewEpisodeId }}
@@ -812,9 +779,9 @@ function ProfileBody({
               className="chip"
               aria-pressed={showAll}
               onClick={onToggleAll}
-              title={showAll ? "返回首屏重点" : "展开完整历时信息"}
+              title={showAll ? "返回临床时间线" : "按类型查看"}
             >
-              {showAll ? "返回首屏" : "全部历时信息"}
+              {showAll ? "临床时间线" : "按类型查看"}
             </button>
           )}
           <button
@@ -842,18 +809,12 @@ function ProfileBody({
           onRequestCorrection={onRequestCorrection}
         />
       ) : (
-        <section className="profile-section" aria-labelledby="profile-highlights-title">
-          <h3 id="profile-highlights-title" className="profile-section__title">
-            首屏重点
-            <span className="section-count">{model.highlights.length}</span>
-          </h3>
-          <ProfileHighlights
+          <ProfileTimeline
             key={model.revisionId}
             model={model}
             onOpenEvidence={onOpenEvidence}
             onRequestCorrection={onRequestCorrection}
           />
-        </section>
       )}
     </>
   );

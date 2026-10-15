@@ -1,0 +1,30 @@
+{
+  "id": "phase5-clinical-facts-profile",
+  "name": "phase5-clinical-facts-profile",
+  "title": "Phase 5 临床事实与 Patient Profile",
+  "description": "从 Phase 4 活动证据处理修订生成可回源临床事实、事件、用药暴露、资料覆盖与 Patient Profile，不产生入排最终结论。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": "backend, frontend, evidence-normalizer, clinical-fact-gate, patient-profile, clinical-regression",
+  "package": null,
+  "priority": "P1",
+  "creator": "codex",
+  "assignee": "codex",
+  "createdAt": "2026-08-22",
+  "completedAt": null,
+  "branch": "codex/phase5-clinical-facts-profile",
+  "base_branch": "codex/phase4-evidence-ocr-v2",
+  "worktree_path": ".worktrees/phase5-clinical-facts-profile",
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "08-12-enrollment-review-v2",
+  "relatedFiles": [
+    "docs/REARCHITECTURE_FINAL_DESIGN_20260812.md",
+    "plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md",
+    ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/current-state-and-conference.md"
+  ],
+  "notes": "Phase 5 remains in progress; claims_complete=false. Current recovery point: CHECKPOINT_20260904_FRESH_RUN_FIX_VERIFIED_QC_GAPS.md. Fresh immutable run f6fe423a (job 4800566f) completed 25/25 all first-attempt on prompt v5 (08a9f311 / template c2e9ad9b), glm-5.3-flash low via zhipu-coding-plan; published 151 facts / 12 events / 3 exposures / 130 expectations / profile rev 3; the historically failing screening page-4 passed attempt 1, so the mechanical verbatim repair and prompt v5 are production-verified. Clinical QC did NOT fully pass: 113 numeric-as-string canonical values fail-closed (entire ECG parameter panel, bilirubin series, creatinine, electrolytes lost from publication, regression vs run d71c1c28 on identical input 833ee61c) and 61 source-semantics label mismatches incl. the page-4 family-history fact; gate rejections of these classes generate no unresolved items (reviewer-invisible). One exposure (糠酸莫米松 from 邮件.pdf p5 actual-use statement) awaits Codex ruling. Proposed generic fixes: numeric-string normalization in _normalize_evidence_json, allowed source-semantics vocabulary in prompt, unresolved-item generation for gate-rejected candidates. QC evidence: artifacts/phase5-acceptance/20260903/fresh-run-f6fe423a-qc/qc-summary.json (sha256 ecabd731…535d). Dedicated 8910 stopped after terminal state; quick_check ok. R3 lanes unchanged: GLM main-A, MiniMax main-B, Qwen3.8-Flash-Next handwriting-C only. Phase 5.5 must wait for Phase 5 closure.",
+  "meta": {}
+}

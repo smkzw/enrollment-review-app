@@ -65,6 +65,22 @@ class AppendedRecordMixin:
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
+class RuleReviewRecordRow(AppendedRecordMixin, Base):
+    __tablename__ = "rule_review_records"
+
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    record_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    draft_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    protocol_version_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    official_code: Mapped[str] = mapped_column(String(256), nullable=False)
+    rule_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index("ix_rule_review_scope", "protocol_version_id", "draft_id", "official_code"),
+        {"sqlite_autoincrement": True},
+    )
+
+
 class RevisionedRecordMixin:
     """可变根公共列：revision 乐观并发 + 时间戳。
 
@@ -353,6 +369,15 @@ class RuleSetRecord(AppendedRecordMixin, Base):
     study_phase: Mapped[str] = mapped_column(String(32), nullable=False)
 
     __table_args__ = (Index("ix_rule_sets_protocol_version_id", "protocol_version_id"),)
+
+
+class RuleSetVariablesRecord(AppendedRecordMixin, Base):
+    """Immutable dictionary snapshot, a projection of the published RuleSet."""
+    __tablename__ = "rule_set_variables"
+    rule_set_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, primary_key=True)
+    __table_args__ = (ForeignKeyConstraint(
+        ["rule_set_id", "revision"], ["rule_sets.rule_set_id", "rule_sets.revision"]),)
 
 
 class RuleRecord(AppendedRecordMixin, Base):
@@ -1020,6 +1045,9 @@ class ReviewRunRecord(AppendedRecordMixin, Base):
     __tablename__ = "review_runs"
 
     review_run_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    # NULL keeps historical payloads byte-for-byte unchanged and means legacy formal records.
+    run_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    system_issues: Mapped[list | None] = mapped_column(JSON, nullable=True)
     review_episode_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("review_episodes.review_episode_id"), nullable=False
     )
@@ -1064,6 +1092,24 @@ class ReviewRunRecord(AppendedRecordMixin, Base):
         ),
         Index("ix_review_runs_review_episode_id", "review_episode_id"),
     )
+
+
+class WorkDraftItemRecord(AppendedRecordMixin, Base):
+    __tablename__ = "work_draft_items"
+    item_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    review_run_id: Mapped[str] = mapped_column(String(128), ForeignKey("review_runs.review_run_id"), nullable=False)
+    official_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    rule_component_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    __table_args__ = (Index("ix_work_draft_items_run", "review_run_id"),)
+
+
+class WorkDraftAcknowledgementRecord(AppendedRecordMixin, Base):
+    __tablename__ = "work_draft_acknowledgements"
+    acknowledgement_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    review_episode_id: Mapped[str] = mapped_column(String(128), ForeignKey("review_episodes.review_episode_id"), nullable=False)
+    official_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class AssessmentCandidateRecord(AppendedRecordMixin, Base):

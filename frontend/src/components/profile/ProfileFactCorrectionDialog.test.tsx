@@ -217,6 +217,55 @@ describe("ProfileFactCorrectionDialog", () => {
     setPatientProfileRepository(null);
   });
 
+  it("用中文选择所属项目，修改关联进入预览和提交，不改写未动的原值", async () => {
+    const { repo, preview, submit } = makeRepo();
+    repo.getFactCorrectionOptions = vi.fn(async () => ({ subjectId: SUBJECT, reviewEpisodeId: EPISODE,
+      targetId: "fact-demographics-1", targetRevision: 1, variableId: null,
+      variables: [{ variableId: "pressure_record", label: "血压记录", valueType: "category" as const, unit: null }] }));
+    preview.mockResolvedValue({ ...makePreview(), oldSnapshot: { ...makePreview().oldSnapshot, variable_id: null },
+      newSnapshot: { ...makePreview().oldSnapshot, variable_id: "pressure_record" },
+      variableLabels: new Map([["pressure_record", "血压记录"]]) });
+    renderDialog(repo);
+    const choices = await screen.findByRole("combobox", { name: "所属审核项目" });
+    expect(choices).toHaveValue("");
+    await userEvent.selectOptions(choices, "pressure_record");
+    await userEvent.type(screen.getByRole("textbox", { name: "修订理由（必填）" }), "原读数对应血压记录。");
+    await userEvent.click(screen.getByRole("button", { name: "预览影响范围" }));
+    expect(await screen.findByText("拟修改")).toBeInTheDocument();
+    expect(preview.mock.calls[0]?.[2].updates).toMatchObject({ variableId: "pressure_record", value: "120/80" });
+    expect(screen.getAllByText("所属审核项目")).toHaveLength(3);
+    expect(screen.queryByText("pressure_record")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: /我已核对/ }));
+    await userEvent.click(screen.getByRole("button", { name: "提交修订" }));
+    expect(submit.mock.calls[0]?.[2].updates.variableId).toBe("pressure_record");
+  });
+
+  it("项目清单版本失配时不让用户选错记录，原关联和旧修订输入保持", async () => {
+    const { repo, preview } = makeRepo();
+    repo.getFactCorrectionOptions = vi.fn(async () => ({ subjectId: SUBJECT, reviewEpisodeId: EPISODE,
+      targetId: "fact-demographics-1", targetRevision: 99, variableId: null, variables: [] }));
+    renderDialog(repo);
+    expect(await screen.findByText("所属审核项目暂时无法读取，原关联保持不变。")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "所属审核项目" })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox", { name: "修订理由（必填）" }), "保留原关联核对读数。");
+    await userEvent.click(screen.getByRole("button", { name: "预览影响范围" }));
+    await screen.findByText("拟修改");
+    expect(preview.mock.calls[0]?.[2].updates).not.toHaveProperty("variableId");
+  });
+
+  it("选择是否项目不会自动清空原文字或改为是与否", async () => {
+    const { repo, preview } = makeRepo();
+    repo.getFactCorrectionOptions = vi.fn(async () => ({ subjectId: SUBJECT, reviewEpisodeId: EPISODE,
+      targetId: "fact-demographics-1", targetRevision: 1, variableId: null,
+      variables: [{ variableId: "procedure_record", label: "检查完成", valueType: "procedure" as const, unit: null }] }));
+    renderDialog(repo);
+    await userEvent.selectOptions(await screen.findByRole("combobox", { name: "所属审核项目" }), "procedure_record");
+    await userEvent.type(screen.getByRole("textbox", { name: "修订理由（必填）" }), "核对关联。");
+    await userEvent.click(screen.getByRole("button", { name: "预览影响范围" }));
+    await screen.findByText("拟修改");
+    expect(preview.mock.calls[0]?.[2].updates).toMatchObject({ variableId: "procedure_record", value: "120/80" });
+  });
+
   it("requires a reason and keeps preview read-only until explicit confirmation", async () => {
     const user = userEvent.setup();
     const { repo, preview, submit } = makeRepo();
@@ -255,6 +304,21 @@ describe("ProfileFactCorrectionDialog", () => {
     expect(screen.queryByText("fact-2")).not.toBeInTheDocument();
   });
 
+  it("范围未能逐项列清时保留整节点重算说明，不把未知范围显示成全为零", async () => {
+    const { repo, preview } = makeRepo();
+    preview.mockResolvedValue({ ...makePreview(), impact: { ...makePreview().impact,
+      affectedLocatorIds: [], affectedDocumentIds: [], affectedFactIds: [], affectedEventIds: [],
+      affectedExposureIds: [], affectedConflictGroupIds: [], affectedRuleLinkIds: [], affectedExpectationIds: [],
+      affectedProfileRevisionIds: [], fallbackReason: "历史 Profile 未提供类型化条目反向索引" } });
+    renderDialog(repo);
+    await userEvent.type(screen.getByRole("textbox", { name: "修订理由（必填）" }), "核对记录。");
+    await userEvent.click(screen.getByRole("button", { name: "预览影响范围" }));
+    await screen.findByText("拟修改");
+    expect(screen.getByText("将重新整理本审核节点全部事实。既有档案版本保持不变，完成后只会生成新的当前档案版本。")).toBeVisible();
+    expect(screen.queryByText(/反向索引/)).not.toBeInTheDocument();
+    expect(document.querySelector(".profile-correction-impact__counts")).toBeNull();
+  });
+
   it("reports completion only after the persistent status is completed", async () => {
     const user = userEvent.setup();
     const completed = vi.fn<(result: ProfileFactCorrectionCompleted) => void>();
@@ -274,6 +338,52 @@ describe("ProfileFactCorrectionDialog", () => {
     });
     expect(repo.getLatestPatientProfile).not.toHaveBeenCalled();
     expect(screen.getByText("修订已完成，档案和修订记录正在刷新。")).toBeInTheDocument();
+  });
+
+  it("更正已保存不冒充新版工作稿完成，后续核对完成才刷新", async () => {
+    const user = userEvent.setup();
+    const completed = vi.fn();
+    const { repo } = makeRepo({ ...completedStatus(), progressTotal: 3, progressCompleted: 3 });
+    let ready = false;
+    repo.getFactCorrectionWorkDraftLink = vi.fn<NonNullable<PatientProfileRepository["getFactCorrectionWorkDraftLink"]>>(async () => ({
+      jobId: "job-1", subjectId: SUBJECT, reviewEpisodeId: EPISODE, enabled: true, correctionApplied: true,
+      workDraftJobId: "new-work-draft", workDraftState: ready ? "completed" : "running", reviewRunId: ready ? "new-review-run" : null,
+    }));
+    renderDialog(repo, completed);
+    await user.type(screen.getByRole("textbox", { name: "修订理由（必填）" }), "核对合成原件，更正读数。");
+    await user.click(screen.getByRole("button", { name: "预览影响范围" }));
+    await screen.findByText("拟修改");
+    await user.click(screen.getByRole("checkbox", { name: /我已核对/ }));
+    await user.click(screen.getByRole("button", { name: "提交修订" }));
+    await screen.findByText("更正已保存，正在更新工作稿");
+    expect(completed).not.toHaveBeenCalled();
+    expect(localStorage.getItem(`work-draft-job:${EPISODE}`)).toBe("new-work-draft");
+    ready = true;
+    await waitFor(() => expect(completed).toHaveBeenCalledTimes(1), { timeout: 2500 });
+    expect(screen.getByText("更正与新工作稿均已保存，未签发")).toBeInTheDocument();
+  });
+
+  it("结果更新失败可只重试核对任务，不再次保存更正", async () => {
+    const user = userEvent.setup();
+    const completed = vi.fn();
+    const { repo, submit } = makeRepo({ ...completedStatus(), progressTotal: 3, progressCompleted: 3 });
+    let recovered = false;
+    repo.getFactCorrectionWorkDraftLink = vi.fn<NonNullable<PatientProfileRepository["getFactCorrectionWorkDraftLink"]>>(async () => ({ jobId: "job-1", subjectId: SUBJECT, reviewEpisodeId: EPISODE,
+      enabled: true, correctionApplied: true, workDraftJobId: "failed-working-job", workDraftState: recovered ? "completed" : "failed_final",
+      reviewRunId: recovered ? "new-run" : null }));
+    repo.retryFactCorrectionJob = vi.fn<PatientProfileRepository["retryFactCorrectionJob"]>(async () => { recovered = true; return { jobId: "failed-working-job", state: "queued", stateLabel: "等待处理", changed: true }; });
+    renderDialog(repo, completed);
+    await user.type(screen.getByRole("textbox", { name: "修订理由（必填）" }), "核对合成原件，更正读数。");
+    await user.click(screen.getByRole("button", { name: "预览影响范围" }));
+    await screen.findByText("拟修改");
+    await user.click(screen.getByRole("checkbox", { name: /我已核对/ }));
+    await user.click(screen.getByRole("button", { name: "提交修订" }));
+    await screen.findByText("更正已经保存，新工作稿尚未生成；原结果保留，可重新更新工作稿。");
+    expect(completed).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "重新处理失败部分" }));
+    await waitFor(() => expect(completed).toHaveBeenCalledTimes(1));
+    expect(repo.retryFactCorrectionJob).toHaveBeenCalledWith("failed-working-job");
+    expect(submit).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the workspace mounted while the persistent task is active", async () => {

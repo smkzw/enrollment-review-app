@@ -59,6 +59,7 @@ EPISODE_KEYS = {
     "active_evidence_snapshot_id",
     "active_evidence_processing_revision_id",
     "anchor_dates",
+    "evidence_cutoff_date",
     "due_at",
     "revision",
 }
@@ -650,6 +651,7 @@ def test_list_review_episodes_returns_labeled_dtos(client) -> None:
     )
     assert episode["revision"] >= 1
     assert episode["latest_evidence_snapshot_id"] is None
+    assert episode["evidence_cutoff_date"] is None
     # due_at 恢复为带时区的 UTC（或为 None）；anchor_dates 为序列化 JSON。
     if episode["due_at"] is not None:
         assert episode["due_at"].endswith("Z") or "+00:00" in episode["due_at"]

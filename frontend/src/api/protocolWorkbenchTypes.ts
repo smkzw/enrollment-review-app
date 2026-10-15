@@ -43,6 +43,8 @@ export interface StartDeconstructionResult {
 }
 
 export interface ProtocolSessionView {
+  operatorName?: string;
+  verificationOnly?: boolean;
   jobId: string;
   jobType: string;
   state: string;
@@ -198,6 +200,7 @@ export interface DraftRevisionView {
   reason: string;
   reasonLabel: string;
   importedUnpublishedProposal?: boolean;
+  reviewScopePending?: boolean;
   actor: string;
   createdAt: string;
   studyPhase: StudyPhase;
@@ -353,6 +356,8 @@ export interface ProtocolDueStagePayload {
 
 export type ProtocolDiffPayload =
   | ProtocolLogicPayload
+  | { kind: "restricted"; limitation_kind: "interpretation_unresolved" | "consumer_unavailable";
+      unresolved_dimensions: string[] }
   | ProtocolTimeEntryPayload[]
   | ProtocolOriginalTextPayload
   | ProtocolEvidencePayload
@@ -446,6 +451,7 @@ export interface SourcesView {
 }
 
 export interface PublishResultView {
+  verificationOnly?: boolean;
   jobId: string;
   projectId: string;
   protocolVersionId: string;
@@ -497,6 +503,7 @@ export interface DraftComparisonSideView {
   isFormalBaseline: boolean;
   content: Record<string, unknown>;
   sourceRefs: string[];
+  reviewScopePending?: boolean;
 }
 
 export interface DraftComparisonView {
@@ -525,4 +532,5 @@ export interface ManualEditInput {
   expectedRevisionId: string;
   draft: Record<string, unknown>;
   actor?: string;
+  reviewedStageAssignment?: boolean;
 }

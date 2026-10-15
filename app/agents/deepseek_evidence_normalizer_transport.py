@@ -125,6 +125,13 @@ def _absorb_glm_stream_chunk(
     if getattr(chunk, "error", None):
         raise RuntimeError("GLM 流式响应包含服务错误，拒绝采信")
     model = getattr(chunk, "model", None)
+    if model == "keepalive":
+        if any(getattr(choice, "finish_reason", None)
+                or getattr(getattr(choice, "delta", None), "content", None)
+                or getattr(getattr(choice, "delta", None), "reasoning_content", None)
+                for choice in getattr(chunk, "choices", None) or []):
+            raise RuntimeError("网关保活消息混入模型输出或结束标记，拒绝采信")
+        return
     if model:
         if state["response_model"] and state["response_model"] != model:
             if not allow_model_identity_change:
@@ -173,9 +180,8 @@ def _assemble_glm_stream(
     同步迭代器在单个块上最多阻塞到客户端读超时（600s），因此实际总时长最多
     可能超出 total_limit 一个不活动窗口，块内挂起由客户端读超时兜底。
 
-    ``allow_model_identity_change`` 供网关路由（cms-router 等）使用：网关
-    会在流中途把请求切换到另一个上游，模型字段随之变化；此时记录最终身份
-    并继续，不视为致命错误（2026-09-19 实测 deepseek 网关流）。
+    ``allow_model_identity_change`` 仅保留既有调用接口；产品请求不启用。
+    请求别名可由首个真实模型名解析，后续真实内容流不能切换模型。
     """
     started = clock()
     last_activity = started
@@ -217,12 +223,17 @@ class DeepSeekEvidenceNormalizerTransport:
         max_tokens: int | None = None,
         temperature: float | None = None,
         response_format: Mapping[str, Any] | None = None,
+        stream_response: bool = False,
+        include_source_categories: bool = False,
         client: Any | None = None,
         receipt_callback: Callable[[dict[str, Any]], None] | None = None,
         request_callback: Callable[[dict[str, Any]], str] | None = None,
     ) -> None:
         self._receipt_callback = receipt_callback
         self._request_callback = request_callback
+        if not isinstance(include_source_categories, bool):
+            raise ValueError("资料类别提示配置必须是布尔值")
+        self.include_source_categories = include_source_categories
         selected_backend = (backend or EVIDENCE_NORMALIZER_PROVIDER).strip().lower()
         if selected_backend not in {
             "deepseek",
@@ -272,6 +283,7 @@ class DeepSeekEvidenceNormalizerTransport:
             temperature if temperature is not None else EVIDENCE_NORMALIZER_TEMPERATURE
         )
         self._response_format = dict(response_format) if response_format is not None else None
+        self._stream_response = stream_response
         if client is not None:
             self._client = client
         else:
@@ -368,6 +380,12 @@ class DeepSeekEvidenceNormalizerTransport:
             and self._response_format.get("type") == "json_schema"
         )
 
+    def set_output_schema(self, schema: dict) -> None:
+        if self.enforces_output_json_schema:
+            self._response_format = {**self._response_format, "json_schema": {
+                **self._response_format["json_schema"], "schema": schema,
+            }}
+
     def _completion_kwargs(self, messages: list[dict[str, str]]) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": self._model,
@@ -395,7 +413,7 @@ class DeepSeekEvidenceNormalizerTransport:
     def initial_request_body(self, *, prompt: str) -> dict[str, Any]:
         """Describe the initial request without invoking or loading any model."""
         body = self._completion_kwargs([{"role": "user", "content": prompt}])
-        if self._backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS or self._backend in {"deepseek", "deepseek-api"}:
+        if self._stream_response or self._backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS or self._backend in {"deepseek", "deepseek-api"}:
             body.update(stream=True, stream_options={"include_usage": True})
         return body
 
@@ -433,8 +451,8 @@ class DeepSeekEvidenceNormalizerTransport:
     def _request_stream(self, kwargs, *, strict_model_check: bool = True):
         """流式执行一次 GLM 请求：逐块观测，失败小票保留部分输出诊断。
 
-        ``strict_model_check`` 供经网关路由的请求放宽：路由器会回填上游真实
-        模型名（如 cms-deepseek-flash → deepseek-flash），身份仍记录在小票。
+        ``strict_model_check`` 允许网关请求名与首个实际返回名不同；实际内容流
+        内的模型身份仍须稳定。空保活消息不提供模型或请求身份。
         """
         started = monotonic()
         receipt = {"mode": "stream",
@@ -447,9 +465,7 @@ class DeepSeekEvidenceNormalizerTransport:
         try:
             self._bind_request_receipt(receipt, kwargs)
             stream = self._client.chat.completions.create(**kwargs)
-            _assemble_glm_stream(
-                stream, state, allow_model_identity_change=not strict_model_check,
-            )
+            _assemble_glm_stream(stream, state)
             if strict_model_check and str(state["response_model"] or "").lower() != self._model.lower():
                 raise RuntimeError("GLM 实际响应模型与请求模型不一致")
             content = "".join(state["content_parts"])
@@ -506,12 +522,12 @@ class DeepSeekEvidenceNormalizerTransport:
         if self._request_callback is not None:
             receipt["request_artifact_sha256"] = self._request_callback(json.loads(encoded))
 
-    def _streaming_completion(self, kwargs):
+    def _streaming_completion(self, kwargs, *, strict_model_check=True):
         """GLM 流式补全：length 重试一次并抬升预算（上限 131072）；仅接受 stop。"""
         stream_kwargs = dict(kwargs)
         stream_kwargs["stream"] = True
         stream_kwargs["stream_options"] = {"include_usage": True}
-        completion = self._request_stream(stream_kwargs)
+        completion = self._request_stream(stream_kwargs, strict_model_check=strict_model_check)
         if completion.choices and completion.choices[0].finish_reason == "length":
             retry_kwargs = dict(stream_kwargs)
             retry_kwargs["max_tokens"] = min(
@@ -519,8 +535,10 @@ class DeepSeekEvidenceNormalizerTransport:
                 EVIDENCE_NORMALIZER_LENGTH_RETRY_MAX_TOKENS,
             )
             if retry_kwargs["max_tokens"] > kwargs["max_tokens"]:
-                completion = self._request_stream(retry_kwargs)
+                completion = self._request_stream(retry_kwargs, strict_model_check=strict_model_check)
         finish = completion.choices[0].finish_reason if completion.choices else None
+        if not completion.model:
+            raise RuntimeError("流式响应未报告实际模型身份，拒绝采信结果")
         if finish != "stop":
             raise RuntimeError(
                 f"GLM 流式响应未完整结束（finish_reason={finish!r}），拒绝采信部分结果"
@@ -534,8 +552,9 @@ class DeepSeekEvidenceNormalizerTransport:
             kwargs["response_format"] = {"type": "json_schema", "json_schema": {
                 "name": "question_classification_proposal", "strict": True, "schema": output_schema}}
         try:
-            if self._backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS:
-                completion = self._streaming_completion(kwargs)
+            if self._backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS or self._stream_response:
+                completion = self._streaming_completion(kwargs,
+                    strict_model_check=self._backend != "cms-router")
             elif self._backend in {"deepseek", "deepseek-api"}:
                 # 云端网关（cms-router）对长生成有短超时，非流式会在首字前被
                 # 504 截断；与 GLM 道一致统一流式累积（2026-09-19 用户指令）。
@@ -634,6 +653,9 @@ def evidence_normalizer_transport_from_model_config(
     """按已冻结模型配置创建 OpenAI 兼容传输，不静默替换供应商或模型。"""
     provider = model_config.provider.strip().lower()
     parameters = model_config.parameters
+    include_source_categories = parameters.get("include_source_categories", False)
+    if not isinstance(include_source_categories, bool):
+        raise ValueError("资料类别提示配置必须是布尔值")
     max_tokens = int(parameters.get("max_tokens", EVIDENCE_NORMALIZER_MAX_TOKENS))
     raw_temperature = parameters.get(
         "temperature", EVIDENCE_NORMALIZER_TEMPERATURE
@@ -644,6 +666,7 @@ def evidence_normalizer_transport_from_model_config(
             raise ValueError("DeepSeek 语义服务尚未配置")
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            include_source_categories=include_source_categories,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -666,6 +689,7 @@ def evidence_normalizer_transport_from_model_config(
             raise ValueError("本次整理的模型加载配置已改变，请新建整理任务，历史结果仍保留")
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            include_source_categories=include_source_categories,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -682,6 +706,7 @@ def evidence_normalizer_transport_from_model_config(
     if provider in {"omlx", "local-omlx"}:
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            include_source_categories=include_source_categories,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -711,6 +736,7 @@ def evidence_normalizer_transport_from_model_config(
             )
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            include_source_categories=include_source_categories,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -729,6 +755,7 @@ def evidence_normalizer_transport_from_model_config(
         # the transport. The frozen job still owns model, effort and budget.
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            include_source_categories=include_source_categories,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -736,6 +763,7 @@ def evidence_normalizer_transport_from_model_config(
             reasoning_effort=model_config.reasoning_effort,
             max_tokens=max_tokens,
             temperature=temperature,
+            stream_response=parameters.get("stream_response", False) is True,
             response_format=(
                 None if provider == "ollama-cloud" else {"type": "json_object"}
             ),

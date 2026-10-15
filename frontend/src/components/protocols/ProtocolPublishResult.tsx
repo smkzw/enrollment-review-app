@@ -22,12 +22,12 @@ export function ProtocolPublishResult({
       <header className="page-head">
         <h1 className="page-head__title">
           <CheckIcon size={18} />
-          发布完成
+          {result.verificationOnly ? "验证用规则包已发布" : "发布完成"}
         </h1>
         <p className="page-head__note">
-          {isRedo
-            ? `已在目标项目 ${session.targetProjectName ?? ""} 下生成新的不可变规则版本。`
-            : "已发布新的正式项目与规则版本。"}
+          {result.verificationOnly ? "规则包未经医学经理本人审定，仅供构建验证，不能用于正式审核。" : isRedo
+            ? `规则第 ${result.ruleSetRevision} 版已保存，旧版保留。`
+            : `已发布新项目及规则第 ${result.ruleSetRevision} 版。`}
         </p>
       </header>
 
@@ -43,7 +43,7 @@ export function ProtocolPublishResult({
           {isRedo && (
             <div>
               <dt>目标项目</dt>
-              <dd>{session.targetProjectName ?? result.projectId}</dd>
+              <dd>{session.targetProjectCode ?? "项目代号未填写"}</dd>
             </div>
           )}
           <div>
@@ -55,9 +55,10 @@ export function ProtocolPublishResult({
             <dd>{session.targetStudyPhaseLabel ?? session.selectedPhaseLabel ?? "—"}</dd>
           </div>
         </dl>
-        <p className="protocol-publish-result__note">
-          已发布的历史版本完整保留用于追溯；后续如需更新规则，请从「重新解构已有项目」继续上传新版方案。
-        </p>
+        {isRedo && session.targetProjectName && <details>
+          <summary>研究完整名称</summary>
+          <p>{session.targetProjectName}</p>
+        </details>}
       </section>
 
       <div className="protocol-publish-result__actions">
@@ -75,7 +76,7 @@ export function ProtocolPublishResult({
         {isRedo && (
           <RouteLink
             to="/protocols"
-            params={{ mode: "redo" }}
+            params={{ mode: "redo", project: result.projectId }}
             className="button"
           >
             <HistoryIcon size={14} />

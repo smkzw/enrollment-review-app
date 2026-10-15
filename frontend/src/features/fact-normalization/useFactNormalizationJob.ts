@@ -118,6 +118,7 @@ export interface UseFactNormalizationJobResult {
   completedReview: { jobId: string; subjectId: string; reviewEpisodeId: string } | null;
   /** 发起或幂等复用整理任务。 */
   start: (idempotencyKey?: string) => Promise<string | null>;
+  retryFailedPages: (runId: string) => Promise<string | null>;
   /** 失败后重试失败范围，或陈旧时重新下发命令。 */
   retry: () => Promise<void>;
   /** 仅从本机恢复已持久的 job id 并拉取状态。 */
@@ -277,7 +278,7 @@ export function useFactNormalizationJob(
   }, [profileStale]);
 
   const start = useCallback(
-    async (idempotencyKey?: string, allowPageRead = true): Promise<string | null> => {
+    async (idempotencyKey?: string, allowPageRead = true, retryFailedFromRunId?: string): Promise<string | null> => {
       if (subjectId === null || reviewEpisodeId === null) return null;
       if (startInFlight.current !== null) return startInFlight.current;
 
@@ -292,7 +293,7 @@ export function useFactNormalizationJob(
           const command = await getFactNormalizationRepository().startFactNormalization(
             subjectId,
             reviewEpisodeId,
-            { idempotencyKey: key },
+            { idempotencyKey: key, ...(retryFailedFromRunId ? {retryFailedFromRunId} : {}) },
           );
           writeStoredJobId(reviewEpisodeId, command.jobId);
           jobIdRef.current = command.jobId;
@@ -354,7 +355,8 @@ export function useFactNormalizationJob(
   }, [applyJob, reviewEpisodeId, start, state.status, subjectId, pageReview.state.status, pageReview.retry]);
 
   return { state: pageReview.state.status === "idle" ? state : pageReview.state,
-    completedReview: pageReview.completedReview, start, retry, resumeFromStorage };
+    completedReview: pageReview.completedReview, start, retry,
+    retryFailedPages: (runId: string) => start(undefined, false, runId), resumeFromStorage };
 }
 
 export function clearFactNormalizationJobStorage(reviewEpisodeId: string): void {

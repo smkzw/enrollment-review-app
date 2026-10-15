@@ -1,15 +1,16 @@
-"""冻结正式审核历史的只读读取；不重算、不发布、不读当前资料指针。
+"""冻结审核历史的只读读取；工作稿与正式结论分层，不重算、不发布。
 
 本模块只从已存储的 ``review/v2`` 正式审核链读取：
 
 - ``ReviewRun``（``REVIEW_RUN_CONFIG``：payload 哈希、列镜像与关联表核对）；
 - ``ReviewContextSnapshotV2``（``ReviewContextV2Repository``：冻结输入快照）；
 - ``FinalAssessment``（``FINAL_ASSESSMENT_CONFIG``）；
+- ``WorkDraftItem``（工作稿运行使用既有工作稿仓储，不制造签发结论）；
 - ``ActionRequest``（``ActionRequestRepository``，含完整状态转换历史）。
 
 它不调用模型、发布、装配、激活或实时投影服务，也不查询审核节点的当前活动指针，
 因此后续上传/更正既不会改写、也不会阻断历史读取。规则判断、缺口原因、官方编号与
-原件出处全部按冻结记录原样返回，不重新解释、不补造人判断、不给出置信度。
+原件出处全部按冻结记录原样返回，不重新解释、不补造人判断或新增置信度。
 
 边界：
 
@@ -27,7 +28,7 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, Sequence
 
 from sqlalchemy import select
@@ -65,6 +66,7 @@ from app.storage.review_control_repository import ReviewControlRepository
 from app.storage.evidence_locator_repositories import EvidenceLocatorRepository
 from app.storage.fact_authority import FactAuthorityValidator
 from app.storage.review_reference_validation import validate_action_response
+from app.services.eligibility_review_projection import EligibilityReviewProjection
 
 __all__ = [
     "ReviewHistoryAction",
@@ -192,6 +194,76 @@ class ReviewHistoryRunDetail:
     evidence_locators: tuple[EvidenceLocatorArtifact, ...]
     controls: tuple[ControlReviewOutcome, ...] = ()
     missing_protocol_control_ids: tuple[str, ...] = ()
+    work_draft: EligibilityReviewProjection | None = None
+    source_file_names: dict[str, str] = field(default_factory=dict)
+
+
+def _work_draft_detail(session, run, context, status):
+    """Read the whole saved working result against its own frozen scope, not today's rules."""
+    from app.services.work_draft_projection import project_saved_items
+    from app.storage.work_draft_repository import WorkDraftRepository
+    from app.storage.evidence_repositories import SourceDocumentRepository, EvidenceSnapshotRepository
+
+    def incomplete(message):
+        raise ReviewHistoryIncompleteError(message, review_run_id=run.review_run_id)
+
+    if not context.work_draft:
+        incomplete("工作稿与其冻结输入的记录类型不一致，暂不能打开。")
+    rules = get_rule_set(session, context.authority.rule_set_id, run.rule_set_revision)
+    expected = {(rule.official_code, None): (rule.kind, rule.source_text) for rule in rules.rules}
+    expected.update({(clause.official_code, clause.rule_component_id): (clause.kind, clause.source_text)
+                     for clause in context.clause_pack.clauses})
+    expected.update({(clause.official_code, clause.clause_id): (clause.kind, clause.source_text)
+                     for clause in context.clause_pack.restricted_clauses})
+    if context.procedure_catalog is None:
+        incomplete("工作稿缺少当时的流程项目录，无法核对完整要求。")
+    expected.update({(item.official_code or f"REQ-{item.position + 1:02d}", None):
+        (RuleKind.REQUIRED_PROCEDURE, "\n".join(text for text in item.source_excerpts if text) or item.label)
+        for item in context.procedure_catalog.items})
+    if rules.scope_supplement is not None:
+        expected.update({(item.item_id, None): (RuleKind.EXCLUSION,
+            "\n".join(dict.fromkeys(quote.excerpt for quote in item.source_quotes)))
+            for item in rules.scope_supplement.medications})
+    rows = WorkDraftRepository(session).list_for_run(run.review_run_id)
+    actual = [(item.official_code, item.rule_component_id) for item in rows]
+    if (len(actual) != len(set(actual)) or set(actual) - set(expected)
+            or run.completed_at is not None and set(actual) != set(expected)):
+        incomplete("工作稿的条款结果重复、缺失或不属于当时的完整规则包，暂不能打开。")
+    facts = {fact.fact_id: fact for fact in context.facts}
+    pages = {(page.source_document_version_id, page.page_artifact_id, page.page_number): page.effective_text
+             for page in context.source_pages}
+    locator_ids = sorted({ref.locator_id for item in rows for ref in item.evidence_refs})
+    FactAuthorityValidator(session).validate_locators(context.authority, locator_ids)
+    locators = EvidenceLocatorRepository(session).get_many(locator_ids)
+    positions = {locator.locator_id: locator for locator in locators}
+    for item in rows:
+        if item.review_run_id != run.review_run_id or (item.rule_kind, item.source_text) != expected[(item.official_code, item.rule_component_id)]:
+            incomplete("工作稿条款的来源或运行身份与冻结规则不一致。")
+        if item.official_code.startswith("med:") != (item.policy_group == "medication"):
+            incomplete("用药要求的类别与冻结条目不一致。")
+        for ref in item.evidence_refs:
+            fact, locator = facts.get(ref.fact_id), positions.get(ref.locator_id)
+            if (fact is None or ref.locator_id not in fact.locator_ids or locator is None
+                    or not locator.excerpt or ref.excerpt not in locator.excerpt
+                    or any(getattr(locator, key) != getattr(ref, key) for key in (
+                        "source_document_version_id", "page_artifact_id", "page_number"))):
+                incomplete("工作稿的事实与原件位置不属于当时的冻结依据。")
+        for ref in item.source_read_refs:
+            text = pages.get((ref.source_document_version_id, ref.page_artifact_id, ref.page_number))
+            if text is None or ref.excerpt is not None and ref.excerpt not in text:
+                incomplete("工作稿的病历摘录或检索页面与冻结原文不一致。")
+    snapshot = EvidenceSnapshotRepository(session).get(run.evidence_snapshot_v2_id)
+    documents = SourceDocumentRepository(session).get_many(list({
+        member.source_document_version_id for member in snapshot.members} | {
+        ref.source_document_version_id for item in rows for ref in (*item.evidence_refs, *item.source_read_refs)}))
+    if any(doc.project_id != context.authority.project_id or doc.subject_id != context.authority.subject_id
+           for doc in documents.values()):
+        incomplete("工作稿原件不属于本项目或本受试者。")
+    return ReviewHistoryRunDetail(run=run, context=context, status=status, assessments=(), actions=(),
+        missing_rule_component_ids=(), evidence_locators=tuple(locators),
+        work_draft=project_saved_items(rows, authority=context.authority, rule_set=rules,
+            run_id=run.review_run_id, issues=tuple(run.system_issues)),
+        source_file_names={key: doc.file_name for key, doc in documents.items()})
 
 
 def _run_status(run: ReviewRun) -> ReviewHistoryRunStatus:
@@ -605,6 +677,8 @@ def get_run(
     _require_v2_run(run)
     context = _load_frozen_context(session, run, episode)
     clauses = _pinned_clause_identities(session, run, context)
+    if run.run_kind == "work_draft":
+        return _work_draft_detail(session, run, context, _run_status(run))
     assessments, ordered_assessments = _stored_assessments(
         session, run, episode, context, clauses
     )

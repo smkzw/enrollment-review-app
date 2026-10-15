@@ -72,6 +72,9 @@ def test_new_deployments_reject_unsupported_output_allowances(value):
 
 def test_declared_model_capability_blocks_request_before_inference(monkeypatch):
     import app.llm.page_review_harness as harness
+    # This contract uses a fake HTTP model, not a running local deployment.
+    monkeypatch.setattr("app.llm.mtplx_model_lifecycle.configured_mtplx_owner", lambda: None)
+    monkeypatch.setattr("app.llm.mtplx_model_lifecycle._external_shared_mtplx_available", lambda *_: True)
     requested = []
 
     def handle(request):
@@ -106,6 +109,8 @@ def test_length_at_maximum_budget_does_not_send_a_larger_request():
 
 def test_mtplx_image_json_uses_mtp_without_altering_the_prompt_or_sampling(monkeypatch):
     import app.llm.page_review_harness as harness
+    monkeypatch.setattr("app.llm.mtplx_model_lifecycle.configured_mtplx_owner", lambda: None)
+    monkeypatch.setattr("app.llm.mtplx_model_lifecycle._external_shared_mtplx_available", lambda *_: True)
     messages = harness.build_page_review_messages(deployment()[PageReviewLane.MAIN_B], _page_input(), _clause_pack())
     captured = []
 

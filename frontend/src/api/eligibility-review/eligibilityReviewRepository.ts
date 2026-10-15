@@ -9,6 +9,19 @@ export interface EligibilityReviewRequestOptions {
   signal?: AbortSignal;
 }
 
+export interface WorkDraftJobView { job_id: string; state: string; review_run_id: string | null }
+
+function decodeWorkDraftJob(value: unknown): WorkDraftJobView {
+  const row = value as Partial<WorkDraftJobView> | null;
+  if (!row || typeof row.job_id !== "string" || !row.job_id || !["queued", "running", "recovering", "failed_retryable", "waiting_user",
+    "completed", "failed_final", "cancel_requested", "cancelled"].includes(row.state ?? "")
+    || !(row.review_run_id === null || typeof row.review_run_id === "string")
+    || row.state === "completed" && !row.review_run_id || row.state !== "completed" && row.review_run_id !== null) {
+    throw new Error("工作稿处理记录不完整，请刷新查看。");
+  }
+  return row as WorkDraftJobView;
+}
+
 export interface EligibilityReviewRepository {
   readonly kind: "http";
   getEligibilityReview(
@@ -16,6 +29,9 @@ export interface EligibilityReviewRepository {
     reviewEpisodeId: string,
     options?: EligibilityReviewRequestOptions,
   ): Promise<EligibilityReviewView>;
+  confirmWorkDraft?(subjectId: string, episodeId: string, input: {
+    review_run_id: string; item_id: string; confirmed: true; actor_kind: "medical_manager" | "builder_verification";
+  }): Promise<WorkDraftJobView>;
 }
 
 export interface EligibilityReviewHttpOptions {
@@ -43,6 +59,13 @@ export function createEligibilityReviewHttp(
   const fetchImpl = options.fetchImpl ?? fetch.bind(globalThis);
   return {
     kind: "http",
+    async confirmWorkDraft(subjectId, episodeId, input) {
+      const response = await fetchImpl(eligibilityReviewUrl(`/api/v2/subjects/${encodeURIComponent(subjectId)}/review-episodes/${encodeURIComponent(episodeId)}/work-draft-confirmations`),
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+      const payload = await readJson(response);
+      if (!response.ok) throw decodeEligibilityReviewError(payload, response.status);
+      return decodeWorkDraftJob(payload);
+    },
     async getEligibilityReview(subjectId, reviewEpisodeId, requestOptions) {
       const response = await fetchImpl(
         eligibilityReviewUrl(

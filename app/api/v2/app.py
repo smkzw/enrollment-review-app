@@ -280,14 +280,14 @@ def create_app(
             job_service=app.state.fact_normalization_job_service,
             registered_config=evidence_normalizer_runtime_config,
             require_page_review=False,
-            require_source_readiness=True,
+            require_source_readiness=False,
             page_reader_identity=lambda: app.state.page_review_runtime.main_reader_identity(),
             allow_candidate_partition=True,
             allow_question_classification_repair=True,
         )
         app.state.evidence_normalizer_runtime_config = evidence_normalizer_runtime_config
         app.state.fact_correction_job_service = FactCorrectionJobService(
-            session_factory, lease_ttl=lease_ttl
+            session_factory, lease_ttl=lease_ttl, work_draft_enabled=True
         )
         app.state.selective_vision_postprocess_job_service = (
             SelectiveVisionPostprocessJobService(
@@ -339,7 +339,7 @@ def create_app(
                 FactNormalizationExecutorConfig(session_factory=session_factory, artifact_store=artifact_store)
             ),
             FACT_CORRECTION_JOB_TYPE: create_fact_correction_executor(
-                FactCorrectionExecutorConfig(session_factory=session_factory)
+                FactCorrectionExecutorConfig(session_factory=session_factory, artifact_store=artifact_store)
             ),
             SELECTIVE_VISION_POSTPROCESS_JOB_TYPE: create_selective_vision_postprocess_executor(
                 SelectiveVisionPostprocessExecutorConfig(
@@ -359,6 +359,9 @@ def create_app(
             ),
         )
         app.state.job_executors = merged_executors
+        from app.services.work_draft_review import WorkDraftReviewService, JOB_TYPE as WORK_DRAFT_JOB_TYPE
+        app.state.work_draft_review_service = WorkDraftReviewService(session_factory, artifact_store)
+        merged_executors[WORK_DRAFT_JOB_TYPE] = app.state.work_draft_review_service.execute
         app.state.job_cancelled_callback = project_cancelled_evidence_job
         app.state.job_failed_callback = project_failed_job
         from app.services.batch_review_workflow import BATCH_JOB_TYPE, BatchReviewRetryService

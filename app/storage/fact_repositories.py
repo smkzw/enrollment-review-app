@@ -997,7 +997,7 @@ class _PublishMixin:
         repository = ClinicalFactV2Repository(self.session)
         for fact_id in unique:
             fact = repository.get(fact_id)
-            if fact.authority != authority:
+            if fact.authority != authority and not self._authority.retained_fact_source_is_reusable(fact, authority):
                 raise FactCrossEntityError(
                     f"事实 {fact.fact_id} 与事件/暴露/冲突不属于同一不可变权威元组"
                 )

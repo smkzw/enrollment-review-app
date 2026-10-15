@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import uuid
 from copy import deepcopy
@@ -28,8 +29,9 @@ from app.domain.contracts.agent_io import (
     ProtocolSemanticDeconstructionCandidate,
 )
 from app.domain.contracts.common import DateValue
+from app.domain.contracts.rule_reviews import RuleReviewRecord, ReviewerKind
 from app.domain.contracts.enums import DatePrecision, MetadataResolutionStatus, StudyPhase
-from app.domain.contracts.protocol_drafts import DraftFeedbackKind, ProtocolDraftRevision
+from app.domain.contracts.protocol_drafts import DraftFeedbackKind, DraftRevisionStatus, ProtocolDraftRevision
 from app.evidence.artifacts import ArtifactStore
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
 from app.domain.contracts.rules import RestrictedRuleComponent, iter_atomic_predicates
@@ -44,6 +46,7 @@ from app.protocols.deconstruction_gate import (
     ProtocolDeconstructionGateResult,
     ProtocolDraftDiffDeclaration,
     ProtocolGateIssue,
+    publication_issue_level,
     _localized_open_list_exception_requires_exclusivity,
     _source_proves_unsupported_member_frequency,
     _substantive_obligation_segments,
@@ -56,6 +59,7 @@ from app.protocols.ingestion import (
 from app.protocols.metadata import MetadataExtractionError, confirm_protocol_identity
 from app.services.job_service import JOB_IDEMPOTENCY_SCOPE, JobService, StepSpec
 from app.services.protocol_draft_service import (
+    DraftEditBoundaryError,
     FormalBaselineError,
     ProtocolDraftService,
     compute_draft_diff,
@@ -69,6 +73,7 @@ from app.services.protocol_publication_service import (
     PublicationGateError,
     PublicationLineageError,
 )
+from app.services.protocol_rule_review import current_reviews, REVIEW_CONFIG
 from app.services.workbench_project_origin import (
     WORKBENCH_ORIGIN_PAYLOAD_KEY,
     WorkbenchOriginError,
@@ -85,6 +90,7 @@ from app.storage.idempotency import (
 from app.storage.config import DataPaths
 from app.storage.models import JobRecord, JobStepRecord
 from app.storage.repositories import (
+    AppendRepository,
     JobRepository,
     NotFoundError,
     ProjectRepository,
@@ -187,6 +193,14 @@ class ProtocolWorkbenchError(RuntimeError):
         super().__init__(detail)
 
 
+def _publication_error(exc: ProtocolPublicationError) -> ProtocolWorkbenchError:
+    if exc.code == "review_scope_not_applied":
+        return ProtocolWorkbenchError("REVIEW_SCOPE_NOT_APPLIED", title="新增范围尚未完成",
+            detail=str(exc), recovery="请先完成新增范围中要求的整理与审定；已发布规则不受影响。")
+    return ProtocolWorkbenchError("PUBLICATION_FAILED", title="发布未能完成", detail=str(exc),
+        recovery="请刷新草稿状态后重试；若仍失败，请联系维护人员并保留操作时间。")
+
+
 @dataclass(frozen=True)
 class StartDeconstructionResult:
     job_id: str
@@ -279,6 +293,7 @@ class DraftComparisonSideView:
     is_formal_baseline: bool
     content: dict[str, Any]
     source_refs: list[str]
+    review_scope_pending: bool = False
 
 
 @dataclass(frozen=True)
@@ -327,6 +342,7 @@ class ProtocolSessionView:
     target_study_phase_label: str | None
     target_official_version: str | None
     target_rule_set_revision: int | None
+    verification_only: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -366,6 +382,7 @@ class PublicationView:
     rule_set_id: str
     rule_set_revision: int
     replay: bool
+    verification_only: bool = False
 
 
 def _study_phase_label(phase: str | None) -> str | None:
@@ -1218,6 +1235,18 @@ class ProtocolWorkbenchService:
                         detail="系统未能继续准备正式草稿副本。",
                         recovery="请返回工作台后重试；若仍失败，请联系维护人员。",
                     )
+                # The copied, source-checked formal input is already frozen.
+                # Leaving this step queued would rerun extraction after publication.
+                store.start_step(lease, STEP_FREEZE)
+                store.complete_step(
+                    lease, STEP_FREEZE,
+                    checkpoint_payload={
+                        "source_input": source_input_payload,
+                        "source_spans": source_context["source_spans"],
+                        "snapshot_id": source_context.get("snapshot_id"),
+                        "formal_baseline_revision_id": baseline.revision_id,
+                    },
+                )
                 store.start_step(lease, STEP_GENERATE)
                 store.complete_step(
                     lease,
@@ -1310,6 +1339,7 @@ class ProtocolWorkbenchService:
             ),
             target_official_version=merged.get("target_official_version"),
             target_rule_set_revision=merged.get("target_rule_set_revision"),
+            verification_only=merged.get("verification_only"),
         )
 
     def get_identity_review(self, job_id: str) -> IdentityReviewView:
@@ -1346,6 +1376,332 @@ class ProtocolWorkbenchService:
             revision=revision,
             diff=diff_payload,
         )
+
+    @staticmethod
+    def operator_name() -> str:
+        return os.environ.get("ENROLLMENT_OPERATOR_NAME", "本机医学经理").strip() or "本机医学经理"
+
+    def get_rule_reviews(self, job_id: str) -> dict[str, Any]:
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        source = self._load_source_input(merged)
+        revision = self._load_draft_revision(merged)
+        with self.session_factory() as session:
+            entries, history = current_reviews(session, source, revision.content)
+        return {
+            "job_id": job_id, "draft_revision_id": revision.revision_id,
+            "operator_name": self.operator_name(), "entries": entries, "history": history,
+            "all_reviewed": bool(entries) and all(entry["review"] is not None for entry in entries),
+        }
+
+    def get_variable_bindings(self, job_id: str) -> dict[str, Any]:
+        from app.services.protocol_variable_binding import binding_view
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        revision = self._load_draft_revision(merged)
+        return {"job_id": job_id, "draft_revision_id": revision.revision_id,
+                **binding_view(revision.content)}
+
+    def get_review_scope(self, job_id: str) -> dict[str, Any]:
+        from app.services.protocol_review_scope_service import load_scope_structure, review_scope_view, scope_source_snapshot, validate_scope_proposal
+
+        self._require_protocol_job(job_id)
+        merged = self._merged_payload(job_id)
+        source = self._load_source_input(merged)
+        revision = self._load_draft_revision(merged)
+        try:
+            if (revision.content.project_id != source.project_id
+                    or revision.content.protocol_version_id != source.protocol_version_id
+                    or revision.content.selected_phase != source.selected_phase):
+                raise ValueError("范围来源与该草稿的项目、方案版本或期别不一致。")
+            with self.session_factory() as session:
+                snapshot = scope_source_snapshot(session, source, merged.get("extraction_snapshot"))
+            view = review_scope_view(source=source,
+                spans=list(self._load_source_spans(merged).values()),
+                snapshot=snapshot, data_paths=self.data_paths,
+                additional_ids=[span_id for addition in revision.review_scope_selection.additions
+                    for span_id in addition.source_span_ids] if revision.review_scope_selection else ())
+            selection = revision.review_scope_selection
+            if selection is not None and selection.scope_content_hash == view["scope_content_hash"]:
+                if selection.snapshot_id != source.extraction_snapshot_id:
+                    raise ValueError("保存的范围不属于本版方案。")
+                validate_scope_proposal(selection, view, source, list(self._load_source_spans(merged).values()),
+                    load_scope_structure(snapshot, self.data_paths))
+                resolved = {key for addition in selection.additions for key in addition.resolves_references}
+            else:
+                resolved = set()
+            for diagnostic in view["diagnostics"]:
+                diagnostic["resolved_by_manual_selection"] = diagnostic["diagnostic_key"] in resolved
+        except (ValueError, OSError) as exc:
+            raise ProtocolWorkbenchError("REVIEW_SCOPE_SOURCE_UNAVAILABLE", title="审核范围暂不可核对",
+                detail=str(exc), recovery="请核对本版方案保存的原文结构；已发布规则不会改变。") from exc
+        status = self.jobs.get_status(job_id)
+        editable = (revision.status in {DraftRevisionStatus.DRAFT, DraftRevisionStatus.SAVED, DraftRevisionStatus.RESTORED_FROM}
+            and status.state == "waiting_user" and not status.cancel_requested
+            and any(step.step_id in {STEP_AWAIT_REVIEW, STEP_PUBLISH} and step.state == "waiting_user" for step in status.steps))
+        from app.domain.variables.dictionary import load_drug_classes
+        return {"job_id": job_id, "draft_revision_id": revision.revision_id, **view, "editable": editable,
+            "drug_classes": load_drug_classes(),
+            "selection": revision.review_scope_selection.model_dump(mode="json") if revision.review_scope_selection else None}
+
+    def get_review_scope_options(self, job_id: str, *, query: str, offset: int = 0) -> dict[str, Any]:
+        from app.protocols.review_scope import review_scope_source_options
+        from app.services.protocol_review_scope_service import load_scope_structure, scope_source_snapshot
+        view = self.get_review_scope(job_id)
+        merged = self._merged_payload(job_id)
+        source = self._load_source_input(merged)
+        revision = self._load_draft_revision(merged)
+        if revision.revision_id != view["draft_revision_id"]:
+            raise ProtocolWorkbenchError("DRAFT_REVISION_CONFLICT", title="草稿已变化",
+                detail="原文查找未使用旧版草稿。", recovery="请刷新后重新查找。")
+        try:
+            with self.session_factory() as session:
+                snapshot = scope_source_snapshot(session, source, merged.get("extraction_snapshot"))
+            options = review_scope_source_options(blocks=load_scope_structure(snapshot, self.data_paths),
+                source_spans=list(self._load_source_spans(merged).values()), query=query, offset=offset)
+        except (ValueError, OSError) as exc:
+            raise ProtocolWorkbenchError("REVIEW_SCOPE_SOURCE_UNAVAILABLE", title="原文暂不可查找",
+                detail=str(exc), recovery="请核对本版方案保存的原文结构。") from exc
+        return {"job_id": job_id, "draft_revision_id": revision.revision_id, **options}
+
+    def save_review_scope(self, job_id: str, *, expected_revision_id: str, proposal) -> dict[str, Any]:
+        from app.domain.contracts.protocol_drafts import ReviewScopeSelection
+        from app.services.protocol_review_scope_service import load_scope_structure, scope_source_snapshot, validate_scope_proposal
+        view = self.get_review_scope(job_id)
+        if view["draft_revision_id"] != expected_revision_id or not view["editable"]:
+            raise ProtocolWorkbenchError("REVIEW_SCOPE_NOT_EDITABLE", title="本次范围尚不能保存",
+                detail="草稿已变化、取消或发布，或不在可编辑步骤。", recovery="请刷新草稿；已发布版本须从新草稿修订。")
+        merged = self._merged_payload(job_id)
+        source = self._load_source_input(merged)
+        revision = self._load_draft_revision(merged)
+        try:
+            with self.session_factory() as session, session.begin():
+                job = JobStore(session).get_job(job_id)
+                if job.state != "waiting_user" or job.cancel_requested:
+                    raise ValueError("任务已离开编辑步骤或正在取消，未保存本次选择。")
+                snapshot = scope_source_snapshot(session, source, merged.get("extraction_snapshot"))
+                validate_scope_proposal(proposal, view, source,
+                    list(self._load_source_spans(merged).values()), load_scope_structure(snapshot, self.data_paths))
+                selection = ReviewScopeSelection(**proposal.model_dump(mode="python"),
+                    snapshot_id=source.extraction_snapshot_id, saved_by=self.operator_name(), saved_at=self.now())
+                saved = ProtocolDraftService(session).save_review_scope(draft_id=revision.draft_id,
+                    selection=selection, expected_revision_id=expected_revision_id,
+                    actor=self.operator_name(), created_at=self.now())
+                if saved.revision_id != revision.revision_id:
+                    self._update_draft_checkpoint(session, job_id, saved)
+        except ValueError as exc:
+            raise ProtocolWorkbenchError("REVIEW_SCOPE_SELECTION_INVALID", title="范围选择未保存",
+                detail=str(exc), recovery="请核对所选原文、关联条款及移除理由。") from exc
+        return self.get_review_scope(job_id)
+
+    def medication_scope_context(self, job_id: str, expected_revision_id: str):
+        view = self.get_review_scope(job_id)
+        revision = self.get_draft_detail(job_id).revision
+        if not view["editable"] or revision.revision_id != expected_revision_id or view["draft_revision_id"] != expected_revision_id:
+            raise ProtocolWorkbenchError("DRAFT_REVISION_CONFLICT", title="草稿不可编辑或已更新",
+                detail="未读取或保存旧版补充要求。", recovery="请刷新当前草稿。")
+        if revision.review_scope_selection is None:
+            raise ProtocolWorkbenchError("REVIEW_SCOPE_SELECTION_MISSING", title="请先保存范围选择",
+                detail="用药要求只读取本次明确保留的原文。", recovery="请在审核范围中核对并保存。")
+        return view, revision
+
+    async def suggest_medication_restrictions(self, job_id: str, *, expected_revision_id: str, completion=None):
+        from app.agents.protocol_medication_author import author_medications, revalidate_medication_result
+        from app.protocols.medication_restrictions import (MedicationRestrictionProposal, build_scope_supplement,
+            medication_input_hash, selected_scope_material, validate_scope_supplement)
+        view, revision = self.medication_scope_context(job_id, expected_revision_id)
+        existing = revision.content.scope_supplement
+        _, _, readable = selected_scope_material(view, revision.review_scope_selection)
+        official_codes = {rule.official_code for rule in revision.content.proposed_rules}
+        if existing is not None and existing.input_sha256 == medication_input_hash(revision.study_phase.value, readable):
+            validate_scope_supplement(existing, view=view, selection=revision.review_scope_selection,
+                phase=revision.study_phase.value, official_codes=official_codes)
+            proposal = MedicationRestrictionProposal(medications=[item.model_dump(exclude={"item_id"}) for item in existing.medications],
+                source_dispositions=existing.source_dispositions)
+            rebound = build_scope_supplement(proposal=proposal, view=view, selection=revision.review_scope_selection,
+                phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules})
+            if rebound.input_sha256 == existing.input_sha256:
+                rebound.request_refs, rebound.response_refs, rebound.reader_identity = existing.request_refs, existing.response_refs, existing.reader_identity
+                return {"job_id": job_id, "draft_revision_id": expected_revision_id,
+                    "scope_content_hash": view["scope_content_hash"], "supplement": rebound.model_dump(mode="json"),
+                    "receipts": [], "system_issue": None, "proposal_ref": None, "reused": True, "new_model_calls": 0}
+        previous_ref = self._merged_payload(job_id).get("medication_proposal_ref")
+        if previous_ref:
+            saved = json.loads(ArtifactStore(self.data_paths).read(previous_ref))
+            if saved.get("job_id") != job_id:
+                raise ProtocolWorkbenchError("MEDICATION_PROPOSAL_MISMATCH", title="读取记录不属于本草稿",
+                    detail="未借用其他任务的回答，也未重新调用模型。", recovery="请核对本次保存的读取记录。")
+            if saved.get("supplement") and saved.get("draft_revision_id") == expected_revision_id:
+                from app.domain.contracts.rules import ProtocolScopeSupplement
+                supplement = ProtocolScopeSupplement.model_validate(saved["supplement"])
+                validate_scope_supplement(supplement, view=view, selection=revision.review_scope_selection,
+                    phase=revision.study_phase.value, official_codes=official_codes)
+                return {**saved, "proposal_ref": previous_ref, "reused": True, "new_model_calls": 0}
+            result = revalidate_medication_result(saved, view=view, selection=revision.review_scope_selection,
+                phase=revision.study_phase.value, official_codes=official_codes, data_paths=self.data_paths)
+            result.update(revalidated_from=saved.get("revalidated_from", previous_ref), new_model_calls=0)
+        else:
+            result = await author_medications(view=view, selection=revision.review_scope_selection,
+                phase=revision.study_phase.value, official_codes=official_codes,
+                data_paths=self.data_paths, **({"completion": completion} if completion else {}))
+            result["new_model_calls"] = len(result["receipts"])
+        if result.get("supplement") is None:
+            manual = MedicationRestrictionProposal(source_dispositions=[{"source_span_id": row.source_span_id,
+                "disposition": "unresolved", "reason": "本段尚未完成整理，请按原文核对。"} for row in readable])
+            result["manual_supplement"] = build_scope_supplement(proposal=manual, view=view,
+                selection=revision.review_scope_selection, phase=revision.study_phase.value,
+                official_codes=official_codes).model_dump(mode="json")
+        result = {"job_id": job_id, "draft_revision_id": expected_revision_id,
+                  "scope_content_hash": view["scope_content_hash"], **result}
+        stored = ArtifactStore(self.data_paths).put("evaluation_manifest", json.dumps(result, ensure_ascii=False).encode())
+        # The bounded request has finished. Recheck cancellation and head before making it a current proposal.
+        self.medication_scope_context(job_id, expected_revision_id)
+        if stored.storage_ref == previous_ref:
+            return {**result, "proposal_ref": previous_ref, "reused": True}
+        with self.session_factory() as session, session.begin():
+            current = JobStore(session).get_last_checkpoint(job_id, STEP_AWAIT_REVIEW)
+            JobRepository(session).create_checkpoint(checkpoint_id=uuid.uuid4().hex, job_id=job_id,
+                step_id=STEP_AWAIT_REVIEW, payload={**(current[1] if current else {}),
+                    "medication_proposal_ref": stored.storage_ref})
+        return {**result, "proposal_ref": stored.storage_ref, "reused": bool(previous_ref)}
+
+    def save_medication_restrictions(self, job_id: str, *, expected_revision_id: str, proposal, proposal_ref=None, drug_classes=None):
+        from app.protocols.medication_restrictions import build_scope_supplement
+        view, revision = self.medication_scope_context(job_id, expected_revision_id)
+        receipts = []
+        if proposal_ref:
+            original = json.loads(ArtifactStore(self.data_paths).read(proposal_ref))
+            if (original.get("job_id") != job_id or original.get("draft_revision_id") != expected_revision_id
+                    or original.get("scope_content_hash") != view["scope_content_hash"] or not original.get("supplement")):
+                raise ProtocolWorkbenchError("MEDICATION_PROPOSAL_MISMATCH", title="补充建议与草稿不一致",
+                    detail="未借用其他版本的模型回执。", recovery="请刷新本次建议。")
+            used = original["supplement"]
+            receipts = [row for row in original["receipts"] if row["request_ref"] in used["request_refs"]
+                and row.get("response_ref") in used["response_refs"]]
+            if ({row["request_ref"] for row in receipts} != set(used["request_refs"])
+                    or {row["response_ref"] for row in receipts} != set(used["response_refs"])):
+                raise ProtocolWorkbenchError("MEDICATION_PROPOSAL_MISMATCH", title="读取依据不完整",
+                    detail="补充建议的请求与原答未能对应。", recovery="请核对已保存的读取记录。")
+        try:
+            from app.domain.variables.dictionary import load_drug_classes
+            previous = revision.content.scope_supplement
+            frozen_classes = previous.drug_classes if previous is not None else load_drug_classes()
+            classes = frozen_classes if drug_classes is None else drug_classes
+            if set(classes) != set(frozen_classes):
+                raise ValueError("本次只调整已有类别中的药名，不能改换类别身份。")
+            for members in classes.values():
+                if not members or any(not name.strip() or name != name.strip() for name in members):
+                    raise ValueError("每个药物类别至少保留一个非空药名，名称两侧不能带空格。")
+                if len(members) != len(set(members)):
+                    raise ValueError("同一药物类别中的药名不能重复。")
+            supplement = build_scope_supplement(proposal=proposal, view=view, selection=revision.review_scope_selection,
+                phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules},
+                receipts=receipts, drug_classes=classes)
+            if proposal_ref:
+                if original["supplement"]["input_sha256"] != supplement.input_sha256:
+                    raise ValueError("所选原文或类别表已变化，不能把旧请求当作本次读取。")
+                supplement.reader_identity = original["supplement"].get("reader_identity")
+            elif revision.content.scope_supplement is not None and supplement.input_sha256 == revision.content.scope_supplement.input_sha256:
+                previous = revision.content.scope_supplement
+                supplement.request_refs, supplement.response_refs, supplement.reader_identity = previous.request_refs, previous.response_refs, previous.reader_identity
+            with self.session_factory() as session, session.begin():
+                job = JobStore(session).get_job(job_id)
+                if job.state != "waiting_user" or job.cancel_requested:
+                    raise ValueError("本次草稿已离开编辑步骤或正在取消。")
+                saved = ProtocolDraftService(session).save_scope_supplement(draft_id=revision.draft_id,
+                    supplement=supplement, expected_revision_id=expected_revision_id,
+                    actor=self.operator_name(), created_at=self.now())
+                self._update_draft_checkpoint(session, job_id, saved)
+        except ValueError as exc:
+            raise ProtocolWorkbenchError("MEDICATION_PROPOSAL_INVALID", title="用药要求未保存",
+                detail=str(exc), recovery="请核对时间、类别及逐字来源；原规则保留。") from exc
+        return self.get_draft_detail(job_id)
+
+    def save_variable_bindings(self, job_id: str, *, expected_revision_id: str, proposal):
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        self._require_draft_session(merged)
+        revision = self._load_draft_revision(merged)
+        if revision.revision_id != expected_revision_id:
+            raise ProtocolWorkbenchError("DRAFT_REVISION_CONFLICT", title="草稿已更新",
+                detail="本次选择针对旧版草稿，没有保存。", recovery="请刷新后核对数据项目。")
+        try:
+            with self.session_factory() as session, session.begin():
+                saved = ProtocolDraftService(session).apply_variable_bindings(
+                    draft_id=revision.draft_id, proposal=proposal,
+                    expected_revision_id=expected_revision_id, actor=self.operator_name(), created_at=self.now())
+                self._update_draft_checkpoint(session, job_id, saved)
+        except DraftEditBoundaryError:
+            raise
+        except ValueError as exc:
+            raise ProtocolWorkbenchError("VARIABLE_BINDING_INVALID", title="数据项目不匹配",
+                detail=str(exc), recovery="请核对该条件的项目类型和单位后重试。") from exc
+        return self.get_draft_detail(job_id)
+
+    def review_rule(self, job_id: str, official_code: str, *,
+                    expected_revision_id: str, rule_content_hash: str,
+                    reviewer_kind: ReviewerKind, action: Literal["approved", "revoked"],
+                    note: str | None = None, result_variables: list[str] | None = None) -> dict[str, Any]:
+        return self.review_rules(job_id, expected_revision_id=expected_revision_id,
+            reviewer_kind=reviewer_kind, action=action,
+            entries=[{"official_code": official_code, "rule_content_hash": rule_content_hash,
+                      "note": note, "result_variables": result_variables or []}])
+
+    def review_rules(self, job_id: str, *, expected_revision_id: str,
+                     reviewer_kind: ReviewerKind, action: Literal["approved", "revoked"],
+                     entries: list[dict[str, Any]]) -> dict[str, Any]:
+        if not entries or len({item["official_code"] for item in entries}) != len(entries):
+            raise ProtocolWorkbenchError("REVIEW_SELECTION_INVALID", title="审定选择不完整",
+                detail="请选择不重复的当前条目。", recovery="请刷新后重新选择。")
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        source = self._load_source_input(merged)
+        with self.session_factory() as session, session.begin():
+            if expected_revision_id != merged.get("draft_revision_id"):
+                raise ProtocolWorkbenchError("REVIEW_DRAFT_CHANGED", title="草稿已改变",
+                    detail="当前审定页面不是最新可编辑草稿。", recovery="请刷新后重新核对所选条目。")
+            revision = ProtocolDraftRevisionRepository(session).get(expected_revision_id)
+            head = ProtocolDraftRevisionRepository(session).get_head(revision.draft_id)
+            if (revision.revision_id != merged.get("draft_revision_id") or head is None
+                    or head.revision_id != revision.revision_id
+                    or revision.content.protocol_version_id != source.protocol_version_id
+                    or revision.status.value not in {"draft", "saved", "restored_from"}):
+                raise ProtocolWorkbenchError("REVIEW_DRAFT_CHANGED", title="草稿已改变",
+                                             detail="当前审定页面不是最新可编辑草稿。", recovery="请刷新后重新核对该条。")
+            current, _ = current_reviews(session, source, revision.content)
+            by_code = {entry["official_code"]: entry for entry in current}
+            from app.domain.variables.dictionary import load_dictionary
+            definitions = load_dictionary(revision.content.variable_definitions or ())
+            records = []
+            for item in entries:
+                entry = by_code.get(item["official_code"])
+                if entry is None or entry["rule_content_hash"] != item["rule_content_hash"]:
+                    raise ProtocolWorkbenchError("REVIEW_CONTENT_CHANGED", title="条目已改变",
+                        detail="所选内容与当前版本不一致，本次审定未保存。", recovery="请刷新后重新核对所选条目。")
+                note, result_variables = item.get("note"), item.get("result_variables") or []
+                if entry["kind"] != "procedure" and (note == "excluded" or result_variables):
+                    raise ProtocolWorkbenchError("REVIEW_SETTINGS_INVALID", title="审定设置不适用",
+                        detail="只有检查项目可设置排除和必需结果变量。", recovery="请保留入排条款并核对原文。")
+                if any(value not in definitions for value in result_variables):
+                    raise ProtocolWorkbenchError("REVIEW_VARIABLE_UNKNOWN", title="检查结果项目不存在",
+                        detail="请选择已保存的数据项目。", recovery="请刷新数据项目清单后重试。")
+                previous = entry["review"]
+                if (action == "approved" and previous is not None
+                        and previous.reviewer_kind == reviewer_kind and previous.note == note
+                        and previous.result_variables == result_variables):
+                    continue
+                records.append(RuleReviewRecord(
+                    record_id=f"rule-review:{uuid.uuid4().hex}", draft_id=revision.draft_id,
+                    protocol_version_id=source.protocol_version_id, official_code=item["official_code"],
+                    rule_content_hash=item["rule_content_hash"], reviewer_kind=reviewer_kind,
+                    reviewed_by="构建者（验证）" if reviewer_kind == "builder_verification" else self.operator_name(),
+                    reviewed_at=self.now(), action=action, note=note, result_variables=result_variables,
+                ))
+            # Validate the entire selection before appending any event; retries preserve history.
+            repository = AppendRepository(session, REVIEW_CONFIG)
+            for record in records:
+                repository.save(record)
+        return self.get_rule_reviews(job_id)
 
     def get_generation_preview(self, job_id: str) -> dict[str, Any]:
         """生成期间的逐批只读预览：来自已验证批次的合并候选，非正式草稿。
@@ -1460,6 +1816,7 @@ class ProtocolWorkbenchService:
         formal: bool,
         official_version: str | None = None,
     ) -> DraftComparisonSideView:
+        from app.protocols.medication_restrictions import scope_supplement_pending
         content = revision.content
         return DraftComparisonSideView(
             revision_id=revision.revision_id,
@@ -1475,6 +1832,7 @@ class ProtocolWorkbenchService:
             is_formal_baseline=formal,
             content=content.model_dump(mode="json"),
             source_refs=sorted(set(content.source_refs)),
+            review_scope_pending=scope_supplement_pending(revision),
         )
 
     def get_sources(self, job_id: str) -> dict[str, Any]:
@@ -2018,6 +2376,7 @@ class ProtocolWorkbenchService:
         draft: ProtocolDeconstructionDraft,
         expected_revision_id: str,
         actor: str,
+        reviewed_stage_assignment: bool = False,
     ) -> DraftDetailView:
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
@@ -2030,6 +2389,7 @@ class ProtocolWorkbenchService:
                     expected_revision_id=expected_revision_id,
                     actor=actor,
                     created_at=self.now(),
+                    reviewed_stage_assignment=reviewed_stage_assignment,
                 )
                 self._update_draft_checkpoint(session, job_id, revision)
         return self.get_draft_detail(job_id)
@@ -3301,10 +3661,6 @@ class ProtocolWorkbenchService:
     ) -> PublicationView:
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
-        self._require_control_publication_references(
-            control_job_id=control_job_id,
-            control_checkpoint_id=control_checkpoint_id,
-        )
         integrity = self.get_integrity(job_id)
         if not integrity.publishable:
             raise ProtocolWorkbenchError(
@@ -3354,12 +3710,7 @@ class ProtocolWorkbenchService:
                 recovery="请确认上传的是当前项目对应方案与研究期别，或另建独立项目。",
             ) from exc
         except ProtocolPublicationError as exc:
-            raise ProtocolWorkbenchError(
-                "PUBLICATION_FAILED",
-                title="发布未能完成",
-                detail=str(exc),
-                recovery="请刷新草稿状态后重试；若仍失败，请联系维护人员并保留操作时间。",
-            ) from exc
+            raise _publication_error(exc) from exc
 
         if not result.replay:
             self._complete_user_step(
@@ -3369,6 +3720,7 @@ class ProtocolWorkbenchService:
                     "project_id": result.project_id,
                     "protocol_version_id": result.protocol_version_id,
                     "rule_set_id": result.rule_set_id,
+                    "verification_only": result.verification_only,
                     "awaiting_user": None,
                 },
             )
@@ -3379,6 +3731,7 @@ class ProtocolWorkbenchService:
             rule_set_id=result.rule_set_id,
             rule_set_revision=result.rule_set_revision,
             replay=result.replay,
+            verification_only=result.verification_only,
         )
 
     def publish_re_deconstruction(
@@ -3395,10 +3748,6 @@ class ProtocolWorkbenchService:
         由发布事务内的确定性门禁裁定（跨方案/跨期即拒绝并给出中文下一步）。"""
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
-        self._require_control_publication_references(
-            control_job_id=control_job_id,
-            control_checkpoint_id=control_checkpoint_id,
-        )
         if merged.get("session_kind") != "re_deconstruction":
             raise ProtocolWorkbenchError(
                 "NOT_RE_DECONSTRUCTION_JOB",
@@ -3462,12 +3811,7 @@ class ProtocolWorkbenchService:
                 recovery="请确认上传的新版方案属于目标项目的同一方案与研究期别。",
             ) from exc
         except ProtocolPublicationError as exc:
-            raise ProtocolWorkbenchError(
-                "PUBLICATION_FAILED",
-                title="发布未能完成",
-                detail=str(exc),
-                recovery="请刷新草稿状态后重试；若仍失败，请联系维护人员并保留操作时间。",
-            ) from exc
+            raise _publication_error(exc) from exc
 
         if not result.replay:
             self._complete_user_step(
@@ -3477,6 +3821,7 @@ class ProtocolWorkbenchService:
                     "project_id": result.project_id,
                     "protocol_version_id": result.protocol_version_id,
                     "rule_set_id": result.rule_set_id,
+                    "verification_only": result.verification_only,
                     "awaiting_user": None,
                 },
             )
@@ -3487,6 +3832,7 @@ class ProtocolWorkbenchService:
             rule_set_id=result.rule_set_id,
             rule_set_revision=result.rule_set_revision,
             replay=result.replay,
+            verification_only=result.verification_only,
         )
 
     # ------------------------------------------------------------------ 测试/恢复辅助
@@ -4072,7 +4418,7 @@ class ProtocolWorkbenchService:
             1
             for check in result.checks
             for issue in check.issues
-            if issue.level == "阻止发布"
+            if publication_issue_level(issue) == "阻止发布"
         )
         return {"publishable": result.publishable, "blocking_count": blocking}
 
@@ -4154,9 +4500,10 @@ class ProtocolWorkbenchService:
             )
             for issue in check.issues:
                 issues.append(self._issue_dto(issue))
-                if issue.level == "阻止发布":
+                level = publication_issue_level(issue)
+                if level == "阻止发布":
                     blocking += 1
-                elif issue.level == "需要核对":
+                elif level == "需要核对":
                     review += 1
                 else:
                     reminder += 1
@@ -4175,7 +4522,7 @@ class ProtocolWorkbenchService:
         return {
             "issue_code": issue.issue_code,
             "check_name": issue.check_name,
-            "level": issue.level,
+            "level": publication_issue_level(issue),
             "problem": issue.problem,
             "impact": issue.impact,
             "next_action": issue.next_action,

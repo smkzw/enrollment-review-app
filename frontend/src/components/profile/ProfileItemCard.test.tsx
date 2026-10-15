@@ -54,7 +54,7 @@ describe("ProfileItemCard", () => {
   it("事件时间与记录时间分开展示，记录时间使用北京时间", () => {
     const { model, item } = demographicsFact();
     render(<ProfileItemCard model={model} item={item} />);
-    const row = screen.getByText("事件时间").closest("div");
+    const row = screen.getByText("原文日期").closest("div");
     expect(row).toHaveTextContent("2026-03（精度：月）");
     expect(row).toHaveTextContent("2026-03-01 至 2026-03-31");
     const recordRow = screen.getByText("记录时间").closest("div");
@@ -74,7 +74,7 @@ describe("ProfileItemCard", () => {
       },
     };
     render(<ProfileItemCard model={model} item={unknownDateItem} />);
-    const row = screen.getByText("事件时间").closest("div");
+    const row = screen.getByText("原文日期").closest("div");
     expect(row).toHaveTextContent("2020年月不详日不详（精度：年）");
     expect(row).not.toHaveTextContent("UK");
   });

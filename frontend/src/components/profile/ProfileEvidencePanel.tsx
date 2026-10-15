@@ -25,6 +25,7 @@ export interface ProfileEvidencePanelProps {
   model: PatientProfileModel;
   item: ProfileItemView;
   onClose: () => void;
+  showClose?: boolean;
   /** 可选的初始页：书面判断候选跳入时优先打开该原件页。 */
   initialPageArtifactId?: string | null;
 }
@@ -60,6 +61,7 @@ export function ProfileEvidencePanel({
   model,
   item,
   onClose,
+  showClose = true,
   initialPageArtifactId = null,
 }: ProfileEvidencePanelProps) {
   const navigation = model.evidenceNavigation;
@@ -130,7 +132,7 @@ export function ProfileEvidencePanel({
   );
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
-  // 条目或原件页变化时初始化到候选指定页；没有指定页时选最精确定位。
+  // Keep exact geometry first; text-only sources prefer the object's excerpt over a date/value fragment.
   useEffect(() => {
     if (initialPageArtifactId !== null) {
       const initialEntryId = entryByArtifact.get(initialPageArtifactId);
@@ -146,6 +148,10 @@ export function ProfileEvidencePanel({
     }
     const firstReal =
       consistentItemLocators.find((locator) => isRealBboxLocator(locator)) ??
+      consistentItemLocators.find((locator) => {
+        const object = item.assertedObject || item.medicationName || item.title;
+        return object.length >= 2 && locator.excerpt?.includes(object);
+      }) ??
       consistentItemLocators[0] ??
       null;
     if (firstReal === null) {
@@ -159,6 +165,9 @@ export function ProfileEvidencePanel({
     );
   }, [
     item.itemId,
+    item.assertedObject,
+    item.medicationName,
+    item.title,
     consistentItemLocators,
     entryByArtifact,
     initialPageArtifactId,
@@ -209,14 +218,14 @@ export function ProfileEvidencePanel({
             {item.kindLabel} · {item.laneLabel}
           </p>
         </div>
-        <button
+        {showClose && <button
           type="button"
           className="button profile-evidence__close"
           onClick={onClose}
           aria-label="关闭原文证据"
         >
           关闭
-        </button>
+        </button>}
       </header>
 
       {revision.state.status === "loading" ||
@@ -234,8 +243,8 @@ export function ProfileEvidencePanel({
         <div className="profile-evidence__body">
           <div className="profile-evidence__rail">
             {item.kind === "fact" && (
-              <section className="profile-evidence__readings" aria-label="已保存的来源读数">
-                <h4 className="profile-evidence__rail-title">来源读数</h4>
+              <details className="profile-evidence__readings" aria-label="已保存的来源读数">
+                <summary className="profile-evidence__rail-title">查看提取记录</summary>
                 {sourceReadings.state.status === "loading" ? <p>正在读取来源记录…</p>
                   : sourceReadings.state.status === "error" ? (
                     <p role="alert">来源读数暂不可查看。原件仍可核对。<button type="button" onClick={sourceReadings.retry}>重试</button></p>
@@ -243,7 +252,6 @@ export function ProfileEvidencePanel({
                     <p>这条事实没有单独保存的提取读数，请直接核对原件。</p>
                   ) : (
                     <>
-                      <p>以下为提取时保存的记录，不代表独立测量次数；以右侧原件为准。</p>
                       <ul>
                         {sourceReadings.state.data.map((reading) => (
                           <li key={reading.candidateId}>
@@ -259,7 +267,7 @@ export function ProfileEvidencePanel({
                       </ul>
                     </>
                   )}
-              </section>
+              </details>
             )}
             <h4 className="profile-evidence__rail-title">定位详情</h4>
             {hasInconsistentLocator && (
@@ -272,6 +280,7 @@ export function ProfileEvidencePanel({
               locators={consistentItemLocators}
               selectedLocatorId={selectedLocatorId}
               onSelectLocator={selectLocator}
+              compact
             />
           </div>
           <div className="profile-evidence__viewer">

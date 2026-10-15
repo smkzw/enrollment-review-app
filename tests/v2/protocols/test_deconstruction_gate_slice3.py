@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 import pytest
+from tests.v2.protocols.gate_assertions import assert_diagnostic_requires_review
 
 from app.domain.contracts.agent_io import (
     EvidenceRequirementDraft,
@@ -710,7 +711,7 @@ def test_source_bound_unresolved_requirement_cannot_replace_a_sibling_or_claim_m
     if expected_issue is None:
         assert result.publishable, codes
     else:
-        assert not result.publishable
+        assert_diagnostic_requires_review(result)
         assert expected_issue in codes
 
 
@@ -822,7 +823,7 @@ def test_whole_capability_label_cannot_hide_independent_numeric_requirement(text
                                          if item.draft_component_id != "draft-component-ex"]
     draft.proposed_workflow_stages[0].due_requirement_ids.remove("req-ex")
     result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
     assert any(issue.issue_code == "RESTRICTED_COMPONENT_CAPABILITY_UNPROVEN"
                for issue in _issues(result, "source_coverage"))
 
@@ -1521,7 +1522,7 @@ def test_parent_rule_substantive_source_spans_must_all_reach_components():
     )
     assert issue.affected_refs == ["EX-01", missing_span_id]
     assert issue.repair_scope == ["EX-01"]
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
 
 
 def test_parent_rule_structural_lead_in_does_not_require_duplicate_component():
@@ -1696,6 +1697,33 @@ def _exists_predicate(pid: str, attribute: str, text: str) -> AtomicExpression:
             source_clause=text,
         )
     )
+
+
+@pytest.mark.parametrize("operator", [LogicalOperator.ALL, LogicalOperator.ANY])
+@pytest.mark.parametrize("connector", ["或", "和/或"])
+@pytest.mark.parametrize("outer_alternative", [False, True])
+def test_observation_alternatives_do_not_connect_independent_requirements(operator, connector, outer_alternative):
+    source_input, draft, spans = _fixture()
+    diagnosis = "符合所规定疾病的诊断"
+    history = "既往明确病史≥3年"
+    observation = f"筛选期至少一种与当前季节{connector}同期发病相关的检测结果阳性"
+    separator = "或" if outer_alternative else "，"
+    text = separator.join([diagnosis, history, observation])
+    reading = _exists_predicate("test-result", "检测结果", observation)
+    reading.predicate.observation_policy = ObservationPolicy(
+        mode="any", scope="与当前季节或同期发病相关的检测结果",
+        source_span_ids=["span-in"], source_excerpts=[observation],
+    )
+    expression = LogicalExpression(operator=operator, children=[
+        _exists_predicate("diagnosis", diagnosis, diagnosis),
+        _predicate("history", "既往明确病史", 3, "year", source_clause=history),
+        reading,
+    ])
+    _replace_inclusion_source_and_expression(source_input, draft, text, expression)
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    codes = {issue.issue_code for issue in _issues(result, "boolean_logic")}
+    assert ("DISJUNCTION_CHANGED_TO_CONJUNCTION" in codes) is (outer_alternative and operator == LogicalOperator.ALL)
+    assert ("DISJUNCTION_NOT_BOUND_TO_SOURCE" in codes) is (not outer_alternative and operator == LogicalOperator.ANY)
 
 
 def test_fabricated_any_from_conjunction_is_blocked_after_wire_hydration():
@@ -2567,7 +2595,7 @@ def test_two_spans_sharing_one_physical_range_are_not_formal_sources():
         source_input, draft, source_spans=spans
     )
 
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
     assert {
         issue.issue_code for issue in _issues(result, "source_coverage")
     } >= {
@@ -3019,7 +3047,7 @@ def test_shared_source_period_cues_preserve_period_and_unknown_consumer(cue, per
         period=(ProtocolPeriod.TREATMENT_PERIOD if period == ProtocolPeriod.STUDY_PERIOD else ProtocolPeriod.STUDY_PERIOD),
     )
     wrong = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
-    assert not wrong.publishable
+    assert_diagnostic_requires_review(wrong)
     assert any(issue.issue_code == "PROSPECTIVE_PERIOD_NOT_STRUCTURED"
                for issue in _issues(wrong, "temporal_semantics"))
 
@@ -3589,7 +3617,7 @@ def test_joint_visit_wrong_due_stage_is_a_binding_problem_not_a_missing_extra_as
     assert any(issue.issue_code == "MERGED_VISIT_STAGE_BINDING_MISMATCH" for issue in issues)
     assert not any(issue.issue_code in {"REVIEW_STAGE_REQUIREMENT_MISSING", "REVIEW_STAGE_ADDITIONAL_SCOPE_UNVERIFIED"}
                    for issue in issues)
-    assert not result.publishable
+    assert_diagnostic_requires_review(result)
 
 
 def test_shared_qualifier_uses_frozen_joint_identity_but_still_requires_each_node():
@@ -4410,7 +4438,7 @@ def test_unverified_heading_does_not_create_validity_duties(validity_months, fin
     result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
     issues = _issues(result, "temporal_semantics")
     assert any(issue.issue_code == "REVIEW_STAGE_SCOPE_UNVERIFIED" for issue in issues)
-    assert result.publishable is False
+    assert_diagnostic_requires_review(result)
     validity = [issue for issue in issues if issue.issue_code == "SOURCE_VALIDITY_WINDOW_MISSING"]
     if validity_months == 1 and not final_anchor:
         assert not validity

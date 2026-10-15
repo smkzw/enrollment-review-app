@@ -83,6 +83,23 @@ def test_ollama_normalizer_frozen_factory_keeps_text_mode(monkeypatch):
     assert "temperature" not in kwargs
 
 
+@pytest.mark.parametrize("flag", [False, True, "false"])
+def test_source_category_layout_is_frozen_and_not_a_provider_option(flag):
+    config = ModelConfigContract(model_config_id="source-layout-test", provider="omlx",
+        model="synthetic-model", reasoning_effort="high",
+        parameters={"agent_node": "evidence_normalizer", "max_tokens": 65536,
+                    "include_source_categories": flag})
+    if not isinstance(flag, bool):
+        with pytest.raises(ValueError, match="布尔值"):
+            validate_evidence_normalizer_model_config(config)
+        with pytest.raises(ValueError, match="布尔值"):
+            transport_module.evidence_normalizer_transport_from_model_config(config, client=object())
+        return
+    transport = transport_module.evidence_normalizer_transport_from_model_config(config, client=object())
+    assert transport.include_source_categories is flag
+    assert "include_source_categories" not in transport._completion_kwargs([{"role": "user", "content": "测试"}])
+
+
 class _FakeStream:
     def __init__(self, chunks):
         self._chunks = tuple(chunks)
@@ -160,6 +177,64 @@ def _glm_stream_client(create):
     return SimpleNamespace(
         chat=SimpleNamespace(completions=SimpleNamespace(create=create))
     )
+
+
+def test_cms_chart_role_opts_into_streaming_without_rerouting_other_roles():
+    requests, receipts = [], []
+    def create(**kwargs):
+        requests.append(kwargs)
+        return _FakeStream([_stream_chunk(content='{"results":[]}', model="glm-5.3-flash", finish="stop"),
+            _stream_chunk(model="glm-5.3-flash", usage={"prompt_tokens": 12, "completion_tokens": 5, "total_tokens": 17})])
+    model = ModelConfigContract(model_config_id="chart-role", provider="cms-router", model="glm-5.3-flash",
+        reasoning_effort="high", parameters={"max_tokens": 65536, "stream_response": True})
+    transport = transport_module.evidence_normalizer_transport_from_model_config(model,
+        client=_glm_stream_client(create), receipt_callback=receipts.append)
+    result = transport.propose_question_classifications(prompt="合成资料", output_schema={"type": "object"})
+    assert result.text == '{"results":[]}'
+    assert requests[0]["stream"] is True and requests[0]["max_tokens"] == 65536
+    assert requests[0]["reasoning_effort"] == "high" and "temperature" not in requests[0]
+    assert receipts[0]["usage"]["total_tokens"] == 17 and receipts[0]["response_model"] == "glm-5.3-flash"
+    other = transport_module.evidence_normalizer_transport_from_model_config(
+        model.model_copy(update={"parameters": {"max_tokens": 65536}}), client=_glm_stream_client(create))
+    assert "stream" not in other.initial_request_body(prompt="合成资料")
+
+
+def test_gateway_empty_heartbeat_preserves_actual_model_request_and_usage():
+    receipts = []
+    stream = _FakeStream([
+        _stream_chunk(model="keepalive", chunk_id="heartbeat-before"),
+        _stream_chunk(content="{}", model="glm-5.3-flash", finish="stop"),
+        _stream_chunk(model="glm-5.3-flash", usage={"total_tokens": 5}),
+        _stream_chunk(model="keepalive", chunk_id="heartbeat-after", usage={"total_tokens": 999}),
+    ])
+    transport = transport_module.DeepSeekEvidenceNormalizerTransport(backend="cms-router",
+        model="glm-5.3-flash", stream_response=True, client=_glm_stream_client(lambda **kwargs: stream),
+        receipt_callback=receipts.append)
+    assert transport.start(prompt="合成资料").text == "{}"
+    assert receipts[0]["response_model"] == "glm-5.3-flash"
+    assert receipts[0]["response_id"] == "chatcmpl-glm-1"
+    assert receipts[0]["usage"]["total_tokens"] == 5 and stream.closed
+
+
+@pytest.mark.parametrize("heartbeat", [
+    {"content": "{}"}, {"reasoning": "内容"}, {"finish": "stop"},
+])
+def test_heartbeat_cannot_smuggle_output_or_finish(heartbeat):
+    state = transport_module._new_glm_stream_state()
+    with pytest.raises(RuntimeError, match="保活消息"):
+        transport_module._absorb_glm_stream_chunk(_stream_chunk(model="keepalive", **heartbeat), state,
+            allow_model_identity_change=True)
+    assert state["response_model"] is None and not state["content_parts"]
+
+
+def test_gateway_alias_does_not_allow_switching_models_mid_answer():
+    stream = _FakeStream([_stream_chunk(content="{", model="actual-model"),
+        _stream_chunk(content="}", model="different-model", finish="stop")])
+    transport = transport_module.DeepSeekEvidenceNormalizerTransport(backend="cms-router", model="request-alias",
+        stream_response=True, client=_glm_stream_client(lambda **kwargs: stream))
+    with pytest.raises(Exception, match="身份发生变化"):
+        transport.start(prompt="合成资料")
+    assert stream.closed
 
 
 @pytest.mark.parametrize("second_fails", [False, True])

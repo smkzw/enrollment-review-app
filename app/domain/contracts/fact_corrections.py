@@ -143,6 +143,11 @@ def _parse_canonical_snapshot(text: str, *, target_kind: str, label: str) -> dic
     if expected_keys is None:
         raise ValueError(f"不支持的修订目标类型 {target_kind}")
     actual_keys = frozenset(value)
+    if target_kind == "fact" and "variable_id" in value:
+        variable_id = value["variable_id"]
+        if variable_id is not None and (not isinstance(variable_id, str) or not variable_id.strip()):
+            raise ValueError("数据项目须为明确身份或空关联")
+        actual_keys -= {"variable_id"}
     if target_kind == "fact" and "contextual_qualifiers" in value:
         from .fact_context import FactContextQualifier, validate_context_excerpt
         if not isinstance(value["contextual_qualifiers"], list):
@@ -169,7 +174,7 @@ def _parse_canonical_snapshot(text: str, *, target_kind: str, label: str) -> dic
     return value
 
 
-def fact_semantic_snapshot(fact: ClinicalFactV2) -> dict:
+def fact_semantic_snapshot(fact: ClinicalFactV2, *, include_variable_id: bool = False) -> dict:
     snapshot = {
         "kind": "fact",
         "fact_type": fact.fact_type,
@@ -184,6 +189,8 @@ def fact_semantic_snapshot(fact: ClinicalFactV2) -> dict:
         "assertion_text": fact.assertion_basis.assertion_text if fact.assertion_basis else None,
         "supported_requirement_ids": list(fact.supported_requirement_ids),
     }
+    if include_variable_id:
+        snapshot["variable_id"] = fact.variable_id
     if fact.assertion_basis and fact.assertion_basis.contextual_qualifiers:
         snapshot["contextual_qualifiers"] = [item.model_dump(mode="json")
                                              for item in fact.assertion_basis.contextual_qualifiers]
@@ -220,10 +227,11 @@ def exposure_semantic_snapshot(exp: MedicationExposureV2) -> dict:
     }
 
 
-def snapshot_for_kind(kind: str, entity: ClinicalFactV2 | ClinicalEventV2 | MedicationExposureV2) -> dict:
+def snapshot_for_kind(kind: str, entity: ClinicalFactV2 | ClinicalEventV2 | MedicationExposureV2,
+                      *, include_variable_id: bool = False) -> dict:
     if kind == "fact":
         assert isinstance(entity, ClinicalFactV2)
-        return fact_semantic_snapshot(entity)
+        return fact_semantic_snapshot(entity, include_variable_id=include_variable_id)
     if kind == "event":
         assert isinstance(entity, ClinicalEventV2)
         return event_semantic_snapshot(entity)
@@ -373,16 +381,18 @@ class FactCorrectionV2(ContractModel):
             raise ValueError("新快照哈希与快照 JSON 不一致")
         if self.old_snapshot_sha256 == self.new_snapshot_sha256:
             raise ValueError("旧/新快照哈希必须不同")
-        _parse_canonical_snapshot(
+        old_snapshot = _parse_canonical_snapshot(
             self.old_snapshot_json,
             target_kind=self.target_kind,
             label="旧",
         )
-        _parse_canonical_snapshot(
+        new_snapshot = _parse_canonical_snapshot(
             self.new_snapshot_json,
             target_kind=self.target_kind,
             label="新",
         )
+        if ("variable_id" in old_snapshot) != ("variable_id" in new_snapshot):
+            raise ValueError("新旧快照的数据项目范围必须一致")
         if self.impact_scope.scope_kind == "local" and not set(self.locator_ids).issubset(
             self.impact_scope.affected_locator_ids
         ):

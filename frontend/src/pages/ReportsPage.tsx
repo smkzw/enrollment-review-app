@@ -10,7 +10,7 @@ import { updateParams, useHashRoute } from "../app/router";
 import { useLoad } from "../app/useLoad";
 import { ErrorState, EmptyState, LoadingState } from "../components/shell/Feedback";
 import { ArrowLeft } from "lucide-react";
-import { PreparedReviewPanel } from "../components/review/PreparedReviewPanel";
+import { WorkDraftPanel } from "../components/review/WorkDraftPanel";
 import { useApplicationMode } from "../app/applicationMode";
 const historyRepository = createReviewHistoryHttp();
 
@@ -54,12 +54,13 @@ function ReportSelection({
         <span>项目</span>
         <select
           aria-label="选择项目"
+          title={selectedProject.projectName}
           value={selectedProject.projectId}
           onChange={(event) => onProjectChange(event.target.value)}
         >
           {projects.map((project) => (
-            <option key={project.projectId} value={project.projectId}>
-              {project.projectName} · {project.studyPhaseLabel} · 方案 {project.officialVersion}
+            <option key={project.projectId} value={project.projectId} title={project.projectName}>
+              {project.projectCode} · {project.studyPhaseLabel} · 方案 {project.officialVersion}
             </option>
           ))}
         </select>
@@ -229,25 +230,18 @@ export function ReportsPage() {
                 onChange={(event) => updateParams({ run: event.target.value, action: null })}>
                 {selectedRun === null && <option value="">请重新选择审核记录</option>}
                 {[...runs].reverse().map((run) => <option key={run.reviewRunId} value={run.reviewRunId}>
-                  {reviewTime(run.completedAt ?? run.startedAt)} · {run.status === "completed" ? "记录已保存，打开查看" : "尚未完成"}
+                  {reviewTime(run.completedAt ?? run.startedAt)} · {run.runKind === "work_draft" ? "工作稿 · 未签发" : "正式审核记录"} · {run.status === "completed" ? "已保存" : "尚未完成"}
                 </option>)}
               </select>
             </label>
           </section>
         )}
       </div>
-      {canModify && <PreparedReviewPanel key={`${selectedEpisode.reviewEpisodeId}:${params.get("workflow") ?? "new"}`}
-        episode={selectedEpisode} workflowId={params.get("workflow")} requestKey={params.get("review_request")}
-        onRequestKey={(key) => updateParams({ project: selectedProject.projectId,
-          subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId, review_request: key })}
-        onStarted={(workflow) => updateParams({ project: selectedProject.projectId,
-          subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId, workflow })}
-        onPublished={(run) => { updateParams({ project: selectedProject.projectId,
-          subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId, run }); history.retry(); }}
-        onNewReview={() => { updateParams({ workflow: null, review_request: null }); episodes.retry(); }} />}
+      {canModify && runs.length === 0 && <WorkDraftPanel key={selectedEpisode.reviewEpisodeId} episode={selectedEpisode}
+        onCompleted={() => history.retry()} />}
       {history.state.status === "loading" ? <LoadingState />
         : history.state.status === "error" ? <ErrorState message={history.state.message} onRetry={history.retry} />
-        : runs.length === 0 ? <EmptyState message="该节点尚无正式审核记录。" hint="审核完成后，报告会保留当时的资料与结论。" />
+        : runs.length === 0 ? <EmptyState message="该节点尚无审核记录。" hint="工作稿保存后，可在这里回看当时的资料与结论。" />
         : selectedRun === null ? <ErrorState message="链接中的审核记录不属于该节点。" onRetry={() => updateParams({ run: null })} />
         : detail.state.status === "error" ? <ErrorState message={detail.state.message} onRetry={detail.retry} />
         : report === null ? <LoadingState /> : <FrozenReviewReport report={report} onActionChanged={detail.retry} focusActionId={params.get("action")} />}

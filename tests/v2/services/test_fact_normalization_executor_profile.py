@@ -211,6 +211,149 @@ def _run(session_factory, chain, requirement_id):
     return service, created
 
 
+def _targeted_job(session_factory, chain):
+    from app.services.fact_normalization_source_adapter import build_fact_normalization_plan
+    from app.services.fact_normalization_job_service import FactNormalizationCallSpec
+    with session_factory() as session:
+        plan, _ = build_fact_normalization_plan(session, authority=chain["authority"],
+                                               revision_id=chain["authority"].complete_processing_revision_id)
+    return FactNormalizationJobService(session_factory).create_or_reuse_job(
+        authority=chain["authority"], prompt_version_id=chain["prompt_version_id"],
+        model_config_id=chain["model_config_id"], created_by="tester",
+        calls=[FactNormalizationCallSpec.from_planned_call(call) for call in plan.calls],
+        targeted_extraction=True,
+    )
+
+
+def test_targeted_format_failure_retains_failed_call_and_partial_run(session_factory):
+    from app.storage.fact_repositories import FactNormalizationRunRepository, FactNormalizationCallRepository
+    chain, _ = _prepare(session_factory, prefix="targeted-format-failure", requirement_id="req-failure")
+    created = _targeted_job(session_factory, chain)
+    attempts = []
+
+    def invalid(evidence_input):
+        attempts.append(evidence_input.call_id)
+        raise ValueError("合成格式失败，不是研究者判断")
+
+    executor = create_fact_normalization_executor(FactNormalizationExecutorConfig(
+        session_factory=session_factory, transport_fn=invalid))
+    runner = JobRunner(session_factory, {"fact_normalization": executor})
+    assert runner.run_job(created.job_id)
+    with session_factory() as session:
+        run = FactNormalizationRunRepository(session).get(created.run_id)
+        calls = FactNormalizationCallRepository(session).list_by_run(created.run_id)
+        assert run.status.value == "partial"
+        assert len(calls) == 1 and calls[0].status.value == "failed"
+        assert calls[0].reading_method is None and calls[0].raw_output_sha256 is None
+        checkpoint = JobStore(session).get_last_checkpoint(created.job_id, FACT_NORMALIZATION_FINALIZE_STEP_ID)[1]
+        assert checkpoint["unread_page_refs"]
+        call_step = next(s for s in JobStore(session).list_steps(created.job_id)
+                         if s.step_id != FACT_NORMALIZATION_FINALIZE_STEP_ID)
+        payload = json.loads(session.get(JobRecord, created.job_id).payload_json)
+        call_checkpoint = JobStore(session).get_last_checkpoint(created.job_id, call_step.step_id)[1]
+    replay = executor(StepContext(job_id=created.job_id, step_id=call_step.step_id,
+        job_type="fact_normalization", name=call_step.name, last_checkpoint_id=None,
+        attempt=2, job_payload=payload, last_checkpoint=call_checkpoint))
+    assert replay["call_status"] == "failed"
+    assert len(attempts) == 1  # The injected adapter has no inner model retry; replay never calls it.
+
+
+def test_failed_page_continuation_preserves_old_terminal_and_has_derived_scope(session_factory, monkeypatch):
+    from dataclasses import replace
+    from app.services import fact_normalization_source_adapter as source_module
+    from app.domain.variables.dictionary import load_dictionary
+    from app.workflow.errors import InvalidJobDefinitionError
+    chain, _ = _prepare(session_factory, prefix="failed-page-continuation", requirement_id="req-continuation")
+    original = _targeted_job(session_factory, chain)
+    runner = JobRunner(session_factory, {"fact_normalization": create_fact_normalization_executor(
+        FactNormalizationExecutorConfig(session_factory=session_factory,
+            transport_fn=lambda _input: (_ for _ in ()).throw(ValueError("synthetic invalid output"))))})
+    assert runner.run_job(original.job_id)
+    service = FactNormalizationJobService(session_factory)
+    before = service.get_job(original.job_id)
+    build = source_module.build_fact_normalization_plan
+    def targeted(*args, **kwargs):
+        from app.domain.planning.fact_normalization_planning import compute_call_input_hash
+        plan, source = build(*args, **kwargs)
+        variables = (load_dictionary()["age"],)
+        return replace(plan, calls=tuple(replace(call, variable_definitions=variables,
+            input_sha256=compute_call_input_hash(authority=plan.authority, revision=source.revision,
+                logical_document_id=call.logical_document_id, context=call.context,
+                related_requirements=call.related_requirements, page_numbers=list(call.page_numbers),
+                page_inputs=list(call.page_inputs), variable_definitions=variables)) for call in plan.calls)), source
+    monkeypatch.setattr(source_module, "build_fact_normalization_plan", targeted)
+    kwargs = dict(authority=chain["authority"], prompt_version_id=chain["prompt_version_id"],
+        model_config_id=chain["model_config_id"], created_by="tester", retry_failed_from_run_id=original.run_id)
+    continued = service.create_or_reuse_from_source(**kwargs)
+    payload = service.get_job(continued.job_id)["payload"]
+    assert continued.job_id != original.job_id and len(payload["calls"]) == 1
+    assert payload["retry_failed_from_run_id"] == original.run_id
+    assert payload["targeted_extraction"] and payload["candidate_partition_policy"]
+    assert service.create_or_reuse_from_source(**kwargs).job_id == continued.job_id
+    assert service.get_job(original.job_id) == before
+    selected_pages = [(row["logical_document_id"], page) for row in payload["calls"] for page in row["page_numbers"]]
+    limited = service.create_or_reuse_from_source(**kwargs, retry_pages=selected_pages)
+    limited_payload = service.get_job(limited.job_id)["payload"]
+    assert limited.job_id != continued.job_id
+    assert limited_payload["retry_pages"] == [list(page) for page in selected_pages]
+    assert service.create_or_reuse_from_source(**kwargs, retry_pages=selected_pages).job_id == limited.job_id
+    with pytest.raises(InvalidJobDefinitionError, match="待核页面"):
+        service.create_or_reuse_from_source(**kwargs, retry_pages=[("other-document", 1)])
+    from app.services.fact_normalization_job_service import FactNormalizationCallSpec, _validate_call_specs
+    separated = [FactNormalizationCallSpec(logical_document_id="doc", page_numbers=[page], input_sha256="a" * 64)
+                 for page in (3, 8)]
+    with pytest.raises(InvalidJobDefinitionError, match="间隙"):
+        _validate_call_specs(separated)
+    _validate_call_specs(separated, allow_gaps=True)
+    with pytest.raises(InvalidJobDefinitionError, match="重复"):
+        _validate_call_specs(separated + separated[:1], allow_gaps=True)
+    from app.services.fact_normalization_executor import _load_frozen_agent_config
+    from app.agents.evidence_normalizer import DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE
+    with session_factory() as session:
+        _load_frozen_agent_config(session, payload=limited_payload, run_id=limited.run_id,
+            authority=chain["authority"], prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE)
+        with pytest.raises(StepFailure, match="冻结身份"):
+            _load_frozen_agent_config(session, payload=limited_payload | {"retry_pages": [["other-document", 1]]},
+                run_id=limited.run_id, authority=chain["authority"],
+                prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE)
+        _load_frozen_agent_config(session, payload=payload, run_id=continued.run_id,
+            authority=chain["authority"], prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE)
+        with pytest.raises(StepFailure, match="冻结身份"):
+            _load_frozen_agent_config(session, payload=payload | {"retry_failed_from_run_id": "different-run"},
+                run_id=continued.run_id, authority=chain["authority"],
+                prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE)
+    with pytest.raises(InvalidJobDefinitionError, match="同一资料范围"):
+        service.create_or_reuse_from_source(**(kwargs | {"authority": chain["authority"].model_copy(
+            update={"subject_id": "foreign-subject"})}))
+
+
+def test_targeted_finalize_keeps_accepted_fact_when_page_coverage_has_failure(
+    session_factory, monkeypatch,
+):
+    from app.domain.contracts.enums import GateOutcome
+    import app.services.fact_normalization_executor as module
+    chain, template = _prepare(session_factory, prefix="targeted-partial-finalize", requirement_id="req-partial")
+    created = _targeted_job(session_factory, chain)
+    # Inject a coverage diagnostic into the real finalizer, not into the model or adopted value.
+    monkeypatch.setattr(module, "validate_page_coverage", lambda *_args, **_kwargs:
+                        (GateOutcome.REJECTED, ["合成缺页诊断"], ["unread-document:2"]))
+    runner = JobRunner(session_factory, {"fact_normalization": create_fact_normalization_executor(
+        FactNormalizationExecutorConfig(session_factory=session_factory,
+                                       transport_fn=_transport(chain, template.requirement_id)))})
+    assert runner.run_job(created.job_id)
+    with session_factory() as session:
+        store = JobStore(session)
+        assert store.get_job(created.job_id).state == "completed", [
+            store.get_last_checkpoint(created.job_id, step.step_id)
+            for step in store.list_steps(created.job_id)]
+        facts = ClinicalFactV2Repository(session).list_by_episode(chain["episode_id"])
+        assert any(fact.value == 5.0 for fact in facts)
+        checkpoint = store.get_last_checkpoint(created.job_id, FACT_NORMALIZATION_FINALIZE_STEP_ID)[1]
+        assert checkpoint["status"] == "partial"
+        assert checkpoint["published_fact_count"] == 1
+        assert checkpoint["unread_page_refs"] == ["unread-document:2"]
+
+
 @pytest.mark.parametrize("compact", [False, True])
 def test_failed_transport_retains_bound_receipt(
     session_factory, data_paths, monkeypatch, compact,

@@ -2,7 +2,7 @@
 
 .app-shell {
   display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  grid-template-columns: 4rem minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -35,7 +35,29 @@
   position: sticky;
   top: 0;
   align-self: start;
+  width: 4rem;
+  height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  z-index: 30;
+  transition: width var(--motion-control), box-shadow var(--motion-control);
 }
+
+.side-nav:hover,
+.side-nav:focus-within,
+.side-nav--pinned { width: var(--sidebar-width); box-shadow: var(--shadow-glass); }
+.app-shell:has(.side-nav--pinned) { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+.side-nav__brand, .side-nav__label { display: none; }
+.side-nav:hover .side-nav__brand, .side-nav:focus-within .side-nav__brand, .side-nav--pinned .side-nav__brand,
+.side-nav:hover .side-nav__label, .side-nav:focus-within .side-nav__label, .side-nav--pinned .side-nav__label { display: inline; }
+.side-nav__label { white-space: nowrap; }
+.side-nav:not(:hover):not(:focus-within):not(.side-nav--pinned) .side-nav__group-title {
+  font-size: 0;
+  padding: 0;
+  margin-block: var(--space-3) var(--space-1);
+  border-top: 1px solid var(--color-line);
+}
+.side-nav__pin { flex-shrink: 0; }
 
 .side-nav__head {
   display: flex;
@@ -87,7 +109,7 @@
   background: var(--color-brand-bg);
   color: var(--color-brand-dark);
   font-weight: 500;
-  box-shadow: inset 3px 0 0 var(--color-brand);
+  box-shadow: var(--shadow-control-hover);
 }
 
 .side-nav__icon {
@@ -190,93 +212,28 @@
   text-decoration: none;
 }
 
-/* ---------- 窄屏：侧栏收起为抽屉（合同 §3.3 窄屏降级） ---------- */
+@media (prefers-reduced-motion: reduce) { .side-nav { transition: none; } }
 
-@media (max-width: 880px) {
-  .app-shell {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .side-nav {
-    position: fixed;
-    inset: 0 auto 0 0;
-    width: min(300px, 84vw);
-    z-index: 40;
-    min-height: 100vh;
-    transform: translateX(-102%);
-    transition: transform 0.18s ease;
-    box-shadow: 0 0 24px rgb(31 41 51 / 0.18);
-  }
-
-  .side-nav--open {
-    transform: none;
-  }
-
-  .side-nav__close-button {
-    display: inline-flex;
-  }
-
-  .side-nav__menu-button {
-    display: inline-flex;
-    position: absolute;
-    top: calc((var(--topbar-height) - 28px) / 2);
-    left: var(--space-3);
-    /* 高于 sticky 顶栏（z-index 20），保证可点击 */
-    z-index: 21;
-  }
-
-  .side-nav__scrim {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgb(31 41 51 / 0.4);
-    z-index: 35;
-  }
-
-  .topbar {
-    padding-left: 56px;
-  }
-
-  /* 窄屏顶栏：只保留当前位置标题与紧凑帮助图标（§3.3 降级，不缩小字号） */
-  .topbar__label {
-    display: none;
-  }
-
-  .topbar__context {
-    display: none;
-  }
-
-  .topbar__position {
-    min-width: 0;
-  }
-
-  .topbar__position strong {
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .topbar__help {
-    margin-left: auto;
-    padding: var(--space-1);
-  }
-
-  .topbar__actions {
-    gap: var(--space-1);
-  }
-
-  .topbar__create,
-  .topbar__help {
-    padding: var(--space-1);
-  }
-
-  .topbar__create span,
-  .topbar__help span {
-    display: none;
-  }
-
-  .app-shell__content {
-    padding: var(--space-3) var(--space-4) var(--space-6);
-  }
+.evidence-reader {
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: min(72rem, calc(100vw - 4rem));
+  height: 100dvh;
+  max-height: 100dvh;
+  max-width: calc(100vw - 4rem);
+  padding: 0;
+  border: 1px solid var(--color-line);
+  color: var(--color-ink);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-glass);
+  overflow: hidden;
 }
+.evidence-reader[open] { display: flex; flex-direction: column; }
+.evidence-reader::backdrop { background: rgb(31 41 51 / 24%); }
+.evidence-reader__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--color-line); }
+.evidence-reader__head h2 { margin: 0; font-size: var(--font-size-title); }
+.evidence-reader__body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: var(--space-4); }
+.evidence-reader__body > .eligibility-evidence { height: 100%; position: static; max-height: none; }
+.evidence-reader__body > .profile-evidence { width: 100%; height: 100%; max-height: none; position: static; }
+.source-text-focus { color: #a52d29; background: #fff1dc; font-weight: 700; padding-inline: .05em; }

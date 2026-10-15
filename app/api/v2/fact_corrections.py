@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Request, Response
 from fastapi import status as http_status
+from pydantic import BaseModel, ConfigDict
 
 from app.api.v2.fact_correction_schemas import (
     FactCorrectionHistoryDTO,
+    FactCorrectionOptionsDTO,
     FactCorrectionPreviewDTO,
     FactCorrectionRequest,
     FactCorrectionSubmitDTO,
@@ -20,6 +24,8 @@ from app.services.evidence_api_read_service import EvidenceApiReadService
 from app.services.fact_correction_job_service import FactCorrectionJobService
 from app.services.fact_correction_service import (
     FactCorrectionError,
+    fact_correction_options,
+    fact_correction_variable_labels,
     authority_from_episode,
     list_fact_correction_history,
     preview_fact_correction,
@@ -55,6 +61,18 @@ def _require_episode_scope(request: Request, subject_id: str, review_episode_id:
     _read(request).require_subject_episode(subject_id, review_episode_id)
 
 
+@router.get("/subjects/{subject_id}/review-episodes/{review_episode_id}/fact-corrections/facts/{fact_id}/options",
+    response_model=FactCorrectionOptionsDTO)
+def correction_options(subject_id: str, review_episode_id: str, fact_id: str, request: Request):
+    _require_episode_scope(request, subject_id, review_episode_id)
+    with _session(request) as session:
+        try:
+            return fact_correction_options(session, authority=authority_from_episode(session, review_episode_id), target_id=fact_id)
+        except Exception as exc:
+            _raise_translated(exc)
+            raise
+
+
 @router.post(
     "/subjects/{subject_id}/review-episodes/{review_episode_id}/fact-corrections/preview",
     response_model=FactCorrectionPreviewDTO,
@@ -77,10 +95,11 @@ def preview_correction(
                 locator_ids=body.locator_ids,
                 updates=request_updates(body),
             )
+            labels = fact_correction_variable_labels(session, authority, [preview.old_snapshot, preview.new_snapshot])
         except Exception as exc:  # noqa: BLE001 - 边界统一翻译
             _raise_translated(exc)
             raise
-    return preview_dto(preview)
+    return preview_dto(preview, variable_labels=labels)
 
 
 @router.post(
@@ -132,6 +151,29 @@ def _authority(request: Request, review_episode_id: str):
         return authority_from_episode(session, review_episode_id)
 
 
+class FactCorrectionWorkDraftLinkDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_id: str
+    subject_id: str
+    review_episode_id: str
+    enabled: bool
+    correction_applied: bool
+    work_draft_job_id: str | None
+    work_draft_state: str | None
+    review_run_id: str | None
+
+
+@router.get("/subjects/{subject_id}/review-episodes/{review_episode_id}/fact-corrections/jobs/{job_id}/work-draft",
+    response_model=FactCorrectionWorkDraftLinkDTO)
+def correction_work_draft_link(subject_id: str, review_episode_id: str, job_id: str, request: Request):
+    _require_episode_scope(request, subject_id, review_episode_id)
+    try:
+        return _jobs(request).work_draft_link(job_id=job_id, subject_id=subject_id, review_episode_id=review_episode_id)
+    except Exception as exc:
+        _raise_translated(exc)
+        raise
+
+
 @router.get(
     "/subjects/{subject_id}/review-episodes/{review_episode_id}/fact-corrections",
     response_model=FactCorrectionHistoryDTO,
@@ -143,18 +185,16 @@ def list_corrections(
     with _session(request) as session:
         try:
             items = list_fact_correction_history(session, review_episode_id)
+            records = [correction_dto(item.correction,
+                patient_profile_revision_id=item.patient_profile_revision_id,
+                patient_profile_revision=item.patient_profile_revision,
+                variable_labels=fact_correction_variable_labels(session, item.correction.authority,
+                    [json.loads(item.correction.old_snapshot_json), json.loads(item.correction.new_snapshot_json)])) for item in items]
         except Exception as exc:  # noqa: BLE001 - 边界统一翻译
             _raise_translated(exc)
             raise
     return FactCorrectionHistoryDTO(
         subject_id=subject_id,
         review_episode_id=review_episode_id,
-        items=[
-            correction_dto(
-                item.correction,
-                patient_profile_revision_id=item.patient_profile_revision_id,
-                patient_profile_revision=item.patient_profile_revision,
-            )
-            for item in items
-        ],
+        items=records,
     )

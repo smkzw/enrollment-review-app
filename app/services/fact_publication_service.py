@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import TypeVar
 
 from sqlalchemy.orm import Session
@@ -406,6 +407,8 @@ class FactPublicationService:
                 unit=candidate.unit,
                 date_range=candidate.date_range,
                 assertion_basis=candidate.assertion_basis,
+                variable_id=candidate.variable_id,
+                date_role=candidate.date_role,
             )
         _reject_profile_lane_conflicts(
             candidates,
@@ -422,6 +425,8 @@ class FactPublicationService:
                 unit=fact.unit,
                 date_range=fact.date_range,
                 assertion_basis=fact.assertion_basis,
+                variable_id=fact.variable_id,
+                date_role=fact.date_role,
             ),
             "事实",
         )
@@ -437,10 +442,39 @@ class FactPublicationService:
                 unit=candidate.unit,
                 date_range=candidate.date_range,
                 assertion_basis=candidate.assertion_basis,
+                variable_id=candidate.variable_id,
+                date_role=candidate.date_role,
             ),
         )
         published: list[ClinicalFactV2] = []
         candidate_to_fact: dict[str, str] = {}
+        from app.domain.risk_flags import fact_risk_flags
+        from app.domain.variables.dictionary import load_dictionary
+        from app.storage.repositories import get_rule_set
+        from app.services.protocol_variable_binding import component_predicates
+        from app.domain.gates.fact_evidence_closure import _fetch_locator, _localized_locator_text, _prepare_blocking_ocr_context
+        definitions = {}
+        thresholds = {}
+        date_sensitive = set()
+        ocr_context = None
+        if any(item.variable_id is not None for item in candidates):
+            rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
+            definitions = load_dictionary(rule_set.variable_definitions or ())
+            ocr_context = _prepare_blocking_ocr_context(session, revision)
+            for rule in rule_set.rules:
+                for component in rule.components:
+                    for predicate in component_predicates(component):
+                        for requirement in component.evidence_requirements:
+                            if predicate.predicate_id in requirement.predicate_ids and requirement.variable_id:
+                                definition = definitions[requirement.variable_id]
+                                values = predicate.value if isinstance(predicate.value, list) else [predicate.value]
+                                thresholds.setdefault(requirement.variable_id, []).extend(
+                                    definition.convert(value, predicate.unit or definition.canonical_unit)
+                                    for value in values
+                                    if definition.value_type == "number" and isinstance(value, (int, float, Decimal))
+                                    and not isinstance(value, bool))
+                                if requirement.source_validity_window is not None or requirement.control_validity_constraint is not None:
+                                    date_sensitive.add(requirement.variable_id)
         for stable_identity, group in groups.items():
             candidate_ids, gate_ids = self._publication_ids(group, gates)
             primary_gate_id = gate_ids[0]
@@ -460,6 +494,28 @@ class FactPublicationService:
                 candidate_ids = sorted(set(candidate_ids) | set(prior.source_candidate_ids))
                 gate_ids = sorted(set(gate_ids) | set(prior.gate_ids))
             representative = group[0]
+            risks = set(flag for item in group for flag in item.risk_flags)
+            for item in group:
+                if item.variable_id is None:
+                    continue
+                if item.variable_id not in definitions:
+                    raise FactPublicationError("事实引用了已发布字典外的数据项目")
+                definition = definitions[item.variable_id]
+                if item.assertion_basis is not None and definition.value_type == "number":
+                    try:
+                        definition.convert(item.canonical_value, item.unit or "")
+                    except ValueError as exc:
+                        raise FactPublicationError("事实的数值或单位与已发布数据项目不符") from exc
+                    from app.domain.risk_flags import same_numeric_reading
+                    if not same_numeric_reading(item.raw_value, item.canonical_value):
+                        raise FactPublicationError("事实不得使用由模型改写的原始读数")
+                locator = _fetch_locator(session, item.assertion_basis.locator_id
+                                         if item.assertion_basis is not None else item.locator_ids[0])
+                text = _localized_locator_text(session, locator, revision, ocr_context[3]) or ""
+                risks.update(fact_risk_flags(item, definitions[item.variable_id], text=text,
+                    low_ocr=bool(ocr_context[1].get(locator.ocr_page_id)),
+                    weak_source=_source_strength(session, revision, [item]) == SourceStrength.UNVERIFIABLE,
+                    thresholds=thresholds.get(item.variable_id, ()), date_sensitive=item.variable_id in date_sensitive))
             fact_revision = _next_revision(existing, stable_identity)
             fact = ClinicalFactV2(
                 fact_id=_entity_id(run_id, "fact", stable_identity, fact_revision),
@@ -474,6 +530,9 @@ class FactPublicationService:
                 gate_ids=gate_ids,
                 authority=authority,
                 fact_type=representative.fact_type,
+                variable_id=representative.variable_id,
+                date_role=representative.date_role,
+                risk_flags=sorted(risks, key=lambda item: item.value),
                 profile_lane=representative.profile_lane,
                 supported_requirement_ids=_requirement_union(group),
                 polarity=representative.polarity,

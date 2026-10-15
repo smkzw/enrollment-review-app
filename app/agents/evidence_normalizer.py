@@ -159,6 +159,8 @@ def validate_evidence_normalizer_model_config(
         raise ValueError("模型最大输出长度无效")
     if raw_max_tokens < 1:
         raise ValueError("模型最大输出长度必须大于零")
+    if not isinstance(model_config.parameters.get("include_source_categories", False), bool):
+        raise ValueError("资料类别提示配置必须是布尔值")
     if "temperature" in model_config.parameters:
         raw_temperature = model_config.parameters["temperature"]
         if isinstance(raw_temperature, bool) or not isinstance(
@@ -198,6 +200,8 @@ class EvidenceFactDraft(ContractModel):
     value_kind: Literal["value", "identifier"] = "value"
     source_observation_refs: list[str] = Field(default_factory=list)
     fact_type: str = Field(min_length=1)
+    variable_id: str | None = None
+    date_role: Literal["sampling", "report", "visit", "unknown"] | None = None
     profile_lane: ProfileLane
     supported_requirement_ids: list[str] = Field(default_factory=list)
     polarity: FactPolarity
@@ -441,7 +445,7 @@ DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE = (
     "请从本次资料页组中逐页提取临床事实候选，并严格按指定结构返回。"
 )
 
-_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v37"
+_PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v42"
 _MAX_PROMPT_CHARS = 100_000
 
 
@@ -518,8 +522,26 @@ _SYSTEM_CONTRACT = (
     "改写为否认，也不得输出要求是否满足或受试者是否符合。"
     "事实候选仅在正文实际支持某条 related_requirements 时，才把该 requirement_id 写入"
     "supported_requirement_ids；不得按标题、描述或相似词猜测绑定。未明确支持任何要求时"
-    "必须返回空列表。绑定 ID 必须来自本次冻结输入。fact_type 是临床展示分类，不要求与"
-    "资料要求的 fact_type 同名；是否支持该要求只由正文语义与显式 requirement_id 表达。"
+    "必须返回空列表。绑定 ID 必须来自本次冻结输入。variable_definitions 是本节点需求清单；"
+    "事实的 variable_id 只能选清单中明确对应原文的数据项目，不能猜映射。清单外重要病史"
+    "保留供个例档案使用，variable_id 填 null。fact_type 保留原有临床展示分类。"
+    "若需求清单将同一行的多个分量定义为不同数值项目，须逐项目分别保留原始数值和共同单位，"
+    "各自引用完整原句；不能把合值字符串绑定到单个数值项目。分量与项目对应关系不清时"
+    "保留合值及具体疑问、variable_id为空，不猜列角色、不补未出现的分量。"
+    "清单中value_type=procedure表示该项检查或操作是否已完成，不是它的检验数值或正常结论。"
+    "原文明示完成，或该项真实报告已有填写的检查结果且归属明确时，按原文形成completed_action"
+    "候选，raw_value与canonical_value均为true、unit为null；保留原文检查名称、真实摘录及日期。"
+    "完成记录与各项实际读数分别保存，不能以完成记录替代必需结果，也不能据此认定结果正常。"
+    "医嘱、预约、计划、次数、印刷空项或未确认归属的结果不证明完成；只保留计划或unknown。"
+    "明确记载未做时以negated表达，值仍为true，不用false重复否定；没有记录不等于未做。"
+    "不得为得到完成记录拼造原句、借用另一项检查结果或把报告打印日补为检查日。"
+    "若数据项目有reference_ratio_of，优先抽取它指向的原始项目及原单位，不自行计算倍数。"
+    "原始项目的assertion_basis须保留项目、结果、参考范围和单位所在的完整原句或表格行；"
+    "参考范围以kind=reference_range、label=该行参考范围原文放入contextual_qualifiers。"
+    "参考范围不能借用别的项目、页、标本或日期；看不清则保留疑问，不补默认上限。"
+    "date_role 按原文明确的日期含义选择 sampling、report、visit；无法确定时填 unknown，"
+    "无日期填 null。数值使用原件实际结果，不取邻行数字或参考范围；raw_value、canonical_value"
+    "均填原始数值，unit填原文单位，单位换算交给程序。"
     "只允许输出 fact_candidates、event_candidates、exposure_candidates、"
     "actual_exposure_fact_refs、non_exposure_medication_fact_refs 与 unresolved_items。"
     "必须逐条复核每一条 polarity=affirmed 且 profile_lane=medication 的事实候选，并且"
@@ -720,7 +742,7 @@ def _strip_schema_titles(node) -> None:
         _strip_schema_titles(value)
 
 
-def evidence_normalizer_json_schema() -> dict:
+def evidence_normalizer_json_schema(variable_ids: list[str] | None = None) -> dict:
     """返回适合约束生成的完整 schema，要求模型显式交代每个已定义字段。
 
     Pydantic 对带默认值字段默认不写入 ``required``，这适合普通 API 解码，但会让
@@ -728,6 +750,10 @@ def evidence_normalizer_json_schema() -> dict:
     可空字段仍保留 ``null``，跨字段医学语义继续由运行时合同和确定性门禁负责。
     """
     schema = deepcopy(EvidenceNormalizerDraftOutput.model_json_schema())
+    if variable_ids is not None:
+        schema["$defs"]["EvidenceFactDraft"]["properties"]["variable_id"] = {
+            "anyOf": [{"type": "string", "enum": sorted(set(variable_ids))}, {"type": "null"}]
+        } if variable_ids else {"type": "null"}
     # Source offsets are host-owned audit data, never an authoring field.
     unresolved_schema = schema["$defs"]["EvidenceNormalizerUnresolvedItem"]
     unresolved_schema["properties"].pop("source_text_range")
@@ -801,9 +827,9 @@ def evidence_normalizer_json_schema() -> dict:
     return schema
 
 
-def _compact_schema() -> str:
+def _compact_schema(variable_ids: list[str] | None = None) -> str:
     return json.dumps(
-        evidence_normalizer_json_schema(),
+        evidence_normalizer_json_schema(variable_ids),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -840,7 +866,8 @@ def _visual_observation_prompt_payload(
     ]
 
 
-def _model_input_payload(evidence_input: EvidenceNormalizerInput, *, pending_details_retained: bool = False) -> dict:
+def _model_input_payload(evidence_input: EvidenceNormalizerInput, *, pending_details_retained: bool = False,
+                         include_source_categories: bool = False) -> dict:
     """Project the frozen audit contract into the smallest model-facing input.
 
     仅省略运行身份和哈希等模型不需要的审计字段。有效原文与
@@ -860,6 +887,7 @@ def _model_input_payload(evidence_input: EvidenceNormalizerInput, *, pending_det
         "related_requirements": [
             {
                 "requirement_id": item.requirement_id,
+                "variable_id": item.variable_id,
                 "fact_type": item.fact_type,
                 "required_source_types": item.required_source_types,
                 "allows_screening_record_transcription": (
@@ -891,6 +919,28 @@ def _model_input_payload(evidence_input: EvidenceNormalizerInput, *, pending_det
             for item in evidence_input.available_locators
         ],
     }
+    if include_source_categories:
+        payload["context"].update({
+            "document_category": evidence_input.context.document_category,
+            "source_category": evidence_input.context.source_category,
+        })
+    if evidence_input.variable_definitions:
+        # Extraction needs identities, labels and literal units; clinical source policy,
+        # plausible ranges and conversions remain frozen and enforced by the host.
+        payload["variable_definitions"] = [{key: item.model_dump(mode="json")[key]
+            for key in ("variable_id", "label_zh", "value_type", "canonical_unit", "aliases_zh")}
+            | ({"reference_ratio_of": item.reference_ratio_of} if item.reference_ratio_of is not None else {})
+            for item in evidence_input.variable_definitions]
+        contexts = []
+        compact = []
+        for item in payload["related_requirements"]:
+            context = {key: item[key] for key in ("fact_type", "description")}
+            if context not in contexts:
+                contexts.append(context)
+            compact.append({"requirement_id": item["requirement_id"], "variable_id": item["variable_id"],
+                            "context_ref": contexts.index(context)})
+        payload["requirement_contexts"] = contexts
+        payload["related_requirements"] = compact
     if evidence_input.page_review is None:
         # 文字主读及历史冻结任务不要求附加双模型判读。
         payload["pages"] = payload.pop("ocr_sidecar_pages")
@@ -981,6 +1031,7 @@ def build_evidence_normalizer_prompt(
     pending_details_retained: bool = False,
     reference_aliases: NormalizerReferenceAliases | None = None,
     verified_scope_prompt: bool = False,
+    include_source_categories: bool = False,
 ) -> str:
     """从冻结输入构建唯一可审计的 prompt，不含隐藏自由文本。
 
@@ -992,9 +1043,15 @@ def build_evidence_normalizer_prompt(
     受限解码强制输出结构的传输使用：此时同一份 Schema 不再在提示内重复内嵌
     （消除重复 Schema）；输出结构约束本身不变，仍由同一 schema 与本地门禁负责。
     """
-    payload = _model_input_payload(evidence_input, pending_details_retained=pending_details_retained)
+    # Frozen model configs opt in; old request receipts must keep their exact layout.
+    payload = _model_input_payload(evidence_input, pending_details_retained=pending_details_retained,
+        include_source_categories=include_source_categories)
     if reference_aliases is not None:
         payload = reference_aliases.transform(payload)
+    if evidence_input.variable_definitions:
+        columns = ["locator_id", "page_number", "precision", "localized_text"]
+        payload["locator_columns"] = columns
+        payload["locators"] = [[item.get(key) for key in columns] for item in payload["locators"]]
     system_contract = _SYSTEM_CONTRACT
     if verified_scope_prompt:
         if not pending_details_retained or evidence_input.page_review is None:
@@ -1002,11 +1059,14 @@ def build_evidence_normalizer_prompt(
         from app.agents.verified_evidence_prompt import VERIFIED_EVIDENCE_SYSTEM_CONTRACT
         system_contract = VERIFIED_EVIDENCE_SYSTEM_CONTRACT
     head = f"{prompt_template.strip()}\n\n{system_contract}\n\n"
+    if evidence_input.variable_definitions:
+        head += ("related_requirements 的 context_ref 是 requirement_contexts 中从0开始的索引；共同说明只保存一次，所有要求编号和数据项目仍分别保留。"
+                 "locators 是按 locator_columns 列顺序保存的定位行，每行仍独立保留真实编号、页和逐字原文，不得合并不同位置。\n")
     if reference_aliases is not None:
         from app.agents.verified_evidence_prompt import SHORT_REFERENCE_INSTRUCTION
         head += SHORT_REFERENCE_INSTRUCTION
     if include_output_schema:
-        head += f"输出结构：{_compact_schema()}\n\n"
+        head += f"输出结构：{_compact_schema([item.variable_id for item in evidence_input.variable_definitions] if evidence_input.variable_definitions else None)}\n\n"
     sections = [
         head + f"本次输入：{json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}\n\n"
     ]
@@ -1495,6 +1555,8 @@ def _hydrate_draft_output(
     context_questions = []
     for candidate in draft.fact_candidates:
         basis = None
+        from app.domain.contracts.fact_context import has_standalone_measurement
+        standalone = has_standalone_measurement(candidate)
         if candidate.assertion_basis is not None:
             source_text_sha256 = locator_source_hashes.get(
                 candidate.assertion_basis.locator_id
@@ -1514,7 +1576,8 @@ def _hydrate_draft_output(
                     validate_context_source_excerpt(qualifier.source.excerpt, locator_source_texts.get(lid))
                     source = FactContextSource(**qualifier.source.model_dump(),
                         source_text_sha256=locator_source_hashes[lid])
-                qualifiers.append(FactContextQualifier(kind=qualifier.kind, label=qualifier.label, source=source))
+                if source is None or not standalone:
+                    qualifiers.append(FactContextQualifier(kind=qualifier.kind, label=qualifier.label, source=source))
                 if source is not None:
                     context_questions.append(EvidenceNormalizerUnresolvedItem(
                         code="context_relation_unverified",
@@ -1537,6 +1600,8 @@ def _hydrate_draft_output(
                 run_id=run_id,
                 call_id=call_id,
                 fact_type=candidate.fact_type,
+                variable_id=candidate.variable_id,
+                date_role=candidate.date_role,
                 profile_lane=candidate.profile_lane,
                 supported_requirement_ids=sorted(
                     set(candidate.supported_requirement_ids)
@@ -1552,6 +1617,7 @@ def _hydrate_draft_output(
                 candidate_source_semantics=candidate.candidate_source_semantics,
                 assertion_basis=basis,
                 model_uncertainty=candidate.model_uncertainty,
+                risk_flags=(["ATTRIBUTION_UNCERTAIN"] if standalone else []),
                 created_at=created_at,
             )
         except ValidationError as exc:
@@ -1834,6 +1900,28 @@ def _validate_normalizer_semantics(
     evidence_input: EvidenceNormalizerInput,
 ) -> EvidenceNormalizerOutput:
     """Shared post-parse checks for structured and actual model transports."""
+    if evidence_input.variable_definitions:
+        definitions = {item.variable_id: item for item in evidence_input.variable_definitions}
+        for candidate in validated.fact_candidates:
+            if candidate.variable_id is not None and candidate.variable_id not in definitions:
+                raise ValueError("事实引用了本次需求清单外的数据项目")
+            definition = definitions.get(candidate.variable_id)
+            if definition is not None and candidate.polarity != FactPolarity.UNKNOWN:
+                value = candidate.canonical_value
+                if definition.value_type == "number":
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
+                        raise EvidenceNormalizedValueError("数值项目尚无可核对的数值", candidate.candidate_id)
+                    try:
+                        definition.convert(value, candidate.unit or "")
+                    except ValueError as exc:
+                        raise EvidenceNumericUnitError(str(exc), candidate.candidate_id) from exc
+                    from app.domain.risk_flags import same_numeric_reading
+                    if not same_numeric_reading(candidate.raw_value, candidate.canonical_value):
+                        raise EvidenceNormalizedValueError("数值规范化不能由模型改写原始读数", candidate.candidate_id)
+                elif definition.value_type in {"boolean", "procedure"} and not isinstance(value, bool):
+                    raise EvidenceNormalizedValueError("是否项目不能填分类或数值", candidate.candidate_id)
+                elif definition.value_type in {"category", "date"} and not isinstance(value, str):
+                    raise EvidenceNormalizedValueError("分类或日期项目必须保留文字值", candidate.candidate_id)
     validated = _filter_supported_requirement_bindings(validated, evidence_input)
     from app.projections.page_review_sources import validate_accepted_candidate_sources
     validate_accepted_candidate_sources(validated, evidence_input.page_review,
@@ -2322,6 +2410,8 @@ class EvidenceNormalizerRunner:
         allow_candidate_partition: bool = False,
         allow_question_classification_repair: bool = False,
     ) -> EvidenceNormalizerRunResult:
+        if evidence_input.variable_definitions and hasattr(transport, "set_output_schema"):
+            transport.set_output_schema(evidence_normalizer_json_schema([item.variable_id for item in evidence_input.variable_definitions]))
         # 传输层若已用 JSON Schema 受限解码强制输出结构（如 omlx json_schema
         # response_format），提示内不再重复内嵌同一份 Schema；其余传输保持
         # Schema 内嵌，输出结构约束不变。
@@ -2340,6 +2430,7 @@ class EvidenceNormalizerRunner:
             pending_details_retained=pending_details_retained,
             reference_aliases=reference_aliases,
             verified_scope_prompt=verified_scope_prompt,
+            include_source_categories=getattr(transport, "include_source_categories", False) is True,
         )
         available = set(evidence_input.available_locator_ids)
         locator_source_hashes = {

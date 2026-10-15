@@ -10,8 +10,9 @@ import { JudgmentIcon } from "../shell/icons";
 import { UI_PHRASES } from "../../domain/labels";
 import { formatPredicateStatement } from "./attributes";
 
-function PredicateRow({ predicate }: { predicate: PredicateNodeView }) {
-  const statement = formatPredicateStatement(predicate);
+type PredicateLabel = (predicate: PredicateNodeView) => string | undefined;
+function PredicateRow({ predicate, predicateLabel }: { predicate: PredicateNodeView; predicateLabel?: PredicateLabel }) {
+  const statement = formatPredicateStatement(predicate, predicateLabel?.(predicate));
   return (
     <li className="expr-node expr-node--predicate">
       <span className="expr-node__condition">
@@ -33,12 +34,14 @@ function PredicateRow({ predicate }: { predicate: PredicateNodeView }) {
 function ExpressionViewInner({
   node,
   depth,
+  predicateLabel,
 }: {
   node: ExpressionNodeView;
   depth: number;
+  predicateLabel?: PredicateLabel;
 }) {
   if (node.kind === "predicate") {
-    return <PredicateRow predicate={node} />;
+    return <PredicateRow predicate={node} predicateLabel={predicateLabel} />;
   }
   return (
     <li className="expr-node expr-node--logic">
@@ -49,6 +52,7 @@ function ExpressionViewInner({
             key={`${child.kind}-${index}`}
             node={child}
             depth={depth + 1}
+            predicateLabel={predicateLabel}
           />
         ))}
       </ul>
@@ -60,14 +64,16 @@ function ExpressionViewInner({
 export function ExpressionView({
   expression,
   exception,
+  predicateLabel,
 }: {
   expression: ExpressionNodeView;
   exception: ExpressionNodeView | null;
+  predicateLabel?: PredicateLabel;
 }) {
   return (
     <div className="expression-view">
       <ul className="expr-children">
-        <ExpressionViewInner node={expression} depth={0} />
+        <ExpressionViewInner node={expression} depth={0} predicateLabel={predicateLabel} />
       </ul>
       {exception !== null && (
         <div className="expression-view__exception">
@@ -76,7 +82,7 @@ export function ExpressionView({
             {UI_PHRASES.exceptionConnective}
           </p>
           <ul className="expr-children">
-            <ExpressionViewInner node={exception} depth={0} />
+            <ExpressionViewInner node={exception} depth={0} predicateLabel={predicateLabel} />
           </ul>
           <p className="expression-view__exception-note">
             {UI_PHRASES.exceptionEffectHint}

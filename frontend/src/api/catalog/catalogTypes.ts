@@ -53,6 +53,7 @@ export interface CatalogEpisodeView {
   activeEvidenceSnapshotId: string | null;
   activeEvidenceProcessingRevisionId: string | null;
   anchorDates: Readonly<Record<string, unknown>>;
+  evidenceCutoffDate?: string | null;
   dueAt: string | null;
   revision: number;
 }

@@ -18,7 +18,9 @@ from .facts import (
 from .fact_rule_index import FactRuleLink
 from .judgment_search import JudgmentSearchCoverageSummary, JudgmentSearchScope
 from .review import ReviewEpisode, Subject, ProtocolDocumentVersion
-from .rules import WorkflowStage
+from .rules import EvidenceRequirement, WorkflowStage
+from .protocol_ingestion import FrozenProtocolCatalog
+from .work_draft import SystemIssue, WorkDraftSourcePage
 
 _SHA256 = r"^[0-9a-f]{64}$"
 
@@ -97,6 +99,12 @@ class ReviewContextSnapshotV2(ContractModel):
     judgment_search_results: tuple[FrozenJudgmentSearchResult, ...] = ()
     created_at: datetime
     context_sha256: str = Field(pattern=_SHA256)
+    work_draft: bool = Field(default=False, exclude_if=lambda value: not value)
+    ancestor_snapshot_ids: tuple[str, ...] = Field(default=(), exclude_if=lambda value: not value)
+    system_issues: tuple[SystemIssue, ...] = Field(default=(), exclude_if=lambda value: not value)
+    source_pages: tuple[WorkDraftSourcePage, ...] = Field(default=(), exclude_if=lambda value: not value)
+    procedure_catalog: FrozenProtocolCatalog | None = Field(default=None, exclude_if=lambda value: value is None)
+    procedure_requirements: tuple[EvidenceRequirement, ...] = Field(default=(), exclude_if=lambda value: not value)
 
     @model_serializer(mode="wrap")
     def serialize_scope_version(self, handler):
@@ -110,6 +118,22 @@ class ReviewContextSnapshotV2(ContractModel):
         from app.domain.publication import canonical_hash
 
         episode = self.review_episode
+        if not self.work_draft and (self.ancestor_snapshot_ids or self.system_issues or self.source_pages
+                                   or self.procedure_catalog or self.procedure_requirements):
+            raise ValueError("正式审核上下文不能混入工作稿专属字段")
+        if self.work_draft and (not self.ancestor_snapshot_ids or len(set(self.ancestor_snapshot_ids)) != len(self.ancestor_snapshot_ids)
+                               or self.authority.evidence_snapshot_v2_id not in self.ancestor_snapshot_ids):
+            raise ValueError("工作稿缺少明确的当前资料版本链")
+        page_keys = [(item.source_document_version_id, item.page_number) for item in self.source_pages]
+        if len(set(page_keys)) != len(page_keys):
+            raise ValueError("工作稿资料页重复")
+        if self.procedure_catalog is not None:
+            if self.procedure_catalog.study_phase != self.clause_pack.study_phase:
+                raise ValueError("流程项目录与当前研究期别不同")
+            catalog_ids = {item.item_id for item in self.procedure_catalog.items}
+            supplied = {item.procedure_catalog_item_id for item in self.procedure_requirements}
+            if supplied != catalog_ids:
+                raise ValueError("流程要求未完整对应有源项目录")
         expected_authority = FactAuthority(
             project_id=episode.project_id,
             subject_id=episode.subject_id,
@@ -163,7 +187,12 @@ class ReviewContextSnapshotV2(ContractModel):
             *self.facts, *self.events, *self.medication_exposures,
             *self.expectations, *self.conflict_groups,
         ):
-            if item.authority != self.authority:
+            if self.work_draft and isinstance(item, ClinicalFactV2):
+                if ((item.authority.project_id, item.authority.subject_id, item.authority.review_episode_id)
+                        != (self.authority.project_id, self.authority.subject_id, self.authority.review_episode_id)
+                        or item.authority.evidence_snapshot_v2_id not in self.ancestor_snapshot_ids):
+                    raise ValueError("工作稿事实不属于当前个例节点或资料版本链")
+            elif item.authority != self.authority:
                 raise ValueError("审核上下文混入其他资料版本的记录")
         templates = {item.template_id: item for item in self.expectation_templates}
         requirements = {
@@ -224,6 +253,11 @@ class ReviewContextSnapshotV2(ContractModel):
                     or template.control_validity_constraint != policy.result_validity_constraint
                 ):
                     raise ValueError("冻结补充资料要求与其发布原文或来源政策不一致")
+        for requirement in self.procedure_requirements:
+            template = next((item for item in self.expectation_templates if item.requirement_id == requirement.requirement_id), None)
+            if template is None or (template.due_stage, template.fact_type, template.description) != (
+                    requirement.due_stage, requirement.fact_type, requirement.description):
+                raise ValueError("工作稿流程要求与正式方案资料要求不一致")
         if self.requirements_scope_version is not None:
             expected_requirements = {}
             for stage in self.workflow_stages:

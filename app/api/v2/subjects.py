@@ -99,6 +99,7 @@ def _episode_dto(
             episode.active_evidence_processing_revision_id
         ),
         anchor_dates=anchor_dates,
+        evidence_cutoff_date=episode.evidence_cutoff_date,
         due_at=_as_utc(episode.due_at),
         revision=episode.revision,
     )

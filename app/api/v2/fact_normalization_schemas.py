@@ -15,6 +15,8 @@ class _StrictModel(BaseModel):
 class FactNormalizationRequest(_StrictModel):
     """客户端仅可声明稳定意图；不得携带权威元组或配置编号。"""
 
+    retry_failed_from_run_id: str | None = Field(default=None, min_length=1, max_length=128)
+
     idempotency_intent: str | None = Field(
         default=None,
         description="可选的稳定意图标记；不参与权威派生或配置选择",
@@ -50,6 +52,7 @@ class NormalizationUnresolvedPageDTO(_StrictModel):
     job_id: str
     content_sha256: str = Field(pattern="^[0-9a-f]{64}$")
     run_id: str
+    failed_page_count: int = Field(default=0, ge=0)
     total: int = Field(ge=0)
     offset: int = Field(ge=0)
     has_more: bool

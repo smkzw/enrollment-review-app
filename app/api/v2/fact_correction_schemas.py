@@ -6,7 +6,7 @@ import json
 from datetime import UTC, date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.contracts.enums import DatePrecision
 from app.domain.contracts.fact_corrections import FactCorrectionImpactScope, FactCorrectionV2
@@ -43,6 +43,7 @@ class FactCorrectionRequest(_StrictModel):
     reason: str | None = None
     operator_id: str | None = None
     fact_type: str | None = None
+    variable_id: str | None = Field(default=None, min_length=1)
     supported_requirement_ids: list[str] | None = None
     polarity: str | None = None
     asserted_object: str | None = None
@@ -61,6 +62,21 @@ class FactCorrectionRequest(_StrictModel):
     dose: str | None = None
     frequency: str | None = None
     route: str | None = None
+
+    @model_validator(mode="after")
+    def variable_scope(self):
+        if self.target_kind != "fact" and "variable_id" in self.model_fields_set:
+            raise ValueError("只有事实记录可调整所属数据项目")
+        return self
+
+
+class FactCorrectionOptionsDTO(_StrictModel):
+    subject_id: str
+    review_episode_id: str
+    target_id: str
+    target_revision: int
+    variable_id: str | None
+    variables: list[dict[str, Any]]
 
 
 class FactCorrectionImpactDTO(_StrictModel):
@@ -95,6 +111,7 @@ class FactCorrectionPreviewDTO(_StrictModel):
     new_snapshot: dict[str, Any]
     impact: FactCorrectionImpactDTO
     sibling_facts: list[FactCorrectionSiblingDTO] = Field(default_factory=list)
+    variable_labels: dict[str, str] = Field(default_factory=dict)
 
 
 class FactCorrectionSubmitDTO(_StrictModel):
@@ -121,6 +138,7 @@ class FactCorrectionRecordDTO(_StrictModel):
     old_snapshot: dict[str, Any]
     new_snapshot: dict[str, Any]
     impact: FactCorrectionImpactDTO
+    variable_labels: dict[str, str] = Field(default_factory=dict)
 
 
 class FactCorrectionHistoryDTO(_StrictModel):
@@ -153,7 +171,7 @@ def impact_dto(scope: FactCorrectionImpactScope) -> FactCorrectionImpactDTO:
     )
 
 
-def preview_dto(preview: FactCorrectionPreview) -> FactCorrectionPreviewDTO:
+def preview_dto(preview: FactCorrectionPreview, *, variable_labels=None) -> FactCorrectionPreviewDTO:
     return FactCorrectionPreviewDTO(
         target_kind=preview.target_kind,
         target_kind_label=TARGET_KIND_LABELS.get(preview.target_kind, preview.target_kind),
@@ -165,6 +183,7 @@ def preview_dto(preview: FactCorrectionPreview) -> FactCorrectionPreviewDTO:
         sibling_facts=[
             FactCorrectionSiblingDTO.model_validate(s) for s in preview.sibling_facts
         ],
+        variable_labels=variable_labels or {},
     )
 
 
@@ -179,6 +198,7 @@ def correction_dto(
     *,
     patient_profile_revision_id: str,
     patient_profile_revision: int,
+    variable_labels=None,
 ) -> FactCorrectionRecordDTO:
     return FactCorrectionRecordDTO(
         correction_id=contract.correction_id,
@@ -195,4 +215,5 @@ def correction_dto(
         old_snapshot=dict(json.loads(contract.old_snapshot_json)),
         new_snapshot=dict(json.loads(contract.new_snapshot_json)),
         impact=impact_dto(contract.impact_scope),
+        variable_labels=variable_labels or {},
     )

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime
 from typing import Any
 
@@ -182,7 +183,10 @@ class FactCorrectionRepository:
         old_entity = self._get_entity(contract.target_kind, contract.target_id)
         new_entity = self._get_entity(contract.target_kind, contract.new_entity_id)
 
-        if old_entity.authority != contract.authority or new_entity.authority != contract.authority:
+        old_source_matches = (old_entity.authority == contract.authority or (
+            contract.target_kind == "fact" and self._authority.retained_fact_source_is_reusable(
+                old_entity, contract.authority)))
+        if not old_source_matches or new_entity.authority != contract.authority:
             raise RepositoryError("修订目标与新实体必须与修订同属同一不可变权威元组")
 
         if old_entity.stable_identity != contract.target_stable_identity:
@@ -204,8 +208,13 @@ class FactCorrectionRepository:
             self._require_chain_head_for_entity(contract.target_kind, contract.target_stable_identity, contract.target_revision)
 
         # 快照校验：对实际持久化合约做语义快照并比对
-        old_snapshot = snapshot_for_kind(contract.target_kind, old_entity)
-        new_snapshot = snapshot_for_kind(contract.target_kind, new_entity)
+        include_variable = "variable_id" in json.loads(contract.old_snapshot_json)
+        if include_variable != ("variable_id" in json.loads(contract.new_snapshot_json)):
+            raise RepositoryError("新旧快照的数据项目范围必须一致")
+        if contract.target_kind == "fact" and old_entity.variable_id != new_entity.variable_id and not include_variable:
+            raise RepositoryError("改变数据项目必须保留修改前后的完整关联")
+        old_snapshot = snapshot_for_kind(contract.target_kind, old_entity, include_variable_id=include_variable)
+        new_snapshot = snapshot_for_kind(contract.target_kind, new_entity, include_variable_id=include_variable)
         old_json = canonical_json(old_snapshot)
         new_json = canonical_json(new_snapshot)
         if old_json != contract.old_snapshot_json:

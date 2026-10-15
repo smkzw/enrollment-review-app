@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewHistoryRunDetailView } from "../api/review-history/reviewHistoryTypes";
 import { ReportsPage } from "./ReportsPage";
 import { frozenReviewExport } from "../domain/frozenReviewExport";
+import { getCatalogRepository } from "../api";
 
 const mocks = vi.hoisted(() => ({ listRuns: vi.fn(), getRun: vi.fn(), canModify: true }));
 vi.mock("../api/review-history/reviewHistoryHttp", () => ({
@@ -64,6 +65,17 @@ beforeEach(() => {
 });
 
 describe("报告", () => {
+  it("项目选择用代号、期别及版本，全名保留且项目绑定不变", async () => {
+    const projects = await getCatalogRepository().listProjects(new AbortController().signal);
+    render(<ReportsPage />);
+    const select = await screen.findByRole("combobox", { name: "选择项目" }) as HTMLSelectElement;
+    expect(select).toHaveValue(projects[0].projectId);
+    expect(select).toHaveAttribute("title", projects[0].projectName);
+    expect([...select.options].map(option => ({ value: option.value, label: option.text, title: option.title })))
+      .toEqual(projects.map(project => ({ value: project.projectId,
+        label: `${project.projectCode} · ${project.studyPhaseLabel} · 方案 ${project.officialVersion}`,
+        title: project.projectName })));
+  });
   it("报告与导出保留方案未决和计算限制，不改成病例缺失或合格", async () => {
     const report = frozenReport("subject-uat-01-clear", "episode-uat-01-screening-clear");
     report.restrictedRequirements = [{
@@ -131,7 +143,7 @@ describe("报告", () => {
     render(<ReportsPage />);
     await screen.findByRole("heading", { name: "逐项审核结果" });
     expect(screen.getByRole("heading", { name: "冻结受试者 · 筛选期审核" })).toBeInTheDocument();
-    expect(screen.getByText("冻结项目名称 · 方案 1.0")).toBeInTheDocument();
+    expect(screen.getByText("方案 1.0 · 规则第 1 版")).toBeInTheDocument();
     expect(mocks.getRun).toHaveBeenCalledWith(expect.any(String), expect.any(String), "saved-run", expect.any(Object));
   });
 
@@ -170,8 +182,60 @@ describe("报告", () => {
   it("尚无保存记录时不以临时计算结果冒充正式报告", async () => {
     mocks.listRuns.mockImplementation(async (subjectId: string, reviewEpisodeId: string) => ({ subjectId, reviewEpisodeId, items: [] }));
     render(<ReportsPage />);
-    await screen.findByText("该节点尚无正式审核记录。");
+    await screen.findByText("该节点尚无审核记录。");
     expect(mocks.getRun).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "打印报告" })).not.toBeInTheDocument();
+  });
+
+  it.each([null, "builder_verification", "medical_manager"] as const)("历史工作稿只读保存结论和分项，保留核实身份（%s）", async confirmationKind => {
+    const report = frozenReport("subject-uat-01-clear", "episode-uat-01-screening-clear");
+    report.run.runKind = "work_draft";
+    report.assessments = [];
+    const clause = { ruleCode: "IN-01", ruleComponentId: "parent", ruleKind: "inclusion" as const,
+      textSummary: "冻结要求标题", sourceText: "必须符合原文限定", parentRuleCode: null,
+      decision: "inclusion_met" as const, confidence: confirmationKind ? "high" as const : "low" as const, confirmationKind,
+      decisionLabel: "满足", reason: "已有支持。相关检查已核对。后续节点仍须另行审核。",
+      factRefs: [], sourceReadRefs: [], gapType: null, determinationMode: "semantic" as const,
+      actionOwner: null, actionDetail: null, actionEvidence: null };
+    report.workDraft = { subjectId: report.context.subjectId, reviewEpisodeId: report.context.reviewEpisodeId,
+      ruleSetId: report.context.ruleSetId, ruleSetRevision: report.context.ruleSetRevision,
+      evidenceSnapshotV2Id: report.context.evidenceSnapshotV2Id, completeProcessingRevisionId: report.context.completeProcessingRevisionId,
+      reviewRunId: report.run.reviewRunId, clauses: [clause], controls: [],
+      componentClauses: [{ ...clause, ruleComponentId: "child", parentRuleCode: "IN-01", confidence: null, confirmationKind: null,
+        decision: "not_due", decisionLabel: "未到期", reason: "基线期还未到，届时核对。" }],
+      systemIssues: [{ kind: "model_output_invalid", affectedCodes: ["IN-01"], detail: "读取意见尚未一致", alternative: "原件保留，可继续核查" },
+        { kind: "excerpt_unverified", affectedCodes: [], detail: "原件记录尚待核实", alternative: "不作阴性解释", pageNumber: 4 },
+        { kind: "excerpt_unverified", affectedCodes: [], detail: "来源范围尚待核清", alternative: "不猜来源" }] };
+    mocks.getRun.mockResolvedValue(report);
+    mocks.listRuns.mockImplementation(async (subjectId: string, reviewEpisodeId: string) => ({ subjectId, reviewEpisodeId, items: [report.run] }));
+    const before = JSON.stringify(report);
+    const user = userEvent.setup();
+    render(<ReportsPage />);
+    await screen.findByText("入排审核工作稿 · 未签发");
+    expect(screen.getByText("工作稿已保存，未签发")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "更新工作稿" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存日期" })).not.toBeInTheDocument();
+    expect(screen.getByText(confirmationKind ? "高置信" : "低置信")).toBeInTheDocument();
+    const marker = confirmationKind === "medical_manager" ? "医学经理已核实" : "构建者试用核实，非正式医学核实";
+    if (confirmationKind) expect(screen.getByText(marker)).toBeInTheDocument();
+    expect(screen.getByText("必须符合原文限定").closest("details")).not.toHaveAttribute("open");
+    await user.click(screen.getByText("分项核对（1）"));
+    expect(screen.getByText("基线期还未到，届时核对。")).toBeVisible();
+    expect(screen.getByText(/读取意见尚未一致/)).toBeInTheDocument();
+    expect(screen.getByText("原件第 4 页")).toBeInTheDocument();
+    expect(screen.getByText("尚未关联条款的记录")).toBeInTheDocument();
+    expect(screen.queryByText("本次审核未记录补充事项。")).not.toBeInTheDocument();
+    for (const format of ["html", "md"] as const) {
+      const content = frozenReviewExport(report, format, new Date(timestamp));
+      expect(content).toContain("未签发");
+      if (confirmationKind) expect(content).toContain(marker);
+      expect(content).toContain("基线期还未到");
+      expect(content).toContain("读取意见尚未一致");
+      expect(content).toContain("原件第 4 页");
+      expect(content).toContain("尚未关联条款的记录");
+      expect(content).toContain("后续节点仍须另行审核");
+      expect(content).not.toContain("本次审核未记录补充事项");
+    }
+    expect(JSON.stringify(report)).toBe(before);
   });
 });

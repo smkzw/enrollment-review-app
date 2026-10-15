@@ -16,6 +16,7 @@ export interface EditableTimeWindow {
 }
 
 export interface EditablePredicate {
+  variableId?: string;
   predicateId: string;
   scope: "main" | "exception";
   subject: string;
@@ -150,6 +151,11 @@ export function getEditableProtocolComponents(content: Record<string, unknown>):
         requirements.push({ requirementId: String(rawRequirement.requirement_id ?? ""), description: String(rawRequirement.description ?? ""), dueStage });
       }
       const draft = draftByComponent.get(componentId);
+      for (const predicate of predicates) {
+        const requirement = (Array.isArray(rawComponent.evidence_requirements) ? rawComponent.evidence_requirements : [])
+          .find(item => isRecord(item) && Array.isArray(item.predicate_ids) && item.predicate_ids.includes(predicate.predicateId));
+        if (isRecord(requirement) && typeof requirement.variable_id === "string") predicate.variableId = requirement.variable_id;
+      }
       result.push({
         componentId,
         displayCode: String(rawComponent.display_code ?? ""),
@@ -174,10 +180,16 @@ function parseValue(text: string, original: unknown, comparator: EditableCompara
     });
   }
   if (typeof original === "number") {
+    if (!text.trim()) throw new Error("请填写有效数值；空白不能当作零。");
     const numeric = Number(text);
-    return Number.isFinite(numeric) ? numeric : original;
+    if (!Number.isFinite(numeric)) throw new Error("请填写有效数值，没有保存本次修订。");
+    return numeric;
   }
-  if (typeof original === "boolean") return text === "是" || text.toLowerCase() === "true";
+  if (typeof original === "boolean") {
+    const answer = text.trim().toLowerCase();
+    if (!["是", "否", "true", "false"].includes(answer)) throw new Error("请明确选择是或否，没有保存本次修订。");
+    return answer === "是" || answer === "true";
+  }
   return text;
 }
 
@@ -246,10 +258,23 @@ export function patchComponentSemantics(content: Record<string, unknown>, compon
       const requirementById = new Map(patch.requirements.map((item) => [item.requirementId, item]));
       rawComponent.evidence_requirements = (Array.isArray(rawComponent.evidence_requirements) ? rawComponent.evidence_requirements : []).map((rawRequirement) => {
         if (!isRecord(rawRequirement)) return rawRequirement;
+        if (patch.predicate?.variableId && Array.isArray(rawRequirement.predicate_ids) && rawRequirement.predicate_ids.includes(patch.predicate.predicateId)) {
+          rawRequirement.variable_id = patch.predicate.variableId;
+        }
         const replacement = requirementById.get(String(rawRequirement.requirement_id ?? ""));
         return replacement === undefined ? rawRequirement : { ...rawRequirement, description: replacement.description, due_stage: replacement.dueStage };
       });
     }
+  }
+  for (const rawDraft of Array.isArray(next.component_drafts) ? next.component_drafts : []) {
+    if (!isRecord(rawDraft) || !isRecord(rawDraft.proposed_component) || rawDraft.proposed_component.rule_component_id !== componentId) continue;
+    const rules = Array.isArray(next.proposed_rules) ? next.proposed_rules : [];
+    const components = rules.flatMap(rule => isRecord(rule) && Array.isArray(rule.components) ? rule.components : []);
+    rawDraft.proposed_component = components.find(value => isRecord(value) && value.rule_component_id === componentId) ?? rawDraft.proposed_component;
+  }
+  for (const item of Array.isArray(next.evidence_requirement_drafts) ? next.evidence_requirement_drafts : []) {
+    if (!isRecord(item) || !isRecord(item.proposed_requirement) || item.proposed_requirement.rule_component_id !== componentId) continue;
+    if (patch.predicate?.variableId && Array.isArray(item.proposed_requirement.predicate_ids) && item.proposed_requirement.predicate_ids.includes(patch.predicate.predicateId)) item.proposed_requirement.variable_id = patch.predicate.variableId;
   }
   return matched ? next : content;
 }

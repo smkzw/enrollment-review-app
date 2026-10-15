@@ -148,6 +148,19 @@ def test_affirmed_object_may_span_adjacent_same_page_locators(monkeypatch):
     )
     assert closure._validate_assertion_text_closure(None, negated, None)
 
+
+@pytest.mark.parametrize("text,raw_value,accepted", [
+    ("ALT 5.6 mmol/L", 5.6, True), ("ALT 55.6 mmol/L", 5.6, False),
+    ("ALT 5.6 mmol/L 正常", 5.6, False), ("ALT 5.6 mmol/L", 9.6, False),
+])
+def test_targeted_fact_checks_complete_literal_and_raw_number(monkeypatch, text, raw_value, accepted):
+    from app.domain.gates import fact_evidence_closure as closure
+    monkeypatch.setattr(closure, "_fetch_cached", lambda *_args: SimpleNamespace())
+    monkeypatch.setattr(closure, "_localized_locator_text", lambda *_args: RAW_TEXT)
+    item = _make_fact_candidate().model_copy(update={"variable_id": "alt", "raw_value": raw_value})
+    item.assertion_basis.assertion_text = text
+    assert (closure._validate_assertion_text_closure(None, item, None) == []) is accepted
+
 # --------------------------------------------------------------------------- 辅助：资料与页
 def _make_authority(
     *,
@@ -1828,7 +1841,7 @@ def test_batch_gate_evidence_closure_happy(migrated_session):
         assert batch["fact-2"][FactGate.LOCATOR_AND_TEXT_HASH].outcome == GateOutcome.ACCEPTED
         session.rollback()
 
-def test_batch_gate_evidence_closure_with_missing_page_rejects_all(migrated_session):
+def test_batch_gate_evidence_closure_missing_page_keeps_verified_sibling(migrated_session):
     # 复用更轻量：无需 DB，仅测页覆盖批次失败对所有候选的传播
     rev = _make_revision(
         manifest_entries=[("doc-1", 1, "pa-1", "op-1"), ("doc-1", 2, "pa-2", "op-2")],
@@ -1907,8 +1920,9 @@ def test_batch_gate_evidence_closure_with_missing_page_rejects_all(migrated_sess
         calls = [_make_call("call-1", "run-1", "log-1", [1])]  # 缺 2
         fact1 = _make_fact_candidate(candidate_id="fact-1", locator_ids=["loc-1"], basis_locator="loc-1", basis_hash=op1.raw_text_sha256)
         batch = batch_gate_evidence_closure(session, rev, calls, fact_candidates=[fact1])
-        assert batch["fact-1"][FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE].outcome == GateOutcome.REJECTED
-        assert any("缺失" in r for r in batch["fact-1"][FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE].reasons)
+        assert batch["fact-1"][FactGate.PAGE_COVERAGE_AND_REFERENCE_CLOSURE].outcome == GateOutcome.ACCEPTED
+        assert validate_page_coverage(rev, calls, session)[0] == GateOutcome.REJECTED
+        assert validate_page_coverage(rev, calls, session)[2] == ["log-1:2"]
         session.rollback()
 
 # --------------------------------------------------------------------------- 持久化

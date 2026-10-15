@@ -38,8 +38,13 @@ export interface EligibilityClauseView {
   sourceText?: string | null;
   parentRuleCode: string | null;
   decision: EligibilityDecision;
+  confidence?: "high" | "low" | null;
+  confidenceReason?: string | null;
+  canConfirm?: boolean;
+  confirmationKind?: "medical_manager" | "builder_verification" | null;
   decisionLabel: string;
   reason: string;
+  reasonParts?: Array<{ conditionId: string; conditionText: string; reasonText: string; requiresAttention: boolean }>;
   factRefs: EligibilityFactRefView[];
   sourceReadRefs?: EligibilitySourceReadRefView[];
   gapType: string | null;
@@ -84,6 +89,10 @@ export type EligibilityActionTarget =
   | "sponsor_medical_or_project";
 
 export interface EligibilityReviewView {
+  verificationOnly?: boolean;
+  componentClauses?: EligibilityClauseView[];
+  reviewRunId?: string | null;
+  systemIssues?: { kind: string; affectedCodes: string[]; detail: string; alternative: string; pageArtifactId?: string | null; pageNumber?: number | null }[];
   workDraftState?: "not_started" | "current" | "source_changed" | "method_changed";
   unassignedConflicts?: { conflictGroupId: string; memberKind: "event" | "exposure"; memberIds: string[] }[];
   subjectId: string;
@@ -172,6 +181,22 @@ function arrayValue(value: unknown, path: string): unknown[] {
   return value;
 }
 
+
+function decodeReasonParts(value: unknown, path: string): NonNullable<EligibilityClauseView["reasonParts"]> {
+  if (value === undefined) return [];
+  const seen = new Set<string>();
+  return arrayValue(value, path).map((raw, index) => {
+    const row = objectValue(raw, `${path}[${index}]`);
+    const conditionId = requiredString(row.condition_id, `${path}[${index}].condition_id`);
+    if (seen.has(conditionId) || typeof row.requires_attention !== "boolean") {
+      throw new EligibilityReviewDecodeError(`${path} 条件重复或核对状态不正确`);
+    }
+    seen.add(conditionId);
+    return { conditionId, conditionText: requiredString(row.condition_text, `${path}[${index}].condition_text`),
+      reasonText: requiredString(row.reason_text, `${path}[${index}].reason_text`), requiresAttention: row.requires_attention };
+  });
+}
+
 function enumValue<T extends string>(
   value: unknown,
   values: readonly T[],
@@ -203,6 +228,7 @@ const RULE_KINDS: readonly EligibilityRuleKind[] = [
   "inclusion",
   "exclusion",
   "required_procedure",
+  "medication",
 ];
 const DECISIONS: readonly EligibilityDecision[] = [
   "inclusion_met",
@@ -216,6 +242,7 @@ const DECISIONS: readonly EligibilityDecision[] = [
   "conflict",
   "not_due",
   "not_applicable",
+  "system_issue",
 ];
 const DETERMINATION_MODES: readonly EligibilityDeterminationMode[] = [
   "deterministic",
@@ -272,7 +299,8 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
   const path = `clauses[${index}]`;
   const row = objectValue(value, path);
   const ruleCode = requiredString(field(row, "rule_code", path), `${path}.rule_code`);
-  if (!/^(IN|EX|REQ)-\d{2}$/.test(ruleCode)) {
+  const ruleKind = enumValue(field(row, "rule_kind", path), RULE_KINDS, `${path}.rule_kind`);
+  if (!(ruleKind === "medication" ? /^用药\d{2,}$/ : /^(IN|EX|REQ)-\d{2}$/).test(ruleCode)) {
     throw new EligibilityReviewDecodeError(`${path}.rule_code 格式不正确`);
   }
   const parentRuleCode = nullableString(
@@ -282,15 +310,13 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
   if (parentRuleCode !== null && !/^(IN|EX|REQ)-\d{2}$/.test(parentRuleCode)) {
     throw new EligibilityReviewDecodeError(`${path}.parent_rule_code 格式不正确`);
   }
+  if (ruleKind === "medication" && parentRuleCode !== null) throw new EligibilityReviewDecodeError("用药要求不能伪装成官方入排子项");
   const refs = arrayValue(field(row, "fact_refs", path), `${path}.fact_refs`);
+  if (row.can_confirm != null && typeof row.can_confirm !== "boolean") throw new EligibilityReviewDecodeError("核实操作记录不完整");
   return {
     ruleCode,
     ruleComponentId: requiredString(field(row, "rule_component_id", path), `${path}.rule_component_id`),
-    ruleKind: enumValue(
-      field(row, "rule_kind", path),
-      RULE_KINDS,
-      `${path}.rule_kind`,
-    ),
+    ruleKind,
     textSummary: requiredString(
       field(row, "text_summary", path),
       `${path}.text_summary`,
@@ -299,11 +325,16 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
       ? nullableString(row.source_text, `${path}.source_text`) : null,
     parentRuleCode,
     decision: enumValue(field(row, "decision", path), DECISIONS, `${path}.decision`),
+    confidence: optionalEnumValue(row.confidence, ["high", "low"] as const, `${path}.confidence`),
+    confidenceReason: row.confidence_reason == null ? null : requiredString(row.confidence_reason, `${path}.confidence_reason`),
+    canConfirm: row.can_confirm === true,
+    confirmationKind: optionalEnumValue(row.confirmation_kind ?? null, ["medical_manager", "builder_verification"] as const, `${path}.confirmation_kind`),
     decisionLabel: requiredString(
       field(row, "decision_label", path),
       `${path}.decision_label`,
     ),
     reason: requiredString(field(row, "reason", path), `${path}.reason`),
+    reasonParts: decodeReasonParts(row.reason_parts, `${path}.reason_parts`),
     factRefs: refs.map((value, index) => decodeFactRef(value, index)),
     sourceReadRefs: decodeSourceReads(row.source_read_refs, `${path}.source_read_refs`),
     gapType: nullableString(field(row, "gap_type", path), `${path}.gap_type`),
@@ -377,7 +408,9 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
   const row = objectValue(value, "eligibility_review");
   const clauses = arrayValue(field(row, "clauses", "eligibility_review"), "clauses");
   const decodedClauses = clauses.map(decodeClause);
-  if (new Set(decodedClauses.map((clause) => clause.ruleComponentId)).size !== decodedClauses.length) {
+  const componentClauses = row.component_clauses == null ? [] : arrayValue(row.component_clauses, "eligibility_review.component_clauses").map(decodeClause);
+  const allIdentities = [...decodedClauses, ...componentClauses].map(clause => clause.ruleComponentId);
+  if (new Set(allIdentities).size !== allIdentities.length) {
     throw new EligibilityReviewDecodeError("审核要点重复，请重新读取审核结果。");
   }
   const unassignedConflicts = ("unassigned_conflicts" in row
@@ -430,7 +463,18 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
       "complete_processing_revision_id",
     ),
     clauses: decodedClauses,
+    componentClauses,
     controls,
+    reviewRunId: row.review_run_id == null ? null : requiredString(row.review_run_id, "eligibility_review.review_run_id"),
+    verificationOnly: row.verification_only === true,
+    systemIssues: row.system_issues == null ? [] : arrayValue(row.system_issues, "eligibility_review.system_issues").map((value, index) => {
+      const issue = objectValue(value, `system_issues[${index}]`);
+      return { kind: requiredString(issue.kind, "system_issue.kind"),
+        affectedCodes: arrayValue(issue.affected_codes, "system_issue.affected_codes").map(value => requiredString(value, "system_issue.code")),
+        pageArtifactId: issue.page_artifact_id == null ? null : requiredString(issue.page_artifact_id, "system_issue.page_artifact_id"),
+        pageNumber: issue.page_number == null ? null : positiveInteger(issue.page_number, "system_issue.page_number"),
+        detail: requiredString(issue.detail, "system_issue.detail"), alternative: requiredString(issue.alternative, "system_issue.alternative") };
+    }),
   };
 }
 

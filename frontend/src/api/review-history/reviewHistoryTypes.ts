@@ -105,6 +105,7 @@ export interface ReviewHistoryClauseIdentityView {
 /** 一次正式审核的身份、冻结资料版本与持久化时间；状态只由完成时间推导。 */
 export interface ReviewHistoryRunSummaryView {
   reviewRunId: string;
+  runKind?: "formal" | "work_draft";
   status: ReviewHistoryRunStatus;
   stage: ReviewHistoryStage;
   workflowStageId: string | null;
@@ -123,6 +124,8 @@ export interface ReviewHistoryRunSummaryView {
 
 /** 冻结输入快照的身份、来源指纹与内容规模；不含重新解释或推导结论。 */
 export interface ReviewHistoryContextView {
+  nodeStartDate?: string | null;
+  evidenceCutoffDate?: string | null;
   contextId: string;
   reviewRunId: string;
   createdAt: string;
@@ -269,6 +272,8 @@ export interface ReviewHistoryRestrictedRequirementView {
 }
 
 export interface ReviewHistoryRunDetailView {
+  workDraft?: import("../eligibility-review").EligibilityReviewView | null;
+  sourceFileNames?: Record<string, string>;
   restrictedRequirements: ReviewHistoryRestrictedRequirementView[];
   controlSelectionRecords: {
     identity: string; protocolControlId: string; displayLabel: string;

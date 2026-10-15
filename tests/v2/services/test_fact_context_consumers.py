@@ -119,7 +119,7 @@ def test_changed_context_fact_cannot_borrow_old_basis(monkeypatch, updates):
     locator = SimpleNamespace(source_text_sha256="a" * 64, excerpt=fact.assertion_basis.assertion_text)
     monkeypatch.setattr(correction, "EvidenceLocatorRepository", lambda session: SimpleNamespace(get=lambda key: locator))
     with pytest.raises(correction.FactCorrectionValidationError, match="需重新核对其归属"):
-        correction._build_new_fact(None, fact, fact.locator_ids, updates, _UTC)
+        correction._build_new_fact(None, fact, fact.locator_ids, updates, _UTC, fact.authority)
 
 
 def test_context_correction_preserves_unchanged_basis_and_allows_explicit_withdrawal(monkeypatch):
@@ -127,11 +127,11 @@ def test_context_correction_preserves_unchanged_basis_and_allows_explicit_withdr
     locator = SimpleNamespace(source_text_sha256="a" * 64, excerpt=fact.assertion_basis.assertion_text)
     monkeypatch.setattr(correction, "EvidenceLocatorRepository", lambda session: SimpleNamespace(get=lambda key: locator))
     monkeypatch.setattr(correction, "ClinicalFactV2Repository", lambda session: SimpleNamespace(list_for_authority=lambda auth: [fact]))
-    updated, candidate, _ = correction._build_new_fact(None, fact, fact.locator_ids, {}, _UTC)
+    updated, candidate, _ = correction._build_new_fact(None, fact, fact.locator_ids, {}, _UTC, fact.authority)
     assert updated.assertion_basis == fact.assertion_basis
     assert updated.stable_identity == fact.stable_identity
     assert candidate["assertion_basis"] == fact.assertion_basis.model_dump(mode="json")
     withdrawn, candidate, _ = correction._build_new_fact(None, fact, fact.locator_ids,
-        {"polarity": FactPolarity.UNKNOWN.value, "value": None, "unit": None}, _UTC)
+        {"polarity": FactPolarity.UNKNOWN.value, "value": None, "unit": None}, _UTC, fact.authority)
     assert withdrawn.assertion_basis is None and candidate["assertion_basis"] is None
     assert fact.assertion_basis.contextual_qualifiers[0].label == "量表甲"

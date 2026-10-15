@@ -53,7 +53,7 @@ export function factTypeDisplayName(factType: string): string | null {
 
 /** 单位 → 中文表达；与属性名内单位去重，避免“年龄（岁）…岁”重复。 */
 const UNIT_LABELS: Record<string, string> = {
-  year: "岁",
+  year: "年",
   xULN: "倍正常上限",
 };
 
@@ -63,7 +63,7 @@ function formatValue(
   attribute: string | null,
 ): string {
   const localizedUnit =
-    unit === null || unit === undefined ? null : (UNIT_LABELS[unit] ?? unit);
+    unit === null || unit === undefined || unit === "unitless" ? null : unit === "year" && attribute?.includes("年龄") ? "岁" : (UNIT_LABELS[unit] ?? unit);
   const unitAlreadyInAttribute =
     localizedUnit !== null &&
     attribute?.includes(`（${localizedUnit}）`) === true;
@@ -85,9 +85,11 @@ export function formatPredicateStatement(
     PredicateNodeView,
     "subject" | "attribute" | "comparator" | "comparatorLabel" | "value" | "unit"
   >,
+  displayName?: string,
 ): string {
-  const attribute = attributeDisplayName(predicate.subject, predicate.attribute);
+  const attribute = displayName ?? attributeDisplayName(predicate.subject, predicate.attribute);
   const name = attribute ?? "该事项";
+  if (predicate.comparator === "exists") return `${name}：需有相应记录`;
   if (typeof predicate.value === "boolean") {
     if (predicate.comparator === "eq") {
       return predicate.value ? name : `${name}：否`;

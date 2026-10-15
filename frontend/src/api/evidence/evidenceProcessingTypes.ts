@@ -304,6 +304,7 @@ export interface BuildRevisionRequestWire {
   actor?: string | null;
   scanner_rule_version?: string | null;
   selected_locator_ids?: string[];
+  source_qualification_mode?: "strict" | "scoped_text_v1";
 }
 
 export interface BuildRevisionResponseWire extends ProcessingCandidateResultWire {

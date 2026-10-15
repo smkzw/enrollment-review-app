@@ -24,7 +24,9 @@ OCR（初始 Job 由后台 worker 在 Slice 4.3 消费）。
 from __future__ import annotations
 
 import hashlib
+import re
 import shutil
+import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -1076,7 +1078,6 @@ class EvidenceUploadService:
                 "review_episode_id": command.review_episode_id,
                 "upload_mode": command.upload_mode.value,
                 "ocr_inheritance_contract": "confirmed-ocr/v1",
-                "preparation_policy": DIRECT_VISION_PREPARATION,
                 "inherited_processing_revision_id": EpisodeRepository(session).get(
                     command.review_episode_id
                 ).active_evidence_processing_revision_id,
@@ -1455,19 +1456,22 @@ class EvidenceUploadService:
         这只是上传后的产品初始态，不是临床事实或最终分类；持久化时明确
         标记为自动建议，后续人工修改必须追加新修订。
         """
-        normalized = file_name.casefold()
+        normalized = re.sub(r"[_-]+", " ", unicodedata.normalize("NFKC", file_name).casefold())
         categories = (
             (("知情", "icf", "consent"), "知情同意资料"),
-            (("病历", "病案", "medical record", "record"), "病历资料"),
-            (("用药", "处方", "治疗", "medication", "therapy"), "用药与治疗记录"),
-            (("检验", "化验", "血常规", "尿常规", "lab"), "实验室检验结果"),
+            (("病历", "病案", "medical record", "discharge summary"), "病历资料"),
+            (("用药", "处方", "购药", "治疗", "medication", "prescription", "purchase", "therapy"), "用药与治疗记录"),
+            (("检验", "化验", "血常规", "尿常规", "lab", "laboratory"), "实验室检验结果"),
             (("检查", "心电", "影像", "超声", "ct", "mri", "ecg"), "检查报告"),
             (("评分", "量表", "scale", "score"), "评分与量表"),
         )
+        matched = set()
         for needles, label in categories:
-            if any(needle in normalized for needle in needles):
-                return label, "研究中心（待确认）"
-        return "其他资料（待确认）", "研究中心（待确认）"
+            if any((re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", normalized)
+                    if needle.isascii() else needle in normalized) for needle in needles):
+                matched.add(label)
+        label = next(iter(matched)) if len(matched) == 1 else "混合临床资料" if matched else "其他资料（待确认）"
+        return label, "来源待核对"
 
     def _ensure_initial_metadata(
         self,
@@ -1494,6 +1498,7 @@ class EvidenceUploadService:
             revision=1,
             document_type=document_type,
             source_party=source_party,
+            source_category="unknown",
             reason="上传后根据文件名生成的初始建议，待用户核对",
             is_auto_suggestion=True,
             supersedes_metadata_revision_id=None,

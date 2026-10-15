@@ -9,7 +9,7 @@ import tempfile
 from datetime import timezone
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, Request, Response, UploadFile, status as http_status
+from fastapi import APIRouter, File, Form, Query, Request, Response, UploadFile, status as http_status
 
 from app.api.v2.protocol_schemas import (
     ConfirmIdentityRequest,
@@ -36,6 +36,9 @@ from app.api.v2.protocol_schemas import (
     ProtocolSessionResponse,
     PublishRequest,
     PublishResponse,
+    RuleReviewRequest,
+    RuleBatchReviewRequest,
+    RuleReviewResponse,
     RegisterInterpretationSourcesRequest,
     SourcesResponse,
     StartDeconstructionResponse,
@@ -53,9 +56,92 @@ from app.api.v2.vocabulary import (
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.protocol_metadata import ProtocolIdentityDecision
 from app.services.protocol_workbench_service import ProtocolWorkbenchService
+from pydantic import Field
+from app.domain.contracts.common import ContractModel
+from app.services.protocol_variable_binding import VariableBindingProposal
+from app.domain.contracts.protocol_drafts import ReviewScopeProposal
+from app.protocols.medication_restrictions import MedicationRestrictionProposal
+
+
+class VariableBindingRequest(ContractModel):
+    expected_revision_id: str = Field(min_length=1)
+    proposal: VariableBindingProposal
+
+
+class VariableSuggestionRequest(ContractModel):
+    expected_revision_id: str = Field(min_length=1)
+
+
+class ReviewScopeRequest(ContractModel):
+    expected_revision_id: str = Field(min_length=1)
+    proposal: ReviewScopeProposal
+
+
+class MedicationRestrictionRequest(ContractModel):
+    expected_revision_id: str = Field(min_length=1)
+    proposal: MedicationRestrictionProposal
+    proposal_ref: str | None = Field(default=None, pattern=r"^artifacts/evaluation_manifest/[0-9a-f]{64}$")
+    drug_classes: dict[str, list[str]] | None = None
 
 router = APIRouter(prefix="/api/v2/protocol/deconstructions", tags=["v2-protocol"])
 projects_router = APIRouter(prefix="/api/v2/protocol", tags=["v2-protocol"])
+
+
+@router.get("/{job_id}/draft/variables")
+def get_variables(job_id: str, request: Request):
+    return _service(request).get_variable_bindings(job_id)
+
+
+@router.get("/{job_id}/draft/review-scope")
+def get_review_scope(job_id: str, request: Request):
+    return _service(request).get_review_scope(job_id)
+
+
+@router.get("/{job_id}/draft/review-scope/sources")
+def get_review_scope_sources(job_id: str, request: Request, q: str = Query("", max_length=200),
+                             offset: int = Query(0, ge=0)):
+    return _service(request).get_review_scope_options(job_id, query=q, offset=offset)
+
+
+@router.put("/{job_id}/draft/review-scope")
+def save_review_scope(job_id: str, body: ReviewScopeRequest, request: Request):
+    return _service(request).save_review_scope(job_id,
+        expected_revision_id=body.expected_revision_id, proposal=body.proposal)
+
+
+@router.put("/{job_id}/draft/variables", response_model=DraftRevisionResponse)
+def save_variables(job_id: str, body: VariableBindingRequest, request: Request):
+    return _draft_dto(_service(request).save_variable_bindings(job_id,
+        expected_revision_id=body.expected_revision_id, proposal=body.proposal))
+
+
+@router.post("/{job_id}/draft/medications/suggest")
+async def suggest_medications(job_id: str, body: VariableSuggestionRequest, request: Request):
+    return await _service(request).suggest_medication_restrictions(job_id, expected_revision_id=body.expected_revision_id)
+
+
+@router.put("/{job_id}/draft/medications", response_model=DraftRevisionResponse)
+def save_medications(job_id: str, body: MedicationRestrictionRequest, request: Request):
+    return _draft_dto(_service(request).save_medication_restrictions(job_id,
+        expected_revision_id=body.expected_revision_id, proposal=body.proposal, proposal_ref=body.proposal_ref,
+        drug_classes=body.drug_classes))
+
+
+@router.post("/{job_id}/draft/variables/suggest")
+async def suggest_variable_bindings(job_id: str, body: VariableSuggestionRequest, request: Request):
+    from app.agents.protocol_variable_binder import suggest_variables
+    service = _service(request)
+    view = service.get_draft_detail(job_id)
+    if view.revision.revision_id != body.expected_revision_id:
+        from app.services.protocol_workbench_service import ProtocolWorkbenchError
+        raise ProtocolWorkbenchError("DRAFT_REVISION_CONFLICT", title="草稿已更新",
+            detail="不会为旧版草稿生成建议。", recovery="请刷新草稿。")
+    if view.revision.status.value not in {"draft", "saved", "restored_from"}:
+        from app.services.protocol_workbench_service import ProtocolWorkbenchError
+        raise ProtocolWorkbenchError("DRAFT_NOT_EDITABLE", title="该版规则已发布",
+            detail="不会为不可编辑的历史版本生成建议。", recovery="请从已发布项目发起规则修订。")
+    return {"job_id": job_id, "draft_revision_id": body.expected_revision_id,
+            **await suggest_variables(view.revision.content, service.data_paths)}
 
 
 def _official_project_dto(view) -> OfficialProjectDTO:
@@ -88,6 +174,8 @@ def _as_utc(value):
 
 def _session_dto(view) -> ProtocolSessionResponse:
     return ProtocolSessionResponse(
+        operator_name=ProtocolWorkbenchService.operator_name(),
+        verification_only=view.verification_only,
         job_id=view.job_id,
         job_type=view.job_type,
         state=view.state,
@@ -281,6 +369,7 @@ def _metadata_conflict_dto(
 
 
 def _draft_dto(view) -> DraftRevisionResponse:
+    from app.protocols.medication_restrictions import scope_supplement_pending
     revision = view.revision
     content = revision.content
     return DraftRevisionResponse(
@@ -297,6 +386,7 @@ def _draft_dto(view) -> DraftRevisionResponse:
             revision.reason.value, revision.reason.value
         ),
         imported_unpublished_proposal=(revision.reason.value == "initial_save" and revision.feedback_note is not None),
+        review_scope_pending=scope_supplement_pending(revision),
         actor=revision.actor,
         created_at=_as_utc(revision.created_at),
         study_phase=revision.study_phase.value,
@@ -323,12 +413,13 @@ def _comparison_side_dto(side) -> DraftComparisonSideResponse:
         is_formal_baseline=side.is_formal_baseline,
         content=side.content,
         source_refs=list(side.source_refs),
+        review_scope_pending=side.review_scope_pending,
     )
 
 
 def _integrity_dto(view) -> IntegrityResponse:
     if view.publishable:
-        summary = "完整性检查已通过，可以进入发布确认。"
+        summary = "未发现结构性错误。请逐条核对提示并完成审定后发布。"
     elif view.blocking_count:
         summary = f"有 {view.blocking_count} 项问题阻止发布，请先修正后再发布。"
     elif view.review_count:
@@ -391,7 +482,7 @@ async def start_deconstruction(
                 original_name=file.filename or "protocol.docx",
                 project_id=project_id.strip(),
                 idempotency_key=idempotency_key,
-                actor=actor,
+                actor=_service(request).operator_name(),
                 workbench_origin=workbench_origin or None,
             )
         else:
@@ -399,7 +490,7 @@ async def start_deconstruction(
                 upload_path=temp_path,
                 original_name=file.filename or "protocol.docx",
                 idempotency_key=idempotency_key,
-                actor=actor,
+                actor=_service(request).operator_name(),
                 workbench_origin=workbench_origin or None,
             )
     finally:
@@ -433,7 +524,7 @@ def start_feedback_re_deconstruction(
         project_id=payload.project_id,
         idempotency_key=payload.idempotency_key,
         interpretation_sources=payload.interpretation_sources,
-        actor=payload.actor,
+        actor=_service(request).operator_name(),
         workbench_origin=payload.workbench_origin,
     )
     if not result.created:
@@ -492,7 +583,7 @@ def confirm_identity(
         official_date_value=body.official_date_value,
         official_date_precision=body.official_date_precision,
         study_phase=body.study_phase,
-        actor=body.actor,
+        actor=_service(request).operator_name(),
         selected_candidate_ids=body.selected_candidate_ids,
     )
     return _session_dto(view)
@@ -543,7 +634,8 @@ def edit_draft(
         job_id,
         draft=body.draft,
         expected_revision_id=body.expected_revision_id,
-        actor=body.actor,
+        actor=_service(request).operator_name(),
+        reviewed_stage_assignment=body.reviewed_stage_assignment,
     )
     return _draft_dto(view)
 
@@ -563,7 +655,7 @@ def submit_feedback(
         target_component_id=body.target_component_id,
         review_parent_scope=body.review_parent_scope,
         retire_redundant_source=body.retire_redundant_source,
-        actor=body.actor,
+        actor=_service(request).operator_name(),
     )
     return _draft_dto(view)
 
@@ -607,7 +699,7 @@ def register_interpretation_sources(
         expected_revision_id=body.expected_revision_id,
         idempotency_key=body.idempotency_key,
         interpretation_sources=body.interpretation_sources,
-        actor=body.actor,
+        actor=_service(request).operator_name(),
     )
     return SourcesResponse(**payload)
 
@@ -623,6 +715,26 @@ def get_integrity(job_id: str, request: Request) -> IntegrityResponse:
     return _integrity_dto(_service(request).get_integrity(job_id))
 
 
+@router.get("/{job_id}/draft/reviews", response_model=RuleReviewResponse)
+def get_rule_reviews(job_id: str, request: Request):
+    return _service(request).get_rule_reviews(job_id)
+
+
+@router.post("/{job_id}/draft/rules/{official_code}/review", response_model=RuleReviewResponse)
+def review_rule(job_id: str, official_code: str, body: RuleReviewRequest, request: Request):
+    return _service(request).review_rule(job_id, official_code, action="approved", **body.model_dump())
+
+
+@router.post("/{job_id}/draft/reviews", response_model=RuleReviewResponse)
+def review_selected_rules(job_id: str, body: RuleBatchReviewRequest, request: Request):
+    return _service(request).review_rules(job_id, action="approved", **body.model_dump())
+
+
+@router.delete("/{job_id}/draft/rules/{official_code}/review", response_model=RuleReviewResponse)
+def revoke_rule_review(job_id: str, official_code: str, body: RuleReviewRequest, request: Request):
+    return _service(request).review_rule(job_id, official_code, action="revoked", **body.model_dump())
+
+
 @router.post("/{job_id}/publish", response_model=PublishResponse)
 def publish_deconstruction(
     job_id: str,
@@ -634,7 +746,7 @@ def publish_deconstruction(
         result = service.publish_re_deconstruction(
             job_id,
             idempotency_key=body.idempotency_key,
-            actor=body.actor,
+            actor=service.operator_name(),
             control_job_id=body.control_job_id,
             control_checkpoint_id=body.control_checkpoint_id,
         )
@@ -642,7 +754,7 @@ def publish_deconstruction(
         result = service.publish_first_project(
             job_id,
             idempotency_key=body.idempotency_key,
-            actor=body.actor,
+            actor=service.operator_name(),
             control_job_id=body.control_job_id,
             control_checkpoint_id=body.control_checkpoint_id,
         )
@@ -653,6 +765,7 @@ def publish_deconstruction(
         rule_set_id=result.rule_set_id,
         rule_set_revision=result.rule_set_revision,
         replay=result.replay,
+        verification_only=result.verification_only,
     )
 
 

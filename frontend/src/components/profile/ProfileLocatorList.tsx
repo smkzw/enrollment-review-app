@@ -7,6 +7,7 @@
 
 import type { LocatorView } from "../../api/evidence";
 import type { ProfileItemView } from "../../api/patient-profile";
+import { SourceExcerpt } from "../evidence/SourceExcerpt";
 
 /** 定位是否为真实区域（可画唯一红框的前提）。 */
 export function isRealBboxLocator(locator: LocatorView): boolean {
@@ -34,6 +35,7 @@ export interface ProfileLocatorListProps {
   locators: ReadonlyArray<LocatorView>;
   selectedLocatorId: string | null;
   onSelectLocator: (locatorId: string) => void;
+  compact?: boolean;
 }
 
 export function ProfileLocatorList({
@@ -41,6 +43,7 @@ export function ProfileLocatorList({
   locators,
   selectedLocatorId,
   onSelectLocator,
+  compact = false,
 }: ProfileLocatorListProps) {
   const isConflict = item.kind === "conflict";
   if (locators.length === 0) {
@@ -52,9 +55,18 @@ export function ProfileLocatorList({
   }
   return (
     <div className={isConflict ? "profile-locator-juxtapose" : "profile-locator-list"}>
+      {compact && !isConflict && locators.length > 1 && <label>原文依据
+        <select aria-label="原文依据" value={selectedLocatorId ?? locators[0].locatorId}
+          onChange={event => onSelectLocator(event.target.value)}>
+          {locators.map((locator, index) => <option key={locator.locatorId} value={locator.locatorId}>
+            {index + 1}. 第{locator.pageNumber}页 · {locator.excerpt?.slice(0, 36) || locator.precisionLabel}
+          </option>)}
+        </select>
+      </label>}
       {locators.map((locator, index) => {
         const real = isRealBboxLocator(locator);
         const selected = locator.locatorId === selectedLocatorId;
+        if (compact && !isConflict && locator.locatorId !== (selectedLocatorId ?? locators[0].locatorId)) return null;
         return (
           <article
             key={locator.locatorId}
@@ -79,8 +91,10 @@ export function ProfileLocatorList({
               第 {locator.pageNumber} 页 · {locator.sourceLayerLabel}
             </p>
             {locator.excerpt !== null && locator.excerpt.length > 0 && (
-              <p className="profile-locator__excerpt">{locator.excerpt}</p>
+              <p className="profile-locator__excerpt"><SourceExcerpt text={locator.excerpt}
+                focusTexts={[item.assertedObject || item.medicationName || item.title]} /></p>
             )}
+            <details open={!compact || isConflict}><summary>定位说明</summary>
             {locator.degradationReason !== null && (
               <p className="profile-locator__reason">{locator.degradationReason}</p>
             )}
@@ -91,6 +105,7 @@ export function ProfileLocatorList({
                   ? "只能确定到所在页，将打开整页查看，不显示重点框。"
                   : "可按文字位置回看原文，但无法稳定框出具体区域。"}
             </p>
+            </details>
             <button
               type="button"
               className={`chip profile-locator__locate${selected ? " is-active" : ""}`}

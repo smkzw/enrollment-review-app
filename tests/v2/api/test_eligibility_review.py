@@ -64,6 +64,27 @@ def test_eligibility_review_rejects_cross_subject_path(client):
     assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
+def test_condition_reasons_reach_http_with_strict_identity_and_attention(client, monkeypatch):
+    chain = _seed(client, "eligibility-condition-reasons")
+    service = client.app.state.eligibility_review_projection_service
+    with client.app.state.session_factory() as session:
+        base = service.project(session, chain["episode_id"])
+    part = {"condition_id": "component:relation", "condition_text": "同次记录关系",
+        "reason_text": "已有相关记录，但对应关系尚未核清。", "requires_attention": True}
+    projected = replace(base, clauses=(replace(base.clauses[0], reason_parts=(part,)),))
+    monkeypatch.setattr(service, "project", lambda _session, _episode: projected)
+    response = client.get(_url(chain))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["clauses"][0]["reason_parts"] == [part]
+    body["clauses"][0]["reason_parts"][0]["requires_attention"] = "false"
+    with pytest.raises(ValidationError):
+        EligibilityReviewResponse.model_validate(body)
+    body["clauses"][0]["reason_parts"] = [part, part]
+    with pytest.raises(ValidationError, match="重复"):
+        EligibilityReviewResponse.model_validate(body)
+
+
 def test_restricted_clause_and_control_action_reach_http_without_claiming_a_decision(
     client, monkeypatch,
 ):

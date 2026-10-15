@@ -133,9 +133,12 @@ export function correctionSnapshotEntries(
   snapshot: FactCorrectionJsonRecord,
   targetKind: "fact" | "event" | "exposure",
   item?: ProfileItemView,
+  variableLabels?: ReadonlyMap<string, string>,
 ): CorrectionSnapshotEntry[] {
   if (targetKind === "fact") {
     return [
+      ...("variable_id" in snapshot ? [{ label: "所属审核项目", value: snapshot.variable_id === null
+        ? "仅保留在个例档案" : variableLabels?.get(String(snapshot.variable_id)) ?? "数据项目名称暂无法读取" }] : []),
       {
         label: "记录性质",
         value: polarityLabel(snapshotValue(snapshot, "polarity", item?.polarityLabel ?? "未记录")),
@@ -203,17 +206,19 @@ export function CorrectionSnapshotPanel({
   snapshot,
   targetKind,
   item,
+  variableLabels,
 }: {
   label: string;
   snapshot: FactCorrectionJsonRecord;
   targetKind: "fact" | "event" | "exposure";
   item?: ProfileItemView;
+  variableLabels?: ReadonlyMap<string, string>;
 }) {
   return (
     <section className="profile-correction-snapshot" aria-label={label}>
       <h4>{label}</h4>
       <dl>
-        {correctionSnapshotEntries(snapshot, targetKind, item).map((entry) => (
+        {correctionSnapshotEntries(snapshot, targetKind, item, variableLabels).map((entry) => (
           <div key={`${label}-${entry.label}`}>
             <dt>{entry.label}</dt>
             <dd>{entry.value}</dd>
@@ -236,9 +241,11 @@ export function CorrectionImpactSummary({ impact }: { impact: FactCorrectionImpa
     ["资料期望", impact.affectedExpectationIds.length],
     ["受影响历史档案", impact.affectedProfileRevisionIds.length],
   ] as const;
+  const visibleRows = rows.filter(([, count]) => count > 0 || impact.scopeKind !== "node");
+  if (visibleRows.length === 0) return null;
   return (
     <dl className="profile-correction-impact__counts">
-      {rows.map(([label, count]) => (
+      {visibleRows.map(([label, count]) => (
         <div key={label}>
           <dt>{label}</dt>
           <dd>{count}</dd>
