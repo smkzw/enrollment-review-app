@@ -102,8 +102,8 @@ class EvidenceExpectationProjectionService:
                 **({"retained_fact_authorities": {fact.fact_id: fact.authority for fact in facts if fact.authority != authority}}
                    if include_rule_revision_sources else {}),
             )
-            result.append(repository.project(expectation))
-        return result
+            result.append(expectation)
+        return repository.project_many(result)
 
     @staticmethod
     def _observations(session: Session, authority: FactAuthority, facts):

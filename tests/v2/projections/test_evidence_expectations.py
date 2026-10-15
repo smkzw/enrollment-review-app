@@ -1547,6 +1547,63 @@ def test_weak_transcription_never_absent_no_double_report(chain, session):
     assert rows[0].status == ExpectationStatus.OBSERVED_WEAK.value
 
 
+def test_batch_validates_shared_sources_once_but_rechecks_next_call(chain, session, monkeypatch):
+    templates = [_template(session, chain, requirement_id=f"batch-source-{index}",
+        fact_type="vital_sign", due_stage=ReviewStage.SCREENING) for index in range(12)]
+    fact = _publish_fact(session, chain, fact_id="batch-source-fact", gate_id="batch-source-gate",
+        candidate_id="batch-source-candidate", fact_type="vital_sign",
+        source_strength=SourceStrength.CONTEMPORANEOUS_OBJECTIVE,
+        asserted_object="血压", value="120/80", unit="unitless", locator_ids=[chain["locator_id"]])
+    items = [_project(chain, template, observations=[fact]) for template in templates]
+    repository = EvidenceExpectationV2Repository(session)
+    calls = []
+    original = repository._authority.validate
+    def validate(authority):
+        calls.append(authority)
+        return original(authority)
+    monkeypatch.setattr(repository._authority, "validate", validate)
+    result = repository.project_many(items)
+    assert [item.model_dump_json() for item in result] == [item.model_dump_json() for item in items]
+    assert len(calls) == 1
+    assert repository.project_many(items) == result and len(calls) == 2
+    # An earlier successful batch is not an approval after the source chain changes.
+    row = session.scalars(select(ProcessingRevisionLocatorRecord).where(
+        ProcessingRevisionLocatorRecord.revision_id == chain["complete_processing_revision_id"],
+        ProcessingRevisionLocatorRecord.locator_id == chain["locator_id"])).one()
+    session.delete(row)
+    session.flush()
+    with pytest.raises(FactAuthorityError):
+        repository.project_many(items)
+    assert len(calls) == 3
+
+
+def test_batch_rolls_back_valid_sibling_when_later_coverage_is_invalid(chain, session):
+    templates = [_template(session, chain, requirement_id=f"batch-atomic-{index}",
+        fact_type="vital_sign", due_stage=ReviewStage.SCREENING) for index in range(2)]
+    fact = _publish_fact(session, chain, fact_id="batch-atomic-fact", gate_id="batch-atomic-gate",
+        candidate_id="batch-atomic-candidate", fact_type="vital_sign",
+        source_strength=SourceStrength.CONTEMPORANEOUS_OBJECTIVE,
+        asserted_object="血压", value="120/80", unit="unitless", locator_ids=[chain["locator_id"]])
+    first, second = [_project(chain, template, observations=[fact]) for template in templates]
+    bad = second.model_copy(update={"coverage_fact_ids": []})
+    repository = EvidenceExpectationV2Repository(session)
+    with pytest.raises(Phase5RepositoryError, match="定位闭包不一致"):
+        repository.project_many([first, bad])
+    assert session.scalars(select(EvidenceExpectationV2Record)).all() == []
+    assert repository.project_many([first, second]) == [first, second]
+
+
+def test_batch_cannot_mix_authorities(chain, chain_other, session):
+    items = []
+    for index, owner in enumerate((chain, chain_other)):
+        template = _template(session, owner, requirement_id=f"batch-owner-{index}",
+            fact_type="vital_sign", due_stage=ReviewStage.BASELINE)
+        items.append(_project(owner, template))
+    with pytest.raises(Phase5RepositoryError, match="同一不可变权威元组"):
+        EvidenceExpectationV2Repository(session).project_many(items)
+    assert session.scalars(select(EvidenceExpectationV2Record)).all() == []
+
+
 def test_batch_projects_every_template_exactly_once(chain, session):
     """批量投影覆盖当前规则修订全部模板，一个模板恰好一条期望。"""
     t1 = _template(session, chain, requirement_id="req-batch-a",
@@ -1596,8 +1653,7 @@ def test_batch_projects_every_template_exactly_once(chain, session):
 
     # 持久化后逐模板仍只有一条（无双重报告）。
     repository = EvidenceExpectationV2Repository(session)
-    for item in projected:
-        repository.project(item)
+    repository.project_many(projected)
     rows = session.execute(
         select(EvidenceExpectationV2Record)
     ).scalars().all()

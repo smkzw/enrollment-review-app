@@ -139,6 +139,45 @@ class EvidenceExpectationV2Repository:
 
     def project(self, expectation: EvidenceExpectationV2) -> EvidenceExpectationV2:
         """投影一条期望；同内容幂等返回最新行，变化时只允许追加链头 +1。"""
+        return self.project_many([expectation])[0]
+
+    def project_many(
+        self, expectations: Sequence[EvidenceExpectationV2]
+    ) -> list[EvidenceExpectationV2]:
+        """Validate the whole batch before appending in the caller-owned transaction."""
+        if not expectations:
+            return []
+        authority = expectations[0].authority
+        if any(item.authority != authority for item in expectations):
+            raise Phase5RepositoryError("同批资料期望必须属于同一不可变权威元组")
+        if len({item.template_id for item in expectations}) != len(expectations):
+            raise Phase5RepositoryError("同批资料期望的模板不能重复")
+        self._authority.validate(authority)
+        self._authority.validate_locators(authority, sorted({
+            key for item in expectations for key in item.locator_ids
+        }))
+        repository = ClinicalFactV2Repository(self.session)
+        facts = {key: repository.get(key) for key in sorted({
+            key for item in expectations for key in item.coverage_fact_ids
+        })}
+        compatible = {}
+        for fact in facts.values():
+            if fact.authority == authority:
+                continue
+            key = fact.authority.model_dump_json()
+            if key not in compatible:
+                compatible[key] = self._authority.rule_revision_source_is_reusable(
+                    fact.authority, authority
+                )
+            if not compatible[key] and not self._authority.retained_fact_source_is_reusable(fact, authority):
+                raise Phase5RepositoryError(
+                    f"覆盖事实 {fact.fact_id} 与期望不属于同一不可变权威元组，拒绝投影"
+                )
+        existing = [self._validate_projection(item, facts) for item in expectations]
+        return [prior if prior is not None else self._append_projection(item)
+                for item, prior in zip(expectations, existing, strict=True)]
+
+    def _validate_projection(self, expectation, facts):
         if expectation.source_revision_of is not None:
             from app.storage.source_reference_successors import validate_source_fact_references
             prior = self.get(expectation.source_revision_of)
@@ -155,13 +194,9 @@ class EvidenceExpectationV2Repository:
                 self.session, expectation.authority,
                 prior.coverage_fact_ids, expectation.coverage_fact_ids,
             )
-        self._authority.validate(expectation.authority)
-        self._authority.validate_locators(
-            expectation.authority, expectation.locator_ids
-        )
         template = self._require_bound_template(expectation)
-        self._require_coverage_facts(expectation, template)
-        self._require_locators_within_coverage(expectation)
+        self._require_coverage_facts(expectation, template, facts)
+        self._require_locators_within_coverage(expectation, facts)
 
         latest = self._latest_record(
             expectation.authority.review_episode_id, expectation.template_id
@@ -180,7 +215,9 @@ class EvidenceExpectationV2Repository:
             raise FactRevisionChainError(
                 f"期望 {expectation.expectation_id} 的首个 revision 必须为 1"
             )
+        return None
 
+    def _append_projection(self, expectation):
         payload_json, payload_sha256 = encode_contract(expectation)
         row = EvidenceExpectationV2Record(
             expectation_id=expectation.expectation_id,
@@ -216,16 +253,11 @@ class EvidenceExpectationV2Repository:
         return template
 
     def _require_coverage_facts(
-        self, expectation: EvidenceExpectationV2, template: EvidenceExpectationTemplate
+        self, expectation: EvidenceExpectationV2, template: EvidenceExpectationTemplate, facts
     ) -> None:
         """覆盖事实必须同权威元组并明确绑定模板资料要求。"""
-        repository = ClinicalFactV2Repository(self.session)
         for fact_id in sorted(set(expectation.coverage_fact_ids)):
-            fact = repository.get(fact_id)
-            if fact.authority != expectation.authority and not self._authority.retained_fact_source_is_reusable(fact, expectation.authority):
-                raise Phase5RepositoryError(
-                    f"覆盖事实 {fact_id} 与期望不属于同一不可变权威元组，拒绝投影"
-                )
+            fact = facts[fact_id]
             if template.requirement_id not in fact.supported_requirement_ids:
                 raise Phase5RepositoryError(
                     f"覆盖事实 {fact_id} 未显式绑定模板资料要求 "
@@ -233,15 +265,14 @@ class EvidenceExpectationV2Repository:
                 )
 
     def _require_locators_within_coverage(
-        self, expectation: EvidenceExpectationV2
+        self, expectation: EvidenceExpectationV2, facts
     ) -> None:
         """期望定位必须正好等于其覆盖事实的定位闭包（定位唯一真相源）。"""
-        repository = ClinicalFactV2Repository(self.session)
         closure = sorted(
             {
                 locator_id
                 for fact_id in expectation.coverage_fact_ids
-                for locator_id in repository.get(fact_id).locator_ids
+                for locator_id in facts[fact_id].locator_ids
             }
         )
         if expectation.locator_ids != closure:
