@@ -38,7 +38,7 @@ function expectation(
   });
 }
 
-function todoModel() {
+function todoModel(includeConflict = true) {
   const items: ProfileItemWire[] = [
     expectation("missing-record", "demographics", "record_incomplete"),
     expectation("missing-file", "target_disease", "referenced_file_missing"),
@@ -70,7 +70,7 @@ function todoModel() {
     lanes: PROFILE_LANE_ORDER.map((lane) =>
       makeLaneSection(
         lane,
-        items.filter((item) => item.lane === lane),
+        items.filter((item) => item.lane === lane && (includeConflict || item.kind !== "conflict")),
       ),
     ),
     highlights: [],
@@ -115,9 +115,22 @@ describe("ProfileTodoSummaryCard", () => {
     expect(screen.getByTestId("profile-todo-conflict")).toHaveAccessibleName(
       "资料有矛盾 2 项",
     );
+    expect(screen.getByTestId("profile-todo-conflict")).toBeVisible();
     expect(screen.getByTestId("profile-todo-manual_review")).toHaveAccessibleName(
       "待人工核对 5 项",
     );
+  });
+
+  it("没有矛盾时资料整理计数默认收起，展开后仍可导航，不冒充条款未决数量", async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    render(<ProfileTodoSummaryCard model={todoModel(false)} onNavigate={onNavigate} />);
+    expect(screen.getByTestId("profile-todo-missing")).not.toBeVisible();
+    await user.click(screen.getByText("资料整理提示"));
+    expect(screen.getByTestId("profile-todo-missing")).toBeVisible();
+    expect(screen.getByText(/条款是否需要补证以入排审核结果为准/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "待补资料 4 项" }));
+    expect(onNavigate).toHaveBeenCalledWith("missing");
   });
 
   it("四组均为零时显示事实性绿条", () => {

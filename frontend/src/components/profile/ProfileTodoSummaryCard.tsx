@@ -146,12 +146,9 @@ export function ProfileTodoSummaryCard({
       aria-labelledby="profile-todo-summary-title"
       data-testid="profile-todo-summary"
     >
-      <header className="profile-todo-summary__head">
-        <h3 id="profile-todo-summary-title" className="profile-section__title">
-          档案记录问题
-        </h3>
-      </header>
-
+      <details className="profile-normalization-details" open={counts.conflict > 0}>
+        <summary id="profile-todo-summary-title">资料整理提示{counts.conflict > 0 && ` · 资料有矛盾 ${counts.conflict} 项`}</summary>
+        <p className="profile-todo-summary__note">以下为资料整理记录，条款是否需要补证以入排审核结果为准。</p>
         <div className="profile-todo-summary__items" aria-label="四组待办数量">
           {PROFILE_TODO_GROUPS.map((group) => {
             const count = counts[group];
@@ -178,6 +175,7 @@ export function ProfileTodoSummaryCard({
             );
           })}
         </div>
+      </details>
     </section>
   );
 }

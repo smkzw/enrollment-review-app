@@ -97,29 +97,31 @@ class PatientProfileService:
 
     def fact_display_metadata(self, session: Session, revision: PatientProfileRevisionV2) -> dict[str, dict]:
         """Read exact saved-source metadata; never adopt facts or infer clinical significance."""
-        items = [item for lane in revision.lanes for item in lane.items if item.kind == ProfileItemKind.FACT]
-        facts = ClinicalFactV2Repository(session).get_many([item.source_id for item in items])
-        # A profile keeps its exact source IDs; this read must not switch to today's chain heads.
-        # Reading original date metadata is not fact adoption or a fresh clinical source review.
-        display_scope = revision.authority.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"})
-        from app.storage.fact_authority import FactAuthorityValidator
-        validator = FactAuthorityValidator(session)
-        metadata = {}
-        for item in items:
-            fact = facts[item.source_id]
-            if ((fact.authority.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"}) != display_scope
-                    and not validator.retained_fact_source_is_reusable(fact, revision.authority))
-                    or fact.revision != item.source_revision or fact.date_range != item.start_range
-                    or fact.value != item.value or type(fact.value) is not type(item.value)
-                    or fact.polarity != item.polarity or fact.unit != item.unit
-                    or fact.asserted_object != item.asserted_object
-                    or sorted(fact.locator_ids) != sorted(item.locator_ids)):
-                raise PatientProfileProjectionError("时间线记录与原事实不一致")
-            metadata[item.source_id] = {"date_role": fact.date_role,
-                "reference_abnormality": reference_abnormality(fact),
-                "record_label": (fact.fact_type if not fact.fact_type.isascii() else "用药记录")
-                    if fact.profile_lane == ProfileLane.MEDICATION else None}
-        return metadata
+        from app.storage.read_retention import retain_read_records
+
+        with retain_read_records(session):
+            items = [item for lane in revision.lanes for item in lane.items if item.kind == ProfileItemKind.FACT]
+            facts = ClinicalFactV2Repository(session).get_many([item.source_id for item in items])
+            # Retain original source IDs, never today's chain heads or a cached validation verdict.
+            display_scope = revision.authority.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"})
+            from app.storage.fact_authority import FactAuthorityValidator
+            validator = FactAuthorityValidator(session)
+            metadata = {}
+            for item in items:
+                fact = facts[item.source_id]
+                if ((fact.authority.model_dump(exclude={"episode_revision", "protocol_version_id", "rule_set_revision"}) != display_scope
+                        and not validator.retained_fact_source_is_reusable(fact, revision.authority))
+                        or fact.revision != item.source_revision or fact.date_range != item.start_range
+                        or fact.value != item.value or type(fact.value) is not type(item.value)
+                        or fact.polarity != item.polarity or fact.unit != item.unit
+                        or fact.asserted_object != item.asserted_object
+                        or sorted(fact.locator_ids) != sorted(item.locator_ids)):
+                    raise PatientProfileProjectionError("时间线记录与原事实不一致")
+                metadata[item.source_id] = {"date_role": fact.date_role,
+                    "reference_abnormality": reference_abnormality(fact),
+                    "record_label": (fact.fact_type if not fact.fact_type.isascii() else "用药记录")
+                        if fact.profile_lane == ProfileLane.MEDICATION else None}
+            return metadata
 
     def fact_source_readings(
         self, session: Session, revision: PatientProfileRevisionV2, fact_id: str,

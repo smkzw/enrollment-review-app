@@ -11,7 +11,7 @@ PR #1增量修复：owner内联处理7份旧文档归档位置冲突，字节与
 | Goal／分支 | 用户2026-10-15解除暂停，现场get_goal为active，dev/0.2.0；接续已保存v38，不重派已完成读取 |
 | 唯一工作树 | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/build-0.2.0 |
 | 当前WP／里程碑 | WP5类别范围子包已合并；真实S4修订6仍未采用／未补范围。节点11的9页GLM整理已终态；自动工作稿e5ddd276…completed4/4、125关系实际复用、0新调用。资料页当前任务恢复已部署并沿原Ego核对，恢复实际10/10任务而非旧0/25；M1／M2／M3未正式验收 |
-| 源码／前端 | 当前已部署14ae9dbf；PR #1–#4实际MERGED，#5当前任务恢复已推送待合并。后续读取提示仅折叠明细，不隐藏失败／续读动作；计算v40，原关系提示v7／校验v29、.env／规则7不变 |
+| 源码／前端 | 本树ff63cb1c，PR #1–#5实际MERGED；后端14ae9dbf、前端9c0f51fe已部署。当前档案读取提速／整理提示子包待部署；计算v40，原关系提示v7／校验v29、.env／规则7不变 |
 | 自有服务 | 61134／PID39300／exec67684，output/wp5-current-normalization-desktop.log：标准run_v2_desktop，runner已恢复；启动前0活动Job，旧7751无活动任务时TERM收回143。显式跳过启动语义连通预检，不等于供应商健康证明；.env默认Ollama未改，共享端口不动 |
 | 临床数据范围 | WP0 SQLite一致性副本data_v2；正式规则7／当前节点11，5份24页。新9页245候选、72事实／0事件／0暴露；节点11工作稿只读冻结121可用事实、24页、40来源问题。原147历史事实／45报告／6753项／规则7的既有行hash保持。未改原库或原件 |
 | 当前工作稿 | run01e7c83e665741d4bb375d366a3c1b1f／计算v40／节点11，Jobe5ddd276efae49b0b927cb290b9aa6b1 completed4/4，101.275秒／0模型；24页、121冻结事实、149项、125关系实际复用。旧rune31／v39／节点10为历史，未覆盖 |
@@ -43,10 +43,10 @@ PR #1增量修复：owner内联处理7份旧文档归档位置冲突，字节与
 | 起点 | dev/0.2.0起点5c63ba1f；本轮前一已推送94f06949517e1594f105d560e7dd4d4cc850a0cc，实际远端以push读回为准 |
 | 规则 | project draft-project-1153e25b4eba；ruleset ruleset:draft-version-1153e25b4eba:phase_iii revision7；本人64有效审定，不是构建者替签 |
 | 个例 | subject58ff71df0cff4a2c9107be743d82584b；episode b843b2c07d6d4318a6df741eb7902eb3 revision11，screening_date=2025-08-08、evidence_cutoff_date=2025-08-15；原Ego保存资料元数据3并启用，未用直接改库代替 |
-| 资料 | snapshot c69c297a3ea84c57a8fa953e07567b1d；当前complete-9a8d09071cfc4b19b2826d4da20804f8，旧complete-ad2f258d2aff46a98affc99dfac3ea78和Profile10保留；新档案尚未生成 |
+| 资料 | snapshot c69c297a3ea84c57a8fa953e07567b1d；当前complete-9a8d09071cfc4b19b2826d4da20804f8；新Profile11实际succeeded、122事实／81定位。旧complete及Profile10保留；此前“新档案尚未生成”记录已按实际库纠正 |
 | 当前调用路线 | 病历关系cms-router/glm-5.3-flash high，OmniRouter，65536流式；规范化ollama-cloud/deepseek-v4.1-flash high65536，月额度失败记录保留；未更改默认路线 |
 | 当前Job | 历史、9页8e68b23e…及自动稿e5ddd276…均终态；实际查询0 queued／running／failed_retryable／cancel_requested。不重跑。全24页b6aceb713…cancelled且0调用；完整后端exec20120此前中断143，不称全库通过 |
-| 当前服务代码 | 标准桌面入口已部署14ae9dbf，前后端同版本；启动恢复runner而非最终交付前继续依赖自定义无runner服务。本次原Ego视口1920×1080／DPR2，不冒充1080P／2K／4K三组验收 |
+| 当前服务代码 | 标准桌面入口恢复runner，后端14ae9dbf／前端9c0f51fe；读取明细折叠已沿原Ego验证可展开50项／分页入口保留，失败与续读动作不在折叠内。本次视口1920×1080／DPR2，不冒充三组宽屏验收 |
 
 ## 本轮真实运行与工程评审（分开计数）
 
@@ -131,6 +131,8 @@ PR #1增量修复：owner内联处理7份旧文档归档位置冲突，字节与
 | 本包失败归因 | 首次测试文件名错误未跑；API新夹具缺先建Job，5失败后补齐真实前置；Ego option不可见text等待及Node相对路径失败 | 全部原日志保留；最终120／920是真实新窗口。没有把夹具修正、HTTP200、定位条目或会商终态冒充医学正确 |
 
 ## 已压缩历史与决策
+
+- 本次实际档案读取诊断：源码ff63cb1c下，Profile11的122事实／81定位读取元信息产生136131条SQL；复用既有有界ORM保留工具后13252条，14.905→4.228秒，完整DTO逐字段hash相同，0调用／0数据写入。不是一般性能排名；不缓存核验结论、不跨请求复用。101后端99.83秒、72前端10.04秒通过；首次误写不存在测试路径exit4后按实际路径集中验证，未降低断言。原Ego还发现档案120补件／35判断／88核对是整理提示，不等于当前条款未决；现仅此明细默认收起，实际矛盾仍展开。待新部署验证；output/wp5-profile-read-{before,comparison}.json、-package-verified.log/xml、wp5-profile-reading-frontend-package.log。
 
 - 用户退回早期M1：有源结果大量落为未接能力，前v7/v8 A/B不能证明当前版本。旧M1表、各次真实调用和失败原文保留Git历史及output，不反复插“最新”。
 - 59bbca86/5ac14600等旧完整窗口相对WP0新增0，仅属于各自源码；当前代码必须单独比较。旧53抽取、后13改变目标、EX07单次关系核查分别计数，不相互覆盖。
