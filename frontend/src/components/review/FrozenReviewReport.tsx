@@ -29,7 +29,7 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
       const url = URL.createObjectURL(new Blob([content], { type: format === "html" ? "text/html;charset=utf-8" : "text/markdown;charset=utf-8" }));
       const link = document.createElement("a");
       link.href = url;
-      link.download = `入排审核报告-${report.context.subjectCode.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_")}-${report.run.reviewRunId}.${format}`;
+      link.download = `入排审核报告-${report.context.subjectCode.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_")}-${reviewTime(report.run.completedAt ?? report.run.startedAt).replace(/[\\/: ]/g, "-")}.${format}`;
       document.body.append(link);
       try { link.click(); } finally { link.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
     } catch (error) {
