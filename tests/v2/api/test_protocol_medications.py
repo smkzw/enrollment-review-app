@@ -260,6 +260,10 @@ def test_manual_class_members_save_review_hash_and_publication_retain_frozen_mea
         assert after["content"]["scope_supplement"]["drug_classes"] == changed
         assert after["content"]["scope_supplement"]["input_sha256"] != supplement["input_sha256"]
         assert after["content"]["scope_supplement"]["request_refs"] == []
+        reused = client.post(path + "/medications/suggest", json={"expected_revision_id": after["revision_id"]})
+        assert reused.status_code == 200, reused.text
+        assert reused.json()["reused"] and reused.json()["new_model_calls"] == 0
+        assert reused.json()["supplement"] == after["content"]["scope_supplement"]
         assert initial.json()["content"]["scope_supplement"]["drug_classes"] == classes
         reviewed = client.get(path + "/reviews").json()
         medication_rows = [row for row in reviewed["entries"] if row["kind"] == "medication"]

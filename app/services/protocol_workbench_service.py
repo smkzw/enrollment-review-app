@@ -1513,13 +1513,14 @@ class ProtocolWorkbenchService:
         existing = revision.content.scope_supplement
         _, _, readable = selected_scope_material(view, revision.review_scope_selection)
         official_codes = {rule.official_code for rule in revision.content.proposed_rules}
-        if existing is not None and existing.input_sha256 == medication_input_hash(revision.study_phase.value, readable):
+        if existing is not None and existing.input_sha256 == medication_input_hash(revision.study_phase.value, readable, existing.drug_classes):
             validate_scope_supplement(existing, view=view, selection=revision.review_scope_selection,
                 phase=revision.study_phase.value, official_codes=official_codes)
             proposal = MedicationRestrictionProposal(medications=[item.model_dump(exclude={"item_id"}) for item in existing.medications],
                 source_dispositions=existing.source_dispositions)
             rebound = build_scope_supplement(proposal=proposal, view=view, selection=revision.review_scope_selection,
-                phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules})
+                phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules},
+                drug_classes=existing.drug_classes)
             if rebound.input_sha256 == existing.input_sha256:
                 rebound.request_refs, rebound.response_refs, rebound.reader_identity = existing.request_refs, existing.response_refs, existing.reader_identity
                 return {"job_id": job_id, "draft_revision_id": expected_revision_id,
