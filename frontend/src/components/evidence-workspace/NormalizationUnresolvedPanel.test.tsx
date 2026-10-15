@@ -10,6 +10,7 @@ const read = vi.fn();
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getFactNormalizationRepository).mockReturnValue({ kind: "http",
+    getCurrentFactNormalizationJob: vi.fn(async () => null),
     getNormalizationUnresolved: read, startFactNormalization: vi.fn(),
     getFactNormalizationJobStatus: vi.fn(), retryFactNormalizationJob: vi.fn() });
 });
@@ -26,18 +27,22 @@ function page(total: number, offset = 0) {
 }
 
 async function openOtherText() {
+  const summary = await screen.findByText("查看原件读取提示");
+  if (!summary.closest("details")?.open) fireEvent.click(summary);
   fireEvent.click(await screen.findByText(/^其他待核对文字/));
 }
 
 describe("NormalizationUnresolvedPanel", () => {
-  it("具体疑问优先显示，其他文字可展开逐项回源，不把折叠当已核清", async () => {
+  it("读取提示默认收起，展开后具体疑问优先、其他文字可逐项回源", async () => {
     const result = page(3);
     read.mockResolvedValue({ ...result, items: [
       { ...result.items[0], kind: "reading_uncertainty", message: "批注对象待核对" },
       { ...result.items[1], sourceExcerpt: "检验报告单" }, result.items[2],
     ] });
     render(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="j" />);
-    expect(await screen.findByText("批注对象待核对")).toBeVisible();
+    expect(await screen.findByText("批注对象待核对")).not.toBeVisible();
+    fireEvent.click(screen.getByText("查看原件读取提示"));
+    expect(screen.getByText("批注对象待核对")).toBeVisible();
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(3);
     expect(links[0]).toBeVisible();
@@ -53,7 +58,10 @@ describe("NormalizationUnresolvedPanel", () => {
     read.mockResolvedValue({ ...page(1), runId: "old-run", failedPageCount: 6 });
     const onContinue = vi.fn().mockResolvedValue("new-job");
     const view = render(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="j" onContinue={onContinue} />);
-    fireEvent.click(await screen.findByRole("button", {name: "继续整理未完成的6页"}));
+    const continueButton = await screen.findByRole("button", {name: "继续整理未完成的6页"});
+    expect(continueButton).toBeVisible();
+    expect(screen.getByRole("link")).not.toBeVisible();
+    fireEvent.click(continueButton);
     await waitFor(() => expect(onContinue).toHaveBeenCalledOnce());
     expect(onContinue).toHaveBeenCalledWith("old-run");
     read.mockResolvedValue({ ...page(1), jobId: "historical", runId: "old-run", failedPageCount: 6, isCurrent: false });

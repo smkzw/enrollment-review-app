@@ -143,6 +143,7 @@ describe("受试者与 Patient Profile 页", () => {
     );
     setFactNormalizationRepository({
       kind: "http",
+      getCurrentFactNormalizationJob: vi.fn(async () => null),
       startFactNormalization: vi.fn(async () => ({
         jobId: "job-normalize-test",
         runId: "run-normalize-test",

@@ -1,6 +1,6 @@
 /**
  * 个例档案整理任务生命周期：命令启动、本机 job id 持久化、标准 Job API 恢复轮询。
- * 进度不保存在组件内存 alone；刷新后从 localStorage + /api/v2/jobs/{id} 恢复。
+ * 服务端当前资料范围决定恢复的任务；本机缓存不能替代来源核对。
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -33,17 +33,6 @@ export type FactNormalizationUiState =
       canRetry: boolean;
     }
   | { status: "error"; message: string; recoveryHint: string; canRetry: boolean };
-
-function readStoredJobId(reviewEpisodeId: string): string | null {
-  try {
-    const value = window.localStorage.getItem(
-      factNormalizationJobStorageKey(reviewEpisodeId),
-    );
-    return value !== null && value.trim().length > 0 ? value.trim() : null;
-  } catch {
-    return null;
-  }
-}
 
 function writeStoredJobId(reviewEpisodeId: string, jobId: string): void {
   try {
@@ -105,6 +94,7 @@ function activeFromJob(
 export interface UseFactNormalizationJobOptions {
   subjectId: string | null;
   reviewEpisodeId: string | null;
+  sourceRevisionId?: string | null;
   /** 档案侧已判定陈旧时展示 stale 相位与恢复动作。 */
   profileStale?: boolean;
   /** 任务成功终态时回调（用于刷新档案）。 */
@@ -115,13 +105,14 @@ export interface UseFactNormalizationJobOptions {
 
 export interface UseFactNormalizationJobResult {
   state: FactNormalizationUiState;
+  restoring: boolean;
   completedReview: { jobId: string; subjectId: string; reviewEpisodeId: string } | null;
   /** 发起或幂等复用整理任务。 */
   start: (idempotencyKey?: string) => Promise<string | null>;
   retryFailedPages: (runId: string) => Promise<string | null>;
   /** 失败后重试失败范围，或陈旧时重新下发命令。 */
   retry: () => Promise<void>;
-  /** 仅从本机恢复已持久的 job id 并拉取状态。 */
+  /** 恢复服务端当前范围的已持久任务，不启动读取。 */
   resumeFromStorage: () => Promise<void>;
 }
 
@@ -131,12 +122,18 @@ export function useFactNormalizationJob(
   const {
     subjectId,
     reviewEpisodeId,
+    sourceRevisionId = null,
     profileStale = false,
     onSucceeded,
     pollIntervalMs = POLL_MS,
   } = options;
 
   const [state, setState] = useState<FactNormalizationUiState>({ status: "idle" });
+  const scopeKey = JSON.stringify([subjectId, reviewEpisodeId, sourceRevisionId]);
+  const currentScope = useRef(scopeKey);
+  currentScope.current = scopeKey;
+  const [restoredScope, setRestoredScope] = useState<string | null>(null);
+  const restoring = subjectId !== null && reviewEpisodeId !== null && restoredScope !== scopeKey;
   const jobIdRef = useRef<string | null>(null);
   const profileStaleRef = useRef(profileStale);
   const onSucceededRef = useRef(onSucceeded);
@@ -178,20 +175,21 @@ export function useFactNormalizationJob(
         jobId,
         { signal },
       );
-      applyJob(job);
+      if (currentScope.current === scopeKey) applyJob(job);
       return job;
     },
-    [applyJob],
+    [applyJob, scopeKey],
   );
 
   const resumeFromStorage = useCallback(async () => {
-    if (reviewEpisodeId === null) return;
-    const stored = readStoredJobId(reviewEpisodeId);
-    if (stored === null) return;
-    jobIdRef.current = stored;
+    if (subjectId === null || reviewEpisodeId === null) return;
     try {
-      await fetchStatus(stored);
+      const job = await getFactNormalizationRepository().getCurrentFactNormalizationJob(subjectId, reviewEpisodeId);
+      if (currentScope.current !== scopeKey || startInFlight.current !== null) return;
+      if (job !== null) applyJob(job);
+      else { clearStoredJobId(reviewEpisodeId); setState({ status: "idle" }); }
     } catch (error) {
+      if (currentScope.current !== scopeKey) return;
       const ui = toUiError(error);
       setState({
         status: "error",
@@ -199,29 +197,30 @@ export function useFactNormalizationJob(
         recoveryHint: ui.recoveryHint,
         canRetry: true,
       });
+    } finally {
+      if (currentScope.current === scopeKey) setRestoredScope(scopeKey);
     }
-  }, [fetchStatus, reviewEpisodeId]);
+  }, [applyJob, reviewEpisodeId, subjectId, scopeKey]);
 
-  // 切换审核节点时清理内存态并从本机恢复。
+  // Scope discovery is read-only. Late responses cannot replace a new scope/start.
   useEffect(() => {
     jobIdRef.current = null;
     idempotencyRef.current = null;
     startInFlight.current = null;
     succeededNotified.current = null;
     setState({ status: "idle" });
-    if (reviewEpisodeId === null) return;
+    if (subjectId === null || reviewEpisodeId === null) return;
     let cancelled = false;
+    const controller = new AbortController();
     void (async () => {
-      const stored = readStoredJobId(reviewEpisodeId);
-      if (stored === null || cancelled) return;
-      jobIdRef.current = stored;
       try {
-        const job = await getFactNormalizationRepository().getFactNormalizationJobStatus(
-          stored,
-        );
-        if (!cancelled) applyJob(job);
+        const job = await getFactNormalizationRepository().getCurrentFactNormalizationJob(
+          subjectId, reviewEpisodeId, { signal: controller.signal });
+        if (cancelled || currentScope.current !== scopeKey || startInFlight.current !== null || jobIdRef.current !== null) return;
+        if (job !== null) applyJob(job);
+        else clearStoredJobId(reviewEpisodeId);
       } catch (error) {
-        if (cancelled) return;
+        if (cancelled || currentScope.current !== scopeKey || startInFlight.current !== null || jobIdRef.current !== null) return;
         const ui = toUiError(error);
         setState({
           status: "error",
@@ -229,12 +228,15 @@ export function useFactNormalizationJob(
           recoveryHint: ui.recoveryHint,
           canRetry: true,
         });
+      } finally {
+        if (!cancelled && currentScope.current === scopeKey) setRestoredScope(scopeKey);
       }
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [applyJob, reviewEpisodeId]);
+  }, [applyJob, reviewEpisodeId, subjectId, scopeKey]);
 
   // 非终态且非失败态轮询；失败/陈旧等待用户明确恢复动作。
   const pollJobId =
@@ -296,13 +298,18 @@ export function useFactNormalizationJob(
             { idempotencyKey: key, ...(retryFailedFromRunId ? {retryFailedFromRunId} : {}) },
           );
           writeStoredJobId(reviewEpisodeId, command.jobId);
+          if (currentScope.current !== scopeKey) return command.jobId;
           jobIdRef.current = command.jobId;
           const job = await getFactNormalizationRepository().getFactNormalizationJobStatus(
             command.jobId,
           );
-          applyJob(job);
+          if (currentScope.current === scopeKey) {
+            applyJob(job);
+            setRestoredScope(scopeKey);
+          }
           return command.jobId;
         } catch (error) {
+          if (currentScope.current !== scopeKey) return null;
           if (allowPageRead && error instanceof FactNormalizationApiError && error.code === "PAGE_COVERAGE_NOT_READY") {
             setState({ status: "idle" });
             void pageReview.start();
@@ -317,14 +324,14 @@ export function useFactNormalizationJob(
           });
           return null;
         } finally {
-          startInFlight.current = null;
+          if (currentScope.current === scopeKey) startInFlight.current = null;
         }
       })();
 
       startInFlight.current = pending;
       return pending;
     },
-    [applyJob, reviewEpisodeId, subjectId, pageReview.start],
+    [applyJob, reviewEpisodeId, subjectId, pageReview.start, scopeKey],
   );
   afterPages.current = () => { void start(undefined, false); };
 
@@ -344,17 +351,20 @@ export function useFactNormalizationJob(
     const jobId = jobIdRef.current;
     try {
       const action = await getFactNormalizationRepository().retryFactNormalizationJob(jobId);
+      if (currentScope.current !== scopeKey) return;
       const job = await getFactNormalizationRepository().getFactNormalizationJobStatus(
         action.jobId,
       );
-      applyJob(job);
+      if (currentScope.current === scopeKey) applyJob(job);
     } catch {
+      if (currentScope.current !== scopeKey) return;
       idempotencyRef.current = newIdempotencyKey(`profile-organize-retry:${reviewEpisodeId}`);
       await start(idempotencyRef.current);
     }
-  }, [applyJob, reviewEpisodeId, start, state.status, subjectId, pageReview.state.status, pageReview.retry]);
+  }, [applyJob, reviewEpisodeId, start, state.status, subjectId, pageReview.state.status, pageReview.retry, scopeKey]);
 
-  return { state: pageReview.state.status === "idle" ? state : pageReview.state,
+  return { state: restoring ? { status: "idle" } : pageReview.state.status === "idle" ? state : pageReview.state,
+    restoring,
     completedReview: pageReview.completedReview, start, retry,
     retryFailedPages: (runId: string) => start(undefined, false, runId), resumeFromStorage };
 }

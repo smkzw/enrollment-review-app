@@ -77,13 +77,16 @@ function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onCon
           try { await onContinue(data.runId!); } finally { setContinuing(false); }
         }}><RefreshCw size={16} />{continuing ? "正在提交" : `继续整理未完成的${data.failedPageCount}页`}</button>}
       {data.total === 0 && <p>暂无待核对记录。入排结论仍以审核结果为准。</p>}
-      <ul>{questions.map(renderItem)}</ul>
-      {otherText.length > 0 && <details className="normalization-unresolved__other">
-        <summary>其他待核对文字（{data.hasMore ? "已加载" : ""}{otherText.length}项）</summary>
-        <ul>{otherText.map(renderItem)}</ul>
+      {data.total > 0 && <details className="normalization-unresolved__other">
+        <summary>查看原件读取提示</summary>
+        <ul>{questions.map(renderItem)}</ul>
+        {otherText.length > 0 && <details className="normalization-unresolved__other">
+          <summary>其他待核对文字（{data.hasMore ? "已加载" : ""}{otherText.length}项）</summary>
+          <ul>{otherText.map(renderItem)}</ul>
+        </details>}
+        {data.hasMore && <button type="button" className="button" disabled={busy}
+          onClick={() => setOffset(data.items.length)}>加载更多</button>}
       </details>}
-      {data.hasMore && <button type="button" className="button" disabled={busy}
-        onClick={() => setOffset(data.items.length)}>加载更多</button>}
     </>}
   </section>;
 }

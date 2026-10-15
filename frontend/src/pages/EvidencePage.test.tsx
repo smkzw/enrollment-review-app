@@ -20,7 +20,7 @@ import {
   setEvidenceRepository,
   type EvidenceRepository,
 } from "../api/evidence";
-import { setFactNormalizationRepository } from "../api/fact-normalization";
+import { getFactNormalizationRepository, setFactNormalizationRepository } from "../api/fact-normalization";
 import { canSupplementEvidence, EvidencePage } from "./EvidencePage";
 import { getLocalVisualTask } from "../api/evidence/localVisualHttp";
 
@@ -487,6 +487,7 @@ beforeEach(() => {
     state: null, text: null, region: null, configurationCurrent: true, canRetry: false });
   setFactNormalizationRepository({
     kind: "http",
+    getCurrentFactNormalizationJob: vi.fn(async () => null),
     startFactNormalization: vi.fn(async () => ({
       jobId: "job-normalize-test",
       runId: "run-normalize-test",
@@ -654,6 +655,32 @@ async function confirmCriticalCorrectionWhenShown(
 }
 
 describe("证据工作台", () => {
+  it("原件读取明细默认收起，展开后仍可核对，不以技术说明抢占临床内容", async () => {
+    const user = userEvent.setup();
+    const repo = getFactNormalizationRepository();
+    setFactNormalizationRepository({ ...repo,
+      getCurrentFactNormalizationJob: async () => ({
+        jobId: "job-normalize-test", state: "completed", stateLabel: "已完成", cancelRequested: false,
+        progressCompleted: 2, progressTotal: 2, recoveryAction: "本次处理已完成。",
+        createdAt: "2026-10-16T00:00:00Z", updatedAt: "2026-10-16T01:00:00Z",
+      }),
+      getNormalizationUnresolved: async () => ({
+        jobId: "job-normalize-test", contentSha256: "a".repeat(64), total: 1, offset: 0,
+        hasMore: false, isCurrent: true, textAccountingApplied: true,
+        evidenceSnapshotId: "snapshot-frozen", processingRevisionId: "revision-frozen",
+        items: [{ itemId: "note", kind: "reading_uncertainty", message: "普通报告签名提示",
+          reason: "原文保留供查看，不是患者的入排结论。", sources: [] }],
+      }),
+    });
+    await openValid(user);
+    expect(await screen.findByText("普通报告签名提示")).not.toBeVisible();
+    const summary = screen.getByText("查看原件读取提示");
+    expect(summary).toBeVisible();
+    await user.click(summary);
+    expect(screen.getByText("普通报告签名提示")).toBeVisible();
+    expect(repo.startFactNormalization).not.toHaveBeenCalled();
+  });
+
   it("局部摘录转入本页校对稿；切页清除提案且不保存或采用", async () => {
     const user = userEvent.setup();
     fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({

@@ -279,6 +279,7 @@ export function EvidencePage() {
   const factNormalization = useFactNormalizationJob({
     subjectId,
     reviewEpisodeId,
+    sourceRevisionId: episode?.activeEvidenceProcessingRevisionId ?? null,
   });
 
   // 证据快照列表（作用域：当前受试者 × 审核节点）
@@ -1685,7 +1686,7 @@ export function EvidencePage() {
           window.location.hash = `#/subjects?subject=${encodeURIComponent(subjectId)}&episode=${encodeURIComponent(reviewEpisodeId)}`;
         }}
       />
-      {episode?.activeEvidenceSnapshotId && factNormalization.state.status === "idle" && (
+      {episode?.activeEvidenceSnapshotId && !factNormalization.restoring && factNormalization.state.status === "idle" && (
         <button className="button" type="button" onClick={() => void factNormalization.start()}>
           整理个例档案
         </button>

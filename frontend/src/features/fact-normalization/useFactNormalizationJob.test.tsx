@@ -31,12 +31,14 @@ function status(
 }
 
 function makeRepo(options: {
+  current?: FactNormalizationRepository["getCurrentFactNormalizationJob"];
   start?: FactNormalizationRepository["startFactNormalization"];
   getStatus?: FactNormalizationRepository["getFactNormalizationJobStatus"];
   retry?: FactNormalizationRepository["retryFactNormalizationJob"];
 }): FactNormalizationRepository {
   return {
     kind: "http",
+    getCurrentFactNormalizationJob: options.current ?? vi.fn(async () => null),
     startFactNormalization:
       options.start ??
       (vi.fn(async () => ({
@@ -70,19 +72,23 @@ function makeRepo(options: {
 function Harness({
   profileStale = false,
   onSucceeded,
+  sourceRevisionId = null,
 }: {
   profileStale?: boolean;
   onSucceeded?: (jobId: string) => void;
+  sourceRevisionId?: string | null;
 }) {
   const job = useFactNormalizationJob({
     subjectId: "subject-1",
     reviewEpisodeId: "episode-1",
     profileStale,
+    sourceRevisionId,
     onSucceeded,
     pollIntervalMs: 50,
   });
   return (
     <div>
+      <span>{job.restoring ? "正在恢复状态" : "已恢复状态"}</span>
       <ProfileNormalizationStatus
         state={job.state}
         onRetry={() => void job.retry()}
@@ -107,10 +113,10 @@ describe("个例档案整理任务恢复与文案", () => {
     window.localStorage.clear();
   });
 
-  it("刷新后从本机 job id 恢复并拉取标准任务状态", async () => {
+  it("刷新以服务端当前任务恢复，不沿用浏览器的旧取消任务", async () => {
     window.localStorage.setItem(
       factNormalizationJobStorageKey("episode-1"),
-      "job-normalize-1",
+      "old-cancelled-job",
     );
     const getStatus = vi.fn(async () =>
       status({
@@ -120,7 +126,8 @@ describe("个例档案整理任务恢复与文案", () => {
         progressCompleted: 1,
       }),
     );
-    setFactNormalizationRepository(makeRepo({ getStatus }));
+    const current = vi.fn(getStatus);
+    setFactNormalizationRepository(makeRepo({ current, getStatus }));
 
     render(<Harness />);
 
@@ -129,7 +136,9 @@ describe("个例档案整理任务恢复与文案", () => {
         "正在整理个例档案",
       );
     });
-    expect(getStatus).toHaveBeenCalledWith("job-normalize-1");
+    expect(current).toHaveBeenCalledWith("subject-1", "episode-1", expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(getStatus).not.toHaveBeenCalledWith("old-cancelled-job");
+    expect(localStorage.getItem(factNormalizationJobStorageKey("episode-1"))).toBe("job-normalize-1");
     expect(screen.getByText(/关闭页面不会中断/)).toBeInTheDocument();
   });
 
@@ -206,7 +215,8 @@ describe("个例档案整理任务恢复与文案", () => {
       factNormalizationJobStorageKey("episode-1"),
       "job-normalize-1",
     );
-    setFactNormalizationRepository(makeRepo({ getStatus, retry }));
+    setFactNormalizationRepository(makeRepo({ getStatus, retry,
+      current: async () => getStatus() }));
 
     const user = userEvent.setup();
     render(<Harness />);
@@ -247,6 +257,7 @@ describe("个例档案整理任务恢复与文案", () => {
     }));
     setFactNormalizationRepository(
       makeRepo({
+        current: async () => getStatus(),
         getStatus,
         start,
       }),
@@ -266,6 +277,63 @@ describe("个例档案整理任务恢复与文案", () => {
     await waitFor(() => {
       expect(start).toHaveBeenCalled();
     });
+  });
+
+  it("没有当前范围任务时清除旧缓存，不自动启动或读取旧任务", async () => {
+    localStorage.setItem(factNormalizationJobStorageKey("episode-1"), "old-job");
+    const start = vi.fn();
+    const getStatus = vi.fn();
+    const current = vi.fn(async () => null);
+    setFactNormalizationRepository(makeRepo({ start, getStatus, current }));
+    render(<Harness />);
+    await waitFor(() => expect(localStorage.getItem(factNormalizationJobStorageKey("episode-1"))).toBeNull());
+    expect(current).toHaveBeenCalledOnce();
+    expect(start).not.toHaveBeenCalled();
+    expect(getStatus).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("个例档案整理状态")).not.toBeInTheDocument();
+  });
+
+  it("资料版本切换后，旧恢复请求的迟到结果不能覆盖当前范围", async () => {
+    let resolveOld: (value: FactNormalizationJobStatusView) => void = () => {};
+    const current = vi.fn().mockImplementationOnce(() => new Promise(done => { resolveOld = done; }))
+      .mockResolvedValue(null);
+    const onSucceeded = vi.fn();
+    const start = vi.fn();
+    setFactNormalizationRepository(makeRepo({ current, start }));
+    const view = render(<Harness sourceRevisionId="old" onSucceeded={onSucceeded} />);
+    await waitFor(() => expect(current).toHaveBeenCalledOnce());
+    view.rerender(<Harness sourceRevisionId="new" onSucceeded={onSucceeded} />);
+    await screen.findByText("已恢复状态");
+    await act(async () => resolveOld(status({ jobId: "old-job", state: "completed", stateLabel: "完成", recoveryAction: "" })));
+    expect(onSucceeded).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+    expect(localStorage.getItem(factNormalizationJobStorageKey("episode-1"))).toBeNull();
+    expect(screen.queryByLabelText("个例档案整理状态")).not.toBeInTheDocument();
+  });
+
+  it("恢复期间明确启动的新任务不被迟到的旧任务替换", async () => {
+    let resolveOld: (value: FactNormalizationJobStatusView) => void = () => {};
+    const current = vi.fn(() => new Promise<FactNormalizationJobStatusView>(done => { resolveOld = done; }));
+    setFactNormalizationRepository(makeRepo({ current }));
+    render(<Harness />);
+    await waitFor(() => expect(current).toHaveBeenCalledOnce());
+    await userEvent.click(screen.getByRole("button", { name: "开始整理" }));
+    await screen.findByText("已恢复状态");
+    await act(async () => resolveOld(status({ jobId: "old-job", state: "cancelled", stateLabel: "已停止", recoveryAction: "" })));
+    expect(screen.getByLabelText("个例档案整理状态")).toHaveTextContent("个例档案整理排队中");
+    expect(localStorage.getItem(factNormalizationJobStorageKey("episode-1"))).toBe("job-normalize-1");
+  });
+
+  it("服务端恢复失败不会回退旧缓存或自动付费重读", async () => {
+    localStorage.setItem(factNormalizationJobStorageKey("episode-1"), "old-job");
+    const start = vi.fn();
+    const getStatus = vi.fn();
+    setFactNormalizationRepository(makeRepo({ start, getStatus,
+      current: async () => { throw new Error("connection unavailable"); } }));
+    render(<Harness />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("暂时无法整理个例档案");
+    expect(start).not.toHaveBeenCalled();
+    expect(getStatus).not.toHaveBeenCalled();
   });
 
   it("成功终态触发回调且不把进度只留在内存", async () => {

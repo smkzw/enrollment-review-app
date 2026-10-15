@@ -51,6 +51,67 @@ def test_v2_app_registers_fact_normalization_command_service(client):
     assert client.app.state.fact_normalization_command_service is not None
 
 
+def test_current_normalization_read_discovers_newer_scope_without_creating_or_retrying_work(client):
+    from sqlalchemy import func, select
+    from app.storage.models import JobRecord
+
+    factory = client.app.state.session_factory
+    with factory() as session, session.begin():
+        chain = _seed_chain(session, prefix="api-current-normalization")
+    path = _endpoint(chain["subject_id"], chain["episode_id"])
+    assert client.get(path).json() is None
+    older = client.post(path, json={})
+    assert older.status_code == 201, older.text
+    old_job = older.json()["job_id"]
+    assert client.post(f"/api/v2/jobs/{old_job}/cancel").status_code == 200
+    with factory() as session:
+        old_run = FactNormalizationRunRepository(session).get(older.json()["run_id"])
+    newer = client.app.state.fact_normalization_job_service.create_or_reuse_from_source(
+        authority=old_run.authority, prompt_version_id=old_run.prompt_version_id,
+        model_config_id=old_run.model_config_id, created_by="builder_verification", max_pages_per_call=1)
+    assert newer.job_id != old_job
+    with factory() as session:
+        count = session.scalar(select(func.count()).select_from(JobRecord))
+    response = client.get(path)
+    assert response.status_code == 200, response.text
+    assert response.json()["job_id"] == newer.job_id
+    assert response.json()["progress_completed"] == 0
+    assert response.json()["state"] == "queued"
+    assert client.post(f"/api/v2/jobs/{newer.job_id}/cancel").status_code == 200
+    assert client.get(path).json()["state"] == "cancelled"  # Do not prefer a more favorable older result.
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(JobRecord)) == count
+        episode = session.get(ReviewEpisodeRecord, chain["episode_id"])
+        _update_episode(session, episode, revision=episode.revision + 1)
+        session.commit()
+    assert client.get(path).json() is None  # The old authority is not today's status.
+    assert client.get(_endpoint("another-subject", chain["episode_id"])).status_code == 404
+
+
+def test_current_normalization_without_active_material_returns_no_job_not_a_command(client):
+    with client.app.state.session_factory() as session, session.begin():
+        chain = _seed_chain(session, prefix="api-current-inactive")
+        episode = session.get(ReviewEpisodeRecord, chain["episode_id"])
+        _update_episode(session, episode, active_evidence_snapshot_id=None, active_evidence_processing_revision_id=None)
+    response = client.get(_endpoint(chain["subject_id"], chain["episode_id"]))
+    assert response.status_code == 200 and response.json() is None
+
+
+def test_current_normalization_does_not_hide_a_broken_job_binding(client):
+    from app.storage.models import JobRecord
+    with client.app.state.session_factory() as session, session.begin():
+        chain = _seed_chain(session, prefix="api-current-broken")
+    path = _endpoint(chain["subject_id"], chain["episode_id"])
+    response = client.post(path, json={})
+    assert response.status_code == 201, response.text
+    with client.app.state.session_factory() as session, session.begin():
+        job = session.get(JobRecord, response.json()["job_id"])
+        job.job_type = "another-kind"
+    response = client.get(path)
+    assert response.status_code == 500, response.text
+    assert response.json() is not None
+
+
 def test_formal_normalization_ignores_other_reader_identity(client):
     from app.domain.contracts.page_review import SubjectPageCoverage
     from app.storage.page_review_repository import PageReviewRepository

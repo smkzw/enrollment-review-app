@@ -181,6 +181,37 @@ class EvidenceApiReadService:
         self.artifact_store = artifact_store
 
     @app_error_boundary
+    def current_normalization_job_id(self, subject_id, review_episode_id):
+        """Discover the latest actual job for today's authority, never enqueue work."""
+        from app.services.fact_normalization_command_service import authority_from_active_episode
+        from app.storage.codecs import verify_payload_sha256
+        from app.storage.fact_repositories import FactNormalizationRunRepository
+        from app.storage.facts_models import FactNormalizationRunRecord
+        from app.storage.models import JobRecord
+
+        with self.session_factory() as session:
+            episode = self._require_subject_episode(session, subject_id, review_episode_id)
+            if episode.active_evidence_snapshot_id is None or episode.active_evidence_processing_revision_id is None:
+                return None
+            authority = authority_from_active_episode(session, review_episode_id)
+            for run in reversed(FactNormalizationRunRepository(session).list_by_episode(review_episode_id)):
+                if run.authority != authority:
+                    continue
+                row = session.get(FactNormalizationRunRecord, run.run_id)
+                if row.job_id is None:
+                    continue
+                job = session.get(JobRecord, row.job_id)
+                if job is None or job.job_type != "fact_normalization":
+                    raise AppInternalError("资料整理记录与保存的任务不一致。")
+                payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+                if (payload.get("run_id") != run.run_id
+                        or payload.get("authority") != authority.model_dump(mode="json")
+                        or payload.get("input_scope_sha256") != run.input_scope_sha256):
+                    raise AppInternalError("资料整理任务与当前来源范围不一致。")
+                return job.job_id
+            return None
+
+    @app_error_boundary
     def normalization_unresolved(self, subject_id, review_episode_id, job_id, *, offset=0, limit=50,
                                  expected_content_sha256=None):
         """Read the frozen run's retained issues; never infer patient missingness."""
