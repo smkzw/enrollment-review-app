@@ -740,14 +740,20 @@ class JobRunner:
     def _apply_without_commit(session: Session, apply: StepApply) -> None:
         """执行领域写入回调，并拒绝回调提前提交 Runner 事务。"""
 
-        def reject_commit(_session: Session) -> None:
+        def reject_commit(_connection) -> None:
+            # SQLAlchemy deactivates its root transaction when this event raises;
+            # roll back the DBAPI transaction first so pooled reuse cannot save it.
+            _connection.connection.rollback()
             raise RuntimeError("PreparedStepResult.apply 不得调用 Session.commit()")
 
-        event.listen(session, "before_commit", reject_commit)
+        # A SAVEPOINT release is not an outer commit. Guard the actual connection
+        # commit so nested domain operations remain atomic with the checkpoint.
+        connection = session.connection()
+        event.listen(connection, "commit", reject_commit)
         try:
             apply(session)
         finally:
-            event.remove(session, "before_commit", reject_commit)
+            event.remove(connection, "commit", reject_commit)
 
     def _commit_step_failure(
         self,

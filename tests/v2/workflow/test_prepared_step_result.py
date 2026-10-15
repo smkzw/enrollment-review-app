@@ -1,6 +1,7 @@
 """PreparedStepResult 的租约写栅栏与事务原子性回归。"""
 from __future__ import annotations
 
+from contextlib import nullcontext
 import pytest
 from datetime import timedelta
 from sqlalchemy import select, text, update
@@ -216,7 +217,9 @@ def test_long_apply_refreshes_expired_lease_before_atomic_completion(
     assert events.count("step_completed") == 1
 
 
-def test_apply_cannot_commit_runner_owned_transaction(session_factory, clock):
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("commit_target", ["session", "root_transaction", "connection"])
+def test_apply_cannot_commit_runner_owned_transaction(session_factory, clock, nested, commit_target):
     create_job_with_steps(
         session_factory,
         clock,
@@ -226,10 +229,12 @@ def test_apply_cannot_commit_runner_owned_transaction(session_factory, clock):
 
     def executor(_context: StepContext) -> PreparedStepResult:
         def apply(session) -> None:
-            session.execute(
-                text("INSERT INTO prepared_step_side_effects(value) VALUES ('early')")
-            )
-            session.commit()
+            with session.begin_nested() if nested else nullcontext():
+                session.execute(
+                    text("INSERT INTO prepared_step_side_effects(value) VALUES ('early')")
+                )
+                {"session": session.commit, "root_transaction": session.get_transaction().commit,
+                    "connection": session.connection().commit}[commit_target]()
 
         return PreparedStepResult(checkpoint={"published": True}, apply=apply)
 
@@ -250,3 +255,22 @@ def test_apply_cannot_commit_runner_owned_transaction(session_factory, clock):
     assert checkpoint_count == 0
     assert "step_completed" not in events
     assert "step_failed" in events
+
+
+@pytest.mark.parametrize("fail_after_savepoint", [False, True])
+def test_nested_domain_savepoints_remain_atomic_with_runner_checkpoint(session_factory, clock, fail_after_savepoint):
+    create_job_with_steps(session_factory, clock, steps=[{"step_id": "s1", "name": "保存有源输入"}])
+    _create_side_effect_table(session_factory)
+    def executor(_context):
+        def apply(session):
+            with session.begin_nested():
+                with session.begin_nested():
+                    session.execute(text("INSERT INTO prepared_step_side_effects(value) VALUES ('nested')"))
+            if fail_after_savepoint:
+                raise RuntimeError("保存点释放后仍须随外层失败回滚")
+        return PreparedStepResult(checkpoint={"published": True}, apply=apply)
+    assert JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now).run_job("job-1")
+    state, progress, checkpoints, events = _workflow_result(session_factory, clock)
+    assert state == ("failed_final" if fail_after_savepoint else "completed")
+    assert _side_effect_values(session_factory) == ([] if fail_after_savepoint else ["nested"])
+    assert progress == checkpoints == (0 if fail_after_savepoint else 1)
