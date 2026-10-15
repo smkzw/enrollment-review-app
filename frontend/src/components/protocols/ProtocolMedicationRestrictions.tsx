@@ -9,6 +9,32 @@ const anchors = { icf_date: "签署知情同意", screening_date: "筛选", base
 const units = { day: "天", week: "周", month: "个月", year: "年" } as const;
 const dispositions = { heading: "标题", permission: "允许用药或治疗", other_phase: "其他研究期别", background: "背景说明", unresolved: "尚待核清" } as const;
 
+function MedicationSourcePicker({ sources, selected, disabled, onChange }: {
+  sources: MedicationRestriction["source_quotes"]; selected: MedicationRestriction["source_quotes"];
+  disabled: boolean; onChange: (quotes: MedicationRestriction["source_quotes"]) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const term = search.normalize("NFKC").trim().toLocaleLowerCase();
+  const matches = sources.filter(source => source.excerpt.trim() && source.excerpt.normalize("NFKC").toLocaleLowerCase().includes(term));
+  return <details className="protocol-review-scope__source-picker" onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>补充或调整方案依据</summary>
+    {open && <>
+    <label>查找方案原文<input type="search" disabled={disabled} value={search} onChange={event => setSearch(event.target.value)} /></label>
+    <fieldset disabled={disabled}><legend>选择本条依据</legend>
+      {matches.length === 0 && <p>没有找到相应原文。</p>}
+      {matches.map(source => {
+        const checked = selected.some(quote => quote.source_span_id === source.source_span_id);
+        return <label key={source.source_span_id}><input type="checkbox" checked={checked}
+          disabled={checked && selected.every(quote => quote.source_span_id === source.source_span_id)}
+          onChange={event => onChange(event.target.checked ? [...selected, source]
+            : selected.filter(quote => quote.source_span_id !== source.source_span_id))} /><span>{source.excerpt}</span></label>;
+      })}
+    </fieldset>
+    </>}
+  </details>;
+}
+
 export function ProtocolMedicationRestrictions({ jobId, revisionId, content, drugClasses, onSaved }: {
   jobId: string; revisionId: string; content: Record<string, unknown>; onSaved: () => void;
   drugClasses: Record<string, string[]>;
@@ -117,6 +143,8 @@ export function ProtocolMedicationRestrictions({ jobId, revisionId, content, dru
             <label>例外原文<input disabled={busy} value={item.exception_excerpt ?? ""} onChange={event => change(index, { exception_excerpt: event.target.value || null })} /></label>
           </div>
           <details><summary>原文依据</summary>{item.source_quotes.map((quote, position) => <p key={position}>{quote.excerpt}</p>)}</details>
+          <MedicationSourcePicker sources={draft.sources} selected={item.source_quotes} disabled={busy}
+            onChange={source_quotes => change(index, { source_quotes })} />
           <div className="protocol-rule-reviews__actions"><button type="button" className="button" disabled={busy} onClick={() => addFromSource(item.source_quotes)}>从同段补充一条限制</button>
             <button type="button" className="button" disabled={busy} onClick={() => remove(index)}>移除此项，保留原文</button></div>
         </details>)}

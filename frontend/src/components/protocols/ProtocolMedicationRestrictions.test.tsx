@@ -115,3 +115,59 @@ it("移除错误提案仍保留原文未决，能从该段补回限制，不要�
   await user.type(screen.getByLabelText("药物或治疗原文"), "药物甲");
   expect(screen.getByLabelText("尚未核清的内容")).toHaveValue("适用时间与例外尚待核清");
 });
+
+it("从已选方案原文补充共同例外，保存真实引用且不重读或自动批准", async () => {
+  const user = userEvent.setup();
+  const content = supplement();
+  const exception = { source_span_id: "exception-source-hidden", excerpt: "研究者评估后可以使用原本禁用的药物进行补救治疗。" };
+  content.sources.push(exception);
+  const sibling = { ...content.medications[0], item_id: "med:" + "e".repeat(24), drug_text: "药物乙" };
+  content.medications.push(sibling);
+  const saved = vi.fn();
+  const request = vi.fn(async (_url: string, options: RequestInit) => {
+    expect(options.method).toBe("PUT");
+    const body = JSON.parse(String(options.body));
+    expect(body.expected_revision_id).toBe("revision");
+    expect(body.proposal.medications[0].source_quotes).toEqual([content.sources[0], exception]);
+    expect(body.proposal.medications[0].exception_excerpt).toBe(exception.excerpt);
+    expect(body.proposal.medications[1].source_quotes).toEqual(sibling.source_quotes);
+    return new Response(JSON.stringify({ revision_id: "next" }));
+  });
+  vi.stubGlobal("fetch", request);
+  render(<ProtocolMedicationRestrictions jobId="job" revisionId="revision" content={{ scope_supplement: content }} drugClasses={{}} onSaved={saved} />);
+  await user.click(screen.getByText(/用药与伴随治疗限制/));
+  await user.click(await screen.findByText(/药物甲 ·/));
+  await user.click(screen.getAllByText("补充或调整方案依据")[0]);
+  const picker = screen.getAllByRole("group", { name: "选择本条依据" })[0];
+  expect(within(picker).getByRole("checkbox", { name: content.sources[0].excerpt })).toBeDisabled();
+  await user.type(screen.getAllByLabelText("查找方案原文")[0], "补救");
+  expect(within(picker).queryByRole("checkbox", { name: content.sources[0].excerpt })).not.toBeInTheDocument();
+  await user.click(within(picker).getByRole("checkbox", { name: exception.excerpt }));
+  await user.type(screen.getAllByLabelText("例外原文")[0], exception.excerpt);
+  expect(request).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "保存补充要求" }));
+  expect(request).toHaveBeenCalledOnce();
+  expect(saved).toHaveBeenCalledOnce();
+  expect(screen.queryByText("exception-source-hidden")).not.toBeInTheDocument();
+});
+
+it("取消补充引用不改原文，不允许移除最后一处依据，查无结果仍可调整查询", async () => {
+  const user = userEvent.setup();
+  const content = supplement();
+  content.sources.push({ source_span_id: "context", excerpt: "此限制只在完成前置条件后适用。" });
+  render(<ProtocolMedicationRestrictions jobId="job" revisionId="revision" content={{ scope_supplement: content }} drugClasses={{}} onSaved={vi.fn()} />);
+  await user.click(screen.getByText(/用药与伴随治疗限制/));
+  await user.click(await screen.findByText(/药物甲 ·/));
+  await user.click(screen.getByText("补充或调整方案依据"));
+  const picker = screen.getByRole("group", { name: "选择本条依据" });
+  const extra = within(picker).getByRole("checkbox", { name: content.sources[1].excerpt });
+  await user.click(extra);
+  expect(extra).toBeChecked();
+  await user.click(extra);
+  expect(extra).not.toBeChecked();
+  expect(within(picker).getByRole("checkbox", { name: content.sources[0].excerpt })).toBeDisabled();
+  await user.type(screen.getByLabelText("查找方案原文"), "不存在的段落");
+  expect(within(picker).getByText("没有找到相应原文。")).toBeVisible();
+  await user.clear(screen.getByLabelText("查找方案原文"));
+  expect(within(picker).getAllByRole("checkbox")).toHaveLength(2);
+});

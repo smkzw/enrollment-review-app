@@ -108,7 +108,7 @@
 | 新增 `RuleReviewRecord` | 新表 `rule_review_records` | `protocol_version_id`、`official_code`（或 REQ／禁用药条目 ID）、`rule_content_hash`、`reviewer_kind`（`medical_manager`｜`builder_verification`）、`reviewed_by`、`reviewed_at`、`note`（含 `excluded`、`result_variables` 设置）。有效性按 `rule_content_hash` 判断：草稿新修订中该条内容哈希不变则审定继续有效；变了则失效。发布时任一条为 `builder_verification`→`RuleSet` 标 `verification_only=true` |
 | 范围清单 | 现有 `ProtocolDraftRevision.review_scope_selection` | 外层修订元数据保存冻结范围身份、保留／移除理由、手工原文及对应引用；不是作者Schema或采用，详见§5.2；不新增表或大型库迁移 |
 
-WP5补充要求复用内层草稿及发布`RuleSet.scope_supplement`可选字段，None不序列化，旧内容及审定hash不变。`ProhibitedMedicationItem`与`TimeConstraint`放在现有rules合同模块避免循环依赖；药物原文、来源摘录、阶段、相对窗／研究期间、例外和真实未决分别保留，不造IN/EX编号。所选来源去重后一次读取，逐字、类别、阶段枚举、窗口数量／单位／起点／方向及逐来源处置由程序核验；仍需医学审定，不能把结构校验称含义正确。新药物项与范围处置进入现有`RuleReviewRecord`；S2定义原文仅使关联条款审定失效，未改兄弟不重批。模型实际请求／原答在既有ArtifactStore，提案可读回；字段可手工调整，原文只读。无新表、队列或第二规则库。范围发布限制须在正式消费者接通后以实际资格替代，本子包不提前解除。
+WP5补充要求复用内层草稿及发布`RuleSet.scope_supplement`可选字段，None不序列化，旧内容及审定hash不变。`ProhibitedMedicationItem`与`TimeConstraint`放在现有rules合同模块避免循环依赖；药物原文、来源摘录、阶段、相对窗／研究期间、例外和真实未决分别保留，不造IN/EX编号。所选来源去重后一次读取，逐字、类别、阶段枚举、窗口数量／单位／起点／方向及逐来源处置由程序核验；仍需医学审定，不能把结构校验称含义正确。新药物项与范围处置进入现有`RuleReviewRecord`；S2定义原文仅使关联条款审定失效，未改兄弟不重批。模型实际请求／原答在既有ArtifactStore，提案可读回；字段可手工调整，原文只读。用药条目按需展开已有冻结`sources`的搜索／勾选，至少保留一处引用；只更新`source_quotes`并沿原PUT追加修订，不新增来源、模型调用或审定。无新表、队列或第二规则库。范围发布限制须在正式消费者接通后以实际资格替代，本子包不提前解除。
 
 药物类别成员随补充要求冻结并进入对应条目审定哈希，不因全局类别表后改而重写旧含义。局部括注例外不扩散到同段其他药物；允许用药段可同时作为含例外条目的背景引用，不因此把整个段认成患者禁用条件。词面核对仅是已知错误防线，不证明例外医学适用范围。结构化单项错误最多重核该项，程序合并并重验全部来源，不让模型重写合法兄弟。已用过两次的失败读取不能因刷新按钮或草稿元数据修订重置：若原始首答、实际提示／Schema、来源、期别及路线参数仍相同，可保存新校验证明，旧失败和第二答保留，不择优拼接；旧请求未记录端点身份时明确未知，不反算补写。手工增删、阶段／时间／例外及原文处置均可调整；保存仍不等于审定或发布。
 
