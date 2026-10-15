@@ -57,7 +57,7 @@ class EligibilityClauseDTO(BaseModel):
 
     rule_component_id: str = Field(min_length=1)
     rule_code: str = Field(pattern=r"^(IN|EX|REQ)-\d{2}$")
-    rule_kind: Literal["inclusion", "exclusion", "required_procedure"]
+    rule_kind: Literal["inclusion", "exclusion", "required_procedure", "medication"]
     text_summary: str = Field(min_length=1)
     source_text: str = Field(min_length=1)
     parent_rule_code: str | None = Field(default=None, pattern=r"^(IN|EX|REQ)-\d{2}$")

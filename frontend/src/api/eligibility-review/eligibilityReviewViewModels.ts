@@ -228,6 +228,7 @@ const RULE_KINDS: readonly EligibilityRuleKind[] = [
   "inclusion",
   "exclusion",
   "required_procedure",
+  "medication",
 ];
 const DECISIONS: readonly EligibilityDecision[] = [
   "inclusion_met",
@@ -298,7 +299,8 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
   const path = `clauses[${index}]`;
   const row = objectValue(value, path);
   const ruleCode = requiredString(field(row, "rule_code", path), `${path}.rule_code`);
-  if (!/^(IN|EX|REQ)-\d{2}$/.test(ruleCode)) {
+  const ruleKind = enumValue(field(row, "rule_kind", path), RULE_KINDS, `${path}.rule_kind`);
+  if (!(ruleKind === "medication" ? /^用药\d{2,}$/ : /^(IN|EX|REQ)-\d{2}$/).test(ruleCode)) {
     throw new EligibilityReviewDecodeError(`${path}.rule_code 格式不正确`);
   }
   const parentRuleCode = nullableString(
@@ -308,16 +310,13 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
   if (parentRuleCode !== null && !/^(IN|EX|REQ)-\d{2}$/.test(parentRuleCode)) {
     throw new EligibilityReviewDecodeError(`${path}.parent_rule_code 格式不正确`);
   }
+  if (ruleKind === "medication" && parentRuleCode !== null) throw new EligibilityReviewDecodeError("用药要求不能伪装成官方入排子项");
   const refs = arrayValue(field(row, "fact_refs", path), `${path}.fact_refs`);
   if (row.can_confirm != null && typeof row.can_confirm !== "boolean") throw new EligibilityReviewDecodeError("核实操作记录不完整");
   return {
     ruleCode,
     ruleComponentId: requiredString(field(row, "rule_component_id", path), `${path}.rule_component_id`),
-    ruleKind: enumValue(
-      field(row, "rule_kind", path),
-      RULE_KINDS,
-      `${path}.rule_kind`,
-    ),
+    ruleKind,
     textSummary: requiredString(
       field(row, "text_summary", path),
       `${path}.text_summary`,

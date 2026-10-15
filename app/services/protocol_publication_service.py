@@ -238,8 +238,31 @@ class ProtocolPublicationService:
         revisions = ProtocolDraftRevisionRepository(session)
         revision = revisions.get(request.draft_revision_id)
         if revision.review_scope_selection is not None:
-            raise ProtocolPublicationError("review_scope_not_applied",
-                "新增范围尚未形成并审定对应要求，本次选择已保存，但不能当作完整规则包发布。")
+            if revision.content.scope_supplement is None:
+                raise ProtocolPublicationError("review_scope_not_applied",
+                    "新增范围尚未形成对应要求，本次选择已保存，但不能当作完整规则包发布。")
+            from app.protocols.medication_restrictions import validate_scope_supplement
+            from app.services.protocol_review_scope_service import (load_scope_structure,
+                review_scope_view, scope_source_snapshot, validate_scope_proposal)
+            database = session.get_bind().engine.url.database
+            if not database or Path(database).name != DB_FILENAME:
+                raise ProtocolPublicationError("review_scope_source_missing", "补充范围未对应本次资料目录，不能发布。")
+            paths = resolve_data_paths(str(Path(database).resolve().parent))
+            try:
+                snapshot = scope_source_snapshot(session, request.source_input, None)
+                selection = revision.review_scope_selection
+                if selection.snapshot_id != request.source_input.extraction_snapshot_id:
+                    raise ValueError("范围选择不属于当前方案结构")
+                spans = list(request.source_spans.values())
+                view = review_scope_view(source=request.source_input, spans=spans, snapshot=snapshot,
+                    data_paths=paths, additional_ids=[span_id for addition in selection.additions for span_id in addition.source_span_ids])
+                validate_scope_proposal(selection, view, request.source_input, spans, load_scope_structure(snapshot, paths))
+                validate_scope_supplement(revision.content.scope_supplement, view=view, selection=selection,
+                    phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules})
+            except (ValueError, OSError) as exc:
+                raise ProtocolPublicationError("review_scope_source_invalid", "补充范围与已保存原文未能核对一致，原规则保留。") from exc
+        elif revision.content.scope_supplement is not None:
+            raise ProtocolPublicationError("review_scope_selection_missing", "补充要求缺少其原文范围选择，不能发布。")
         head = revisions.get_head(revision.draft_id)
         if head is None or head.revision_id != revision.revision_id:
             from app.services.protocol_draft_service import head_stale_error
@@ -659,6 +682,7 @@ class ProtocolPublicationService:
             study_phase=draft.selected_phase,
             rules=draft.proposed_rules,
             variable_definitions=draft.variable_definitions,
+            scope_supplement=draft.scope_supplement,
             revision=revision,
         )
 
@@ -828,6 +852,9 @@ class ProtocolPublicationService:
                 for ref in refs
             }
         )
+        if draft.scope_supplement is not None:
+            all_refs = sorted(set(all_refs) | {f"{version_id}:{ref}" for ref in self._source_refs(
+                [quote.source_span_id for quote in draft.scope_supplement.sources], request.source_spans)})
         source_records = [
             build_protocol_source_record(
                 source_ref=ref,

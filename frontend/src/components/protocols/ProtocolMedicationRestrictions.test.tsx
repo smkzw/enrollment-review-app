@@ -63,6 +63,26 @@ it("来源版本或阶段格式不合法时拒绝展示，不默认为已完成"
   expect(() => decodeScopeSupplement(invalid)).toThrow();
 });
 
+it("旧时间窗不猜含义，选择后随现有保存入口提交，切换期间清除旧含义", async () => {
+  const user = userEvent.setup();
+  const request = vi.fn(async (_url: string, options: RequestInit) => {
+    const value = JSON.parse(String(options.body)).proposal.medications[0];
+    expect(value.window_interpretation).toBe("prohibited_interval");
+    expect(value.window.upper_bound).toEqual({ value: 4, unit: "week" });
+    return new Response(JSON.stringify({ revision_id: "next" }));
+  });
+  vi.stubGlobal("fetch", request);
+  render(<ProtocolMedicationRestrictions jobId="job" revisionId="revision" content={{ scope_supplement: supplement() }} drugClasses={{}} onSaved={vi.fn()} />);
+  await user.click(screen.getByText(/用药与伴随治疗限制/));
+  await user.click(await screen.findByText(/药物甲 ·/));
+  expect(screen.getByLabelText("时间要求")).toHaveValue("");
+  await user.selectOptions(screen.getByLabelText("时间要求"), "prohibited_interval");
+  await user.click(screen.getByRole("button", { name: "保存补充要求" }));
+  expect(request).toHaveBeenCalledOnce();
+  await user.selectOptions(screen.getByLabelText("适用期间"), "study_period");
+  expect(screen.queryByLabelText("时间要求")).not.toBeInTheDocument();
+});
+
 it("读取失败仍能从已选原文手工整理，不把失败回执附给手工要求", async () => {
   const user = userEvent.setup();
   const manual = { ...supplement(), medications: [], source_dispositions: [{ source_span_id: "source-hidden", disposition: "unresolved", reason: "尚未整理" }] };

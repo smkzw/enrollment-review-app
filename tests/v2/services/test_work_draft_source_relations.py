@@ -133,7 +133,7 @@ def test_product_composition_separates_reader_disagreement_from_patient_conflict
     from app.domain.publication import canonical_hash
     from app.services import work_draft_review as service
 
-    rules = SimpleNamespace(rules=[], model_dump=lambda **_: {"rules": "frozen"})
+    rules = SimpleNamespace(rules=[], scope_supplement=None, model_dump=lambda **_: {"rules": "frozen"})
     authority = SimpleNamespace(review_episode_id="episode", rule_set_id="rules", rule_set_revision=1)
     components = [SimpleNamespace(rule_component_id=value) for value in ("affected", "sibling")]
     frame = SimpleNamespace(work_draft=True, review_run_id="run", authority=authority,
@@ -729,7 +729,7 @@ def test_product_procedure_failure_keeps_its_catalog_identity_and_source_closure
     from app.domain.contracts.work_draft import WorkDraftItem, SystemIssue
     from app.domain.publication import canonical_hash
     from app.services import work_draft_review as service
-    rules = SimpleNamespace(rules=[], model_dump=lambda **_: {"rules": "frozen"})
+    rules = SimpleNamespace(rules=[], scope_supplement=None, model_dump=lambda **_: {"rules": "frozen"})
     authority = SimpleNamespace(review_episode_id="episode", rule_set_id="rules", rule_set_revision=1)
     frame = SimpleNamespace(work_draft=True, review_run_id="run", authority=authority,
         rule_set_sha256=canonical_hash(rules.model_dump()), facts=[], system_issues=[],

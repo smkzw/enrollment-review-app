@@ -159,6 +159,7 @@ export function ruleReviewPresentations(entries: RuleReviewEntry[], content: Rec
       const supplement = reviewObjects([content.scope_supplement])[0];
       const medication = reviewObjects(supplement?.medications).find(value => value.item_id === entry.official_code);
       if (medication?.exception_excerpt) reasons.push("含用药例外，请核对适用对象及期间。");
+      if (medication?.window && !medication.window_interpretation) reasons.push("时间要求尚未区分禁用区间与最短停药间隔。");
       if (typeof medication?.unresolved_reason === "string") reasons.push(medication.unresolved_reason);
     }
     return { entry, rule, category: entry.kind === "rule" && rule?.kind !== "required_procedure"

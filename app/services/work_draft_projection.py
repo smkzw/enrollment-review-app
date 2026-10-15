@@ -66,6 +66,13 @@ def project_work_draft(session, *, authority, rule_set, clause_pack, artifact_st
                 rule_kind=rule.kind.value, text_summary=rule.source_text, source_text=rule.source_text,
                 parent_rule_code=None, decision="system_issue", decision_label="尚未生成工作稿",
                 reason="请开始审核；旧结果和资料仍会保留。", fact_refs=(), gap_type=None, determination_mode="restricted"))
+        if rule_set.scope_supplement is not None:
+            for index, item in enumerate(rule_set.scope_supplement.medications):
+                clauses.append(EligibilityClauseProjection(rule_component_id=f"medication:{item.item_id}",
+                    rule_code=f"用药{index + 1:02d}", rule_kind="medication", text_summary=item.drug_text,
+                    source_text="\n".join(dict.fromkeys(quote.excerpt for quote in item.source_quotes)),
+                    parent_rule_code=None, decision="system_issue", decision_label="尚未生成工作稿",
+                    reason="请开始审核；旧结果和资料仍会保留。", fact_refs=(), gap_type=None, determination_mode="restricted"))
     return _review_projection(authority, rule_set, clauses, components, run_id, issues, state)
 
 
@@ -74,9 +81,13 @@ def project_saved_items(rows, *, authority, rule_set, run_id, issues=()):
     from app.services.eligibility_review_projection import EligibilityClauseProjection, EligibilityFactRef, EligibilitySourceReadRef
     from app.services.work_draft_review import confirmation_allowed
     clauses, components = [], []
+    medication_labels = {item.item_id: f"用药{index + 1:02d}" for index, item in enumerate(
+        rule_set.scope_supplement.medications if rule_set.scope_supplement else [])}
     for item in rows:
-        projection = EligibilityClauseProjection(rule_component_id=item.item_id, rule_code=item.official_code,
-            rule_kind=item.rule_kind.value, text_summary=item.title, source_text=item.source_text,
+        projection = EligibilityClauseProjection(rule_component_id=item.item_id,
+            rule_code=medication_labels[item.official_code] if item.policy_group == "medication" else item.official_code,
+            rule_kind="medication" if item.policy_group == "medication" else item.rule_kind.value,
+            text_summary=item.title, source_text=item.source_text,
             parent_rule_code=item.official_code if item.rule_component_id is not None else None,
             decision=item.decision.value if item.decision else "system_issue",
             decision_label=LABELS[item.decision] if item.decision else "系统问题",
@@ -94,9 +105,13 @@ def project_saved_items(rows, *, authority, rule_set, run_id, issues=()):
 
 def _review_projection(authority, rule_set, clauses, components, run_id, issues, state):
     from app.services.eligibility_review_projection import EligibilityReviewProjection
+    medication_labels = {item.item_id: f"用药{index + 1:02d}" for index, item in enumerate(
+        rule_set.scope_supplement.medications if rule_set.scope_supplement else [])}
+    display_issues = tuple(issue.model_copy(update={"affected_codes": [medication_labels.get(code, code)
+        for code in issue.affected_codes]}) for issue in issues)
     return EligibilityReviewProjection(subject_id=authority.subject_id, review_episode_id=authority.review_episode_id,
         rule_set_id=authority.rule_set_id, rule_set_revision=authority.rule_set_revision,
         evidence_snapshot_v2_id=authority.evidence_snapshot_v2_id,
         complete_processing_revision_id=authority.complete_processing_revision_id,
-        clauses=tuple(clauses), work_draft_state=state, review_run_id=run_id, system_issues=issues,
+        clauses=tuple(clauses), work_draft_state=state, review_run_id=run_id, system_issues=display_issues,
         verification_only=rule_set.verification_only is not False, component_clauses=tuple(components))

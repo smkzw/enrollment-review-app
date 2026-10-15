@@ -23,12 +23,13 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v37"
+CALCULATION_VERSION = "work-draft/0.2.0-v38"
 
 
 def confirmation_allowed(item, items):
     from app.services.work_draft_calculation import DETERMINATE
     return (item.rule_component_id is None and item.decision in DETERMINATE and item.confidence == "low"
+        and item.policy_group != "medication"
         and item.system_issue is None and bool(item.evidence_refs or item.source_read_refs)
         and not any(ref.disposition == "unresolved" for ref in item.source_read_refs)
         and all(child.system_issue is None and child.decision in DETERMINATE | {
@@ -543,6 +544,8 @@ class WorkDraftReviewService:
                         continue
                     children = [item for item in items if item.official_code == rule.official_code]
                     items.append(compose_parent(rule, children, frozen.review_run_id))
+                from app.services.work_draft_medications import calculate_medications
+                items.extend(calculate_medications(frame, rule_set, evidence_refs=refs))
                 items = _apply_confirmations(items, confirmations, frozen.evaluator_version)
                 return {"items": [item.model_dump(mode="json") for item in items]}
             if context.step_id != "save":

@@ -52,7 +52,7 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
   ] }];
   if (report.workDraft) {
     const parents = [...report.workDraft.clauses].sort((a, b) =>
-      ({ inclusion: 0, exclusion: 1, required_procedure: 2 })[a.ruleKind] - ({ inclusion: 0, exclusion: 1, required_procedure: 2 })[b.ruleKind]
+      ({ inclusion: 0, exclusion: 1, required_procedure: 2, medication: 3 })[a.ruleKind] - ({ inclusion: 0, exclusion: 1, required_procedure: 2, medication: 3 })[b.ruleKind]
         || a.ruleCode.localeCompare(b.ruleCode));
     for (const parent of parents) {
       for (const item of [parent, ...(report.workDraft.componentClauses?.filter(child => child.parentRuleCode === parent.ruleCode) ?? [])]) {

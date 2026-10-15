@@ -71,7 +71,7 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
   const { run, context, assessments, actions } = report;
   const draft = report.workDraft;
   const draftParents = [...(draft?.clauses ?? [])].sort((a, b) =>
-    ({ inclusion: 0, exclusion: 1, required_procedure: 2 })[a.ruleKind] - ({ inclusion: 0, exclusion: 1, required_procedure: 2 })[b.ruleKind]
+    ({ inclusion: 0, exclusion: 1, required_procedure: 2, medication: 3 })[a.ruleKind] - ({ inclusion: 0, exclusion: 1, required_procedure: 2, medication: 3 })[b.ruleKind]
       || a.ruleCode.localeCompare(b.ruleCode));
   const draftItem = draftSelection?.runId === run.reviewRunId
     ? [...(draft?.clauses ?? []), ...(draft?.componentClauses ?? [])].find(item => item.ruleComponentId === draftSelection.itemId) : undefined;

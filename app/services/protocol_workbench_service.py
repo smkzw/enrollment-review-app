@@ -1804,6 +1804,7 @@ class ProtocolWorkbenchService:
         formal: bool,
         official_version: str | None = None,
     ) -> DraftComparisonSideView:
+        from app.protocols.medication_restrictions import scope_supplement_pending
         content = revision.content
         return DraftComparisonSideView(
             revision_id=revision.revision_id,
@@ -1819,7 +1820,7 @@ class ProtocolWorkbenchService:
             is_formal_baseline=formal,
             content=content.model_dump(mode="json"),
             source_refs=sorted(set(content.source_refs)),
-            review_scope_pending=revision.review_scope_selection is not None,
+            review_scope_pending=scope_supplement_pending(revision),
         )
 
     def get_sources(self, job_id: str) -> dict[str, Any]:

@@ -181,6 +181,8 @@ class MedicationRestriction(ContractModel):
     drug_text: str = Field(min_length=1)
     drug_class_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
     window: TimeConstraint | None = None
+    window_interpretation: Literal["prohibited_interval", "minimum_washout"] | None = Field(
+        default=None, exclude_if=lambda value: value is None)
     period: ProtocolPeriod | None = None
     applicable_stages: list[ReviewStage]
     exception_excerpt: str | None = Field(default=None, min_length=1)
@@ -194,6 +196,20 @@ class MedicationRestriction(ContractModel):
             raise ValueError("用药限制的审核阶段不能重复")
         if self.window is not None and self.period is not None:
             raise ValueError("相对时间窗与整个期间不能混作同一限制")
+        if self.window_interpretation is not None:
+            if self.window is None:
+                raise ValueError("时间窗含义必须对应实际时间窗")
+            lower = self.window.lower_bound is not None or self.window.lower_bound_days not in {None, 0}
+            upper = self.window.upper_bound is not None or self.window.upper_bound_days is not None
+            if self.window_interpretation == "minimum_washout" and (
+                self.window.direction != TimeDirection.BEFORE or upper
+                or not (lower or self.window.half_life_multiplier is not None)
+            ):
+                raise ValueError("最短停药间隔须为命名起点前的下限，不能同时作为禁用区间上限")
+            if self.window_interpretation == "prohibited_interval" and self.window.direction != TimeDirection.ON and not upper and self.window.half_life_multiplier is None:
+                raise ValueError("禁用区间须有明确上限或半衰期范围，不能把最短停药间隔当作禁用区间")
+            if self.window_interpretation == "prohibited_interval" and self.window.half_life_multiplier is not None and lower:
+                raise ValueError("半衰期禁用区间不能混入尚未支持的内侧下限")
         if self.unresolved_reason is None and (not self.applicable_stages or
                 (self.window is None and self.period is None)):
             raise ValueError("用药限制须有明确阶段和时间范围；未知不能默认补入")

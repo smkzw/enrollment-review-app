@@ -94,9 +94,12 @@ export function ProtocolMedicationRestrictions({ jobId, revisionId, content, dru
               change(index, value === "window" ? { period: null, window: item.window ?? {
                 anchor_type: "" as keyof typeof anchors, direction: "before", lower_bound_days: null, upper_bound_days: null,
                 lower_bound: null, upper_bound: null, lower_bound_inclusive: true, upper_bound_inclusive: true, half_life_multiplier: null, allow_partial_date: false } }
-                : { period: value === "study_period" || value === "treatment_period" ? value : null, window: null });
+                : { period: value === "study_period" || value === "treatment_period" ? value : null, window: null, window_interpretation: null });
             }}><option value="unknown">尚未核清</option><option value="window">相对日期窗口</option><option value="study_period">整个研究期间</option><option value="treatment_period">治疗期间</option></select></label>
             {item.window && <>
+              <label>时间要求<select disabled={busy} value={item.window_interpretation ?? ""} onChange={event => change(index, {
+                window_interpretation: event.target.value as MedicationRestriction["window_interpretation"] || null })}>
+                <option value="">尚未核清</option><option value="prohibited_interval">这段时间内禁用</option><option value="minimum_washout">至少停药这么久</option></select></label>
               <label>时间起点<select disabled={busy} value={item.window.anchor_type} onChange={event => change(index, { window: { ...item.window!, anchor_type: event.target.value as keyof typeof anchors } })}>
                 <option value="">请选择原文命名起点</option>{Object.entries(anchors).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
               <label>相对方向<select disabled={busy} value={item.window.direction} onChange={event => change(index, { window: { ...item.window!, direction: event.target.value as "before" | "after" | "on" } })}>

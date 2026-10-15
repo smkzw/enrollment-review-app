@@ -40,6 +40,17 @@ function reviewBody() {
 }
 
 describe("eligibility review HTTP repository", () => {
+  it("合并用药要求独立读取，不伪装官方入排编号", async () => {
+    const body = reviewBody();
+    body.clauses[0] = { ...body.clauses[0]!, rule_kind: "medication", rule_code: "用药01",
+      determination_mode: "deterministic", decision: "exclusion_triggered", decision_label: "已触发" };
+    const repo = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
+    const view = await repo.getEligibilityReview("subject", "episode");
+    expect(view.clauses[0]?.ruleKind).toBe("medication");
+    expect(view.clauses[0]?.ruleCode).toBe("用药01");
+    body.clauses[0]!.rule_code = "EX-01";
+    await expect(repo.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+  });
   it("明确核实走独立命令，拒绝假完成和不完整回执", async () => {
     let receipt: unknown = { job_id: "job", state: "queued", review_run_id: null };
     const requests: RequestInit[] = [];

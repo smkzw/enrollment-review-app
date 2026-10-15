@@ -19,6 +19,7 @@ PROMPT = """你为方案审定人整理已选章节中的禁用药物、合并�
 只按本次指定研究期别提取；不同期别的不同规定不能混用，共同适用必须有原文依据。
 每项保留原文药物/治疗名称drug_text、逐字来源source_quotes、审核阶段、相对时间窗或明确研究期间。
 TimeConstraint使用原文命名锚点、数量、日/周/月/年及方向；不补默认筛选起点，不把日历月折算固定天数。
+window_interpretation须区分prohibited_interval（窗口内禁止使用，时长放上限）与minimum_washout（至少停药的间隔，时长放下限）；不明时保留null并说明未决，不靠数字相同认作含义相同。
 仅明确整个研究/治疗期间才用period；window与period不同时填，时段不清用unresolved_reason说明，不猜。
 有例外必须逐字保留exception_excerpt，并把限定它的上位原文一并引用，不能删例外以便自动计算。
 drug_class_id只能来自给定类别表，药物归属不确定用null，不把外用、鼻用、吸入用混成全身用药。

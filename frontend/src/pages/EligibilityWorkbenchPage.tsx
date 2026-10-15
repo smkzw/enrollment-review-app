@@ -121,6 +121,8 @@ function clauseKindLabel(kind: EligibilityClauseView["ruleKind"]): string {
       return "排除标准";
     case "required_procedure":
       return "流程要求";
+    case "medication":
+      return "合并用药与治疗要求";
   }
 }
 
@@ -312,6 +314,7 @@ function EligibilityClauseList({
     { kind: "inclusion", title: "入选标准" },
     { kind: "exclusion", title: "排除标准" },
     { kind: "required_procedure", title: "流程要求" },
+    { kind: "medication", title: "合并用药与治疗要求" },
     { kind: "control", title: "方案补充要求" },
   ];
   return (

@@ -151,3 +151,66 @@ def test_changed_context_after_failure_does_not_reset_model_budget(build_app, da
         monkeypatch.setattr(author, "PROMPT", author.PROMPT + "\n不同提示不能借旧回执冒充。")
         second = client.post(path + "/medications/suggest", json=request).json()
         assert second["supplement"] is None and second["new_model_calls"] == 0 and len(calls) == 2
+
+
+def test_manual_time_meaning_save_review_and_shared_publication_are_one_source_chain(build_app, data_paths, monkeypatch):
+    from app.domain.contracts.rules import ProtocolScopeSupplement
+    from app.storage.repositories import get_rule_set
+    calls = install_completion(monkeypatch)
+    app = build_app(run_runner=False)
+    with TestClient(app) as client:
+        preserved_scope(app, data_paths, medication_text="筛选前4周内禁止使用药物甲。")
+        path, scope = save_scope(client)
+        result = client.post(path + "/medications/suggest", json={"expected_revision_id": scope["draft_revision_id"]}).json()
+        proposal = {"medications": [{key: value for key, value in result["supplement"]["medications"][0].items() if key != "item_id"}],
+            "source_dispositions": result["supplement"]["source_dispositions"]}
+        proposal["medications"][0]["window_interpretation"] = "minimum_washout"
+        assert client.put(path + "/medications", json={"expected_revision_id": scope["draft_revision_id"], "proposal": proposal}).status_code == 422
+        proposal["medications"][0]["window_interpretation"] = "prohibited_interval"
+        saved = client.put(path + "/medications", json={"expected_revision_id": scope["draft_revision_id"], "proposal": proposal})
+        assert saved.status_code == 200, saved.text
+        after = saved.json()
+        assert after["content"]["scope_supplement"]["medications"][0]["window_interpretation"] == "prohibited_interval"
+        assert after["review_scope_pending"] is False
+        # Saving has not approved either medication or official requirements.
+        blocked = client.post(path.removesuffix("/draft") + "/publish", json={"idempotency_key": "not-reviewed"})
+        assert blocked.status_code == 409 and blocked.json()["error"]["code"] == "PUBLICATION_FAILED"
+        assert "尚未审定或已修改" in blocked.json()["error"]["detail"]
+        assert after["content"]["scope_supplement"]["medications"][0]["item_id"] in blocked.json()["error"]["detail"]
+        reviews = client.get(path + "/reviews").json()
+        entries = [{"official_code": row["official_code"], "rule_content_hash": row["rule_content_hash"],
+            "note": "excluded" if row["kind"] == "procedure" else None,
+            "result_variables": ["eos"] if row["kind"] == "procedure" else []} for row in reviews["entries"]]
+        approved = client.post(path + "/reviews", json={"expected_revision_id": after["revision_id"],
+            "reviewer_kind": "builder_verification", "entries": entries})
+        assert approved.status_code == 200, approved.text
+        published = client.post(path.removesuffix("/draft") + "/publish", json={"idempotency_key": "reviewed-medication"})
+        assert published.status_code == 200, published.text
+        assert published.json()["verification_only"] is True
+        with app.state.session_factory() as session:
+            rules = get_rule_set(session, published.json()["rule_set_id"], published.json()["rule_set_revision"])
+            assert rules.scope_supplement == ProtocolScopeSupplement.model_validate(after["content"]["scope_supplement"])
+        assert len(calls) == 1
+
+
+def test_selected_scope_source_damage_blocks_publication_instead_of_hiding_missing_sources(build_app, data_paths, monkeypatch):
+    install_completion(monkeypatch)
+    app = build_app(run_runner=False)
+    with TestClient(app) as client:
+        _, _, structure = preserved_scope(app, data_paths, medication_text="筛选前4周内禁止使用药物甲。")
+        path, scope = save_scope(client)
+        result = client.post(path + "/medications/suggest", json={"expected_revision_id": scope["draft_revision_id"]}).json()
+        proposal = {"medications": [{key: value for key, value in result["supplement"]["medications"][0].items() if key != "item_id"}],
+            "source_dispositions": result["supplement"]["source_dispositions"]}
+        saved = client.put(path + "/medications", json={"expected_revision_id": scope["draft_revision_id"], "proposal": proposal})
+        assert saved.status_code == 200
+        original = structure.read_bytes()
+        structure.write_bytes(b"[]")
+        try:
+            response = client.post(path.removesuffix("/draft") + "/publish", json={"idempotency_key": "damaged-source"})
+            assert response.status_code == 409
+            assert response.json()["error"]["code"] == "PUBLICATION_FAILED"
+            assert response.json()["error"]["detail"] == "补充范围与已保存原文未能核对一致，原规则保留。"
+        finally:
+            structure.write_bytes(original)
+        assert client.get(path).json()["revision_id"] == saved.json()["revision_id"]

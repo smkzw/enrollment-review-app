@@ -245,9 +245,11 @@ WP5补充要求复用内层草稿及发布`RuleSet.scope_supplement`可选字段
 
 ### 6.3 用药暴露
 
+- 当前实现按已发布、已冻结且逐事实能回到本次资料页的 `MedicationExposureV2` 计算具体药物的日期；不以同页、处方事实或模型类别字符串伪造实际暴露。`work_draft_medications.calculate_medications` 接入既有 compose／保存／历史／API，显示独立的“合并用药与治疗要求”，不伪造IN/EX编号。暂未完成的类别限定及例外继续明确列出，不以小样或新增记录类型称整个禁用药消费者完成。
+- `MedicationRestriction.window_interpretation` 区分“窗口内禁用”（上限）与“至少停药”（下限）。旧空值读回及哈希不变，不按旧数字自动补含义；手动选择后只变该项审定内容。`medication_timing`复用既有日历／半衰期计算：纯半衰期只反转一次；择长禁用窗取两个禁用区间的并集；没有PK依据时，区间外不能误认安全。当前节点已知期间的用药可支持整研究期间要求；治疗期间另外需要实际首次给药日期，不能把计划日期当真实发生。
 - 新增适配：`MedicationExposureV2`（`facts.py:525-551`）→ 判定用事实，`variable_id = drug_class:<class_id>` 或具体药物变量；有效日期取 `end_range`，`duration_status` 为持续则取锚点日；只有 `start_range` 时置 `PARTIAL_DATE`／低置信。
 - 来源只有处方／医嘱／购药记录时打 `PRESCRIPTION_ONLY`。
-- 药名在类别表中找不到→不参与类别匹配，生成卡片"未能归类的用药：××"；此时该受试者所有禁用药类别条款的"未触发"降为低置信（PRD R-C3）。
+- 药名在类别表中找不到→不参与类别匹配，生成卡片"未能归类的用药：××"；未满足PRD R-C3三项前提时不能给“未触发”，不只是降置信。类别表命中是线索，不证明全身／局部、制剂或适应症限定已核实；当前消费者对这种缺口明确报系统问题，不凭名字触发，也不改旧事件／暴露门禁。
 - `duration_status` 为间断或未知、只有 `start_range`→相关结论最多低置信，不得为高置信"未触发"。
 - 禁用药判定用现有 `evaluate_time_constraint`（`app/domain/expression.py:336-416`），半衰期规则沿用 `HalfLifeEvidence`。
 

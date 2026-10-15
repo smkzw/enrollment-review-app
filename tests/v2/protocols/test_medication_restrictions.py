@@ -150,3 +150,27 @@ def test_new_optional_fields_do_not_change_existing_draft_or_ruleset_hashes():
     rules = RuleSet(rule_set_id="fixture", protocol_version_id=draft.protocol_version_id,
         study_phase=draft.selected_phase, rules=draft.proposed_rules, revision=1)
     assert "scope_supplement" not in rules.model_dump(mode="json")
+
+
+def test_unknown_historical_time_meaning_keeps_identity_but_explicit_choice_requires_new_review():
+    selection, view, proposal = frozen_medications()
+    old = build(proposal, selection, view)
+    payload = old.model_dump(mode="json")
+    assert "window_interpretation" not in payload["medications"][0]
+    assert canonical_hash(type(old).model_validate(payload).model_dump(mode="json")) == canonical_hash(payload)
+    proposal["medications"][0]["window_interpretation"] = "prohibited_interval"
+    selected = build(proposal, selection, view)
+    assert selected.medications[0].item_id != old.medications[0].item_id
+    assert selected.sources == old.sources
+    assert old.medications[0].window_interpretation is None
+
+
+def test_changed_source_selection_cannot_look_ready_because_old_medications_still_exist():
+    from types import SimpleNamespace
+    from app.protocols.medication_restrictions import scope_supplement_pending
+    selection, view, proposal = frozen_medications()
+    supplement = build(proposal, selection, view)
+    revision = SimpleNamespace(review_scope_selection=selection, content=SimpleNamespace(scope_supplement=supplement))
+    assert not scope_supplement_pending(revision)
+    selection.included_candidate_keys.append("d" * 64)
+    assert scope_supplement_pending(revision)

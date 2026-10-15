@@ -8,6 +8,7 @@ export interface MedicationQuote { source_span_id: string; excerpt: string }
 export interface MedicationRestriction {
   item_id?: string; drug_text: string; drug_class_id: string | null;
   window: (TimeConstraintWire & Record<string, unknown>) | null;
+  window_interpretation?: "prohibited_interval" | "minimum_washout" | null;
   period: "study_period" | "treatment_period" | null; applicable_stages: MedicationStage[];
   exception_excerpt: string | null; unresolved_reason: string | null;
   source_quotes: MedicationQuote[]; applies_to_rule: string | null;
@@ -45,6 +46,9 @@ export function decodeScopeSupplement(value: unknown): ScopeSupplement {
         !["exception_excerpt", "unresolved_reason", "applies_to_rule"].every(key => item[key] === null || typeof item[key] === "string"))
       throw new Error("用药限制的阶段或范围不完整。");
     quotes(item.source_quotes);
+    if (item.window_interpretation != null && !["prohibited_interval", "minimum_washout"].includes(String(item.window_interpretation)))
+      throw new Error("用药时间要求的含义尚不能读取。");
+    if (item.window_interpretation != null && item.window === null) throw new Error("用药时间要求缺少对应日期窗口。");
     if (item.window !== null) {
       const window = row(item.window);
       if (typeof window.anchor_type !== "string" || !["before", "after", "on"].includes(String(window.direction))) throw new Error("用药时间窗不完整。");

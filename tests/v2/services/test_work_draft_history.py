@@ -138,3 +138,21 @@ def test_formal_completed_history_still_requires_formal_assessments(monkeypatch,
         history.get_run(None, context.authority.subject_id, run.review_episode_id, run.review_run_id)
 
 
+def test_medication_rows_are_required_in_their_own_frozen_report_and_never_official_codes(frozen_history):
+    from tests.v2.protocols.test_medication_restrictions import frozen_medications, build
+    from app.services.work_draft_medications import calculate_medications
+    run, context, rows, _, _ = frozen_history
+    rules = history.get_rule_set(None, context.authority.rule_set_id, run.rule_set_revision)
+    selection, view, proposal = frozen_medications()
+    rules.scope_supplement = build(proposal, selection, view)
+    context = context.model_copy(update={"medication_exposures": ()})
+    medication, = calculate_medications(context, rules, evidence_refs={})
+    rows.append(medication)
+    result = history._work_draft_detail(None, run, context, "completed")
+    assert result.work_draft.clauses[-1].rule_code == "用药01"
+    assert result.work_draft.clauses[-1].rule_kind == "medication"
+    rows.pop()
+    with pytest.raises(history.ReviewHistoryIncompleteError, match="缺失"):
+        history._work_draft_detail(None, run, context, "completed")
+
+

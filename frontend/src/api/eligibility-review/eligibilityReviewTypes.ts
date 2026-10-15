@@ -3,6 +3,7 @@
 export type EligibilityRuleKindWire =
   | "inclusion"
   | "exclusion"
+  | "medication"
   | "required_procedure";
 
 export type EligibilityDecisionWire =

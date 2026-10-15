@@ -367,6 +367,7 @@ def _metadata_conflict_dto(
 
 
 def _draft_dto(view) -> DraftRevisionResponse:
+    from app.protocols.medication_restrictions import scope_supplement_pending
     revision = view.revision
     content = revision.content
     return DraftRevisionResponse(
@@ -383,7 +384,7 @@ def _draft_dto(view) -> DraftRevisionResponse:
             revision.reason.value, revision.reason.value
         ),
         imported_unpublished_proposal=(revision.reason.value == "initial_save" and revision.feedback_note is not None),
-        review_scope_pending=revision.review_scope_selection is not None,
+        review_scope_pending=scope_supplement_pending(revision),
         actor=revision.actor,
         created_at=_as_utc(revision.created_at),
         study_phase=revision.study_phase.value,

@@ -30,6 +30,13 @@ def scope_selection_hash(selection):
     return canonical_hash(selection.model_dump(mode="json", exclude={"saved_at", "saved_by"}))
 
 
+def scope_supplement_pending(revision):
+    selection = revision.review_scope_selection
+    supplement = revision.content.scope_supplement
+    return selection is not None and (supplement is None
+        or supplement.selection_sha256 != scope_selection_hash(selection))
+
+
 def selected_scope_material(view, selection):
     if selection is None or selection.scope_content_hash != view["scope_content_hash"]:
         raise ValueError("请先保存与当前原文一致的范围选择。")

@@ -220,6 +220,10 @@ def _work_draft_detail(session, run, context, status):
     expected.update({(item.official_code or f"REQ-{item.position + 1:02d}", None):
         (RuleKind.REQUIRED_PROCEDURE, "\n".join(text for text in item.source_excerpts if text) or item.label)
         for item in context.procedure_catalog.items})
+    if rules.scope_supplement is not None:
+        expected.update({(item.item_id, None): (RuleKind.EXCLUSION,
+            "\n".join(dict.fromkeys(quote.excerpt for quote in item.source_quotes)))
+            for item in rules.scope_supplement.medications})
     rows = WorkDraftRepository(session).list_for_run(run.review_run_id)
     actual = [(item.official_code, item.rule_component_id) for item in rows]
     if (len(actual) != len(set(actual)) or set(actual) - set(expected)
@@ -235,6 +239,8 @@ def _work_draft_detail(session, run, context, status):
     for item in rows:
         if item.review_run_id != run.review_run_id or (item.rule_kind, item.source_text) != expected[(item.official_code, item.rule_component_id)]:
             incomplete("工作稿条款的来源或运行身份与冻结规则不一致。")
+        if item.official_code.startswith("med:") != (item.policy_group == "medication"):
+            incomplete("用药要求的类别与冻结条目不一致。")
         for ref in item.evidence_refs:
             fact, locator = facts.get(ref.fact_id), positions.get(ref.locator_id)
             if (fact is None or ref.locator_id not in fact.locator_ids or locator is None
