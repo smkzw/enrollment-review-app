@@ -62,3 +62,36 @@ it("来源版本或阶段格式不合法时拒绝展示，不默认为已完成"
   const invalid = supplement(); invalid.medications[0].applicable_stages = ["not-a-stage"];
   expect(() => decodeScopeSupplement(invalid)).toThrow();
 });
+
+it("读取失败仍能从已选原文手工整理，不把失败回执附给手工要求", async () => {
+  const user = userEvent.setup();
+  const manual = { ...supplement(), medications: [], source_dispositions: [{ source_span_id: "source-hidden", disposition: "unresolved", reason: "尚未整理" }] };
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ job_id: "job", draft_revision_id: "revision",
+    supplement: null, manual_supplement: manual, system_issue: "原答尚未通过核对", proposal_ref: "failed-receipt" }))));
+  render(<ProtocolMedicationRestrictions jobId="job" revisionId="revision" content={{}} drugClasses={{}} onSaved={vi.fn()} />);
+  await user.click(screen.getByText("用药与伴随治疗限制"));
+  await user.click(screen.getByRole("button", { name: "整理选定章节" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("原答尚未通过核对");
+  await user.click(screen.getByText(/其余所选原文的处置/));
+  expect(screen.getByRole("button", { name: "从此段新增限制" })).toBeVisible();
+});
+
+it("移除错误提案仍保留原文未决，能从该段补回限制，不要求手写JSON", async () => {
+  const user = userEvent.setup();
+  render(<ProtocolMedicationRestrictions jobId="job" revisionId="revision" content={{ scope_supplement: supplement() }} drugClasses={{}} onSaved={vi.fn()} />);
+  await user.click(screen.getByText(/用药与伴随治疗限制/));
+  await user.click(await screen.findByText(/药物甲 ·/));
+  await user.click(screen.getByRole("button", { name: "移除此项，保留原文" }));
+  await user.click(screen.getByText(/其余所选原文的处置/));
+  expect(screen.getByText("提案已移除，此段是否包含限制仍待核对。")).toBeVisible();
+  await user.click(screen.getByText("调整这段的处理方式"));
+  await user.selectOptions(screen.getByLabelText("原文性质"), "permission");
+  await user.clear(screen.getByLabelText("处理说明"));
+  await user.type(screen.getByLabelText("处理说明"), "需同时核对剂量限制。");
+  expect(screen.getByLabelText("处理说明")).toHaveValue("需同时核对剂量限制。");
+  await user.click(screen.getByRole("button", { name: "从此段新增限制" }));
+  await user.click(screen.getByText(/新增用药限制 ·/));
+  expect(screen.getByLabelText("药物或治疗原文")).toHaveValue("");
+  await user.type(screen.getByLabelText("药物或治疗原文"), "药物甲");
+  expect(screen.getByLabelText("尚未核清的内容")).toHaveValue("适用时间与例外尚待核清");
+});

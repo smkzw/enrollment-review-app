@@ -28,16 +28,18 @@ def install_completion(monkeypatch, *, fail_first=False):
         payload = json.loads(messages[1]["content"])
         calls.append(payload)
         assert max_tokens == 65536
-        assert len(payload["sources"]) == 2
-        assert len({row["source_span_id"] for row in payload["sources"]}) == 2
-        heading = next(row for row in payload["sources"] if row["excerpt"] == "合并用药")
-        clause = next(row for row in payload["sources"] if row != heading)
+        is_local = payload["output_schema"]["title"] == "MedicationRestriction"
+        assert len(payload["sources"]) == (1 if is_local else 2)
+        assert len({row["source_span_id"] for row in payload["sources"]}) == len(payload["sources"])
+        if not is_local:
+            heading = next(row for row in payload["sources"] if row["excerpt"] == "合并用药")
+        clause = next(row for row in payload["sources"] if row["excerpt"] != "合并用药")
         proposal = {"medications": [{"drug_text": "药物甲", "drug_class_id": None,
             "window": {"anchor_type": "screening_date", "direction": "before", "upper_bound": {"value": 3 if fail_first and len(calls) == 1 else 4, "unit": "week"}},
             "period": None, "applicable_stages": ["screening"], "exception_excerpt": None,
             "unresolved_reason": None, "source_quotes": [clause], "applies_to_rule": None}],
-            "source_dispositions": [{"source_span_id": heading["source_span_id"], "disposition": "heading", "reason": "章节标题"}]}
-        return SimpleNamespace(text=json.dumps(proposal), finish_reason="stop", usage={"total_tokens": 123},
+            "source_dispositions": [] if is_local else [{"source_span_id": heading["source_span_id"], "disposition": "heading", "reason": "章节标题"}]}
+        return SimpleNamespace(text=json.dumps(proposal["medications"][0] if is_local else proposal), finish_reason="stop", usage={"total_tokens": 123},
             response_model="fixture-model", response_id="fixture-response", output_lengths={})
 
     async def injected(**kwargs):
@@ -57,6 +59,8 @@ def test_product_proposal_bounded_retry_save_readback_and_existing_review_entry_
         assert response.status_code == 200, response.text
         result = response.json()
         assert result["supplement"] is not None and len(calls) == 2
+        assert calls[1]["item_index"] == 0 and "current_item" in calls[1]
+        assert "medications" not in calls[1] and "source_dispositions" not in calls[1]
         assert len(result["receipts"]) == 2
         assert client.post(path + "/medications/suggest", json={"expected_revision_id": scope["draft_revision_id"]}).json()["reused"] is True
         assert len(calls) == 2
@@ -94,3 +98,56 @@ def test_bad_quote_or_stale_revision_cannot_write_medications(build_app, data_pa
         assert client.get(path).json()["revision_id"] == scope["draft_revision_id"]
         stale = client.post(path + "/medications/suggest", json={"expected_revision_id": "old"})
         assert stale.status_code == 409 and len(calls) == 1
+
+
+def test_saved_initial_answer_revalidated_without_refreshing_failed_call_budget(build_app, data_paths, monkeypatch):
+    from app.agents import protocol_medication_author as author
+    calls = install_completion(monkeypatch)
+    real_build = author.build_scope_supplement
+    def old_guard(**kwargs):
+        raise ValueError("模拟旧检查器误拒整个回答")
+    monkeypatch.setattr(author, "build_scope_supplement", old_guard)
+    app = build_app()
+    with TestClient(app) as client:
+        preserved_scope(app, data_paths, medication_text="筛选前4周内禁止使用药物甲。")
+        path, scope = save_scope(client)
+        request = {"expected_revision_id": scope["draft_revision_id"]}
+        failed = client.post(path + "/medications/suggest", json=request).json()
+        assert failed["supplement"] is None and len(calls) == 2
+        assert not failed["manual_supplement"]["medications"]
+        assert all(row["disposition"] == "unresolved" for row in failed["manual_supplement"]["source_dispositions"])
+        again = client.post(path + "/medications/suggest", json=request).json()
+        assert again["supplement"] is None and again["new_model_calls"] == 0 and len(calls) == 2
+        monkeypatch.setattr(author, "build_scope_supplement", real_build)
+        recovered = client.post(path + "/medications/suggest", json=request).json()
+        assert recovered["supplement"] is not None and recovered["new_model_calls"] == 0 and len(calls) == 2
+        assert recovered["revalidation"]["basis"] == "original_initial_response"
+        assert recovered["revalidated_from"] == failed["proposal_ref"]
+        assert len(recovered["receipts"]) == 2
+        assert recovered["supplement"]["request_refs"] == [failed["receipts"][0]["request_ref"]]
+        from app.evidence.artifacts import ArtifactStore
+        assert json.loads(ArtifactStore(data_paths).read(failed["proposal_ref"]))["supplement"] is None
+        supplement = recovered["supplement"]
+        proposal = {"medications": [{key: value for key, value in row.items() if key != "item_id"} for row in supplement["medications"]],
+            "source_dispositions": supplement["source_dispositions"]}
+        saved = client.put(path + "/medications", json={**request, "proposal": proposal, "proposal_ref": recovered["proposal_ref"]})
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["content"]["scope_supplement"]["request_refs"] == supplement["request_refs"]
+
+
+def test_changed_context_after_failure_does_not_reset_model_budget(build_app, data_paths, monkeypatch):
+    from app.agents import protocol_medication_author as author
+    calls = install_completion(monkeypatch)
+    def old_guard(**kwargs):
+        raise ValueError("旧检查器误拒")
+    monkeypatch.setattr(author, "build_scope_supplement", old_guard)
+    app = build_app()
+    with TestClient(app) as client:
+        preserved_scope(app, data_paths, medication_text="筛选前4周内禁止使用药物甲。")
+        path, scope = save_scope(client)
+        request = {"expected_revision_id": scope["draft_revision_id"]}
+        first = client.post(path + "/medications/suggest", json=request).json()
+        assert first["supplement"] is None and len(calls) == 2
+        monkeypatch.setattr(author, "PROMPT", author.PROMPT + "\n不同提示不能借旧回执冒充。")
+        second = client.post(path + "/medications/suggest", json=request).json()
+        assert second["supplement"] is None and second["new_model_calls"] == 0 and len(calls) == 2

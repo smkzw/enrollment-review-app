@@ -57,6 +57,53 @@ def test_closed_zero_lower_distance_is_equivalent_not_an_invented_source_duratio
     assert build(proposal, selection, view).medications[0] == expected
 
 
+def test_parenthetical_exception_does_not_spread_to_other_objects_in_the_same_paragraph():
+    selection, view, proposal = frozen_medications()
+    text = "研究期间禁止使用药物甲（补救治疗除外）、药物乙。"
+    view["source_records"][1]["raw_text"] = text
+    first = proposal["medications"][0]
+    first.update(window=None, period="study_period", source_quotes=[{"source_span_id": "clause", "excerpt": text}])
+    sibling = deepcopy(first)
+    sibling.update(drug_text="药物乙", exception_excerpt=None)
+    proposal["medications"].append(sibling)
+    result = build(proposal, selection, view)
+    assert result.medications[0].exception_excerpt == "补救治疗除外"
+    assert result.medications[1].exception_excerpt is None
+    first["exception_excerpt"] = None
+    with pytest.raises(ValueError): build(proposal, selection, view)
+    first["source_quotes"][0]["excerpt"] = "药物甲"
+    first["source_quotes"].append({"source_span_id": "clause", "excerpt": "研究期间禁止使用"})
+    with pytest.raises(ValueError): build(proposal, selection, view)
+
+
+def test_permission_can_be_shared_exception_context_but_not_erase_restrictions():
+    selection, view, proposal = frozen_medications()
+    text = "经评估可使用补救治疗。"
+    view["candidates"][0]["source_span_ids"].append("permission")
+    view["source_records"].append({"source_span_id": "permission", "identity_status": "ok", "raw_text": text})
+    proposal["medications"][0]["source_quotes"].append({"source_span_id": "permission", "excerpt": text})
+    disposition = {"source_span_id": "permission", "disposition": "permission", "reason": "同时提供例外依据"}
+    proposal["source_dispositions"].append(disposition)
+    assert len(build(proposal, selection, view).medications) == 1
+    disposition["disposition"] = "background"
+    with pytest.raises(ValueError): build(proposal, selection, view)
+    disposition["disposition"] = "permission"
+    proposal["medications"][0].update(exception_excerpt=None, unresolved_reason=None)
+    with pytest.raises(ValueError): build(proposal, selection, view)
+
+
+def test_saved_class_members_are_frozen_not_replaced_by_later_global_dictionary(monkeypatch):
+    selection, view, proposal = frozen_medications()
+    from app.protocols import medication_restrictions as restrictions
+    monkeypatch.setattr(restrictions, "load_drug_classes", lambda: {"fixture_class": ["药物甲"]})
+    proposal["medications"][0]["drug_class_id"] = "fixture_class"
+    result = build(proposal, selection, view)
+    monkeypatch.setattr(restrictions, "load_drug_classes", lambda: {"fixture_class": ["药物乙"]})
+    validate_scope_supplement(result, selection=selection, view=view, phase="phase_iii", official_codes={"EX-01"})
+    assert result.drug_classes == {"fixture_class": ["药物甲"]}
+    assert build(proposal, selection, view).input_sha256 != result.input_sha256
+
+
 @pytest.mark.parametrize("fault", ["omitted", "unknown_source", "altered_quote", "wrong_quantity", "wrong_unit", "wrong_anchor",
     "wrong_direction", "invented_exception", "omitted_exception", "expanded_period", "invented_class", "invented_code", "duplicate_disposition", "double_disposition"])
 def test_invalid_proposals_cannot_be_saved_as_complete_scope(fault):

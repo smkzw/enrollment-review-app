@@ -1506,14 +1506,16 @@ class ProtocolWorkbenchService:
         return view, revision
 
     async def suggest_medication_restrictions(self, job_id: str, *, expected_revision_id: str, completion=None):
-        from app.agents.protocol_medication_author import author_medications, medication_reader_identity
+        from app.agents.protocol_medication_author import author_medications, revalidate_medication_result
         from app.protocols.medication_restrictions import (MedicationRestrictionProposal, build_scope_supplement,
-            medication_input_hash, selected_scope_material)
+            medication_input_hash, selected_scope_material, validate_scope_supplement)
         view, revision = self.medication_scope_context(job_id, expected_revision_id)
         existing = revision.content.scope_supplement
         _, _, readable = selected_scope_material(view, revision.review_scope_selection)
-        if (existing is not None and existing.input_sha256 == medication_input_hash(revision.study_phase.value, readable)
-                and existing.reader_identity == medication_reader_identity()):
+        official_codes = {rule.official_code for rule in revision.content.proposed_rules}
+        if existing is not None and existing.input_sha256 == medication_input_hash(revision.study_phase.value, readable):
+            validate_scope_supplement(existing, view=view, selection=revision.review_scope_selection,
+                phase=revision.study_phase.value, official_codes=official_codes)
             proposal = MedicationRestrictionProposal(medications=[item.model_dump(exclude={"item_id"}) for item in existing.medications],
                 source_dispositions=existing.source_dispositions)
             rebound = build_scope_supplement(proposal=proposal, view=view, selection=revision.review_scope_selection,
@@ -1522,30 +1524,46 @@ class ProtocolWorkbenchService:
                 rebound.request_refs, rebound.response_refs, rebound.reader_identity = existing.request_refs, existing.response_refs, existing.reader_identity
                 return {"job_id": job_id, "draft_revision_id": expected_revision_id,
                     "scope_content_hash": view["scope_content_hash"], "supplement": rebound.model_dump(mode="json"),
-                    "receipts": [], "system_issue": None, "proposal_ref": None, "reused": True}
-        with self.session_factory() as session:
-            checkpoint = JobStore(session).get_last_checkpoint(job_id, STEP_AWAIT_REVIEW)
-        previous_ref = (checkpoint[1] if checkpoint else {}).get("medication_proposal_ref")
+                    "receipts": [], "system_issue": None, "proposal_ref": None, "reused": True, "new_model_calls": 0}
+        previous_ref = self._merged_payload(job_id).get("medication_proposal_ref")
         if previous_ref:
             saved = json.loads(ArtifactStore(self.data_paths).read(previous_ref))
-            if (saved.get("job_id") == job_id and saved.get("draft_revision_id") == expected_revision_id
-                    and saved.get("scope_content_hash") == view["scope_content_hash"] and saved.get("supplement")
-                    and saved["supplement"].get("reader_identity") == medication_reader_identity()):
-                return {**saved, "proposal_ref": previous_ref, "reused": True}
-        result = await author_medications(view=view, selection=revision.review_scope_selection,
-            phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules},
-            data_paths=self.data_paths, **({"completion": completion} if completion else {}))
+            if saved.get("job_id") != job_id:
+                raise ProtocolWorkbenchError("MEDICATION_PROPOSAL_MISMATCH", title="读取记录不属于本草稿",
+                    detail="未借用其他任务的回答，也未重新调用模型。", recovery="请核对本次保存的读取记录。")
+            if saved.get("supplement") and saved.get("draft_revision_id") == expected_revision_id:
+                from app.domain.contracts.rules import ProtocolScopeSupplement
+                supplement = ProtocolScopeSupplement.model_validate(saved["supplement"])
+                validate_scope_supplement(supplement, view=view, selection=revision.review_scope_selection,
+                    phase=revision.study_phase.value, official_codes=official_codes)
+                return {**saved, "proposal_ref": previous_ref, "reused": True, "new_model_calls": 0}
+            result = revalidate_medication_result(saved, view=view, selection=revision.review_scope_selection,
+                phase=revision.study_phase.value, official_codes=official_codes, data_paths=self.data_paths)
+            result.update(revalidated_from=saved.get("revalidated_from", previous_ref), new_model_calls=0)
+        else:
+            result = await author_medications(view=view, selection=revision.review_scope_selection,
+                phase=revision.study_phase.value, official_codes=official_codes,
+                data_paths=self.data_paths, **({"completion": completion} if completion else {}))
+            result["new_model_calls"] = len(result["receipts"])
+        if result.get("supplement") is None:
+            manual = MedicationRestrictionProposal(source_dispositions=[{"source_span_id": row.source_span_id,
+                "disposition": "unresolved", "reason": "本段尚未完成整理，请按原文核对。"} for row in readable])
+            result["manual_supplement"] = build_scope_supplement(proposal=manual, view=view,
+                selection=revision.review_scope_selection, phase=revision.study_phase.value,
+                official_codes=official_codes).model_dump(mode="json")
         result = {"job_id": job_id, "draft_revision_id": expected_revision_id,
                   "scope_content_hash": view["scope_content_hash"], **result}
         stored = ArtifactStore(self.data_paths).put("evaluation_manifest", json.dumps(result, ensure_ascii=False).encode())
         # The bounded request has finished. Recheck cancellation and head before making it a current proposal.
         self.medication_scope_context(job_id, expected_revision_id)
+        if stored.storage_ref == previous_ref:
+            return {**result, "proposal_ref": previous_ref, "reused": True}
         with self.session_factory() as session, session.begin():
             current = JobStore(session).get_last_checkpoint(job_id, STEP_AWAIT_REVIEW)
             JobRepository(session).create_checkpoint(checkpoint_id=uuid.uuid4().hex, job_id=job_id,
                 step_id=STEP_AWAIT_REVIEW, payload={**(current[1] if current else {}),
                     "medication_proposal_ref": stored.storage_ref})
-        return {**result, "proposal_ref": stored.storage_ref, "reused": False}
+        return {**result, "proposal_ref": stored.storage_ref, "reused": bool(previous_ref)}
 
     def save_medication_restrictions(self, job_id: str, *, expected_revision_id: str, proposal, proposal_ref=None):
         from app.protocols.medication_restrictions import build_scope_supplement
@@ -1557,11 +1575,19 @@ class ProtocolWorkbenchService:
                     or original.get("scope_content_hash") != view["scope_content_hash"] or not original.get("supplement")):
                 raise ProtocolWorkbenchError("MEDICATION_PROPOSAL_MISMATCH", title="补充建议与草稿不一致",
                     detail="未借用其他版本的模型回执。", recovery="请刷新本次建议。")
-            receipts = original["receipts"]
+            used = original["supplement"]
+            receipts = [row for row in original["receipts"] if row["request_ref"] in used["request_refs"]
+                and row.get("response_ref") in used["response_refs"]]
+            if ({row["request_ref"] for row in receipts} != set(used["request_refs"])
+                    or {row["response_ref"] for row in receipts} != set(used["response_refs"])):
+                raise ProtocolWorkbenchError("MEDICATION_PROPOSAL_MISMATCH", title="读取依据不完整",
+                    detail="补充建议的请求与原答未能对应。", recovery="请核对已保存的读取记录。")
         try:
             supplement = build_scope_supplement(proposal=proposal, view=view, selection=revision.review_scope_selection,
                 phase=revision.study_phase.value, official_codes={rule.official_code for rule in revision.content.proposed_rules}, receipts=receipts)
             if proposal_ref:
+                if original["supplement"]["input_sha256"] != supplement.input_sha256:
+                    raise ValueError("所选原文或类别表已变化，不能把旧请求当作本次读取。")
                 supplement.reader_identity = original["supplement"].get("reader_identity")
             elif revision.content.scope_supplement is not None and supplement.input_sha256 == revision.content.scope_supplement.input_sha256:
                 previous = revision.content.scope_supplement

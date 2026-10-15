@@ -227,6 +227,7 @@ class ProtocolScopeSupplement(ContractModel):
     reader_identity: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     sections: list[ProtocolScopeSection]
     sources: list[ProtocolScopeQuote]
+    drug_classes: dict[str, list[str]] = Field(default_factory=dict)
     medications: list[ProhibitedMedicationItem]
     source_dispositions: list[MedicationSourceDisposition]
     request_refs: list[str] = Field(default_factory=list)

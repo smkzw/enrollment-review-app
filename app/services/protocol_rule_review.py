@@ -100,7 +100,8 @@ def review_entries(source: ProtocolDeconstructionInput, draft: ProtocolDeconstru
         for item in supplement.medications:
             refs = list(dict.fromkeys(quote.source_span_id for quote in item.source_quotes))
             entries.append({"official_code": item.item_id, "kind": "medication", "label": item.drug_text,
-                "rule_content_hash": canonical_hash(item.model_dump(mode="json")),
+                "rule_content_hash": canonical_hash({"item": item.model_dump(mode="json"),
+                    "class_members": supplement.drug_classes.get(item.drug_class_id) if item.drug_class_id else None}),
                 "source_refs": refs, "issue_refs": [item.item_id, *refs]})
         scope_payload = supplement.model_dump(mode="json", exclude={"medications", "request_refs", "response_refs", "reader_identity"})
         refs = [quote.source_span_id for quote in supplement.sources]

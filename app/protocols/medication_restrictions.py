@@ -20,6 +20,12 @@ class MedicationRestrictionProposal(ContractModel):
     source_dispositions: list[MedicationSourceDisposition] = Field(default_factory=list)
 
 
+class MedicationProposalError(ValueError):
+    def __init__(self, message: str, *, item_index: int):
+        self.item_index = item_index
+        super().__init__(message)
+
+
 def scope_selection_hash(selection):
     return canonical_hash(selection.model_dump(mode="json", exclude={"saved_at", "saved_by"}))
 
@@ -46,18 +52,18 @@ def selected_scope_material(view, selection):
     return sections, sources, readable
 
 
-def medication_input_hash(phase, readable):
+def medication_input_hash(phase, readable, drug_classes=None):
     return canonical_hash({"phase": str(phase), "sources": [row.model_dump(mode="json") for row in readable],
-                           "drug_classes": load_drug_classes()})
+                           "drug_classes": load_drug_classes() if drug_classes is None else drug_classes})
 
 
-def build_scope_supplement(*, proposal, view, selection, phase, official_codes, receipts=()):
+def build_scope_supplement(*, proposal, view, selection, phase, official_codes, receipts=(), drug_classes=None):
     sections, sources, readable = selected_scope_material(view, selection)
     texts = {row.source_span_id: row.excerpt for row in readable}
     covered = set()
     items = []
-    classes = load_drug_classes()
-    for restriction in proposal.medications:
+    classes = load_drug_classes() if drug_classes is None else drug_classes
+    for index, restriction in enumerate(proposal.medications):
         window = restriction.window
         if (window is not None and window.lower_bound_days == 0 and window.lower_bound_inclusive
                 and (window.upper_bound is not None or window.upper_bound_days is not None)):
@@ -65,50 +71,61 @@ def build_scope_supplement(*, proposal, view, selection, phase, official_codes, 
             restriction = restriction.model_copy(update={"window": window.model_copy(update={"lower_bound_days": None})})
         for quote in restriction.source_quotes:
             if quote.source_span_id not in texts or quote.excerpt not in texts[quote.source_span_id]:
-                raise ValueError("用药限制的摘录不在所选原文位置内。")
+                raise MedicationProposalError("用药限制的摘录不在所选原文位置内。", item_index=index)
             covered.add(quote.source_span_id)
         quoted = "\n".join(quote.excerpt for quote in restriction.source_quotes)
         if restriction.drug_text not in quoted:
-            raise ValueError("药物或治疗名称必须保留原文写法。")
+            raise MedicationProposalError("药物或治疗名称必须保留原文写法。", item_index=index)
         if restriction.exception_excerpt and restriction.exception_excerpt not in quoted:
-            raise ValueError("例外内容须逐字保留在本条原文中。")
-        if (re.search(r"除外|例外|除[^。；\n]{1,80}外", quoted)
-                and not restriction.exception_excerpt and not restriction.unresolved_reason):
-            raise ValueError("本条原文有例外，尚未保留其内容或明确未决。")
+            raise MedicationProposalError("例外内容须逐字保留在本条原文中。", item_index=index)
+        source_texts = [texts[quote.source_span_id] for quote in restriction.source_quotes]
+        own_exception = any(
+            re.search(re.escape(restriction.drug_text) + r"\s*[（(][^）)]*(?:除外|例外)[^）)]*[）)]", text)
+            or (restriction.drug_text in text and not re.search(r"[、，,]|\b(?:or|and)\b|或", text)
+                and re.search(r"除外|例外|除[^。；\n]{1,80}外", text))
+            for text in source_texts)
+        if (own_exception and not restriction.exception_excerpt and not restriction.unresolved_reason):
+            raise MedicationProposalError("本条原文有例外，尚未保留其内容或明确未决。", item_index=index)
         if restriction.period is not None:
             markers = {"study_period": ("研究期间", "试验期间", "整个研究", "整个试验"),
                        "treatment_period": ("治疗期间", "治疗期内", "治疗期")}[restriction.period.value]
             if not any(marker in quoted for marker in markers):
-                raise ValueError("整个适用期间不能对应本条原文，不得把局部时间窗扩大。")
+                raise MedicationProposalError("整个适用期间不能对应本条原文，不得把局部时间窗扩大。", item_index=index)
         if restriction.drug_class_id is not None and restriction.drug_class_id not in classes:
-            raise ValueError("药物类别不在现有类别表内，不能猜测类别身份。")
+            raise MedicationProposalError("药物类别不在现有类别表内，不能猜测类别身份。", item_index=index)
         if restriction.applies_to_rule and restriction.applies_to_rule not in official_codes:
-            raise ValueError("关联的入排条款不属于当前方案。")
+            raise MedicationProposalError("关联的入排条款不属于当前方案。", item_index=index)
         window = restriction.window
         if window is not None:
             direction = {"before": "前", "after": "后", "on": "(?:时|当日|当天)"}[window.direction.value]
             if not any(re.search(re.escape(word) + r"(?:期|访视|日期|日|书|开始|的|之){0,3}" + direction, quoted, re.IGNORECASE)
                        for word in ANCHOR_WORDS[window.anchor_type.value]):
-                raise ValueError("时间起点或前后方向不能对应本条原文，不能借用默认节点。")
+                raise MedicationProposalError("时间起点或前后方向不能对应本条原文，不能借用默认节点。", item_index=index)
             if window.half_life_evidence is not None:
-                raise ValueError("本次只整理方案要求，不得从模型常识补入药物半衰期依据。")
+                raise MedicationProposalError("本次只整理方案要求，不得从模型常识补入药物半衰期依据。", item_index=index)
             bounds = [(window.lower_bound_days, TimeUnit.DAY), (window.upper_bound_days, TimeUnit.DAY)]
             bounds += [(value.value, value.unit) for value in (window.lower_bound, window.upper_bound) if value]
             if any(value is not None and not _time_bound_matches_source(value, unit, quoted) for value, unit in bounds):
-                raise ValueError("洗脱时间的数量或单位不能对应本条原文。")
+                raise MedicationProposalError("洗脱时间的数量或单位不能对应本条原文。", item_index=index)
             if window.half_life_multiplier and not _numeric_value_in_tokens(window.half_life_multiplier, _numeric_tokens(quoted)):
-                raise ValueError("半衰期倍数不能对应本条原文。")
+                raise MedicationProposalError("半衰期倍数不能对应本条原文。", item_index=index)
         payload = restriction.model_dump(mode="json")
         items.append(ProhibitedMedicationItem(**payload, item_id="med:" + canonical_hash(payload)[:24]))
     dispositions = proposal.source_dispositions
     ids = [row.source_span_id for row in dispositions]
-    if len(ids) != len(set(ids)) or set(ids) - set(texts) or covered & set(ids):
+    # A permission can also supply exception context. This does not make the
+    # exception's clinical scope verified; it remains visible for rule review.
+    invalid_overlap = any(row.source_span_id in covered and (row.disposition != "permission" or
+        any(not (item.exception_excerpt or item.unresolved_reason) for item in items
+            if any(quote.source_span_id == row.source_span_id for quote in item.source_quotes)))
+        for row in dispositions)
+    if len(ids) != len(set(ids)) or set(ids) - set(texts) or invalid_overlap:
         raise ValueError("用药原文处置重复、越界或与已有条目冲突。")
     if covered | set(ids) != set(texts):
         raise ValueError("所选用药原文尚有未处理位置，不能用部分成功冒充完成。")
     return ProtocolScopeSupplement(selection_sha256=scope_selection_hash(selection),
-        input_sha256=medication_input_hash(phase, readable), structure_sha256=view["structure_sha256"],
-        sections=sections, sources=sources, medications=items, source_dispositions=dispositions,
+        input_sha256=medication_input_hash(phase, readable, classes), structure_sha256=view["structure_sha256"],
+        sections=sections, sources=sources, drug_classes=classes, medications=items, source_dispositions=dispositions,
         request_refs=[row["request_ref"] for row in receipts],
         response_refs=[row["response_ref"] for row in receipts if row.get("response_ref")])
 
@@ -118,6 +135,6 @@ def validate_scope_supplement(supplement, *, view, selection, phase, official_co
         item.model_dump(exclude={"item_id"})) for item in supplement.medications],
         source_dispositions=supplement.source_dispositions)
     expected = build_scope_supplement(proposal=proposal, view=view, selection=selection,
-        phase=phase, official_codes=official_codes)
+        phase=phase, official_codes=official_codes, drug_classes=supplement.drug_classes)
     if supplement.model_dump(exclude={"request_refs", "response_refs", "reader_identity"}) != expected.model_dump(exclude={"request_refs", "response_refs", "reader_identity"}):
         raise ValueError("补充要求与当前范围、原文或条目身份不一致。")

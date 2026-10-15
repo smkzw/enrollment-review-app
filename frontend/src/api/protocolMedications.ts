@@ -18,6 +18,7 @@ export interface MedicationDisposition {
 export interface ScopeSupplement {
   medications: MedicationRestriction[]; source_dispositions: MedicationDisposition[]; sources: MedicationQuote[];
   selection_sha256: string; input_sha256: string; structure_sha256: string;
+  drug_classes?: Record<string, string[]>;
 }
 function row(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("用药要求的内容不完整。");
@@ -32,6 +33,8 @@ export function decodeScopeSupplement(value: unknown): ScopeSupplement {
   for (const key of ["selection_sha256", "input_sha256", "structure_sha256"])
     if (typeof result[key] !== "string" || !/^[0-9a-f]{64}$/.test(result[key] as string)) throw new Error("用药要求与方案来源不一致。");
   quotes(result.sources);
+  if (result.drug_classes != null && Object.values(row(result.drug_classes)).some(value => !Array.isArray(value) || value.some(member => typeof member !== "string")))
+    throw new Error("本版用药类别内容不完整。");
   if (!Array.isArray(result.medications) || !Array.isArray(result.source_dispositions)) throw new Error("用药要求清单不完整。");
   for (const value of result.medications) {
     const item = row(value);
