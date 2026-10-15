@@ -41,6 +41,16 @@ V2 必须把方案事实、证据事实、候选解释、确定性判定和用�
 
 ## Testing Requirements
 
+### 0.2.0 自动工作稿读取复用
+
+1. **触发／签名**：`work_draft_review._reusable_source_reads(session, store, frozen, targets, model, artifact_store)`读取自动整理后的工作稿；原Job没有`context_id`是合法生产路径，不是没有来源证明。
+2. **合同**：从既有`IdempotencyRepository.get(review-preparation:{episode}:work-draft, automatic:{job})`读取实际冻结context；不调用resolve、不新建context、不写回旧Job。保存步骤如存在，必须对应context的真实run。
+3. **验证**：准备回执须committed且类型正确；context须工作稿、原authority／subject／episode／evaluator一致，再走原文页／模型／请求／Schema／摘录完整复验。
+4. **错误矩阵**：取消且尚未准备→无复用；取消但已有合法分段→可复验该分段；完成却缺准备或保存、指向错run／范围、损坏哈希→拒绝，不能降为缓存未命中。
+5. **正／基线／反例**：普通payload已有context路径保持；自动稿两条已保存读数可发现；改资料页不复用；旧未知只保留未知，不因另一次调用回答不同就改写旧读数。
+6. **检查**：`test_work_draft_source_relations.py`自动稿14变体及既有真实请求重验；相连工作稿／历史／核实／截止API／JobStore。真实材料可只读复验，不能为证明缓存再读病例。
+7. **错误／正确**：只认payload指针会重复付费读取；实际准备回执定位＋原内容核验才是复用，不复用旧批准或结论。
+
 ### 0.2.0 同源反馈审定绑定
 
 1. **范围**：已发布规则的同源反馈草稿；不能凭调用者声称旧批准有效。

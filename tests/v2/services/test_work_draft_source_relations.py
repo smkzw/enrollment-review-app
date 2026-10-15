@@ -234,6 +234,66 @@ def test_unique_line_wrap_restores_exact_original_quote_without_a_new_model_answ
     assert accepted["component:infection"]["source_read_refs"][0]["excerpt"] == "否认近期\n感染"
 
 
+@pytest.mark.parametrize("change", [None, "cancelled_partial", "not_prepared", "missing_receipt", "wrong_receipt_type",
+    "uncommitted", "subject", "episode", "authority", "calculation", "formal", "wrong_saved_run", "missing_save", "new_page"])
+def test_automatic_work_draft_reuses_original_preparation_not_a_guessed_context(monkeypatch, change):
+    import json
+    from app.domain.contracts.facts import FactAuthority
+    from app.services import work_draft_review as service, work_draft_semantics as semantics
+    authority = FactAuthority(project_id="project", subject_id="subject", review_episode_id="episode", episode_revision=1,
+        protocol_version_id="protocol", rule_set_id="rules", rule_set_revision=1,
+        evidence_snapshot_v2_id="snapshot", complete_processing_revision_id="processing")
+    data = dict(normalization_run_id="normalization", subject_id="other" if change == "subject" else "subject",
+        review_episode_id="other" if change == "episode" else "episode", authority=authority.model_dump(mode="json"),
+        calculation_version="old" if change == "calculation" else "calculation")
+    if change == "authority":
+        data["authority"]["complete_processing_revision_id"] = "other-processing"
+    payload = json.dumps(data)
+    job = SimpleNamespace(job_id="automatic-job", state="cancelled" if change in {"cancelled_partial", "not_prepared"} else "completed",
+        payload_json=payload, payload_sha256=sha256(payload.encode()).hexdigest())
+    frame = SimpleNamespace(authority=authority, source_pages=[page()], work_draft=change != "formal",
+        evaluator_version="calculation", review_run_id="saved-run")
+    current = SimpleNamespace(authority=authority, source_pages=[page(key="different")] if change == "new_page" else [page()])
+    session = SimpleNamespace(scalars=lambda _: SimpleNamespace(all=lambda: [job]))
+    receipt = None if change in {"not_prepared", "missing_receipt"} else SimpleNamespace(result_id="original-context",
+        result_type="other" if change == "wrong_receipt_type" else "review_context_v2",
+        status="pending" if change == "uncommitted" else "committed")
+    seen = []
+    def get_receipt(scope, key):
+        assert scope == f"review-preparation:{data['review_episode_id']}:work-draft"
+        assert key == "automatic:automatic-job"
+        return receipt
+    def get_context(key):
+        assert key == "original-context"
+        return frame
+    def checkpoint(job_id, step):
+        assert job_id == "automatic-job"
+        if step == "save":
+            return None if change in {"missing_save", "cancelled_partial"} else ("saved-checkpoint",
+                {"review_run_id": "wrong" if change == "wrong_saved_run" else "saved-run"})
+        assert step == "semantic"
+        return "read-checkpoint", {"raw_refs": ["actual-answer"]}
+    monkeypatch.setattr(service, "IdempotencyRepository", lambda _: SimpleNamespace(get=get_receipt))
+    monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=get_context))
+    def revalidate(value, frozen, targets, model, artifacts, *, previous_targets=None):
+        assert value == {"raw_refs": ["actual-answer"]} and frozen is current
+        assert targets == [target()] and previous_targets is None
+        seen.append(True)
+        return {"component:infection": {"truth": "false"}}, {"component:infection": {"raw_response_ref": "actual-answer"}}
+    monkeypatch.setattr(semantics, "revalidate_saved_source_read", revalidate)
+    store = SimpleNamespace(list_steps=lambda _: [SimpleNamespace(step_id="semantic")], get_last_checkpoint=checkpoint)
+    invalid = change not in {None, "cancelled_partial", "not_prepared", "new_page"}
+    if invalid:
+        with pytest.raises(service.ScopeViolationError, match="自动工作稿"):
+            service._reusable_source_reads(session, store, current, [target()], object(), object())
+        assert not seen
+    else:
+        accepted, proofs = service._reusable_source_reads(session, store, current, [target()], object(), object())
+        assert bool(accepted) == bool(proofs) == bool(seen) == (change in {None, "cancelled_partial"})
+        if proofs:
+            assert proofs["component:infection"]["job_id"] == "automatic-job"
+
+
 @pytest.mark.parametrize("original,quote", [
     ("否认近期\n感染；否认近期\n感染", "否认近期感染"),
     ("读数1\n2mg", "读数12mg"),

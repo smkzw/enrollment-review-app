@@ -14,7 +14,7 @@ from app.services.fact_normalization_command_service import authority_from_activ
 from app.services.review_preparation_command import prepare_review
 from app.services.work_draft_calculation import calculate_work_component, calculate_procedures, compose_parent
 from app.storage.evidence_locator_repositories import EvidenceLocatorRepository
-from app.storage.idempotency import IdempotencyRepository
+from app.storage.idempotency import IdempotencyRepository, STATUS_COMMITTED
 from app.storage.models import ReviewRunRecord
 from app.storage.repositories import AppendRepository, REVIEW_RUN_CONFIG, ScopeViolationError, get_rule_set
 from app.storage.review_context_repository import ReviewContextV2Repository
@@ -64,9 +64,33 @@ def _reusable_source_reads(session, store, frozen, targets, model, artifact_stor
         ).order_by(JobRecord.created_at.desc())).all()
     for job in prior_jobs:
         payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
-        if not payload.get("context_id"):
+        context_id = payload.get("context_id")
+        automatic = context_id is None and bool(payload.get("normalization_run_id"))
+        if automatic:
+            # Automatic jobs prepare their input during execution, so their
+            # immutable job payload has no context pointer. Use the original receipt.
+            receipt = IdempotencyRepository(session).get(
+                f"review-preparation:{payload['review_episode_id']}:work-draft", f"automatic:{job.job_id}")
+            if receipt is None:
+                if job.state == "completed":
+                    raise ScopeViolationError("已完成自动工作稿缺少原准备记录，未复用其病例核对结果")
+                continue
+            if receipt.result_type != "review_context_v2" or receipt.status != STATUS_COMMITTED:
+                raise ScopeViolationError("自动工作稿的原准备记录不完整，未复用其病例核对结果")
+            context_id = receipt.result_id
+        if context_id is None:
             continue
-        previous = ReviewContextV2Repository(session).get(payload["context_id"])
+        previous = ReviewContextV2Repository(session).get(context_id)
+        if automatic:
+            saved = store.get_last_checkpoint(job.job_id, "save")
+            if (not previous.work_draft
+                    or previous.authority.model_dump(mode="json") != payload["authority"]
+                    or previous.authority.subject_id != payload["subject_id"]
+                    or previous.authority.review_episode_id != payload["review_episode_id"]
+                    or previous.evaluator_version != payload["calculation_version"]
+                    or saved is not None and saved[1]["review_run_id"] != previous.review_run_id
+                    or job.state == "completed" and saved is None):
+                raise ScopeViolationError("自动工作稿与原任务、资料或保存结果不一致，未复用其病例核对结果")
         if previous.source_pages != frozen.source_pages:
             continue
         previous_targets = None
