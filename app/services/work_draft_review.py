@@ -23,7 +23,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v36"
+CALCULATION_VERSION = "work-draft/0.2.0-v37"
 
 
 def confirmation_allowed(item, items):

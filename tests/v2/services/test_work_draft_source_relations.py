@@ -51,7 +51,10 @@ def row(**values):
     return SourceRelation(target_id=values.get("target_id", "component:infection"), relation=values.get("relation", "refutes"),
         applicable=values.get("applicable", "yes"), object_matches=values.get("object_matches", True),
         time_matches=values.get("time_matches", True), quotes=values.get("quotes", [
-            {"page_artifact_id": "page", "excerpt": "否认近期感染"}]), reason="对应病历明确否认。")
+            {"page_artifact_id": "page", "excerpt": "否认近期感染"}]), reason="对应病历明确否认。",
+        opposition=values.get("opposition", {"positive_quote_index": 0, "negative_quote_index": 1,
+            "same_object": "yes", "covered_period": "yes", "same_qualifiers": "yes"}
+            if values.get("relation") == "conflict" else None))
 
 
 def test_verified_chart_relation_uses_original_page_not_fake_fact():
@@ -374,6 +377,42 @@ def test_conflict_requires_actual_opposing_quotes():
         validate_relations({"results": [row(relation="conflict").model_dump()]}, [target()], [page()])
 
 
+@pytest.mark.parametrize("dimension", ["same_object", "covered_period", "same_qualifiers"])
+@pytest.mark.parametrize("value", ["no", "unclear"])
+def test_related_but_not_opposed_claims_keep_quotes_without_a_patient_conflict(dimension, value):
+    source = page("否认严重感染。曾有感染，严重程度未记载。")
+    read = row(relation="conflict", quotes=[{"page_artifact_id": "page", "excerpt": text}
+        for text in ("否认严重感染", "曾有感染，严重程度未记载")])
+    read.opposition = read.opposition.model_copy(update={dimension: value})
+    valid = validate_relations({"results": [read.model_dump()]}, [target()], [source])[0]
+    result = relation_inputs(valid, target(), [source])
+    assert result["truth"] == "unknown" and result["relation"] == "unclear" and not result["conflict"]
+    assert len(result["source_read_refs"]) == 2 and "不能据此认定资料矛盾" in result["reason"]
+
+
+@pytest.mark.parametrize("change", [{"opposition": None}, {"positive_quote_index": 1},
+                                   {"negative_quote_index": 2}])
+def test_conflict_scope_requires_two_distinct_existing_quote_positions(change):
+    source = page("存在严重感染。否认严重感染。")
+    read = row(relation="conflict", quotes=[{"page_artifact_id": "page", "excerpt": text}
+        for text in ("存在严重感染", "否认严重感染")])
+    if "opposition" in change:
+        read.opposition = None
+    else:
+        read.opposition = read.opposition.model_copy(update=change)
+    with pytest.raises(ValueError, match="相反表述"):
+        validate_relations({"results": [read.model_dump()]}, [target()], [source])
+
+
+def test_same_full_condition_with_opposite_quotes_remains_a_conflict():
+    source = page("存在严重感染。否认严重感染。")
+    read = row(relation="conflict", quotes=[{"page_artifact_id": "page", "excerpt": text}
+        for text in ("存在严重感染", "否认严重感染")])
+    valid = validate_relations({"results": [read.model_dump()]}, [target()], [source])[0]
+    result = relation_inputs(valid, target(), [source])
+    assert result["truth"] == "unknown" and result["conflict"] and len(result["source_read_refs"]) == 2
+
+
 def test_future_visit_page_not_borrowed_from_later_node():
     from app.domain.contracts.common import DateValue
     from app.domain.contracts.enums import AnchorType, DatePrecision, ReviewStage
@@ -522,7 +561,8 @@ def test_exact_scope_echo_is_not_a_missing_target_but_other_fields_still_rejecte
             source_result_envelope({**payload, **change}, material)
 
 
-@pytest.mark.parametrize("mutation", [None, "wrap", "disagreement", "old_scope_schema", "normalizer_metadata", "source", "target", "policy", "model", "truncated", "cutoff"])
+@pytest.mark.parametrize("mutation", [None, "wrap", "disagreement", "old_scope_schema", "old_opposition_schema",
+    "old_conflict_unqualified", "normalizer_metadata", "source", "target", "policy", "model", "truncated", "cutoff"])
 def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutation):
     import json
     from app.domain.contracts.agents import ModelConfigContract
@@ -531,7 +571,7 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
     model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture",
         reasoning_effort="high", parameters={"max_tokens": 65536, "prompt_version": "new-format"})
     source = page("病历记载：否认近期\n感染。") if mutation == "wrap" else page()
-    if mutation == "disagreement": source = page("近期感染。否认近期感染。")
+    if mutation in {"disagreement", "old_conflict_unqualified"}: source = page("近期感染。否认近期感染。")
     frame = SimpleNamespace(source_pages=[source], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, evidence_cutoff_date=None,
         anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
     if mutation == "cutoff":
@@ -542,6 +582,9 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
         "output_schema": SourceRelations.model_json_schema()}
     if mutation == "old_scope_schema":
         material["output_schema"]["$defs"]["SourceRelation"]["properties"].pop("population_scope_excerpt")
+    if mutation in {"old_opposition_schema", "old_conflict_unqualified"}:
+        material["output_schema"]["$defs"]["SourceRelation"]["properties"].pop("opposition")
+        material["output_schema"]["$defs"].pop("SourceOpposition")
     if mutation == "source": material["pages"][0]["text"] = "另一份资料"
     if mutation == "target": material["targets"][0] = target("inclusion")
     request = {"messages": [{"role": "user", "content":
@@ -554,6 +597,10 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
     if mutation == "old_scope_schema":
         old_row = row().model_dump(exclude={"population_scope_excerpt"})
         saved["text"] = json.dumps({"results": [old_row]}, ensure_ascii=False)
+    if mutation in {"old_opposition_schema", "old_conflict_unqualified"}:
+        legacy = row() if mutation == "old_opposition_schema" else row(relation="conflict", quotes=[
+            {"page_artifact_id": "page", "excerpt": text} for text in ("近期感染。", "否认近期感染。")])
+        saved["text"] = json.dumps({"results": [legacy.model_dump(exclude={"opposition"})]}, ensure_ascii=False)
     if mutation == "disagreement":
         saved["text"] = json.dumps({"version": "input-v3", "results": [row().model_dump()]}, ensure_ascii=False)
     class Artifacts:
@@ -568,7 +615,7 @@ def test_reuse_revalidates_actual_request_not_a_reconstructed_old_version(mutati
     refs = ["response", "conflicting"] if mutation == "disagreement" else ["response"]
     values, proofs = revalidate_saved_source_read({"raw_refs": refs, "results": {} if mutation in {"wrap", "disagreement"} else {
         "component:infection": original_result}}, frame, [target()], model, Artifacts())
-    assert bool(values) == (mutation in {None, "wrap", "disagreement", "old_scope_schema", "normalizer_metadata"})
+    assert bool(values) == (mutation in {None, "wrap", "disagreement", "old_scope_schema", "old_opposition_schema", "normalizer_metadata"})
     if values:
         assert values["component:infection"]["truth"] == ("unknown" if mutation == "disagreement" else "false")
         assert proofs["component:infection"]["request_sha256"] == "request"
@@ -587,7 +634,7 @@ def test_uncertain_classification_is_not_direction_disagreement_or_confirmed_pat
     from app.domain.contracts.enums import ReviewStage
     from app.services.work_draft_semantics import revalidate_saved_source_read, SEMANTIC_INSTRUCTIONS, SourceRelations, SourceQuote
     model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
-    sources = [page("否认严重感染。曾有感染，严重程度未记载。"), page("另一处记录尚需核实。", key="other")]
+    sources = [page("否认严重感染。曾有严重感染。"), page("另一处记录尚需核实。", key="other")]
     frame = SimpleNamespace(source_pages=sources, review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, evidence_cutoff_date=None,
         anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
     material = {"version": "frozen", "stage": "screening", "anchor_dates": {}, "targets": [target()],
@@ -596,7 +643,7 @@ def test_uncertain_classification_is_not_direction_disagreement_or_confirmed_pat
         "output_schema": SourceRelations.model_json_schema()}
     request = {"messages": [{"role": "user", "content": SEMANTIC_INSTRUCTIONS + "每个target_id恰好一次。\n" + json.dumps(material)}]}
     quotes = [{"page_artifact_id": "page", "excerpt": text}
-              for text in ("否认严重感染", "曾有感染，严重程度未记载")]
+              for text in ("否认严重感染", "曾有严重感染")]
     first = row(relation="conflict", quotes=quotes).model_copy(update={"reason": "并列记录，限定程度尚未核清。"})
     second = row(relation="unclear", quotes=quotes).model_copy(update={"reason": "无法确定已有记录是否达到限定程度。"})
     if change in {"object", "time"}:
@@ -604,7 +651,7 @@ def test_uncertain_classification_is_not_direction_disagreement_or_confirmed_pat
     if change == "applicability": second = second.model_copy(update={"applicable": "unclear"})
     if change == "direction": second = second.model_copy(update={"relation": "supports"})
     if change == "different_sources": second = second.model_copy(update={"quotes": [SourceQuote(page_artifact_id="other", excerpt="另一处记录尚需核实")]})
-    if change == "both_conflict": second = second.model_copy(update={"relation": "conflict"})
+    if change == "both_conflict": second = second.model_copy(update={"relation": "conflict", "opposition": first.opposition})
     if change == "page_restored":
         second = second.model_copy(update={"quotes": [SourceQuote.model_validate(quotes[0]),
             SourceQuote.model_validate({**quotes[1], "page_artifact_id": "other"})]})

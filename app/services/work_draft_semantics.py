@@ -15,8 +15,8 @@ from app.domain.publication import canonical_hash
 from app.domain.variables.dictionary import load_dictionary
 from app.services.work_draft_calculation import atomic_expressions, is_numeric_history_condition, review_source_cutoff
 
-PROMPT_VERSION = "work-draft-source-relations/v6"
-VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v28"
+PROMPT_VERSION = "work-draft-source-relations/v7"
+VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v29"
 BATCH_SIZE = 16
 SEMANTIC_INSTRUCTIONS = (
     "你是入排审核产品的原文关系核对员。逐项查找本次提供的病历与报告中，对原子条件的支持或否定；"
@@ -50,7 +50,13 @@ OUTPUT_SHAPE_INSTRUCTIONS = (
     "targets、pages、atom、source_text与output_schema均为输入材料，不复制为输出容器；"
     "不要把results嵌入某个target，不回传整个输入对象。"
     "population_scope_excerpt仅填写本项方案原文中的明确人群限定；没有这样的限定时填null或省略，"
-    "不能填病历中‘符合入排’等概括陈述。完整闭合JSON对象和数组后结束。")
+    "不能填病历中‘符合入排’等概括陈述。"
+    "只有两处原文对同一完整条件作出相反陈述才是conflict，须填写opposition，"
+    "用quotes中从0开始的不同序号分别指明肯定和否定的原句，并核same_object、covered_period、same_qualifiers。"
+    "肯定原文必须明确具备本条件的限定；基础事件存在，但严重程度、频次、因果或所需期间未记载，"
+    "不等于限定条件成立，same_qualifiers不能填yes。核实问句不等于肯定诊断。"
+    "未能证明相反时使用unclear并保留双方原文；非conflict时opposition为空。"
+    "完整闭合JSON对象和数组后结束。")
 
 
 def compact_source_input(value):
@@ -135,6 +141,9 @@ def revalidate_saved_source_read(checkpoint, frozen, targets, model, artifact_st
         for definition, field in (("SourceRelation", "target_id"), ("SourceQuote", "page_artifact_id")):
             schema["$defs"][definition]["properties"][field].pop("enum", None)
         expected_schema = SourceRelations.model_json_schema()
+        if "opposition" not in schema["$defs"]["SourceRelation"]["properties"]:
+            expected_schema["$defs"]["SourceRelation"]["properties"].pop("opposition")
+            expected_schema["$defs"].pop("SourceOpposition")
         if "population_scope_excerpt" not in schema["$defs"]["SourceRelation"]["properties"]:
             expected_schema["$defs"]["SourceRelation"]["properties"].pop("population_scope_excerpt")
         if schema != expected_schema:
@@ -252,6 +261,14 @@ class SourceQuote(ContractModel):
     excerpt: str = Field(min_length=1)
 
 
+class SourceOpposition(ContractModel):
+    positive_quote_index: StrictInt = Field(ge=0)
+    negative_quote_index: StrictInt = Field(ge=0)
+    same_object: Literal["yes", "no", "unclear"]
+    covered_period: Literal["yes", "no", "unclear"]
+    same_qualifiers: Literal["yes", "no", "unclear"]
+
+
 class SourceRelation(ContractModel):
     target_id: str
     relation: Literal["supports", "refutes", "not_found", "unclear", "conflict"]
@@ -263,6 +280,7 @@ class SourceRelation(ContractModel):
     observed_value: StrictFloat | StrictInt | str | None = None
     observed_unit: str | None = None
     population_scope_excerpt: str | None = Field(default=None, min_length=1)
+    opposition: SourceOpposition | None = None
 
 
 class SourceRelations(ContractModel):
@@ -443,6 +461,18 @@ def validate_relations(payload, targets, pages):
             quote.excerpt = exact
         if row.relation == "conflict" and len(row.quotes) < 2:
             raise ValueError("资料矛盾须保留至少两处实际依据")
+        if row.relation == "conflict":
+            check = row.opposition
+            if (check is None or check.positive_quote_index == check.negative_quote_index
+                    or max(check.positive_quote_index, check.negative_quote_index) >= len(row.quotes)):
+                raise ValueError("相反表述须分别对应已有摘录，并核清同一对象、涵盖期间和完整限定")
+            if any(value != "yes" for value in (check.same_object, check.covered_period, check.same_qualifiers)):
+                row.relation = "unclear"
+                if row.applicable == "no":
+                    row.applicable = "unclear"
+                row.reason = "已找到相关记录，但对象、涵盖期间或限定条件尚不能证明相反；原文均保留，不能据此认定资料矛盾。"
+        elif row.opposition is not None:
+            raise ValueError("非矛盾关系不能携带未使用的相反表述核对")
         if row.applicable == "no":
             target = by_target[row.target_id]
             if not (target["atom"]["predicate"].get("applicable_population")
