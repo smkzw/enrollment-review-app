@@ -456,11 +456,15 @@ class FactPublicationService:
         definitions = {}
         thresholds = {}
         date_sensitive = set()
+        source_pages = {entry.page_artifact_id: entry.ocr_page_id for entry in revision.manifest}
         ocr_context = None
+        if candidates and revision.source_qualification_mode == "scoped_text_v1":
+            ocr_context = _prepare_blocking_ocr_context(session, revision)
         if any(item.variable_id is not None for item in candidates):
             rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
             definitions = load_dictionary(rule_set.variable_definitions or ())
-            ocr_context = _prepare_blocking_ocr_context(session, revision)
+            if ocr_context is None:
+                ocr_context = _prepare_blocking_ocr_context(session, revision)
             for rule in rule_set.rules:
                 for component in rule.components:
                     for predicate in component_predicates(component):
@@ -496,24 +500,26 @@ class FactPublicationService:
             representative = group[0]
             risks = set(flag for item in group for flag in item.risk_flags)
             for item in group:
-                if item.variable_id is None:
+                if item.variable_id is None and revision.source_qualification_mode != "scoped_text_v1":
                     continue
-                if item.variable_id not in definitions:
+                if item.variable_id is not None and item.variable_id not in definitions:
                     raise FactPublicationError("事实引用了已发布字典外的数据项目")
-                definition = definitions[item.variable_id]
-                if item.assertion_basis is not None and definition.value_type == "number":
+                definition = definitions.get(item.variable_id)
+                if item.assertion_basis is not None and definition is not None and definition.value_type == "number":
                     try:
                         definition.convert(item.canonical_value, item.unit or "")
                     except ValueError as exc:
                         raise FactPublicationError("事实的数值或单位与已发布数据项目不符") from exc
+                if isinstance(item.canonical_value, (int, float)) and not isinstance(item.canonical_value, bool):
                     from app.domain.risk_flags import same_numeric_reading
                     if not same_numeric_reading(item.raw_value, item.canonical_value):
                         raise FactPublicationError("事实不得使用由模型改写的原始读数")
                 locator = _fetch_locator(session, item.assertion_basis.locator_id
                                          if item.assertion_basis is not None else item.locator_ids[0])
                 text = _localized_locator_text(session, locator, revision, ocr_context[3]) or ""
-                risks.update(fact_risk_flags(item, definitions[item.variable_id], text=text,
-                    low_ocr=bool(ocr_context[1].get(locator.ocr_page_id)),
+                locators = [_fetch_locator(session, locator_id) for locator_id in item.locator_ids]
+                risks.update(fact_risk_flags(item, definition, text=text,
+                    low_ocr=any(ocr_context[1].get(source_pages.get(entry.page_artifact_id)) for entry in locators),
                     weak_source=_source_strength(session, revision, [item]) == SourceStrength.UNVERIFIABLE,
                     thresholds=thresholds.get(item.variable_id, ()), date_sensitive=item.variable_id in date_sensitive))
             fact_revision = _next_revision(existing, stable_identity)

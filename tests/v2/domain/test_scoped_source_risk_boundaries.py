@@ -62,14 +62,16 @@ def test_scoped_value_requires_its_source_page_clear_not_the_whole_revision(monk
 
 
 @pytest.mark.parametrize("failure", ["missing_page", "wrong_ocr", "closure"])
-def test_scoped_clear_page_does_not_override_source_failures(monkeypatch, failure):
+@pytest.mark.parametrize("variable_id", [None, "alt"])
+def test_scoped_clear_page_does_not_override_source_failures(monkeypatch, failure, variable_id):
+    from tests.v2.domain.test_fact_evidence_closure import _make_fact_candidate
     locator = SimpleNamespace(page_artifact_id="page", ocr_page_id="wrong" if failure == "wrong_ocr" else "ocr",
         source_layer=LocatorSourceLayer.RAW_OCR, precision=LocatorPrecision.TEXT_RANGE,
         text_start=0, text_end=3)
     monkeypatch.setattr(gate, "_fetch_cached", lambda *_args: locator)
     revision = SimpleNamespace(source_qualification_mode="scoped_text_v1",
         manifest=[] if failure == "missing_page" else [SimpleNamespace(page_artifact_id="page", ocr_page_id="ocr")])
-    candidate = SimpleNamespace(locator_ids=["loc"], canonical_value=5.6)
+    candidate = _make_fact_candidate(locator_ids=["loc"]).model_copy(update={"variable_id": variable_id})
     result = gate.validate_blocking_ocr_for_candidate(None, candidate, revision,
         prepared_context=(["stale selected review"] if failure == "closure" else [],
                           {"other-ocr": [("scan", SimpleNamespace())]}, set(), []))

@@ -211,6 +211,62 @@ def _run(session_factory, chain, requirement_id):
     return service, created
 
 
+@pytest.mark.parametrize("literal_value", [True, False])
+def test_scoped_profile_fact_keeps_ocr_warning_without_variable_binding(session_factory, literal_value):
+    from app.domain.contracts.enums import FactGate, GateOutcome, OcrRiskKind, OcrRiskLevel
+    from app.domain.contracts.ocr import OcrRiskFlag
+    from app.domain.contracts.facts import MedicationExposureCandidateV2
+    from app.domain.risk_flags import RiskFlag
+    from app.storage.fact_repositories import FactGateResultRepository, MedicationExposureV2Repository, FactNormalizationCandidateRepository
+
+    flag = OcrRiskFlag(risk_id="number", kind=OcrRiskKind.NUMERIC_VALUE, level=OcrRiskLevel.BLOCKING,
+        text="5", text_start=4, text_end=5, rule_version="facts-test/v1")
+    with session_factory() as session, session.begin():
+        chain = _seed_chain(session, prefix="scoped-profile", source_qualification_mode="scoped_text_v1", risk_flags=(flag,))
+    transport = _transport(chain, "req-profile")
+    def read(evidence_input):
+        output = transport(evidence_input)
+        fact = output.fact_candidates[0].model_copy(update={"supported_requirement_ids": []})
+        assert fact.variable_id is None
+        if not literal_value:
+            fact = fact.model_copy(update={"raw_value": 55.0, "canonical_value": 55.0})
+        facts = [fact]
+        if not literal_value:
+            sibling = _candidate_fact(evidence_input.run_id, evidence_input.call_id, chain["locator_id_2"], asserted_object="AST")
+            facts.append(sibling.model_copy(update={"raw_value": 3.0, "canonical_value": 3.0, "unit": "mmol/L", "supported_requirement_ids": []}))
+        event = ClinicalEventCandidateV2(candidate_id="event-linked", run_id=fact.run_id, call_id=fact.call_id,
+            event_type="检验记录", duration_status="unknown", fact_candidate_ids=[fact.candidate_id],
+            locator_ids=fact.locator_ids, candidate_source_semantics="同期客观结果", model_uncertainty=0.1, created_at=fact.created_at)
+        # Even a structurally linked exposure cannot borrow a fact's warning policy.
+        exposure = MedicationExposureCandidateV2(candidate_id="exposure-linked", run_id=fact.run_id, call_id=fact.call_id,
+            medication_name="ALT", duration_status="unknown", fact_candidate_ids=[fact.candidate_id],
+            locator_ids=fact.locator_ids, candidate_source_semantics="同期客观结果", model_uncertainty=0.1, created_at=fact.created_at)
+        return output.model_copy(update={"fact_candidates": facts, "event_candidates": [event], "exposure_candidates": [exposure]})
+    service = FactNormalizationJobService(session_factory)
+    created = _create_job_from_source(service, chain)
+    runner = JobRunner(session_factory, {"fact_normalization": create_fact_normalization_executor(
+        FactNormalizationExecutorConfig(session_factory=session_factory, transport_fn=read))})
+    assert runner.run_job(created.job_id)
+    with session_factory() as session:
+        facts = ClinicalFactV2Repository(session).list_by_episode(chain["episode_id"])
+        assert len(facts) == 1
+        assert facts[0].asserted_object == ("ALT" if literal_value else "AST")
+        assert MedicationExposureV2Repository(session).list_by_episode(chain["episode_id"]) == []
+        gates = FactGateResultRepository(session).list_by_run(created.run_id)
+        linked_ids = {candidate.candidate_id for candidate in FactNormalizationCandidateRepository(session).list_by_run(created.run_id)
+                      if candidate.candidate_kind in {"event", "exposure"}}
+        final_linked = [gate for gate in gates if gate.candidate_id in linked_ids and gate.gate == FactGate.TRANSACTIONAL_PUBLISH]
+        assert len(linked_ids) == len(final_linked) == 2
+        assert all(gate.outcome != GateOutcome.ACCEPTED for gate in final_linked)
+        if literal_value:
+            assert RiskFlag.LOW_OCR_CONFIDENCE in facts[0].risk_flags
+            profile = PatientProfileService().latest(session, chain["episode_id"])
+            assert profile is not None and profile.status == ProfileStatus.SUCCEEDED
+            assert any(item.source_id == facts[0].fact_id for lane in profile.lanes for item in lane.items)
+        else:
+            assert any("原始数值未出现" in reason for gate in gates for reason in gate.reasons)
+
+
 def _targeted_job(session_factory, chain):
     from app.services.fact_normalization_source_adapter import build_fact_normalization_plan
     from app.services.fact_normalization_job_service import FactNormalizationCallSpec

@@ -688,6 +688,16 @@ def test_variable_identity_not_display_type_selects_and_computes():
     assert result.decision == D.INCLUSION_MET and result.confidence == "high"
 
 
+def test_ocr_warning_is_not_a_high_confidence_success_or_a_missing_patient_record():
+    from app.domain.risk_flags import RiskFlag
+    rules, projected, _ = clause()
+    fact = material().model_copy(update={"risk_flags": [RiskFlag.LOW_OCR_CONFIDENCE]})
+    before = fact.model_dump_json()
+    result = calculate_work_component(projected, frozen([fact]), rules, evidence_refs={})
+    assert result.decision == D.INCLUSION_MET and result.confidence == "low"
+    assert "识别或归属标记" in result.confidence_reason
+    assert result.system_issue is None and fact.model_dump_json() == before
+
 def test_outer_all_does_not_become_any_because_one_inner_group_is_any():
     rules, _, component = clause()
     a = component.expression
