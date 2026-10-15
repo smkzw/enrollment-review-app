@@ -1,9 +1,9 @@
-"""Consume reviewed medication requirements and frozen, published exposures only."""
+"""Compute from qualified exposures; show related records without inventing use."""
 import unicodedata
 
 from app.domain.calendar_dates import date_bounds
 from app.domain.contracts.common import DateValue
-from app.domain.contracts.enums import ComponentDecision as D, DurationStatus, RuleKind, TruthValue
+from app.domain.contracts.enums import ComponentDecision as D, DurationStatus, FactPolarity, ProfileLane, RuleKind, TruthValue
 from app.domain.contracts.work_draft import SystemIssue, WorkDraftItem
 from app.domain.medication_timing import medication_window_violation, medication_period_violation
 from app.domain.publication import canonical_hash
@@ -12,6 +12,28 @@ from app.services.work_draft_calculation import review_anchor_dates, review_sour
 
 def _name(value):
     return unicodedata.normalize("NFKC", value).strip().casefold()
+
+
+def _record_refs(facts, evidence_refs, source_pages, members, cutoff):
+    """Navigation only: a published medication record is not a dated exposure."""
+    refs = {}
+    for fact in facts.values():
+        if (fact.profile_lane != ProfileLane.MEDICATION or fact.polarity != FactPolarity.AFFIRMED
+                or not any(member in _name(fact.asserted_object) for member in members)
+                or fact.assertion_basis is None):
+            continue
+        if cutoff is None or fact.record_time is not None and fact.record_time.date() > cutoff:
+            continue
+        if (fact.date_range is not None and fact.date_range.lower_bound is not None
+                and fact.date_range.lower_bound > cutoff):
+            continue
+        basis = fact.assertion_basis
+        for ref in evidence_refs[fact.fact_id]:
+            if (ref.fact_id == fact.fact_id and ref.locator_id in fact.locator_ids
+                    and ref.locator_id == basis.locator_id and basis.assertion_text in ref.excerpt
+                    and (ref.source_document_version_id, ref.page_artifact_id, ref.page_number) in source_pages):
+                refs[(ref.fact_id, ref.locator_id)] = ref
+    return refs
 
 
 def calculate_medications(frozen, rule_set, *, evidence_refs):
@@ -48,8 +70,10 @@ def calculate_medications(frozen, rule_set, *, evidence_refs):
         else:
             members = (supplement.drug_classes.get(restriction.drug_class_id, [])
                 if restriction.drug_class_id else [restriction.drug_text])
+            members = {_name(member) for member in members}
+            records = _record_refs(facts, evidence_refs, source_pages, members, cutoff)
             matching = [exposure for exposure in frozen.medication_exposures
-                if _name(exposure.medication_name) in {_name(member) for member in members}]
+                if _name(exposure.medication_name) in members]
             observed = []
             conflicted = {exposure_id for group in frozen.conflict_groups if group.member_kind == "exposure"
                 for exposure_id in group.exposure_ids}
@@ -118,6 +142,11 @@ def calculate_medications(frozen, rule_set, *, evidence_refs):
                 reason = ("已有用药记录的时间未落入限制窗口；完整用药史及未归类用药尚未核清，暂不认定未触发。"
                     if all(row.truth == TruthValue.FALSE for row in observed)
                     else "已找到相关用药，但停药时间、命名起点或半衰期依据尚不完整。")
+            elif records:
+                reason = "发现可能相关的药物记录，可查看原文；这不代表药物类别、实际使用或停药日期已经核实。"
+                # Record-only sources support inspection, never the calculation.
+                if issue is None:
+                    refs.update(records)
         if issue is not None:
             decision, reason = None, issue.detail
         results.append(WorkDraftItem(**values, decision=decision, reason_text=reason,

@@ -183,6 +183,93 @@ def test_no_supplement_leaves_existing_official_consumer_unchanged():
     assert calculate_medications(frame, rules, evidence_refs=refs) == []
 
 
+def test_published_record_without_exposure_is_navigable_but_not_used_for_time_calculation():
+    frame, rules, refs = medication_context()
+    frame.medication_exposures = []
+    before = frame.facts[0].model_dump_json()
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.INDETERMINATE and row.confidence is None
+    assert row.evidence_refs == refs["med-fact"]
+    assert "发现可能相关的药物记录" in row.reason_text and "不代表药物类别、实际使用或停药日期已经核实" in row.reason_text
+    saved = WorkDraftItem.model_validate_json(row.model_dump_json())
+    view = project_saved_items([saved], authority=frame.authority, rule_set=rules, run_id="draft")
+    item, = view.clauses
+    assert item.fact_refs[0].page_number == 1 and not item.can_confirm
+    assert frame.medication_exposures == [] and frame.facts[0].model_dump_json() == before
+
+
+@pytest.mark.parametrize("fault", ["other_name", "other_lane", "denied", "missing_basis",
+    "other_locator", "other_excerpt", "other_fact_ref", "wrong_page", "future_record", "future_date", "missing_cutoff"])
+def test_record_navigation_does_not_borrow_nearby_or_unqualified_evidence(fault):
+    frame, rules, refs = medication_context()
+    frame.medication_exposures = []
+    fact = frame.facts[0]
+    if fault == "other_name": fact = fact.model_copy(update={"asserted_object": "药物乙"})
+    elif fault == "other_lane": fact = fact.model_copy(update={"profile_lane": ProfileLane.MEDICAL_HISTORY})
+    elif fault == "denied": fact = fact.model_copy(update={"polarity": FactPolarity.NEGATED})
+    elif fault == "missing_basis": fact = fact.model_copy(update={"assertion_basis": None})
+    elif fault == "other_locator": refs["med-fact"][0] = refs["med-fact"][0].model_copy(update={"locator_id": "other"})
+    elif fault == "other_excerpt": refs["med-fact"][0] = refs["med-fact"][0].model_copy(update={"excerpt": "同页另一个药物的记录"})
+    elif fault == "other_fact_ref": refs["med-fact"][0] = refs["med-fact"][0].model_copy(update={"fact_id": "other"})
+    elif fault == "wrong_page": frame.source_pages = []
+    elif fault == "future_record": fact = fact.model_copy(update={"record_time": datetime(2026, 4, 1, tzinfo=UTC)})
+    elif fault == "future_date": fact = fact.model_copy(update={"date_range": PartialDateRange(
+        precision="day", lower_bound=date(2026, 4, 1), upper_bound=date(2026, 4, 1))})
+    else:
+        frame.review_episode.anchor_dates = {}
+        frame.review_episode.evidence_cutoff_date = None
+    frame.facts = [fact]
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.INDETERMINATE and row.confidence is None
+    assert row.evidence_refs == [] and "发现可能相关的药物记录" not in row.reason_text
+
+
+def test_name_mention_only_opens_related_record_and_cannot_classify_or_compute_use():
+    frame, rules, refs = medication_context()
+    frame.medication_exposures = []
+    text = "药物甲乙片的处方记录"
+    frame.facts = [frame.facts[0].model_copy(update={"asserted_object": "药物甲乙片",
+        "assertion_basis": AssertionBasis(asserted_object="药物甲乙片", assertion_text=text,
+            locator_id="med-location", source_text_sha256=sha256(text.encode()).hexdigest())})]
+    refs["med-fact"] = [refs["med-fact"][0].model_copy(update={"excerpt": text})]
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.INDETERMINATE and row.confidence is None
+    assert row.evidence_refs == refs["med-fact"] and "可能相关" in row.reason_text
+    assert frame.medication_exposures == []
+
+
+def test_record_navigation_preserves_unknown_dates_and_never_infers_continuation():
+    frame, rules, refs = medication_context()
+    frame.medication_exposures = []
+    frame.facts = [frame.facts[0].model_copy(update={"date_range": None, "record_time": None})]
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.INDETERMINATE and row.evidence_refs == refs["med-fact"]
+    assert frame.facts[0].date_range is None and frame.medication_exposures == []
+
+
+def test_related_record_does_not_certify_class_qualifiers_or_a_different_drug():
+    frame, rules, refs = medication_context()
+    frame.medication_exposures = []
+    restriction = rules.scope_supplement.medications[0]
+    restriction.drug_class_id, restriction.class_scope = "fixture_class", "qualified"
+    rules.scope_supplement.drug_classes = {"fixture_class": ["药物甲"]}
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.INDETERMINATE and row.evidence_refs == refs["med-fact"]
+    rules.scope_supplement.drug_classes = {"fixture_class": ["药物乙"]}
+    assert calculate_medications(frame, rules, evidence_refs=refs)[0].evidence_refs == []
+
+
+def test_record_only_does_not_add_unrelated_sources_to_a_qualified_positive():
+    frame, rules, refs = medication_context()
+    extra = refs["med-fact"][0].model_copy(update={"locator_id": "other-location"})
+    another = frame.facts[0].model_copy(update={"fact_id": "another", "locator_ids": ["other-location"],
+        "assertion_basis": frame.facts[0].assertion_basis.model_copy(update={"locator_id": "other-location"})})
+    frame.facts.append(another)
+    refs["another"] = [extra.model_copy(update={"fact_id": "another"})]
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.EXCLUSION_TRIGGERED and row.evidence_refs == refs["med-fact"]
+
+
 def test_current_stage_use_can_support_study_period_but_not_an_unstarted_treatment_period():
     frame, rules, refs = medication_context()
     medication = rules.scope_supplement.medications[0]
