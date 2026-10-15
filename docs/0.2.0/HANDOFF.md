@@ -16,8 +16,8 @@
 
 | 层 | 实际状态 |
 |---|---|
-| Git | HEAD `06916f3843c0527ab0a4e19d1b11eb87dbc0d71c`，在其上有本包原文关系复用修复及相连测试／文档，待提交；产品实现不交给子Agent |
-| PR | #1归档冲突已修并MERGED为6e9453a3；#2冻结类别suggest复用MERGED为7aa533f2；#3类别适用范围8e2687e8已MERGED为06916f38。本树均正常快进，无force push |
+| Git | HEAD `4c350c2a3e77f390940fc4944e8d7bd727870aa3`，在其上有本包当前资料任务恢复及相连测试／文档，待提交；产品实现不交给子Agent |
+| PR | #1归档冲突已修并MERGED为6e9453a3；#2冻结类别suggest复用MERGED为7aa533f2；#3类别范围MERGED为06916f38；#4原文关系复用b61d6636已MERGED为4c350c2a。本树均正常快进，无force push；首个merge命令误用短SHA被拒，改完整SHA成功 |
 | 自有服务 | `61134`，PID7751／exec67108，`output/wp5-chart-controlled-server.log`。真实`create_app(run_runner=False)`＋正式前端，仅显式运行选定Job，不服务历史队列。进程仍是8e2687e8源码，不把磁盘新修改冒充已部署 |
 | 数据 | `data_v2/enrollment-review-v2.sqlite3`，WP0验证副本；非原临床库。与历史回执和原图同目录；不重造数据 |
 | 项目／受试者 | project `draft-project-1153e25b4eba`；subject `58ff71df0cff4a2c9107be743d82584b`（31001） |
@@ -26,9 +26,9 @@
 | 当前资料 | snapshot `c69c297a3ea84c57a8fa953e07567b1d`；complete `complete-9a8d09071cfc4b19b2826d4da20804f8`，5文件24页。原UI核实病历出具方、追加metadata3并启用；未改原件 |
 | 新规范化终态 | Job `8e68b23ef5364039b3c165c9eade7bf0` completed10/10；run `0044f1885f8e4d13b23628eea0ec504a` partial；exec51614已收回exit0，不再运行 |
 | 新规范化结果 | 仅9页，245候选（201事实／32事件／12暴露）；72新事实、0事件／暴露，167候选来源读数阻断、3拒绝。75 accepted候选与72事实为不同分母，含既有去重；不是全部用药核实完成 |
-| 自动工作稿 | `e5ddd276efae49b0b927cb290b9aa6b1` queued，自动关联上述run；尚未执行。只读冻结121可用事实、24页、40来源问题，125原文关系可复验复用，无新增目标。不要新建第二工作稿来绕开它 |
+| 当前工作稿 | 自动Job `e5ddd276efae49b0b927cb290b9aa6b1` completed4/4／101.275秒／0新调用；run `review-run:01e7c83e665741d4bb375d366a3c1b1f`，节点11／v40。121事实、24页、149项，125原文关系实际复用；完整149项有当前保存结果，不覆盖旧报告 |
 | 最近历史稿 | `review-run:e31a998096304ea5b97d1eb44588a9bb`／计算v39，节点10；149项（64父／85子）。34父项确定、15未到期、5不适用、9证据不足、1系统项。现在只是历史，不是节点11结果 |
-| 新计算 | `work-draft/0.2.0-v40`；类别范围消费者已实现，但本例尚未生成v40工作稿 |
+| 新计算 | `work-draft/0.2.0-v40`已在本例实际运行；类别范围消费者具备但S4尚未共同发布，不能称已完成用药验证 |
 | 补充要求草稿 | S4 Job `afe79035d4e04d1b9b8f4778dbc0e54e`，修订6；34用药项，62有效审定／99审定条目；未发布、未补class_scope，不借规则7的批准冒充 |
 | Ego | 原Space42，p1方案草稿、p2资料、p3合成TEST001；另有用户未托管页不可操作。沿原页恢复，不新建空间／浏览器或接管认证页 |
 | 验收 | M1／M2／M3未正式通过；claims_complete=false；历史完整后端exec20120中断143，不称全库通过 |
@@ -67,7 +67,13 @@ Devin的绿色检查实际写“trial expired and no credits remaining，Full re
 
 修复只作用于读取复验：同项目／受试者／节点／快照／规则版本及指纹，完整页材料一致，两份真实冻结修订均通过原校验；之后仍逐原请求／模型／参数／Schema／正文／摘录／目标／日期复验。没有伪造一个“新权威”代替历史，也没有复制旧事实批准。来源或任务变化仍不复用；提取完成度变化时，当前政策重新核，不能将原未见记录结论直接沿用。
 
-410相连检查39.51秒exit0；真实只读预检修前0→修后125，0数据库写入／0模型调用。自动Job的实际消费与新结果仍待执行，不能仅凭预检宣布新稿完成。本包owner内联：边界依赖完整冻结材料及确定性复验，不新增医学解读或采用权限；前次C03不冒称审阅了这个新补丁。
+410相连检查39.51秒exit0；真实只读预检修前0→修后125，0数据库写入／0模型调用。随后b61d6636实际自动Job completed4/4、101.275秒，0新调用／125关系均复验复用；新149项结论／置信／条目系统项与v39一致，548出处身份／逐字0失配，旧147事实／45稿／6753条目／规则旧行hash不变。一次lease heartbeat短写锁日志后正常终态，未重派，不掩盖日志。本包owner内联：完整冻结材料及确定性复验，不新增医学解读或采用权限；前次C03不冒称审阅了新补丁。
+
+### 3.5 当前任务恢复子包（集中验证，尚待部署）
+
+Ego资料页原从localStorage恢复已取消的全24页Job，导致新9页已完成仍显示0/25。现沿原fact-normalization collection增加只读GET：从当前节点权威找实际最新Job并核run／Job／输入范围闭包，不因旧结果更好优选旧版本，不建任务或调用模型。浏览器恢复期间不自动POST；当前版本切换和迟到响应不覆盖新范围；HTTP坏JSON不当成没有资料。
+
+77后端112.38秒、前端104文件945通过66.21秒，正式构建exit0。第一次构建发现一份窄Stub缺新增方法；补齐该测试接口后构建通过，未改生产契约、超时或断言。需要部署后沿原Ego验证恢复到实际9页任务；不将9页成功显示成24页全部临床合格。
 
 ## 4. 已完成与未完成
 
@@ -80,7 +86,7 @@ Devin的绿色检查实际写“trial expired and no credits remaining，Full re
 - 独立TB筛查资料关联、部分数值单位／检测前后关系。原件不明确时保留具体未知，不把技术缺口交给研究者。
 - M2真正数字更正／新文件补证：指定31001目录的5文件均已上传，没有已核实的真实错误数值；不改正确值／重传相同hash／拿虚构图冒充。
 - M3人工IE及D001留出、实际宽屏缩放与备份恢复。D001不参与M3前提示／字典／代码调优，IE不入提示。
-- 61134资料页仍显示先前已取消全24页任务的0/25，尚未指向本次9页Job；这是UI/命令关联未完成，不是临床读取重新失败。不得靠改状态或显示“全24页完成”掩盖。
+- 当前任务恢复子包尚未部署真实Ego；旧61134进程仍会显示先前取消任务，不能把磁盘修复当成界面已验。
 
 ## 5. 验证与证据位置
 
@@ -93,8 +99,9 @@ Devin的绿色检查实际写“trial expired and no credits remaining，Full re
 | class_scope | `output/wp5-class-scope-connected-verified.*`，110 passed／47.20秒；`-consumers.*`，163 passed／2.91秒；`-frontend-verified.log`，33 passed／2.07秒；正式构建exit0 |
 | 元数据保全 | `output/wp5-chart-metadata-{before,after}.json`，仅追加目标metadata3，旧事实／结果／规则hash不变 |
 | 9页执行 | `output/wp5_chart_normalization.py`、`wp5-chart-normalization-record.json`、`-run.log`、`-readback.json`；记录真实Job／scope／12请求回执及历史hash |
-| 原文关系复验 | `output/wp5-chart-source-reuse-package.{log,xml}`，410 passed／39.51秒；`wp5-chart-workdraft-preflight.json`修前0、`-preflight-source-reuse.json`修后125，均只读0调用 |
-| 当前源码与历史 | 合并提交06916f38＋本次明确diff；提交后以实际commit替代补丁身份。旧v39证据在`output/m1-review-review-run-e31a998096304ea5b97d1eb44588a9bb/` |
+| 原文关系复验及消费 | `output/wp5-chart-source-reuse-package.{log,xml}`，410 passed／39.51秒；预检0→125后，`wp5-chart-workdraft-{execution,readback}.json`与`m1-review-review-run-01e7c83e665741d4bb375d366a3c1b1f/`证明真实0调用消费、548引用逐字／身份0失配及历史保持 |
+| 当前任务恢复 | `output/wp5-current-normalization-package.{log,xml}`，77 passed／112.38秒；`-frontend.log`104文件945通过／66.21秒；`-build-verified.log`构建exit0，旧失败构建日志保留 |
+| 当前源码与历史 | 原文关系实际运行b61d6636，已合并4c350c2a；其后当前任务恢复为明确diff，提交后记实际身份。旧v39证据在`output/m1-review-review-run-e31a998096304ea5b97d1eb44588a9bb/` |
 
 前述测试窗口不能相加冒充全库通过。SWIG弃用警告与既有前端大包提示保留。首次错误测试路径exit4无用例、一个旧高并发前端超时、Ego未知snapshot选项／陈旧ref／CDP截图超时、只读诊断猜错路径等原日志保留，区分工具错误、夹具问题和产品失败。
 
@@ -102,9 +109,9 @@ C03用药资格：`output/wp5-medication-qualification-review-20261015`，CodeBu
 
 ## 6. 接续顺序与复盘
 
-1. 先提交本次复用功能包及实际记录；不把未提交源码的测试归到旧远端commit。继续实际运行自动Job `e5ddd276efae49b0b927cb290b9aa6b1`，只用现有JobRunner明确ID，不启动全队列或新建平行工作稿。实际应复验125原文关系而非再次付费读取；输出／失败按真实回执核，不以预检代执行。
-2. 对新稿核事实选择、来源逐字、当前日期、正常结果与具体未决；与节点10历史对照，并核旧行hash不变。新稿v40不宣称M1已由本人验收。
-3. 修资料页当前任务关联，使成功切片、整体尚未核清及旧取消记录分别显示。不能把9页成功显示成24页全合格。再沿原Ego检查新稿／原件／历史返回；截图仍故障时如实写未验，不接管用户认证页。
+1. 自动Job及原文关系功能包均已实际完成／提交／合并，不再执行e5ddd276、8e68b23e或b6aceb713。当前新稿已核548引用及旧历史，不需要重跑原读取来整理记录。
+2. 提交当前任务恢复功能包，部署至自有61134，再沿原Ego检查当前9页任务、新稿／原件／历史返回。查询已无queued／running／failed_retryable／cancel_requested；可用标准桌面入口恢复服务，不碰共享端口或用户其他页面。若仍保留无自动runner模式需写明，不冒充最终启动验收。
+3. 新稿v40不宣称M1已由本人验收；真实0用药暴露及S4未采用仍是后续工作，不以界面状态正确替代临床能力。
 4. 后续继续WP5：从已有原答和原图验证事件／暴露字段与相关事实的资格，不重新抽取9页；完成必要类别／例外及共同发布消费，构建期使用验证身份。
 5. 合并当前结果至05，再按用户授权提交／PR／merge。不要每改一行重跑全库；受影响包集中验证，里程碑才做完整检查与A/B。
 

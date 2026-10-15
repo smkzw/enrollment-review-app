@@ -34,11 +34,11 @@ function apiUrl(path: string): string {
 
 async function readJson(response: Response): Promise<unknown> {
   const text = await response.text();
-  if (text.length === 0) return null;
+  if (text.length === 0) return undefined;
   try {
     return JSON.parse(text) as unknown;
   } catch {
-    return null;
+    return undefined;
   }
 }
 
@@ -70,6 +70,14 @@ export function createFactNormalizationHttp(
 
   return {
     kind: "http",
+
+    async getCurrentFactNormalizationJob(subjectId, reviewEpisodeId, options) {
+      const response = await fetchImpl(apiUrl(factNormalizationCommandPath(subjectId, reviewEpisodeId)),
+        { method: "GET", signal: options?.signal });
+      const payload = await readJson(response);
+      if (!response.ok) throw decodeFactNormalizationError(payload, response.status);
+      return payload === null ? null : decodeFactNormalizationJobStatus(payload);
+    },
 
     async getNormalizationUnresolved(subjectId, episodeId, jobId, offset, options) {
       return request(factNormalizationUnresolvedPath(subjectId, episodeId, jobId, offset, options?.expectedContentSha256),

@@ -14,6 +14,30 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("个例档案整理 HTTP 仓储", () => {
+  it("恢复当前服务端任务只GET，不靠旧缓存发起整理", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe(factNormalizationCommandPath("subject-1", "episode-1"));
+      expect(init?.method).toBe("GET");
+      expect(init?.body).toBeUndefined();
+      return jsonResponse({ job_id: "latest", state: "completed", state_label: "已完成",
+        cancel_requested: false, progress_completed: 10, progress_total: 10,
+        recovery_action: "本次处理已完成。", created_at: "2026-10-16T00:00:00Z", updated_at: "2026-10-16T01:00:00Z" });
+    });
+    const repo = createFactNormalizationHttp({ fetchImpl: fetchImpl as typeof fetch });
+    expect((await repo.getCurrentFactNormalizationJob("subject-1", "episode-1"))?.jobId).toBe("latest");
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("明确null表示没有任务，坏JSON或空响应不得伪装没有任务", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(null))
+      .mockResolvedValueOnce(new Response("not json"))
+      .mockResolvedValueOnce(new Response(""));
+    const repo = createFactNormalizationHttp({ fetchImpl: fetchImpl as typeof fetch });
+    expect(await repo.getCurrentFactNormalizationJob("s", "e")).toBeNull();
+    await expect(repo.getCurrentFactNormalizationJob("s", "e")).rejects.toThrow();
+    await expect(repo.getCurrentFactNormalizationJob("s", "e")).rejects.toThrow();
+  });
+
   it("命令路径集中在 endpoints，请求体只含幂等意图", async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe(

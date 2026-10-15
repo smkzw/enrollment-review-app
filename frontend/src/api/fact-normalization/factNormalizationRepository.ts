@@ -28,6 +28,10 @@ export interface FactNormalizationStartInput {
 
 export interface FactNormalizationRepository {
   readonly kind: "http";
+  /** GET collection: current server-owned scope; no job is created. */
+  getCurrentFactNormalizationJob(
+    subjectId: string, reviewEpisodeId: string, options?: FactNormalizationRequestOptions,
+  ): Promise<FactNormalizationJobStatusView | null>;
   getNormalizationUnresolved?(
     subjectId: string, episodeId: string, jobId: string, offset: number,
     options?: FactNormalizationRequestOptions & { expectedContentSha256?: string },

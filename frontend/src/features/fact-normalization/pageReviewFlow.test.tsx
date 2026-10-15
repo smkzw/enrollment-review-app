@@ -49,6 +49,7 @@ it("失败页重读完成后自动继续整理，成功历史不重新提交", a
     "PAGE_COVERAGE_NOT_READY", "资料识别尚未完成", "请先判读", "请先判读", 409,
   )).mockResolvedValue({ jobId: "normalizer", runId: "run", created: true, state: "queued", stateLabel: "等待", recoveryAction: "" });
   setFactNormalizationRepository({ kind: "http", startFactNormalization: start,
+    getCurrentFactNormalizationJob: vi.fn(async () => null),
     getFactNormalizationJobStatus: vi.fn().mockResolvedValue({ jobId: "normalizer", state: "completed",
       stateLabel: "完成", cancelRequested: false, progressCompleted: 1, progressTotal: 1,
       recoveryAction: "", createdAt: "2026-09-06", updatedAt: "2026-09-06" }),

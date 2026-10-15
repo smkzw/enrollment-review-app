@@ -10,6 +10,7 @@ const read = vi.fn();
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getFactNormalizationRepository).mockReturnValue({ kind: "http",
+    getCurrentFactNormalizationJob: vi.fn(async () => null),
     getNormalizationUnresolved: read, startFactNormalization: vi.fn(),
     getFactNormalizationJobStatus: vi.fn(), retryFactNormalizationJob: vi.fn() });
 });

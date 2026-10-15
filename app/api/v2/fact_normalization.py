@@ -11,6 +11,7 @@ from app.api.v2.fact_normalization_schemas import (
     NormalizationUnresolvedPageDTO,
 )
 from app.api.v2.vocabulary import JOB_STATE_LABELS, job_recovery_action
+from app.api.v2.schemas import JobStatusResponse
 from app.services.evidence_app_errors import EvidenceAppError, translate_storage_error
 from app.services.evidence_api_read_service import EvidenceApiReadService
 from app.services.fact_normalization_command_service import (
@@ -18,6 +19,15 @@ from app.services.fact_normalization_command_service import (
 )
 
 router = APIRouter(prefix="/api/v2", tags=["v2-fact-normalization"])
+
+
+@router.get("/subjects/{subject_id}/review-episodes/{review_episode_id}/fact-normalization-jobs",
+            response_model=JobStatusResponse | None)
+def read_current_fact_normalization_job(subject_id: str, review_episode_id: str, request: Request) -> JobStatusResponse | None:
+    from app.api.v2.jobs import get_job_status
+
+    job_id = _read(request).current_normalization_job_id(subject_id, review_episode_id)
+    return get_job_status(job_id, request) if job_id is not None else None
 
 
 @router.get(

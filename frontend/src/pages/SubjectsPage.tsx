@@ -237,6 +237,7 @@ export function SubjectsPage() {
   const factNormalization = useFactNormalizationJob({
     subjectId: selectedSubject?.subjectId ?? null,
     reviewEpisodeId: selectedEpisode?.reviewEpisodeId ?? null,
+    sourceRevisionId: selectedEpisode?.activeEvidenceProcessingRevisionId ?? null,
     profileStale,
     onSucceeded: () => {
       profile.retry();
@@ -250,7 +251,7 @@ export function SubjectsPage() {
   useEffect(() => {
     if (selectedSubject === null || selectedEpisode === null) return;
     if (selectedEpisode.activeEvidenceSnapshotId === null) return;
-    if (normalizationStatus === "active") return;
+    if (factNormalization.restoring || normalizationStatus !== "idle") return;
     const needsOrganize =
       (profile.state.status === "error" && profile.state.missing) ||
       (profile.state.status === "success" && profile.state.data.isGenerating);
@@ -260,6 +261,7 @@ export function SubjectsPage() {
     autoStartKeyRef.current = key;
     void startNormalization(`profile-organize:subjects:${key}`);
   }, [
+    factNormalization.restoring,
     normalizationStatus,
     profile.state,
     selectedEpisode,

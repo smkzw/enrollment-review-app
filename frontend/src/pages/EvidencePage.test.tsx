@@ -487,6 +487,7 @@ beforeEach(() => {
     state: null, text: null, region: null, configurationCurrent: true, canRetry: false });
   setFactNormalizationRepository({
     kind: "http",
+    getCurrentFactNormalizationJob: vi.fn(async () => null),
     startFactNormalization: vi.fn(async () => ({
       jobId: "job-normalize-test",
       runId: "run-normalize-test",
