@@ -64,6 +64,28 @@ def test_eligibility_review_rejects_cross_subject_path(client):
     assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
+@pytest.mark.parametrize("code", ["用药01", "用药101"])
+def test_medication_projection_reaches_the_real_http_response_contract(client, monkeypatch, code):
+    chain = _seed(client, "medication-wire")
+    service = client.app.state.eligibility_review_projection_service
+    with client.app.state.session_factory() as session:
+        base = service.project(session, chain["episode_id"])
+    medication = replace(base.clauses[0], rule_code=code, rule_kind="medication",
+        rule_component_id="synthetic-medication", parent_rule_code=None)
+    monkeypatch.setattr(service, "project", lambda *_: replace(base, clauses=(*base.clauses, medication)))
+    response = client.get(_url(chain))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["clauses"][-1]["rule_code"] == code
+    assert body["clauses"][-1]["rule_kind"] == "medication"
+    for code_value, kind, parent in (("IN-01", "medication", None), (code, "inclusion", None),
+        (code, "medication", "EX-01"), ("用药1", "medication", None), ("药物01", "medication", None)):
+        changed = {**body, "clauses": [{**body["clauses"][-1], "rule_code": code_value,
+            "rule_kind": kind, "parent_rule_code": parent}]}
+        with pytest.raises(ValidationError):
+            EligibilityReviewResponse.model_validate(changed)
+
+
 def test_condition_reasons_reach_http_with_strict_identity_and_attention(client, monkeypatch):
     chain = _seed(client, "eligibility-condition-reasons")
     service = client.app.state.eligibility_review_projection_service

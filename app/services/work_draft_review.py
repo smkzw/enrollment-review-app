@@ -23,7 +23,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v41"
+CALCULATION_VERSION = "work-draft/0.2.0-v42"
 
 
 def confirmation_allowed(item, items):
@@ -178,7 +178,8 @@ def _fact_refs(session, frozen, artifact_store=None):
     for fact in frozen.facts:
         refs = []
         primary_failed = False
-        for locator_id in fact.locator_ids:
+        primary = fact.assertion_basis.locator_id if fact.assertion_basis is not None else None
+        for locator_id in sorted(fact.locator_ids, key=lambda key: key != primary):
             locator = repo.get(locator_id)
             localized = _localized_locator_text(session, locator, revision)
             excerpt = (fact.assertion_basis.assertion_text if fact.assertion_basis is not None
