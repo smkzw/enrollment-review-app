@@ -196,7 +196,7 @@ _EXPLICIT_TIME_FRAGMENT_RE = re.compile(
     r"(?:筛选|导入|基线|治疗|研究|试验|随访)期(?:间|内)?|"
     r"(?:筛选|基线|随机(?:化|分组)?|首次给药)(?:前|后|时)|"
     r"(?:W|D)\s*-?\d+\s*[~～至-]\s*(?:W|D)?\s*-?\d+|"
-    r"\d+\s*(?:天|日|周|月|年)(?!岁|龄)(?:内|前|后|以上|以下)?|"
+    r"\d+\s*(?:个\s*)?(?:天|日|周|月|年)(?!岁|龄)(?:内|前|后|以上|以下)?|"
     r"每(?:日|天|周|月)(?:\d+|[一二三四五六七八九十]+)次|"
     r"(?:其余|其他|剩余|后续)(?:的)?访视",
     re.IGNORECASE,
@@ -3007,12 +3007,17 @@ def source_requires_temporal_resolution(statement) -> bool:
     source = normalize_source_excerpt(" ".join(filter(None, (
         statement.quoted_text, statement.scope_quote, *statement.time_words,
     ))))
+    phase_ranges = [match.span() for match in _STUDY_PHASE_LABEL_RE.finditer(source)]
+    multiple_visit_scopes = any(
+        not any(start <= match.start() and match.end() <= end for start, end in phase_ranges)
+        for match in re.finditer(r"期(?:、|，|,|和|及|与).{0,30}?期", source)
+    )
     return bool(
         intraday_time_fragments(source)
-        or re.search(r"\d+(?:天|日|周|月|年)(?:内|以上|以下)?", source)
+        or re.search(r"\d+(?:个)?(?:天|日|周|月|年)(?:内|以上|以下)?", source)
         or re.search(r"(?:W|D)\d+[~～至-](?:W|D)?\d+", source)
         or re.search(r"整个|全程|持续|连续|继续", source)
-        or re.search(r"期(?:、|，|,|和|及|与).{0,30}期", source)
+        or multiple_visit_scopes
         or re.search(r"每(?:日|天|周|月)(?:\d+|[一二三四五六七八九十]+)次", source)
     )
 
@@ -3326,13 +3331,18 @@ def relative_visit_action_preserves_time(batch, statement, candidate) -> bool:
     return False
 
 
+SOURCE_STUDY_PHASE_ENUMERATION_VERSION = "source-study-phase-enumeration/v1"
+_STUDY_PHASE_TOKEN = r"(?:(?:第)?(?:IV|III|II|I)|[一二三四])期"
+_STUDY_PHASE_LABEL_RE = re.compile(
+    rf"(?<![A-Za-z第]){_STUDY_PHASE_TOKEN}(?:(?:和|及|与|或|、|，|,|/){_STUDY_PHASE_TOKEN})*[:：]?",
+    re.IGNORECASE,
+)
+
+
 def is_study_phase_label(value: str) -> bool:
     """A protocol phase label is population scope, not subject-relative time."""
 
-    return bool(re.fullmatch(
-        r"(?:第)?(?:I|II|III|IV|[一二三四])期[:：]?",
-        normalize_source_excerpt(value), re.IGNORECASE,
-    ))
+    return _STUDY_PHASE_LABEL_RE.fullmatch(normalize_source_excerpt(value)) is not None
 
 
 def _scope_precedes_action_in_same_clause(source: str, scope: str, quote: str) -> bool:
@@ -3453,7 +3463,8 @@ def _validate_sequence_context(batch, statement):
 
 
 def validate_source_interpretation(
-    batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation
+    batch: ProtocolControlDispositionBatch, interpretation: SourceInterpretation,
+    *, study_phase_refresh_check: bool = False,
 ) -> None:
     owned = {unit.structure_unit_id: unit for unit in batch.owned_units}
     statement_ids = {item.structure_unit_id for item in interpretation.statements}
@@ -3482,6 +3493,13 @@ def validate_source_interpretation(
                 source_refs=list(unit.source_span_ids), retry_class=retry_class,
             )
         source_parts = [*unit.heading_path, unit.excerpt]
+        def grounded_scope_word(value: str, parts: list[str]) -> bool:
+            normalized = normalize_source_excerpt(value)
+            if study_phase_refresh_check and is_study_phase_label(value):
+                pattern = r"(?<![A-Za-z第一二三四五六七八九十百])" + re.escape(normalized)
+                return bool(normalized) and any(re.search(pattern, normalize_source_excerpt(part)) for part in parts)
+            return bool(normalized) and any(normalized in normalize_source_excerpt(part) for part in parts)
+
         normalized_quote = normalize_source_excerpt(item.quoted_text)
         if not normalized_quote:
             reject("SOURCE_QUOTE_BLANK", "陈述摘录不得只有空白", "quoted_text", "correct_source_quote")
@@ -3530,23 +3548,21 @@ def validate_source_interpretation(
                 reject("SOURCE_SCOPE_UNGROUNDED", "共享范围须来自陈述之前的原文、所属标题或本单元表格标题",
                        "scope_quote", "correct_source_scope")
         if item.affected_stage is not None:
-            if is_study_phase_label(item.affected_stage):
+            if is_study_phase_label(item.affected_stage) and not study_phase_refresh_check:
                 reject("STUDY_PHASE_NOT_VISIT_STAGE", "方案期别不是受试者访视阶段",
                        "affected_stage", "correct_source_scope")
             affected = normalize_source_excerpt(item.affected_stage)
-            if not affected or not any(
-                affected in normalize_source_excerpt(part)
-                for part in [item.quoted_text, (item.scope_quote or "") if context_label is None else "", *unit.heading_path]
-            ):
+            if not grounded_scope_word(item.affected_stage,
+                [item.quoted_text, (item.scope_quote or "") if context_label is None else "", *unit.heading_path]):
                 reject("SOURCE_STAGE_UNGROUNDED", "阶段措辞须来自本条陈述或其共享范围",
                        "affected_stage", "correct_source_scope")
-            if not _time_words_cover_stage_label(affected, item.time_words) and not (
+            if not (study_phase_refresh_check and is_study_phase_label(item.affected_stage)) and not _time_words_cover_stage_label(affected, item.time_words) and not (
                 scope and affected in scope and not _unreported_time_fragments(item)
             ):
                 reject("SOURCE_STAGE_TIME_MISSING", "明确阶段范围不得从时间措辞中遗漏",
                        "time_words", "correct_source_scope")
         for time_quote in item.time_words:
-            if is_study_phase_label(time_quote):
+            if is_study_phase_label(time_quote) and not study_phase_refresh_check:
                 reject(
                     "STUDY_PHASE_NOT_VISIT_TIME",
                     "方案期别是适用人群范围，不是受试者访视或回溯时间；保留原范围，仅校正时间措辞",
@@ -3557,10 +3573,8 @@ def validate_source_interpretation(
                 _preceding_sequence_boundary(unit, item, item.quoted_text) is not None
                 and normalized_time in normalize_source_excerpt(item.eligibility_sequence_quote or "")
             )
-            if not normalized_time or not any(
-                normalized_time in normalize_source_excerpt(part)
-                for part in [item.quoted_text, (item.scope_quote or "") if context_label is None else "", *unit.heading_path]
-            ) and not retained_sequence_time:
+            if not normalized_time or not grounded_scope_word(time_quote,
+                [item.quoted_text, (item.scope_quote or "") if context_label is None else "", *unit.heading_path]) and not retained_sequence_time:
                 reject("SOURCE_TIME_UNGROUNDED", "时间措辞不属于本条陈述、共享范围或所属标题",
                        "time_words", "correct_source_scope")
         reported_time = [normalize_source_excerpt(word) for word in item.time_words]
