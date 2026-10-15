@@ -64,6 +64,34 @@ def test_eligibility_review_rejects_cross_subject_path(client):
     assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
+@pytest.mark.parametrize("corrupt", ["fact", "locator"])
+def test_eligibility_read_retention_revalidates_after_each_request(client, monkeypatch, corrupt):
+    from fastapi.testclient import TestClient
+    from sqlalchemy import update
+    from app.storage.facts_models import ClinicalFactV2Record
+    from app.storage.evidence_locator_models import EvidenceLocatorArtifactRecord
+
+    from tests.v2.api.test_work_draft_confirmations import seed_saved_work_draft
+    _, chain, frozen, _, _ = seed_saved_work_draft(client, monkeypatch)
+    first = client.get(_url(chain))
+    assert first.status_code == 200, first.text
+    assert client.get(_url(chain)).json() == first.json()
+    with client.app.state.session_factory() as session, session.begin():
+        if corrupt == "fact":
+            identity = frozen.facts[0].fact_id
+            session.execute(update(ClinicalFactV2Record).where(ClinicalFactV2Record.fact_id == identity)
+                .values(payload_sha256="0" * 64))
+        else:
+            session.execute(update(EvidenceLocatorArtifactRecord)
+                .where(EvidenceLocatorArtifactRecord.locator_id == chain["locator_id"])
+                .values(payload_sha256="0" * 64))
+    failed = TestClient(client.app, raise_server_exceptions=False).get(_url(chain))
+    assert failed.status_code == (500 if corrupt == "fact" else 409)
+    if corrupt == "locator":
+        assert failed.json()["error"]["code"] == "STALE_AUTHORITY"
+    assert failed.content != first.content
+
+
 @pytest.mark.parametrize("code", ["用药01", "用药101"])
 def test_medication_projection_reaches_the_real_http_response_contract(client, monkeypatch, code):
     chain = _seed(client, "medication-wire")

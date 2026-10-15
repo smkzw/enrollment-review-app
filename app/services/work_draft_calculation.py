@@ -96,6 +96,21 @@ def binding_preserves_source_requirement(original, bound):
     return original.model_dump(exclude=excluded) == bound.model_dump(exclude=excluded)
 
 
+def independent_source_requirements(component):
+    """Unbound source requirements are records to check, never inferred predicates."""
+    independent = []
+    for req in component.evidence_requirements:
+        if req.variable_id is not None or req.predicate_ids:
+            continue
+        bindings = [bound for bound in component.evidence_requirements if
+            bound.variable_id is not None and len(bound.predicate_ids) == 1
+            and bound.requirement_id == "variable_requirement:" + sha256(":".join((
+                component.rule_component_id, bound.predicate_ids[0], req.requirement_id)).encode()).hexdigest()[:32]]
+        if not bindings or not all(binding_preserves_source_requirement(req, bound) for bound in bindings):
+            independent.append(req)
+    return independent
+
+
 @dataclass(frozen=True)
 class VariableSelection:
     fact_ids: tuple[str, ...]
@@ -106,18 +121,25 @@ class VariableSelection:
     chronology_conflict: bool = False
 
 
-def source_record_date(fact, evidence_refs, source_pages, *, allow_report_date=False, date_role=None):
+def source_record_date(fact, evidence_refs, source_pages, *, allow_report_date=False, date_role=None,
+                       allow_exam_date=False):
     """Explicit visit/sample headers may exclude future records, not date an event."""
     pages = {(page.source_document_version_id, page.page_number, page.page_artifact_id): page for page in source_pages}
     labels = [{"sampling": "采样时间", "visit": "就诊时间"}.get(date_role, "采样时间|就诊时间")]
+    if allow_exam_date and date_role is None:
+        labels.append("检查日期|检查时间")
     labels += ["报告日期|报告时间"] if allow_report_date else []
-    for label in labels:
+    texts = [page.effective_text for ref in (evidence_refs or {}).get(fact.fact_id, ())
+        if (page := pages.get((ref.source_document_version_id, ref.page_number, ref.page_artifact_id))) is not None]
+    return source_header_date(texts, labels)
+
+
+def source_header_date(texts, label_groups):
+    """Use explicit header roles in priority order; ambiguous or invalid dates stay unknown."""
+    for label in label_groups:
         values = set()
-        for ref in (evidence_refs or {}).get(fact.fact_id, ()):
-            page = pages.get((ref.source_document_version_id, ref.page_number, ref.page_artifact_id))
-            if page is None:
-                continue
-            for match in re.finditer(r"(?m)^\s*(?:" + label + r")\s*[:：]\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)", page.effective_text):
+        for text in texts:
+            for match in re.finditer(r"(?m)^\s*(?:" + label + r")\s*[:：]\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)", text):
                 try:
                     values.add(date(*(int(value) for value in match.groups())))
                 except ValueError:
@@ -137,11 +159,11 @@ def age_record_chronology(facts, evidence_refs, source_pages, definition, predic
         explicit = (fact.date_range.lower_bound if fact.date_range is not None
             and fact.date_range.precision.value == "day" and fact.date_role in {"sampling", "visit"} else None)
         document_date = source_record_date(fact, evidence_refs, source_pages,
-            date_role=fact.date_role if explicit is not None else None)
+            date_role=fact.date_role if explicit is not None else None, allow_exam_date=True)
         if explicit is not None and document_date is not None and explicit != document_date:
             return dates, True
         recorded = explicit or document_date or source_record_date(
-            fact, evidence_refs, source_pages, allow_report_date=True)
+            fact, evidence_refs, source_pages, allow_report_date=True, allow_exam_date=True)
         if recorded is not None:
             dates[fact.fact_id] = recorded
             value, _ = comparison_reading(fact, definition, predicate)
@@ -233,7 +255,8 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                     explicit_age_date = (fact.date_range is not None and fact.date_range.precision.value == "day"
                         and fact.date_role in {"sampling", "visit"})
                     age_recorded = (fact.date_range.lower_bound if explicit_age_date else
-                        source_record_date(fact, evidence_refs, source_pages, allow_report_date=True))
+                        source_record_date(fact, evidence_refs, source_pages, allow_report_date=True,
+                                           allow_exam_date=True))
                     if cutoff is not None and age_recorded is not None and age_recorded > cutoff:
                         continue
                     chronology_facts.append(fact)
@@ -424,7 +447,10 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
         return WorkDraftItem(**common, decision=D.NOT_DUE, reason_text="本条要求属于后续审核节点。")
     predicates = [predicate for expression in (component.expression, component.exception_expression)
                   if expression is not None for predicate in iter_atomic_predicates(expression)]
-    has_source_relations = bool(source_results and any(
+    records = {req.requirement_id: source_results[f"requirement:{clause.rule_component_id}:{req.requirement_id}"]
+        for req in independent_source_requirements(component) if req in due and source_results
+        and f"requirement:{clause.rule_component_id}:{req.requirement_id}" in source_results}
+    has_source_relations = bool(records or source_results and any(
         f"{clause.rule_component_id}:{p.predicate_id}" in source_results for p in predicates))
     policy = None if has_source_relations else absence_policy(clause, frozen, definitions)
     if policy == "mentioned":
@@ -445,10 +471,11 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             "reason": "本条含否定、例外或其他非事件条件，未见记录不能替代这些条件的核实。"}
                 if row["policy"] and key not in policy_predicates else row for key, row in relations.items()}
     from app.domain.contracts.work_draft import WorkDraftSourceRef
-    source_refs = [WorkDraftSourceRef.model_validate(ref) for row in relations.values()
+    source_refs = [WorkDraftSourceRef.model_validate(ref) for row in (*relations.values(), *records.values())
                    for ref in row.get("source_read_refs", ())]
     common["source_read_refs"] = source_refs
-    common["input_hash"] = canonical_hash({"calculation_input": input_hash, "source_relations": relations})
+    common["input_hash"] = canonical_hash({"calculation_input": input_hash,
+        "source_relations": relations, "source_requirements": records})
     try:
         selection = select_by_variable(component, frozen.facts, frozen.review_episode.anchor_dates,
             authority=frozen.authority, definitions=definitions, stage=frozen.review_episode.stage,
@@ -537,6 +564,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                     for pid in req.predicate_ids)}
         observed.update(req.requirement_id for req in due
             if any(req.requirement_id in fact.supported_requirement_ids for fact in selected))
+        observed.update(key for key, row in records.items() if row["truth"] == TruthValue.TRUE.value
+            and row["relation"] == "supports" and not row["conflict"] and row["applicable"] == "yes"
+            and row.get("source_read_refs"))
         # WP2 retained the source requirement and appended derived bindings. Its
         # exact content-derived identity proves ancestry; a display type does not.
         for original in due:
@@ -554,6 +584,7 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             context=context, episode_stage=frozen.review_episode.stage, expectations=expectations,
             conflicts=[], predicate_fact_ids={key: value.fact_ids for key, value in selection.items()},
             unverified_predicate_ids=frozenset(key for key, value in selection.items() if not value.fact_ids))
+        inactive_requirements = set()
         if relations:
             from app.domain.expression import ComponentEvaluation, EvaluationResult, _combine_bound_expression
             from app.domain.gates.assessment import derive_component_decision, derive_gate_gap_types
@@ -643,6 +674,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
         if GapType.CALCULATION_CAPABILITY_UNAVAILABLE in outcome.gaps:
             issue = _issue(clause.official_code, "系统暂不支持本条所需的计算方式。")
             return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)
+        if any(row.get("unsupported_record_time") for row in records.values()) and outcome.decision not in DETERMINATE | {D.NOT_DUE, D.NOT_APPLICABLE}:
+            issue = _issue(clause.official_code, "本项独立资料的有效时间要求尚未由系统核对，原文记录与其他结果保留。")
+            return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
         if (needs_source | numeric_history) - set(relations) and outcome.decision not in DETERMINATE | {D.NOT_DUE, D.NOT_APPLICABLE, D.CONFLICT}:
             issue = _issue(clause.official_code, "本条病历及用药记录的原文核对尚未完成，已有读取内容和其他独立结果保留。")
             return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail, evidence_refs=available_refs)
@@ -651,7 +685,7 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             used_ids.update(outcome.evaluation.exception.used_fact_ids)
         used = [fact for fact in selected if fact.fact_id in used_ids]
         low_reason = _risk_reason(used)
-        if low_reason is None and relations:
+        if low_reason is None and (relations or records):
             low_reason = "依据原文作出的含义判断，尚未经人工核实。"
         if low_reason is None and any(value.calculation_unverified_ids for value in selection.values()):
             low_reason = "另有相关检验记录的参考范围未核实，本结论仅依据已有完整读数。"
@@ -717,14 +751,11 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             "已找到相关记录，但" + "、".join(unavailable) + "的内容、归属或适用时间尚未核实，暂不能据此完成判断。" if unavailable else
             "尚未形成可用于本条的" + "、".join(missing_labels) + "已核实记录；请查看原件及尚未采用的内容，不代表原件没有记载。" if missing_labels else
             "现有记录尚不能核对本条全部条件，请查看所列依据与具体子项。")
+        pending_requirements = [req for req in due if req.requirement_id not in observed
+            and req.requirement_id not in inactive_requirements]
         if relations:
             notes = list(dict.fromkeys(row["reason"] for row in relations.values()))
             reason = "；".join([*summaries, *notes])
-            pending_requirements = [req for req in due if req.requirement_id not in observed
-                and req.requirement_id not in inactive_requirements]
-            if outcome.decision not in DETERMINATE | {D.NOT_DUE, D.NOT_APPLICABLE} and pending_requirements:
-                labels = list(dict.fromkeys(req.description for req in pending_requirements if req.description))
-                reason += "。原文关系与所需记录分别核对；以下记录尚未核实：" + "；".join(labels)
             missing_calculations = list(dict.fromkeys(definitions[variable_id].label_zh
                 for predicate_id, variable_id in predicate_variables.items()
                 if variable_id in definitions and predicate_id not in relations
@@ -737,16 +768,19 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                 reason += "。已采用的数量记录与病历原文关系不一致，两者均已保留，未选择有利结果。"
             if any(row["policy"] for row in relations.values()):
                 reason += "。按本次已提供且已核对资料未见排除依据，不表示原件明确否认或研究者另行签字。"
+        if outcome.decision not in DETERMINATE | {D.NOT_DUE, D.NOT_APPLICABLE} and pending_requirements:
+            labels = list(dict.fromkeys(req.description for req in pending_requirements if req.description))
+            reason += "。以下记录尚未核实：" + "；".join(labels)
         if any(row["conflict"] for row in relations.values()) and outcome.decision not in DETERMINATE:
             outcome = replace(outcome, decision=D.CONFLICT)
         elif outcome.decision == D.PROFESSIONAL_JUDGMENT and relations:
             outcome = replace(outcome, decision=D.INDETERMINATE)
             reason = "对应节点病历尚无足以支持本条判断的记录，现为证据不足；不要求另外重复签名。" + reason
         reason_parts = []
+        attention_predicates = set()
         if relations:
             # Trace unresolved branches together: changing one leaf alone can
             # hide uncertainty shared by nested alternatives.
-            attention_predicates = set()
             pending_expressions = [active_trigger]
             if evaluation.trigger.truth != TruthValue.FALSE:
                 pending_expressions.append(active_exception)
@@ -774,21 +808,21 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                     else definition.label_zh)
                 reason_parts.append(WorkDraftReasonPart(condition_id=f"{clause.rule_component_id}:{pid}",
                     condition_text=label, reason_text=note, requires_attention=attention))
-            if outcome.decision not in DETERMINATE | {D.NOT_DUE, D.NOT_APPLICABLE}:
-                for original in pending_requirements:
-                    if not original.description or original.predicate_ids:
-                        continue
-                    linked_attention = any(req.variable_id is not None and len(req.predicate_ids) == 1
-                        and req.predicate_ids[0] in attention_predicates
-                        and req.requirement_id == "variable_requirement:" + sha256(":".join((
-                            component.rule_component_id, req.predicate_ids[0], original.requirement_id)).encode()).hexdigest()[:32]
-                        and binding_preserves_source_requirement(original, req) for req in due)
-                    if not linked_attention:
-                        reason_parts.append(WorkDraftReasonPart(
-                            condition_id=f"{clause.rule_component_id}:requirement:{original.requirement_id}",
-                            condition_text=original.description,
-                            reason_text="这项所需记录尚未核实。已有原件可继续查看，不表示检查未做或资料一定未提供。",
-                            requires_attention=True))
+        if outcome.decision not in DETERMINATE | {D.NOT_DUE, D.NOT_APPLICABLE}:
+            for original in pending_requirements:
+                if not original.description or original.predicate_ids:
+                    continue
+                linked_attention = any(req.variable_id is not None and len(req.predicate_ids) == 1
+                    and req.predicate_ids[0] in attention_predicates
+                    and req.requirement_id == "variable_requirement:" + sha256(":".join((
+                        component.rule_component_id, req.predicate_ids[0], original.requirement_id)).encode()).hexdigest()[:32]
+                    and binding_preserves_source_requirement(original, req) for req in due)
+                if not linked_attention:
+                    reason_parts.append(WorkDraftReasonPart(
+                        condition_id=f"{clause.rule_component_id}:requirement:{original.requirement_id}",
+                        condition_text=original.description,
+                        reason_text="这项所需记录尚未核实。已有原件可继续查看，不表示检查未做或资料一定未提供。",
+                        requires_attention=True))
         return WorkDraftItem(**common, decision=outcome.decision,
             confidence=("low" if low_reason else "high") if outcome.decision in DETERMINATE else None,
             confidence_reason=low_reason if outcome.decision in DETERMINATE else None,

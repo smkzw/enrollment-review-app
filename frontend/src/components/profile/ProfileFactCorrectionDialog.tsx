@@ -459,6 +459,15 @@ function CorrectionFields({
     return (
       <div className="profile-correction-fields">
         <div className="profile-correction-fields__grid">
+          {item.value === null && <label className="profile-correction-field">
+            <span>记录形式</span>
+            <select value={draft.valueKind} disabled={disabled} onChange={event => {
+              const valueKind = event.target.value;
+              if (valueKind === "number" || valueKind === "string" || valueKind === "boolean") onChange({ valueKind });
+            }}>
+              <option value="string">文字</option><option value="number">数字</option><option value="boolean">是或否</option>
+            </select>
+          </label>}
           {options && <label className="profile-correction-field"><span>所属审核项目</span>
             <select value={draft.variableId === undefined ? options.variableId ?? "" : draft.variableId ?? ""}
               disabled={disabled} onChange={event => {
