@@ -50,6 +50,23 @@ def test_source_union_preserves_calendar_units_exception_and_stable_item_identit
     assert build(proposal, selection, view).medications[0].item_id == result.medications[0].item_id
 
 
+def test_class_scope_is_explicit_and_changes_only_item_identity():
+    from app.domain.contracts.rules import MedicationRestriction
+    selection, view, proposal = frozen_medications()
+    original = build(proposal, selection, view)
+    assert "class_scope" not in original.medications[0].model_dump(mode="json")
+    proposal["medications"][0]["drug_class_id"] = next(iter(original.drug_classes))
+    prior = build(proposal, selection, view)
+    proposal["medications"][0]["class_scope"] = "all_members"
+    changed = build(proposal, selection, view)
+    assert prior.medications[0].item_id != changed.medications[0].item_id
+    assert prior.input_sha256 == changed.input_sha256
+    assert MedicationRestriction.model_validate(proposal["medications"][0]).class_scope == "all_members"
+    proposal["medications"][0]["drug_class_id"] = None
+    with pytest.raises(ValueError, match="类别适用范围"):
+        build(proposal, selection, view)
+
+
 def test_closed_zero_lower_distance_is_equivalent_not_an_invented_source_duration():
     selection, view, proposal = frozen_medications()
     expected = build(proposal, selection, view).medications[0]

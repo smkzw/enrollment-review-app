@@ -308,4 +308,49 @@ def test_bad_class_member_changes_never_write_or_borrow_old_reading(build_app, d
             **({"proposal_ref": result["proposal_ref"]} if fault == "false_receipt" else {})})
         assert response.status_code == 409, response.text
         assert client.get(path).json()["revision_id"] == scope["draft_revision_id"]
+
+
+def test_class_scope_requires_new_review_and_survives_verification_publication(build_app, data_paths, monkeypatch):
+    from app.storage.repositories import get_rule_set
+    calls = install_completion(monkeypatch)
+    app = build_app(run_runner=False)
+    with TestClient(app) as client:
+        preserved_scope(app, data_paths, medication_text="筛选前4周内禁止使用药物甲。")
+        path, scope = save_scope(client)
+        suggested = client.post(path + "/medications/suggest", json={"expected_revision_id": scope["draft_revision_id"]}).json()
+        supplement = suggested["supplement"]
+        one = {key: value for key, value in supplement["medications"][0].items() if key != "item_id"}
+        one["drug_class_id"] = next(iter(supplement["drug_classes"]))
+        proposal = {"medications": [one, deepcopy(one)], "source_dispositions": supplement["source_dispositions"]}
+        proposal["medications"][1]["drug_class_id"] = None
+        saved = client.put(path + "/medications", json={"expected_revision_id": scope["draft_revision_id"], "proposal": proposal})
+        assert saved.status_code == 200, saved.text
+        current = saved.json()
+        reviews = client.get(path + "/reviews").json()
+        entries = [{"official_code": row["official_code"], "rule_content_hash": row["rule_content_hash"],
+            "note": "excluded" if row["kind"] == "procedure" else None,
+            "result_variables": ["eos"] if row["kind"] == "procedure" else []} for row in reviews["entries"]]
+        assert client.post(path + "/reviews", json={"expected_revision_id": current["revision_id"],
+            "reviewer_kind": "builder_verification", "entries": entries}).status_code == 200
+        proposal["medications"][0]["class_scope"] = "all_members"
+        changed = client.put(path + "/medications", json={"expected_revision_id": current["revision_id"], "proposal": proposal})
+        assert changed.status_code == 200, changed.text
+        after = client.get(path + "/reviews").json()
+        medication_rows = [row for row in after["entries"] if row["kind"] == "medication"]
+        assert medication_rows[0]["review"] is None and medication_rows[1]["review"] is not None
+        assert all(row["review"] is not None for row in after["entries"] if row["kind"] in {"rule", "procedure"})
+        publication = path.removesuffix("/draft") + "/publish"
+        assert client.post(publication, json={"idempotency_key": "unreviewed-scope"}).status_code == 409
+        pending = [{"official_code": row["official_code"], "rule_content_hash": row["rule_content_hash"]}
+                   for row in after["entries"] if row["review"] is None]
+        assert client.post(path + "/reviews", json={"expected_revision_id": changed.json()["revision_id"],
+            "reviewer_kind": "builder_verification", "entries": pending}).status_code == 200
+        published = client.post(publication, json={"idempotency_key": "reviewed-scope"})
+        assert published.status_code == 200, published.text
+        assert published.json()["verification_only"] is True
+        with app.state.session_factory() as session:
+            rules = get_rule_set(session, published.json()["rule_set_id"], published.json()["rule_set_revision"])
+            assert rules.scope_supplement.medications[0].class_scope == "all_members"
+            assert rules.scope_supplement.medications[1].class_scope is None
+        assert len(calls) == 1
         assert len(calls) == 1

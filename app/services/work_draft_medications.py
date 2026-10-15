@@ -73,7 +73,7 @@ def calculate_medications(frozen, rule_set, *, evidence_refs):
                 if exposure.exposure_id in conflicted:
                     has_conflict = True
                     continue
-                if restriction.drug_class_id is not None:
+                if restriction.drug_class_id is not None and restriction.class_scope != "all_members":
                     issue = SystemIssue(kind="method_unsupported", affected_codes=[restriction.item_id],
                         detail="已找到类别表中的药名，但本条所需的给药途径、制剂等类别限定尚未完成核对。",
                         alternative="核实具体用药与本条类别限定的关系；不能仅凭药名触发限制。")

@@ -105,6 +105,37 @@ def test_ongoing_does_not_invent_continuation_to_a_future_anchor():
     assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.INDETERMINATE
 
 
+@pytest.mark.parametrize("scope,expected", [(None, None), ("qualified", None), ("all_members", D.EXCLUSION_TRIGGERED)])
+def test_class_scope_only_changes_qualified_exposure_consumption(scope, expected):
+    frame, rules, refs = medication_context()
+    restriction = rules.scope_supplement.medications[0]
+    restriction.drug_class_id = "fixture_class"
+    restriction.class_scope = scope
+    rules.scope_supplement.drug_classes = {"fixture_class": ["药物甲"]}
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == expected
+    assert (row.system_issue is not None) == (scope != "all_members")
+    if scope == "all_members":
+        assert row.confidence == "low" and row.evidence_refs == refs["med-fact"]
+        frame.medication_exposures = []
+        assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.INDETERMINATE
+
+
+@pytest.mark.parametrize("fault", ["exception", "missing_fact", "wrong_page", "after_cutoff", "conflict"])
+def test_class_scope_does_not_bypass_source_date_or_exception(fault):
+    frame, rules, refs = medication_context()
+    restriction = rules.scope_supplement.medications[0]
+    restriction.drug_class_id, restriction.class_scope = "fixture_class", "all_members"
+    rules.scope_supplement.drug_classes = {"fixture_class": ["药物甲"]}
+    if fault == "exception": restriction.exception_excerpt = "另有例外"
+    elif fault == "missing_fact": refs = {}
+    elif fault == "wrong_page": frame.source_pages = []
+    elif fault == "after_cutoff": frame.medication_exposures[0] = frame.medication_exposures[0].model_copy(update={"record_time": datetime(2026, 4, 1, tzinfo=UTC)})
+    else: frame.conflict_groups = [SimpleNamespace(member_kind="exposure", exposure_ids=["exposure"])]
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == (D.CONFLICT if fault == "conflict" else D.INDETERMINATE)
+
+
 @pytest.mark.parametrize("status", [DurationStatus.UNKNOWN, DurationStatus.INTERMITTENT, DurationStatus.ONGOING])
 def test_dated_start_inside_prohibited_window_is_a_low_confidence_positive_not_invented_cessation(status):
     frame, rules, refs = medication_context()

@@ -72,6 +72,7 @@ export function ProtocolMedicationRestrictions({ jobId, revisionId, content, dru
     finally { if (active.current === identity) setBusy(false); }
   }
   function change(index: number, patch: Partial<MedicationRestriction>) {
+    if ("drug_text" in patch || "drug_class_id" in patch || "source_quotes" in patch) patch = { ...patch, class_scope: null };
     setDraft(previous => previous ? { ...previous, medications: previous.medications.map((item, position) => position === index ? { ...item, ...patch } : item) } : null);
     setChanged(true);
   }
@@ -116,6 +117,10 @@ export function ProtocolMedicationRestrictions({ jobId, revisionId, content, dru
             <label>药物或治疗原文<input disabled={busy} value={item.drug_text} onChange={event => change(index, { drug_text: event.target.value })} /></label>
             <label>药物类别<select disabled={busy} value={item.drug_class_id ?? ""} onChange={event => change(index, { drug_class_id: event.target.value || null })}>
               <option value="">尚未归类</option>{Object.entries(draft.drug_classes ?? drugClasses).map(([id, members]) => <option key={id} value={id}>{members.slice(0, 3).join("、")}等</option>)}</select></label>
+            {item.drug_class_id && <label>类别适用范围<select disabled={busy} value={item.class_scope ?? ""}
+              onChange={event => change(index, { class_scope: event.target.value as MedicationRestriction["class_scope"] || null })}>
+              <option value="">尚未核对</option><option value="all_members">本条适用于该类全部药物</option>
+              <option value="qualified">另有途径、制剂等限定</option></select></label>}
             <label>关联入排标准<input disabled={busy} value={item.applies_to_rule ?? ""} placeholder="没有明确关联则留空" onChange={event => change(index, { applies_to_rule: event.target.value || null })} /></label>
             <label>尚未核清的内容<input disabled={busy} value={item.unresolved_reason ?? ""} onChange={event => change(index, { unresolved_reason: event.target.value || null })} /></label>
           </div>

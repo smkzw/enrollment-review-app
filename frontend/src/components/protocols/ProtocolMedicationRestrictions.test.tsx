@@ -17,6 +17,37 @@ function supplement() {
 }
 afterEach(() => vi.unstubAllGlobals());
 
+it("类别适用范围只能明确选择，修改药名后须重新核对，不自行批准", async () => {
+  const user = userEvent.setup();
+  const initial = supplement();
+  const content = { ...initial, drug_classes: { class_one: ["药物甲"] }, medications: [
+    { ...initial.medications[0], drug_class_id: "class_one", class_scope: null as "all_members" | null }] };
+  const request = vi.fn(async (_url: string, options: RequestInit) => {
+    expect(JSON.parse(String(options.body)).proposal.medications[0].class_scope).toBe("all_members");
+    return new Response(JSON.stringify({ revision_id: "next" }));
+  });
+  vi.stubGlobal("fetch", request);
+  render(<ProtocolMedicationRestrictions jobId="job" revisionId="revision" content={{ scope_supplement: content }} drugClasses={{}} onSaved={vi.fn()} />);
+  await user.click(screen.getByText(/用药与伴随治疗限制/));
+  await user.click(screen.getByText(/药物甲 ·/));
+  expect(screen.getByLabelText("类别适用范围")).toHaveValue("");
+  await user.selectOptions(screen.getByLabelText("类别适用范围"), "all_members");
+  expect(request).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "保存补充要求" }));
+  expect(request).toHaveBeenCalledOnce();
+  await user.type(screen.getByLabelText("药物或治疗原文"), "制剂");
+  expect(screen.getByLabelText("类别适用范围")).toHaveValue("");
+  expect(screen.queryByRole("button", { name: /批准|发布/ })).not.toBeInTheDocument();
+});
+
+it("未知类别范围或无类别的范围不得被解码为已核清", () => {
+  for (const scope of ["all_members", "not-supported"]) {
+    const content = supplement();
+    Object.assign(content.medications[0], { class_scope: scope });
+    expect(() => decodeScopeSupplement(content)).toThrow(/类别/);
+  }
+});
+
 it("只在操作后请求，用来源提案保存，不伪装批准或发布", async () => {
   const user = userEvent.setup();
   const saved = vi.fn();
