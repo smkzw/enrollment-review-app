@@ -20,7 +20,7 @@
   断言为事实；先期明确为兜底/无信号的期望允许在完整证据到达时解除，历史
   来源未知（None）按未解决保守处理。
 
-本模块只依赖 domain/storage/workflow.errors，不依赖任何 service，避免循环导入。
+来源保留与当前事实读取在函数内惰性引用既有 service，避免启动时循环导入。
 """
 
 from __future__ import annotations
@@ -63,6 +63,7 @@ from app.storage.fact_repositories import (
     ClinicalFactV2Repository,
     FactGateResultRepository,
     FactNormalizationCandidateRepository,
+    FactNormalizationCallRepository,
     FactNormalizationRunRepository,
     FactNormalizationUnresolvedItemRepository,
     MedicationExposureV2Repository,
@@ -364,14 +365,15 @@ def select_reprojection_source_runs(
     authority: FactAuthority,
     target_kind: _TargetKind,
     target_id: str,
-) -> list[str]:
+) -> dict[str, frozenset[str] | None]:
     """选择修订重投影允许使用的源运行（确定性升序、去重、逐运行校验权威）。
 
     选择范围 = 当前权威下每一条未被修订取代的活动事实/事件/暴露 ∪ 本次修订
     目标，各自沿不可变修订记录回溯全部祖先实体，取这些实体引用的运行。
     只修正当前目标而遗漏其他活动实体的谱系，会让它们原始运行的未解决项在
     无关修订后被静默丢弃。任一实体或运行缺失、跨权威即视为谱系损坏并拒绝；
-    绝不纳入已被丢弃的分支或全部历史运行。
+    绝不纳入已被丢弃的分支或全部历史运行。返回运行及允许重放的调用；None
+    表示整个来源相容。部分保留仅重放来源未变的调用，不借一条事实批准整次运行。
     """
     corrections = FactCorrectionRepository(session).list_by_review_episode(authority.review_episode_id)
     by_new_entity = corrections_by_new_entity(corrections)
@@ -402,16 +404,20 @@ def select_reprojection_source_runs(
     from app.storage.fact_authority import FactAuthorityValidator
     validator = FactAuthorityValidator(session)
     reusable_sources = {}
-    def source_matches(previous):
+    def source_scope(previous):
         key = previous.model_dump_json()
         if key not in reusable_sources:
-            reusable_sources[key] = validator.rule_revision_source_is_reusable(previous, authority)
-            if not reusable_sources[key]:
+            if validator.rule_revision_source_is_reusable(previous, authority):
+                reusable_sources[key] = None
+            else:
                 retained = validator.retained_source_documents(previous, authority)
                 source = validator.validate_frozen_source(previous)
-                # This routine replays an entire run's gaps, not one selected fact.
-                # Partial document retention cannot authorize unrelated old signals.
-                reusable_sources[key] = bool(retained) and {page.source_document_version_id for page in source.manifest} <= retained
+                from app.services.fact_normalization_source_adapter import build_doc_version_to_logical_map
+                documents, _ = build_doc_version_to_logical_map(session, source)
+                reusable_sources[key] = {
+                    (documents[page.source_document_version_id], page.page_number)
+                    for page in source.manifest if page.source_document_version_id in retained
+                }
         return reusable_sources[key]
     run_ids: set[str] = set()
     for kind, entity_id in sorted(lineage_entities):
@@ -427,6 +433,7 @@ def select_reprojection_source_runs(
             )
         run_ids.add(entity.run_id)
     run_repository = FactNormalizationRunRepository(session)
+    scopes: dict[str, frozenset[str] | None] = {}
     for run_id in sorted(run_ids):
         try:
             run = run_repository.get(run_id)
@@ -434,11 +441,19 @@ def select_reprojection_source_runs(
             raise ReprojectionLineageError(
                 f"所选源运行 {run_id} 缺少持久化运行记录，拒绝重投影"
             ) from exc
-        if not source_matches(run.authority):
+        pages = source_scope(run.authority)
+        if pages is None:
+            scopes[run_id] = None
+            continue
+        calls = FactNormalizationCallRepository(session).list_by_run(run_id)
+        selected = frozenset(call.call_id for call in calls
+            if {(call.logical_document_id, page) for page in call.page_numbers} <= pages)
+        if not selected:
             raise ReprojectionLineageError(
-                f"源运行 {run_id} 的权威元组与本次修订不一致，拒绝将其纳入重投影"
+                f"源运行 {run_id} 没有来源完整保留的调用，拒绝将其纳入重投影"
             )
-    return sorted(run_ids)
+        scopes[run_id] = selected
+    return scopes
 
 
 def _signal_key(signal: CoverageGapSignal) -> str:
@@ -547,6 +562,7 @@ def reconstruct_reprojection_gap_signals(
     authority: FactAuthority,
     target_kind: _TargetKind,
     target_id: str,
+    diagnostics: dict | None = None,
 ) -> list[CoverageGapSignal]:
     """按同一推导从所选源运行重建修订重投影的结构化缺口信号。
 
@@ -554,8 +570,11 @@ def reconstruct_reprojection_gap_signals(
     当前权威下未被取代的已发布事实所支持的资料要求（历史「曾经接受」的候选
     可能已被取代或解除绑定，不得据此继续压制）；到期模板按共用推导补 fallback
     兜底；先期无法按源记录复核的具体输入按保守策略保留。
+    旧修订存在、当前模板全集已不存在的绑定只在内存排除并记入 diagnostics；
+    不推断疑问已解决、不映射到新的要求，也不产生面向用户的退役编号清单。
+    list_expectation_templates 必须返回整个修订，不得在此以显示或阶段过滤。
     """
-    run_ids = select_reprojection_source_runs(
+    run_scopes = select_reprojection_source_runs(
         session, authority=authority, target_kind=target_kind, target_id=target_id
     )
     from app.storage.active_facts import current_fact_heads
@@ -571,21 +590,52 @@ def reconstruct_reprojection_gap_signals(
     unresolved_items: list[PersistedEvidenceNormalizerUnresolvedItem] = []
     fact_candidates: list[ClinicalFactCandidateV2] = []
     gate_results: list[FactGateResult] = []
-    for run_id in run_ids:
-        unresolved_items.extend(
-            FactNormalizationUnresolvedItemRepository(session).list_by_run(run_id)
-        )
-        fact_candidates.extend(
-            candidate
-            for candidate in FactNormalizationCandidateRepository(
-                session
-            ).list_by_run(run_id)
-            if isinstance(candidate, ClinicalFactCandidateV2)
-        )
+    unreconfirmed_requirements: set[str] = set()
+    templates = list_expectation_templates(session, authority.rule_set_id, authority.rule_set_revision)
+    current_requirements = {template.requirement_id for template in templates}
+    prior_requirements = {}
+    omitted: dict[str, list[str]] = {}
+    if diagnostics is not None:
+        diagnostics.update({"run_call_scopes": {key: None if value is None else sorted(value) for key, value in run_scopes.items()},
+            "retired_requirement_ids_by_run": omitted})
+
+    def current_bindings(requirements, previous, run_id):
+        missing = set(requirements) - current_requirements
+        if missing and previous != authority:
+            key = (previous.rule_set_id, previous.rule_set_revision)
+            if key not in prior_requirements:
+                prior_requirements[key] = {row.requirement_id for row in list_expectation_templates(session, *key)}
+            retired = missing & prior_requirements[key]
+            if retired:
+                omitted[run_id] = sorted(set(omitted.get(run_id, ())) | retired)
+                return sorted(set(requirements) - retired)
+        return requirements
+
+    for run_id, call_scope in run_scopes.items():
+        previous = FactNormalizationRunRepository(session).get(run_id).authority
+        results = [result for result in FactGateResultRepository(session).list_by_run(run_id)
+            if result.gate == FactGate.TRANSACTIONAL_PUBLISH]
+        outcomes = {result.candidate_id: result.outcome for result in results}
+        for unresolved in FactNormalizationUnresolvedItemRepository(session).list_by_run(run_id):
+            requirements = current_bindings(unresolved.item.affected_requirement_ids, previous, run_id)
+            if not requirements:
+                continue
+            unresolved = unresolved.model_copy(update={"item": unresolved.item.model_copy(update={"affected_requirement_ids": requirements})})
+            if call_scope is None or unresolved.call_id in call_scope:
+                unresolved_items.append(unresolved)
+            else:
+                unreconfirmed_requirements.update(unresolved.item.affected_requirement_ids)
+        for candidate in FactNormalizationCandidateRepository(session).list_by_run(run_id):
+            if not isinstance(candidate, ClinicalFactCandidateV2):
+                continue
+            candidate = candidate.model_copy(update={"supported_requirement_ids": current_bindings(
+                candidate.supported_requirement_ids, previous, run_id)})
+            if call_scope is None or candidate.call_id in call_scope:
+                fact_candidates.append(candidate)
+            elif outcomes.get(candidate.candidate_id) != GateOutcome.ACCEPTED:
+                unreconfirmed_requirements.update(set(candidate.supported_requirement_ids) - accepted_requirements)
         gate_results.extend(
-            result
-            for result in FactGateResultRepository(session).list_by_run(run_id)
-            if result.gate == FactGate.TRANSACTIONAL_PUBLISH
+            result for result in results if call_scope is None or result.call_id in call_scope
         )
     unresolved_items.sort(key=lambda item: (item.run_id, item.unresolved_item_id))
     signals = expectation_gap_signals(
@@ -597,6 +647,19 @@ def reconstruct_reprojection_gap_signals(
         accepted_requirements=accepted_requirements,
         judgment_search_summaries=_lazy_judgment_search_summaries(session, authority),
     )
+    episode = EpisodeRepository(session).get(authority.review_episode_id)
+    missing = unreconfirmed_requirements - {template.requirement_id for template in templates}
+    if missing:
+        raise ReprojectionLineageError("旧读取的疑问尚未对应当前资料要求，不能静默清除：" + ", ".join(sorted(missing)))
+    for template in templates:
+        if (template.requirement_id in unreconfirmed_requirements
+                and stage_rank(template.due_stage) <= stage_rank(episode.stage)
+                and (template.due_stage != episode.stage or template.workflow_stage_id == episode.workflow_stage_id)):
+            signals.append(CoverageGapSignal(
+                kind=GapType.OBSERVATION_UNVERIFIED,
+                detail="旧读取包含已变更的资料来源，相关疑问不能沿用原判断，尚待按当前来源核实。",
+                applies_to_template_id=template.template_id,
+            ))
     signals.extend(
         _prior_unreconfirmed_signals(
             session, authority=authority, concrete_signals=signals

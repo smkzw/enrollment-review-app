@@ -487,6 +487,7 @@ def _template(
     required_source_types: tuple[str, ...] = (),
     description: str = "资料核对要求",
     source_validity_window=None,
+    rule_set_revision: int = 1,
 ) -> EvidenceExpectationTemplate:
     """种子模板记录（要求 FK 行 + 模板行）并返回合法合同。"""
     requirement_id = f"slice54-{requirement_id}"
@@ -505,17 +506,17 @@ def _template(
         source_validity_window=source_validity_window,
     )
     requirement_row = _add(session, EvidenceRequirementRecord(
-        rule_set_id=ids["rule_set_id"], rule_set_revision=1,
+        rule_set_id=ids["rule_set_id"], rule_set_revision=rule_set_revision,
         requirement_id=requirement_id, rule_component_id=None,
         procedure_catalog_item_id=f"{ids['run_id']}-catalog",
         fact_type=fact_type, due_stage=due_stage.value,
         payload_json=_PAYLOAD, payload_sha256=_PAYLOAD_SHA, created_at=NOW,
     ))
     _bind_payload(requirement_row, requirement)
-    template_id = template_identity(ids["rule_set_id"], 1, requirement_id)
+    template_id = template_identity(ids["rule_set_id"], rule_set_revision, requirement_id)
     projection_sha256 = template_projection_sha256(
         source_validity_window=source_validity_window,
-        rule_set_id=ids["rule_set_id"], revision=1,
+        rule_set_id=ids["rule_set_id"], revision=rule_set_revision,
         requirement_id=requirement_id, due_stage=due_stage,
         study_phase=StudyPhase.PHASE_III,
         workflow_stage_id=ids["workflow_stage_id"], fact_type=fact_type,
@@ -532,7 +533,7 @@ def _template(
         source_validity_window=source_validity_window,
         template_id=template_id,
         rule_set_id=ids["rule_set_id"],
-        rule_set_revision=1,
+        rule_set_revision=rule_set_revision,
         requirement_id=requirement_id,
         due_stage=due_stage,
         study_phase=StudyPhase.PHASE_III,
@@ -551,7 +552,7 @@ def _template(
     )
     template_row = _add(session, EvidenceExpectationTemplateRecord(
         template_id=template_id, rule_set_id=ids["rule_set_id"],
-        rule_set_revision=1, requirement_id=requirement_id,
+        rule_set_revision=rule_set_revision, requirement_id=requirement_id,
         due_stage=due_stage.value, study_phase="phase_iii",
         workflow_stage_id=ids["workflow_stage_id"], fact_type=fact_type,
         required_source_types=list(required_source_types),
