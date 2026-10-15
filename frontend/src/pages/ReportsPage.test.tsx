@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewHistoryRunDetailView } from "../api/review-history/reviewHistoryTypes";
 import { ReportsPage } from "./ReportsPage";
-import { frozenReviewExport } from "../domain/frozenReviewExport";
+import { frozenReviewCollectionExport, frozenReviewExport } from "../domain/frozenReviewExport";
 import { getCatalogRepository } from "../api";
 
 const mocks = vi.hoisted(() => ({ listRuns: vi.fn(), getRun: vi.fn(), canModify: true }));
@@ -107,8 +107,9 @@ describe("报告", () => {
       expect(content).toContain("该定义适用对象尚待澄清");
       expect(content).toContain("连续期间计算尚未支持");
       expect(content).toContain("特殊情况不适用");
-      expect(content).toContain("例外原文：特殊情况不适用");
-      expect(content).toContain("涉及阶段：筛选期至治疗结束");
+      const visible = format === "html" ? new DOMParser().parseFromString(content, "text/html").body.textContent : content;
+      expect(visible).toContain("例外原文：特殊情况不适用");
+      expect(visible).toContain("涉及阶段：筛选期至治疗结束");
       expect(content).not.toContain("time_validity");
       expect(content).not.toContain("prohibited");
       expect(content).not.toContain("本次审核未记录补充事项");
@@ -206,6 +207,11 @@ describe("报告", () => {
       systemIssues: [{ kind: "model_output_invalid", affectedCodes: ["IN-01"], detail: "读取意见尚未一致", alternative: "原件保留，可继续核查" },
         { kind: "excerpt_unverified", affectedCodes: [], detail: "原件记录尚待核实", alternative: "不作阴性解释", pageNumber: 4 },
         { kind: "excerpt_unverified", affectedCodes: [], detail: "来源范围尚待核清", alternative: "不猜来源" }] };
+    const quote = { sourceDocumentVersionId: "internal-document-id", pageArtifactId: "page-3", pageNumber: 3,
+      excerpt: "同一检验读数。", disposition: "mentioned" as const };
+    report.sourceFileNames = { "internal-document-id": "检验报告.pdf" };
+    report.workDraft.clauses[0].sourceReadRefs = [quote, quote];
+    report.workDraft.componentClauses![0].sourceReadRefs = [quote, { ...quote, pageArtifactId: "page-4", pageNumber: 4 }];
     mocks.getRun.mockResolvedValue(report);
     mocks.listRuns.mockImplementation(async (subjectId: string, reviewEpisodeId: string) => ({ subjectId, reviewEpisodeId, items: [report.run] }));
     const before = JSON.stringify(report);
@@ -235,7 +241,29 @@ describe("报告", () => {
       expect(content).toContain("尚未关联条款的记录");
       expect(content).toContain("后续节点仍须另行审核");
       expect(content).not.toContain("本次审核未记录补充事项");
+      expect(content).not.toContain("saved-run");
+      expect(content).not.toContain("snapshot-1");
+      expect(content).not.toContain("processing-1");
+      expect(content).not.toContain("internal-document-id");
+      expect(content.match(/同一检验读数/g)).toHaveLength(2); // Same page folds; different pages remain distinct.
+      if (format === "html") {
+        const document = new DOMParser().parseFromString(content, "text/html");
+        expect([...document.querySelectorAll("h2")].filter(h => h.textContent?.includes("IN-01"))).toHaveLength(1);
+        expect(document.querySelectorAll("h3")).toHaveLength(1);
+        const details = [...document.querySelectorAll("details")].find(node => node.querySelector("summary")?.textContent === "分项核对（1）");
+        expect(details?.hasAttribute("open")).toBe(false);
+        expect(details?.textContent).toContain("基线期还未到");
+        expect(content).toContain('addEventListener("beforeprint"');
+        expect(content).toContain('addEventListener("afterprint"');
+      } else {
+        expect(content.split("\n").filter(line => line.startsWith("### "))).toHaveLength(1);
+      }
     }
+    expect(frozenReviewCollectionExport([report], "html", new Date(timestamp))).not.toContain("saved-run");
     expect(JSON.stringify(report)).toBe(before);
+    const broken = structuredClone(report);
+    broken.workDraft!.componentClauses![0].factRefs = [{ factId: "missing-fact", locatorId: "missing-locator",
+      sourceDocumentVersionId: "internal-document-id", pageArtifactId: "page-4", pageNumber: 4, excerpt: "未知出处" }];
+    expect(() => frozenReviewExport(broken, "html", new Date(timestamp))).toThrow("工作稿引用的原件位置不完整");
   });
 });

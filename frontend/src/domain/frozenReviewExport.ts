@@ -3,7 +3,7 @@ import { actionStateLabel, actionTargetLabel, decisionLabel, gapTypeLabel, stage
 import { reviewConditionNotes } from "./reviewConditionNotes";
 import type { LocatorView } from "../api/evidence";
 
-interface ReportSection { title: string; paragraphs: string[] }
+interface ReportSection { title: string; paragraphs: string[]; sources?: string[]; children?: ReportSection[] }
 export function reviewSystemIssueLabel(issue: { affectedCodes: string[]; pageNumber?: number | null }): string {
   return issue.affectedCodes.join("、") || (issue.pageNumber ? `原件第 ${issue.pageNumber} 页` : "尚未关联条款的记录");
 }
@@ -21,7 +21,7 @@ export function reviewLimitationContext(item: ReviewHistoryRestrictedRequirement
   ];
 }
 const controlLabels = { fulfilled: "已满足", unfulfilled: "未满足", unverified: "尚无法判定", not_applicable: "本次不适用" };
-const locatorText = (locator: LocatorView) => `资料版本 ${locator.sourceDocumentVersionId}，第 ${locator.pageNumber} 页，${locator.precisionLabel}：${locator.excerpt ?? "未保存文字摘录，请在系统中查看原件。"}`;
+const locatorText = (locator: LocatorView, fileName = "原始资料") => `${fileName} · 第 ${locator.pageNumber} 页 · ${locator.precisionLabel}：${locator.excerpt ?? "未保存文字摘录，请在系统中查看原件。"}`;
 const time = (value: string) => new Intl.DateTimeFormat("zh-CN", {
   dateStyle: "medium", timeStyle: "medium", timeZone: "Asia/Shanghai", hour12: false,
 }).format(new Date(value));
@@ -34,7 +34,7 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
   const evidence = (ids: string[]) => ids.map((id) => {
     const locator = report.evidenceLocators.find((item) => item.locatorId === id);
     if (!locator) throw new Error("报告引用的原件位置不完整，请刷新后重试。");
-    return locatorText(locator);
+    return locatorText(locator, report.sourceFileNames?.[locator.sourceDocumentVersionId]);
   });
   const result: ReportSection[] = [{ title: "本次审核资料", paragraphs: [
     `研究项目：${context.projectName}`, `受试者：${context.subjectCode}`,
@@ -55,19 +55,25 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
       ({ inclusion: 0, exclusion: 1, required_procedure: 2, medication: 3 })[a.ruleKind] - ({ inclusion: 0, exclusion: 1, required_procedure: 2, medication: 3 })[b.ruleKind]
         || a.ruleCode.localeCompare(b.ruleCode));
     for (const parent of parents) {
+      const group: ReportSection[] = [];
       for (const item of [parent, ...(report.workDraft.componentClauses?.filter(child => child.parentRuleCode === parent.ruleCode) ?? [])]) {
-        result.push({ title: `${item.ruleCode} · ${item.textSummary}`, paragraphs: [
-          `审核结果：${item.decisionLabel}${item.confidence ? ` · ${item.confidence === "high" ? "高置信" : "低置信"}` : ""}${item.confirmationKind ? ` · ${item.confirmationKind === "medical_manager" ? "医学经理已核实" : "构建者试用核实，非正式医学核实"}` : ""}`,
-          `判定依据：${item.reason}`, `方案要求：${item.sourceText ?? item.textSummary}`,
+        const sources = [
+          ...((item === parent || item.sourceText !== parent.sourceText) ? [`方案要求：${item.sourceText ?? item.textSummary}`] : []),
           ...item.factRefs.map(ref => {
             const locator = report.evidenceLocators.find(position => position.locatorId === ref.locatorId);
             if (!locator) throw new Error("工作稿引用的原件位置不完整，请刷新后重试。");
             return `${report.sourceFileNames?.[locator.sourceDocumentVersionId] ?? "原始资料"} · 第 ${locator.pageNumber} 页：${ref.excerpt ?? "本处未保存文字摘录"}`;
           }),
-          ...[...new Map((item.sourceReadRefs ?? []).map(ref => [JSON.stringify(ref), ref])).values()].map(ref =>
+          ...(item.sourceReadRefs ?? []).map(ref =>
             `${report.sourceFileNames?.[ref.sourceDocumentVersionId] ?? "原始资料"} · 第 ${ref.pageNumber} 页 · ${ref.disposition === "not_seen" ? "本页未见相关记录，不代表明确否认" : ref.disposition === "unresolved" ? "原文尚待核清" : "原文摘录"}：${ref.excerpt ?? "本处未保存文字摘录，请核对原件"}`),
-        ] });
+        ];
+        group.push({ title: `${item.ruleCode} · ${item.textSummary}`, paragraphs: [
+          `审核结果：${item.decisionLabel}${item.confidence ? ` · ${item.confidence === "high" ? "高置信" : "低置信"}` : ""}${item.confirmationKind ? ` · ${item.confirmationKind === "medical_manager" ? "医学经理已核实" : "构建者试用核实，非正式医学核实"}` : ""}`,
+          ...item.reason.split(/(?<=；)|(?<=。)|\n+/u).filter(part => part.trim() && part.trim() !== "；")
+            .map((part, index) => `${index === 0 ? "判定依据：" : ""}${part}`),
+        ], sources: [...new Set(sources)].filter(source => item === parent || !group[0].sources?.includes(source)) });
       }
+      result.push({ ...group[0], children: group.slice(1) });
     }
     for (const group of [
       { title: "系统尚未完成的核对", issues: report.workDraft.systemIssues?.filter(issue => issue.kind !== "excerpt_unverified") ?? [] },
@@ -144,9 +150,8 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
     ]),
   ]) : [report.restrictedRequirements.length ? "方案仍有待澄清或暂不能计算的要求，详见上述内容；不能据此认为受试者符合全部要求。" : report.controls.some((item) => item.status === "unverified")
     ? "其他章节仍有尚无法判定的要求，详见对应核对情况；本次尚未保存对应办理事项。" : "本次审核未记录补充事项。"] });
-  result.push({ title: "报告追溯信息", paragraphs: [
-    `审核记录编号：${run.reviewRunId}`, `资料版本编号：${run.evidenceSnapshotV2Id}`,
-    `资料整理版本编号：${run.completeProcessingRevisionId}`, `规则版本：${run.ruleSetRevision}`,
+  result.push({ title: "资料与版本", paragraphs: [
+    `方案版本：${context.officialProtocolVersion} · 规则第 ${run.ruleSetRevision} 版`,
     "本文件包含已保存的文字摘录和原件页码，不包含原件附件。原始资料及精确标注请在系统中查看。",
   ] });
   return result;
@@ -169,7 +174,7 @@ export function frozenReviewCollectionExport(reports: ReviewHistoryRunDetailView
   const reportSections = reports.map((report) => sections(report, exportedAt));
   const content: ReportSection[] = [{ title: "本次选取的报告", paragraphs: [
     `共 ${reports.length} 份已保存报告。以下保留各次审核的资料、日期和结论，不代表项目全部受试者的审核情况。`,
-    ...reports.map((report, index) => `${index + 1}. ${report.context.subjectCode} · ${report.context.workflowStageLabel} · ${time(report.run.completedAt!)} · 报告编号 ${report.run.reviewRunId}`),
+    ...reports.map((report, index) => `${index + 1}. ${report.context.subjectCode} · ${report.context.workflowStageLabel} · ${time(report.run.completedAt!)}`),
   ] }];
   reports.forEach((report, index) => {
     const label = `${index + 1}. ${report.context.subjectCode} · ${report.context.workflowStageLabel}`;
@@ -179,6 +184,13 @@ export function frozenReviewCollectionExport(reports: ReviewHistoryRunDetailView
 }
 
 function renderDocument(title: string, content: ReportSection[], format: "md" | "html"): string {
-  if (format === "md") return `# ${markdownText(title)}\n\n${content.map((section) => `## ${markdownText(section.title)}\n\n${section.paragraphs.map(markdownText).join("\n\n")}`).join("\n\n")}\n`;
-  return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>${htmlText(title)}</title><style>body{font-family:system-ui,"PingFang SC",sans-serif;color:#24312c;margin:3rem auto;padding:0 2rem;max-width:72rem;line-height:1.8}h1{font-size:1.75rem}h2{font-size:1.15rem;border-bottom:1px solid #d5ded9;padding-bottom:.5rem}section{margin-block:2rem}p{white-space:pre-wrap;overflow-wrap:anywhere;margin:.5rem 0}@media print{body{margin:0;max-width:none}h2{break-after:avoid}p{orphans:3;widows:3}}</style><body><h1>${htmlText(title)}</h1>${content.map((section) => `<section><h2>${htmlText(section.title)}</h2>${section.paragraphs.map((text) => `<p>${htmlText(text)}</p>`).join("")}</section>`).join("")}</body></html>`;
+  const markdownSection = (section: ReportSection, level: number): string =>
+    `${"#".repeat(level)} ${markdownText(section.title)}\n\n${[...section.paragraphs, ...(section.sources ?? [])].map(markdownText).join("\n\n")}${section.children?.length ? "\n\n" + section.children.map(child => markdownSection(child, level + 1)).join("\n\n") : ""}`;
+  if (format === "md") return `# ${markdownText(title)}\n\n${content.map(section => markdownSection(section, 2)).join("\n\n")}\n`;
+  const paragraph = (text: string) => {
+    const colon = text.indexOf("：");
+    return `<p>${colon > 0 && colon < 64 ? `<strong>${htmlText(text.slice(0, colon + 1))}</strong>${htmlText(text.slice(colon + 1))}` : htmlText(text)}</p>`;
+  };
+  const htmlSection = (section: ReportSection, level: number): string => `<section><h${level}>${htmlText(section.title)}</h${level}>${section.paragraphs.map(paragraph).join("")}${section.sources?.length ? `<details><summary>方案及原件依据</summary>${section.sources.map(paragraph).join("")}</details>` : ""}${section.children?.length ? `<details><summary>分项核对（${section.children.length}）</summary>${section.children.map(child => htmlSection(child, level + 1)).join("")}</details>` : ""}</section>`;
+  return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>${htmlText(title)}</title><style>body{font-family:system-ui,"PingFang SC",sans-serif;color:#24312c;margin:3rem auto;padding:0 2rem;max-width:72rem;line-height:1.8}h1{font-size:1.75rem}h2{font-size:1.15rem;border-bottom:1px solid #d5ded9;padding-bottom:.5rem}h3{font-size:1rem}section{margin-block:2rem}details section{margin:1rem 0;padding-left:1rem}summary{cursor:pointer;font-weight:600}p{white-space:pre-wrap;overflow-wrap:anywhere;margin:.5rem 0}@media print{body{margin:0;max-width:none}h2,h3{break-after:avoid}p{orphans:3;widows:3}}</style><body><h1>${htmlText(title)}</h1>${content.map(section => htmlSection(section, 2)).join("")}<script>let folded=[];addEventListener("beforeprint",()=>{folded=[...document.querySelectorAll("details:not([open])")];folded.forEach(item=>{item.open=true})});addEventListener("afterprint",()=>{folded.forEach(item=>{item.open=false});folded=[]});</script></body></html>`;
 }
