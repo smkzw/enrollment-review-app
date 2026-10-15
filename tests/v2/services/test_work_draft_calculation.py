@@ -67,7 +67,8 @@ def test_absence_policy_cannot_turn_missing_negation_or_exception_into_a_trigger
     assert positive_event_predicate_ids(component.expression) == (set() if shape in {"not", "eq_false"} else {"event"})
 
 
-def test_complete_negative_chart_reason_still_names_an_unresolved_independent_record_requirement():
+@pytest.mark.parametrize("record_present", [False, True])
+def test_complete_negative_chart_reason_still_names_an_unresolved_independent_record_requirement(record_present):
     from app.domain.variables.dictionary import VariableDef
     rules, _, component = clause(kind=RuleKind.EXCLUSION)
     predicate = component.expression.predicate
@@ -75,7 +76,7 @@ def test_complete_negative_chart_reason_still_names_an_unresolved_independent_re
     rules.variable_definitions = [VariableDef(variable_id="condition", label_zh="需核对的病情", value_type="boolean", domain="history")]
     component.evidence_requirements[0].variable_id = "condition"
     independent = component.evidence_requirements[0].model_copy(update={"requirement_id": "independent-record",
-        "variable_id": None, "predicate_ids": [], "description": "相应筛查结果记录"})
+        "variable_id": None, "predicate_ids": [], "required_source_types": [], "description": "相应筛查结果记录"})
     component.evidence_requirements.append(independent)
     frame = frozen([material()])
     frame.facts, frame.source_pages = [], []
@@ -83,11 +84,25 @@ def test_complete_negative_chart_reason_still_names_an_unresolved_independent_re
         "relation": "refutes", "reason": "病历明确否认该病情。", "source_read_refs": [{
             "source_document_version_id": "document", "page_artifact_id": "page", "page_number": 1,
             "excerpt": "病历明确否认该病情", "disposition": "mentioned"}]}
-    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules, evidence_refs={},
-        source_results={f"{component.rule_component_id}:{predicate.predicate_id}": relation})
-    assert result.decision == D.INDETERMINATE and result.system_issue is None
-    assert "相应筛查结果记录" in result.reason_text and "尚未核实" in result.reason_text
-    assert any(part.condition_text == independent.description and part.requires_attention for part in result.reason_parts)
+    sources = {f"{component.rule_component_id}:{predicate.predicate_id}": relation}
+    if record_present:
+        from app.services.work_draft_semantics import SourceRelation, relation_inputs, targets_for_review, validate_relations
+        from app.domain.contracts.work_draft import WorkDraftSourcePage
+        frame.clause_pack, frame.procedure_catalog, frame.procedure_requirements = project_clause_pack(rules), None, []
+        text = "检查报告已有实际结果。"
+        frame.source_pages = [WorkDraftSourcePage(source_document_version_id="document", page_artifact_id="page", page_number=1,
+            effective_text=text, effective_text_sha256=sha256(text.encode()).hexdigest(), document_category="objective_report")]
+        target = next(t for t in targets_for_review(frame, rules) if t.get("record_requirement"))
+        row = SourceRelation(target_id=target["target_id"], relation="supports", applicable="yes",
+            object_matches=True, time_matches=True, quotes=[{"page_artifact_id": "page", "excerpt": text}], reason="报告已有结果。")
+        validated = validate_relations({"results": [row.model_dump()]}, [target], frame.source_pages)[0]
+        sources[target["target_id"]] = relation_inputs(validated, target, frame.source_pages)
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules, evidence_refs={}, source_results=sources)
+    assert result.decision == (D.EXCLUSION_NOT_TRIGGERED if record_present else D.INDETERMINATE)
+    assert result.system_issue is None
+    if not record_present:
+        assert "相应筛查结果记录" in result.reason_text and "尚未核实" in result.reason_text
+        assert any(part.condition_text == independent.description and part.requires_attention for part in result.reason_parts)
     assert relation["reason"] in result.reason_text and result.source_read_refs
 
 
@@ -978,15 +993,16 @@ def test_nearest_date_and_same_day_conflict():
     (date(2024, 2, 28), 50, date(2025, 2, 28), 52, date(2025, 2, 28), D.INCLUSION_MET),
     (date(2025, 8, 9), 51, date(2025, 8, 15), 52, date(2025, 8, 8), D.INDETERMINATE),
 ])
+@pytest.mark.parametrize("date_label", ["采样时间", "检查日期", "检查时间"])
 def test_age_uses_dated_documents_at_node_and_checks_chronology_without_redating_facts(
-        first_day, first_age, last_day, last_age, anchor, decision):
+        first_day, first_age, last_day, last_age, anchor, decision, date_label):
     from app.domain.contracts.work_draft import WorkDraftSourcePage
     rules, projected, component = clause()
     facts = [material(value=first_age, snapshot="old"), material(value=last_age, snapshot="new")]
     before = [fact.model_dump_json() for fact in facts]
     refs, pages = {}, []
     for fact, day in zip(facts, [first_day, last_day], strict=True):
-        text = f"采样时间:{day.isoformat()}\n{fact.assertion_basis.assertion_text}"
+        text = f"{date_label}:{day.isoformat()}\n{fact.assertion_basis.assertion_text}"
         page = WorkDraftSourcePage(source_document_version_id=f"doc-{fact.fact_id}",
             page_artifact_id=f"page-{fact.fact_id}", page_number=1, effective_text=text,
             effective_text_sha256=sha256(text.encode()).hexdigest(), extraction_complete=True)
@@ -1030,6 +1046,50 @@ def test_undated_other_age_remains_visible_and_low_confidence():
     assert {ref.fact_id for ref in result.evidence_refs} == {first.fact_id, other.fact_id}
 
 
+def test_age_uses_sampling_header_before_exam_header_without_redating_the_fact():
+    from app.domain.contracts.work_draft import WorkDraftSourcePage
+    from app.services.work_draft_calculation import source_record_date
+    rules, projected, _ = clause()
+    fact = material(value=51)
+    frame = frozen([fact], {AnchorType.SCREENING_DATE: DateValue(value=date(2025, 8, 8), precision=DatePrecision.DAY)})
+    text = "采样时间：2025/8/8\n检查日期：2025/8/9\n" + fact.assertion_basis.assertion_text
+    page = WorkDraftSourcePage(source_document_version_id="doc", page_artifact_id="page", page_number=1,
+        effective_text=text, effective_text_sha256=sha256(text.encode()).hexdigest(), extraction_complete=True)
+    frame.source_pages = [page]
+    refs = {fact.fact_id: [WorkDraftEvidenceRef(fact_id=fact.fact_id, locator_id=fact.locator_ids[0],
+        source_document_version_id="doc", page_artifact_id="page", page_number=1, excerpt=fact.assertion_basis.assertion_text)]}
+    assert source_record_date(fact, refs, [page], allow_report_date=True, allow_exam_date=True) == date(2025, 8, 8)
+    assert calculate_work_component(projected, frame, rules, evidence_refs=refs).decision == D.INCLUSION_MET
+    assert fact.date_range is None
+
+
+@pytest.mark.parametrize("limited_time", [False, True])
+def test_numeric_condition_with_independent_record_has_specific_pending_or_system_reason(limited_time):
+    from app.domain.contracts.rules import TimeQuantity
+    from app.services.work_draft_semantics import targets_for_review, relation_inputs, SourceRelation
+    rules, _, component = clause()
+    independent = component.evidence_requirements[0].model_copy(update={"requirement_id": "separate-report",
+        "variable_id": None, "predicate_ids": [], "description": "本节点检查报告", "required_source_types": [],
+        "source_validity_window": TimeQuantity(value=3, unit="day") if limited_time else None})
+    component.evidence_requirements.append(independent)
+    frame = frozen([material(value=51)])
+    frame.clause_pack, frame.procedure_catalog, frame.procedure_requirements = project_clause_pack(rules), None, []
+    frame.source_pages = []
+    record = next(target for target in targets_for_review(frame, rules) if target.get("record_requirement"))
+    read = SourceRelation(target_id=record["target_id"], relation="not_found", applicable="yes",
+        object_matches=True, time_matches=True, quotes=[], reason="本次尚未找到对应报告。")
+    source = relation_inputs(read, record, [])
+    result = calculate_work_component(frame.clause_pack.clauses[0], frame, rules, evidence_refs={},
+        source_results={record["target_id"]: source})
+    if limited_time:
+        assert result.system_issue is not None and result.system_issue.kind == "method_unsupported"
+        assert "有效时间要求尚未由系统核对" in result.reason_text
+    else:
+        assert result.decision == D.INDETERMINATE and result.system_issue is None
+        assert independent.description in result.reason_text
+        assert any(part.condition_text == independent.description and part.requires_attention for part in result.reason_parts)
+
+
 @pytest.mark.parametrize("label,source_day,decision", [
     ("报告日期", date(2025, 8, 10), D.INCLUSION_MET),
     ("报告日期", date(2025, 8, 20), D.INCLUSION_MET),
@@ -1067,7 +1127,9 @@ def test_older_age_outside_rule_window_still_checks_chronology_without_becoming_
 
 
 @pytest.mark.parametrize("label,decision", [("采样时间", D.INCLUSION_MET),
-    ("报告日期", D.INCLUSION_MET), ("打印时间", D.INDETERMINATE)])
+    ("报告日期", D.INCLUSION_MET), ("检查日期", D.INCLUSION_MET), ("检查时间", D.INCLUSION_MET),
+    ("预约检查日期", D.INDETERMINATE), ("下次检查日期", D.INDETERMINATE),
+    ("打印时间", D.INDETERMINATE)])
 def test_age_date_source_is_explicit_not_upload_or_print_time(label, decision):
     from app.domain.contracts.work_draft import WorkDraftSourcePage
     rules, projected, _ = clause()

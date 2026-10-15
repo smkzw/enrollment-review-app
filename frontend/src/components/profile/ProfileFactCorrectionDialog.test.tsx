@@ -217,6 +217,31 @@ describe("ProfileFactCorrectionDialog", () => {
     setPatientProfileRepository(null);
   });
 
+  it("空读数可明确选择数字，不把补回的读数保存成文字，提交仍须预览确认", async () => {
+    const { repo, preview, submit } = makeRepo();
+    preview.mockResolvedValue({ ...makePreview(),
+      oldSnapshot: { ...makePreview().oldSnapshot, value: null },
+      newSnapshot: { ...makePreview().oldSnapshot, value: 52 } });
+    const raw = makeRevision();
+    const selected = raw.lanes.flatMap(lane => lane.items).find(item => item.kind === "fact")!;
+    selected.value = null;
+    const model = adaptPatientProfile(decodePatientProfileRevision(raw));
+    const item = model.lanes.flatMap(lane => lane.items).find(item => item.sourceId === selected.source_id)!;
+    setPatientProfileRepository(repo);
+    render(<ProfileFactCorrectionDialog model={model} item={item} targetKind="fact" subjectId={SUBJECT}
+      reviewEpisodeId={EPISODE} onClose={vi.fn()} onCompleted={vi.fn()} />);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "记录形式" }), "number");
+    await userEvent.type(screen.getByRole("spinbutton", { name: "记录结果" }), "52");
+    await userEvent.type(screen.getByRole("textbox", { name: "修订理由（必填）" }), "按原件补回未记录读数。");
+    await userEvent.click(screen.getByRole("button", { name: "预览影响范围" }));
+    await screen.findByText("拟修改");
+    expect(preview.mock.calls[0]?.[2].updates.value).toBe(52);
+    expect(submit).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("checkbox", { name: /我已核对/ }));
+    await userEvent.click(screen.getByRole("button", { name: "提交修订" }));
+    expect(submit.mock.calls[0]?.[2].updates.value).toBe(52);
+  });
+
   it("用中文选择所属项目，修改关联进入预览和提交，不改写未动的原值", async () => {
     const { repo, preview, submit } = makeRepo();
     repo.getFactCorrectionOptions = vi.fn(async () => ({ subjectId: SUBJECT, reviewEpisodeId: EPISODE,

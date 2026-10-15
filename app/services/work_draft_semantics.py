@@ -13,10 +13,11 @@ from app.domain.contracts.rules import LogicalExpression
 from app.domain.contracts.work_draft import WorkDraftSourceRef
 from app.domain.publication import canonical_hash
 from app.domain.variables.dictionary import load_dictionary
-from app.services.work_draft_calculation import atomic_expressions, is_numeric_history_condition, review_source_cutoff
+from app.services.work_draft_calculation import (atomic_expressions, is_numeric_history_condition,
+    review_source_cutoff, independent_source_requirements, source_header_date)
 
 PROMPT_VERSION = "work-draft-source-relations/v7"
-VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v29"
+VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v30"
 BATCH_SIZE = 16
 SEMANTIC_INSTRUCTIONS = (
     "你是入排审核产品的原文关系核对员。逐项查找本次提供的病历与报告中，对原子条件的支持或否定；"
@@ -313,7 +314,9 @@ def runtime_model():
 def targets_for_review(frozen, rule_set):
     from app.domain.policies import STAGE_RANK
     definitions = load_dictionary(rule_set.variable_definitions or ())
+    reviews = {item.official_code: item for item in rule_set.review_records or ()}
     targets = []
+    record_targets = []
     subjects_by_rule = {}
     for clause in frozen.clause_pack.clauses:
         subjects_by_rule.setdefault(clause.rule_id, set()).update(part.predicate.subject
@@ -377,7 +380,28 @@ def targets_for_review(frozen, rule_set):
                         "保留相关摘录，并在reason说明哪一个对象或期间的关联尚无依据。"
                         "不凭药物常识、季节常识或总体符合入排的说法补齐关系。"
                     )} if context is not None else {})})
-    reviews = {item.official_code: item for item in rule_set.review_records or ()}
+        for requirement in independent_source_requirements(clause):
+            if STAGE_RANK[requirement.due_stage] > STAGE_RANK[frozen.review_episode.stage]:
+                continue
+            anchor_key = {ReviewStage.SCREENING: AnchorType.SCREENING_DATE,
+                ReviewStage.BASELINE: AnchorType.BASELINE_DATE}.get(requirement.due_stage)
+            anchor = frozen.review_episode.anchor_dates.get(anchor_key)
+            cutoff = review_source_cutoff(frozen.review_episode.anchor_dates, frozen.review_episode.stage,
+                frozen.review_episode.evidence_cutoff_date)
+            record_targets.append({"target_id": f"requirement:{clause.rule_component_id}:{requirement.requirement_id}",
+                "component_id": clause.rule_component_id, "official_code": clause.official_code,
+                "kind": RuleKind.REQUIRED_PROCEDURE.value, "title": requirement.description,
+                "source_text": clause.source_text, "variable": None,
+                "record_requirement": requirement.model_dump(mode="json"),
+                "record_date_bounds": {"start": anchor.value.isoformat() if anchor and anchor.value else None,
+                    "end": cutoff.isoformat() if cutoff else None},
+                "atom": {"predicate": {"subject": "受试者", "attribute": requirement.description, "comparator": "exists"}},
+                "source_context": {"purpose": "仅核本项要求的资料是否实际存在，不判定疾病或整条入排。已发布流程定义仅用于核对允许的检查方式；不借用无关定义，不把预约、计划或病史否认当作检查报告。只引用符合本项来源要求的实际记录，不混入申请或预约记录作为完成依据。不能确认方式或对应关系时unclear。",
+                    "published_procedure_definitions": [{"label": item.label,
+                        "source_excerpts": list(item.source_excerpts)}
+                        for item in frozen.procedure_catalog.items
+                        if not (reviews.get(item.item_id) and reviews[item.item_id].note == "excluded")]
+                        if frozen.procedure_catalog else []}})
     if frozen.procedure_catalog is not None:
         for item in sorted(frozen.procedure_catalog.items, key=lambda value: value.position):
             review = reviews.get(item.item_id)
@@ -393,7 +417,7 @@ def targets_for_review(frozen, rule_set):
                 "source_text": "\n".join(text for text in item.source_excerpts if text),
                 "atom": {"predicate": {"subject": "受试者", "attribute": f"本次节点已完成{item.label}",
                     "comparator": "exists"}}, "variable": None})
-    return targets
+    return targets + record_targets
 
 
 def source_pages_for_review(frozen):
@@ -590,10 +614,39 @@ def relation_inputs(row, target, pages):
         truth = TruthValue.UNKNOWN
     if target.get("scope_only") or row.applicable == "no":
         truth, policy = TruthValue.UNKNOWN, False
+    requirement = target.get("record_requirement")
+    unsupported_record_time = bool(requirement and (
+        requirement.get("source_validity_window") or requirement.get("control_validity_constraint")))
+    if requirement is not None:
+        from app.domain.contracts.rules import EvidenceRequirement
+        requirement = EvidenceRequirement.model_validate(requirement).model_dump(mode="json")
+        quoted_pages = [page for page in pages if any(q.page_artifact_id == page.page_artifact_id for q in row.quotes)]
+        # Record presence does not prove the condition. Unsupported source/time
+        # policies stay unfulfilled, never borrow an unrelated objective report.
+        eligible_pages = [page for page in quoted_pages
+            if (not requirement.get("required_source_types") or page.document_category in requirement["required_source_types"])
+            and (not requirement.get("requires_contemporaneous_objective_source") or page.document_category == "objective_report")
+            and (requirement.get("allows_screening_record_transcription") is not False
+                 or page.document_category != "screening_transcription")]
+        if requirement["requires_contemporaneous_objective_source"] is True:
+            bounds = target.get("record_date_bounds", {})
+            start = date.fromisoformat(bounds["start"]) if bounds.get("start") else None
+            end = date.fromisoformat(bounds["end"]) if bounds.get("end") else None
+            eligible_pages = [page for page in eligible_pages
+                if (day := source_header_date([page.effective_text], ["采样时间|就诊时间|检查日期|检查时间", "报告日期|报告时间"]))
+                is not None and start is not None and end is not None and start <= day <= end]
+        if (row.relation != "supports" or not eligible_pages or len(eligible_pages) != len(quoted_pages)
+                or requirement["requires_contemporaneous_objective_source"] is None
+                or requirement["allows_screening_record_transcription"] is None or unsupported_record_time):
+            truth = TruthValue.UNKNOWN
+        policy = False
+        if truth == TruthValue.UNKNOWN:
+            refs = [ref.model_copy(update={"disposition": "unresolved"}) for ref in refs]
     return {"truth": truth.value, "applicable": row.applicable, "conflict": row.relation == "conflict",
             "policy": policy, "reason": row.reason, "relation": row.relation,
             **({"population_scope_excerpt": row.population_scope_excerpt} if row.population_scope_excerpt else {}),
             **({"scope_only": True} if target.get("scope_only") else {}),
+            **({"unsupported_record_time": True} if unsupported_record_time else {}),
             "source_read_refs": [ref.model_dump(mode="json") for ref in refs]}
 
 

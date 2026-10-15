@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from app.services.evidence_app_errors import AppReviewSourceIncompleteError, translate_storage_error
 from app.domain.contracts.work_draft import SystemIssue
+from app.storage.read_retention import retain_read_records
 from app.services.eligibility_review_projection import (
     EligibilityReviewProjection,
     EligibilityReviewProjectionService,
@@ -211,7 +212,7 @@ def get_eligibility_review(
 ) -> EligibilityReviewResponse:
     """读取当前活动资料下的入排条款投影；不启动正式 ReviewRun。"""
     _read(request).require_subject_episode(subject_id, review_episode_id)
-    with request.app.state.session_factory() as session:
+    with request.app.state.session_factory() as session, retain_read_records(session):
         try:
             projection: EligibilityReviewProjection = _service(request).project(
                 session, review_episode_id

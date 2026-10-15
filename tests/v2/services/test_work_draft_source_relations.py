@@ -65,6 +65,89 @@ def test_verified_chart_relation_uses_original_page_not_fake_fact():
     assert "fact_id" not in inputs["source_read_refs"][0]
 
 
+@pytest.mark.parametrize("category,relation,expected", [
+    ("objective_report", "supports", "true"), ("study_chart", "supports", "unknown"),
+    ("objective_report", "not_found", "unknown"), ("objective_report", "refutes", "unknown"),
+    ("objective_report", "unclear", "unknown")])
+def test_independent_record_presence_is_not_a_disease_predicate_or_absence_policy(category, relation, expected):
+    from app.domain.contracts.rules import EvidenceRequirement
+    requirement = EvidenceRequirement(requirement_id="separate-record", rule_component_id="component",
+        description="检查报告", fact_type="report", due_stage="screening",
+        requires_contemporaneous_objective_source=True, allows_screening_record_transcription=False)
+    record = {**target("required_procedure"), "record_requirement": requirement.model_dump(mode="json"),
+        "record_date_bounds": {"start": "2025-08-08", "end": "2025-08-15"}}
+    original = page("检查日期：2025/8/8\n胸部检查报告已有实际结果。", category=category)
+    read = row(relation=relation, quotes=[] if relation == "not_found" else [
+        {"page_artifact_id": original.page_artifact_id, "excerpt": original.effective_text}])
+    validated = validate_relations({"results": [read.model_dump()]}, [record], [original])[0]
+    result = relation_inputs(validated, record, [original])
+    assert result["truth"] == expected and not result["policy"]
+    assert all("fact_id" not in ref for ref in result["source_read_refs"])
+    with_window = {**record, "record_requirement": {**record["record_requirement"], "source_validity_window": {"value": 3, "unit": "day"}}}
+    assert relation_inputs(validated, with_window, [original])["truth"] == "unknown"
+    for changed in ("检查日期：2028/8/8", "检查日期：2020/8/8", "预约检查日期：2025/8/8", "未记日期",
+                    "检查日期：2025/8/8\n采样时间：2025/8/9"):
+        other = page(changed + "\n胸部检查报告已有实际结果。", category="objective_report")
+        checked = validate_relations({"results": [row(relation="supports", quotes=[{
+            "page_artifact_id": "page", "excerpt": "胸部检查报告已有实际结果。"}]).model_dump()]}, [record], [other])[0]
+        assert relation_inputs(checked, record, [other])["truth"] == "unknown"
+    for policy in ({"requires_contemporaneous_objective_source": None},
+                   {"allows_screening_record_transcription": None}):
+        with pytest.raises(ValueError, match="来源状态"):
+            relation_inputs(validated, {**record, "record_requirement": {
+                **record["record_requirement"], **policy}}, [original])
+    for policy in ({"required_source_types": ["study_chart"]},):
+        assert relation_inputs(validated, {**record, "record_requirement": {
+            **record["record_requirement"], **policy}}, [original])["truth"] == "unknown"
+
+
+def test_independent_record_target_uses_exact_binding_ancestry_and_keeps_original_targets():
+    from app.projections.clause_pack import project_clause_pack
+    from app.services.work_draft_semantics import targets_for_review
+    from tests.v2.services.test_work_draft_calculation import clause, frozen, material
+    rules, _, component = clause()
+    frame = frozen([material()])
+    frame.clause_pack = project_clause_pack(rules)
+    frame.procedure_catalog, frame.procedure_requirements = None, []
+    before = targets_for_review(frame, rules)
+    requirement = component.evidence_requirements[0].model_copy(update={"requirement_id": "separate-source",
+        "variable_id": None, "predicate_ids": [], "description": "另需客观检查报告",
+        "requires_contemporaneous_objective_source": True})
+    component.evidence_requirements.append(requirement)
+    frame.clause_pack = project_clause_pack(rules)
+    after = targets_for_review(frame, rules)
+    assert after[:-1] == before and len(after) == len(before) + 1
+    record = after[-1]
+    assert record["kind"] == "required_procedure"
+    assert record["record_requirement"] == requirement.model_dump(mode="json")
+    assert record["target_id"] == f"requirement:{component.rule_component_id}:separate-source"
+    assert record["source_text"] == frame.clause_pack.clauses[0].source_text
+    predicate = component.expression.predicate
+    derived = requirement.model_copy(update={"requirement_id": "variable_requirement:" + sha256(":".join((
+        component.rule_component_id, predicate.predicate_id, requirement.requirement_id)).encode()).hexdigest()[:32],
+        "variable_id": "age", "predicate_ids": [predicate.predicate_id]})
+    component.evidence_requirements.append(derived)
+    frame.clause_pack = project_clause_pack(rules)
+    assert targets_for_review(frame, rules) == before
+    derived.description = "另一项不同的资料要求"
+    frame.clause_pack = project_clause_pack(rules)
+    assert len(targets_for_review(frame, rules)) == len(before) + 1
+
+
+@pytest.mark.parametrize("allow,expected", [(False, "unknown"), (True, "true")])
+def test_independent_record_transcription_policy_is_enforced_separately_from_objective_policy(allow, expected):
+    from app.domain.contracts.rules import EvidenceRequirement
+    requirement = EvidenceRequirement(requirement_id="record", rule_component_id="component", fact_type="report",
+        description="检查记录", due_stage="screening", allows_screening_record_transcription=allow,
+        requires_contemporaneous_objective_source=False)
+    selected = {**target("required_procedure"), "record_requirement": requirement.model_dump(mode="json")}
+    source = page("检查已完成，结果已有记载。", category="screening_transcription")
+    read = row(relation="supports", quotes=[{"page_artifact_id": "page", "excerpt": source.effective_text}])
+    valid = validate_relations({"results": [read.model_dump()]}, [selected], [source])[0]
+    result = relation_inputs(valid, selected, [source])
+    assert result["truth"] == expected and not result["policy"]
+
+
 def test_pending_targets_share_short_batch_without_dropping_reused_targets_or_changing_inputs():
     from app.services.work_draft_semantics import source_batches, BATCH_SIZE
     targets = [{"target_id": str(index), "payload": {"value": index}} for index in range(122)]
