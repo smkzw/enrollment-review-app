@@ -418,10 +418,11 @@ def test_monthly_quota_is_detected_through_transport_wrapper():
     assert not provider_is_blocked(RuntimeError("invalid schema"))
 
 
-def test_source_reader_retries_only_bad_target_and_preserves_first_answer():
+@pytest.mark.parametrize("failure", ["quote", "population_scope"])
+def test_source_reader_retries_only_bad_target_and_preserves_first_answer(failure):
     import json
     from app.domain.contracts.enums import ReviewStage
-    from app.services.work_draft_semantics import read_source_relations
+    from app.services.work_draft_semantics import read_source_relations, OUTPUT_SHAPE_INSTRUCTIONS
     other = {**target(), "target_id": "component:other"}
     model = SimpleNamespace(model_dump=lambda **_: {"provider": "synthetic", "model": "fixture"})
     frame = SimpleNamespace(source_pages=[page()], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, evidence_cutoff_date=None,
@@ -430,10 +431,13 @@ def test_source_reader_retries_only_bad_target_and_preserves_first_answer():
     class Transport:
         def propose_question_classifications(self, *, prompt, output_schema):
             prompts.append(prompt)
+            assert OUTPUT_SHAPE_INSTRUCTIONS in prompt
             wire = json.loads(prompt.split("\n", 1)[1])
             values = [row(target_id=t["target_id"], quotes=[{"page_artifact_id": "P01",
-                "excerpt": "伪造摘录" if len(prompts) == 1 and t["target_id"] == "T02" else "否认近期感染"}]).model_dump()
+                "excerpt": "伪造摘录" if failure == "quote" and len(prompts) == 1 and t["target_id"] == "T02" else "否认近期感染"}]).model_dump()
                 for t in wire["targets"]]
+            if failure == "population_scope" and len(prompts) == 1:
+                values[-1]["population_scope_excerpt"] = "病历概括符合入排，不是方案人群限定。"
             return SimpleNamespace(text=json.dumps({"results": values}, ensure_ascii=False))
     class Artifacts:
         def put(self, kind, body):
@@ -443,6 +447,34 @@ def test_source_reader_retries_only_bad_target_and_preserves_first_answer():
     second = json.loads(prompts[1].split("\n", 1)[1])
     assert [t["target_id"] for t in second["targets"]] == ["T02"]
     assert "error" not in result and len(result["raw_refs"]) == 2
+
+
+@pytest.mark.parametrize("failure", ["input_echo", "incomplete"])
+def test_source_reader_never_adopts_nested_or_unclosed_results_or_adds_attempts(failure):
+    import json
+    from app.domain.contracts.enums import ReviewStage
+    from app.services.work_draft_semantics import read_source_relations
+    model = SimpleNamespace(model_dump=lambda **_: {"provider": "synthetic", "model": "fixture"})
+    frame = SimpleNamespace(source_pages=[page()], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+        evidence_cutoff_date=None, anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
+    answers = []
+    class Transport:
+        def propose_question_classifications(self, *, prompt, output_schema):
+            answer = {"results": [row(target_id="T01", quotes=[{
+                "page_artifact_id": "P01", "excerpt": "否认近期感染"}]).model_dump()]}
+            text = json.dumps({"targets": [answer]} if failure == "input_echo" else answer, ensure_ascii=False)
+            text = text[:-1] if failure == "incomplete" else text
+            answers.append(text)
+            return SimpleNamespace(text=text)
+    saved = []
+    class Artifacts:
+        def put(self, kind, body):
+            saved.append(json.loads(body))
+            return SimpleNamespace(sha256=sha256(body).hexdigest(), storage_ref=f"artifacts/{kind}/{sha256(body).hexdigest()}")
+    result = read_source_relations(frame, [target()], model, Artifacts(), transport_factory=lambda _: Transport())
+    assert len(answers) == 2 and [item["text"] for item in saved] == answers
+    assert result["results"] == {} and result["error_target_ids"] == [target()["target_id"]]
+    assert result["error"] and len(result["raw_refs"]) == 2
 
 
 @pytest.mark.parametrize("value,unit,relation,expected", [
