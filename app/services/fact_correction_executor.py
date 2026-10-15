@@ -125,6 +125,7 @@ def create_fact_correction_executor(
             if planned_scope is None
             else planned_scope.model_dump(mode="json"),
             "patient_profile_revision_id": None,
+            "source_reprojection": (context.last_checkpoint or {}).get("source_reprojection"),
         }
 
         def apply(session: Session) -> None:
@@ -153,6 +154,8 @@ def create_fact_correction_executor(
             checkpoint["impact_scope"] = result.impact_scope.model_dump(mode="json")
             checkpoint["new_entity_id"] = result.new_entity_id
             checkpoint["patient_profile_revision_id"] = result.profile_revision_id
+            if result.source_reprojection is not None:
+                checkpoint["source_reprojection"] = result.source_reprojection
 
         return PreparedStepResult(checkpoint=checkpoint, apply=apply)
 

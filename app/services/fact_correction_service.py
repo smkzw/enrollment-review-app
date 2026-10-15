@@ -218,6 +218,7 @@ class FactCorrectionApplyResult:
     profile_revision_id: str
     impact_scope: FactCorrectionImpactScope
     is_replay: bool = False
+    source_reprojection: dict | None = None
 
 
 def superseded_entity_ids(session: Session, authority: FactAuthority) -> set[str]:
@@ -1277,7 +1278,7 @@ def apply_prepared_fact_correction(
         )
         persisted = FactCorrectionRepository(session).create(correction)
         _rebuild_rule_index(session, prepared, scope)
-        _reproject_expectations(session, prepared, scope)
+        source_reprojection = _reproject_expectations(session, prepared, scope)
         active_ids = active_entity_ids_after_corrections(session, prepared.authority)
         active_conflict_ids = active_ids["conflict"]
         historical_conflict_ids = {
@@ -1326,6 +1327,7 @@ def apply_prepared_fact_correction(
             profile_revision_id=profile.patient_profile_revision_id,
             impact_scope=scope,
             is_replay=False,
+            source_reprojection=source_reprojection,
         )
     except FactCorrectionError:
         raise
@@ -1431,7 +1433,7 @@ def _reproject_expectations(
     session: Session,
     prepared: PreparedFactCorrection,
     scope: FactCorrectionImpactScope,
-) -> None:
+) -> dict:
     template_ids = None
     if scope.scope_kind == "local":
         expectations = EvidenceExpectationV2Repository(session).list_for_authority(
@@ -1449,12 +1451,14 @@ def _reproject_expectations(
     # 与原始终结共用同一信号推导：从所选源运行的持久化未解决项/事务门禁重建
     # 结构化缺口，按到期模板补 fallback 兜底，并保守保留无法按源记录复核的
     # 先期显式风险。绝不静默以空信号重投影。
+    diagnostics: dict = {}
     try:
         gap_signals = reconstruct_reprojection_gap_signals(
             session,
             authority=prepared.authority,
             target_kind=prepared.target_kind,
             target_id=prepared.target_id,
+            diagnostics=diagnostics,
         )
     except ReprojectionLineageError as exc:
         raise FactCorrectionError(
@@ -1473,6 +1477,7 @@ def _reproject_expectations(
         exclude_fact_ids=superseded_entity_ids(session, prepared.authority),
         include_rule_revision_sources=True,
     )
+    return diagnostics
 
 
 def _require_locator_page_artifact_consistency(

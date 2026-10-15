@@ -661,6 +661,121 @@ def test_reprojection_ignores_unrelated_orphan_run(session_factory):
         assert expectation.gap_type is None
 
 
+@pytest.mark.parametrize("retained", [True, False])
+def test_reprojection_uses_call_scope_not_entire_visible_manifest(session_factory, monkeypatch, retained):
+    """Isolate the retention-proof seam; run selection, gaps and correction use real repositories.
+
+    Metadata/text retention itself is exercised in test_incremental_fact_sources.
+    An unchanged document's one-page call must not authorize a changed sibling call.
+    """
+    from app.services.fact_expectation_gaps import select_reprojection_source_runs, reconstruct_reprojection_gap_signals
+    from app.storage.fact_authority import FactAuthorityValidator
+    from app.storage.fact_repositories import FactNormalizationCallRepository
+    from tests.v2.services.test_incremental_fact_sources import _seed_incremental
+    from tests.v2.services.test_fact_correction_job import _publish_fact, _variable_rule_revision, _service, _run
+    with session_factory() as session, session.begin():
+        old, added, wide, _, _ = _seed_incremental(session)
+        chain = {**old, "authority": wide}
+        fact = _publish_fact(session, chain, suffix="wide", include_source_candidates=True)
+        candidate = FactNormalizationCandidateRepository(session).get(fact.source_candidate_ids[0])
+        call = FactNormalizationCallRepository(session).get(candidate.call_id)
+        changed_call = call.model_copy(update={"call_id": "changed-sibling-call", "logical_document_id": added["logical_document_id"]})
+        FactNormalizationCallRepository(session).create(changed_call)
+        current = _variable_rule_revision(session, chain, 3)
+        previous = wide
+        original_reuse = FactAuthorityValidator.rule_revision_source_is_reusable
+        monkeypatch.setattr(FactAuthorityValidator, "rule_revision_source_is_reusable",
+            lambda self, a, b: False if a == previous and b == current else original_reuse(self, a, b))
+        original_documents = FactAuthorityValidator.retained_source_documents
+        def retained_documents(self, a, b):
+            result = original_documents(self, a, b)
+            return frozenset({old["doc_id"]} if retained else ()) if a == previous and b == current else result
+        monkeypatch.setattr(FactAuthorityValidator, "retained_source_documents",
+            retained_documents)
+        if not retained:
+            with pytest.raises(ReprojectionLineageError, match="权威元组"):
+                select_reprojection_source_runs(session, authority=current, target_kind="fact", target_id=fact.fact_id)
+            return
+        # The independent fact stays reusable, but the changed sibling's call does not.
+        scopes = select_reprojection_source_runs(session, authority=current, target_kind="fact", target_id=fact.fact_id)
+        assert scopes[fact.run_id] == {call.call_id}
+        template = _template(session, {**chain, "authority": current}, requirement_id="partial-source-req",
+            fact_type=fact.fact_type, due_stage=ReviewStage.SCREENING, rule_set_revision=3)
+        retired = _template(session, chain, requirement_id="retired-source-req", fact_type=fact.fact_type,
+            due_stage=ReviewStage.SCREENING, rule_set_revision=2)
+        _persist_unresolved_item(session, chain, run_id=fact.run_id, call_id=call.call_id,
+            requirement_id=retired.requirement_id, gap_type=GapType.RECORD_INCOMPLETE,
+            reason="旧要求已经撤换，只在旧版本保留。", position=1)
+        requirement = template.requirement_id
+        _persist_unresolved_item(session, {**chain, "call_id": changed_call.call_id, "logical_document_id": added["logical_document_id"]},
+            run_id=fact.run_id, call_id=changed_call.call_id, requirement_id=requirement,
+            gap_type=GapType.REQUIRED_PROCEDURE_NOT_DONE, reason="旧来源曾记未做，当前分类已变，不能直接重申。")
+        diagnostics = {}
+        signals = reconstruct_reprojection_gap_signals(session, authority=current, target_kind="fact", target_id=fact.fact_id,
+            diagnostics=diagnostics)
+        assert diagnostics["retired_requirement_ids_by_run"][fact.run_id] == [retired.requirement_id]
+        assert any(item.kind == GapType.OBSERVATION_UNVERIFIED and not item.fallback_only for item in signals)
+        assert not any(item.kind == GapType.REQUIRED_PROCEDURE_NOT_DONE for item in signals)
+    job = _service(session_factory).create_or_reuse_job(authority=current, target_kind="fact", target_id=fact.fact_id,
+        locator_ids=fact.locator_ids, reason="核对未变化来源后更正", operator_id="builder-verification",
+        updates={"value": "130/80"}, created_by="builder-verification", created_at=NOW)
+    for _ in range(4):
+        _run(session_factory)
+    _assert_completed(session_factory, job.job_id)
+    with session_factory() as session:
+        correction = FactCorrectionRepository(session).list_by_review_episode(current.review_episode_id)[0]
+        assert ClinicalFactV2Repository(session).get(fact.fact_id) == fact
+        assert ClinicalFactV2Repository(session).get(correction.new_entity_id).value == "130/80"
+        projected = EvidenceExpectationV2Repository(session).latest_by_template(current.review_episode_id, template.template_id)
+        assert projected.gap_type == GapType.OBSERVATION_UNVERIFIED
+        assert any(not signal.fallback_only for signal in projected.input_gap_signals)
+
+
+def test_unknown_requirement_on_current_run_still_rejects_reprojection(session):
+    from app.services.fact_expectation_gaps import reconstruct_reprojection_gap_signals
+    from app.workflow.errors import StepFailure
+    chain, template = _seed_chain_with_template(session, "unknown-current")
+    fact = _publish_supporting_fact(session, chain, template, fact_id="unknown-current-fact", value="120/80")
+    _persist_unresolved_item(session, chain, run_id=chain["run_id"], call_id=chain["call_id"],
+        requirement_id="never-published-requirement", gap_type=GapType.RECORD_INCOMPLETE, reason="非法要求不能被当作退役要求。")
+    with pytest.raises(StepFailure, match="没有当前规则修订模板"):
+        reconstruct_reprojection_gap_signals(session, authority=chain["authority"], target_kind="fact", target_id=fact.fact_id)
+
+
+def test_correction_retains_report_when_other_document_metadata_really_changes(session_factory):
+    """Actual two-document revisions and retention validator, no patched proof or network."""
+    from app.services.fact_expectation_gaps import select_reprojection_source_runs
+    from app.storage.fact_authority import FactAuthorityValidator
+    from app.storage.fact_repositories import FactNormalizationCallRepository
+    from tests.v2.services.test_incremental_fact_sources import _seed_incremental, _incremental_source
+    from tests.v2.services.test_fact_correction_job import _publish_fact, _service, _run
+    with session_factory() as session, session.begin():
+        old, added, wide, _, _ = _seed_incremental(session)
+        target = _publish_fact(session, {**old, "authority": wide}, suffix="kept-report", value="125/80", include_source_candidates=True)
+        candidate = FactNormalizationCandidateRepository(session).get(target.source_candidate_ids[0])
+        call = FactNormalizationCallRepository(session).get(candidate.call_id)
+        changed_call = call.model_copy(update={"call_id": "old-chart-call", "logical_document_id": added["logical_document_id"]})
+        FactNormalizationCallRepository(session).create(changed_call)
+        current = _incremental_source(session, {**old, "authority": wide, "snapshot_id": wide.evidence_snapshot_v2_id,
+            "complete_revision_id": wide.complete_processing_revision_id, "base_revision_id": "inc-base"},
+            added, change_metadata=True, retained_only=True, prefix="reclassified")
+        validator = FactAuthorityValidator(session)
+        assert validator.retained_source_documents(wide, current) == {old["doc_id"]}
+        assert validator.retained_fact_source_is_reusable(target, current)
+        scopes = select_reprojection_source_runs(session, authority=current, target_kind="fact", target_id=target.fact_id)
+        assert scopes[target.run_id] == {call.call_id}
+    job = _service(session_factory).create_or_reuse_job(authority=current, target_kind="fact", target_id=target.fact_id,
+        locator_ids=target.locator_ids, reason="原图未变，仅其他资料分类变化后更正", operator_id="builder-verification",
+        updates={"value": "130/80"}, created_by="builder-verification", created_at=NOW)
+    for _ in range(4):
+        _run(session_factory)
+    _assert_completed(session_factory, job.job_id)
+    with session_factory() as session:
+        correction = FactCorrectionRepository(session).list_by_review_episode(current.review_episode_id)[0]
+        assert ClinicalFactV2Repository(session).get(target.fact_id) == target
+        assert ClinicalFactV2Repository(session).get(correction.new_entity_id).value == "130/80"
+
+
 def test_prior_risk_without_source_linkage_stays_weak_as_unreconfirmed(session_factory):
     """先期显式风险无法按源记录复核时：保守保留较弱覆盖，不升级也不重申旧缺口。"""
     with session_factory() as session, session.begin():

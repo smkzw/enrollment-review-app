@@ -26,7 +26,7 @@ from tests.v2.storage.test_fact_repositories import _update_episode
 NOW = datetime(2026, 10, 14, tzinfo=UTC)
 
 
-def _incremental_source(session, old, added, *, change_metadata=False, retained_only=False):
+def _incremental_source(session, old, added, *, change_metadata=False, retained_only=False, prefix="inc"):
     """Compose two real Phase4 repository fixtures under one owner; no fake completion row."""
     snapshots = EvidenceSnapshotRepository(session)
     before = snapshots.get(old["snapshot_id"])
@@ -40,8 +40,12 @@ def _incremental_source(session, old, added, *, change_metadata=False, retained_
         EvidenceSnapshotMember(member_id="inc-added", snapshot_id="inc-snapshot",
         logical_document_id=added["logical_document_id"], source_document_version_id=added["doc_id"], origin="added")]
     if retained_only:
-        members = members[:1]
-    snapshot = snapshots.create_incremental(EvidenceSnapshot(evidence_snapshot_id="inc-snapshot",
+        members = [member.model_copy(update={"member_id": f"{prefix}-member-{index}",
+            "snapshot_id": f"{prefix}-snapshot", "origin": "inherited"}) for index, member in enumerate(before.members)]
+    else:
+        members = [member.model_copy(update={"member_id": f"{prefix}-member-{index}",
+            "snapshot_id": f"{prefix}-snapshot"}) for index, member in enumerate(members)]
+    snapshot = snapshots.create_incremental(EvidenceSnapshot(evidence_snapshot_id=f"{prefix}-snapshot",
         project_id=before.project_id, subject_id=before.subject_id, review_episode_id=before.review_episode_id,
         prior_snapshot_id=before.evidence_snapshot_id, comparison_snapshot_id=before.evidence_snapshot_id,
         upload_mode="incremental", members=members,
@@ -55,17 +59,17 @@ def _incremental_source(session, old, added, *, change_metadata=False, retained_
         from app.storage.evidence_repositories import SourceDocumentMetadataRevisionRepository
         metadata = SourceDocumentMetadataRevisionRepository(session)
         original = metadata.get(metadata_ids[0])
-        revised = original.model_copy(update={"metadata_revision_id": "inc-metadata", "revision": original.revision + 1,
+        revised = original.model_copy(update={"metadata_revision_id": f"{prefix}-metadata", "revision": original.revision + 1,
             "supersedes_metadata_revision_id": original.metadata_revision_id,
             **(change_metadata if isinstance(change_metadata, dict) else {"document_type": "另一类资料"})})
         metadata.append(revised)
-        metadata_ids = [revised.metadata_revision_id]
-    manifest = [item.model_copy(update={"entry_id": f"inc-page-{index}", "position": index})
+        metadata_ids[0] = revised.metadata_revision_id
+    manifest = [item.model_copy(update={"entry_id": f"{prefix}-page-{index}", "position": index})
         for index, item in enumerate([*previous.manifest, *(item for row in additions for item in row.manifest)], 1)]
     manifest_sha = evidence_processing_manifest_hash(entries=[(item.source_document_version_id, item.page_number,
         item.original_frame, item.page_artifact_id, item.ocr_page_id, item.status.value) for item in manifest])
     base = EvidenceProcessingRevisionRepository(session).get(old["base_revision_id"]).model_copy(update={
-        "evidence_processing_revision_id": "inc-base", "evidence_snapshot_id": snapshot.evidence_snapshot_id,
+        "evidence_processing_revision_id": f"{prefix}-base", "evidence_snapshot_id": snapshot.evidence_snapshot_id,
         "manifest": manifest, "manifest_sha256": manifest_sha})
     EvidenceProcessingRevisionRepository(session).create(base)
     locators = sorted([*previous.locator_ids, *(item for row in additions for item in row.locator_ids)])
@@ -77,16 +81,16 @@ def _incremental_source(session, old, added, *, change_metadata=False, retained_
     candidate_sha = processing_candidate_input_hash(evidence_snapshot_id=snapshot.evidence_snapshot_id,
         base_processing_revision_id=base.evidence_processing_revision_id, expected_revision=authority.episode_revision,
         scanner_rule_version="facts-test/v1", selected_locator_ids=locators, attempt_manifest=attempt)
-    candidate = EvidenceProcessingCandidate(candidate_id="inc-producer", evidence_snapshot_id=snapshot.evidence_snapshot_id,
+    candidate = EvidenceProcessingCandidate(candidate_id=f"{prefix}-producer", evidence_snapshot_id=snapshot.evidence_snapshot_id,
         base_processing_revision_id=base.evidence_processing_revision_id, project_id=authority.project_id,
         subject_id=authority.subject_id, review_episode_id=authority.review_episode_id,
-        expected_revision=authority.episode_revision, idempotency_key="inc-key", scanner_rule_version="facts-test/v1",
+        expected_revision=authority.episode_revision, idempotency_key=f"{prefix}-key", scanner_rule_version="facts-test/v1",
         selected_locator_ids=locators, attempt_manifest=attempt, candidate_input_sha256=candidate_sha,
         status="staged", created_by="test", created_at=NOW)
     EvidenceProcessingCandidateRepository(session).create(candidate, EvidenceProcessingCandidateEvent(
         candidate_id=candidate.candidate_id, seq=1, from_status="staged", to_status="processing", event_kind="worker_start",
         actor="test", reason="合成增量来源测试", attempt_manifest=attempt, attempt_input_sha256=candidate_sha, created_at=NOW))
-    complete = previous.model_copy(update={"evidence_processing_revision_id": "inc-complete",
+    complete = previous.model_copy(update={"evidence_processing_revision_id": f"{prefix}-complete",
         "evidence_snapshot_id": snapshot.evidence_snapshot_id, "base_processing_revision_id": base.evidence_processing_revision_id,
         "producer_candidate_id": candidate.candidate_id, "candidate_input_sha256": candidate_sha,
         "manifest": manifest, "manifest_sha256": manifest_sha, "locator_ids": locators,
