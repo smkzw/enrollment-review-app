@@ -88,18 +88,20 @@ def test_flagged_prompt_is_selected_only_with_its_explicit_matching_model(sessio
             select_registered_evidence_normalizer_config(session, registered_config=wrong)
 
 
-@pytest.mark.parametrize("fault", [None, "two_drugs", "blocking_date", "wrong_role", "wrong_object", "missing_unit"])
+@pytest.mark.parametrize("fault", [None, "two_drugs", "blocking_date", "blocking_date_outside", "unannotated_date", "negation", "aligned_ongoing",
+    "wrong_role", "wrong_object", "missing_unit"])
 def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_consumer(
     session_factory, data_paths, fault,
 ):
     medication_text = TEXT + ("同时口服药物乙10mg一次。" if fault == "two_drugs" else "")
-    source_text = medication_text + "\nAST 3.5 mmol/L"
-    flag = OcrRiskFlag(risk_id="date", kind="date", level="blocking", text="2025-04-12",
-        text_start=0, text_end=10, rule_version="facts-test/v1")
+    source_text = ("否认" if fault == "negation" else "") + medication_text + "\nAST 3.5 mmol/L"
+    flag = OcrRiskFlag(risk_id="date", kind="negation_polarity" if fault == "negation" else "date",
+        level="blocking", text="否认" if fault == "negation" else "2025-04-12",
+        text_start=0, text_end=2 if fault == "negation" else 10, rule_version="facts-test/v1")
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="medication-fields", source_text=source_text, first_excerpt=medication_text,
             document_type="既往病历", source_party="外院", source_qualification_mode="scoped_text_v1",
-            risk_flags=(flag,) if fault == "blocking_date" else ())
+            risk_flags=(flag,) if fault in {"blocking_date", "blocking_date_outside", "unannotated_date", "negation", "aligned_ongoing"} else ())
         base = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
         model = base.model_copy(update={"model_config_id": "medication-fields-model",
             "parameters": {**base.parameters, "include_medication_field_sources": True}})
@@ -133,6 +135,11 @@ def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_cons
         fields[1]["object_text"] = "药物乙"
     elif fault == "missing_unit":
         fields.pop()
+    elif fault == "unannotated_date":
+        body["exposure_candidates"][0].pop("field_sources")
+    elif fault == "aligned_ongoing":
+        body["exposure_candidates"][0]["duration_status"] = "ongoing"
+        fields[2].update(role="status_ongoing", value_text="药物甲")
     requests = []
     response = SimpleNamespace(id="synthetic-no-network", model=model.model, usage=None,
         choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content=json.dumps(body, ensure_ascii=False)))])
@@ -151,23 +158,44 @@ def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_cons
         exposures = MedicationExposureV2Repository(session).list_by_episode(chain["episode_id"])
         expected = 2 if fault == "two_drugs" else 1
         assert len(facts) == expected, facts
-        assert len(exposures) == (expected if fault in (None, "two_drugs") else 0)
+        assert len(exposures) == (expected if fault in (None, "two_drugs", "blocking_date", "blocking_date_outside") else 0)
         profile = PatientProfileService().latest(session, chain["episode_id"])
         assert profile is not None
-        if fault is not None:
+        if fault not in (None, "blocking_date", "blocking_date_outside"):
             return
+        if fault in {"blocking_date", "blocking_date_outside"}:
+            assert "LOW_OCR_CONFIDENCE" in facts[0].risk_flags
         saved = FactNormalizationCandidateRepository(session).get(exposures[0].source_candidate_ids[0])
         assert len(saved.field_sources) == 5
         assert all(item.source_text_sha256 == hashlib.sha256(source_text.encode()).hexdigest() for item in saved.field_sources)
         assert exposures[0].fact_ids == [facts[0].fact_id]
     frame, rules, _ = medication_context(use_day=date(2025, 4, 12))
     frame.authority, frame.facts, frame.medication_exposures = chain["authority"], facts, exposures
-    frame.review_episode.evidence_cutoff_date = date(2025, 4, 20)
-    frame.review_episode.anchor_dates = {"screening_date": DateValue(value=date(2025, 4, 20), precision="day")}
+    anchor = date(2025, 6, 20) if fault == "blocking_date_outside" else date(2025, 4, 20)
+    frame.review_episode.evidence_cutoff_date = anchor
+    frame.review_episode.anchor_dates = {"screening_date": DateValue(value=anchor, precision="day")}
     frame.source_pages = [SimpleNamespace(source_document_version_id=chain["doc_id"], page_artifact_id=chain["page_artifact_id"], page_number=1)]
     refs = {facts[0].fact_id: [WorkDraftEvidenceRef(fact_id=facts[0].fact_id, locator_id=chain["locator_id"],
         source_document_version_id=chain["doc_id"], page_artifact_id=chain["page_artifact_id"], page_number=1, excerpt=TEXT)]}
     before = deepcopy(exposures[0].model_dump(mode="json"))
     item, = calculate_medications(frame, rules, evidence_refs=refs)
-    assert item.decision.value == "exclusion_triggered" and item.confidence == "low"
+    if fault == "blocking_date_outside":
+        assert item.decision.value == "indeterminate" and item.confidence is None
+        assert "未落入" in item.reason_text
+    else:
+        assert item.decision.value == "exclusion_triggered" and item.confidence == "low"
+        assert ("识别可能有误" in (item.confidence_reason or "")) == (fault == "blocking_date")
+    assert ("识别可能有误" in item.reason_text) == (fault in {"blocking_date", "blocking_date_outside"})
     assert exposures[0].model_dump(mode="json") == before
+
+
+def test_unreadable_source_cannot_enter_the_normalization_chain(session_factory):
+    from app.storage.evidence_locator_repositories import RevisionClosureError
+
+    flag = OcrRiskFlag(risk_id="repetition", kind="output_repetition", level="blocking",
+        text=TEXT, text_start=0, text_end=len(TEXT), rule_version="facts-test/v1")
+    with session_factory() as session, session.begin():
+        with pytest.raises(RevisionClosureError, match="blocking"):
+            _seed_chain(session, prefix="unreadable-medication", source_text=TEXT + "\nAST 3.5 mmol/L", first_excerpt=TEXT,
+                document_type="既往病历", source_party="外院", source_qualification_mode="scoped_text_v1",
+                risk_flags=(flag,))

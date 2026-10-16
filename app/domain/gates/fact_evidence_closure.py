@@ -616,7 +616,9 @@ def validate_blocking_ocr_for_candidate(
       BLOCKING 风险即视为阻断（保守策略，符合“整页 OCR 风险未完成校对时
       相关候选不得发布”的要求）。
 
-    非 BLOCKING 风险不阻断。
+    非 BLOCKING 风险不阻断。0.2.0 的文字主读对普通风险保留低置信：
+    用药派生记录须另有完整逐字段原文及角色提案，不以页号或策略名代替。
+    这不授予原图读数已核实状态；来源损坏和不可读仍阻断。
     """
     locator_ids: list[str] = list(getattr(candidate, "locator_ids", []) or [])
     if not locator_ids:
@@ -633,11 +635,20 @@ def validate_blocking_ocr_for_candidate(
         revision.source_qualification_mode == "scoped_text_v1"
         and _has_unlocated_value_dependencies(candidate)
     )
+    source_bound_medication = (
+        isinstance(candidate, MedicationExposureCandidateV2)
+        and revision.source_qualification_mode == "scoped_text_v1"
+        and bool(candidate.field_sources)
+        and candidate.duration_status.value in {"single", "unknown"}
+        and not _medication_field_source_errors(session, candidate, revision,
+            locator_cache=locator_cache, correction_cache=corrections, visual_batch=visual_batch)
+    )
 
     blocked_locators: set[str] = set()
     reasons: list[str] = []
     source_error = False
     unreadable_source = False
+    medication_semantics_unresolved = False
     from app.evidence.risk import allows_risk_review
 
     for lid in locator_ids:
@@ -662,7 +673,16 @@ def validate_blocking_ocr_for_candidate(
             continue
         flags = blocking_by_page.get(ocr_pid, [])
         unreadable_source |= any(not allows_risk_review(flag) for _, flag in flags)
-        if requires_clear_source_page and flags:
+        # A clipped quote can omit a preceding negation. Field annotations are
+        # not a polarity review and never resolve a page's outstanding polarity.
+        medication_semantics_unresolved |= source_bound_medication and any(
+            flag.kind.value not in {"numeric_value", "decimal_point", "unit", "date"}
+            for _, flag in flags)
+        if source_bound_medication and medication_semantics_unresolved:
+            reasons.append(f"定位 {lid} 的用药记录仍有未核清的极性或读取问题，逐字段摘录不能替代语义核对")
+            blocked_locators.add(lid)
+            continue
+        if requires_clear_source_page and not source_bound_medication and flags:
             reasons.append(f"定位 {lid} 所在原件页仍有未核实读数，候选数值或日期尚无逐项来源核实依据")
             blocked_locators.add(lid)
             continue
@@ -695,11 +715,11 @@ def validate_blocking_ocr_for_candidate(
                 )
                 blocked_locators.add(lid)
     if reasons:
-        if isinstance(candidate, ClinicalFactCandidateV2) and (
+        if source_bound_medication or (isinstance(candidate, ClinicalFactCandidateV2) and (
             candidate.variable_id is not None or revision.source_qualification_mode == "scoped_text_v1"
-        ):
+        )):
             # Source identity failures are never converted into OCR warnings.
-            if not source_error and not unreadable_source:
+            if not source_error and not unreadable_source and not medication_semantics_unresolved:
                 return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
         return GateOutcome.BLOCKED, reasons, sorted(blocked_locators)
     return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
