@@ -17,7 +17,7 @@ PR #1增量修复：owner内联处理7份旧文档归档位置冲突，字节与
 | Goal／分支 | 用户已解除暂停并要求继续0.2.0，现场get_goal为active，dev/0.2.0；接续现有v46，不重派已完成读取 |
 | 唯一工作树 | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/build-0.2.0 |
 | 当前WP／里程碑 | 当前WP5，M1已有真实稿，不冒称本人最终验收；S4共同补救范围仍待此前医学问题答复。新v46 Job3d69a7c3完成4/4，126证明复用0模型；149项全部临床内容与b193／v45相同。字段来源默认关闭，真实单页追加15事实而0暴露，日期对象未对应仍拒。不重读方案、9页或变量建议 |
-| 源码／前端 | PR #1–#32实际MERGED，32为bd980b81；本包源码23adbbee已提交部署，推送／merge按实际Git核对。前端eeafc419／index-cdSDIlft.js未改。旧503＋25、前置501及最终148窗口分别绑定版本，不冒称当前全库绿；旧基线和Devin跳过限制保留 |
+| 源码／前端 | PR #1–#33实际MERGED，33为2edf3bd7，本树已快进；本包源码23adbbee已部署。前端eeafc419／index-cdSDIlft.js未改。旧503＋25、前置501及最终148窗口分别绑定版本，不冒称当前全库绿；PR33的Devin绿色不替代本轮验证或医学审阅，旧跳过限制保留 |
 | 自有服务 | 唯一61134，标准入口／本树显式.env与data_v2，后端23adbbee／PID1138／exec54975、output/wp5-requirement-rows-23adbbee-desktop.log。0活动Job后正常TERM原94055、收回143并核端口释放再启，共享服务不动。Profile API更新前后完整JSON相同，416事实54稿8094项／0暴露／0活动Job保持；两个新选项均未启用、0模型、不改.env。证据wp5-requirement-rows-deployment.json；未改前端，不冒称新增视觉或模型速度验收 |
 | 临床数据范围 | WP0一致性副本data_v2；规则7／节点11，5份24页。单页字段试跑追加15事实，累计416事实，当前工作稿冻结243事实；不是416独立事件。Profile14 c115f2c83ac2f1f3b2388dcc7a35a666，旧Profile13等保持，0合格暴露仍未解决 |
 | 当前工作稿 | 原UI Job3d69a7c3d6004d14a9a78727f7b062b3 completed4/4、87.374651秒，run23cd765ee15440e382555cbbad5f04bd／v46，supersedesb1936c71；126证明复用0模型、24页243事实149项。87秒是入队后Job，不含此前慢准备，不冒称完整点击耗时。旧b193／自动5175562a为119.6128秒，全部已终态读取保留 |
