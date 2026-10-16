@@ -747,7 +747,15 @@
 .protocol-review-scope__source-picker fieldset { max-block-size: min(24rem, 45vh); overflow: auto; }
 .protocol-review-scope__source-picker fieldset label { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.5rem; padding-block: 0.5rem; align-items: start; }
 .protocol-review-scope__source-picker fieldset input { margin-block-start: 0.25rem; }
-.protocol-review-scope__class-members { display: grid; gap: 0.25rem; padding-block: 0.5rem; }
+.protocol-review-scope__classes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1rem;
+  max-inline-size: 96rem;
+  align-items: start;
+}
+.protocol-review-scope__class-members { display: grid; gap: 0.25rem; padding-block: 0.5rem; min-inline-size: 0; }
+.protocol-review-scope__class-members > span { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .protocol-review-scope__class-members textarea { min-block-size: 6rem; resize: vertical; font: inherit; }
 .protocol-review-scope__choice { padding-inline-start: 1rem; }
 

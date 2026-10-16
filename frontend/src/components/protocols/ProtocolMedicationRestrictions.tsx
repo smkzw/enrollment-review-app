@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, Pill } from "lucide-react";
+import { CalendarDays, Pill, Plus, Trash2 } from "lucide-react";
 import { decodeScopeSupplement, medicationRequest, medicationStages, type MedicationRestriction, type ScopeSupplement } from "../../api/protocolMedications";
 import { formatTimeConstraint } from "../../domain/mappers";
 
@@ -45,10 +45,14 @@ export function ProtocolMedicationRestrictions({ jobId, revisionId, content, dru
   const [changed, setChanged] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reused, setReused] = useState(false);
+  const [savedClassIds, setSavedClassIds] = useState<string[]>([]);
   const active = useRef(""); active.current = `${jobId}/${revisionId}`;
   useEffect(() => {
     setError(null); setChanged(false); setBusy(false); setProposalRef(null); setReused(false);
-    try { setDraft(content.scope_supplement ? decodeScopeSupplement(content.scope_supplement) : null); }
+    try {
+      const value = content.scope_supplement ? decodeScopeSupplement(content.scope_supplement) : null;
+      setDraft(value); setSavedClassIds(Object.keys(value?.drug_classes ?? drugClasses));
+    }
     catch (reason) { setDraft(null); setError(reason instanceof Error ? reason.message : "补充要求尚不能读取。"); }
   }, [jobId, revisionId, content]);
   async function run(save: boolean) {
@@ -103,12 +107,25 @@ export function ProtocolMedicationRestrictions({ jobId, revisionId, content, dru
       {draft && <>
         <p>{changed ? reused ? "已核对保存的原答，未重新读取；本次建议尚未保存。" : "本次建议尚未保存。" : "已保存为草稿，审定后才可用于规则包。"}</p>
         <details><summary>补充药物类别中的药名</summary>
-          {Object.entries(draft.drug_classes ?? drugClasses).map(([id, members], index) => <label key={id} className="protocol-review-scope__class-members">
-            {draft.medications.filter(item => item.drug_class_id === id).map(item => item.drug_text).join("、") || members.filter(Boolean).slice(0, 3).join("、") || "药名待补充"}
+          <button type="button" className="button" disabled={busy} onClick={() => {
+            const classes = draft.drug_classes ?? drugClasses;
+            let number = 1;
+            while (Object.hasOwn(classes, `custom_${number}`)) number += 1;
+            setDraft({ ...draft, drug_classes: { ...classes, [`custom_${number}`]: [""] } });
+            setProposalRef(null); setReused(false); setChanged(true);
+          }}><Plus size={16} aria-hidden="true" />新增类别</button>
+          <div className="protocol-review-scope__classes-grid">{Object.entries(draft.drug_classes ?? drugClasses).map(([id, members], index) => <label key={id} className="protocol-review-scope__class-members">
+            <span>{draft.medications.filter(item => item.drug_class_id === id).map(item => item.drug_text).join("、") || members.filter(Boolean).slice(0, 3).join("、") || "药名待补充"}
+              {!savedClassIds.includes(id) && <button type="button" className="button button--icon"
+                aria-label={`移除新增类别${index + 1}`} title={draft.medications.some(item => item.drug_class_id === id) ? "已有条目使用本类别" : "移除新增类别"}
+                disabled={busy || draft.medications.some(item => item.drug_class_id === id)} onClick={() => {
+                  const classes = { ...(draft.drug_classes ?? drugClasses) }; delete classes[id];
+                  setDraft({ ...draft, drug_classes: classes }); setProposalRef(null); setReused(false); setChanged(true);
+                }}><Trash2 size={16} aria-hidden="true" /></button>}</span>
             <textarea aria-label={`类别${index + 1}的药名，每行一个`} disabled={busy} value={members.join("\n")}
               onChange={event => { setDraft({ ...draft, drug_classes: { ...(draft.drug_classes ?? drugClasses),
-                [id]: event.target.value.split("\n") } }); setChanged(true); }} />
-          </label>)}
+                [id]: event.target.value.split("\n") } }); setProposalRef(null); setReused(false); setChanged(true); }} />
+          </label>)}</div>
         </details>
         {draft.medications.map((item, index) => <details className="protocol-review-scope__group" key={index}>
           <summary>{item.drug_text || "新增用药限制"} · <CalendarDays size={14} aria-hidden="true" /> {item.window ? Object.hasOwn(anchors, item.window.anchor_type) ? formatTimeConstraint(item.window) : "时间起点尚未核清" : item.period === "study_period" ? "整个研究期间" : item.period === "treatment_period" ? "治疗期间" : "时间尚待核清"}
@@ -116,7 +133,7 @@ export function ProtocolMedicationRestrictions({ jobId, revisionId, content, dru
           <div className="protocol-review-scope__form">
             <label>药物或治疗原文<input disabled={busy} value={item.drug_text} onChange={event => change(index, { drug_text: event.target.value })} /></label>
             <label>药物类别<select disabled={busy} value={item.drug_class_id ?? ""} onChange={event => change(index, { drug_class_id: event.target.value || null })}>
-              <option value="">尚未归类</option>{Object.entries(draft.drug_classes ?? drugClasses).map(([id, members]) => <option key={id} value={id}>{members.slice(0, 3).join("、")}等</option>)}</select></label>
+              <option value="">尚未归类</option>{Object.entries(draft.drug_classes ?? drugClasses).map(([id, members], position) => <option key={id} value={id}>{members.filter(Boolean).slice(0, 3).join("、") || `药名待补充的类别${position + 1}`}</option>)}</select></label>
             {item.drug_class_id && <label>类别适用范围<select disabled={busy} value={item.class_scope ?? ""}
               onChange={event => change(index, { class_scope: event.target.value as MedicationRestriction["class_scope"] || null })}>
               <option value="">尚未核对</option><option value="all_members">本条适用于该类全部药物</option>

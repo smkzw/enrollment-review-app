@@ -224,3 +224,49 @@ it("补充类别药名沿原保存入口提交，空行不冒充药名，不触�
   await user.click(screen.getByRole("button", { name: "保存补充要求" }));
   expect(request).toHaveBeenCalledOnce();
 });
+
+it("新增类别与来源条目共同保存，不自动确定类别适用范围或借用原读取", async () => {
+  const user = userEvent.setup();
+  const content = { ...supplement(), drug_classes: { saved_class: ["药物乙"] } };
+  const request = vi.fn(async (_url: string, options: RequestInit) => {
+    const body = JSON.parse(String(options.body));
+    if (options.method === "POST") return new Response(JSON.stringify({ job_id: "job", draft_revision_id: "revision",
+      supplement: content, proposal_ref: "old-reading", reused: true }));
+    expect(body.proposal_ref).toBeNull();
+    expect(body.drug_classes).toEqual({ saved_class: ["药物乙"], custom_1: ["药物甲"] });
+    expect(body.proposal.medications[0].drug_class_id).toBe("custom_1");
+    expect(body.proposal.medications[0].class_scope).toBeNull();
+    return new Response(JSON.stringify({ revision_id: "next" }));
+  });
+  vi.stubGlobal("fetch", request);
+  render(<ProtocolMedicationRestrictions jobId="job" revisionId="revision" content={{}} drugClasses={{ saved_class: ["药物乙"] }} onSaved={vi.fn()} />);
+  await user.click(screen.getByText(/用药与伴随治疗限制/));
+  await user.click(screen.getByRole("button", { name: "整理选定章节" }));
+  await screen.findByText(/本次建议尚未保存/);
+  await user.click(screen.getByText("补充药物类别中的药名"));
+  expect(screen.queryByRole("button", { name: "移除新增类别1" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "新增类别" }));
+  expect(screen.queryByText(/已核对保存的原答/)).not.toBeInTheDocument();
+  await user.type(screen.getByLabelText("类别2的药名，每行一个"), "药物甲");
+  await user.click(screen.getByText(/药物甲 ·/));
+  await user.selectOptions(screen.getByLabelText("药物类别"), "custom_1");
+  expect(screen.getByLabelText("类别适用范围")).toHaveValue("");
+  expect(screen.getByRole("button", { name: "移除新增类别2" })).toBeDisabled();
+  expect(screen.queryByText("custom_1")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "保存补充要求" }));
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
+it("只可移除未保存且未被条目使用的新类别，不移除已有类别", async () => {
+  const user = userEvent.setup();
+  const content = { ...supplement(), drug_classes: { custom_1: ["药物乙"] } };
+  render(<ProtocolMedicationRestrictions jobId="job" revisionId="revision" content={{ scope_supplement: content }} drugClasses={{}} onSaved={vi.fn()} />);
+  await user.click(screen.getByText(/用药与伴随治疗限制/));
+  await user.click(screen.getByText("补充药物类别中的药名"));
+  expect(screen.queryByRole("button", { name: /移除新增/ })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "新增类别" }));
+  expect(screen.getByLabelText("类别2的药名，每行一个")).toHaveValue("");
+  await user.click(screen.getByRole("button", { name: "移除新增类别2" }));
+  expect(screen.queryByLabelText("类别2的药名，每行一个")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("类别1的药名，每行一个")).toHaveValue("药物乙");
+});

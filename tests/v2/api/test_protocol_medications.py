@@ -218,7 +218,8 @@ def test_selected_scope_source_damage_blocks_publication_instead_of_hiding_missi
         assert client.get(path).json()["revision_id"] == saved.json()["revision_id"]
 
 
-def test_manual_class_members_save_review_hash_and_publication_retain_frozen_meaning(build_app, data_paths, monkeypatch):
+@pytest.mark.parametrize("change", ["members", "new_class"])
+def test_manual_class_members_save_review_hash_and_publication_retain_frozen_meaning(build_app, data_paths, monkeypatch, change):
     from app.domain.variables import dictionary
     from app.storage.repositories import get_rule_set
     calls = install_completion(monkeypatch)
@@ -252,7 +253,12 @@ def test_manual_class_members_save_review_hash_and_publication_retain_frozen_mea
         assert current["content"]["scope_supplement"]["drug_classes"] == classes
         assert current["content"]["scope_supplement"]["request_refs"] == supplement["request_refs"]
         changed = deepcopy(classes)
-        changed[class_id].append("合成品种乙")
+        if change == "members":
+            changed[class_id].append("合成品种乙")
+        else:
+            changed["custom_1"] = ["药物甲", "合成品种乙"]
+            proposal["medications"][0]["drug_class_id"] = "custom_1"
+            proposal["medications"][0]["class_scope"] = "all_members"
         saved = client.put(path + "/medications", json={"expected_revision_id": current["revision_id"],
             "proposal": proposal, "drug_classes": changed})
         assert saved.status_code == 200, saved.text
@@ -282,10 +288,22 @@ def test_manual_class_members_save_review_hash_and_publication_retain_frozen_mea
         with app.state.session_factory() as session:
             rules = get_rule_set(session, published.json()["rule_set_id"], published.json()["rule_set_revision"])
             assert rules.scope_supplement.drug_classes == changed
+            if change == "new_class":
+                from app.services.work_draft_medications import calculate_medications
+                from app.domain.contracts.enums import ComponentDecision
+                from tests.v2.services.test_work_draft_medications import medication_context
+                frame, _, refs = medication_context()
+                computed = calculate_medications(frame, rules, evidence_refs=refs)
+                assert computed[0].decision == ComponentDecision.EXCLUSION_TRIGGERED
+                assert computed[0].confidence == "low"
+                assert computed[0].evidence_refs == refs["med-fact"]
+                # A verified dictionary does not establish a missing exposure.
+                frame.medication_exposures = []
+                assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == ComponentDecision.INDETERMINATE
         assert len(calls) == 1
 
 
-@pytest.mark.parametrize("fault", ["key", "empty", "blank", "duplicate", "false_receipt"])
+@pytest.mark.parametrize("fault", ["key", "empty", "blank", "duplicate", "false_receipt", "unlinked_class", "blank_class_id", "blank_reference", "false_new_class_receipt"])
 def test_bad_class_member_changes_never_write_or_borrow_old_reading(build_app, data_paths, monkeypatch, fault):
     calls = install_completion(monkeypatch)
     app = build_app(run_runner=False)
@@ -302,11 +320,19 @@ def test_bad_class_member_changes_never_write_or_borrow_old_reading(build_app, d
         elif fault == "empty": classes[class_id] = []
         elif fault == "blank": classes[class_id] = [" "]
         elif fault == "duplicate": classes[class_id] = ["药物甲", "药物甲"]
+        elif fault == "unlinked_class": classes["custom_1"] = ["药物乙"]
+        elif fault == "blank_class_id":
+            classes[" "] = ["药物甲"]
+        elif fault == "blank_reference":
+            proposal["medications"][0]["drug_class_id"] = " "
+        elif fault == "false_new_class_receipt":
+            classes["custom_1"] = ["药物甲"]
+            proposal["medications"][0]["drug_class_id"] = "custom_1"
         else: classes[class_id].append("合成品种乙")
         response = client.put(path + "/medications", json={"expected_revision_id": scope["draft_revision_id"],
             "proposal": proposal, "drug_classes": classes,
-            **({"proposal_ref": result["proposal_ref"]} if fault == "false_receipt" else {})})
-        assert response.status_code == 409, response.text
+            **({"proposal_ref": result["proposal_ref"]} if fault in {"false_receipt", "false_new_class_receipt"} else {})})
+        assert response.status_code == (422 if fault == "blank_reference" else 409), response.text
         assert client.get(path).json()["revision_id"] == scope["draft_revision_id"]
 
 

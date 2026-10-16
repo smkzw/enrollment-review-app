@@ -1588,8 +1588,13 @@ class ProtocolWorkbenchService:
             previous = revision.content.scope_supplement
             frozen_classes = previous.drug_classes if previous is not None else load_drug_classes()
             classes = frozen_classes if drug_classes is None else drug_classes
-            if set(classes) != set(frozen_classes):
-                raise ValueError("本次只调整已有类别中的药名，不能改换类别身份。")
+            if not set(frozen_classes) <= set(classes):
+                raise ValueError("不能删除或改换已保存的药物类别身份。")
+            if any(not name.strip() or name != name.strip() for name in classes):
+                raise ValueError("药物类别身份不能为空或含首尾空白。")
+            added = set(classes) - set(frozen_classes)
+            if added - {item.drug_class_id for item in proposal.medications}:
+                raise ValueError("新增的药物类别尚未关联限制条目，请先选择对应类别或移除新增类别。")
             for members in classes.values():
                 if not members or any(not name.strip() or name != name.strip() for name in members):
                     raise ValueError("每个药物类别至少保留一个非空药名，名称两侧不能带空格。")
