@@ -118,15 +118,21 @@ describe("受试者资料目录", () => {
     setCatalogRepository(repository);
   });
 
-  it("项目选项以项目代号开头，长项目名仍保留完整身份", async () => {
+  it("项目以代号期别版本显示，全名保留提示，项目与受试者绑定不变", async () => {
     render(<SubjectsCatalogPage />);
 
     const projectSelect = await screen.findByRole("combobox", { name: "选择项目" });
-    expect(
-      within(projectSelect).getByRole("option", {
-        name: /PROJECT-1 · 合成试用项目 · Ⅲ期 · 方案 V1\.0/,
-      }),
-    ).toBeInTheDocument();
+    expect(projectSelect).toHaveValue(project.projectId);
+    expect(projectSelect).toHaveAttribute("title", project.projectName);
+    expect(within(projectSelect).getByRole("option", { name: "PROJECT-1 · Ⅲ期 · 方案 V1.0" }))
+      .toHaveAttribute("title", project.projectName);
+    await screen.findByText("筛选期资料当前有效");
+    const identity = document.querySelector(".catalog-project-meta strong");
+    expect(identity).toHaveTextContent(project.projectCode);
+    expect(identity).toHaveAttribute("title", project.projectName);
+    expect(screen.getByRole("link", { name: "打开筛选期证据工作台" }))
+      .toHaveAttribute("href", `#/subjects/${subject.subjectId}/evidence?episode=${episode.reviewEpisodeId}`);
+    expect(screen.queryByText(project.projectName)).not.toBeInTheDocument();
   });
 
   it("已启用的资料在目录中明确标为当前有效", async () => {

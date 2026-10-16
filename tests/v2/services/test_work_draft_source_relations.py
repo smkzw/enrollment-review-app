@@ -43,6 +43,32 @@ def test_display_source_scope_checks_use_chinese_without_rewriting_clinical_oper
     assert shown == "判断对象为受试者，节点日期=2025-08-08；记录时间适用，记录对象尚未核清；ALT 57.8 U/L。"
 
 
+def test_display_source_scope_names_without_assignments_remain_explanations_not_new_verdicts():
+    from app.services.work_draft_projection import display_source_reason
+    text = "object_matches与time_matches成立；object_matches_extra保持；ALT 57.8 U/L。"
+    assert display_source_reason(text) == "记录对象核对与记录时间核对成立；object_matches_extra保持；ALT 57.8 U/L。"
+
+
+def test_saved_projection_translates_explanation_only_and_preserves_source_and_history():
+    from app.domain.contracts.work_draft import WorkDraftItem, WorkDraftSourceRef
+    from app.services.work_draft_projection import project_saved_items
+    from tests.v2.services.test_work_draft_calculation import clause, material
+
+    rules, _, _ = clause()
+    source = "原件字段 object_matches 与 time_matches，原读数 57.8 U/L。"
+    saved = WorkDraftItem(item_id="saved", review_run_id="saved-run", official_code="IN-01",
+        rule_kind="inclusion", title="有源要求", source_text=source, decision="indeterminate",
+        reason_text="object_matches与time_matches尚待核清。", input_hash="a" * 64,
+        source_read_refs=[WorkDraftSourceRef(source_document_version_id="doc", page_artifact_id="page",
+            page_number=1, excerpt=source, disposition="unresolved")])
+    before = saved.model_dump_json()
+    shown, = project_saved_items([saved], authority=material().authority, rule_set=rules,
+        run_id=saved.review_run_id).clauses
+    assert shown.reason == "记录对象核对与记录时间核对尚待核清。"
+    assert shown.source_text == shown.source_read_refs[0].excerpt == source
+    assert shown.decision == "indeterminate" and saved.model_dump_json() == before
+
+
 def page(text="病历记载：否认近期感染。", *, complete=True, category="study_chart", key="page"):
     return WorkDraftSourcePage(source_document_version_id="document", page_artifact_id=key,
         page_number=1, effective_text=text, effective_text_sha256=sha256(text.encode()).hexdigest(),
