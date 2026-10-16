@@ -88,8 +88,12 @@ def project_saved_items(rows, *, authority, rule_set, run_id, issues=()):
     clauses, components = [], []
     medication_labels = {item.item_id: f"用药{index + 1:02d}" for index, item in enumerate(
         rule_set.scope_supplement.medications if rule_set.scope_supplement else [])}
+    navigation_scope = canonical_hash(rule_set.model_dump(mode="json"))
     for item in rows:
         projection = EligibilityClauseProjection(rule_component_id=item.item_id,
+            navigation_key=f"{navigation_scope}:{item.policy_group}:" + (
+                f"component:{item.rule_component_id}" if item.rule_component_id is not None
+                else f"parent:{item.official_code}"),
             rule_code=medication_labels[item.official_code] if item.policy_group == "medication" else item.official_code,
             rule_kind="medication" if item.policy_group == "medication" else item.rule_kind.value,
             text_summary=item.title, source_text=item.source_text,

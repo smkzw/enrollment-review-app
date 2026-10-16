@@ -88,7 +88,8 @@ def test_flagged_prompt_is_selected_only_with_its_explicit_matching_model(sessio
             select_registered_evidence_normalizer_config(session, registered_config=wrong)
 
 
-@pytest.mark.parametrize("fault", [None, "two_drugs", "blocking_date", "blocking_date_outside", "unannotated_date", "negation", "aligned_ongoing",
+@pytest.mark.parametrize("fault", [None, "two_drugs", "blocking_date", "blocking_date_outside", "compound_dose", "unknown_duration",
+    "unannotated_date", "negation", "aligned_ongoing",
     "wrong_role", "wrong_object", "missing_unit"])
 def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_consumer(
     session_factory, data_paths, fault,
@@ -101,7 +102,8 @@ def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_cons
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="medication-fields", source_text=source_text, first_excerpt=medication_text,
             document_type="既往病历", source_party="外院", source_qualification_mode="scoped_text_v1",
-            risk_flags=(flag,) if fault in {"blocking_date", "blocking_date_outside", "unannotated_date", "negation", "aligned_ongoing"} else ())
+            risk_flags=(flag,) if fault in {"blocking_date", "blocking_date_outside", "compound_dose", "unknown_duration",
+                "unannotated_date", "negation", "aligned_ongoing"} else ())
         base = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
         model = base.model_copy(update={"model_config_id": "medication-fields-model",
             "parameters": {**base.parameters, "include_medication_field_sources": True}})
@@ -140,6 +142,12 @@ def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_cons
     elif fault == "aligned_ongoing":
         body["exposure_candidates"][0]["duration_status"] = "ongoing"
         fields[2].update(role="status_ongoing", value_text="药物甲")
+    elif fault == "compound_dose":
+        fields[3]["value_text"] = "10mg"
+    elif fault == "unknown_duration":
+        body["exposure_candidates"][0]["duration_status"] = "unknown"
+        fields[1]["role"] = "use_start"
+        fields.pop(2)
     requests = []
     response = SimpleNamespace(id="synthetic-no-network", model=model.model, usage=None,
         choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content=json.dumps(body, ensure_ascii=False)))])
@@ -158,15 +166,15 @@ def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_cons
         exposures = MedicationExposureV2Repository(session).list_by_episode(chain["episode_id"])
         expected = 2 if fault == "two_drugs" else 1
         assert len(facts) == expected, facts
-        assert len(exposures) == (expected if fault in (None, "two_drugs", "blocking_date", "blocking_date_outside") else 0)
+        assert len(exposures) == (expected if fault in (None, "two_drugs", "blocking_date", "blocking_date_outside", "compound_dose", "unknown_duration") else 0)
         profile = PatientProfileService().latest(session, chain["episode_id"])
         assert profile is not None
-        if fault not in (None, "blocking_date", "blocking_date_outside"):
+        if fault not in (None, "blocking_date", "blocking_date_outside", "compound_dose", "unknown_duration"):
             return
-        if fault in {"blocking_date", "blocking_date_outside"}:
+        if fault in {"blocking_date", "blocking_date_outside", "compound_dose", "unknown_duration"}:
             assert "LOW_OCR_CONFIDENCE" in facts[0].risk_flags
         saved = FactNormalizationCandidateRepository(session).get(exposures[0].source_candidate_ids[0])
-        assert len(saved.field_sources) == 5
+        assert len(saved.field_sources) == (4 if fault == "unknown_duration" else 5)
         assert all(item.source_text_sha256 == hashlib.sha256(source_text.encode()).hexdigest() for item in saved.field_sources)
         assert exposures[0].fact_ids == [facts[0].fact_id]
     frame, rules, _ = medication_context(use_day=date(2025, 4, 12))
@@ -184,8 +192,8 @@ def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_cons
         assert "未落入" in item.reason_text
     else:
         assert item.decision.value == "exclusion_triggered" and item.confidence == "low"
-        assert ("识别可能有误" in (item.confidence_reason or "")) == (fault == "blocking_date")
-    assert ("识别可能有误" in item.reason_text) == (fault in {"blocking_date", "blocking_date_outside"})
+        assert ("识别可能有误" in (item.confidence_reason or "")) == (fault in {"blocking_date", "compound_dose", "unknown_duration"})
+    assert ("识别可能有误" in item.reason_text) == (fault in {"blocking_date", "blocking_date_outside", "compound_dose", "unknown_duration"})
     assert exposures[0].model_dump(mode="json") == before
 
 

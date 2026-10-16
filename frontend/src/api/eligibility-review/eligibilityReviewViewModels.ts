@@ -32,6 +32,7 @@ export interface EligibilitySourceReadRefView {
 
 export interface EligibilityClauseView {
   ruleComponentId: string;
+  navigationKey?: string | null;
   ruleCode: string;
   ruleKind: EligibilityRuleKind;
   textSummary: string;
@@ -316,6 +317,7 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
   return {
     ruleCode,
     ruleComponentId: requiredString(field(row, "rule_component_id", path), `${path}.rule_component_id`),
+    navigationKey: row.navigation_key == null ? null : requiredString(row.navigation_key, `${path}.navigation_key`),
     ruleKind,
     textSummary: requiredString(
       field(row, "text_summary", path),
@@ -412,6 +414,10 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
   const allIdentities = [...decodedClauses, ...componentClauses].map(clause => clause.ruleComponentId);
   if (new Set(allIdentities).size !== allIdentities.length) {
     throw new EligibilityReviewDecodeError("审核要点重复，请重新读取审核结果。");
+  }
+  const navigationKeys = [...decodedClauses, ...componentClauses].flatMap(clause => clause.navigationKey ? [clause.navigationKey] : []);
+  if (new Set(navigationKeys).size !== navigationKeys.length) {
+    throw new EligibilityReviewDecodeError("条款导航重复，请重新读取审核结果。");
   }
   const unassignedConflicts = ("unassigned_conflicts" in row
       ? arrayValue(row.unassigned_conflicts, "unassigned_conflicts") : []).map((value, index) => {

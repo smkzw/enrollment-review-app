@@ -56,6 +56,7 @@ class EligibilityClauseDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     rule_component_id: str = Field(min_length=1)
+    navigation_key: str | None = Field(default=None, min_length=1)
     rule_code: str = Field(pattern=r"^(?:(?:IN|EX|REQ)-\d{2}|用药\d{2,})$")
     rule_kind: Literal["inclusion", "exclusion", "required_procedure", "medication"]
     text_summary: str = Field(min_length=1)
@@ -176,6 +177,10 @@ class EligibilityReviewResponse(BaseModel):
         identities = [clause.rule_component_id for clause in (*self.clauses, *self.component_clauses)]
         if len(identities) != len(set(identities)):
             raise ValueError("审核结果包含重复的审核要点身份")
+        navigation_keys = [clause.navigation_key for clause in (*self.clauses, *self.component_clauses)
+                           if clause.navigation_key is not None]
+        if len(navigation_keys) != len(set(navigation_keys)):
+            raise ValueError("审核结果包含重复的条款导航身份")
         groups = [item.conflict_group_id for item in self.unassigned_conflicts]
         if len(groups) != len(set(groups)):
             raise ValueError("审核结果包含重复的争议记录")

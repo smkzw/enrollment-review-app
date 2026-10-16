@@ -47,6 +47,7 @@ export interface EligibilitySourceReadRefWire {
 
 export interface EligibilityClauseWire {
   rule_component_id: string;
+  navigation_key?: string | null;
   rule_code: string;
   rule_kind: EligibilityRuleKindWire;
   text_summary: string;

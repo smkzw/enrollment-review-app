@@ -30,14 +30,15 @@ export function EmptyState({ message, hint }: EmptyStateProps) {
 interface ErrorStateProps {
   message: string;
   onRetry: () => void;
+  retryLabel?: string;
 }
 
-export function ErrorState({ message, onRetry }: ErrorStateProps) {
+export function ErrorState({ message, onRetry, retryLabel = "重试" }: ErrorStateProps) {
   return (
     <div className="feedback feedback--error" role="alert">
       <p className="feedback__title">{message}</p>
       <button type="button" className="button" onClick={onRetry}>
-        重试
+        {retryLabel}
       </button>
     </div>
   );

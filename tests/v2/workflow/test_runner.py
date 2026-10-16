@@ -318,9 +318,32 @@ def test_retryable_failure_reruns_only_failed_step_after_backoff(session_factory
     snap = _snapshot(session_factory, clock, "job-1")
     assert snap.state == "completed"
     assert snap.steps[0].attempt == 2
+    assert snap.error_code is None and snap.error_classification is None
+    with _store(session_factory, clock) as store:
+        saved = store.get_job("job-1")
+        assert saved.error_code is None and saved.error_classification is None
     kinds = [row.event.event_type.value for row in snap.events]
     assert kinds.count("retry_scheduled") == 1
     assert kinds.count("step_failed") == 1
+
+
+def test_legacy_recovered_snapshot_keeps_failure_history_without_rewriting_terminal_row(session_factory, clock):
+    from sqlalchemy import update
+    from app.storage.models import JobRecord
+
+    create_job_with_steps(session_factory, clock, job_id="old-recovered", steps=TWO_STEPS)
+    runner = JobRunner(session_factory, {"demo": lambda ctx: {"step": ctx.step_id}}, now=clock.now)
+    assert runner.run_job("old-recovered")
+    with _store(session_factory, clock) as store:
+        history = store.list_event_rows("old-recovered")
+        store.session.execute(update(JobRecord).where(JobRecord.job_id == "old-recovered").values(
+            error_code="E_TRANSIENT", error_classification="retryable"))
+    snap = _snapshot(session_factory, clock, "old-recovered")
+    assert snap.state == "completed" and snap.error_code is None and snap.error_classification is None
+    assert snap.events == history
+    with _store(session_factory, clock) as store:
+        persisted = store.get_job("old-recovered")
+        assert persisted.error_code == "E_TRANSIENT" and persisted.error_classification == "retryable"
 
 
 def test_retry_receives_persisted_failure_checkpoint_without_replaying_success(session_factory, clock):

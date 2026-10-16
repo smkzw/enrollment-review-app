@@ -1044,7 +1044,7 @@ export function EligibilityWorkbenchPage() {
     if (review.state.status !== "success" || !confirmedRule || selectedEpisode?.reviewEpisodeId !== confirmedRule.episodeId
         || review.state.data.reviewRunId === confirmedRule.previousRun) return;
     const target = review.state.data.clauses.find(item => item.ruleCode === confirmedRule.ruleCode);
-    if (target) updateParams({ component: target.ruleComponentId, view: "all", filter: null, page: null });
+    if (target) updateParams({ component: target.navigationKey ?? target.ruleComponentId, view: "all", filter: null, page: null });
     setConfirmedRule(null);
   }, [review.state, confirmedRule, selectedEpisode?.reviewEpisodeId]);
 
@@ -1055,7 +1055,12 @@ export function EligibilityWorkbenchPage() {
   const setEpisode = (episodeId: string) =>
     updateParams({ episode: episodeId, component: null });
   const refreshWorkDraft = () => {
-    if (!confirmedRule) updateParams({ component: null, page: null });
+    if (!confirmedRule) {
+      const current = review.state.status === "success" ? [...review.state.data.clauses,
+        ...(review.state.data.componentClauses ?? [])].find(item =>
+          item.ruleComponentId === componentParam || item.navigationKey === componentParam) : undefined;
+      updateParams({ component: current?.navigationKey ?? null, page: null });
+    }
     setConfirmationJob(null);
     episodes.retry();
     review.retry();
@@ -1131,10 +1136,11 @@ export function EligibilityWorkbenchPage() {
     ...reviewData.clauses, ...controlWorkItems(reviewData.controls),
   ];
   const requestedClause = componentParam === null
-    ? null : [...allClauses, ...(reviewData.componentClauses ?? [])].find((clause) => clause.ruleComponentId === componentParam);
+    ? null : [...allClauses, ...(reviewData.componentClauses ?? [])].find((clause) =>
+      clause.ruleComponentId === componentParam || clause.navigationKey === componentParam);
   if (componentParam !== null && requestedClause === undefined
       && reviewData.workDraftState !== "method_changed" && reviewData.workDraftState !== "source_changed") {
-    return <ErrorState message="链接中的审核要点不存在，请重新选择。" onRetry={() => updateParams({ component: null })} />;
+    return <ErrorState message="链接中的审核要点不存在，请重新选择。" retryLabel="返回当前工作稿" onRetry={() => updateParams({ component: null })} />;
   }
   const matches = (clause: EligibilityWorkItem, mode: EligibilityListMode, decisionFilter: EligibilityDecisionFilter) =>
     mode === "pending" ? clauseIsIssue(clause) : decisionMatchesFilter(clause.decision, decisionFilter);
@@ -1160,25 +1166,28 @@ export function EligibilityWorkbenchPage() {
   const undeterminedCount = allClauses.filter((clause) => isUndeterminedDecision(clause.decision)).length;
   const subjectLabel = `${selectedSubject.subjectCode} · ${centerLabel(selectedSubject)}`;
   const unassignedConflictCount = reviewData.unassignedConflicts?.length ?? 0;
-  const selectClause = (componentId: string) => updateParams({ component: componentId });
+  const selectClause = (componentId: string) => {
+    const clause = [...allClauses, ...(reviewData.componentClauses ?? [])].find(item => item.ruleComponentId === componentId);
+    updateParams({ component: clause?.navigationKey ?? componentId });
+  };
   const setListMode = (mode: EligibilityListMode) => {
     const candidates = [...allClauses]
       .filter((clause) => matches(clause, mode, filter))
       .sort(compareEligibilityClauses);
     updateParams({ view: mode, filter: mode === "pending" ? null : filter, page: null,
-      component: candidates[0]?.ruleComponentId ?? null });
+      component: candidates[0]?.navigationKey ?? candidates[0]?.ruleComponentId ?? null });
   };
   const setDecisionFilter = (nextFilter: EligibilityDecisionFilter) => {
     const candidates = [...allClauses]
       .filter((clause) => decisionMatchesFilter(clause.decision, nextFilter))
       .sort(compareEligibilityClauses);
     updateParams({ view: "all", filter: nextFilter === "all" ? null : nextFilter, page: null,
-      component: candidates[0]?.ruleComponentId ?? null });
+      component: candidates[0]?.navigationKey ?? candidates[0]?.ruleComponentId ?? null });
   };
 
   const selectPage = (page: number) => updateParams({
     page: page === 0 ? null : String(page),
-    component: filteredClauses[page * clausePageSize]?.ruleComponentId ?? null,
+    component: filteredClauses[page * clausePageSize]?.navigationKey ?? filteredClauses[page * clausePageSize]?.ruleComponentId ?? null,
   });
 
   return (

@@ -172,6 +172,7 @@ class EligibilityClauseProjection:
     reason_parts: tuple[dict[str, Any], ...] = ()
     can_confirm: bool = False
     confirmation_kind: str | None = None
+    navigation_key: str | None = None
 
 
 @dataclass(frozen=True)

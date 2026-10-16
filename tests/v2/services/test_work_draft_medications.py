@@ -64,6 +64,22 @@ def test_published_single_use_reaches_saved_contract_projection_and_preserves_in
     assert before == (canonical_hash(rules.model_dump(mode="json")), frame.medication_exposures[0].model_dump_json())
 
 
+def test_navigation_tracks_the_requirement_not_the_saved_run_or_display_number():
+    from app.api.v2.eligibility_review import EligibilityReviewResponse
+    frame, rules, refs = medication_context()
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    first = project_saved_items([row], authority=frame.authority, rule_set=rules, run_id="old")
+    later = row.model_copy(update={"item_id": "another-saved-item", "review_run_id": "new"})
+    second = project_saved_items([later], authority=frame.authority, rule_set=rules, run_id="new")
+    assert first.clauses[0].rule_component_id != second.clauses[0].rule_component_id
+    assert first.clauses[0].navigation_key == second.clauses[0].navigation_key
+    assert EligibilityReviewResponse.model_validate(second.to_dict()).clauses[0].navigation_key == first.clauses[0].navigation_key
+    changed_rules = rules.model_copy(deep=True)
+    changed_rules.scope_supplement.medications[0].drug_text = "另一条要求"
+    changed = project_saved_items([later], authority=frame.authority, rule_set=changed_rules, run_id="new")
+    assert changed.clauses[0].navigation_key != second.clauses[0].navigation_key
+
+
 @pytest.mark.parametrize("fault", ["missing_fact", "other_locator", "future_record", "wrong_source_scope",
     "no_exposure", "different_name", "prescription_fact_only", "missing_anchor"])
 def test_unqualified_or_missing_record_never_becomes_negative_or_fabricated_exposure(fault):

@@ -697,10 +697,28 @@ describe("入排审核工作台", () => {
     expect(within(clausePane).getByRole("button", { name: /第一个审核要点/ }).style.paddingInlineStart).toBe(secondButton.style.paddingInlineStart);
   });
 
+  it("保存条款链接在新工作稿中仍指向同一条，不按列表顺序猜测", async () => {
+    window.location.hash = "#/workbench?view=all&component=stable-second";
+    const second = { ...review.clauses[2]!, navigationKey: "stable-second", ruleComponentId: "new-run:second" };
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      reviewRunId: "new-run", clauses: [review.clauses[0]!, second] }) });
+    render(<EligibilityWorkbenchPage />);
+    const pane = await screen.findByRole("complementary", { name: "审核要点列表" });
+    expect(within(pane).getByRole("button", { name: /排除既往治疗/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("链接中的审核要点不存在，请重新选择。")).not.toBeInTheDocument();
+    await userEvent.click(within(pane).getByRole("button", { name: /目标人群符合方案要求/ }));
+    await userEvent.click(within(pane).getByRole("button", { name: /排除既往治疗/ }));
+    expect(window.location.hash).toContain("component=stable-second");
+    expect(window.location.hash).not.toContain("new-run");
+  });
+
   it("失效要点链接不会静默选中第一项", async () => {
     window.location.hash = "#/workbench?component=missing-component";
     render(<EligibilityWorkbenchPage />);
     expect(await screen.findByText("链接中的审核要点不存在，请重新选择。")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "返回当前工作稿" }));
+    await screen.findByRole("heading", { name: "入排审核工作台" });
+    expect(window.location.hash).not.toContain("missing-component");
   });
 
   it("展示项目、受试者、节点选择，分组条款并常显无法判定计数", async () => {
