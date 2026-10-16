@@ -326,6 +326,37 @@ describe("入排审核工作台", () => {
     expect(within(all).getByText("后续节点的条件尚未到期。")).toBeVisible();
   });
 
+  it.each([false, true])("更新返回当前同稿不重载，返回新稿仍重新读取：new=%s", async (isNew) => {
+    localStorage.clear();
+    const catalog = getCatalogRepository();
+    const projects = await catalog.listProjects();
+    const subjects = await catalog.listSubjects(projects[0]!.projectId);
+    const episodes = await catalog.listEpisodes(subjects[0]!.subjectId);
+    const episode = { ...episodes[0]!, activeEvidenceProcessingRevisionId: "processing-1" };
+    vi.spyOn(catalog, "listEpisodes").mockResolvedValue([episode]);
+    window.location.hash = "#/workbench?view=all&component=stable-clause";
+    let saved: EligibilityReviewView = { ...review, workDraftState: "current", reviewRunId: "saved",
+      clauses: [{ ...review.clauses[2]!, ruleComponentId: "old-row", navigationKey: "stable-clause" }] };
+    const load = vi.fn(async () => saved);
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: load });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      if (options?.method === "POST" && isNew) saved = { ...saved, reviewRunId: "new",
+        clauses: [{ ...saved.clauses[0]!, ruleComponentId: "new-row" }] };
+      return new Response(JSON.stringify({ job_id: "existing-job", state: "completed", review_run_id: saved.reviewRunId }));
+    });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByRole("heading", { name: "入排审核工作台" });
+    await userEvent.click(screen.getByText("工作稿操作与节点日期"));
+    await userEvent.click(screen.getByRole("button", { name: "开始审核" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "更新工作稿", hidden: true })).toBeEnabled());
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(isNew ? 2 : 1));
+    await screen.findByRole("complementary", { name: "审核要点列表" });
+    const current = within(screen.getByRole("complementary", { name: "审核要点列表" }));
+    expect(current.getByRole("button", { name: /排除既往治疗/ })).toHaveAttribute("aria-pressed", "true");
+    expect(window.location.hash).toContain("component=stable-clause");
+    localStorage.clear();
+  });
+
   it("规则更新导致读取拒绝时，可由用户更新工作稿，不自动调用或沿用旧结果链接", async () => {
     localStorage.clear();
     const catalog = getCatalogRepository();

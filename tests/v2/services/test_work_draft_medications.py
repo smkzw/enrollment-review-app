@@ -78,6 +78,10 @@ def test_navigation_tracks_the_requirement_not_the_saved_run_or_display_number()
     changed_rules.scope_supplement.medications[0].drug_text = "另一条要求"
     changed = project_saved_items([later], authority=frame.authority, rule_set=changed_rules, run_id="new")
     assert changed.clauses[0].navigation_key != second.clauses[0].navigation_key
+    for field in ("project_id", "subject_id", "review_episode_id"):
+        other = frame.authority.model_copy(update={field: "another-scope"})
+        view = project_saved_items([later], authority=other, rule_set=rules, run_id="new")
+        assert view.clauses[0].navigation_key != second.clauses[0].navigation_key
 
 
 @pytest.mark.parametrize("fault", ["missing_fact", "other_locator", "future_record", "wrong_source_scope",

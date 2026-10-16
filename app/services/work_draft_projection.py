@@ -88,7 +88,8 @@ def project_saved_items(rows, *, authority, rule_set, run_id, issues=()):
     clauses, components = [], []
     medication_labels = {item.item_id: f"用药{index + 1:02d}" for index, item in enumerate(
         rule_set.scope_supplement.medications if rule_set.scope_supplement else [])}
-    navigation_scope = canonical_hash(rule_set.model_dump(mode="json"))
+    navigation_scope = canonical_hash({"rule_set": canonical_hash(rule_set.model_dump(mode="json")),
+        "project": authority.project_id, "subject": authority.subject_id, "episode": authority.review_episode_id})
     for item in rows:
         projection = EligibilityClauseProjection(rule_component_id=item.item_id,
             navigation_key=f"{navigation_scope}:{item.policy_group}:" + (
