@@ -1004,7 +1004,7 @@ def test_nearest_date_and_same_day_conflict():
     (date(2025, 8, 8), 17, date(2025, 8, 15), 18, date(2025, 8, 8), D.INCLUSION_NOT_MET),
     (date(2023, 8, 8), 53, date(2025, 8, 8), 51, date(2025, 8, 8), D.CONFLICT),
     (date(2025, 7, 1), 51, date(2025, 8, 8), 54, date(2025, 8, 8), D.CONFLICT),
-    (date(2025, 8, 8), 51, date(2025, 8, 8), 52, date(2025, 8, 8), D.CONFLICT),
+    (date(2025, 8, 8), 51, date(2025, 8, 8), 52, date(2025, 8, 8), D.INCLUSION_MET),
     (date(2024, 12, 31), 51, date(2025, 1, 1), 52, date(2025, 1, 1), D.INCLUSION_MET),
     (date(2023, 2, 28), 51, date(2024, 2, 28), 51, date(2024, 2, 28), D.INCLUSION_MET),
     (date(2024, 2, 28), 40, date(2026, 8, 8), 41, date(2026, 8, 8), D.CONFLICT),
@@ -1042,12 +1042,47 @@ def test_age_uses_dated_documents_at_node_and_checks_chronology_without_redating
         assert selection.chronology_conflict and {ref.fact_id for ref in result.evidence_refs} == {f.fact_id for f in facts}
     elif decision == D.INDETERMINATE:
         assert not selection.fact_ids
+    elif first_day == last_day and first_age != last_age:
+        assert set(selection.fact_ids) == {fact.fact_id for fact in facts} and not selection.conflict
+        assert result.confidence == "low" and "年龄记录不一致" in result.confidence_reason
+        assert {ref.fact_id for ref in result.evidence_refs} == {fact.fact_id for fact in facts}
     else:
         expected = facts[0] if last_day > anchor else facts[1]
         assert selection.fact_ids == (expected.fact_id,) and not selection.conflict
         assert {ref.fact_id for ref in result.evidence_refs} == {expected.fact_id}
     assert [fact.model_dump_json() for fact in facts] == before
     assert all(fact.date_range is None for fact in facts)
+
+
+@pytest.mark.parametrize("values,variable,expected", [
+    ((51, 52), "age", D.INCLUSION_MET), ((17, 18), "age", D.CONFLICT),
+    ((16, 17), "age", D.INCLUSION_NOT_MET), ((75, 76), "age", D.CONFLICT),
+    ((51, 52), "alt", D.CONFLICT),
+])
+def test_age_disagreement_is_result_consensus_not_a_chosen_or_rewritten_reading(values, variable, expected):
+    rules, _, component = clause()
+    facts = [material(value=value, variable_id=variable, unit="岁" if variable == "age" else "U/L",
+        day=date(2025, 8, 8), snapshot=str(index)) for index, value in enumerate(values)]
+    if variable != "age":
+        component.evidence_requirements[0].variable_id = variable
+        component.expression.predicate.unit = "U/L"
+        rules.variable_definitions = [load_dictionary()[variable]]
+    # A two-sided requirement still evaluates each leaf with its own threshold.
+    component.expression = LogicalExpression(operator=LogicalOperator.ALL, children=[component.expression,
+        AtomicExpression(predicate=component.expression.predicate.model_copy(update={
+            "predicate_id": "upper", "comparator": Comparator.LTE, "value": 75}))])
+    component.evidence_requirements[0].predicate_ids.append("upper")
+    refs = {fact.fact_id: [WorkDraftEvidenceRef(fact_id=fact.fact_id, locator_id=fact.locator_ids[0],
+        source_document_version_id="doc-" + fact.fact_id, page_artifact_id="page-" + fact.fact_id,
+        page_number=1, excerpt=fact.assertion_basis.assertion_text)] for fact in facts}
+    before = [fact.model_dump_json() for fact in facts], rules.model_dump_json()
+    frame = frozen(facts, {AnchorType.SCREENING_DATE: DateValue(value=date(2025, 8, 8), precision=DatePrecision.DAY)})
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frame, rules, evidence_refs=refs)
+    assert result.decision == expected and result.system_issue is None
+    assert {ref.fact_id for ref in result.evidence_refs} == {fact.fact_id for fact in facts}
+    if expected != D.CONFLICT:
+        assert result.confidence == "low" and "年龄记录不一致" in result.confidence_reason
+    assert ([fact.model_dump_json() for fact in facts], rules.model_dump_json()) == before
 
 
 def test_undated_other_age_remains_visible_and_low_confidence():
@@ -1063,6 +1098,18 @@ def test_undated_other_age_remains_visible_and_low_confidence():
     assert result.decision == D.INCLUSION_MET and result.confidence == "low"
     assert "单据日期尚未核实" in result.confidence_reason
     assert {ref.fact_id for ref in result.evidence_refs} == {first.fact_id, other.fact_id}
+
+
+def test_two_dated_ages_cannot_claim_every_record_agrees_when_another_age_is_undated():
+    rules, projected, _ = clause()
+    facts = [material(value=value, day=date(2025, 8, 8) if index < 2 else None, snapshot=str(index))
+        for index, value in enumerate((51, 52, 17))]
+    frame = frozen(facts, {AnchorType.SCREENING_DATE: DateValue(value=date(2025, 8, 8), precision=DatePrecision.DAY)})
+    selection = select_by_variable(rules.rules[0].components[0], facts, frame.review_episode.anchor_dates,
+        authority=frame.authority, definitions=load_dictionary())["age-limit"]
+    assert selection.age_consensus is None
+    result = calculate_work_component(projected, frame, rules, evidence_refs={})
+    assert result.decision == D.CONFLICT and result.confidence is None
 
 
 def test_age_uses_sampling_header_before_exam_header_without_redating_the_fact():

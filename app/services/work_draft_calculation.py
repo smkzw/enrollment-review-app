@@ -119,6 +119,7 @@ class VariableSelection:
     date_uncertain: bool = False
     calculation_unverified_ids: tuple[str, ...] = ()
     chronology_conflict: bool = False
+    age_consensus: TruthValue | None = None
 
 
 def source_record_date(fact, evidence_refs, source_pages, *, allow_report_date=False, date_role=None,
@@ -184,6 +185,10 @@ def age_record_chronology(facts, evidence_refs, source_pages, definition, predic
     readings.sort()
     for index, (earlier, age) in enumerate(readings):
         for later, later_age in readings[index + 1:]:
+            if earlier == later:
+                # Same-day disagreement is checked against the actual age
+                # condition below; it cannot establish a backward chronology.
+                continue
             years = later.year - earlier.year
             first_day, last_day = (earlier.month, earlier.day), (later.month, later.day)
             minimum = years - (last_day < first_day)
@@ -296,12 +301,15 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
             if chronology_conflict:
                 eligible = chronology_facts
             conflict = chronology_conflict
+            conflicting_ids = set()
             for index, fact in enumerate(eligible):
                 for other in eligible[index + 1:]:
                     same_day = (fact.date_range is not None and other.date_range is not None
                         and fact.date_role == other.date_role == "sampling"
                         and fact.date_range.precision.value == other.date_range.precision.value == "day"
                         and fact.date_range.lower_bound == other.date_range.lower_bound)
+                    if is_age and fact.fact_id in age_dates and other.fact_id in age_dates:
+                        same_day = age_dates[fact.fact_id] == age_dates[other.fact_id]
                     # A PDF can bundle several reports. Only a shared actual
                     # source position proves that these readings refer to one field.
                     distinct_samples = (fact.date_range is not None and other.date_range is not None
@@ -311,6 +319,7 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                     same_report = bool(set(fact.locator_ids) & set(other.locator_ids)) and not distinct_samples
                     if (same_day or same_report) and value_key(fact) != value_key(other):
                         conflict = True
+                        conflicting_ids.update((fact.fact_id, other.fact_id))
             selection_dates = ({fact.fact_id: age_dates[fact.fact_id] for fact in eligible if fact.fact_id in age_dates}
                 if is_age else {fact.fact_id: fact.date_range.lower_bound
                 for fact in eligible if fact.date_range is not None and fact.date_range.lower_bound is not None})
@@ -324,6 +333,29 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                 chosen = [fact for fact in dated if selection_dates[fact.fact_id] == nearest]
             else:
                 chosen = [] if is_age and age_dates else eligible
+            age_consensus = None
+            if (is_age and chosen and not chronology_conflict and node_anchor is not None and node_anchor.value is not None
+                    and not any((atom.predicate.requires_professional_judgment,
+                        atom.predicate.semantic_proposition, atom.predicate.repeat_scheme,
+                        atom.predicate.source_computation, atom.predicate.occurrence_window,
+                        atom.predicate.observation_policy, atom.predicate.applicable_population,
+                        atom.predicate.prospective_period, atom.predicate.prospective_window))
+                    and conflicting_ids <= {fact.fact_id for fact in chosen}
+                    and not any(fact.fact_id not in age_dates
+                        and value_key(fact) not in {value_key(row) for row in chosen} for fact in eligible)
+                    and all(fact.fact_id in age_dates and fact.polarity.value == "affirmed"
+                        and float(comparison_reading(fact, definition, atom.predicate)[0]).is_integer() for fact in chosen)
+                    and len({value_key(fact) for fact in chosen}) > 1):
+                predicate = atom.predicate.model_copy(deep=True)
+                expected = predicate.value if isinstance(predicate.value, list) else [predicate.value]
+                if all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in expected):
+                    normalized = [float(definition.convert(value, predicate.unit or definition.canonical_unit))
+                        for value in expected]
+                    predicate.value = normalized if isinstance(predicate.value, list) else normalized[0]
+                    truths = {_compare(predicate, comparison_reading(fact, definition, predicate)[0]) for fact in chosen}
+                    if len(truths) == 1 and TruthValue.UNKNOWN not in truths:
+                        age_consensus = truths.pop()
+                        conflict = False
             undated_choice_unclear = not conflict and not dated and len({value_key(fact) for fact in chosen}) > 1
             if undated_choice_unclear:
                 chosen = []
@@ -339,7 +371,7 @@ def select_by_variable(component, facts, anchor_dates, *, authority, definitions
                     or fact.date_role not in {"sampling", "visit"} for fact in chosen)
                  )
                 if atom.time_constraint or definition is not None and definition.domain in {"lab", "vital", "score", "procedure"} else False),
-                tuple(sorted(invalid_calculations)), chronology_conflict)
+                tuple(sorted(invalid_calculations)), chronology_conflict, age_consensus)
     return result
 
 
@@ -597,10 +629,15 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             conflicts=[], predicate_fact_ids={key: value.fact_ids for key, value in selection.items()},
             unverified_predicate_ids=frozenset(key for key, value in selection.items() if not value.fact_ids))
         inactive_requirements = set()
-        if relations:
+        age_agreements = {pid: value for pid, value in selection.items() if value.age_consensus is not None}
+        if relations or age_agreements:
             from app.domain.expression import ComponentEvaluation, EvaluationResult, _combine_bound_expression
             from app.domain.gates.assessment import derive_component_decision, derive_gate_gap_types
             values = dict(outcome.evaluation.predicate_evaluations)
+            for pid, agreed in age_agreements.items():
+                values[pid] = EvaluationResult(truth=agreed.age_consensus,
+                    used_fact_ids=list(agreed.fact_ids), evidence_span_ids=sorted({span
+                        for fact in adapted if fact.fact_id in agreed.fact_ids for span in fact.evidence_span_ids}))
             unverified_source_times = set()
             numeric_source_conflicts = set()
             atoms = {atom.predicate.predicate_id: atom for expression in (
@@ -697,6 +734,8 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             used_ids.update(outcome.evaluation.exception.used_fact_ids)
         used = [fact for fact in selected if fact.fact_id in used_ids]
         low_reason = _risk_reason(used)
+        if age_agreements:
+            low_reason = "年龄记录不一致；各记载均得到本条相同结论，未认定哪个年龄正确。" + (low_reason or "")
         if low_reason is None and (relations or records):
             low_reason = "依据原文作出的含义判断，尚未经人工核实。"
         if low_reason is None and any(value.calculation_unverified_ids for value in selection.values()):
