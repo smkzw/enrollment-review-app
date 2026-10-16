@@ -17,7 +17,7 @@ from app.services.work_draft_calculation import (atomic_expressions, is_numeric_
     review_source_cutoff, independent_source_requirements, source_header_date)
 
 PROMPT_VERSION = "work-draft-source-relations/v7"
-VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v30"
+VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v31"
 BATCH_SIZE = 16
 SEMANTIC_INSTRUCTIONS = (
     "你是入排审核产品的原文关系核对员。逐项查找本次提供的病历与报告中，对原子条件的支持或否定；"
@@ -457,6 +457,25 @@ def source_excerpt(text, excerpt):
     return matches[0] if len(matches) == 1 else None
 
 
+def record_source_pages(row, target, pages):
+    from app.domain.contracts.rules import EvidenceRequirement
+    requirement = EvidenceRequirement.model_validate(target["record_requirement"]).model_dump(mode="json")
+    quoted_pages = [page for page in pages if any(q.page_artifact_id == page.page_artifact_id for q in row.quotes)]
+    eligible_pages = [page for page in quoted_pages
+        if (not requirement.get("required_source_types") or page.document_category in requirement["required_source_types"])
+        and (not requirement["requires_contemporaneous_objective_source"] or page.document_category == "objective_report")
+        and (requirement["allows_screening_record_transcription"] is not False
+             or page.document_category != "screening_transcription")]
+    if requirement["requires_contemporaneous_objective_source"] is True:
+        bounds = target.get("record_date_bounds", {})
+        start = date.fromisoformat(bounds["start"]) if bounds.get("start") else None
+        end = date.fromisoformat(bounds["end"]) if bounds.get("end") else None
+        eligible_pages = [page for page in eligible_pages
+            if (day := source_header_date([page.effective_text], ["采样时间|就诊时间|检查日期|检查时间|摄片日期", "报告日期|报告时间"]))
+            is not None and start is not None and end is not None and start <= day <= end]
+    return requirement, quoted_pages, eligible_pages
+
+
 def validate_relations(payload, targets, pages):
     rows = SourceRelations.model_validate(payload).results
     expected = {target["target_id"] for target in targets}
@@ -514,6 +533,12 @@ def validate_relations(payload, targets, pages):
             row.relation = "unclear"
             if row.applicable != "no":
                 row.reason = "已找到相关原文，但尚不足以证明本条件，不能当作未见记录。" + row.reason
+        if row.relation == "supports" and row.applicable == "yes" and by_target[row.target_id].get("record_requirement"):
+            _, quoted, eligible = record_source_pages(row, by_target[row.target_id], pages)
+            if eligible and len(eligible) != len(quoted):
+                raise ValueError("本项要求核对记录本身；所引依据混有不符合已发布来源类别或日期要求的页面。"
+                    "请重新核对，仅以符合本项要求的实际报告逐字内容作为支持依据；病历转述可说明背景，"
+                    "不能代替报告。若报告本身不能证明本项，返回unclear并保留疑问，不补写答案。")
     return rows
 
 
@@ -618,23 +643,9 @@ def relation_inputs(row, target, pages):
     unsupported_record_time = bool(requirement and (
         requirement.get("source_validity_window") or requirement.get("control_validity_constraint")))
     if requirement is not None:
-        from app.domain.contracts.rules import EvidenceRequirement
-        requirement = EvidenceRequirement.model_validate(requirement).model_dump(mode="json")
-        quoted_pages = [page for page in pages if any(q.page_artifact_id == page.page_artifact_id for q in row.quotes)]
+        requirement, quoted_pages, eligible_pages = record_source_pages(row, target, pages)
         # Record presence does not prove the condition. Unsupported source/time
         # policies stay unfulfilled, never borrow an unrelated objective report.
-        eligible_pages = [page for page in quoted_pages
-            if (not requirement.get("required_source_types") or page.document_category in requirement["required_source_types"])
-            and (not requirement.get("requires_contemporaneous_objective_source") or page.document_category == "objective_report")
-            and (requirement.get("allows_screening_record_transcription") is not False
-                 or page.document_category != "screening_transcription")]
-        if requirement["requires_contemporaneous_objective_source"] is True:
-            bounds = target.get("record_date_bounds", {})
-            start = date.fromisoformat(bounds["start"]) if bounds.get("start") else None
-            end = date.fromisoformat(bounds["end"]) if bounds.get("end") else None
-            eligible_pages = [page for page in eligible_pages
-                if (day := source_header_date([page.effective_text], ["采样时间|就诊时间|检查日期|检查时间", "报告日期|报告时间"]))
-                is not None and start is not None and end is not None and start <= day <= end]
         if (row.relation != "supports" or not eligible_pages or len(eligible_pages) != len(quoted_pages)
                 or requirement["requires_contemporaneous_objective_source"] is None
                 or requirement["allows_screening_record_transcription"] is None or unsupported_record_time):

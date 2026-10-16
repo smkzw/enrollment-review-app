@@ -148,6 +148,72 @@ def test_independent_record_transcription_policy_is_enforced_separately_from_obj
     assert result["truth"] == expected and not result["policy"]
 
 
+@pytest.mark.parametrize("recovery", ["report_only", "unclear", "still_mixed"])
+def test_mixed_record_sources_retry_only_record_target_without_weakening_source_policy(recovery):
+    import json
+    from app.domain.contracts.enums import ReviewStage
+    from app.domain.contracts.rules import EvidenceRequirement
+    from app.services.work_draft_semantics import read_source_relations, split_valid_relations
+    requirement = EvidenceRequirement(requirement_id="report", rule_component_id="component", fact_type="report",
+        description="检查报告", due_stage="screening", requires_contemporaneous_objective_source=True,
+        allows_screening_record_transcription=False)
+    record = {**target("required_procedure"), "target_id": "record:report",
+        "record_requirement": requirement.model_dump(mode="json"),
+        "record_date_bounds": {"start": "2025-08-08", "end": "2025-08-15"}}
+    sources = [page(), page("摄片日期：2025/8/8报告日期：2025/8/8 11:10:50\n实际检查结果已填写。",
+        category="objective_report", key="report")]
+    quotes = [{"page_artifact_id": "report", "excerpt": "实际检查结果已填写。"},
+              {"page_artifact_id": "page", "excerpt": "否认近期感染"}]
+    mixed = row(target_id=record["target_id"], relation="supports", quotes=quotes)
+    # A previous mixed answer remains unknown; validation must not silently
+    # remove its auxiliary quotes and turn it into adopted report evidence.
+    assert relation_inputs(mixed, record, sources)["truth"] == "unknown"
+    valid, failed = split_valid_relations({"results": [mixed.model_dump()]}, [record], sources)
+    assert not valid and set(failed) == {record["target_id"]}
+    frame = SimpleNamespace(source_pages=sources, review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+        evidence_cutoff_date=None, anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
+    model = SimpleNamespace(model_dump=lambda **_: {"provider": "synthetic", "model": "fixture"})
+    prompts, saved = [], []
+    class Transport:
+        def propose_question_classifications(self, *, prompt, output_schema):
+            wire = json.loads(prompt.split("\n", 1)[1])
+            prompts.append(wire)
+            if len(prompts) == 1:
+                results = [row(target_id="T01", quotes=[{"page_artifact_id": "P01",
+                    "excerpt": "否认近期感染"}]).model_dump(), row(target_id="T02", relation="supports", quotes=[
+                    {**quote, "page_artifact_id": "P02" if quote["page_artifact_id"] == "report" else "P01"}
+                    for quote in quotes]).model_dump()]
+            else:
+                assert [t["target_id"] for t in wire["targets"]] == ["T02"]
+                assert "来源类别或日期" in wire["validation_errors"]["T02"]
+                results = [row(target_id="T02", relation="unclear" if recovery == "unclear" else "supports", quotes=[
+                    {**quote, "page_artifact_id": "P02" if quote["page_artifact_id"] == "report" else "P01"}
+                    for quote in (quotes if recovery != "report_only" else quotes[:1])]).model_dump()]
+            return SimpleNamespace(text=json.dumps({"results": results}, ensure_ascii=False))
+    class Artifacts:
+        def put(self, kind, body):
+            saved.append(body)
+            return SimpleNamespace(sha256=sha256(body).hexdigest(), storage_ref=f"artifacts/{kind}/{sha256(body).hexdigest()}")
+    reused = {"already-read": {"truth": "unknown", "reason": "原有疑问保持"}}
+    proofs = {"already-read": {"raw_response_ref": "old-response"}}
+    result = read_source_relations(frame, [target(), record], model, Artifacts(), transport_factory=lambda _: Transport(),
+        reused=reused, reuse_proofs=proofs)
+    assert len(prompts) == len(saved) == len(result["raw_refs"]) == 2
+    assert result["results"][target()["target_id"]]["truth"] == "false"
+    assert result["results"]["already-read"] == reused["already-read"]
+    assert result["reuse_proofs"] == proofs
+    assert len(json.loads(json.loads(saved[0])["text"])["results"][1]["quotes"]) == 2
+    if recovery == "still_mixed":
+        assert result["error_target_ids"] == [record["target_id"]]
+        assert record["target_id"] not in result["results"]
+    else:
+        assert "error" not in result
+        accepted = result["results"][record["target_id"]]
+        assert accepted["truth"] == ("true" if recovery == "report_only" else "unknown")
+        assert not accepted["policy"]
+        assert len(accepted["source_read_refs"]) == (1 if recovery == "report_only" else 2)
+
+
 def test_pending_targets_share_short_batch_without_dropping_reused_targets_or_changing_inputs():
     from app.services.work_draft_semantics import source_batches, BATCH_SIZE
     targets = [{"target_id": str(index), "payload": {"value": index}} for index in range(122)]
