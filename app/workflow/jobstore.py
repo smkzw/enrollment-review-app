@@ -394,6 +394,8 @@ class JobStore:
             )
             for step in self.list_steps(job_id)
         ]
+        all_completed = bool(steps) and all(step.state == "completed" for step in steps)
+        recovered = job.state == "completed" and all_completed
         return JobSnapshot(
             job_id=job.job_id,
             job_type=job.job_type,
@@ -401,8 +403,10 @@ class JobStore:
             cancel_requested=bool(job.cancel_requested),
             progress_completed=job.progress_completed,
             progress_total=job.progress_total,
-            error_code=job.error_code,
-            error_classification=job.error_classification,
+            # Old terminal rows remain immutable; their failed-attempt events
+            # still describe history, not a current error after full recovery.
+            error_code=None if recovered else job.error_code,
+            error_classification=None if recovered else job.error_classification,
             lease_generation=job.lease_generation,
             created_at=job.created_at,
             updated_at=job.updated_at,
@@ -1134,6 +1138,8 @@ class JobStore:
             )
             .values(
                 state="completed",
+                error_code=None,
+                error_classification=None,
                 lease_owner=None,
                 lease_expires_at=None,
                 updated_at=now,

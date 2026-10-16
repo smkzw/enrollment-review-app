@@ -93,6 +93,37 @@ def test_record_date_does_not_certify_an_unwritten_clock_time():
     assert medication_field_source_errors(candidate)
 
 
+def test_unknown_duration_does_not_require_a_fabricated_unknown_quote():
+    from app.domain.contracts.enums import DurationStatus
+
+    candidate = exposure_with_sources()
+    candidate = candidate.model_copy(update={"duration_status": DurationStatus.UNKNOWN,
+        "field_sources": [item.model_copy(update={"role": "use_start"}) if item.field == "start_range" else item
+            for item in candidate.field_sources if item.field != "duration_status"]})
+    before = candidate.model_dump_json()
+    assert not medication_field_source_errors(candidate)
+    assert candidate.model_dump_json() == before
+
+
+@pytest.mark.parametrize("declared,unit,written,valid", [
+    ("10", "mg", "10mg", True), ("10.0", "mg", "10 mg", True),
+    ("20", "mg", "10mg", False), ("10", "g", "10mg", False),
+    ("0.01", "g", "10mg", False), ("10", None, "10mg", False),
+    ("Infinity", "mg", "Infinitymg", False), ("10", "mg", "10-20mg", False),
+])
+def test_compound_dose_requires_the_same_finite_number_and_separately_sourced_unit(declared, unit, written, valid):
+    candidate = exposure_with_sources()
+    text = TEXT.replace("10mg", written)
+    sources = [item.model_copy(update={"excerpt": text,
+        **({"value_text": written} if item.field == "dose" else {}),
+        **({"value_text": unit} if item.field == "unit" and unit is not None else {})})
+        for item in candidate.field_sources if item.field != "unit" or unit is not None]
+    candidate = candidate.model_copy(update={"dose": declared, "unit": unit, "field_sources": sources})
+    before = candidate.model_dump_json()
+    assert (not medication_field_source_errors(candidate)) == valid
+    assert candidate.model_dump_json() == before
+
+
 @pytest.mark.parametrize("kind,expected", [("date", "accepted"), ("output_repetition", "blocked"), ("negation_polarity", "blocked")])
 @pytest.mark.parametrize("fault", [None, "wrong_hash", "fake_quote", "duplicate_quote", "wrong_role",
     "unannotated", "legacy", "aligned_ongoing"])

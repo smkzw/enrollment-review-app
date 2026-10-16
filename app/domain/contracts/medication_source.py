@@ -4,6 +4,7 @@ from __future__ import annotations
 import calendar
 import unicodedata
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Literal
 
 from pydantic import Field
@@ -60,12 +61,15 @@ def medication_field_source_errors(candidate) -> list[str]:
     by matching a date. All such clinical calculations remain low confidence.
     """
     sources = candidate.field_sources
-    required = {"medication_name", "duration_status"}
+    required = {"medication_name"}
+    if candidate.duration_status.value != "unknown":
+        required.add("duration_status")
     required.update(field for field in ("start_range", "end_range", "record_time", "dose", "unit", "frequency", "route")
         if getattr(candidate, field) is not None)
     fields = [item.field for item in sources]
     errors = []
-    if len(fields) != len(set(fields)) or set(fields) != required:
+    allowed = required | {"duration_status"}
+    if len(fields) != len(set(fields)) or not required <= set(fields) or not set(fields) <= allowed:
         errors.append("用药逐字段依据缺失、重复或包含未声明字段")
     for source in sources:
         value = getattr(candidate, source.field)
@@ -103,6 +107,18 @@ def medication_field_source_errors(candidate) -> list[str]:
                         errors.append("用药记录时刻与原文不符或缺少时区依据")
                 except ValueError:
                     errors.append("用药记录日期没有明确原值依据")
+        elif source.field == "dose" and value != source.value_text:
+            # A dose and its separately quoted unit may be printed together.
+            # Compare the written number only; do not convert units or ranges.
+            try:
+                if not candidate.unit or not source.value_text.endswith(candidate.unit):
+                    raise ValueError
+                written = Decimal(source.value_text[:-len(candidate.unit)].strip())
+                declared = Decimal(value)
+                if not written.is_finite() or not declared.is_finite() or written != declared:
+                    raise ValueError
+            except (InvalidOperation, ValueError, TypeError):
+                errors.append("用药剂量与其原文数字及单位不一致")
         elif source.field != "duration_status" and value != source.value_text:
             errors.append("用药字段值与其逐字原值不一致")
     return list(dict.fromkeys(errors))

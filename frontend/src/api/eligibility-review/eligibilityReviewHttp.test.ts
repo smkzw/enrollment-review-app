@@ -95,6 +95,16 @@ describe("eligibility review HTTP repository", () => {
     body.component_clauses[0]!.rule_component_id = body.clauses[0]!.rule_component_id;
     await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
   });
+  it("条款导航可跨工作稿使用，缺省兼容旧响应但重复身份拒绝", async () => {
+    const body = { ...reviewBody(), clauses: [{ ...reviewBody().clauses[0], navigation_key: "stable-parent" }],
+      component_clauses: [{ ...reviewBody().clauses[0], rule_component_id: "child", navigation_key: "stable-child" }] };
+    const repository = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
+    const view = await repository.getEligibilityReview("subject", "episode");
+    expect(view.clauses[0]?.navigationKey).toBe("stable-parent");
+    expect(view.componentClauses?.[0]?.navigationKey).toBe("stable-child");
+    body.component_clauses[0]!.navigation_key = "stable-parent";
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+  });
   it("将检索原文与采用事实分开，并拒绝无法回源的页码", async () => {
     const body = { ...reviewBody(), clauses: [{ ...reviewBody().clauses[0], source_read_refs: [{
       source_document_version_id: "document", page_artifact_id: "page", page_number: 2,

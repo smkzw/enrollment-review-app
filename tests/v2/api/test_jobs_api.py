@@ -10,6 +10,49 @@ import pytest
 from tests.v2.api.conftest import create_job_body
 
 
+@pytest.mark.parametrize("legacy_stale_error", [False, True])
+def test_recovered_status_reports_success_and_keeps_the_failed_attempt(client, legacy_stale_error):
+    from datetime import timedelta
+    from app.storage.codecs import utc_now
+    from app.storage.models import JobRecord
+    from app.workflow.jobstore import JobStore
+
+    response = client.post("/api/v2/jobs", json=create_job_body(key="recovered-status", steps=[
+        {"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 2},
+        {"step_id": "s2", "name": "审核", "depends_on": ["s1"]},
+    ]))
+    job_id = response.json()["job_id"]
+    now = [utc_now()]
+    sessions = client.app.state.session_factory
+    with sessions() as session, session.begin():
+        store = JobStore(session, now=lambda: now[0])
+        lease = store.claim_job(job_id, "test-worker")
+        store.start_step(lease, "s1")
+        store.fail_step(lease, "s1", retryable=True, error_code="E_TRANSIENT")
+    assert client.get(f"/api/v2/jobs/{job_id}").json()["error_code"] == "E_TRANSIENT"
+    now[0] += timedelta(seconds=1)
+    with sessions() as session, session.begin():
+        store = JobStore(session, now=lambda: now[0])
+        assert store.requeue_due_retries() == [job_id]
+        lease = store.claim_job(job_id, "test-worker")
+        for step in ("s1", "s2"):
+            store.start_step(lease, step)
+            store.complete_step(lease, step, checkpoint_payload={"step": step})
+        store.finish_success(lease)
+        saved = store.get_job(job_id)
+        assert saved.error_code is None and saved.error_classification is None
+        if legacy_stale_error:
+            saved.error_code, saved.error_classification = "E_TRANSIENT", "retryable"
+    body = client.get(f"/api/v2/jobs/{job_id}").json()
+    assert body["state"] == "completed" and body["error_code"] is None and body["error_classification"] is None
+    failed = [event for event in body["events"] if event["event_type"] == "step_failed"]
+    assert len(failed) == 1 and failed[0]["payload"]["error_code"] == "E_TRANSIENT"
+    assert body["retryable_scope"] == []
+    with sessions() as session:
+        saved = session.get(JobRecord, job_id)
+        assert saved.error_code == ("E_TRANSIENT" if legacy_stale_error else None)
+
+
 def test_create_job_returns_201_and_queued(client) -> None:
     resp = client.post("/api/v2/jobs", json=create_job_body())
     assert resp.status_code == 201
