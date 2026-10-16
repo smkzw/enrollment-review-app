@@ -164,6 +164,8 @@ def validate_evidence_normalizer_model_config(
         raise ValueError("资料类别提示配置必须是布尔值")
     if not isinstance(model_config.parameters.get("include_medication_field_sources", False), bool):
         raise ValueError("用药逐字段来源配置必须是布尔值")
+    if not isinstance(model_config.parameters.get("compact_requirement_rows", False), bool):
+        raise ValueError("要求清单紧凑格式配置必须是布尔值")
     medication_source_guidance(
         model_config.parameters.get("include_medication_field_sources", False),
         model_config.parameters.get("medication_source_guidance"),
@@ -755,10 +757,13 @@ def _sha256(text: str) -> str:
 def evidence_normalizer_prompt_template_sha256(
     prompt_template: str, *, include_medication_field_sources: bool = False,
     medication_source_material: str | None = None,
+    compact_requirement_rows: bool = False,
 ) -> str:
     """对模板、合同、生成 schema、修复规则与布局的完整可审计哈希。"""
     from app.agents.evidence_question_repair import QUESTION_REPAIR_INSTRUCTIONS, RECOVERABLE_GAP_TYPES
 
+    if not isinstance(compact_requirement_rows, bool):
+        raise ValueError("要求清单紧凑格式配置必须是布尔值")
     base = _sha256(
         "\n\n".join(
             (
@@ -778,9 +783,9 @@ def evidence_normalizer_prompt_template_sha256(
     )
     guidance = medication_source_guidance(include_medication_field_sources, medication_source_material)
     if include_medication_field_sources:
-        return _sha256(base + guidance
+        base = _sha256(base + guidance
             + _compact_schema(include_medication_field_sources=True))
-    return base
+    return _sha256(base + _REQUIREMENT_ROW_INSTRUCTION) if compact_requirement_rows else base
 
 
 def _strip_schema_titles(node) -> None:
@@ -1083,6 +1088,28 @@ def evidence_normalizer_reference_aliases(
     ))
 
 
+_REQUIREMENT_ROW_INSTRUCTION = (
+    "related_requirements和requirement_contexts若有对应的同名_columns，均为按该列顺序保存的行数组；"
+    "先按列名还原各行字段，context_ref仍是从0开始的共同说明索引。"
+    "所有要求、来源政策、原文、空值及顺序保持，不得合并不同要求或漏读行。\n"
+)
+
+
+def _compact_requirement_rows(payload: dict) -> None:
+    """Encode homogeneous records only; missing keys must never become null."""
+    for name in ("related_requirements", "requirement_contexts"):
+        rows = payload.get(name)
+        if not rows or not all(isinstance(row, dict) for row in rows):
+            continue
+        columns = sorted(rows[0])
+        if not columns or any(set(row) != set(columns) for row in rows):
+            continue
+        packed = {name + "_columns": columns, name: [[row[key] for key in columns] for row in rows]}
+        if len(json.dumps(packed, ensure_ascii=False, separators=(",", ":"))) < len(
+                json.dumps({name: rows}, ensure_ascii=False, separators=(",", ":"))):
+            payload.update(packed)
+
+
 def build_evidence_normalizer_prompt(
     evidence_input: EvidenceNormalizerInput,
     *,
@@ -1095,6 +1122,7 @@ def build_evidence_normalizer_prompt(
     include_source_categories: bool = False,
     include_medication_field_sources: bool = False,
     medication_source_material: str | None = None,
+    compact_requirement_rows: bool = False,
 ) -> str:
     """从冻结输入构建唯一可审计的 prompt，不含隐藏自由文本。
 
@@ -1111,6 +1139,10 @@ def build_evidence_normalizer_prompt(
         include_source_categories=include_source_categories)
     if reference_aliases is not None:
         payload = reference_aliases.transform(payload)
+    if not isinstance(compact_requirement_rows, bool):
+        raise ValueError("要求清单紧凑格式配置必须是布尔值")
+    if compact_requirement_rows:
+        _compact_requirement_rows(payload)
     if evidence_input.variable_definitions:
         columns = ["locator_id", "page_number", "precision", "localized_text"]
         payload["locator_columns"] = columns
@@ -1123,6 +1155,8 @@ def build_evidence_normalizer_prompt(
         system_contract = VERIFIED_EVIDENCE_SYSTEM_CONTRACT
     head = f"{prompt_template.strip()}\n\n{system_contract}\n\n"
     head += medication_source_guidance(include_medication_field_sources, medication_source_material)
+    if compact_requirement_rows:
+        head += _REQUIREMENT_ROW_INSTRUCTION
     if evidence_input.variable_definitions:
         head += ("related_requirements 的 context_ref 是 requirement_contexts 中从0开始的索引；共同说明只保存一次，所有要求编号和数据项目仍分别保留。"
                  "locators 是按 locator_columns 列顺序保存的定位行，每行仍独立保留真实编号、页和逐字原文，不得合并不同位置。\n")
@@ -2505,6 +2539,7 @@ class EvidenceNormalizerRunner:
             include_source_categories=getattr(transport, "include_source_categories", False) is True,
             include_medication_field_sources=field_sources,
             medication_source_material=getattr(transport, "medication_source_material", None),
+            compact_requirement_rows=getattr(transport, "compact_requirement_rows", False),
         )
         available = set(evidence_input.available_locator_ids)
         locator_source_hashes = {

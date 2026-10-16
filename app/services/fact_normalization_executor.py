@@ -527,6 +527,7 @@ def _load_frozen_agent_config(
     if prompt.template_sha256 != evidence_normalizer_prompt_template_sha256(
         prompt_template, include_medication_field_sources=model_config.parameters.get("include_medication_field_sources", False) is True,
         medication_source_material=model_config.parameters.get("medication_source_guidance"),
+        compact_requirement_rows=model_config.parameters.get("compact_requirement_rows", False),
     ):
         raise StepFailure(
             retryable=False,
@@ -976,7 +977,8 @@ def _prepare_response_revalidation(payload, evidence_input, model_config, prompt
         pending_details_retained=strategy, reference_aliases=aliases, verified_scope_prompt=strategy,
         include_source_categories=transport.include_source_categories,
         include_medication_field_sources=transport.include_medication_field_sources,
-        medication_source_material=model_config.parameters.get("medication_source_guidance"))
+        medication_source_material=model_config.parameters.get("medication_source_guidance"),
+        compact_requirement_rows=transport.compact_requirement_rows)
     return transport.initial_request_body(prompt=prompt), aliases
 
 

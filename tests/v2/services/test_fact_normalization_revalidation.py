@@ -57,19 +57,21 @@ def test_qualification_identity_does_not_hide_missing_dependency(tmp_path, monke
 
 
 def successful_reading(session_factory, data_paths, *, partition=False, whitespace=False,
-                       field_sources=False, source_guidance=None):
+                       field_sources=False, source_guidance=None, compact_rows=False):
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="saved-success", source_qualification_mode="scoped_text_v1")
         model = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
-        if field_sources:
+        if field_sources or compact_rows:
             from app.agents.evidence_normalizer import DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE
             from app.services.fact_normalization_command_service import _runtime_prompt, _model_identity
 
-            model = model.model_copy(update={"parameters": {**model.parameters, "include_medication_field_sources": True,
+            model = model.model_copy(update={"parameters": {**model.parameters, "include_medication_field_sources": field_sources,
+                "compact_requirement_rows": compact_rows,
                 **({"medication_source_guidance": source_guidance} if source_guidance is not None else {})}})
             model = model.model_copy(update={"model_config_id": "evidence-normalizer/model/" + _model_identity(model)})
             prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE,
-                include_medication_field_sources=True, medication_source_material=source_guidance)
+                include_medication_field_sources=field_sources, medication_source_material=source_guidance,
+                compact_requirement_rows=compact_rows)
             AppendRepository(session, MODEL_CONFIG_CONFIG).save(model)
             AppendRepository(session, PROMPT_VERSION_CONFIG).save(prompt)
             chain.update(model_config_id=model.model_config_id, prompt_version_id=prompt.prompt_version_id)
@@ -122,8 +124,9 @@ def successful_reading(session_factory, data_paths, *, partition=False, whitespa
 
 
 @pytest.mark.parametrize("frozen", [False, True], ids=["legacy-material", "explicit-material"])
+@pytest.mark.parametrize("compact_rows", [False, True], ids=["objects", "rows"])
 def test_saved_medication_prompt_replays_without_using_a_new_current_guidance(
-    session_factory, data_paths, monkeypatch, frozen,
+    session_factory, data_paths, monkeypatch, frozen, compact_rows,
 ):
     from app.agents import evidence_normalizer as prompts
     from app.services.fact_normalization_revalidation import saved_readings
@@ -132,7 +135,7 @@ def test_saved_medication_prompt_replays_without_using_a_new_current_guidance(
 
     material = prompts.MEDICATION_PARTIAL_SOURCE_GUIDANCE if frozen else None
     chain, service, original, artifacts = successful_reading(session_factory, data_paths,
-        field_sources=True, source_guidance=material)
+        field_sources=True, source_guidance=material, compact_rows=compact_rows)
     monkeypatch.setattr(prompts, "MEDICATION_PARTIAL_SOURCE_GUIDANCE", "今后新请求的另一份提示，不得替换旧请求")
     with session_factory() as session:
         payload, rows = saved_readings(session, run_id=original.run_id, authority=chain["authority"],
@@ -152,6 +155,11 @@ def test_saved_medication_prompt_replays_without_using_a_new_current_guidance(
         expected, _ = _prepare_response_revalidation(payload, evidence, model,
             prompts.DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, [])
         assert expected == body
+        mismatched = model.model_copy(update={"parameters": {**model.parameters,
+            "compact_requirement_rows": not compact_rows}})
+        other_request, _ = _prepare_response_revalidation(payload, evidence, mismatched,
+            prompts.DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, [])
+        assert other_request != body
         before = {fact.fact_id: fact.model_dump_json() for fact in
             ClinicalFactV2Repository(session).list_by_episode(chain["episode_id"])}
     newer = service.create_revalidation_from_run(authority=chain["authority"], source_run_id=original.run_id,

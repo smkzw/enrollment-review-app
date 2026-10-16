@@ -237,6 +237,7 @@ def _receipt_transport_factory(requests, *, fail_after=None, distinct_document_a
             include_source_categories=model.parameters.get("include_source_categories", False),
             include_medication_field_sources=model.parameters.get("include_medication_field_sources", False),
             medication_source_material=model.parameters.get("medication_source_guidance"),
+            compact_requirement_rows=model.parameters.get("compact_requirement_rows", False),
             client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=complete))),
             receipt_callback=receipt_callback, request_callback=request_callback)
     return factory
@@ -301,7 +302,7 @@ def test_unknown_type_runs_targeted_product_job_without_upgrading_source(session
 
 
 @pytest.mark.parametrize("case", ["normal", "other_model", "new_source_layout", "receipt_damage", "new_page_failed", "cancelled", "all_retained"])
-@pytest.mark.parametrize("frozen_guidance", [False, True], ids=["default-prompt", "frozen-medication-prompt"])
+@pytest.mark.parametrize("frozen_guidance", [False, True, "columns"], ids=["default-prompt", "frozen-medication-prompt", "column-rows"])
 def test_incremental_product_job_reads_only_added_page_and_preserves_saved_sources(session_factory, data_paths, monkeypatch, case, frozen_guidance):
     from app.evidence.artifacts import ArtifactStore
     from app.services import fact_normalization_executor as executor_module
@@ -338,10 +339,12 @@ def test_incremental_product_job_reads_only_added_page_and_preserves_saved_sourc
 
             config = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
             config = config.model_copy(update={"parameters": {**config.parameters,
-                "include_medication_field_sources": True, "medication_source_guidance": MEDICATION_PARTIAL_SOURCE_GUIDANCE}})
+                "include_medication_field_sources": True, "medication_source_guidance": MEDICATION_PARTIAL_SOURCE_GUIDANCE,
+                "compact_requirement_rows": frozen_guidance == "columns"}})
             config = config.model_copy(update={"model_config_id": "evidence-normalizer/model/" + _model_identity(config)})
             prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE,
-                include_medication_field_sources=True, medication_source_material=MEDICATION_PARTIAL_SOURCE_GUIDANCE)
+                include_medication_field_sources=True, medication_source_material=MEDICATION_PARTIAL_SOURCE_GUIDANCE,
+                compact_requirement_rows=frozen_guidance == "columns")
             AppendRepository(session, MODEL_CONFIG_CONFIG).save(config)
             AppendRepository(session, PROMPT_VERSION_CONFIG).save(prompt)
             chain.update(model_config_id=config.model_config_id, prompt_version_id=prompt.prompt_version_id)
