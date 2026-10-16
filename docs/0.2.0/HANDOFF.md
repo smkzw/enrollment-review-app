@@ -24,15 +24,18 @@
 
 ## 3. 当前必须接收的真实作业
 
-**Job76045861ab4147349d9b930b428814fb，run3171abaa85ca41eba67b608bab4d3c51。** 资料整理运行中，最近5/13；不是整例完成。请查实际状态，不按文档进度重派。
+**自动Job ebb31b61fb6f4ec1a05ebf2e226a5d89已completed11/11，新稿3eb534f9已保存；不要重派。** 资料整理76045861ab4147349d9b930b428814fb／run3171abaa85ca41eba67b608bab4d3c51已completed13/13但partial：120新事实、0事件暴露、65拒绝／286疑问；12页处理结束不等于全部读清。第12页初答背景名未在自己的摘录中，补答集合外引用，明确未采用。13实际HTTP均stop，6354.100秒，报告输入420428／输出384603 token；思考拆分及费用未知。
 
 - 受试者26002：subject5f8d5ba53d024be8a9afe8084552dbf3，筛选episode21b08bca5aaa42278c86afa1c2709fe5，当前revision5，开始／截至2025-08-18。基线bc2e57a732b14c629ee1551733f88d88未动。
 - 原7页病历0905be06…已完成整理并形成首份有模型读取的工作稿；新增12页检查报告3cb678a3…已由真实UI补传、核资料信息、生成版本、启用。不是重复上传或合成补证。
 - 当前snapshot29a7b2a542ca488da9c275eb5cc4855f，complete-5b110a93eebd482d90401df70891d272，规则7；19/19来源页。新报告metadata2，objective_report／other，真实混合院方及中心实验室、既往与本次日期，不猜统一日期。
 - 真实冻结计划只请求新报告[1]…[12]，max_pages_per_call=1；原7页由5份成功回执严格复验复用，没有伪造新读取。payload SHA98f5c62768b453c314a60c7af1b583dbab2fcc199e453eade5cfee72ca594ed7。
 - 原病历始终7次OCR，无新尝试；新增报告11次实际OCR＋1原生文字。ocr_pages的历史processing行不是活跃请求，也不能按行数当调用数。
-- 观察器exec30379，仅GET，每60秒一次，7200秒观察窗；output/wp7-26002-supplement-normalization-observation.json。窗口到期不取消Job、不重新上传／启用。不存在可恢复的原functions wait cell时，不猜cell ID。
-- 完成后会自动创建新工作稿；先找到该子Job，确认plan_semantic_batches=true，等真实终态，不再手工新建重复稿。资料范围7→19页后关系证据需按新范围复验，不能机械搬用旧125项关系；这不等于重读原7页规范化／OCR。
+- 原观察器exec30379及26050均已终态exit0；output/wp7-26002-supplement-draft-observation.json。没有需要接着等待的旧观察器，不猜functions wait cell ID。
+- 自动新稿已核plan_semantic_batches=true，context review-context-v2:ff52d7c203204e0cbe6195cfb8098f60，run review-run:3eb534f9df364da483415c09f401d210；原calculate原子创建8批16×7＋14及compose／save，总11步。冻结19页、18页extraction_complete，仅报告第12页false；不是6页都不可读。关系按新19页范围复验，不能机械搬用旧125项；这不等于重读原7页规范化／OCR。不要再手工新建重复稿。
+- output/wp7-26002-supplement-terminal-all-calls.json及after-supplement-draft-history.json为终态与历史证据。首版terminal.json只数成功checkpoint而漏失败页的2实际HTTP，保留错误审计并以all-calls版为准；失败页回执在raw_response内，不能以checkpoint缺链接写0调用。当前693事实／59稿8839项／21档案，原431事实／55旧稿8243项／7规则／18档案逐主键hash保持。
+- 新3eb534f9继承dfaab257，64父85子、126关系全通过、344引用逐字／页身份0失配；34确定（5IN／10EX／19REQ）、8不足／2系统／15未到期／5不适用。8实际HTTP、4042.937秒，报告输入197414／输出243689，思考拆分未知；API SHAc68324acde56e7751838bbe30a3d678a2bb9cdbd2b30506e83eae12f92feae0d。全量比较旧稿hash6b1e1f75保持，9父／8子结论变化；未挑有利回答，EX07仍有真实待核，EX09两项括号定性被程序误拒。比较器第一次错用run前缀item身份，后按已验证的本run前缀移除作同组件对照，非产品失败。
+- 接下来只部署已集中验证的定性括号修复及打印包，计算v47；利用当前126已核关系复验，原UI追加重算，不重读报告／方案。第3页原图明确“（阴性）”，只认该明示；第4页只有数字不能猜阴性。第9页FEV1数值与列已核，但“用药前”角色是否有独立资料支持仍须核清，不以读到数值冒充该角色已证。
 - 预检账本output/wp7-26002-supplement-frozen-plan.json。启用前猜未来authority的只读试验被正确拒绝，0写0模型；不能绕过节点身份。启用后的只读复用探针8.466秒／7161 SQL，仅局部诊断，不能称总流程提速。
 
 ## 4. 已实现的真实用户动作

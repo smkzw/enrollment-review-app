@@ -42,6 +42,8 @@ V2 必须把方案事实、证据事实、候选解释、确定性判定和用�
 
 ## Testing Requirements
 
+- 0.2.0检验定性比较只采用结果中完整、明确的“阴性／阳性”（含数字后的配对括号及一致的正负号），不能根据数值、参考范围或检测下限推断阴阳性。括号不完整、正负号冲突、弱阳性／待复查等限定仍拒绝直接比较；原值及单位不改写。`comparison_reading`与真实工作稿消费者须共享此规则，计算语义变化提升`CALCULATION_VERSION`，已核原文关系按原请求复验复用、不重读病例。
+
 ### 0.2.0 自动工作稿读取复用
 
 1. **触发／签名**：`work_draft_review._reusable_source_reads(session, store, frozen, targets, model, artifact_store)`读取自动整理后的工作稿；原Job没有`context_id`是合法生产路径，不是没有来源证明。

@@ -405,12 +405,15 @@ def comparison_reading(fact, definition, predicate, *, definitions=None):
         # negative inferred from a concentration or a quantification limit.
         if literal in {"未检出", "未检测到靶基因"}:
             return "阴性", "unitless"
-        match = re.fullmatch(r"(?:[<>≤≥=]?\d+(?:\.\d+)?)?(阳性|阴性)(?:\(([+-])\))?", literal)
-        if match is None or match[2] and match[2] != ("+" if match[1] == "阳性" else "-"):
+        match = re.fullmatch(r"(?:[<>≤≥=]?\d+(?:\.\d+)?)?(?:(阳性|阴性)(?:\(([+-])\))?|\((阳性|阴性)(?:\(([+-])\))?\))", literal)
+        if match is None:
+            raise ValueError("检验定性结果包含未核实或相互矛盾的文字")
+        label, sign = match[1] or match[3], match[2] or match[4]
+        if sign and sign != ("+" if label == "阳性" else "-"):
             raise ValueError("检验定性结果包含未核实或相互矛盾的文字")
         # The requested comparison concerns the literal qualitative label. The
         # original quantitative reading/unit remain unchanged in the saved fact.
-        return match[1], "unitless"
+        return label, "unitless"
     return value, unit
 
 
