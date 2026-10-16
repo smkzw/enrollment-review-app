@@ -78,6 +78,10 @@ class ActivationServiceError(RuntimeError):
 class ActivationGateError(ActivationServiceError):
     """完整修订闭包/作用域/状态不满足激活门禁。"""
 
+    def __init__(self, message: str, *, gate: str | None = None) -> None:
+        super().__init__(message)
+        self.gate = gate
+
 
 class ActivationAlreadyActiveError(ActivationServiceError):
     """目标快照/处理修订对已是当前活动版本（拒绝无意义切换）。"""
@@ -577,7 +581,10 @@ class EvidenceActivationService:
         if candidate.complete_revision_id != complete.evidence_processing_revision_id:
             raise ActivationGateError("候选只能启用其构建并冻结的完整处理修订")
         if candidate.expected_revision != expected_revision:
-            raise ActivationGateError("候选预期修订号与激活请求不一致")
+            raise ActivationGateError(
+                "资料版本生成后审核节点已变化，请更新资料版本；已有页面识别保留。",
+                gate="candidate_revision",
+            )
         return candidate
 
     def _record_candidate_conflict(

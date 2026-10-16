@@ -1996,6 +1996,13 @@ class EvidenceApiCommandService:
         self, revision_id: str, submitted: dict[str, Any], exc: Exception
     ) -> AppActivationGateError:
         """激活门禁失败：从读取服务重算逐门禁结果并列出未通过门禁。"""
+        if isinstance(exc, ActivationGateError) and exc.gate == "candidate_revision":
+            return AppActivationGateError(
+                revision_id=revision_id,
+                failed_gates=[{"gate": exc.gate, "detail": str(exc)}],
+                submitted=submitted,
+                detail=str(exc),
+            )
         from app.services.evidence_api_read_service import EvidenceApiReadService
 
         read = EvidenceApiReadService(self.session_factory, self.artifact_store)

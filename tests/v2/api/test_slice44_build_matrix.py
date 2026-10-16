@@ -100,6 +100,46 @@ def test_scoped_source_build_is_explicit_versioned_and_reports_pending(client):
     assert conflict.status_code == 409
 
 
+def test_scoped_activation_after_node_change_reports_revision_and_rebuilds_without_reviewing_risks(client):
+    from app.storage.repositories import EpisodeRepository
+
+    keys = _seed_api_stack(client)
+    _seed_metadata_helper(client, keys)
+    body = _build_body(client, keys, source_qualification_mode="scoped_text_v1")
+    queued = client.post("/api/v2/evidence-processing-revisions/build", json=body).json()
+    _run_revision_job(client, queued["job_id"])
+    old = client.get("/api/v2/evidence-processing-candidates/" + queued["candidate_id"]).json()
+    old_complete = client.get("/api/v2/evidence-processing-revisions/" + old["complete_revision_id"]).json()
+    assert old_complete["pending_risk_flag_count"] > 0
+    with client.app.state.session_factory() as session, session.begin():
+        episode = EpisodeRepository(session).get(keys["episode_id"])
+        updated = EpisodeRepository(session).update(episode.review_episode_id, episode.revision, {"due_at": None})
+        current_revision = updated.revision
+    activation = {"expected_revision": current_revision, "idempotency_key": "stale-candidate-activation",
+        "actor": "构建者验证", "reason": "核对来源"}
+    failed = client.post("/api/v2/evidence-processing-revisions/" + old["complete_revision_id"] + "/activate",
+        json=activation)
+    assert failed.status_code == 409, failed.text
+    error = failed.json()["error"]
+    assert error["code"] == "ACTIVATION_GATE_FAILED"
+    assert [gate["gate"] for gate in error["context"]["failed_gates"]] == ["candidate_revision"]
+    assert "审核节点已变化" in error["detail"]
+    fresh = client.post("/api/v2/evidence-processing-revisions/build", json={**body,
+        "expected_revision": current_revision, "idempotency_key": "updated-node-build"})
+    assert fresh.status_code == 201, fresh.text
+    _run_revision_job(client, fresh.json()["job_id"])
+    new = client.get("/api/v2/evidence-processing-candidates/" + fresh.json()["candidate_id"]).json()
+    assert new["complete_revision_id"] != old["complete_revision_id"]
+    new_complete = client.get("/api/v2/evidence-processing-revisions/" + new["complete_revision_id"]).json()
+    assert new_complete["pages"] == old_complete["pages"]
+    assert new_complete["pending_risk_flag_count"] == old_complete["pending_risk_flag_count"]
+    assert new_complete["risk_review_ids"] == old_complete["risk_review_ids"]
+    succeeded = client.post("/api/v2/evidence-processing-revisions/" + new["complete_revision_id"] + "/activate",
+        json={**activation, "idempotency_key": "updated-node-activation"})
+    assert succeeded.status_code == 201, succeeded.text
+    assert client.get("/api/v2/evidence-processing-revisions/" + old["complete_revision_id"]).json()["pages"] == old_complete["pages"]
+
+
 def test_build_same_key_same_command_replays_after_advance(client) -> None:
     """同键同命令：即使审核节点修订号已前进也回放原候选（READY）。"""
     keys = _seed_api_stack(client)

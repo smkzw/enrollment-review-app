@@ -1144,6 +1144,50 @@ describe("证据工作台", () => {
     expect(fns.createCorrection).not.toHaveBeenCalled();
   });
 
+  it.each(["candidate_revision", "risk"])("启用失败只为当前版本的节点变化提供原识别复用：%s", async (gate) => {
+    const user = userEvent.setup();
+    const pending = withLatestCandidate({
+      ...makeSnapshotWire("snap-pending", "active"), status: "ready", is_current: false,
+    }, "ready", 2);
+    fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({
+      subject_id: SUBJECT_ID, review_episode_id: EPISODE_ID,
+      active_evidence_snapshot_id: null, active_evidence_processing_revision_id: null, items: [pending],
+    }));
+    fns.getProcessingRevision.mockImplementation(async (id) => decodeProcessingRevision({
+      ...makeProcessingRevisionWire(), evidence_processing_revision_id: id, evidence_snapshot_id: "snap-pending",
+      revision_kind: id === "revision-1" ? "complete" : "base", status: "ready",
+      is_current: false, is_activatable: id === "revision-1", metadata_revision_ids: ["metadata-active-1"],
+    }));
+    fns.activateProcessingRevision.mockRejectedValue(new EvidenceApiError(
+      "ACTIVATION_GATE_FAILED", "资料版本未通过启用门禁", "资料版本需要更新", "请更新资料版本", 409,
+      { submitted: {}, currentRecord: { revision_id: "revision-1" },
+        fieldDiff: { failed_gates: { current: [{ gate, detail: "尚未核对" }], submitted: [] } } },
+    ));
+    fns.buildProcessingRevision.mockResolvedValue({
+      candidateId: "candidate-refreshed", jobId: "job-refreshed", candidateStatus: "staged",
+      candidateStatusLabel: "等待处理", candidateEventSeq: null, completeRevisionId: null, created: true, revision: null,
+    });
+    await openValid(user);
+    const activate = await screen.findByRole("button", { name: "启用这个资料版本" });
+    await waitFor(() => expect(activate).toBeEnabled());
+    await user.click(activate);
+    await waitFor(() => expect(fns.activateProcessingRevision).toHaveBeenCalledTimes(1));
+    if (gate === "candidate_revision") {
+      const rebuild = await screen.findByRole("button", { name: "更新资料版本" });
+      expect(activate).toBeDisabled();
+      await user.click(rebuild);
+      await waitFor(() => expect(fns.buildProcessingRevision).toHaveBeenCalledWith(expect.objectContaining({
+        evidence_snapshot_id: "snap-pending", base_processing_revision_id: "base-revision-1",
+        source_qualification_mode: "scoped_text_v1",
+      })));
+    } else {
+      expect(screen.queryByRole("button", { name: "更新资料版本" })).not.toBeInTheDocument();
+      expect(fns.buildProcessingRevision).not.toHaveBeenCalled();
+    }
+    expect(fns.createUploadPreview).not.toHaveBeenCalled();
+    expect(fns.createCorrection).not.toHaveBeenCalled();
+  });
+
   it("资料信息与已启用版本一致时不提示重复生成", async () => {
     const user = userEvent.setup();
     fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({

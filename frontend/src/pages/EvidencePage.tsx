@@ -445,6 +445,13 @@ export function EvidencePage() {
   const metadataChanged = selectedMetadataRevisionIds !== null && selectedSnapshot !== null &&
     selectedSnapshot.members.some(member =>
       !selectedMetadataRevisionIds.includes(member.metadataHead.metadataRevisionId));
+  const activationFailures = ocrConflict?.conflictContext?.fieldDiff.failed_gates;
+  const failedGates = activationFailures && !Array.isArray(activationFailures) && typeof activationFailures === "object"
+    ? activationFailures.current : null;
+  const candidateRevisionChanged = ocrConflict?.code === "ACTIVATION_GATE_FAILED"
+    && ocrConflict.conflictContext?.currentRecord.revision_id === readyRevisionId
+    && Array.isArray(failedGates) && failedGates.some(gate => gate !== null && typeof gate === "object"
+      && !Array.isArray(gate) && gate.gate === "candidate_revision");
   const currentCandidateId = useRef<string | null>(null);
   const candidateScope = useRef(
     `${subjectIdParam ?? ""}:${episodeParam ?? ""}`,
@@ -1019,6 +1026,7 @@ export function EvidencePage() {
     const action = `build:${snapshot.evidenceSnapshotId}:${baseId}:revision:${episode.revision}`;
     setBuildBusy(true);
     setProcessingActionError(null);
+    setOcrConflict(null);
     setProcessingNotice("正在生成可启用的资料版本…");
     try {
       const result = await getEvidenceRepository().buildProcessingRevision({
@@ -1075,7 +1083,7 @@ export function EvidencePage() {
       subjectId === null ||
       processingCandidate?.candidateStatus !== "ready" ||
       processingCandidate.completeRevisionId === null ||
-      !readyRevisionMatches || metadataChanged || metadataBusy ||
+      !readyRevisionMatches || metadataChanged || candidateRevisionChanged || metadataBusy ||
       snapshots.state.status !== "success"
     )
       return;
@@ -1746,10 +1754,14 @@ export function EvidencePage() {
               readyRevision.state.status === "success" && !readyRevisionMatches) && <p role="alert">
               尚未核实待启用版本，请重试。<button type="button" className="button" onClick={readyRevision.retry}>重试读取</button>
             </p>}
+            {candidateRevisionChanged && selectedSnapshot !== null && (
+              <button type="button" className="button button--primary" disabled={buildBusy || !readyRevisionMatches}
+                onClick={() => void buildReviewableRevision(selectedSnapshot)}>更新资料版本</button>
+            )}
             <button
               type="button"
               className="button button--primary"
-              disabled={!readyRevisionMatches || metadataChanged || metadataBusy || snapshots.state.status !== "success"}
+              disabled={!readyRevisionMatches || metadataChanged || candidateRevisionChanged || metadataBusy || snapshots.state.status !== "success"}
               onClick={() => void activateReviewableRevision()}
             >
               启用这个资料版本
