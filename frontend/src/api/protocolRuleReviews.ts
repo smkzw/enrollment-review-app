@@ -45,7 +45,13 @@ function readReview(value: unknown): RuleReviewRecord {
       !["approved", "revoked"].includes(String(row.action)) ||
       !(row.note === null || typeof row.note === "string") ||
       !Array.isArray(row.result_variables) || !row.result_variables.every(v => typeof v === "string")) throw new Error("审定记录格式不完整，请刷新。");
-  return row as unknown as RuleReviewRecord;
+  // This endpoint inherits the SQLite UTC-naive storage convention. Do not
+  // interpret an operation timestamp as the browser's local clinical date.
+  const savedTime = String(row.reviewed_at);
+  const reviewedAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(savedTime) ? savedTime + "Z" : savedTime;
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(reviewedAt) || Number.isNaN(Date.parse(reviewedAt)))
+    throw new Error("审定时间不完整，请刷新。");
+  return { ...row, reviewed_at: reviewedAt } as unknown as RuleReviewRecord;
 }
 export function decodeRuleReviews(value: unknown, jobId: string): RuleReviews {
   const row = record(value);

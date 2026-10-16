@@ -25,6 +25,18 @@ beforeAll(() => {
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
 });
 describe("逐条审定", () => {
+  it.each(["2026-10-16T23:25:18.633347", "2026-10-16T23:25:18.633347Z", "2026-10-17T07:25:18.633347+08:00"])("审定时间按真实UTC约定解码，不改原记录：%s", time => {
+    const review = { record_id: "record", official_code: "IN-01", rule_content_hash: hash,
+      reviewer_kind: "builder_verification", reviewed_by: "构建者（验证）", reviewed_at: time,
+      action: "approved", note: null, result_variables: [] };
+    const response = { ...initial, all_reviewed: true, entries: [{ ...entry, review }], history: [review] };
+    const before = JSON.stringify(response);
+    const decoded = decodeRuleReviews(response, "job");
+    expect(new Date(decoded.entries[0]!.review!.reviewed_at).toISOString()).toBe("2026-10-16T23:25:18.633Z");
+    expect(decoded.history[0]?.reviewed_at).toBe(decoded.entries[0]?.review?.reviewed_at);
+    expect(JSON.stringify(response)).toBe(before);
+    expect(() => decodeRuleReviews({ ...response, history: [{ ...review, reviewed_at: "2026-13-17T07:25:18" }] }, "job")).toThrow();
+  });
   it.each(["all_members", "qualified", null])("用药审定及集中确认可查看同版节点、类别、例外与时间：%s", async classScope => {
     const medicationEntry = { ...entry, official_code: "med:fixture", kind: "medication", label: "药物甲限制" };
     const full = { ...initial, entries: [medicationEntry] };
@@ -114,7 +126,7 @@ describe("逐条审定", () => {
       expect(payload.expected_revision_id).toBe("revision");
       expect(payload.rule_content_hash).toBe(hash);
       const review = { record_id: "record", official_code: "IN-01", rule_content_hash: hash,
-        reviewer_kind: "builder_verification", reviewed_by: "构建者（验证）", reviewed_at: "2026-10-12T00:00:00Z",
+        reviewer_kind: "builder_verification", reviewed_by: "构建者（验证）", reviewed_at: "2026-10-16T23:25:18.633347",
         action: "approved", note: null, result_variables: [] };
       return new Response(JSON.stringify({ ...initial, all_reviewed: true,
         entries: [{ ...entry, review }], history: [review] }));
@@ -132,7 +144,7 @@ describe("逐条审定", () => {
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "审定范围" }), "approved");
     // The next-action selector is not the author of the saved approval.
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "审定身份" }), "medical_manager");
-    expect(screen.getByText(/^构建者验证：已由/)).toBeInTheDocument();
+    expect(screen.getByText(/^构建者验证：已由/)).toHaveTextContent("2026/10/17 07:25:18（北京时间）");
     expect(screen.getByRole("button", { name: "撤销审定" })).toBeEnabled();
   });
 
