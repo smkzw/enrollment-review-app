@@ -104,6 +104,8 @@ PR #1增量修复：owner内联处理7份旧文档归档位置冲突，字节与
 
 本轮字段／恢复／导航包：281通过1失败、162.18秒exit1（wp5-fields-navigation-final.xml）；唯一失败为原test_retry_receives_persisted_failure_checkpoint_without_replaying_success，与先前m1-correction-child-queue-atomic.xml同名同断言，不删测放宽。新增两API测试首轮失败是测试自造时钟违反SQLite naive UTC约定，已按utc_now修夹具；生产租约校验未放宽。另55投影／API消费者59.38秒exit0，67前端8.24秒exit0及正式构建通过（wp6-stable-navigation-{consumers,integrated,integrated-build}）。当前导航身份只作用于显示、含规则内容指纹；原保存item_id仍用于实际核实写入，旧版／坏链接不猜映射。临床／历史审计0写0模型，真实两暴露仍因日期对象未对应而拒绝。后续部署及实际Ego消费另记，不以测试代替。
 
+原Ego一次更新v46处于准备中时查到确定性重复工作：126项已有完整、重新核实的最新证明后，旧代码仍遍历更早所有Job；旧条目既不会覆盖已选结果，又反复解码／校验。现仅在全部目标已有合格证明时停止继续搜索，未找到部分仍查更早历史，已实际读取的损坏仍拒。254相连48.78秒exit0；当前243事实／24页的只读126证明复验11.677411秒、0写0模型（wp5-v46-reuse-shortcircuit-preflight.json），不是完整工作稿耗时或模型性能排名。不终止原健康请求／重派；当前服务4ab2402a尚未消费此增量。
+
 | 问题 | 首因／影响 | 当前处置与下一步 |
 |---|---|---|
 | 零模型复验的混合历史衔接（已修／已消费） | 首次37d6fbc6在source_reference_successors→expectation仓储失败505.473秒；2项提醒合法引用旧节点修订4，下一层却要求全为修订11，整次发布回滚 | 5b80b3d9只保留原样且重新证明相容的引用，跨权威替换／整个节点已更正目标仍拒；闭包选合格累计来源。164后端／45及最后24前端／构建通过，PR9实际合并；原Ego新dbdb3266 completed10/10，Profile及自动新稿真实落库，旧219事实／46稿6902项等全旧行hash保持，0新请求。旧失败不改，新入口回原读取，重试失败不变成整例模型读取 |
