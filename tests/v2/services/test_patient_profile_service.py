@@ -144,12 +144,12 @@ def _fact_via_candidate(
             supported_requirement_ids=list(supported_requirement_ids),
         )
     )
-def _event_via_candidate(session, chain, event_id, *, fact_candidate_ids, fact_ids):
+def _event_via_candidate(session, chain, event_id, *, fact_candidate_ids, fact_ids, event_type="diagnosis"):
     candidate = ClinicalEventCandidateV2(
         candidate_id=f"cc-{event_id}-cand",
         run_id=chain["run_id"],
         call_id=chain["call_id"],
-        event_type="diagnosis",
+        event_type=event_type,
         start_range=_date_range(),
         end_range=None,
         duration_status=DurationStatus.ONGOING,
@@ -166,6 +166,7 @@ def _event_via_candidate(session, chain, event_id, *, fact_candidate_ids, fact_i
             chain,
             authority=chain.get("authority") or _authority(chain),
             event_id=event_id,
+            event_type=event_type,
             gate_id=f"cc-{event_id}-gate",
             fact_ids=sorted(set(fact_ids)),
             referenced_fact_objects=["vital_sign:血压"],
@@ -175,7 +176,7 @@ def _event_via_candidate(session, chain, event_id, *, fact_candidate_ids, fact_i
     )
 
 
-def _exposure_via_candidate(session, chain, exposure_id, *, fact_candidate_ids, fact_ids):
+def _exposure_via_candidate(session, chain, exposure_id, *, fact_candidate_ids, fact_ids, dose="500"):
     candidate = MedicationExposureCandidateV2(
         candidate_id=f"cc-{exposure_id}-cand",
         run_id=chain["run_id"],
@@ -183,7 +184,7 @@ def _exposure_via_candidate(session, chain, exposure_id, *, fact_candidate_ids, 
         medication_name="二甲双胍",
         category="降糖药",
         indication="2 型糖尿病",
-        dose="500",
+        dose=dose,
         unit="mg",
         frequency="bid",
         route="口服",
@@ -203,6 +204,7 @@ def _exposure_via_candidate(session, chain, exposure_id, *, fact_candidate_ids, 
             chain,
             authority=chain.get("authority") or _authority(chain),
             exposure_id=exposure_id,
+            dose=dose,
             gate_id=f"cc-{exposure_id}-gate",
             fact_ids=sorted(set(fact_ids)),
             source_candidate_ids=[candidate.candidate_id],

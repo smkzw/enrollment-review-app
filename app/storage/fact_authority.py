@@ -236,7 +236,22 @@ class FactAuthorityValidator:
         if any((locator.source_document_version_id, locator.page_number) not in pages for locator in locators):
             return False
         documents = self.retained_source_documents(fact.authority, current)
-        if any(locator.source_document_version_id not in documents for locator in locators) and not fact.source_candidate_ids:
+        _, current_locators = self._retained_documents[(fact.authority.model_dump_json(), current.model_dump_json())]
+        if not set(fact.locator_ids) <= current_locators:
+            return False
+        if all(locator.source_document_version_id in documents for locator in locators):
+            return True
+        from app.domain.contracts.facts import ClinicalConflictGroupV2
+        if isinstance(fact, ClinicalConflictGroupV2):
+            from app.storage.fact_repositories import ClinicalFactV2Repository, ClinicalEventV2Repository, MedicationExposureV2Repository
+            repository, members = {
+                "fact": (ClinicalFactV2Repository, fact.fact_ids),
+                "event": (ClinicalEventV2Repository, fact.event_ids),
+                "exposure": (MedicationExposureV2Repository, fact.exposure_ids),
+            }[fact.member_kind]
+            repo = repository(self.session)
+            return all(self.retained_fact_source_is_reusable(repo.get(identity), current) for identity in members)
+        if not fact.source_candidate_ids:
             return False
         # A multi-page reading may depend on a changed sibling even when this
         # fact's displayed excerpt is on an unchanged page.
@@ -249,8 +264,7 @@ class FactAuthorityValidator:
             call_documents = {locator.source_document_version_id for locator in locators}
             if len(call_documents) != 1 or any((next(iter(call_documents)), page) not in pages for page in call.page_numbers):
                 return False
-        _, current_locators = self._retained_documents[(fact.authority.model_dump_json(), current.model_dump_json())]
-        return set(fact.locator_ids) <= current_locators
+        return True
 
     def _validate_snapshot(self, authority: FactAuthority) -> None:
         snapshot = self.session.get(

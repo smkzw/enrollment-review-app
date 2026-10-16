@@ -233,6 +233,43 @@ def test_retained_profile_includes_original_linked_history_and_medication(sessio
     assert {row.source_id for row in profile_items(profile)} == {fact.fact_id, "retained-event", "retained-exposure"}
 
 
+@pytest.mark.parametrize("kind", ["fact", "event", "exposure"])
+def test_incremental_profile_preserves_conflicts_without_treating_group_as_fact(session, kind):
+    from app.domain.contracts.facts import ClinicalConflictGroupV2
+    from app.storage.fact_repositories import ClinicalConflictGroupV2Repository, FactNormalizationCandidateRepository, ClinicalFactV2Repository
+    from tests.v2.services.test_patient_profile_service import _event_via_candidate, _exposure_via_candidate
+
+    saved = {}
+    def add_group(chain):
+        first = ClinicalFactV2Repository(session).get(f"{chain['run_id']}-fact-a")
+        second = _publish_fact(session, chain, suffix="group-second", value="90/60", include_source_candidates=True)
+        candidate = FactNormalizationCandidateRepository(session).get(first.source_candidate_ids[0])
+        selected = [first, second]
+        source = {**chain, "run_id": first.run_id, "call_id": candidate.call_id}
+        if kind != "fact":
+            factory = _event_via_candidate if kind == "event" else _exposure_via_candidate
+            selected = [factory(session, source, f"conflict-{kind}-{index}",
+                fact_candidate_ids=first.source_candidate_ids, fact_ids=[first.fact_id],
+                **({"event_type": f"synthetic-diagnosis-{index}"} if kind == "event" else {"dose": str(500 + index * 500)}))
+                for index in range(2)]
+        field = {"fact": "fact_ids", "event": "event_ids", "exposure": "exposure_ids"}[kind]
+        identity = {"fact": "fact_id", "event": "event_id", "exposure": "exposure_id"}[kind]
+        group = ClinicalConflictGroupV2(conflict_group_id=f"retained-{kind}-conflict", run_id=selected[0].run_id,
+            gate_id=selected[0].gate_id, authority=chain["authority"], member_kind=kind,
+            locator_ids=first.locator_ids, created_at=NOW,
+            **{field: sorted(getattr(row, identity) for row in selected)})
+        ClinicalConflictGroupV2Repository(session).create(group)
+        saved["group"] = group
+    old, _, current, _, _ = _seed_incremental(session, before_incremental=add_group)
+    from app.storage.fact_authority import FactAuthorityValidator
+    validator = FactAuthorityValidator(session)
+    assert validator.retained_fact_source_is_reusable(saved["group"], current)
+    assert saved["group"] in PatientProfileService()._published_conflicts(session, current,
+        include_rule_revision_sources=True)
+    assert ClinicalConflictGroupV2Repository(session).get(saved["group"].conflict_group_id) == saved["group"]
+    assert old["authority"] != current
+
+
 def _receipt_transport_factory(requests, *, fail_after=None, invalid_after=None, distinct_document_assertions=False):
     """Real product transport and receipts, synthetic model response, no network."""
     import json
