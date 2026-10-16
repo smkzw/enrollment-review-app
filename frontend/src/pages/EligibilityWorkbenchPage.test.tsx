@@ -214,6 +214,25 @@ describe("入排审核工作台", () => {
     await userEvent.click(summary);
     expect(detail).toHaveAttribute("open");
   });
+  it("并列读数保留完整首句，不把分号后的差异折叠成只采用第一个值", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review, clauses: [{
+      ...review.clauses[0]!, decision: "inclusion_met", decisionLabel: "满足", confidence: "low",
+      confidenceReason: "年龄记录不一致，各记载均得到本条相同结论。",
+      reason: "年龄：51岁；年龄：52岁。已按本条方案条件核对。原件和差异保留。",
+    }] }) });
+    render(<EligibilityWorkbenchPage />);
+    const first = await screen.findByText((_, node) => node?.tagName === "LI" && node.textContent === "年龄：51岁；");
+    const other = screen.getByText((_, node) => node?.tagName === "LI" && node.textContent === "年龄：52岁。");
+    expect(first.closest("details")).toBeNull();
+    expect(other.closest("details")).toBeNull();
+    expect(first.querySelector("strong")).toHaveTextContent("年龄：");
+    const rest = screen.getByText("展开核对说明").closest("details")!;
+    expect(rest).not.toHaveAttribute("open");
+    expect(within(rest).getByText("原件和差异保留。")).toBeInTheDocument();
+    await userEvent.click(within(rest).getByText("展开核对说明"));
+    expect(rest).toHaveAttribute("open");
+    expect(screen.getAllByText("满足").length).toBeGreaterThan(0);
+  });
   it("组合条件先展示真正待核的对应关系，已有条件与原汇总可展开保留", async () => {
     const compound = { ...review.clauses[0]!, decision: "indeterminate" as const,
       decisionLabel: "证据不足", reason: "治疗有记录，但其对应疗效尚无依据。",
