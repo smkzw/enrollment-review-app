@@ -12,6 +12,19 @@ from pydantic import Field
 from .common import ContractModel
 
 
+MEDICATION_FIELD_ROLES = {
+    "medication_name": ("actual_use",),
+    "start_range": ("use_start", "single_use"),
+    "end_range": ("use_end", "single_use"),
+    "record_time": ("recorded_at",),
+    "duration_status": ("status_ended", "status_ongoing", "status_single", "status_intermittent", "status_unknown"),
+    "dose": ("use_detail",),
+    "unit": ("use_detail",),
+    "frequency": ("use_detail",),
+    "route": ("use_detail",),
+}
+
+
 class MedicationFieldSourceDraft(ContractModel):
     field: Literal["medication_name", "start_range", "end_range", "record_time", "duration_status",
                    "dose", "unit", "frequency", "route"]
@@ -87,11 +100,11 @@ def medication_field_source_errors(candidate) -> list[str]:
             and source.value_text == source.object_text else source.value_text in source.excerpt)
         if (source.object_text != candidate.medication_name or not object_present or not value_present):
             errors.append("用药字段须在同一连续摘录中明确对应药物对象和原值")
-        role = {"medication_name": {"actual_use"}, "duration_status": {"status_" + candidate.duration_status.value},
-                "record_time": {"recorded_at"}, "start_range": {"use_start"}, "end_range": {"use_end"}
-                }.get(source.field, {"use_detail"})
-        if source.field in {"start_range", "end_range"} and candidate.duration_status.value == "single":
-            role = {*role, "single_use"}
+        role = set(MEDICATION_FIELD_ROLES[source.field])
+        if source.field == "duration_status":
+            role = {"status_" + candidate.duration_status.value}
+        elif source.field in {"start_range", "end_range"} and candidate.duration_status.value != "single":
+            role.discard("single_use")
         if source.role not in role:
             errors.append("用药字段的日期或使用角色与目标字段不一致")
         if source.field in {"start_range", "end_range"}:

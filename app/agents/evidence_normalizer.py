@@ -54,7 +54,7 @@ from app.domain.contracts.facts import (
     MedicationExposureCandidateV2,
     PartialDateRange,
 )
-from app.domain.contracts.medication_source import MedicationFieldSource, MedicationFieldSourceDraft
+from app.domain.contracts.medication_source import MEDICATION_FIELD_ROLES, MedicationFieldSource, MedicationFieldSourceDraft
 from app.domain.contracts.selective_vision_observation import (
     SelectiveVisionObservationAttachment,
 )
@@ -836,6 +836,18 @@ def evidence_normalizer_json_schema(variable_ids: list[str] | None = None, *, in
         schema["$defs"].pop("MedicationFieldSourceDraft")
     elif medication_source_material != MEDICATION_CONTINUOUS_SOURCE_GUIDANCE:
         schema["$defs"]["MedicationFieldSourceDraft"]["properties"].pop("locator_ids")
+    else:
+        # Constrain fixed field/role pairs before generation, not after a full
+        # page has been read. Status/date meaning still requires host checks.
+        field_schema = schema["$defs"]["MedicationFieldSourceDraft"]
+        field_schema["anyOf"] = [
+            {"properties": {"field": {"const": field}, "role": {"enum": list(roles)}}}
+            for field, roles in MEDICATION_FIELD_ROLES.items()
+        ]
+        field_schema["properties"]["excerpt"]["description"] = (
+            "逐字复制原句，保留原始换行与空格；locator_ids非空时复制完整连续范围，"
+            "不能把相邻两行直接拼接，也不能省略中间文字。"
+        )
     if variable_ids is not None:
         schema["$defs"]["EvidenceFactDraft"]["properties"]["variable_id"] = {
             "anyOf": [{"type": "string", "enum": sorted(set(variable_ids))}, {"type": "null"}]

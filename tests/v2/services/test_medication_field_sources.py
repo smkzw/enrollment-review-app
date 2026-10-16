@@ -65,6 +65,38 @@ def test_continuous_quotes_are_explicit_and_do_not_change_legacy_schema_or_mater
             medication_source_material=MEDICATION_CONTINUOUS_SOURCE_GUIDANCE)
 
 
+@pytest.mark.parametrize("field", ["medication_name", "start_range", "end_range", "record_time",
+    "duration_status", "dose", "unit", "frequency", "route"])
+@pytest.mark.parametrize("role", ["actual_use", "use_start", "use_end", "single_use", "recorded_at",
+    "use_detail", "status_ended", "status_ongoing", "status_single", "status_intermittent", "status_unknown"])
+def test_new_generation_schema_rejects_wrong_fixed_field_role_before_adoption(field, role):
+    from jsonschema import Draft202012Validator
+
+    # Expected pairs are independent of the implementation's mapping.
+    expected = {"medication_name": {"actual_use"}, "start_range": {"use_start", "single_use"},
+        "end_range": {"use_end", "single_use"}, "record_time": {"recorded_at"},
+        "duration_status": {"status_ended", "status_ongoing", "status_single", "status_intermittent", "status_unknown"}}
+    new = evidence_normalizer_json_schema(include_medication_field_sources=True,
+        medication_source_material=MEDICATION_CONTINUOUS_SOURCE_GUIDANCE)
+    source = {"field": field, "role": role, "locator_id": "source-1", "locator_ids": [],
+        "object_text": "药物甲", "value_text": "10", "excerpt": "药物甲10mg"}
+    validator = Draft202012Validator(new["$defs"]["MedicationFieldSourceDraft"])
+    assert validator.is_valid(source) == (role in expected.get(field, {"use_detail"}))
+    # Legacy requests remain unchanged; their runtime role checks still reject
+    # incompatible pairs rather than silently translating old model answers.
+    old = evidence_normalizer_json_schema(include_medication_field_sources=True)
+    assert "anyOf" not in old["$defs"]["MedicationFieldSourceDraft"]
+    assert "description" not in old["$defs"]["MedicationFieldSourceDraft"]["properties"]["excerpt"]
+
+
+def test_continuous_quote_schema_keeps_original_newlines_explicit():
+    schema = evidence_normalizer_json_schema(include_medication_field_sources=True,
+        medication_source_material=MEDICATION_CONTINUOUS_SOURCE_GUIDANCE)
+    field = schema["$defs"]["MedicationFieldSourceDraft"]
+    assert "原始换行与空格" in field["properties"]["excerpt"]["description"]
+    assert "excerpt" in field["required"]
+
+
 @pytest.mark.parametrize("material", [None, MEDICATION_PARTIAL_SOURCE_GUIDANCE])
 def test_prompt_material_is_content_addressed_and_bound_to_the_actual_request(material):
     from tests.v2.agents.test_evidence_normalizer_adapter import _input
