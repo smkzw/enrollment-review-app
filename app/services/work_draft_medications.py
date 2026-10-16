@@ -7,6 +7,7 @@ from app.domain.contracts.enums import ComponentDecision as D, DurationStatus, F
 from app.domain.contracts.work_draft import SystemIssue, WorkDraftItem
 from app.domain.medication_timing import medication_window_violation, medication_period_violation
 from app.domain.publication import canonical_hash
+from app.domain.risk_flags import RiskFlag
 from app.services.work_draft_calculation import review_anchor_dates, review_source_cutoff
 
 
@@ -149,8 +150,14 @@ def calculate_medications(frozen, rule_set, *, evidence_refs):
                     refs.update(records)
         if issue is not None:
             decision, reason = None, issue.detail
+        ocr_warning = issue is None and any(
+            RiskFlag.LOW_OCR_CONFIDENCE in facts[ref.fact_id].risk_flags
+            for ref in refs.values())
+        if ocr_warning:
+            reason = "识别可能有误，请核对所引原件。" + reason
         results.append(WorkDraftItem(**values, decision=decision, reason_text=reason,
             confidence="low" if decision == D.EXCLUSION_TRIGGERED else None,
-            confidence_reason="时间判断有原件依据，按本次资料范围提示用药风险。" if decision == D.EXCLUSION_TRIGGERED else None,
+            confidence_reason=("识别可能有误；按本次资料范围提示用药风险。" if ocr_warning
+                else "时间判断有原件依据，按本次资料范围提示用药风险。") if decision == D.EXCLUSION_TRIGGERED else None,
             evidence_refs=list(refs.values()), system_issue=issue))
     return results

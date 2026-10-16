@@ -93,8 +93,9 @@ def test_record_date_does_not_certify_an_unwritten_clock_time():
     assert medication_field_source_errors(candidate)
 
 
-@pytest.mark.parametrize("kind,expected", [("date", "blocked"), ("output_repetition", "blocked")])
-@pytest.mark.parametrize("fault", [None, "wrong_hash", "fake_quote", "duplicate_quote", "wrong_role"])
+@pytest.mark.parametrize("kind,expected", [("date", "accepted"), ("output_repetition", "blocked"), ("negation_polarity", "blocked")])
+@pytest.mark.parametrize("fault", [None, "wrong_hash", "fake_quote", "duplicate_quote", "wrong_role",
+    "unannotated", "legacy", "aligned_ongoing"])
 def test_field_proof_checks_original_not_just_a_policy_or_page(monkeypatch, kind, expected, fault):
     from types import SimpleNamespace
     from app.domain.gates import fact_evidence_closure as module
@@ -112,16 +113,48 @@ def test_field_proof_checks_original_not_just_a_policy_or_page(monkeypatch, kind
         text += "\n" + TEXT
     elif fault == "wrong_role":
         candidate.field_sources[1] = candidate.field_sources[1].model_copy(update={"role": "recorded_at"})
+    elif fault == "unannotated":
+        candidate = candidate.model_copy(update={"field_sources": []})
+    elif fault == "aligned_ongoing":
+        from app.domain.contracts.enums import DurationStatus
+        candidate = candidate.model_copy(update={"duration_status": DurationStatus.ONGOING})
+        candidate.field_sources[2] = candidate.field_sources[2].model_copy(update={
+            "role": "status_ongoing", "value_text": "药物甲"})
     locator = SimpleNamespace(locator_id="loc-1", page_artifact_id="pa-1", ocr_page_id="op-1",
         source_text_sha256=sha256(TEXT.encode()).hexdigest(), source_layer=LocatorSourceLayer.RAW_OCR,
         precision=LocatorPrecision.TEXT_RANGE, text_start=0, text_end=len(TEXT))
     monkeypatch.setattr(module, "_fetch_cached", lambda *_args: locator)
     monkeypatch.setattr(module, "_localized_locator_text", lambda *_args, **_kwargs: text)
     revision = _make_revision(manifest_entries=[("doc-1", 1, "pa-1", "op-1")], locator_ids=["loc-1"])
-    revision = revision.model_copy(update={"source_qualification_mode": "scoped_text_v1"})
+    if fault != "legacy":
+        revision = revision.model_copy(update={"source_qualification_mode": "scoped_text_v1"})
     flag = OcrRiskFlag(risk_id="r1", kind=kind, level="blocking", text="2025-04-12",
         text_start=0, text_end=10, rule_version="synthetic-v1")
     outcome, reasons, _ = module.validate_blocking_ocr_for_candidate(None, candidate, revision,
         prepared_context=([], {"op-1": [("scan", flag)]}, set(), []))
     assert outcome.value == ("blocked" if fault else expected)
-    assert reasons
+    assert bool(reasons) == (outcome.value == "blocked")
+
+
+def test_negation_outside_a_clipped_quote_is_not_downgraded(monkeypatch):
+    from types import SimpleNamespace
+    from app.domain.gates import fact_evidence_closure as module
+    from app.domain.contracts.ocr import OcrRiskFlag
+    from app.domain.contracts.enums import LocatorPrecision, LocatorSourceLayer
+    from tests.v2.domain.test_fact_evidence_closure import _make_revision
+
+    source = "否认" + TEXT
+    candidate = exposure_with_sources(source_hash=sha256(source.encode()).hexdigest())
+    locator = SimpleNamespace(locator_id="loc-1", page_artifact_id="pa-1", ocr_page_id="op-1",
+        source_text_sha256=sha256(source.encode()).hexdigest(), source_layer=LocatorSourceLayer.RAW_OCR,
+        precision=LocatorPrecision.TEXT_RANGE, text_start=2, text_end=len(source))
+    monkeypatch.setattr(module, "_fetch_cached", lambda *_args: locator)
+    monkeypatch.setattr(module, "_localized_locator_text", lambda *_args, **_kwargs: TEXT)
+    revision = _make_revision(manifest_entries=[("doc-1", 1, "pa-1", "op-1")], locator_ids=["loc-1"])
+    revision = revision.model_copy(update={"source_qualification_mode": "scoped_text_v1"})
+    flag = OcrRiskFlag(risk_id="neg", kind="negation_polarity", level="blocking", text="否认",
+        text_start=0, text_end=2, rule_version="synthetic-v1")
+    outcome, reasons, _ = module.validate_blocking_ocr_for_candidate(None, candidate, revision,
+        prepared_context=([], {"op-1": [("scan", flag)]}, set(), []))
+    assert outcome.value == "blocked"
+    assert any("极性" in reason for reason in reasons)
