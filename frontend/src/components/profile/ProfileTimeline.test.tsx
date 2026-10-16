@@ -37,6 +37,33 @@ describe("交互式临床时间图", () => {
     const { container } = render(<ProfileTimeline model={model} />);
     expect(container.querySelector(".clinical-chart__point")).not.toHaveClass("is-interval");
   });
+  it("尚未确认发生的安排不画作病史或服药，可展开后下钻且不改原记录", async () => {
+    const user = userEvent.setup();
+    const model = modelFor([
+      makeFactItem({ item_id: "known", source_id: "known-source", lane: "medication",
+        asserted_object: "药物甲", kind_label: "处方记录", start_range: date("2026-09-18") }),
+      makeFactItem({ item_id: "planned", source_id: "plan-source", lane: "medication",
+        asserted_object: "下一次用药安排", title: "下一次用药安排", kind_label: "计划记录",
+        polarity: "unknown", polarity_label: "未明确", value: null, start_range: date("2026-09-20") }),
+      makeFactItem({ item_id: "possible", source_id: "possible-source", lane: "medical_history",
+        asserted_object: "病史尚待核实", title: "病史尚待核实", polarity: "unknown", value: null }),
+    ]);
+    const before = JSON.stringify(model.items);
+    const open = vi.fn();
+    const { container } = render(<ProfileTimeline model={model} onOpenEvidence={open} />);
+    const treatment = screen.getByRole("region", { name: "用药与治疗时间图" });
+    expect(within(treatment).getByText("处方记录")).toBeInTheDocument();
+    expect(within(treatment).queryByText("下一次用药安排")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".clinical-chart__point")).toHaveLength(1);
+    const summary = screen.getByText("待核清的病史与用药记录（2）");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    await user.click(summary);
+    await user.click(screen.getByRole("button", { name: /下一次用药安排/ }));
+    const detail = screen.getByRole("complementary", { name: "临床记录详情" });
+    await user.click(within(detail).getByRole("button", { name: "查看“下一次用药安排”的原文证据" }));
+    expect(open).toHaveBeenCalledWith(model.itemById.get("planned"));
+    expect(JSON.stringify(model.items)).toBe(before);
+  });
   it("按病史／用药画点；正常检查、行政信息和明确否认不铺在主图", () => {
     const model = modelFor([
       makeFactItem({ lane: "target_disease", asserted_object: "研究疾病", title: "研究疾病" }),
