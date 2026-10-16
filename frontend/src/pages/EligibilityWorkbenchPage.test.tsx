@@ -271,10 +271,42 @@ describe("入排审核工作台", () => {
     await userEvent.click(summary);
     expect(summary.closest("details")).toHaveAttribute("open");
     await userEvent.click(screen.getByText("逐项条件与依据"));
+    const detailPane = screen.getByLabelText("审核要点详情").querySelector(".workbench-pane")!;
+    detailPane.scrollTop = 1400;
     await userEvent.click(screen.getByRole("button", { name: /目标人群符合方案要求 · 证据不足/ }));
     expect(screen.queryByText("尚缺的依据")).not.toBeInTheDocument();
     expect(screen.queryByText("完整汇总说明")).not.toBeInTheDocument();
+    expect(detailPane.scrollTop).toBe(0);
+    expect(within(screen.getByLabelText("审核要点详情"))
+      .getByRole("heading", { name: missing.textSummary })).toBeInTheDocument();
   });
+  it("组合条款主区直接呈现当前条件与真实读数，未来要求不冒充当前满足", async () => {
+    window.location.hash = "#/workbench?view=all";
+    const first = review.clauses[0]!;
+    const current = Array.from({ length: 4 }, (_, index) => ({ ...first,
+      ruleComponentId: `current-${index}`, parentRuleCode: first.ruleCode,
+      textSummary: `本次指标${index + 1}须达标`, decision: "inclusion_met" as const,
+      decisionLabel: "满足", reason: `实际读数为${12 + index}分。`,
+    }));
+    const future = { ...current[0]!, ruleComponentId: "future", textSummary: "后续节点复核指标",
+      decision: "not_due" as const, decisionLabel: "未到期", reason: "后续节点的条件尚未到期。" };
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...first, decision: "inclusion_met", decisionLabel: "满足", reason: "本次节点按已到期要求核对。" }],
+      componentClauses: [...current, future],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const detail = await screen.findByLabelText("条款详情");
+    expect(within(detail).getByText("实际读数为12分。")).toBeVisible();
+    expect(within(detail).getByText("本次指标3须达标")).toBeVisible();
+    expect(screen.getByText("另有 1 项后续要求未到期。")).toBeVisible();
+    expect(screen.getByText("完整汇总说明").closest("details")).not.toHaveAttribute("open");
+    const all = screen.getByText("逐项条件与依据").closest("details")!;
+    expect(all).not.toHaveAttribute("open");
+    await userEvent.click(within(all).getByText("逐项条件与依据"));
+    expect(within(all).getByText("实际读数为15分。")).toBeVisible();
+    expect(within(all).getByText("后续节点的条件尚未到期。")).toBeVisible();
+  });
+
   it("规则更新导致读取拒绝时，可由用户更新工作稿，不自动调用或沿用旧结果链接", async () => {
     localStorage.clear();
     const catalog = getCatalogRepository();
@@ -810,6 +842,18 @@ describe("入排审核工作台", () => {
       expect(groups).toHaveLength(1);
       expect(groups[0]!.label).toBe("已判定 · 低置信");
       expect(groups[0]!.clauses.map(item => item.ruleComponentId)).toEqual(["low"]);
+    });
+
+    it("未给根因的资料矛盾不冒充条款未满足", () => {
+      const groups = buildEligibilityIssueGroups([
+        clause({ ruleComponentId: "conflict", decision: "conflict", gapType: null }),
+        clause({ ruleComponentId: "unmet", decision: "inclusion_not_met", gapType: null }),
+      ]);
+      const disagreement = groups.find(group => group.clauses.some(item => item.ruleComponentId === "conflict"));
+      expect(disagreement?.key).toBe("source_conflict");
+      expect(disagreement?.label).toBe("来源存在冲突");
+      expect(disagreement?.clauses).toHaveLength(1);
+      expect(groups.find(group => group.key === "clause_not_satisfied")?.clauses[0]?.ruleComponentId).toBe("unmet");
     });
 
     it("大量低置信正常项不遮住风险与真正未决，全部项目仍保留", () => {

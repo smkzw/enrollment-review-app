@@ -36,6 +36,13 @@ def test_qualified_inapplicability_does_not_display_missing_applicable_patient_e
     assert display_source_reason(reason, decision="indeterminate").startswith(prefix)
 
 
+def test_display_source_scope_checks_use_chinese_without_rewriting_clinical_operands():
+    from app.services.work_draft_projection import display_source_reason
+    text = "subject为受试者，anchor_date=2025-08-08；time_matches=true，object_matches=false；ALT 57.8 U/L。"
+    shown = display_source_reason(text)
+    assert shown == "判断对象为受试者，节点日期=2025-08-08；记录时间适用，记录对象尚未核清；ALT 57.8 U/L。"
+
+
 def page(text="病历记载：否认近期感染。", *, complete=True, category="study_chart", key="page"):
     return WorkDraftSourcePage(source_document_version_id="document", page_artifact_id=key,
         page_number=1, effective_text=text, effective_text_sha256=sha256(text.encode()).hexdigest(),

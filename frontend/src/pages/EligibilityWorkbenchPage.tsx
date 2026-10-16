@@ -418,6 +418,7 @@ function clauseIssueKey(clause: EligibilityClauseView): {
   }
   switch (clause.decision) {
     case "conflict":
+      return { key: clause.gapType ?? "source_conflict", severity: "danger" };
     case "exclusion_triggered":
     case "inclusion_not_met":
     case "requirement_not_met":
@@ -571,6 +572,7 @@ function EligibilityIssueQueue({
 
 interface EligibilityClauseDetailProps {
   clause: EligibilityWorkItem;
+  conditions?: ReadonlyArray<EligibilityClauseView>;
   unresolvedConditions?: ReadonlyArray<EligibilityClauseView>;
   selectedFactIndex: number;
   onSelectFact: (index: number) => void;
@@ -578,6 +580,7 @@ interface EligibilityClauseDetailProps {
 
 function EligibilityClauseDetail({
   clause,
+  conditions = [],
   unresolvedConditions = [],
   selectedFactIndex,
   onSelectFact,
@@ -585,8 +588,13 @@ function EligibilityClauseDetail({
   const parts = clause.reasonParts ?? [];
   const pendingParts = isUndeterminedDecision(clause.decision)
     ? parts.filter(part => part.requiresAttention) : [];
+  const judgedConditions = clause.parentRuleCode === null && !isUndeterminedDecision(clause.decision)
+    ? conditions.filter(item => !isUndeterminedDecision(item.decision)
+      && item.decision !== "not_due" && item.decision !== "not_applicable").slice(0, 3) : [];
+  const futureConditions = conditions.filter(item => item.decision === "not_due");
   return (
     <div className="eligibility-clause-detail">
+      {clause.parentRuleCode !== null && <h3 className="eligibility-clause-detail__condition">{clause.textSummary}</h3>}
       <div className="eligibility-clause-detail__decision">
         <StatusBadge
           tone={decisionTone(clause.decision)}
@@ -604,7 +612,13 @@ function EligibilityClauseDetail({
           <strong>{pendingParts.length ? "尚需核对的条件" : unresolvedConditions.length ? "尚缺的依据" : "判定依据"}</strong>
           {pendingParts.length > 0 ? <dl className="eligibility-reason-parts">{pendingParts.map(part => <div key={part.conditionId}>
             <dt><strong>{part.conditionText}</strong></dt><dd><ReasonText text={part.reasonText} compact /></dd>
-          </div>)}</dl> : <ReasonText compact text={unresolvedConditions.length
+          </div>)}</dl> : judgedConditions.length > 0 ? <>
+            <dl className="eligibility-reason-parts">{judgedConditions.map(item => <div key={item.ruleComponentId}>
+              <dt><strong>{item.textSummary}</strong> · {item.decisionLabel}</dt>
+              <dd><ReasonText text={item.reason} compact /></dd>
+            </div>)}</dl>
+            {futureConditions.length > 0 && <p className="eligibility-muted">另有 {futureConditions.length} 项后续要求未到期。</p>}
+          </> : <ReasonText compact text={unresolvedConditions.length
             ? unresolvedConditions.map(item => item.reason).join("\n") : clause.reason} />}
           {pendingParts.length > 0 && parts.some(part => !part.requiresAttention) && <details>
             <summary>其他条件及依据（{parts.filter(part => !part.requiresAttention).length}）</summary>
@@ -612,7 +626,7 @@ function EligibilityClauseDetail({
               <dt><strong>{part.conditionText}</strong></dt><dd><ReasonText text={part.reasonText} /></dd>
             </div>)}</dl>
           </details>}
-          {(pendingParts.length > 0 || unresolvedConditions.length > 0) && <details>
+          {(pendingParts.length > 0 || unresolvedConditions.length > 0 || judgedConditions.length > 0) && <details>
             <summary>完整汇总说明</summary>
             <ReasonText text={clause.reason} />
           </details>}
@@ -950,6 +964,7 @@ export function EligibilityWorkbenchPage() {
   const requestedPage = Number.isSafeInteger(requestedPageValue) && requestedPageValue >= 0
     ? requestedPageValue : 0;
   const [selectedFactIndex, setSelectedFactIndex] = useState(0);
+  const detailPaneRef = useRef<HTMLDivElement>(null);
   const [queueVisible, setQueueVisible] = useState(true);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [evidenceVisited, setEvidenceVisited] = useState(false);
@@ -1012,6 +1027,7 @@ export function EligibilityWorkbenchPage() {
     setSelectedFactIndex(0);
     setEvidenceOpen(false);
     setEvidenceVisited(false);
+    if (detailPaneRef.current) detailPaneRef.current.scrollTop = 0;
   }, [selectedEpisode?.reviewEpisodeId, componentParam]);
 
   useEffect(() => {
@@ -1310,7 +1326,7 @@ export function EligibilityWorkbenchPage() {
           </div>
         </aside>}
         <section className="workbench-col eligibility-workbench__detail" aria-label="审核要点详情">
-          <div className="workbench-pane">
+          <div className="workbench-pane" ref={detailPaneRef}>
             <header className="workbench-pane__head">
               <div>
                 <h2 className="workbench-pane__title">
@@ -1321,6 +1337,9 @@ export function EligibilityWorkbenchPage() {
             </header>
             {selectedClause ? <EligibilityClauseDetail
               clause={selectedClause}
+              conditions={selectedClause.parentRuleCode === null
+                ? reviewData.componentClauses?.filter(item => item.ruleCode === selectedClause.ruleCode
+                  && item.ruleComponentId !== selectedClause.ruleComponentId) : []}
               unresolvedConditions={selectedClause.parentRuleCode === null && isUndeterminedDecision(selectedClause.decision)
                 && reviewData.componentClauses?.some(item => item.ruleCode === selectedClause.ruleCode
                   && item.ruleComponentId !== selectedClause.ruleComponentId && !isUndeterminedDecision(item.decision))
