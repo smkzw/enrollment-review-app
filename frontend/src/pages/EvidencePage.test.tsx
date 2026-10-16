@@ -1091,6 +1091,59 @@ describe("证据工作台", () => {
     ));
   });
 
+  it.each(["相同", "已变更", "错来源", "不可启用", "读取失败"])("首次待启用版本按实际资料信息开放动作：%s", async (scenario) => {
+    const user = userEvent.setup();
+    const pending = withLatestCandidate({
+      ...makeSnapshotWire("snap-pending", "active"), status: "ready", is_current: false,
+    }, "ready", 2);
+    fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({
+      subject_id: SUBJECT_ID, review_episode_id: EPISODE_ID,
+      active_evidence_snapshot_id: null, active_evidence_processing_revision_id: null,
+      items: [pending],
+    }));
+    fns.getProcessingRevision.mockImplementation(async (id) => {
+      if (id === "revision-1" && scenario === "读取失败") throw new Error("unavailable");
+      return decodeProcessingRevision({
+        ...makeProcessingRevisionWire(), evidence_processing_revision_id: id,
+        evidence_snapshot_id: id === "revision-1" && scenario === "错来源" ? "other-snapshot" : "snap-pending",
+        revision_kind: id === "revision-1" ? "complete" : "base",
+        status: "ready", is_current: false, is_activatable: id === "revision-1" && scenario !== "不可启用",
+        metadata_revision_ids: [scenario === "已变更" ? "metadata-before-confirmation" : "metadata-active-1"],
+      });
+    });
+    fns.buildProcessingRevision.mockResolvedValue({
+      candidateId: "candidate-updated", jobId: "job-updated", candidateStatus: "staged",
+      candidateStatusLabel: "等待处理", candidateEventSeq: null,
+      completeRevisionId: null, created: true, revision: null,
+    });
+    await openValid(user);
+    await waitFor(() => expect(fns.getProcessingRevision).toHaveBeenCalledWith("revision-1"));
+    const activate = await screen.findByRole("button", { name: "启用这个资料版本" });
+    if (scenario === "相同") {
+      await waitFor(() => expect(activate).toBeEnabled());
+      expect(screen.queryByRole("button", { name: "更新资料信息并生成新版本" })).not.toBeInTheDocument();
+    } else {
+      expect(activate).toBeDisabled();
+      if (scenario === "已变更") {
+        const rebuild = await screen.findByRole("button", { name: "更新资料信息并生成新版本" });
+        expect(rebuild).toBeEnabled();
+        await user.click(rebuild);
+        await waitFor(() => expect(fns.buildProcessingRevision).toHaveBeenCalledWith(expect.objectContaining({
+          evidence_snapshot_id: "snap-pending", base_processing_revision_id: "base-revision-1",
+          source_qualification_mode: "scoped_text_v1",
+        })));
+      } else {
+        expect(screen.queryByRole("button", { name: "更新资料信息并生成新版本" })).not.toBeInTheDocument();
+        if (scenario === "读取失败") {
+          expect(await screen.findByRole("button", { name: "重试读取" })).toBeInTheDocument();
+        }
+      }
+    }
+    expect(fns.activateProcessingRevision).not.toHaveBeenCalled();
+    expect(fns.createUploadPreview).not.toHaveBeenCalled();
+    expect(fns.createCorrection).not.toHaveBeenCalled();
+  });
+
   it("资料信息与已启用版本一致时不提示重复生成", async () => {
     const user = userEvent.setup();
     fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({
