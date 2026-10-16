@@ -228,6 +228,7 @@ class DeepSeekEvidenceNormalizerTransport:
         include_source_categories: bool = False,
         include_medication_field_sources: bool = False,
         medication_source_material: str | None = None,
+        compact_requirement_rows: bool = False,
         client: Any | None = None,
         receipt_callback: Callable[[dict[str, Any]], None] | None = None,
         request_callback: Callable[[dict[str, Any]], str] | None = None,
@@ -242,6 +243,9 @@ class DeepSeekEvidenceNormalizerTransport:
         self.include_medication_field_sources = include_medication_field_sources
         medication_source_guidance(include_medication_field_sources, medication_source_material)
         self.medication_source_material = medication_source_material
+        if not isinstance(compact_requirement_rows, bool):
+            raise ValueError("要求清单紧凑格式配置必须是布尔值")
+        self.compact_requirement_rows = compact_requirement_rows
         selected_backend = (backend or EVIDENCE_NORMALIZER_PROVIDER).strip().lower()
         if selected_backend not in {
             "deepseek",
@@ -680,6 +684,7 @@ def evidence_normalizer_transport_from_model_config(
             include_source_categories=include_source_categories,
             include_medication_field_sources=include_medication_field_sources,
             medication_source_material=parameters.get("medication_source_guidance"),
+            compact_requirement_rows=parameters.get("compact_requirement_rows", False),
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -705,6 +710,7 @@ def evidence_normalizer_transport_from_model_config(
             include_source_categories=include_source_categories,
             include_medication_field_sources=include_medication_field_sources,
             medication_source_material=parameters.get("medication_source_guidance"),
+            compact_requirement_rows=parameters.get("compact_requirement_rows", False),
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -724,6 +730,7 @@ def evidence_normalizer_transport_from_model_config(
             include_source_categories=include_source_categories,
             include_medication_field_sources=include_medication_field_sources,
             medication_source_material=parameters.get("medication_source_guidance"),
+            compact_requirement_rows=parameters.get("compact_requirement_rows", False),
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -756,6 +763,7 @@ def evidence_normalizer_transport_from_model_config(
             include_source_categories=include_source_categories,
             include_medication_field_sources=include_medication_field_sources,
             medication_source_material=parameters.get("medication_source_guidance"),
+            compact_requirement_rows=parameters.get("compact_requirement_rows", False),
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -777,6 +785,7 @@ def evidence_normalizer_transport_from_model_config(
             include_source_categories=include_source_categories,
             include_medication_field_sources=include_medication_field_sources,
             medication_source_material=parameters.get("medication_source_guidance"),
+            compact_requirement_rows=parameters.get("compact_requirement_rows", False),
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,

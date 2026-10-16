@@ -260,6 +260,7 @@ def _validate_registered_agent_config(
     if prompt.template_sha256 != evidence_normalizer_prompt_template_sha256(
         prompt_template, include_medication_field_sources=model_config.parameters.get("include_medication_field_sources", False) is True,
         medication_source_material=model_config.parameters.get("medication_source_guidance"),
+        compact_requirement_rows=model_config.parameters.get("compact_requirement_rows", False),
     ):
         raise InvalidJobDefinitionError("所选提示词内容与当前证据规范化模板不一致")
     return model_config
@@ -554,6 +555,7 @@ class FactNormalizationJobService:
                                 include_source_categories=model_config.parameters.get("include_source_categories", False),
                                 include_medication_field_sources=model_config.parameters.get("include_medication_field_sources", False),
                                 medication_source_material=model_config.parameters.get("medication_source_guidance"),
+                                compact_requirement_rows=model_config.parameters.get("compact_requirement_rows", False),
                             )
                         except EvidenceNormalizerPromptTooLong as exc:
                             oversized = (call, exc)
