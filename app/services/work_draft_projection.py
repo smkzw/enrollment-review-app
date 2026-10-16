@@ -25,8 +25,12 @@ def display_source_reason(text, *, decision=None):
     text = re.sub(r"(?<![A-Za-z0-9_])(?:relation|applicable|site)(?![A-Za-z0-9_])", lambda match: labels[match[0]], text)
     text = re.sub(r"(?<![A-Za-z0-9_])requires_professional_judgment\s*=\s*(true|false)(?![A-Za-z0-9_])", lambda match:
         "本条件需要研究者判断" if match[1] == "true" else "本条件不额外要求研究者判断", text)
+    for key, descriptions in {"object_matches": {"true": "记录对象一致", "false": "记录对象尚未核清"},
+            "time_matches": {"true": "记录时间适用", "false": "记录时间尚未核清"}}.items():
+        text = re.sub(r"(?<![A-Za-z0-9_])" + key + r"\s*=\s*(true|false)(?![A-Za-z0-9_])",
+            lambda match: descriptions[match[1]], text)
     for key, label in {"applicable_population": "条款限定的适用人群", "observed_value": "原始读数",
-                       "observed_unit": "原始单位"}.items():
+                       "observed_unit": "原始单位", "anchor_date": "节点日期", "subject": "判断对象"}.items():
         text = re.sub(r"(?<![A-Za-z0-9_])" + key + r"(?![A-Za-z0-9_])", label, text)
     return re.sub(r"(?<![A-Za-z0-9_])[PT]\d{2}(?![A-Za-z0-9_])", "所列原文", text)
 

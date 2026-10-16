@@ -418,6 +418,7 @@ function clauseIssueKey(clause: EligibilityClauseView): {
   }
   switch (clause.decision) {
     case "conflict":
+      return { key: clause.gapType ?? "source_conflict", severity: "danger" };
     case "exclusion_triggered":
     case "inclusion_not_met":
     case "requirement_not_met":
@@ -950,6 +951,7 @@ export function EligibilityWorkbenchPage() {
   const requestedPage = Number.isSafeInteger(requestedPageValue) && requestedPageValue >= 0
     ? requestedPageValue : 0;
   const [selectedFactIndex, setSelectedFactIndex] = useState(0);
+  const detailPaneRef = useRef<HTMLDivElement>(null);
   const [queueVisible, setQueueVisible] = useState(true);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [evidenceVisited, setEvidenceVisited] = useState(false);
@@ -1012,6 +1014,7 @@ export function EligibilityWorkbenchPage() {
     setSelectedFactIndex(0);
     setEvidenceOpen(false);
     setEvidenceVisited(false);
+    if (detailPaneRef.current) detailPaneRef.current.scrollTop = 0;
   }, [selectedEpisode?.reviewEpisodeId, componentParam]);
 
   useEffect(() => {
@@ -1310,7 +1313,7 @@ export function EligibilityWorkbenchPage() {
           </div>
         </aside>}
         <section className="workbench-col eligibility-workbench__detail" aria-label="审核要点详情">
-          <div className="workbench-pane">
+          <div className="workbench-pane" ref={detailPaneRef}>
             <header className="workbench-pane__head">
               <div>
                 <h2 className="workbench-pane__title">
