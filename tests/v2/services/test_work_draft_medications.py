@@ -41,8 +41,9 @@ def medication_context(*, use_day=date(2026, 3, 4)):
     rules = clause()[0]
     rules.scope_supplement = build(proposal, selection, view)
     frame = SimpleNamespace(authority=authority, facts=[fact], medication_exposures=[exposure],
-        conflict_groups=[], review_run_id="draft", context_sha256="a" * 64,
-        source_pages=[SimpleNamespace(source_document_version_id="source-doc", page_artifact_id="source-page", page_number=1)],
+        conflict_groups=[], system_issues=[], review_run_id="draft", context_sha256="a" * 64,
+        source_pages=[SimpleNamespace(source_document_version_id="source-doc", page_artifact_id="source-page", page_number=1,
+            document_category="study_chart", extraction_complete=True)],
         review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, evidence_cutoff_date=date(2026, 3, 31),
             anchor_dates={"screening_date": DateValue(value="2026-03-31", precision="day")}))
     refs = {fact.fact_id: [WorkDraftEvidenceRef(fact_id=fact.fact_id, locator_id="med-location",
@@ -317,3 +318,112 @@ def test_current_stage_use_can_support_study_period_but_not_an_unstarted_treatme
     assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.INDETERMINATE
     frame.review_episode.anchor_dates["first_dose_date"] = DateValue(value="2026-03-02", precision="day")
     assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.EXCLUSION_TRIGGERED
+
+
+def classified_context(*, use_day=date(2026, 2, 1)):
+    frame, rules, refs = medication_context(use_day=use_day)
+    rules.scope_supplement.drug_classes = {"fixture_class": ["药物甲"]}
+    item = rules.scope_supplement.medications[0]
+    item.drug_class_id, item.class_scope = "fixture_class", "all_members"
+    return frame, rules, refs
+
+
+@pytest.mark.parametrize("status", [DurationStatus.SINGLE, DurationStatus.ENDED])
+def test_complete_classified_history_outside_window_has_a_saved_navigable_negative(status):
+    from app.api.v2.eligibility_review import EligibilityReviewResponse
+    frame, rules, refs = classified_context()
+    exposure = frame.medication_exposures[0]
+    frame.medication_exposures = [exposure.model_copy(update={"duration_status": status,
+        "end_range": exposure.start_range if status == DurationStatus.ENDED else None})]
+    before = frame.facts[0].model_dump_json(), frame.medication_exposures[0].model_dump_json()
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.EXCLUSION_NOT_TRIGGERED and row.confidence == "low"
+    assert "本次资料范围" in row.reason_text and row.evidence_refs == refs["med-fact"]
+    saved = WorkDraftItem.model_validate_json(row.model_dump_json())
+    projected = project_saved_items([saved], authority=frame.authority, rule_set=rules, run_id="draft")
+    assert projected.clauses[0].rule_kind == "medication" and not projected.clauses[0].can_confirm
+    assert projected.clauses[0].fact_refs[0].page_number == 1
+    assert EligibilityReviewResponse.model_validate(projected.to_dict()).clauses[0].decision == "exclusion_not_triggered"
+    assert before == (frame.facts[0].model_dump_json(), frame.medication_exposures[0].model_dump_json())
+
+
+@pytest.mark.parametrize("fault", ["unread", "unverified", "unknown_class", "other_unclassified_fact",
+    "unlinked_fact", "unknown_polarity", "missing_history_source", "missing_refs", "wrong_ref",
+    "wrong_page", "future_record", "future_fact", "no_exposure", "wrong_drug", "wrong_locator",
+    "unknown_course", "intermittent", "ongoing", "missing_last_use", "conflict", "scope", "no_anchor", "missing_class"])
+def test_negative_never_uses_an_accepted_subset_as_the_whole_medication_history(fault):
+    from app.domain.contracts.work_draft import SystemIssue
+    frame, rules, refs = classified_context()
+    fact, exposure = frame.facts[0], frame.medication_exposures[0]
+    if fault == "unread": frame.source_pages[0].extraction_complete = False
+    elif fault == "unverified": frame.system_issues = [SystemIssue(kind="excerpt_unverified",
+        affected_codes=[], detail="同页尚有未通过核对的记录", alternative="核对原件")]
+    elif fault == "unknown_class": rules.scope_supplement.drug_classes["fixture_class"] = ["药物乙"]
+    elif fault == "other_unclassified_fact": frame.facts.append(fact.model_copy(update={
+        "fact_id": "unclassified", "asserted_object": "药物乙"}))
+    elif fault == "unlinked_fact": frame.facts.append(fact.model_copy(update={"fact_id": "unlinked"}))
+    elif fault == "unknown_polarity": frame.facts[0] = fact.model_copy(update={"polarity": FactPolarity.UNKNOWN})
+    elif fault == "missing_history_source": frame.source_pages[0].document_category = "objective_report"
+    elif fault == "missing_refs": refs = {}
+    elif fault == "wrong_ref": refs["med-fact"][0] = refs["med-fact"][0].model_copy(update={"fact_id": "another"})
+    elif fault == "wrong_page": frame.source_pages[0].page_number = 2
+    elif fault == "future_record": frame.medication_exposures[0] = exposure.model_copy(update={
+        "record_time": datetime(2026, 4, 1, tzinfo=UTC)})
+    elif fault == "future_fact": frame.facts[0] = fact.model_copy(update={
+        "record_time": datetime(2026, 4, 1, tzinfo=UTC)})
+    elif fault == "no_exposure": frame.medication_exposures = []
+    elif fault == "wrong_drug": frame.medication_exposures[0] = exposure.model_copy(update={"medication_name": "药物乙"})
+    elif fault == "wrong_locator": frame.medication_exposures[0] = exposure.model_copy(update={"locator_ids": ["another"]})
+    elif fault in {"unknown_course", "intermittent", "ongoing", "missing_last_use"}:
+        status = {"unknown_course": DurationStatus.UNKNOWN, "intermittent": DurationStatus.INTERMITTENT,
+            "ongoing": DurationStatus.ONGOING, "missing_last_use": DurationStatus.ENDED}[fault]
+        frame.medication_exposures[0] = exposure.model_copy(update={"duration_status": status})
+    elif fault == "conflict": frame.conflict_groups = [SimpleNamespace(member_kind="exposure", exposure_ids=["exposure"])]
+    elif fault == "scope": rules.scope_supplement.medications[0].class_scope = "qualified"
+    elif fault == "missing_class": rules.scope_supplement.medications[0].drug_class_id = "missing-class"
+    else: frame.review_episode.anchor_dates = {}
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision != D.EXCLUSION_NOT_TRIGGERED
+
+
+@pytest.mark.parametrize("fault", ["unread", "unverified", "unclassified"])
+def test_incomplete_history_does_not_hide_an_independently_proven_use_in_window(fault):
+    from app.domain.contracts.work_draft import SystemIssue
+    frame, rules, refs = classified_context(use_day=date(2026, 3, 4))
+    if fault == "unread": frame.source_pages[0].extraction_complete = False
+    elif fault == "unverified": frame.system_issues = [SystemIssue(kind="excerpt_unverified",
+        affected_codes=[], detail="其他记录未核", alternative="查看原件")]
+    else: frame.facts.append(frame.facts[0].model_copy(update={"fact_id": "other", "asserted_object": "药物乙"}))
+    assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.EXCLUSION_TRIGGERED
+
+
+def test_no_use_of_this_class_requires_a_complete_differently_classified_history():
+    frame, rules, refs = classified_context()
+    rules.scope_supplement.drug_classes["other_class"] = ["药物乙"]
+    rules.scope_supplement.medications[0].drug_class_id = "other_class"
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.EXCLUSION_NOT_TRIGGERED and row.evidence_refs == refs["med-fact"]
+    frame.medication_exposures = []
+    assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.INDETERMINATE
+
+
+def test_classified_history_does_not_invent_a_class_for_untyped_restriction_text():
+    frame, rules, refs = classified_context()
+    rules.scope_supplement.medications[0].drug_class_id = None
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.INDETERMINATE
+
+
+def test_future_treatment_interval_cannot_be_declared_negative_from_earlier_history():
+    frame, rules, refs = classified_context()
+    item = rules.scope_supplement.medications[0]
+    item.window, item.window_interpretation, item.period = None, None, ProtocolPeriod.TREATMENT_PERIOD
+    frame.review_episode.anchor_dates["first_dose_date"] = DateValue(value="2026-04-01", precision="day")
+    assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.INDETERMINATE
+
+
+def test_an_additional_unlinked_course_cannot_be_hidden_behind_a_valid_one():
+    frame, rules, refs = classified_context()
+    frame.medication_exposures.append(frame.medication_exposures[0].model_copy(update={
+        "exposure_id": "unlinked-course", "fact_ids": ["missing-fact"]}))
+    assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.INDETERMINATE
