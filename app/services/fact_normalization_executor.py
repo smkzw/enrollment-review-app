@@ -1398,6 +1398,14 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 call=call,
                 payload=payload,
             )
+            if not visual_observations and config.transport_fn is None:
+                from app.services.fact_normalization_source_adapter import unchanged_failed_normalization_read
+                failure = unchanged_failed_normalization_read(session, evidence_input=evidence_input,
+                    payload=payload, artifact_store=config.artifact_store)
+                if failure is not None:
+                    raise StepFailure(retryable=False, error_code="UNCHANGED_FAILED_READ",
+                        detail="本页原有读取失败；来源、要求及读取设置未改变，本次保留问题而未重复调用模型。可在查明原因后局部重试。",
+                        diagnostic_checkpoint=failure)
 
         receipt_hashes = []
         partition_sha = None
@@ -1984,7 +1992,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             return execute_call(context)
         except StepFailure as exc:
             if not payload.get("targeted_extraction") or exc.error_code not in {
-                "TRANSPORT_FAILED", "NORMALIZER_OUTPUT_INVALID", EMPTY_OUTPUT_CODE,
+                "TRANSPORT_FAILED", "NORMALIZER_OUTPUT_INVALID", "UNCHANGED_FAILED_READ", EMPTY_OUTPUT_CODE,
             }:
                 raise
             if exc.error_code in {"TRANSPORT_FAILED", EMPTY_OUTPUT_CODE} and context.attempt < 2:
@@ -2010,6 +2018,8 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                           "unresolved_items": items, "unresolved_items_sha256": items_sha,
                           "unresolved_item_ids": [item.unresolved_item_id for item in unresolved],
                           "completed_at": created_at.isoformat()}
+            if exc.error_code == "UNCHANGED_FAILED_READ":
+                checkpoint["prior_failed_read"] = exc.diagnostic_checkpoint
 
             def apply(session):
                 _validate_authority(session, authority)

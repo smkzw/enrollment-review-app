@@ -190,6 +190,42 @@ def test_new_metadata_does_not_reuse_old_classification(session):
     assert PatientProfileService()._published_facts(session, current, include_rule_revision_sources=True) == []
 
 
+@pytest.mark.parametrize("changed", [False, True])
+def test_page_scope_comparison_keeps_unchanged_sibling_without_retaining_changed_document(session, monkeypatch, changed):
+    """Synthetic two-page projection after source validation; not a fake publication."""
+    from dataclasses import replace
+    import hashlib
+    from app.services import fact_normalization_source_adapter as adapter
+    from app.storage.fact_authority import FactAuthorityValidator
+
+    old, _, current, _, _ = _seed_incremental(session)
+    original_revision = FactAuthorityValidator.validate_frozen_source
+    original_pages = adapter.build_effective_text_map
+    def revision(self, authority):
+        value = original_revision(self, authority)
+        first = next(row for row in value.manifest if row.source_document_version_id == old["doc_id"])
+        second = first.model_copy(update={"entry_id": "synthetic-second", "page_number": 2,
+            "ocr_page_id": "synthetic-ocr-second", "page_artifact_id": "synthetic-page-second"})
+        return value.model_copy(update={"manifest": [*value.manifest, second]})
+    def pages(session, revision, **kwargs):
+        result = original_pages(session, revision.model_copy(update={"manifest": [row for row in revision.manifest
+            if row.entry_id != "synthetic-second"]}), **kwargs)
+        first = result[(old["doc_id"], 1)]
+        result[(old["doc_id"], 2)] = replace(first, page_number=2,
+            page_artifact_id="synthetic-page-second", ocr_page_id="synthetic-ocr-second",
+            locator_ids=(), locator_inputs=())
+        if changed and revision.evidence_processing_revision_id == current.complete_processing_revision_id:
+            result[(old["doc_id"], 1)] = replace(first, effective_text="corrected source",
+                effective_text_sha256=hashlib.sha256(b"corrected source").hexdigest())
+        return result
+    monkeypatch.setattr(FactAuthorityValidator, "validate_frozen_source", revision)
+    monkeypatch.setattr(adapter, "build_effective_text_map", pages)
+    validator = FactAuthorityValidator(session)
+    assert validator.retained_source_documents(old["authority"], current) == (set() if changed else {old["doc_id"]})
+    assert validator.retained_source_pages(old["authority"], current) == {
+        (old["doc_id"], number) for number in ([2] if changed else [1, 2])}
+
+
 def test_retained_profile_includes_original_linked_history_and_medication(session):
     from app.domain.contracts.patient_profile_v2 import profile_items
     _, _, current, fact, _ = _seed_incremental(session, linked_entities=True)
@@ -197,7 +233,7 @@ def test_retained_profile_includes_original_linked_history_and_medication(sessio
     assert {row.source_id for row in profile_items(profile)} == {fact.fact_id, "retained-event", "retained-exposure"}
 
 
-def _receipt_transport_factory(requests, *, fail_after=None, distinct_document_assertions=False):
+def _receipt_transport_factory(requests, *, fail_after=None, invalid_after=None, distinct_document_assertions=False):
     """Real product transport and receipts, synthetic model response, no network."""
     import json
     from types import SimpleNamespace
@@ -213,6 +249,9 @@ def _receipt_transport_factory(requests, *, fail_after=None, distinct_document_a
             if payload.get("locator_columns"):
                 locators = [dict(zip(payload["locator_columns"], row)) for row in locators]
             requests.append([row["locator_id"] for row in locators])
+            if invalid_after is not None and len(requests) > invalid_after:
+                return SimpleNamespace(model=model.model, id="synthetic-invalid-response", usage=None,
+                    choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content="{invalid"))])
             if distinct_document_assertions:
                 # Both repository seeds contain the same two rows. Isolate a
                 # different literal assertion from each, not a merged-source fact.
@@ -242,6 +281,68 @@ def _receipt_transport_factory(requests, *, fail_after=None, distinct_document_a
             client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=complete))),
             receipt_callback=receipt_callback, request_callback=request_callback)
     return factory
+
+
+@pytest.mark.parametrize("explicit_retry", [False, True])
+def test_new_material_revision_does_not_automatically_retry_unchanged_failed_read(
+    session_factory, data_paths, monkeypatch, explicit_retry,
+):
+    from app.evidence.artifacts import ArtifactStore
+    from app.services import fact_normalization_executor as executor_module
+    from app.services.fact_normalization_job_service import FactNormalizationJobService
+    from app.storage.codecs import verify_payload_sha256
+    from app.storage.fact_repositories import FactNormalizationCallRepository
+    from app.workflow.jobstore import JobStore
+    from app.workflow.runner import JobRunner
+
+    requests = []
+    monkeypatch.setattr(executor_module, "evidence_normalizer_transport_from_model_config",
+        _receipt_transport_factory(requests, invalid_after=1))
+    artifacts = ArtifactStore(data_paths)
+    service = FactNormalizationJobService(session_factory)
+    runner = JobRunner(session_factory, {"fact_normalization": executor_module.create_fact_normalization_executor(
+        executor_module.FactNormalizationExecutorConfig(session_factory=session_factory, artifact_store=artifacts))})
+    with session_factory() as session:
+        old, added, current, _, _ = _seed_incremental(session, targeted=True)
+        session.commit()
+    first = service.create_or_reuse_from_source(authority=current, prompt_version_id=old["prompt_version_id"],
+        model_config_id=old["model_config_id"], created_by="synthetic-builder")
+    assert runner.run_job(first.job_id)
+    assert service.get_job(first.job_id)["state"] == "completed"
+    assert len(requests) == 3  # A successful page and one invalid page's original + format retry.
+    with session_factory() as session:
+        failed_call = next(call for call in FactNormalizationCallRepository(session).list_by_run(first.run_id)
+            if call.status.value == "failed")
+        prior = CompleteEvidenceProcessingRevisionRepository(session).get(current.complete_processing_revision_id)
+        chain = {**old, "authority": current, "snapshot_id": current.evidence_snapshot_v2_id,
+            "complete_revision_id": current.complete_processing_revision_id,
+            "base_revision_id": prior.base_processing_revision_id}
+        revised = _incremental_source(session, chain, added, retained_only=True, prefix="unchanged-failure")
+        session.commit()
+    next_job = service.create_or_reuse_from_source(authority=revised, prompt_version_id=old["prompt_version_id"],
+        model_config_id=old["model_config_id"], created_by="synthetic-builder")
+    assert runner.run_job(next_job.job_id)
+    assert service.get_job(next_job.job_id)["state"] == "completed"
+    assert len(requests) == 3
+    with session_factory() as session:
+        store = JobStore(session)
+        job = store.get_job(next_job.job_id)
+        payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+        assert len(payload["retained_reads"]) == 1
+        call = FactNormalizationCallRepository(session).list_by_run(next_job.run_id)[0]
+        assert call.status.value == "failed"
+        checkpoint = next(store.get_last_checkpoint(job.job_id, step.step_id)[1]
+            for step in store.list_steps(job.job_id) if step.step_id.startswith("normalize_"))
+        assert checkpoint["candidate_ids"] == []
+        assert checkpoint["prior_failed_read"]["source_run_id"] == first.run_id
+        final = store.get_last_checkpoint(job.job_id, "finalize")[1]
+        assert final["unread_page_refs"] == [f"{failed_call.logical_document_id}:1"]
+    if explicit_retry:
+        retry = service.create_or_reuse_from_source(authority=revised, prompt_version_id=old["prompt_version_id"],
+            model_config_id=old["model_config_id"], created_by="synthetic-builder",
+            retry_failed_from_run_id=next_job.run_id)
+        assert runner.run_job(retry.job_id)
+        assert len(requests) == 5  # Explicit recovery still has the original bounded retry.
 
 
 def test_unknown_type_runs_targeted_product_job_without_upgrading_source(session_factory, data_paths, monkeypatch):

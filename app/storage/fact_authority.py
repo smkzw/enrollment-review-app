@@ -83,6 +83,7 @@ class FactAuthorityValidator:
         self.session = session
         self.artifact_store = artifact_store
         self._retained_documents = {}
+        self._retained_pages = {}
 
     def _require_artifact_store(self):
         """native_text 定位闭包核验需要内容寻址工件库；惰性构建避免循环导入。"""
@@ -188,17 +189,16 @@ class FactAuthorityValidator:
             scans = OCRRiskScanRepository(self.session).get_many(revision.risk_scan_ids)
             reviews = OCRRiskReviewRepository(self.session).get_many(revision.risk_review_ids)
             result = {}
-            for document in {page.source_document_version_id for page in revision.manifest}:
-                pages = {page.ocr_page_id for page in revision.manifest if page.source_document_version_id == document}
-                selected = [scan for scan in scans if scan.ocr_page_id in pages]
+            for page in revision.manifest:
+                selected = [scan for scan in scans if scan.ocr_page_id == page.ocr_page_id]
                 flags = {flag.risk_id for scan in selected for flag in scan.flags}
-                result[document] = (sorted(scan.scan_id for scan in selected),
+                result[(page.source_document_version_id, page.page_number)] = (sorted(scan.scan_id for scan in selected),
                     sorted(review.review_id for review in reviews if review.risk_flag_id in flags),
                     sorted(flags & set(revision.unresolved_blocking_risk_ids)))
             return result
         old_risks, new_risks = risk_scopes(old_revision), risk_scopes(new_revision)
         metadata = SourceDocumentMetadataRevisionRepository(self.session)
-        selected = set()
+        selected, retained_pages = set(), set()
         for document in old_docs.keys() & new_docs.keys():
             logical = old_docs[document]
             if new_docs[document] != logical or logical not in old_meta or logical not in new_meta:
@@ -210,22 +210,45 @@ class FactAuthorityValidator:
                 continue
             prior = {key: value for key, value in old_pages.items() if key[0] == document}
             present = {key: value for key, value in new_pages.items() if key[0] == document}
-            if prior and prior == present and old_risks[document] == new_risks[document]:
+            matching = {key for key in prior.keys() & present.keys()
+                if prior[key] == present[key] and old_risks[key] == new_risks[key]}
+            retained_pages.update(matching)
+            if prior and prior.keys() == present.keys() == matching:
                 selected.add(document)
         result = frozenset(selected)
         self._retained_documents[cache_key] = result, frozenset(new_revision.locator_ids)
+        self._retained_pages[cache_key] = frozenset(retained_pages)
         return result
+
+    def retained_source_pages(self, previous: FactAuthority, current: FactAuthority) -> frozenset[tuple[str, int]]:
+        """Page reuse preserves the same ownership, metadata and risk checks as document reuse."""
+        self.retained_source_documents(previous, current)
+        return self._retained_pages.get((previous.model_dump_json(), current.model_dump_json()), frozenset())
 
     def retained_fact_source_is_reusable(self, fact, current: FactAuthority) -> bool:
         if self.rule_revision_source_is_reusable(fact.authority, current):
             return True
-        documents = self.retained_source_documents(fact.authority, current)
-        if not documents or not fact.locator_ids:
+        pages = self.retained_source_pages(fact.authority, current)
+        if not pages or not fact.locator_ids:
             return False
         from app.storage.evidence_locator_repositories import EvidenceLocatorRepository
         locators = EvidenceLocatorRepository(self.session).get_many(fact.locator_ids)
-        if any(locator.source_document_version_id not in documents for locator in locators):
+        if any((locator.source_document_version_id, locator.page_number) not in pages for locator in locators):
             return False
+        documents = self.retained_source_documents(fact.authority, current)
+        if any(locator.source_document_version_id not in documents for locator in locators) and not fact.source_candidate_ids:
+            return False
+        # A multi-page reading may depend on a changed sibling even when this
+        # fact's displayed excerpt is on an unchanged page.
+        from app.storage.fact_repositories import FactNormalizationCandidateRepository, FactNormalizationCallRepository
+        candidates = FactNormalizationCandidateRepository(self.session)
+        calls = FactNormalizationCallRepository(self.session)
+        for candidate_id in fact.source_candidate_ids:
+            candidate = candidates.get(candidate_id)
+            call = calls.get(candidate.call_id)
+            call_documents = {locator.source_document_version_id for locator in locators}
+            if len(call_documents) != 1 or any((next(iter(call_documents)), page) not in pages for page in call.page_numbers):
+                return False
         _, current_locators = self._retained_documents[(fact.authority.model_dump_json(), current.model_dump_json())]
         return set(fact.locator_ids) <= current_locators
 

@@ -692,6 +692,12 @@ def test_reprojection_uses_call_scope_not_entire_visible_manifest(session_factor
             return frozenset({old["doc_id"]} if retained else ()) if a == previous and b == current else result
         monkeypatch.setattr(FactAuthorityValidator, "retained_source_documents",
             retained_documents)
+        original_pages = FactAuthorityValidator.retained_source_pages
+        def retained_pages(self, a, b):
+            result = original_pages(self, a, b)
+            return frozenset(page for page in result if retained and page[0] == old["doc_id"]) \
+                if a == previous and b == current else result
+        monkeypatch.setattr(FactAuthorityValidator, "retained_source_pages", retained_pages)
         if not retained:
             with pytest.raises(ReprojectionLineageError, match="权威元组"):
                 select_reprojection_source_runs(session, authority=current, target_kind="fact", target_id=fact.fact_id)

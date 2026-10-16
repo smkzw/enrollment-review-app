@@ -638,8 +638,8 @@ def retained_normalization_reads(
         if (run.authority.evidence_snapshot_v2_id == authority.evidence_snapshot_v2_id
                 and run.authority.complete_processing_revision_id == authority.complete_processing_revision_id):
             continue
-        documents = validator.retained_source_documents(run.authority, authority)
-        if not documents:
+        retained_pages = validator.retained_source_pages(run.authority, authority)
+        if not retained_pages:
             continue
         saved_prompt = prompts.get(run.prompt_version_id)
         if (saved_prompt.template_sha256 != current_prompt.template_sha256
@@ -674,7 +674,8 @@ def retained_normalization_reads(
             selected = planned.get((call.logical_document_id, tuple(call.page_numbers)))
             pages = {(call.logical_document_id, page) for page in call.page_numbers}
             if (call.status != FactCallStatus.SUCCEEDED or call.call_id in accounting or selected is None
-                    or pages & covered or any(page.source_document_version_id not in documents for page in selected.page_inputs)):
+                    or pages & covered or any((page.source_document_version_id, page.page_number) not in retained_pages
+                        for page in selected.page_inputs)):
                 continue
             checkpoint = checkpoints.get(call.call_id, {})
             if (checkpoint.get("input_sha256") != call.input_sha256
@@ -732,6 +733,76 @@ def retained_normalization_reads(
                 covered.update(pages)
                 break
     return sorted(result, key=lambda row: row["call_id"])
+
+
+def unchanged_failed_normalization_read(session: Session, *, evidence_input: EvidenceNormalizerInput,
+    payload: dict, artifact_store=None) -> dict | None:
+    """A new material revision does not grant an automatic retry of an unchanged failed read.
+
+    This retains a technical failure, never coverage or candidates. An explicit
+    failed-page retry, changed source, requirements, prompt or model can run again.
+    """
+    from app.storage.codecs import verify_payload_sha256
+    from app.storage.fact_authority import FactAuthorityValidator
+    from app.storage.fact_repositories import FactNormalizationRunRepository, FactNormalizationCallRepository
+    from app.storage.facts_models import FactNormalizationRunRecord
+    from app.workflow.jobstore import JobStore
+
+    if (not payload.get("targeted_extraction") or payload.get("retry_failed_from_run_id")
+            or payload.get("source_revalidation") or evidence_input.page_review is not None):
+        return None
+    validator = FactAuthorityValidator(session, artifact_store)
+    scope = {(page.source_document_version_id, page.page_number) for page in evidence_input.pages}
+    policies = ("targeted_extraction", "candidate_partition_policy", "question_classification_repair_policy",
+        "text_accounting_policy", "text_reference_strategy", "verified_evidence_strategy",
+        "visual_source_policy", "page_review_coverage_id", "pending_normalization_policy")
+    for run in reversed(FactNormalizationRunRepository(session).list_by_episode(evidence_input.authority.review_episode_id)):
+        if (run.run_id == evidence_input.run_id or run.prompt_version_id != payload["prompt_version_id"]
+                or run.model_config_id != payload["model_config_id"]
+                or run.authority.complete_processing_revision_id == evidence_input.authority.complete_processing_revision_id):
+            continue
+        record = session.get(FactNormalizationRunRecord, run.run_id)
+        if record is None or not record.job_id:
+            continue
+        store = JobStore(session)
+        job = store.get_job(record.job_id)
+        original = verify_payload_sha256(job.payload_json, job.payload_sha256)
+        if job.state != "completed" or any(original.get(key) != payload.get(key) for key in policies):
+            continue
+        if not scope <= validator.retained_source_pages(run.authority, evidence_input.authority):
+            continue
+        revision = validator.validate_frozen_source(run.authority)
+        previous_hash = evidence_normalizer_input_scope_hash(
+            authority=run.authority, logical_document_id=evidence_input.logical_document_id,
+            context=evidence_input.context, related_requirements=evidence_input.related_requirements,
+            variable_definitions=evidence_input.variable_definitions,
+            manifest_sha256=revision.manifest_sha256, completion_manifest_sha256=revision.completion_manifest_sha256,
+            page_numbers=evidence_input.page_numbers, pages=evidence_input.pages,
+            available_locator_ids=evidence_input.available_locator_ids, available_locators=evidence_input.available_locators)
+        for call in FactNormalizationCallRepository(session).list_by_run(run.run_id):
+            if (call.logical_document_id != evidence_input.logical_document_id
+                    or list(call.page_numbers) != evidence_input.page_numbers or call.input_sha256 != previous_hash):
+                continue
+            # The most recent exact read supersedes an older failure, including
+            # a later successful explicit retry.
+            if call.status.value != "failed":
+                return None
+            for step in store.list_steps(job.job_id):
+                checkpoint = store.get_last_checkpoint(job.job_id, step.step_id)
+                if checkpoint is None:
+                    continue
+                saved = checkpoint[1]
+                if saved.get("call_id") != call.call_id:
+                    continue
+                if (saved.get("call_status") != "failed" or saved.get("input_sha256") != previous_hash
+                        or saved.get("candidate_ids")):
+                    continue
+                return {"source_run_id": run.run_id, "source_call_id": call.call_id,
+                    "source_job_id": job.job_id, "source_payload_sha256": job.payload_sha256,
+                    "source_checkpoint_sha256": hashlib.sha256(json.dumps(saved, ensure_ascii=False,
+                        sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+                    "previous_input_sha256": previous_hash, "current_input_sha256": evidence_input.input_scope_sha256}
+    return None
 
 
 def validated_retained_normalization_calls(session: Session, payload: dict, *, prompt_template: str, artifact_store=None):
