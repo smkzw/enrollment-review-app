@@ -6,7 +6,7 @@
 
 本次接续：前一Goal轮有实际消费者反例、同版Ego证据及PR31合并，归为progress。当前包owner内联：六处共享提示身份／传输／原请求重建须同一集成者维护；将新用药提示的实际文字冻结在既有ModelConfig参数中，旧缺省继续逐字重放原材料。目标是改进首次不明日期的提取而不破坏历史，不改模型路线／默认开关、不回填旧事实。集中验证真实Job及零模型重验正反例后，先只读核现有单页回执与档案；不以新提示版本宣称病例已修好。
 
-冻结材料子包已成套实现，沿既有参数／内容身份、Job、传输和原请求复验，无新库／队列／角色／Schema版本。最终503项84.61秒exit0（output/wp5-frozen-source-guidance-final.log/xml），另25项增量来源31.20秒exit0（wp5-frozen-guidance-incremental.*），均5条SWIG弃用警告；涵盖旧默认及逐字段旧提示、新明确材料、错配／坏参数建Job前拒绝、跨资料版本只读新增页、失败／取消与原答0模型重验。31001原892972c2单页26候选、原请求／回执逐字重建成功，Profile14当前244事实元信息／106定位可读；新源码直接DTO与运行中902a155f实际API的完整DTO hash均015959be…相同，.env和请求文件数未变。wp5-frozen-guidance-final-readback.json记录最终补丁hash与0写0模型；此前legacy-readback属前置版。未新增真实暴露、未启用新提示、未部署；临床未决和S4等待状态不变。
+冻结材料子包55d4c936已成套实现并部署，沿既有参数／内容身份、Job、传输和原请求复验，无新库／队列／角色／Schema版本。最终503项84.61秒exit0（output/wp5-frozen-source-guidance-final.log/xml），另25项增量来源31.20秒exit0（wp5-frozen-guidance-incremental.*），均5条SWIG弃用警告；涵盖旧默认及逐字段旧提示、新明确材料、错配／坏参数建Job前拒绝、跨资料版本只读新增页、失败／取消与原答0模型重验。31001原892972c2单页26候选、原请求／回执逐字重建成功，Profile14当前244事实元信息／106定位可读；新源码直接DTO、旧902a155f和新55d4c936实际API的完整DTO hash均015959be…相同，.env和请求文件数未变。wp5-frozen-guidance-{final-readback,deployment}.json记录最终源码／补丁hash与0写0模型；此前legacy-readback属前置版。原Ego实际刷新档案及进入工作稿；416事实54稿8094项／0暴露／0活动Job保持。未启用新提示、未新增病例读取或发布；临床未决和S4等待状态不变。
 
 PR #1增量修复：owner内联处理7份旧文档归档位置冲突，字节与目标78efb820逐份一致；代码保留、旧链不启。63 passed／1760 deselected／20.66秒exit0（output/pr1-merge-regression.log/xml）；2190406a已推送。用户随后明确授权定期merge，PR #1实际MERGED，合并6e9453a3；本树已快进同版本。类别建议的两份继承dirty单独验证27项／25.79秒exit0，未混入归档合并。
 
@@ -15,8 +15,8 @@ PR #1增量修复：owner内联处理7份旧文档归档位置冲突，字节与
 | Goal／分支 | 用户已解除暂停并要求继续0.2.0，现场get_goal为active，dev/0.2.0；接续现有v46，不重派已完成读取 |
 | 唯一工作树 | /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/build-0.2.0 |
 | 当前WP／里程碑 | 当前WP5，M1已有真实稿，不冒称本人最终验收；S4共同补救范围仍待此前医学问题答复。新v46 Job3d69a7c3完成4/4，126证明复用0模型；149项全部临床内容与b193／v45相同。字段来源默认关闭，真实单页追加15事实而0暴露，日期对象未对应仍拒。不重读方案、9页或变量建议 |
-| 源码／前端 | PR #1–#30实际MERGED；30为8d882a3f，本树已快进；后端902a155f（含f892读段优化），前端eeafc419／index-cdSDIlft.js。87前端7.17秒、257导航范围／消费者12.28秒及构建通过。281通过1既存失败、55消费者、247读取边界等窗口分开记录，不称全库绿；旧基线和Devin跳过限制保留 |
-| 自有服务 | 唯一61134，标准入口／本树显式.env与data_v2，后端902a155f／PID90330／exec84038、output/wp6-902a155f-desktop.log；0活动Job后正常TERM原89359、核端口释放再启，共享服务不动。Ego IN01链接刷新→病历9页→关闭返回、新旧报告及同稿更新已实核；不改.env。第一张过渡图不是目标9页，settled图才作像素证据。未操作CUA误指的用户其他窗口，不冒称浏览器缩放验收 |
+| 源码／前端 | PR #1–#31实际MERGED，31为91c279d6；新字段提示源码55d4c936已提交及部署，最终推送／merge查实际Git。前端eeafc419／index-cdSDIlft.js未改。新503＋25窗口分列，87前端／257导航及281通过1旧失败等归原受测版，不冒称当前全库绿；旧基线和Devin跳过限制保留 |
+| 自有服务 | 唯一61134，标准入口／本树显式.env与data_v2，后端55d4c936／PID94055／exec34092、output/wp5-guidance-55d4c936-desktop.log；0活动Job后正常TERM原90330、收回143并核端口释放再启，共享服务不动。实际Ego档案与工作稿读回、前后API DTO相同；未启用新提示／模型调用，不改.env。原902上的IN01病历9页、新旧报告及同稿更新证据保留各自版本，不冒称新源重测速度或原生缩放 |
 | 临床数据范围 | WP0一致性副本data_v2；规则7／节点11，5份24页。单页字段试跑追加15事实，累计416事实，当前工作稿冻结243事实；不是416独立事件。Profile14 c115f2c83ac2f1f3b2388dcc7a35a666，旧Profile13等保持，0合格暴露仍未解决 |
 | 当前工作稿 | 原UI Job3d69a7c3d6004d14a9a78727f7b062b3 completed4/4、87.374651秒，run23cd765ee15440e382555cbbad5f04bd／v46，supersedesb1936c71；126证明复用0模型、24页243事实149项。87秒是入队后Job，不含此前慢准备，不冒称完整点击耗时。旧b193／自动5175562a为119.6128秒，全部已终态读取保留 |
 | 当前结果 | 64父／85子：34父项确定、15未到期、5不适用、9证据不足、1系统项；新v46与b193的149项除运行／输入身份外全部相同。574引用逐字／页身份0失配；40系统问题不冒充40临床条款。累计416事实54稿8094项，401旧事实52旧稿7796项等hash保持；新旧UI下载HTML各149项，完整临床段落相同、各自时间不同。output/wp5-v46-result-audit.json、wp6-v46-browser-report-readback.json；审计0写0模型 |
@@ -50,7 +50,7 @@ PR #1增量修复：owner内联处理7份旧文档归档位置冲突，字节与
 | 资料 | snapshot c69c297a3ea84c57a8fa953e07567b1d；complete-9a8d09071cfc4b19b2826d4da20804f8；当前Profile14 c115f2c83ac2f1f3b2388dcc7a35a666，Profile13及以前保持。394资料期望是后台整理提示，不冒充394临床未决 |
 | 当前调用路线 | 病历关系cms-router/glm-5.3-flash high，OmniRouter，65536流式；规范化ollama-cloud/deepseek-v4.1-flash high65536，月额度失败记录保留；未更改默认路线 |
 | 当前Job | 历史、9页8e68b23e…及自动稿e5ddd276…均终态；实际查询0 queued／running／failed_retryable／cancel_requested。不重跑。全24页b6aceb713…cancelled且0调用；完整后端exec20120此前中断143，不称全库通过 |
-| 当前服务代码 | 标准桌面61134，runner开启，后端902a155f（合并8d882a3f）／PID90330／exec84038；output/wp6-902a155f-desktop.log。前端eeafc419已实际消费，同稿18.465秒可操作，0额外结果读取；旧失败、已取消、已完成不改终态 |
+| 当前服务代码 | 标准桌面61134，runner开启，后端55d4c936／PID94055／exec34092；output/wp5-guidance-55d4c936-desktop.log。前端eeafc419／index-cdSDIlft.js不变；同稿18.465秒属于此前902版本实测，新55仅核原API和Ego读取不变，不冒称重测速度；旧失败、已取消、已完成不改终态 |
 
 ## 本轮真实运行与工程评审（分开计数）
 
