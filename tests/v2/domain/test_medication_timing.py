@@ -61,6 +61,16 @@ def test_longer_window_missing_pk_can_confirm_inside_calendar_but_not_outside():
     assert evaluate(item, "2025-01-01").truth == T.UNKNOWN
 
 
+@pytest.mark.parametrize("day,expected", [("2026-03-04", T.TRUE), ("2025-01-01", T.UNKNOWN)])
+def test_minimum_longer_washout_uses_shared_calendar_and_pk_evaluator(day, expected):
+    item = restriction("minimum_washout", lower_bound_days=28, half_life_multiplier=5,
+        combined_window_selection="longer_of_calendar_and_half_life")
+    result = evaluate(item, day)
+    assert result.truth == expected
+    if expected == T.UNKNOWN:
+        assert "half_life_missing" in result.reason_codes
+
+
 @pytest.mark.parametrize("meaning,window", [
     ("minimum_washout", {"upper_bound_days": 28}),
     ("minimum_washout", {"direction": "after", "lower_bound_days": 28}),

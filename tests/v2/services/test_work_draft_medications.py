@@ -177,6 +177,23 @@ def test_known_single_use_date_does_not_require_a_second_record_date():
     assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.EXCLUSION_TRIGGERED
 
 
+@pytest.mark.parametrize("day,expected", [(date(2026, 3, 4), D.EXCLUSION_TRIGGERED),
+    (date(2026, 1, 1), D.INDETERMINATE)])
+def test_minimum_calendar_and_half_life_reaches_consumer_without_invented_pk(day, expected):
+    frame, rules, refs = medication_context(use_day=day)
+    medication = rules.scope_supplement.medications[0]
+    medication.window = type(medication.window).model_validate({**medication.window.model_dump(mode="json"), "upper_bound_days": None,
+        "upper_bound": None, "lower_bound_days": 28, "half_life_multiplier": 5,
+        "combined_window_selection": "longer_of_calendar_and_half_life"})
+    medication.window_interpretation = "minimum_washout"
+    before = frame.medication_exposures[0].model_dump_json()
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == expected
+    assert row.confidence == ("low" if expected == D.EXCLUSION_TRIGGERED else None)
+    assert row.evidence_refs == refs["med-fact"]
+    assert frame.medication_exposures[0].model_dump_json() == before
+
+
 def test_no_supplement_leaves_existing_official_consumer_unchanged():
     frame, rules, refs = medication_context()
     rules.scope_supplement = None
