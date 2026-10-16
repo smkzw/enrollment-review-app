@@ -1,13 +1,20 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewHistoryRunDetailView } from "../api/review-history/reviewHistoryTypes";
 import { ReportsPage } from "./ReportsPage";
+import { FrozenReviewReport } from "../components/review/FrozenReviewReport";
 import { frozenReviewCollectionExport, frozenReviewExport } from "../domain/frozenReviewExport";
 import { getCatalogRepository } from "../api";
 
-const mocks = vi.hoisted(() => ({ listRuns: vi.fn(), getRun: vi.fn(), canModify: true }));
+const mocks = vi.hoisted(() => ({ listRuns: vi.fn(), getRun: vi.fn(), source: vi.fn(), canModify: true }));
+vi.mock("../components/review/FrozenReviewEvidence", () => ({
+  FrozenReviewEvidence: (props: import("react").ComponentProps<typeof import("../components/review/FrozenReviewEvidence").FrozenReviewEvidence>) => {
+    mocks.source(props);
+    return <section aria-label={props.title}><button onClick={props.onClose}>关闭待核原件</button></section>;
+  },
+}));
 vi.mock("../api/review-history/reviewHistoryHttp", () => ({
   createReviewHistoryHttp: () => ({ listRuns: mocks.listRuns, getRun: mocks.getRun }),
 }));
@@ -58,6 +65,7 @@ function frozenReport(subjectId: string, reviewEpisodeId: string): ReviewHistory
 beforeEach(() => {
   window.location.hash = "";
   mocks.canModify = true;
+  mocks.source.mockReset();
   mocks.listRuns.mockReset().mockImplementation(async (subjectId: string, reviewEpisodeId: string) => ({
     subjectId, reviewEpisodeId, items: [frozenReport(subjectId, reviewEpisodeId).run],
   }));
@@ -65,6 +73,64 @@ beforeEach(() => {
 });
 
 describe("报告", () => {
+  function workingReport(): ReviewHistoryRunDetailView {
+    const report = frozenReport("subject-uat-01-clear", "episode-uat-01-screening-clear");
+    report.run.runKind = "work_draft";
+    report.assessments = [];
+    report.workDraft = { subjectId: report.context.subjectId, reviewEpisodeId: report.context.reviewEpisodeId,
+      ruleSetId: report.context.ruleSetId, ruleSetRevision: report.context.ruleSetRevision,
+      evidenceSnapshotV2Id: report.context.evidenceSnapshotV2Id, completeProcessingRevisionId: report.context.completeProcessingRevisionId,
+      reviewRunId: report.run.reviewRunId, clauses: [], controls: [], systemIssues: [] };
+    return report;
+  }
+
+  it("历史待核记录可直接查看当时页面，不改成已采用证据；切换报告不带旧原件", async () => {
+    const report = workingReport();
+    report.workDraft!.systemIssues = [
+      { kind: "extraction_failed", affectedCodes: [], detail: "检查页尚未读清", alternative: "查看检查原件",
+        sourceDocumentVersionId: "old-exam", pageArtifactId: "old-exam-page", pageNumber: 2 },
+      { kind: "excerpt_unverified", affectedCodes: [], detail: "用药记录尚未核清", alternative: "查看病历原件",
+        sourceDocumentVersionId: "old-chart", pageArtifactId: "old-chart-page", pageNumber: 7 },
+    ];
+    const before = JSON.stringify(report);
+    const user = userEvent.setup();
+    const view = render(<FrozenReviewReport report={report} onActionChanged={vi.fn()} />);
+    const pending = screen.getByText("尚未用于判断的原件记录（1）");
+    await user.click(pending);
+    await user.click(within(pending.closest("details")!).getByRole("button", { name: "查看待核原件" }));
+    expect(mocks.source).toHaveBeenLastCalledWith(expect.objectContaining({ title: "当时的待核原件",
+      context: report.context, locators: [], pageRefs: [{ sourceDocumentVersionId: "old-chart",
+        pageArtifactId: "old-chart-page", pageNumber: 7, excerpt: null, disposition: "unresolved" }] }));
+    await user.click(screen.getByRole("button", { name: "关闭待核原件" }));
+    const failed = screen.getByText("系统尚未完成的核对（1）");
+    await user.click(failed);
+    await user.click(within(failed.closest("details")!).getByRole("button", { name: "查看待核原件" }));
+    expect(mocks.source).toHaveBeenLastCalledWith(expect.objectContaining({
+      pageRefs: [{ sourceDocumentVersionId: "old-exam", pageArtifactId: "old-exam-page",
+        pageNumber: 2, excerpt: null, disposition: "unresolved" }] }));
+    expect(JSON.stringify(report)).toBe(before);
+    const newer = structuredClone(report);
+    newer.run.reviewRunId = "new-run";
+    newer.context = { ...newer.context, reviewRunId: "new-run", subjectId: "other-subject",
+      evidenceSnapshotV2Id: "new-snapshot", completeProcessingRevisionId: "new-processing" };
+    view.rerender(<FrozenReviewReport report={newer} onActionChanged={vi.fn()} />);
+    expect(screen.queryByRole("region", { name: "当时的待核原件" })).not.toBeInTheDocument();
+    expect(JSON.stringify(report)).toBe(before);
+  });
+
+  it.each(["sourceDocumentVersionId", "pageArtifactId", "pageNumber"] as const)("待核记录缺少%s时只显示问题，不猜原件", async field => {
+    const report = workingReport();
+    const issue = { kind: "excerpt_unverified", affectedCodes: [], detail: "原件尚待核实", alternative: "不猜来源",
+      sourceDocumentVersionId: "document", pageArtifactId: "page", pageNumber: 1 };
+    report.workDraft!.systemIssues = [{ ...issue, [field]: null }];
+    const user = userEvent.setup();
+    render(<FrozenReviewReport report={report} onActionChanged={vi.fn()} />);
+    await user.click(screen.getByText("尚未用于判断的原件记录（1）"));
+    expect(screen.getByText(/原件尚待核实/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "查看待核原件" })).not.toBeInTheDocument();
+    expect(mocks.source).not.toHaveBeenCalled();
+  });
+
   it("项目选择用代号、期别及版本，全名保留且项目绑定不变", async () => {
     const projects = await getCatalogRepository().listProjects(new AbortController().signal);
     render(<ReportsPage />);

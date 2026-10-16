@@ -91,6 +91,28 @@ describe("历史报告原件查看", () => {
     expect(mocks.viewer).not.toHaveBeenCalled();
   });
 
+  it.each(["sourceDocumentVersionId", "pageArtifactId", "pageNumber"] as const)("待核来源的%s不属于冻结页时不借用同号页面", async field => {
+    const ref = { sourceDocumentVersionId: "document", pageArtifactId: "page", pageNumber: 1,
+      excerpt: null, disposition: "unresolved" as const };
+    const invalid = { ...ref, [field]: field === "pageNumber" ? 2 : "other-source" };
+    render(<FrozenReviewEvidence context={context} locators={[]} pageRefs={[invalid]} title="当时的待核原件" onClose={vi.fn()} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("原件与本次审核保存的出处不一致");
+    expect(mocks.viewer).not.toHaveBeenCalled();
+  });
+
+  it("没有已核摘录的待核页面只作页级回看，不把问题说明充作临床引文", async () => {
+    render(<FrozenReviewEvidence context={context} locators={[]} pageRefs={[{
+      sourceDocumentVersionId: "document", pageArtifactId: "page", pageNumber: 1,
+      excerpt: null, disposition: "unresolved",
+    }]} title="当时的待核原件" onClose={vi.fn()} />);
+    await screen.findByRole("navigation");
+    expect(screen.getByRole("status")).toHaveTextContent("原文尚待核清，仅定位页面");
+    expect(screen.getByText("该出处未保存文字摘录，请核对原件。")).toBeInTheDocument();
+    expect(screen.getByText("待核原文")).toBeInTheDocument();
+    expect(mocks.viewer).toHaveBeenLastCalledWith(expect.objectContaining({ selectedEntryId: "entry",
+      selectedLocatorId: null, selectedPageLocators: [] }));
+  });
+
   it("关闭和Esc仍走现有操作，卸载后恢复原按钮焦点", async () => {
     const close = vi.fn();
     const trigger = document.createElement("button"); document.body.append(trigger); trigger.focus();
