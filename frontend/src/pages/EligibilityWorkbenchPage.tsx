@@ -1054,7 +1054,9 @@ export function EligibilityWorkbenchPage() {
     updateParams({ subject: subjectId, episode: null, component: null });
   const setEpisode = (episodeId: string) =>
     updateParams({ episode: episodeId, component: null });
-  const refreshWorkDraft = () => {
+  const refreshWorkDraft = (runId: string) => {
+    if (!confirmedRule && review.state.status === "success" && review.state.data.workDraftState === "current"
+        && review.state.data.reviewRunId === runId) return;
     if (!confirmedRule) {
       const current = review.state.status === "success" ? [...review.state.data.clauses,
         ...(review.state.data.componentClauses ?? [])].find(item =>
