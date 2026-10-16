@@ -327,28 +327,32 @@ class WorkDraftReviewService:
                     and FactAuthorityValidator(session, self.artifact_store).rule_revision_source_is_reusable(
                         previous_profile.authority, authority))
             from app.services.review_context_assembly import assemble_review_context
-            preview = assemble_review_context(session, self.artifact_store, review_episode_id=review_episode_id,
-                review_run_id="pending", evaluator_version=CALCULATION_VERSION,
-                created_at=datetime.now(UTC), work_draft=True)
+            from app.storage.read_retention import retain_read_records
             from app.services.work_draft_semantics import runtime_model, targets_for_review, source_batches
-            rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
-            targets = targets_for_review(preview, rule_set)
-            model = runtime_model() if targets else None
-            reusable, _ = _reusable_source_reads(session, JobStore(session), preview, targets, model,
-                self.artifact_store) if targets else ({}, {})
-            batches = source_batches(targets, reusable)
-            confirmations = WorkDraftRepository(session).list_acknowledgements(review_episode_id)
-            identity = canonical_hash({"authority": authority.model_dump(mode="json"),
-                "rule_set_sha256": preview.rule_set_sha256,
-                "clinical_facts": [item.model_dump(mode="json") for item in preview.facts],
-                "system_issues": [item.model_dump(mode="json") for item in preview.system_issues],
-                "source_pages": [item.model_dump(mode="json") for item in preview.source_pages],
-                "evidence_cutoff_date": preview.review_episode.model_dump(mode="json").get("evidence_cutoff_date"),
-                "calculation_version": CALCULATION_VERSION,
-                "semantic_model": model.model_dump(mode="json") if model else None,
-                "semantic_targets": targets,
-                "semantic_batches": batches,
-                **({"acknowledgements": [row.model_dump(mode="json") for row in confirmations]} if confirmations else {})})
+            # Retain ORM records only during this read-only preparation phase;
+            # validation still runs, and retention ends before any Job write.
+            with retain_read_records(session):
+                preview = assemble_review_context(session, self.artifact_store, review_episode_id=review_episode_id,
+                    review_run_id="pending", evaluator_version=CALCULATION_VERSION,
+                    created_at=datetime.now(UTC), work_draft=True)
+                rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
+                targets = targets_for_review(preview, rule_set)
+                model = runtime_model() if targets else None
+                reusable, _ = _reusable_source_reads(session, JobStore(session), preview, targets, model,
+                    self.artifact_store) if targets else ({}, {})
+                batches = source_batches(targets, reusable)
+                confirmations = WorkDraftRepository(session).list_acknowledgements(review_episode_id)
+                identity = canonical_hash({"authority": authority.model_dump(mode="json"),
+                    "rule_set_sha256": preview.rule_set_sha256,
+                    "clinical_facts": [item.model_dump(mode="json") for item in preview.facts],
+                    "system_issues": [item.model_dump(mode="json") for item in preview.system_issues],
+                    "source_pages": [item.model_dump(mode="json") for item in preview.source_pages],
+                    "evidence_cutoff_date": preview.review_episode.model_dump(mode="json").get("evidence_cutoff_date"),
+                    "calculation_version": CALCULATION_VERSION,
+                    "semantic_model": model.model_dump(mode="json") if model else None,
+                    "semantic_targets": targets,
+                    "semantic_batches": batches,
+                    **({"acknowledgements": [row.model_dump(mode="json") for row in confirmations]} if confirmations else {})})
             receipt, created = IdempotencyRepository(session).resolve(scope=f"work-draft:{review_episode_id}",
                 idempotency_key=identity, submitted_hash=identity, result_type="work_draft_job", result_id=uuid4().hex)
             store = JobStore(session)
