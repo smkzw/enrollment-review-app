@@ -18,6 +18,26 @@ const integrity: IntegrityView = { jobId: "j", publishable: true, blockingCount:
 const sources: SourcesView = { jobId: "j", snapshotId: "s", selectedPhase: "phase_iii", selectedPhaseLabel: "III期", sourceMaterials: {}, sourceSpans: { s: { excerpt: "年龄要求", precision: "block" } } };
 
 describe("审定重点投影", () => {
+  it("用药节点来自本条限制，不借其他流程项；未核类别保留重点提示", () => {
+    const medicationEntry: RuleReviewEntry = { ...entry, kind: "medication", official_code: "med:example", label: "药物甲限制" };
+    const medication = { item_id: medicationEntry.official_code, drug_class_id: "class_a", class_scope: null,
+      applicable_stages: ["run_in", "baseline", "run_in"], window: null, unresolved_reason: null };
+    const sample = { ...content, scope_supplement: { medications: [medication] } };
+    const before = JSON.stringify(sample);
+    const item = ruleReviewPresentations([medicationEntry], sample, null, integrity, sources)[0]!;
+    expect(item.stages).toEqual(["导入／洗脱", "基线"]);
+    expect(item.requirements).toEqual([]);
+    expect(item.reasons).toContain("药物类别的适用范围尚未核清。");
+    expect(ruleReviewPresentations([medicationEntry], { ...sample, scope_supplement: {
+      medications: [{ ...medication, class_scope: "all_members" }],
+    } }, null, integrity, sources)[0]?.reasons).not.toContain("药物类别的适用范围尚未核清。");
+    expect(JSON.stringify(sample)).toBe(before);
+  });
+  it("官方与操作的节点保持原资料要求，无节点不补造筛选期", () => {
+    expect(ruleReviewPresentations([entry], content, bindings, integrity, sources)[0]?.stages).toEqual(["筛选"]);
+    const scope: RuleReviewEntry = { ...entry, kind: "scope", official_code: "scope:example" };
+    expect(ruleReviewPresentations([scope], {}, null, integrity, sources)[0]?.stages).toEqual([]);
+  });
   it("书面判断方向只有对应原文明确要求时才推荐，不能仅凭旧判断标记", () => {
     const sourceClause = "研究者认为该情况影响评价";
     const raw = { ...content.proposed_rules[0]!.components[0]!, expression: { ...expression,

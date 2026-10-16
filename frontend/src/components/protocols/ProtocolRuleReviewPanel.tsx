@@ -152,13 +152,13 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
             onClick={() => setBatchOpen(true)}>批准所选 {selectedBatch.length} 项</button>
         </div>
         <ul aria-label="审定条目">{visible.map(item => <li key={item.entry.official_code}>
-        <input type="checkbox" aria-label={`选择${item.entry.kind === "rule" ? item.entry.official_code : `${item.entry.label}（${[...new Set(item.requirements.map(value => value.stage))].join("、")}）`}`} checked={checked.has(item.entry.official_code)} disabled={busy}
+        <input type="checkbox" aria-label={`选择${item.entry.kind === "rule" ? item.entry.official_code : item.entry.label + (item.stages.length ? `（${item.stages.join("、")}）` : "")}`} checked={checked.has(item.entry.official_code)} disabled={busy}
           onChange={event => setChecked(previous => { const next = new Set(previous); if (event.target.checked) next.add(item.entry.official_code); else next.delete(item.entry.official_code); return next; })} />
         <button aria-pressed={entry?.official_code === item.entry.official_code} disabled={busy} onClick={() => setSelection(item.entry.official_code)}>
           <span className="protocol-review-queue__title">{item.entry.kind === "rule" ? item.entry.official_code : reviewCategories[item.category]} · {item.title}</span>
           <span className="protocol-review-queue__meta"><strong>{item.entry.review ? "已审定" : "待审定"}</strong>
             {item.rule && <span>{item.rule.components.length + item.rule.restrictedComponents.length} 个子项</span>}
-            <span>{[...new Set(item.requirements.map(value => value.stage))].join("、")}</span>
+            <span>{item.stages.join("、")}</span>
             <span className={item.reasons.length ? "protocol-review-confidence--low" : "protocol-review-confidence--high"}>
               {item.reasons.length ? "重点核对" : "结构清楚"}</span></span>
         </button>
@@ -215,7 +215,7 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
             {dictionary.filter(value => value.value_type !== "procedure").map(value => <option key={value.variable_id} value={value.variable_id}>{value.label_zh}</option>)}
           </select></label>
         </fieldset>}
-        {entry.review && <p>已由{entry.review.reviewed_by}于{new Date(entry.review.reviewed_at).toLocaleString("zh-CN")}审定{entry.review.note === "excluded" ? "，不参与入组前判定" : ""}。</p>}
+        {entry.review && <p>{entry.review.reviewer_kind === "builder_verification" ? "构建者验证" : "医学经理审定"}：已由{entry.review.reviewed_by}于{new Date(entry.review.reviewed_at).toLocaleString("zh-CN")}审定{entry.review.note === "excluded" ? "，不参与入组前判定" : ""}。</p>}
         <div className="protocol-rule-reviews__actions">
           <button className="button button--primary" disabled={busy || !integrity.publishable || hasUnsavedChoice} onClick={() => void submit(false)}>{busy ? "正在保存…" : "审定通过"}</button>
           <button className="button" disabled={busy || !entry.review} onClick={() => void submit(true)}>撤销审定</button>
@@ -224,7 +224,7 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
         <details><summary>原文依据与位置</summary><ProtocolDraftSourcePane component={null} fileName={null}
           selectionLabel={entry.kind === "rule" ? entry.official_code : entry.label}
           locators={displayProtocolSourceLocators(sources.sourceSpans, entry.source_refs)} /></details>
-        <details><summary>审定历史</summary><ul>{data.history.filter(record => record.official_code === entry.official_code).map(record => <li key={record.record_id}>{new Date(record.reviewed_at).toLocaleString("zh-CN")} · {record.reviewed_by} · {record.action === "approved" ? "审定通过" : "撤销审定"}</li>)}</ul></details>
+        <details><summary>审定历史</summary><ul>{data.history.filter(record => record.official_code === entry.official_code).map(record => <li key={record.record_id}>{new Date(record.reviewed_at).toLocaleString("zh-CN")} · {record.reviewer_kind === "builder_verification" ? "构建者验证" : "医学经理审定"} · {record.reviewed_by} · {record.action === "approved" ? "审定通过" : "撤销审定"}</li>)}</ul></details>
       </div>}
     </div></>}
     <dialog ref={dialog} className="protocol-review-batch-dialog" onCancel={event => { if (busy) event.preventDefault(); else setBatchOpen(false); }} onClose={() => setBatchOpen(false)} aria-labelledby="review-batch-title">
@@ -233,7 +233,9 @@ export function ProtocolRuleReviewPanel({ jobId, revisionId, integrity, sources,
       {!!selectedBatch.filter(item => item.reasons.length).length && <p>其中 {selectedBatch.filter(item => item.reasons.length).length} 项标为重点核对；请确认已对照原文与解析。</p>}
       <ul>{selectedBatch.map(item => {
         const settings = batchSettings(item);
-        return <li key={item.entry.official_code}>{item.entry.kind === "rule" ? item.entry.official_code : item.entry.kind === "procedure" ? "检查项目" : "补充用药要求"} · {item.entry.label} · {[...new Set(item.requirements.map(value => value.stage))].join("、")}
+        return <li key={item.entry.official_code}>{item.entry.kind === "rule" ? item.entry.official_code : item.entry.kind === "procedure" ? "检查项目" : "补充用药要求"} · {item.entry.label}{item.stages.length ? ` · ${item.stages.join("、")}` : ""}
+          {item.entry.kind === "medication" && <details><summary>查看限制范围与例外</summary>
+            <ProtocolReviewLogic item={item} content={content} bindings={bindings} /></details>}
           {item.rule && <p>本次审定包含此条的 {item.rule.components.length + item.rule.restrictedComponents.length} 个子项。</p>}
           {item.entry.kind === "procedure" && <p>{settings.note === "excluded" ? "不作为入组前必需" : settings.result_variables.length
             ? `必需结果：${settings.result_variables.map(id => dictionary.find(value => value.variable_id === id)?.label_zh ?? "项目名称待核对").join("、")}`

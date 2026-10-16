@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { decodeRuleReviews } from "../../api/protocolRuleReviews";
@@ -25,6 +25,54 @@ beforeAll(() => {
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
 });
 describe("逐条审定", () => {
+  it.each(["all_members", "qualified", null])("用药审定及集中确认可查看同版节点、类别、例外与时间：%s", async classScope => {
+    const medicationEntry = { ...entry, official_code: "med:fixture", kind: "medication", label: "药物甲限制" };
+    const full = { ...initial, entries: [medicationEntry] };
+    const supplement = { selection_sha256: hash, input_sha256: hash, structure_sha256: hash,
+      drug_classes: { fixture: ["药物甲", "药物乙"] }, sources: [], source_dispositions: [], medications: [{
+        item_id: medicationEntry.official_code, drug_text: "药物甲限制", drug_class_id: "fixture", class_scope: classScope,
+        period: "study_period", window: null, applicable_stages: ["screening", "baseline"],
+        exception_excerpt: "本条明确例外", unresolved_reason: null, source_quotes: [], applies_to_rule: null,
+      }] };
+    const fetcher = vi.fn(async (url: RequestInfo | URL) => new Response(JSON.stringify(String(url).endsWith("/variables")
+      ? { job_id: "job", draft_revision_id: "revision", variables: [], predicates: [] } : full)));
+    vi.stubGlobal("fetch", fetcher);
+    render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity} sources={sources}
+      content={{ scope_supplement: supplement }} onReady={vi.fn()} />);
+    const checkbox = await screen.findByRole("checkbox", { name: "选择药物甲限制（筛选、基线）" });
+    expect(within(screen.getByRole("list", { name: "审定条目" })).getByText("筛选、基线")).toBeInTheDocument();
+    const logic = screen.getByRole("region", { name: "逻辑解析" });
+    expect(within(logic).getByText("整个研究期间")).toBeInTheDocument();
+    expect(within(logic).getByText(classScope === "all_members" ? "本条适用于该类全部药物"
+      : classScope === "qualified" ? "另有给药途径、制剂等限定" : "尚未核清")).toBeInTheDocument();
+    const names = within(logic).getByText("2 个药名").closest("details")!;
+    expect(names).not.toHaveAttribute("open");
+    await userEvent.click(within(names).getByText("2 个药名"));
+    expect(within(names).getByText("药物乙")).toBeVisible();
+    await userEvent.click(checkbox);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "审定身份" }), "builder_verification");
+    await userEvent.click(screen.getByRole("button", { name: "批准所选 1 项" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("筛选、基线");
+    await userEvent.click(within(dialog).getByText("查看限制范围与例外"));
+    expect(within(dialog).getByText("本条明确例外")).toBeVisible();
+    expect(within(dialog).getByText("整个研究期间")).toBeVisible();
+    expect(fetcher.mock.calls.every(([url]) => !String(url).endsWith("/publish"))).toBe(true);
+  });
+  it("旧版缺类别表显示未保存，不编造零成员；无节点条目不显示空括号", async () => {
+    const medicationEntry = { ...entry, official_code: "med:old", kind: "medication", label: "旧药物限制" };
+    vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL) => new Response(JSON.stringify(String(url).endsWith("/variables")
+      ? { job_id: "job", draft_revision_id: "revision", variables: [], predicates: [] }
+      : { ...initial, entries: [medicationEntry] }))));
+    render(<ProtocolRuleReviewPanel jobId="job" revisionId="revision" integrity={integrity} sources={sources} onReady={vi.fn()}
+      content={{ scope_supplement: { selection_sha256: hash, input_sha256: hash, structure_sha256: hash,
+        sources: [], source_dispositions: [], medications: [{ item_id: "med:old", drug_text: "旧药物限制",
+          drug_class_id: "old-class", class_scope: null, window: null, period: null, applicable_stages: [],
+          exception_excerpt: null, unresolved_reason: null, source_quotes: [], applies_to_rule: null }] } }} />);
+    await screen.findByRole("checkbox", { name: "选择旧药物限制" });
+    expect(screen.getByText("本版未保存类别成员")).toBeInTheDocument();
+    expect(screen.queryByText("0 个药名")).not.toBeInTheDocument();
+  });
   it("未改条目保持审定，默认只列剩余项，不发起重复批准", async () => {
     const retained = { record_id: "retained", official_code: "IN-01", rule_content_hash: hash,
       reviewer_kind: "medical_manager", reviewed_by: "王医学经理", reviewed_at: "2026-10-12T00:00:00Z",
@@ -82,6 +130,9 @@ describe("逐条审定", () => {
     await userEvent.click(screen.getByRole("button", { name: "审定通过" }));
     await waitFor(() => expect(onReady).toHaveBeenLastCalledWith(true));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "审定范围" }), "approved");
+    // The next-action selector is not the author of the saved approval.
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "审定身份" }), "medical_manager");
+    expect(screen.getByText(/^构建者验证：已由/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "撤销审定" })).toBeEnabled();
   });
 

@@ -14,11 +14,20 @@ export function ProtocolReviewLogic({ item, content, bindings }: {
     try {
       const supplement = decodeScopeSupplement(content.scope_supplement);
       const restriction = supplement.medications.find(value => value.item_id === item.entry.official_code);
+      const members = restriction?.drug_class_id ? supplement.drug_classes?.[restriction.drug_class_id] : undefined;
       return <section className="protocol-review-logic" aria-label="逻辑解析"><h4>限制与适用范围</h4>
         {restriction ? <dl>
           <div><dt>限制对象</dt><dd>{restriction.drug_text}</dd></div>
           <div><dt>适用阶段</dt><dd>{restriction.applicable_stages.map(value => medicationStages[value]).join("、") || "尚待核清"}</dd></div>
-          <div><dt>时间范围</dt><dd>{restriction.window ? formatTimeConstraint(restriction.window) : restriction.period === "study_period" ? "整个研究期间" : restriction.period === "treatment_period" ? "治疗期间" : "尚待核清"}</dd></div>
+          <div><dt>{restriction.window_interpretation === "minimum_washout" ? "最短停药间隔"
+            : restriction.window_interpretation === "prohibited_interval" ? "禁用时间" : "时间范围"}</dt><dd>{restriction.window ? formatTimeConstraint(restriction.window) : restriction.period === "study_period" ? "整个研究期间" : restriction.period === "treatment_period" ? "治疗期间" : "尚待核清"}</dd></div>
+          {restriction.drug_class_id && <>
+            <div><dt>类别适用</dt><dd>{restriction.class_scope === "all_members" ? "本条适用于该类全部药物"
+              : restriction.class_scope === "qualified" ? "另有给药途径、制剂等限定" : "尚未核清"}</dd></div>
+            <div><dt>已列药名</dt><dd>{members ? <details><summary>{members.length} 个药名</summary>
+              <ul>{members.map(name => <li key={name}>{name}</li>)}</ul>
+            </details> : "本版未保存类别成员"}</dd></div>
+          </>}
           {restriction.exception_excerpt && <div><dt>例外</dt><dd>{restriction.exception_excerpt}</dd></div>}
           {restriction.unresolved_reason && <div><dt>未决</dt><dd>{restriction.unresolved_reason}</dd></div>}
           {restriction.applies_to_rule && <div><dt>关联条款</dt><dd>{restriction.applies_to_rule}</dd></div>}

@@ -94,6 +94,7 @@ export interface RuleReviewPresentation {
   reasons: string[];
   rule: ProtocolDraftRuleView | null;
   requirements: { description: string; stage: string }[];
+  stages: string[];
 }
 
 export function reviewObjects(value: unknown): Record<string, unknown>[] {
@@ -114,7 +115,10 @@ export function ruleReviewPresentations(entries: RuleReviewEntry[], content: Rec
   const rules = mapProtocolDraftRules(content);
   const drafts = reviewObjects(content.component_drafts);
   const requirements = reviewObjects(content.evidence_requirement_drafts);
+  const supplement = reviewObjects([content.scope_supplement])[0];
   return entries.map(entry => {
+    const medication = entry.kind === "medication"
+      ? reviewObjects(supplement?.medications).find(value => value.item_id === entry.official_code) : undefined;
     const rule = rules.find(item => item.officialCode === entry.official_code) ?? null;
     const ids = new Set(drafts.filter(item => item.parent_official_code === entry.official_code)
       .map(item => item.draft_component_id));
@@ -156,16 +160,18 @@ export function ruleReviewPresentations(entries: RuleReviewEntry[], content: Rec
       reviewObjects(raw?.components).forEach(item => { inspect(item.expression); inspect(item.exception_expression); });
     } else if (entry.kind === "procedure" && !needed.length) reasons.push("流程表操作尚未对应到审核要求，请核对节点及必需内容。");
     if (entry.kind === "medication") {
-      const supplement = reviewObjects([content.scope_supplement])[0];
-      const medication = reviewObjects(supplement?.medications).find(value => value.item_id === entry.official_code);
       if (medication?.exception_excerpt) reasons.push("含用药例外，请核对适用对象及期间。");
       if (medication?.window && !medication.window_interpretation) reasons.push("时间要求尚未区分禁用区间与最短停药间隔。");
       if (typeof medication?.unresolved_reason === "string") reasons.push(medication.unresolved_reason);
+      if (medication?.drug_class_id && !medication.class_scope) reasons.push("药物类别的适用范围尚未核清。");
     }
+    const stages = medication && Array.isArray(medication.applicable_stages) ? medication.applicable_stages
+      : needed.map(item => item.due_stage);
     return { entry, rule, category: entry.kind === "rule" && rule?.kind !== "required_procedure"
       ? rule?.kind === "inclusion" || entry.official_code.startsWith("IN-") ? "inclusion" : "exclusion"
       : entry.kind === "medication" || entry.kind === "scope" ? "medication" : procedureCategory,
       medicationRelated: entry.kind === "medication" || entry.kind === "scope" || domains.has("medication"), title: rule?.components[0]?.title ?? entry.label,
+      stages: [...new Set(stages.map(value => stageLabels[String(value)] ?? "节点尚未明确"))],
       reasons: [...new Set(reasons)], requirements: [...new Map(needed.map(item => [JSON.stringify([item.due_stage, item.description]), {
         description: String(item.description ?? ""), stage: stageLabels[String(item.due_stage)] ?? "节点尚未明确",
       }])).values()] };
