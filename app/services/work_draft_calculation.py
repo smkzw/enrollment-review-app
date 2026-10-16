@@ -127,7 +127,7 @@ def source_record_date(fact, evidence_refs, source_pages, *, allow_report_date=F
     pages = {(page.source_document_version_id, page.page_number, page.page_artifact_id): page for page in source_pages}
     labels = [{"sampling": "采样时间", "visit": "就诊时间"}.get(date_role, "采样时间|就诊时间")]
     if allow_exam_date and date_role is None:
-        labels.append("检查日期|检查时间")
+        labels.append("检查日期|检查时间|摄片日期")
     labels += ["报告日期|报告时间"] if allow_report_date else []
     texts = [page.effective_text for ref in (evidence_refs or {}).get(fact.fact_id, ())
         if (page := pages.get((ref.source_document_version_id, ref.page_number, ref.page_artifact_id))) is not None]
@@ -136,12 +136,24 @@ def source_record_date(fact, evidence_refs, source_pages, *, allow_report_date=F
 
 def source_header_date(texts, label_groups):
     """Use explicit header roles in priority order; ambiguous or invalid dates stay unknown."""
+    header = re.compile(r"\s*(" + "|".join(label_groups) + r")\s*[:：]\s*"
+        r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?")
+    fields = []
+    for text in texts:
+        for first in re.finditer(r"(?m)^" + header.pattern, text):
+            fields.append(first.groups())
+            offset = first.end()
+            # Continue only across complete adjacent date fields. A narrative,
+            # appointment prefix or arbitrary text is not a header boundary.
+            while match := header.match(text, offset):
+                fields.append(match.groups())
+                offset = match.end()
     for label in label_groups:
         values = set()
-        for text in texts:
-            for match in re.finditer(r"(?m)^\s*(?:" + label + r")\s*[:：]\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)", text):
+        for role, *parts in fields:
+            if re.fullmatch(label, role):
                 try:
-                    values.add(date(*(int(value) for value in match.groups())))
+                    values.add(date(*(int(value) for value in parts)))
                 except ValueError:
                     return None
         if values:

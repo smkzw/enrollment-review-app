@@ -969,6 +969,25 @@ def test_time_window_does_not_use_future_or_unknown_date():
     assert selected["age-limit"].fact_ids == (a.fact_id,)
 
 
+@pytest.mark.parametrize("text,expected", [
+    ("摄片日期:2025-08-08报告日期:2025-08-09 11:10:50", date(2025, 8, 8)),
+    ("检查日期：2025/8/8 09:10 报告时间：2025/8/9 11:10", date(2025, 8, 8)),
+    ("检查日期：\n2025/8/8\n报告时间：2025/8/9 11:10", date(2025, 8, 8)),
+    ("报告日期:2025-08-08报告时间:2025-08-09", None),
+    ("检查日期:2025-02-30报告日期:2025-03-01", None),
+    ("检查日期:2025-08-08检查时间:2025-08-09", None),
+    ("预约检查日期:2025-08-08", None),
+    ("下次摄片日期:2025-08-08", None),
+    ("打印日期:2025-08-08", None),
+    ("曾于检查日期:2025-08-08", None),
+    ("说明2025-08-08报告日期:2025-08-09", None),
+    ("检查日期:2025-08-08 下次检查日期:2025-08-09", date(2025, 8, 8)),
+])
+def test_adjacent_explicit_header_dates_keep_roles_and_reject_narrative_boundaries(text, expected):
+    from app.services.work_draft_calculation import source_header_date
+    assert source_header_date([text], ["检查日期|检查时间|摄片日期", "报告日期|报告时间"]) == expected
+
+
 def test_nearest_date_and_same_day_conflict():
     _, _, component = clause()
     a = material(value=52, day=date(2025, 8, 1), snapshot="first")
@@ -993,7 +1012,7 @@ def test_nearest_date_and_same_day_conflict():
     (date(2024, 2, 28), 50, date(2025, 2, 28), 52, date(2025, 2, 28), D.INCLUSION_MET),
     (date(2025, 8, 9), 51, date(2025, 8, 15), 52, date(2025, 8, 8), D.INDETERMINATE),
 ])
-@pytest.mark.parametrize("date_label", ["采样时间", "检查日期", "检查时间"])
+@pytest.mark.parametrize("date_label", ["采样时间", "检查日期", "检查时间", "摄片日期"])
 def test_age_uses_dated_documents_at_node_and_checks_chronology_without_redating_facts(
         first_day, first_age, last_day, last_age, anchor, decision, date_label):
     from app.domain.contracts.work_draft import WorkDraftSourcePage
