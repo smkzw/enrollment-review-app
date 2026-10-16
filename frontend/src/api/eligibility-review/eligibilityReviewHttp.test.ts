@@ -40,6 +40,24 @@ function reviewBody() {
 }
 
 describe("eligibility review HTTP repository", () => {
+  it("保存待核记录完整页身份；旧回执不补造来源，不接受损坏的文件标识", async () => {
+    const issue = { kind: "excerpt_unverified", affected_codes: [], detail: "原件尚待核实", alternative: "核对所引原件",
+      source_document_version_id: "frozen-document", page_artifact_id: "frozen-page", page_number: 7 };
+    const body = { ...reviewBody(), system_issues: [issue] };
+    const repository = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
+    const before = JSON.stringify(body);
+    expect((await repository.getEligibilityReview("subject", "episode")).systemIssues).toEqual([{
+      kind: issue.kind, affectedCodes: [], detail: issue.detail, alternative: issue.alternative,
+      sourceDocumentVersionId: "frozen-document", pageArtifactId: "frozen-page", pageNumber: 7,
+    }]);
+    expect(JSON.stringify(body)).toBe(before);
+    delete (issue as Record<string, unknown>).source_document_version_id;
+    expect((await repository.getEligibilityReview("subject", "episode")).systemIssues?.[0].sourceDocumentVersionId).toBeNull();
+    Object.assign(issue, { source_document_version_id: "" });
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+    Object.assign(issue, { source_document_version_id: 7 });
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+  });
   it("合并用药要求独立读取，不伪装官方入排编号", async () => {
     const body = reviewBody();
     body.clauses[0] = { ...body.clauses[0]!, rule_kind: "medication", rule_code: "用药01",

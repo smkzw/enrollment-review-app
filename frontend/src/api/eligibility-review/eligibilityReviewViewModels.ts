@@ -93,7 +93,7 @@ export interface EligibilityReviewView {
   verificationOnly?: boolean;
   componentClauses?: EligibilityClauseView[];
   reviewRunId?: string | null;
-  systemIssues?: { kind: string; affectedCodes: string[]; detail: string; alternative: string; pageArtifactId?: string | null; pageNumber?: number | null }[];
+  systemIssues?: { kind: string; affectedCodes: string[]; detail: string; alternative: string; sourceDocumentVersionId?: string | null; pageArtifactId?: string | null; pageNumber?: number | null }[];
   workDraftState?: "not_started" | "current" | "source_changed" | "method_changed";
   unassignedConflicts?: { conflictGroupId: string; memberKind: "event" | "exposure"; memberIds: string[] }[];
   subjectId: string;
@@ -477,6 +477,7 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
       const issue = objectValue(value, `system_issues[${index}]`);
       return { kind: requiredString(issue.kind, "system_issue.kind"),
         affectedCodes: arrayValue(issue.affected_codes, "system_issue.affected_codes").map(value => requiredString(value, "system_issue.code")),
+        sourceDocumentVersionId: issue.source_document_version_id == null ? null : requiredString(issue.source_document_version_id, "system_issue.source_document_version_id"),
         pageArtifactId: issue.page_artifact_id == null ? null : requiredString(issue.page_artifact_id, "system_issue.page_artifact_id"),
         pageNumber: issue.page_number == null ? null : positiveInteger(issue.page_number, "system_issue.page_number"),
         detail: requiredString(issue.detail, "system_issue.detail"), alternative: requiredString(issue.alternative, "system_issue.alternative") };

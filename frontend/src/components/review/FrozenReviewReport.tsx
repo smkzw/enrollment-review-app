@@ -42,9 +42,10 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
   const [editingAction, setEditingAction] = useState<{ runId: string; actionId: string } | null>(null);
   const [controlSelection, setControlSelection] = useState<{ runId: string; controlId: string; obligationId: string; doubtLocatorId?: string } | null>(null);
   const [draftSelection, setDraftSelection] = useState<{ runId: string; itemId: string } | null>(null);
+  const [issueSelection, setIssueSelection] = useState<{ runId: string; index: number } | null>(null);
   useEffect(() => {
     setDraftSelection(null); setEvidenceSelection(null); setOrderingSelection(null);
-    setControlSelection(null); setResponseSelection(null); setEditingAction(null);
+    setControlSelection(null); setResponseSelection(null); setEditingAction(null); setIssueSelection(null);
   }, [report.run.reviewRunId]);
   useEffect(() => {
     if (focusActionId === null) return;
@@ -70,6 +71,8 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
   }, [report.run.reviewRunId]);
   const { run, context, assessments, actions } = report;
   const draft = report.workDraft;
+  const sourceIssue = issueSelection?.runId === run.reviewRunId
+    ? draft?.systemIssues?.[issueSelection.index] : undefined;
   const draftParents = [...(draft?.clauses ?? [])].sort((a, b) =>
     ({ inclusion: 0, exclusion: 1, required_procedure: 2, medication: 3 })[a.ruleKind] - ({ inclusion: 0, exclusion: 1, required_procedure: 2, medication: 3 })[b.ruleKind]
       || a.ruleCode.localeCompare(b.ruleCode));
@@ -263,6 +266,11 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
             <ul>{group.issues.map((issue, index) => <li key={index}>
               <strong>{reviewSystemIssueLabel(issue)}</strong>：{issue.detail}
               <small>{issue.alternative}</small>
+              {issue.sourceDocumentVersionId && issue.pageArtifactId && issue.pageNumber && <button type="button"
+                className="button reports-print__action reports-print__source" onClick={() => setIssueSelection({
+                  runId: run.reviewRunId, index: draft.systemIssues?.indexOf(issue) ?? -1 })}>
+                <FileSearch size={16} aria-hidden="true" />查看待核原件
+              </button>}
             </li>)}</ul>
           </details>)}
       </section> : <section className="reports-print__section" aria-labelledby="reports-actions-title">
@@ -304,6 +312,11 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
         title={`${draftItem.ruleCode} · 当时的原始资料`}
         locators={report.evidenceLocators.filter(locator => draftItem.factRefs.some(ref => ref.locatorId === locator.locatorId))}
         pageRefs={draftItem.sourceReadRefs} onClose={() => setDraftSelection(null)} />}
+      {sourceIssue?.sourceDocumentVersionId && sourceIssue.pageArtifactId && sourceIssue.pageNumber && <FrozenReviewEvidence
+        key={JSON.stringify(issueSelection)} context={context} title="当时的待核原件" locators={[]}
+        pageRefs={[{ sourceDocumentVersionId: sourceIssue.sourceDocumentVersionId,
+          pageArtifactId: sourceIssue.pageArtifactId, pageNumber: sourceIssue.pageNumber,
+          excerpt: null, disposition: "unresolved" }]} onClose={() => setIssueSelection(null)} />}
       {evidenceAssessment && <FrozenReviewEvidence key={JSON.stringify(evidenceSelection)}
         context={context} title={`${evidenceAssessment.clause.ruleDisplayCode} · ${evidenceSelection?.doubtLocatorId ? "待核实原件" : "原始资料"}`}
         locators={report.evidenceLocators.filter((item) => evidenceSelection?.doubtLocatorId
