@@ -80,6 +80,35 @@ def target(kind="exclusion"):
             "atom": {"predicate": {"comparator": "exists"}}}
 
 
+@pytest.mark.parametrize("latest_complete", [True, False])
+def test_reuse_stops_only_after_every_requested_target_has_a_verified_proof(monkeypatch, latest_complete):
+    import json
+    from app.services import work_draft_review as service, work_draft_semantics as semantics
+    authority = SimpleNamespace(review_episode_id="episode")
+    frozen = SimpleNamespace(authority=authority, source_pages=[page()])
+    payload = json.dumps({"context_id": "same-scope"})
+    jobs = [SimpleNamespace(job_id=key, payload_json=payload, payload_sha256=sha256(payload.encode()).hexdigest())
+            for key in ("latest", "older", "unused")]
+    session = SimpleNamespace(scalars=lambda _: SimpleNamespace(all=lambda: jobs))
+    monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: frozen))
+    checked = []
+    def revalidate(checkpoint, *_, **__):
+        checked.append(checkpoint["job"])
+        keys = ["first", "second"] if checkpoint["job"] == "latest" and latest_complete else (
+            ["first"] if checkpoint["job"] == "latest" else ["second"])
+        return ({key: {"truth": "false", "origin": checkpoint["job"]} for key in keys},
+                {key: {"raw_response_ref": checkpoint["job"]} for key in keys})
+    monkeypatch.setattr(semantics, "revalidate_saved_source_read", revalidate)
+    store = SimpleNamespace(list_steps=lambda _: [SimpleNamespace(step_id="semantic")],
+        get_last_checkpoint=lambda job, _: (job, {"job": job}))
+    rows, proofs = service._reusable_source_reads(session, store, frozen,
+        [{"target_id": key} for key in ("first", "second")], object(), object())
+    assert set(rows) == set(proofs) == {"first", "second"}
+    assert rows["first"]["origin"] == proofs["first"]["job_id"] == "latest"
+    assert rows["second"]["origin"] == proofs["second"]["job_id"] == ("latest" if latest_complete else "older")
+    assert checked == (["latest"] if latest_complete else ["latest", "older"])
+
+
 def row(**values):
     return SourceRelation(target_id=values.get("target_id", "component:infection"), relation=values.get("relation", "refutes"),
         applicable=values.get("applicable", "yes"), object_matches=values.get("object_matches", True),

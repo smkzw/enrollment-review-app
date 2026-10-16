@@ -58,11 +58,18 @@ def _reusable_source_reads(session, store, frozen, targets, model, artifact_stor
     from app.services.review_context_assembly import clinical_source_scope_is_compatible
     from app.storage.repositories import PROTOCOL_DOC_CONFIG, list_workflow_stages_for_rule_set
     accepted, proofs = {}, {}
+    needed = {target["target_id"] for target in targets}
+    if not needed:
+        return accepted, proofs
     prior_jobs = session.scalars(select(JobRecord).where(JobRecord.job_type == JOB_TYPE,
         JobRecord.state.in_({"completed", "cancelled"}),
         func.json_extract(JobRecord.payload_json, "$.review_episode_id") == frozen.authority.review_episode_id
         ).order_by(JobRecord.created_at.desc())).all()
     for job in prior_jobs:
+        # Newest verified receipts already win below. Once every target has a
+        # proof, older unused receipts cannot change the selected reading.
+        if needed <= accepted.keys():
+            break
         payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
         context_id = payload.get("context_id")
         automatic = context_id is None and bool(payload.get("normalization_run_id"))
@@ -130,6 +137,8 @@ def _reusable_source_reads(session, store, frozen, targets, model, artifact_stor
                     continue
                 previous_targets = targets_for_review(previous, old_rules)
         for step in store.list_steps(job.job_id):
+            if needed <= accepted.keys():
+                break
             if not step.step_id.startswith("semantic"):
                 continue
             checkpoint = store.get_last_checkpoint(job.job_id, step.step_id)
