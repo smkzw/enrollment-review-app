@@ -391,6 +391,7 @@ const FALLBACK_ISSUE_LABELS: Record<string, string> = {
   protocol_meaning_unresolved: "方案要求尚待核清",
   review_method_unavailable: "审核方法待完善",
   protocol_requirement_unresolved: "本项暂不能判定",
+  evidence_incomplete: "证据需补充或核对",
   unclassified: "原因待明确",
 };
 
@@ -425,6 +426,8 @@ function clauseIssueKey(clause: EligibilityClauseView): {
       return { key: clause.gapType ?? "clause_not_satisfied", severity: "danger" };
     case "professional_judgment":
       return { key: clause.gapType ?? "professional_judgment", severity: "attention" };
+    case "indeterminate":
+      return { key: clause.gapType ?? "evidence_incomplete", severity: "info" };
     default:
       return { key: clause.gapType ?? "unclassified", severity: "info" };
   }
@@ -806,6 +809,11 @@ function EligibilityEvidencePanel({
     locator.precision === "bbox" && locator.authenticity === "authenticated"
     && locator.bbox !== null && locator.coordinateFrame !== null);
 
+  const closeSourceChoices = (button: HTMLButtonElement) => {
+    const choices = button.closest(".eligibility-evidence__sources");
+    choices?.removeAttribute("open");
+    choices?.querySelector("summary")?.focus({ preventScroll: true });
+  };
   const sourceButtons = (refs: typeof sourceRefs) => refs.map(ref => {
     const key = JSON.stringify(ref);
     const page = pages.find(item => item.sourceDocumentVersionId === ref.sourceDocumentVersionId
@@ -816,7 +824,7 @@ function EligibilityEvidencePanel({
         onClick={event => {
           if (!page) return;
           setBrowsedPage({ context: sourceContext, entryId: page.entryId, sourceKey: key });
-          event.currentTarget.closest(".eligibility-evidence__sources")?.removeAttribute("open");
+          closeSourceChoices(event.currentTarget);
         }}>
         <strong>{ref.disposition === "mentioned" ? hasJudgedSource(clause) ? "本次判断的病历依据" : "已找到相关原文，待核清" : ref.disposition === "not_seen" ? "本页未见相关记录" : "本页尚未核清"}</strong>
         {ref.excerpt && <span>{ref.excerpt}</span>}
@@ -827,12 +835,6 @@ function EligibilityEvidencePanel({
 
   return (
     <aside className="eligibility-evidence" aria-label="原件面板">
-      <header className="workbench-pane__head">
-        <div>
-          <h2 className="workbench-pane__title">原件</h2>
-          <p className="workbench-pane__subtitle">{clause.ruleCode} · {workItemKindLabel(clause)}</p>
-        </div>
-      </header>
       {selectedPage !== null && (
         <div className="eligibility-evidence__state" role="status">
           <strong>{browsedSource ? browsedSource.disposition === "unresolved" || !hasJudgedSource(clause)
@@ -883,7 +885,11 @@ function EligibilityEvidencePanel({
                     type="button"
                     className={`eligibility-evidence__ref${selectedFactIndex === index ? " is-active" : ""}`}
                     aria-pressed={selectedFactIndex === index}
-                    onClick={() => { returnToReference(); onSelectFact(index); }}
+                    onClick={event => {
+                      closeSourceChoices(event.currentTarget);
+                      returnToReference();
+                      onSelectFact(index);
+                    }}
                   >
                     <strong>{fact.excerpt?.trim() || `原文依据 ${index + 1}`}</strong>
                     <span>{documentNames.get(fact.sourceDocumentVersionId ?? "") ?? "原始资料"} · 第 {fact.pageNumber} 页</span>
@@ -921,7 +927,7 @@ function EligibilityEvidencePanel({
             {isReferencePage && locatorPage.state.status === "error" ? (
               <ErrorState message="原文标注暂时无法读取，可先查看原件。" onRetry={locatorPage.retry} />
             ) : isReferencePage && locatorPage.state.status === "success" && !hasVerifiedBox ? (
-              <p className="eligibility-muted">已定位到原件页面，具体文字位置尚未核实，暂不显示红框。</p>
+              <p className="eligibility-muted"><span title="已定位到原件页面，具体文字位置尚未核实，暂不显示红框。">页级定位</span></p>
             ) : null}
             <OriginalEvidenceViewer
               revisionId={review.completeProcessingRevisionId}
