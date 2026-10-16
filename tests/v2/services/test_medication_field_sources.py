@@ -98,6 +98,38 @@ def test_invalid_frozen_guidance_is_rejected_before_job_creation(session_factory
         assert session.scalar(select(func.count()).select_from(JobRecord)) == before
 
 
+@pytest.mark.parametrize("compact_rows", [False, True, "true", 1, None])
+def test_frozen_layout_is_validated_at_registration_and_before_job_creation(session_factory, compact_rows):
+    from sqlalchemy import func, select
+    from app.storage.models import JobRecord
+    from app.workflow.errors import InvalidJobDefinitionError
+
+    with session_factory() as session, session.begin():
+        chain = _seed_chain(session, prefix="layout")
+        base = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
+        model = base.model_copy(update={"parameters": {**base.parameters, "compact_requirement_rows": compact_rows}})
+        model = model.model_copy(update={"model_config_id": "evidence-normalizer/model/" + _model_identity(model)})
+        AppendRepository(session, MODEL_CONFIG_CONFIG).save(model)
+        before = session.scalar(select(func.count()).select_from(JobRecord))
+        if isinstance(compact_rows, bool):
+            prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, compact_requirement_rows=compact_rows)
+            AppendRepository(session, PROMPT_VERSION_CONFIG).save(prompt)
+            pair = RegisteredNormalizerConfig(prompt_version_id=prompt.prompt_version_id, model_config_id=model.model_config_id)
+            assert select_registered_evidence_normalizer_config(session, registered_config=pair) == pair
+            if compact_rows:
+                with pytest.raises(AppFactNormalizationConfigError, match="不一致"):
+                    select_registered_evidence_normalizer_config(session, registered_config=RegisteredNormalizerConfig(
+                        prompt_version_id=chain["prompt_version_id"], model_config_id=model.model_config_id))
+            return
+    # Null is rejected by the stored ModelConfig contract before role validation.
+    with pytest.raises(InvalidJobDefinitionError, match="无法读取证据规范化配置" if compact_rows is None else "紧凑格式"):
+        FactNormalizationJobService(session_factory).create_or_reuse_from_source(authority=chain["authority"],
+            prompt_version_id=chain["prompt_version_id"], model_config_id=model.model_config_id,
+            created_by="builder_verification")
+    with session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(JobRecord)) == before
+
+
 def medication_draft(locator_id):
     exposure = exposure_with_sources(locator_id)
     fields = exposure.model_dump(mode="json")
@@ -153,8 +185,9 @@ def test_flagged_prompt_is_selected_only_with_its_explicit_matching_model(sessio
     "unknown_start", "date_only_excerpt", "unannotated_date", "negation", "aligned_ongoing",
     "wrong_role", "wrong_object", "missing_unit"])
 @pytest.mark.parametrize("guidance", [None, MEDICATION_PARTIAL_SOURCE_GUIDANCE], ids=["legacy", "frozen-partial"])
+@pytest.mark.parametrize("compact_rows", [False, True], ids=["objects", "rows"])
 def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_consumer(
-    session_factory, data_paths, fault, guidance,
+    session_factory, data_paths, fault, guidance, compact_rows,
 ):
     medication_text = TEXT + ("同时口服药物乙10mg一次。" if fault == "two_drugs" else "")
     if fault == "unknown_start":
@@ -171,10 +204,11 @@ def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_cons
         base = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
         model = base.model_copy(update={"model_config_id": "medication-fields-model",
             "parameters": {**base.parameters, "include_medication_field_sources": True,
+                "compact_requirement_rows": compact_rows,
                 **({"medication_source_guidance": guidance} if guidance is not None else {})}})
         validate_evidence_normalizer_model_config(model)
         prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True,
-            medication_source_material=guidance)
+            medication_source_material=guidance, compact_requirement_rows=compact_rows)
         AppendRepository(session, MODEL_CONFIG_CONFIG).save(model)
         AppendRepository(session, PROMPT_VERSION_CONFIG).save(prompt)
     service = FactNormalizationJobService(session_factory)
@@ -236,6 +270,7 @@ def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_cons
     assert service.get_job(created.job_id)["state"] == "completed", service.get_job(created.job_id)
     assert len(requests) == 1
     assert medication_source_guidance(True, guidance) in requests[0]["messages"][0]["content"]
+    assert ("若有对应的同名_columns" in requests[0]["messages"][0]["content"]) == compact_rows
     assert "field_sources" in requests[0]["response_format"]["json_schema"]["schema"]["$defs"]["EvidenceExposureDraft"]["required"]
     with session_factory() as session:
         facts = ClinicalFactV2Repository(session).list_by_episode(chain["episode_id"])
