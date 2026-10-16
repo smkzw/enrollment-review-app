@@ -164,6 +164,10 @@ def validate_evidence_normalizer_model_config(
         raise ValueError("资料类别提示配置必须是布尔值")
     if not isinstance(model_config.parameters.get("include_medication_field_sources", False), bool):
         raise ValueError("用药逐字段来源配置必须是布尔值")
+    medication_source_guidance(
+        model_config.parameters.get("include_medication_field_sources", False),
+        model_config.parameters.get("medication_source_guidance"),
+    )
     if "temperature" in model_config.parameters:
         raw_temperature = model_config.parameters["temperature"]
         if isinstance(raw_temperature, bool) or not isinstance(
@@ -457,6 +461,7 @@ DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE = (
 
 _PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v42"
 _MAX_PROMPT_CHARS = 100_000
+# Legacy request material is immutable: saved requests are reconstructed verbatim.
 _MEDICATION_FIELD_SOURCE_INSTRUCTIONS = (
     "实际用药候选须逐字段填写field_sources：每项保留本药对象、原值、对应角色、定位及连续原句；"
     "药物对象与原值必须在同一段明确对应，不能把同页另一药物的日期或剂量借来。"
@@ -466,6 +471,32 @@ _MEDICATION_FIELD_SOURCE_INSTRUCTIONS = (
     "无法为某字段找到忠实依据则保留原候选和具体疑问，不补写或删字段求通过。"
     "field_sources是有源解释提案，不是已核实、批准或最终入排结论。\n"
 )
+
+MEDICATION_PARTIAL_SOURCE_GUIDANCE = (
+    "实际用药候选须逐字段填写field_sources，保留本药对象、原值、对应角色、定位及连续原句；"
+    "药物对象与原值须在同一段明确对应，不借同页另一药物的日期或剂量。"
+    "实际开始、结束、单次使用和记录日期分别核对；就诊、处方、购药、报告或计划日期"
+    "不能仅因相邻就当作实际开始或结束。日期照录原有精度，不补未知月日。"
+    "首次提取时，明确使用某药但起止、剂量或用法未详，保留有据药物记录，"
+    "无法证明的可空字段填null，并在unresolved_items中列具体疑问。持续状态不明填unknown，"
+    "无需为unknown编造状态原句；single、ongoing、ended或intermittent须有各自明确原句。"
+    "一次就诊或开药不等于单次实际使用，未记停药不等于仍在使用。"
+    "药名及每个非空起止、记录时间、剂量、单位、频次、途径各一项依据；"
+    "持续状态不是unknown时另附对应状态依据。药物存在、实际使用和确切疗程分开核对。"
+    "补答不得删除已提出的内容、来源或疑问来规避核对，不改写其他候选。"
+    "field_sources只是有源提案，不是已核实、批准或入排结论。\n"
+)
+
+
+def medication_source_guidance(enabled: bool, material: str | None = None) -> str:
+    """Read frozen prompt material; absence retains the exact legacy request."""
+    if not isinstance(enabled, bool):
+        raise ValueError("用药逐字段来源配置必须是布尔值")
+    if material is not None and (not enabled or not isinstance(material, str) or not material.strip()):
+        raise ValueError("用药来源提示须为非空文字，且只能用于逐字段来源读取")
+    if not enabled:
+        return ""
+    return _MEDICATION_FIELD_SOURCE_INSTRUCTIONS if material is None else material
 
 
 class EvidenceNormalizerPromptTooLong(ValueError):
@@ -721,7 +752,10 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def evidence_normalizer_prompt_template_sha256(prompt_template: str, *, include_medication_field_sources: bool = False) -> str:
+def evidence_normalizer_prompt_template_sha256(
+    prompt_template: str, *, include_medication_field_sources: bool = False,
+    medication_source_material: str | None = None,
+) -> str:
     """对模板、合同、生成 schema、修复规则与布局的完整可审计哈希。"""
     from app.agents.evidence_question_repair import QUESTION_REPAIR_INSTRUCTIONS, RECOVERABLE_GAP_TYPES
 
@@ -742,8 +776,9 @@ def evidence_normalizer_prompt_template_sha256(prompt_template: str, *, include_
             )
         )
     )
+    guidance = medication_source_guidance(include_medication_field_sources, medication_source_material)
     if include_medication_field_sources:
-        return _sha256(base + _MEDICATION_FIELD_SOURCE_INSTRUCTIONS
+        return _sha256(base + guidance
             + _compact_schema(include_medication_field_sources=True))
     return base
 
@@ -1059,6 +1094,7 @@ def build_evidence_normalizer_prompt(
     verified_scope_prompt: bool = False,
     include_source_categories: bool = False,
     include_medication_field_sources: bool = False,
+    medication_source_material: str | None = None,
 ) -> str:
     """从冻结输入构建唯一可审计的 prompt，不含隐藏自由文本。
 
@@ -1086,8 +1122,7 @@ def build_evidence_normalizer_prompt(
         from app.agents.verified_evidence_prompt import VERIFIED_EVIDENCE_SYSTEM_CONTRACT
         system_contract = VERIFIED_EVIDENCE_SYSTEM_CONTRACT
     head = f"{prompt_template.strip()}\n\n{system_contract}\n\n"
-    if include_medication_field_sources:
-        head += _MEDICATION_FIELD_SOURCE_INSTRUCTIONS
+    head += medication_source_guidance(include_medication_field_sources, medication_source_material)
     if evidence_input.variable_definitions:
         head += ("related_requirements 的 context_ref 是 requirement_contexts 中从0开始的索引；共同说明只保存一次，所有要求编号和数据项目仍分别保留。"
                  "locators 是按 locator_columns 列顺序保存的定位行，每行仍独立保留真实编号、页和逐字原文，不得合并不同位置。\n")
@@ -2469,6 +2504,7 @@ class EvidenceNormalizerRunner:
             verified_scope_prompt=verified_scope_prompt,
             include_source_categories=getattr(transport, "include_source_categories", False) is True,
             include_medication_field_sources=field_sources,
+            medication_source_material=getattr(transport, "medication_source_material", None),
         )
         available = set(evidence_input.available_locator_ids)
         locator_source_hashes = {

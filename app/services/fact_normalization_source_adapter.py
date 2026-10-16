@@ -706,7 +706,8 @@ def retained_normalization_reads(
                     raise FactPlanningSourceError("旧读取回执与实际请求身份不一致")
                 schema = body.get("response_format", {}).get("json_schema", {}).get("schema")
                 if schema is not None and schema != json.loads(_compact_schema(
-                        [row.variable_id for row in evidence_input.variable_definitions])):
+                        [row.variable_id for row in evidence_input.variable_definitions],
+                        include_medication_field_sources=model.parameters.get("include_medication_field_sources", False))):
                     continue
                 aliases = (NormalizerReferenceAliases(receipt["reference_aliases"])
                     if receipt.get("reference_aliases") is not None else None)
@@ -714,7 +715,9 @@ def retained_normalization_reads(
                     raise FactPlanningSourceError("旧读取的短引用与当前真实来源不一致")
                 prompt = build_evidence_normalizer_prompt(evidence_input, prompt_template=prompt_template,
                     include_output_schema=schema is None, reference_aliases=aliases,
-                    include_source_categories=model.parameters.get("include_source_categories", False))
+                    include_source_categories=model.parameters.get("include_source_categories", False),
+                    include_medication_field_sources=model.parameters.get("include_medication_field_sources", False),
+                    medication_source_material=model.parameters.get("medication_source_guidance"))
                 if not any(row.get("role") == "user" and row.get("content") == prompt for row in body.get("messages", ())):
                     continue
                 result.append({"run_id": run.run_id, "call_id": call.call_id,

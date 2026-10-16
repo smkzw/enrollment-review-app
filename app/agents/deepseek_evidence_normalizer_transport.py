@@ -49,6 +49,7 @@ from .evidence_normalizer import (
     SUPPORTED_GLM_NORMALIZER_REASONING_EFFORTS,
     ZHIPU_EVIDENCE_NORMALIZER_BACKENDS,
     evidence_normalizer_json_schema,
+    medication_source_guidance,
 )
 
 
@@ -226,6 +227,7 @@ class DeepSeekEvidenceNormalizerTransport:
         stream_response: bool = False,
         include_source_categories: bool = False,
         include_medication_field_sources: bool = False,
+        medication_source_material: str | None = None,
         client: Any | None = None,
         receipt_callback: Callable[[dict[str, Any]], None] | None = None,
         request_callback: Callable[[dict[str, Any]], str] | None = None,
@@ -238,6 +240,8 @@ class DeepSeekEvidenceNormalizerTransport:
         if not isinstance(include_medication_field_sources, bool):
             raise ValueError("用药逐字段来源配置必须是布尔值")
         self.include_medication_field_sources = include_medication_field_sources
+        medication_source_guidance(include_medication_field_sources, medication_source_material)
+        self.medication_source_material = medication_source_material
         selected_backend = (backend or EVIDENCE_NORMALIZER_PROVIDER).strip().lower()
         if selected_backend not in {
             "deepseek",
@@ -675,6 +679,7 @@ def evidence_normalizer_transport_from_model_config(
             backend=provider,
             include_source_categories=include_source_categories,
             include_medication_field_sources=include_medication_field_sources,
+            medication_source_material=parameters.get("medication_source_guidance"),
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -699,6 +704,7 @@ def evidence_normalizer_transport_from_model_config(
             backend=provider,
             include_source_categories=include_source_categories,
             include_medication_field_sources=include_medication_field_sources,
+            medication_source_material=parameters.get("medication_source_guidance"),
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -717,6 +723,7 @@ def evidence_normalizer_transport_from_model_config(
             backend=provider,
             include_source_categories=include_source_categories,
             include_medication_field_sources=include_medication_field_sources,
+            medication_source_material=parameters.get("medication_source_guidance"),
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -748,6 +755,7 @@ def evidence_normalizer_transport_from_model_config(
             backend=provider,
             include_source_categories=include_source_categories,
             include_medication_field_sources=include_medication_field_sources,
+            medication_source_material=parameters.get("medication_source_guidance"),
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -768,6 +776,7 @@ def evidence_normalizer_transport_from_model_config(
             backend=provider,
             include_source_categories=include_source_categories,
             include_medication_field_sources=include_medication_field_sources,
+            medication_source_material=parameters.get("medication_source_guidance"),
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
