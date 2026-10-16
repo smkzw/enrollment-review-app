@@ -18,6 +18,14 @@ export function ProfileNormalizationStatus({
   onOpenProfile,
 }: ProfileNormalizationStatusProps) {
   if (state.status === "idle") return null;
+  if (state.status === "starting") return (
+    <div className="profile-normalization profile-normalization--progress" role="status" aria-label="准备资料整理">
+      <span className="feedback__spinner" aria-hidden="true" />
+      <div className="profile-normalization__body">
+        <p className="profile-normalization__title">正在核对资料并准备整理任务…</p>
+      </div>
+    </div>
+  );
 
   if (state.status === "page_review") {
     return (

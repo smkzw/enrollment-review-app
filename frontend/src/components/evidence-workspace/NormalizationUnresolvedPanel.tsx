@@ -62,8 +62,8 @@ function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onCon
     </li>;
   }
 
-  return <section className="normalization-unresolved" aria-label="尚未整理清楚的资料">
-    <h3>尚未整理清楚的资料{data ? `（${data.total}项）` : ""}</h3>
+  return <section className="normalization-unresolved" aria-label="资料读取提示">
+    <h3>资料读取提示</h3>
     {busy && <p role="status">正在读取…</p>}
     {failed && <p role="alert">暂时无法读取待核对内容。<button className="button" type="button"
       onClick={() => { setData(null); contentSha256.current = undefined; setOffset(0);
@@ -71,15 +71,15 @@ function ScopedNormalizationUnresolvedPanel({ subjectId, episodeId, jobId, onCon
     {data && <>
       {!data.isCurrent && <p>这是历史资料版本，不能代替当前审核结果。</p>}
       {!data.textAccountingApplied && <p>这次记录未逐段检查是否漏项。</p>}
-      <p className="normalization-unresolved__caption">读取疑问不等于患者缺少检查，尚未核清的内容仍保留。</p>
       {data.isCurrent && data.runId && (data.failedPageCount ?? 0) > 0 && onContinue &&
         <button className="button" type="button" disabled={continuing} onClick={async () => {
           setContinuing(true);
           try { await onContinue(data.runId!); } finally { setContinuing(false); }
-        }}><RefreshCw size={16} />{continuing ? "正在提交" : `继续整理未完成的${data.failedPageCount}页`}</button>}
+        }}><RefreshCw size={16} />{continuing ? "正在提交" : `重新核对${data.failedPageCount}页待核内容`}</button>}
       {data.total === 0 && <p>暂无待核对记录。入排结论仍以审核结果为准。</p>}
       {data.total > 0 && <details className="normalization-unresolved__other">
-        <summary>查看原件读取提示</summary>
+        <summary>查看原件读取提示<span aria-label="读取提示数量">（{data.total}项）</span></summary>
+        <p className="normalization-unresolved__caption">读取疑问不等于患者缺少检查，尚未核清的内容仍保留。</p>
         {data.isCurrent && data.canRevalidateSaved && data.runId && onRevalidate &&
           <button className="button" type="button" disabled={continuing} onClick={async () => {
             setContinuing(true);

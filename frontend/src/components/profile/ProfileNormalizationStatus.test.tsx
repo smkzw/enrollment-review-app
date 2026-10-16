@@ -5,6 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 import { ProfileNormalizationStatus } from "./ProfileNormalizationStatus";
 
 describe("ProfileNormalizationStatus", () => {
+  it("创建任务期间立即给出反馈，不显示虚构进度或重复启动入口", () => {
+    render(<ProfileNormalizationStatus state={{ status: "starting" }} onRetry={vi.fn()} />);
+    expect(screen.getByLabelText("准备资料整理")).toHaveTextContent("正在核对资料并准备整理任务");
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText(/已完成|已保存|已读完/)).not.toBeInTheDocument();
+  });
   it("已完成的过程说明默认收起，仍可展开；不折叠失败和陈旧", async () => {
     render(<ProfileNormalizationStatus state={{ status: "active", jobId: "done", phase: "succeeded",
       title: "本次资料整理结果已保存", recoveryHint: "可查看整理结果。", job: null, canRetry: false }} />);

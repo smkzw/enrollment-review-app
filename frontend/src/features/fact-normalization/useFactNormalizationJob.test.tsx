@@ -110,6 +110,23 @@ function Harness({
 }
 
 describe("个例档案整理任务恢复与文案", () => {
+  it("命令尚未返回时显示准备中且合并重复点击，收到真实任务后才显示进度", async () => {
+    let resolve!: (value: Awaited<ReturnType<FactNormalizationRepository["startFactNormalization"]>>) => void;
+    const start = vi.fn(() => new Promise<Awaited<ReturnType<FactNormalizationRepository["startFactNormalization"]>>>(done => { resolve = done; }));
+    setFactNormalizationRepository(makeRepo({ start }));
+    const user = userEvent.setup();
+    render(<Harness />);
+    await screen.findByText("已恢复状态");
+    await user.click(screen.getByRole("button", { name: "开始整理" }));
+    expect(await screen.findByLabelText("准备资料整理")).toBeVisible();
+    expect(screen.queryByText(/已完成.*项/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "再次开始" }));
+    expect(start).toHaveBeenCalledOnce();
+    await act(async () => resolve({jobId: "job-normalize-1", runId: "run-normalize-1", created: true,
+      state: "queued", stateLabel: "等待处理", recoveryAction: "无需操作"}));
+    expect(await screen.findByLabelText("个例档案整理状态")).toHaveTextContent("个例档案整理排队中");
+    expect(screen.queryByLabelText("准备资料整理")).not.toBeInTheDocument();
+  });
   it("刷新后重试已读核验仍回到原读取，不回退成新模型整理", async () => {
     const failed = status({state: "failed_final", stateLabel: "未完成", recoveryAction: "原记录保留"});
     const start = vi.fn(async () => ({jobId: "verified-new", runId: "verified-run", created: true,

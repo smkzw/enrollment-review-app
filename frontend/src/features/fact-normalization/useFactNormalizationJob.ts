@@ -23,6 +23,7 @@ const POLL_MS = 2_000;
 export type FactNormalizationUiState =
   | PageReviewUiState
   | { status: "idle" }
+  | { status: "starting" }
   | {
       status: "active";
       jobId: string;
@@ -293,6 +294,7 @@ export function useFactNormalizationJob(
     async (idempotencyKey?: string, allowPageRead = true, retryFailedFromRunId?: string, revalidateFromRunId?: string): Promise<string | null> => {
       if (subjectId === null || reviewEpisodeId === null) return null;
       if (startInFlight.current !== null) return startInFlight.current;
+      if (currentScope.current === scopeKey) setState({ status: "starting" });
 
       const key =
         idempotencyKey ??

@@ -72,7 +72,7 @@ describe("NormalizationUnresolvedPanel", () => {
     read.mockResolvedValue({ ...page(1), runId: "old-run", failedPageCount: 6 });
     const onContinue = vi.fn().mockResolvedValue("new-job");
     const view = render(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="j" onContinue={onContinue} />);
-    const continueButton = await screen.findByRole("button", {name: "继续整理未完成的6页"});
+    const continueButton = await screen.findByRole("button", {name: "重新核对6页待核内容"});
     expect(continueButton).toBeVisible();
     expect(screen.getByRole("link")).not.toBeVisible();
     fireEvent.click(continueButton);
@@ -81,12 +81,14 @@ describe("NormalizationUnresolvedPanel", () => {
     read.mockResolvedValue({ ...page(1), jobId: "historical", runId: "old-run", failedPageCount: 6, isCurrent: false });
     view.rerender(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="historical" onContinue={onContinue} />);
     await screen.findByText(/这是历史资料版本/);
-    expect(screen.queryByRole("button", {name: "继续整理未完成的6页"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {name: "重新核对6页待核内容"})).not.toBeInTheDocument();
   });
   it.each([0, 1, 101, 250])("%s项均可访问，不做前100项截断", async (total) => {
     read.mockImplementation(async (_subject, _episode, _job, offset) => page(total, offset));
     render(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="j" />);
-    await screen.findByRole("heading", { name: `尚未整理清楚的资料（${total}项）` });
+    await screen.findByRole("heading", { name: "资料读取提示" });
+    if (total > 0) expect(await screen.findByLabelText("读取提示数量")).toHaveTextContent(`（${total}项）`);
+    else await screen.findByText(/暂无待核对/);
     if (total > 0) await openOtherText();
     for (let offset = 50; offset < total; offset += 50) {
       fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
@@ -150,7 +152,7 @@ describe("NormalizationUnresolvedPanel", () => {
     read.mockImplementation(async (_s, _e, _j, offset) => offset === 0 ? page(101)
       : { ...page(101, offset), contentSha256: "b".repeat(64) });
     render(<NormalizationUnresolvedPanel subjectId="s" episodeId="e" jobId="j" />);
-    await screen.findByRole("heading", { name: "尚未整理清楚的资料（101项）" });
+    await screen.findByRole("heading", { name: "资料读取提示" });
     await openOtherText();
     fireEvent.click(screen.getByRole("button", {name: "加载更多"}));
     await screen.findByRole("alert");
@@ -159,6 +161,8 @@ describe("NormalizationUnresolvedPanel", () => {
     fireEvent.click(screen.getByRole("button", {name: "重新读取"}));
     await waitFor(() => expect(read.mock.calls.at(-1)?.[3]).toBe(0));
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(screen.getByText(/尚未核清的内容仍保留/)).not.toBeVisible();
+    fireEvent.click(screen.getByText("查看原件读取提示"));
     expect(screen.getByText(/尚未核清的内容仍保留/)).toBeVisible();
   });
 });
