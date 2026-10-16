@@ -108,6 +108,59 @@ def test_saved_history_reads_all_parents_children_and_procedures_without_signing
     assert before == (canonical_hash(context.model_dump(mode="json")), [canonical_hash(row.model_dump(mode="json")) for row in rows])
 
 
+@pytest.mark.parametrize("position", ["current", "wrong_document", "wrong_artifact", "wrong_page", "missing", "absent"])
+def test_rejected_fact_navigation_requires_exact_current_page_and_does_not_adopt(frozen_history, monkeypatch, position):
+    from app.services.review_context_assembly import _fact_closure_issues
+    from app.storage.evidence_locator_repositories import EvidenceLocatorRepository
+
+    run, context, rows, locator, _ = frozen_history
+    before = context.model_dump_json(), [row.model_dump_json() for row in rows]
+    values = {"wrong_document": {"source_document_version_id": "other-doc"},
+        "wrong_artifact": {"page_artifact_id": "other-page"}, "wrong_page": {"page_number": 2}}
+    candidate_locator = locator.model_copy(update=values.get(position, {}))
+    calls = []
+    def get(_, key):
+        calls.append(key)
+        return None if position == "missing" else candidate_locator
+    monkeypatch.setattr(EvidenceLocatorRepository, "get_or_none", get)
+    rejected = SimpleNamespace(locator_ids=[] if position == "absent" else [locator.locator_id])
+    manifest = SimpleNamespace(manifest=[context.source_pages[0]])
+    issue, = _fact_closure_issues(None, manifest, [(rejected, ["EX-01"]), (rejected, ["IN-01", "EX-01"])])
+    assert issue.affected_codes == ["EX-01", "IN-01"]
+    assert calls == ([] if position == "absent" else [locator.locator_id])
+    assert issue.kind == "fact_closure_failed"
+    assert (issue.source_document_version_id, issue.page_artifact_id, issue.page_number) == (
+        ("doc", "page", 1) if position == "current" else (None, None, None))
+    # The saved history consumes the issue, not a replacement fact or conclusion.
+    run_with_issue = run.model_copy(update={"system_issues": [issue]})
+    result = history._work_draft_detail(None, run_with_issue, context, "completed")
+    assert result.work_draft.system_issues == (issue,)
+    assert result.work_draft.component_clauses[0].decision == "exclusion_not_triggered"
+    assert before == (context.model_dump_json(), [row.model_dump_json() for row in rows])
+
+
+def test_rejected_fact_navigation_keeps_unlocated_scope_and_propagates_corruption(frozen_history, monkeypatch):
+    from app.services.review_context_assembly import _fact_closure_issues
+    from app.storage.evidence_locator_repositories import EvidenceLocatorRepository
+    from app.storage.repositories import RepositoryError
+
+    _, context, _, locator, _ = frozen_history
+    missing = SimpleNamespace(locator_ids=["missing"])
+    known = SimpleNamespace(locator_ids=[locator.locator_id])
+    monkeypatch.setattr(EvidenceLocatorRepository, "get_or_none", lambda _, key: locator if key == locator.locator_id else None)
+    manifest = SimpleNamespace(manifest=[context.source_pages[0]])
+    issues = _fact_closure_issues(None, manifest, [(known, ["EX-01"]), (missing, [])])
+    assert len(issues) == 2 and any(issue.page_number is None and not issue.affected_codes for issue in issues)
+    same_page = _fact_closure_issues(None, manifest, [(known, ["EX-01"]), (known, [])])
+    assert len(same_page) == 2 and any(not issue.affected_codes and issue.page_number == 1 for issue in same_page)
+    assert _fact_closure_issues(None, manifest, []) == []
+    def broken(*args):
+        raise RepositoryError("合成定位正文损坏")
+    monkeypatch.setattr(EvidenceLocatorRepository, "get_or_none", broken)
+    with pytest.raises(RepositoryError, match="损坏"):
+        _fact_closure_issues(None, manifest, [(known, [])])
+
+
 @pytest.mark.parametrize("damage", ["missing", "duplicate", "extra", "wrong_run", "wrong_source", "wrong_kind", "wrong_fact", "wrong_position", "wrong_excerpt", "wrong_page_excerpt", "wrong_patient"])
 def test_history_rejects_incomplete_or_wrong_frozen_sources(frozen_history, damage):
     run, context, rows, _, documents = frozen_history

@@ -280,7 +280,7 @@ M1收口v42：工作台API对用药编号与类型共同校验，与投影及前
 
 新增 `app/services/work_draft_review.py`，作为一个持久 Job 类型 `work_draft_review`：
 
-1. 冻结上下文：复用 `prepare_review`（`app/services/review_preparation_command.py:16-57`）的冻结逻辑与 `review_run_id` 预分配。它目前在任一事实引用闭包或定位校验失败时让整次审核失败（`_validate_referential_closure`、`validate_locators`）；工作稿路径中改为**剔除该事实并记 `SystemIssue(fact_closure_failed)`**，只有身份类错误整体停止；
+1. 冻结上下文：复用 `prepare_review`（`app/services/review_preparation_command.py:16-57`）的冻结逻辑与 `review_run_id` 预分配。工作稿路径中**剔除来源闭包不合格的事实并记 `SystemIssue(fact_closure_failed)`**，只有身份类错误整体停止；待核原件页只在文件版本／页工件／页号与当前已核清单完全一致时提供，不带假摘录、不恢复事实资格。按页面汇合已关联条款提示，未关联范围保留独立提示；缺位置不猜，损坏定位不吞掉。v49只更新新工作稿的这类提示，旧稿不回写；
 2. `select_by_variable(clause_pack, facts, anchor_dates) -> {predicate_id: [fact_ids]}`：纯函数，按 `EvidenceRequirement.predicate_ids` × `fact.variable_id` 连接，再按 PRD R-B7 的时间窗与选取规则确定判定值；
 3. 对每个组件调用 `calculate_component_review`（`app/services/component_review.py:27-66`），传入上一步的 `predicate_fact_ids`，`unverified_predicate_ids` 只包含**确无可用事实**的谓词；锚点日期取 `ReviewEpisode.anchor_dates`；
 4. 语义条款与研究者判断条款并入 S6 结果；

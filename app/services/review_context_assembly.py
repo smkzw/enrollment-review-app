@@ -128,6 +128,33 @@ def require_current_review_clinical_material(session: Session, context: ReviewCo
         raise ScopeViolationError("当前病史或书面判断核查已经更新，请重新准备本次审核")
 
 
+def _fact_closure_issues(session, revision, failed_facts):
+    """Locate rejected records for inspection, without granting source qualification."""
+    from app.domain.contracts.work_draft import SystemIssue
+    from app.storage.evidence_locator_repositories import EvidenceLocatorRepository
+
+    pages = {(row.source_document_version_id, row.page_artifact_id, row.page_number)
+             for row in revision.manifest}
+    repository, locators, groups = EvidenceLocatorRepository(session), {}, {}
+    for fact, codes in failed_facts:
+        positions = set()
+        for key in fact.locator_ids:
+            if key not in locators:
+                locators[key] = repository.get_or_none(key)
+            locator = locators[key]
+            position = (locator.source_document_version_id, locator.page_artifact_id, locator.page_number) if locator else None
+            positions.add(position if position in pages else None)
+        for position in positions or {None}:
+            groups.setdefault((position, bool(codes)), set()).update(codes)
+    return [SystemIssue(kind="fact_closure_failed", affected_codes=sorted(codes),
+        detail="部分既有记录未通过本次资料核对，未用于判断。",
+        alternative="可查看对应原件；已核实的其他记录仍可使用。" if position
+            else "这项记录暂不能对应本次原件；已核实的其他记录仍可使用。",
+        source_document_version_id=position[0] if position else None,
+        page_artifact_id=position[1] if position else None, page_number=position[2] if position else None)
+        for (position, _), codes in sorted(groups.items(), key=lambda item: (item[0][0] or ("", "", 0), item[0][1]))]
+
+
 def assemble_review_context(
     session: Session, artifact_store: ArtifactStore, *, review_episode_id: str,
     review_run_id: str, evaluator_version: str, created_at: datetime,
@@ -181,6 +208,7 @@ def assemble_review_context(
             if prior is None or fact.revision > prior.revision:
                 heads[fact.stable_identity] = fact
         facts = []
+        failed_facts = []
         frozen_source_revision = validator.validate_frozen_source(authority)
         compatible_sources = {}
         for fact in heads.values():
@@ -202,11 +230,10 @@ def assemble_review_context(
                 affected = sorted({clause.official_code for clause in pack.clauses
                     if any(req.variable_id == fact.variable_id and fact.variable_id is not None
                            for req in clause.evidence_requirements)})
-                issues.append(SystemIssue(kind="fact_closure_failed", affected_codes=affected,
-                    detail="系统暂不能把这条记录对应到当前原件，未用于本次判断。",
-                    alternative="请查看该记录原件或补充资料。"))
+                failed_facts.append((fact, affected))
                 continue
             facts.append(fact)
+        issues.extend(_fact_closure_issues(session, frozen_source_revision, failed_facts))
         links_by_fact = {}
         from app.services.fact_normalization_source_adapter import build_fact_normalization_plan
         from app.domain.contracts.work_draft import WorkDraftSourcePage

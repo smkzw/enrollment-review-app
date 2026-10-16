@@ -131,6 +131,25 @@ describe("报告", () => {
     expect(mocks.source).not.toHaveBeenCalled();
   });
 
+  it("未通过本次资料核对的旧记录只提供待核原件，不变成结论或已采用证据", async () => {
+    const report = workingReport();
+    report.workDraft!.systemIssues = [{ kind: "fact_closure_failed", affectedCodes: ["EX-01", "IN-01"],
+      detail: "部分既有记录未通过本次资料核对，未用于判断。", alternative: "可查看对应原件；已核实的其他记录仍可使用。",
+      sourceDocumentVersionId: "old-chart", pageArtifactId: "old-chart-page", pageNumber: 7 }];
+    const original = JSON.stringify(report);
+    const user = userEvent.setup();
+    render(<FrozenReviewReport report={report} onActionChanged={vi.fn()} />);
+    await user.click(screen.getByText("系统尚未完成的核对（1）"));
+    expect(screen.getByText("EX-01、IN-01")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "查看待核原件" }));
+    expect(mocks.source).toHaveBeenLastCalledWith(expect.objectContaining({ locators: [],
+      pageRefs: [{ sourceDocumentVersionId: "old-chart", pageArtifactId: "old-chart-page", pageNumber: 7,
+        excerpt: null, disposition: "unresolved" }] }));
+    expect(report.workDraft!.clauses).toEqual([]);
+    expect(report.evidenceLocators).toEqual([]);
+    expect(JSON.stringify(report)).toBe(original);
+  });
+
   it("项目选择用代号、期别及版本，全名保留且项目绑定不变", async () => {
     const projects = await getCatalogRepository().listProjects(new AbortController().signal);
     render(<ReportsPage />);

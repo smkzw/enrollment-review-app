@@ -28,6 +28,12 @@ def test_source_reason_display_translates_scope_fields_not_clinical_excerpt_valu
     assert "ALT 57.8 U/L" in shown
 
 
+def test_display_explains_purpose_without_changing_saved_clinical_source():
+    from app.services.work_draft_projection import display_source_reason
+    text = "按本项purpose核对；purpose_extra保留，ALT 57.8 U/L。"
+    assert display_source_reason(text) == "按本项核对目的核对；purpose_extra保留，ALT 57.8 U/L。"
+
+
 def test_qualified_inapplicability_does_not_display_missing_applicable_patient_evidence():
     from app.services.work_draft_projection import display_source_reason
     prefix = "已找到相关原文，但尚不足以证明本条件，不能当作未见记录。"
