@@ -131,8 +131,14 @@ export function useFactNormalizationJob(
 
   const [state, setState] = useState<FactNormalizationUiState>({ status: "idle" });
   const scopeKey = JSON.stringify([subjectId, reviewEpisodeId, sourceRevisionId]);
+  const identityKey = JSON.stringify([subjectId, reviewEpisodeId]);
   const currentScope = useRef(scopeKey);
   currentScope.current = scopeKey;
+  const currentIdentity = useRef(identityKey);
+  currentIdentity.current = identityKey;
+  const mounted = useRef(true);
+  const resumeCurrentScope = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [restoredScope, setRestoredScope] = useState<string | null>(null);
   const restoring = subjectId !== null && reviewEpisodeId !== null && restoredScope !== scopeKey;
   const jobIdRef = useRef<string | null>(null);
@@ -203,6 +209,7 @@ export function useFactNormalizationJob(
       if (currentScope.current === scopeKey) setRestoredScope(scopeKey);
     }
   }, [applyJob, reviewEpisodeId, subjectId, scopeKey]);
+  resumeCurrentScope.current = resumeFromStorage;
 
   // Scope discovery is read-only. Late responses cannot replace a new scope/start.
   useEffect(() => {
@@ -330,13 +337,16 @@ export function useFactNormalizationJob(
           return null;
         } finally {
           if (currentScope.current === scopeKey) startInFlight.current = null;
+          // Activation can refresh the source before its POST returns. Discover
+          // the current scope again; never adopt the old command by its ID.
+          else if (mounted.current && currentIdentity.current === identityKey) await resumeCurrentScope.current();
         }
       })();
 
       startInFlight.current = pending;
       return pending;
     },
-    [applyJob, reviewEpisodeId, subjectId, pageReview.start, scopeKey],
+    [applyJob, reviewEpisodeId, subjectId, pageReview.start, scopeKey, identityKey],
   );
   afterPages.current = () => { void start(undefined, false); };
 

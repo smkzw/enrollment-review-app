@@ -75,14 +75,18 @@ function Harness({
   profileStale = false,
   onSucceeded,
   sourceRevisionId = null,
+  subjectId = "subject-1",
+  reviewEpisodeId = "episode-1",
 }: {
   profileStale?: boolean;
   onSucceeded?: (jobId: string) => void;
   sourceRevisionId?: string | null;
+  subjectId?: string;
+  reviewEpisodeId?: string;
 }) {
   const job = useFactNormalizationJob({
-    subjectId: "subject-1",
-    reviewEpisodeId: "episode-1",
+    subjectId,
+    reviewEpisodeId,
     profileStale,
     sourceRevisionId,
     onSucceeded,
@@ -357,6 +361,55 @@ describe("个例档案整理任务恢复与文案", () => {
     expect(start).not.toHaveBeenCalled();
     expect(localStorage.getItem(factNormalizationJobStorageKey("episode-1"))).toBeNull();
     expect(screen.queryByLabelText("个例档案整理状态")).not.toBeInTheDocument();
+  });
+
+  it.each(["command", "status"])("启用刷新先于%s回包时，只读恢复新范围的实际任务，不再提交", async (latePhase) => {
+    let resolveCommand!: (value: Awaited<ReturnType<FactNormalizationRepository["startFactNormalization"]>>) => void;
+    let resolveStatus!: (value: FactNormalizationJobStatusView) => void;
+    const started: Awaited<ReturnType<FactNormalizationRepository["startFactNormalization"]>> = {jobId: "old-command-job", runId: "run", created: true, state: "queued",
+      stateLabel: "等待处理", recoveryAction: "无需操作"};
+    const start = vi.fn(() => latePhase === "command" ? new Promise<typeof started>(done => {resolveCommand = done;}) : Promise.resolve(started));
+    const getStatus = vi.fn((id: string) => id === "old-command-job"
+      ? new Promise<FactNormalizationJobStatusView>(done => {resolveStatus = done;})
+      : Promise.resolve(status({jobId: id, state: "running", stateLabel: "正在处理", recoveryAction: "关闭页面不会中断。"})));
+    const current = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(null)
+      .mockResolvedValue(status({jobId: "current-scope-job", state: "running", stateLabel: "正在处理", recoveryAction: "关闭页面不会中断。"}));
+    const onSucceeded = vi.fn();
+    setFactNormalizationRepository(makeRepo({start, getStatus, current}));
+    const view = render(<Harness sourceRevisionId={null} onSucceeded={onSucceeded} />);
+    await screen.findByText("已恢复状态");
+    await userEvent.click(screen.getByRole("button", {name: "开始整理"}));
+    await waitFor(() => expect(start).toHaveBeenCalledOnce());
+    if (latePhase === "status") await waitFor(() => expect(getStatus).toHaveBeenCalledWith("old-command-job"));
+    view.rerender(<Harness sourceRevisionId="activated-complete" onSucceeded={onSucceeded} />);
+    await waitFor(() => expect(current).toHaveBeenCalledTimes(2));
+    await screen.findByText("已恢复状态");
+    await act(async () => {
+      if (latePhase === "command") resolveCommand(started);
+      else resolveStatus(status({jobId: "old-command-job", state: "completed", stateLabel: "已完成", recoveryAction: ""}));
+    });
+    await waitFor(() => expect(localStorage.getItem(factNormalizationJobStorageKey("episode-1"))).toBe("current-scope-job"));
+    expect(screen.getByLabelText("个例档案整理状态")).toHaveTextContent("正在整理个例档案");
+    expect(start).toHaveBeenCalledOnce();
+    expect(onSucceeded).not.toHaveBeenCalled();
+  });
+
+  it("旧启动回包不能为另一受试者或节点恢复任务", async () => {
+    let resolveCommand!: (value: Awaited<ReturnType<FactNormalizationRepository["startFactNormalization"]>>) => void;
+    const start = vi.fn(() => new Promise<Awaited<ReturnType<FactNormalizationRepository["startFactNormalization"]>>>(done => {resolveCommand = done;}));
+    const current = vi.fn(async () => null), getStatus = vi.fn();
+    setFactNormalizationRepository(makeRepo({start, current, getStatus}));
+    const view = render(<Harness sourceRevisionId="old" />);
+    await screen.findByText("已恢复状态");
+    await userEvent.click(screen.getByRole("button", {name: "开始整理"}));
+    view.rerender(<Harness subjectId="subject-2" reviewEpisodeId="episode-2" sourceRevisionId="new" />);
+    await waitFor(() => expect(current).toHaveBeenCalledTimes(2));
+    await act(async () => resolveCommand({jobId: "old-job", runId: "old-run", created: true,
+      state: "queued", stateLabel: "等待处理", recoveryAction: "无需操作"}));
+    expect(current).toHaveBeenCalledTimes(2);
+    expect(getStatus).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("个例档案整理状态")).not.toBeInTheDocument();
+    expect(localStorage.getItem(factNormalizationJobStorageKey("episode-2"))).toBeNull();
   });
 
   it("恢复期间明确启动的新任务不被迟到的旧任务替换", async () => {
