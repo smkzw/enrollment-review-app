@@ -254,7 +254,7 @@ def _validate_registered_agent_config(
     if prompt.schema_version_id != _FACT_NORMALIZATION_CONTRACT_VERSION:
         raise InvalidJobDefinitionError("所选提示词与当前输出结构版本不一致")
     if prompt.template_sha256 != evidence_normalizer_prompt_template_sha256(
-        prompt_template
+        prompt_template, include_medication_field_sources=model_config.parameters.get("include_medication_field_sources", False) is True,
     ):
         raise InvalidJobDefinitionError("所选提示词内容与当前证据规范化模板不一致")
     try:

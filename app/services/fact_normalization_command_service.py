@@ -134,22 +134,24 @@ def _model_marked_for_normalizer(model_config: ModelConfigContract) -> bool:
 
 
 def _is_usable_prompt(
-    prompt: PromptVersion, *, prompt_template: str
+    prompt: PromptVersion, *, prompt_template: str, include_medication_field_sources: bool = False
 ) -> bool:
     if prompt.node is not AgentNode.EVIDENCE_NORMALIZER:
         return False
     if prompt.schema_version_id != _FACT_NORMALIZATION_CONTRACT_VERSION:
         return False
-    expected = evidence_normalizer_prompt_template_sha256(prompt_template)
+    expected = evidence_normalizer_prompt_template_sha256(prompt_template,
+        include_medication_field_sources=include_medication_field_sources)
     return prompt.template_sha256 == expected
 
 
-def _runtime_prompt(prompt_template: str) -> PromptVersion:
+def _runtime_prompt(prompt_template: str, *, include_medication_field_sources: bool = False) -> PromptVersion:
     if not prompt_template.strip():
         raise AppFactNormalizationConfigError(
             "个例档案整理所需的语义模板为空，系统已停止启动。"
         )
-    template_hash = evidence_normalizer_prompt_template_sha256(prompt_template)
+    template_hash = evidence_normalizer_prompt_template_sha256(prompt_template,
+        include_medication_field_sources=include_medication_field_sources)
     prompt = PromptVersion(
         # PromptVersion enforces a non-empty id; this provisional value is
         # excluded from the content identity and replaced before persistence.
@@ -381,7 +383,8 @@ def _load_exact_registered_config(
         or model_config.model_config_id != registered_config.model_config_id
         or _prompt_identity(prompt) != prompt.prompt_version_id.split("/", 2)[-1]
         or _model_identity(model_config) != model_config.model_config_id.rsplit("/", 1)[-1]
-        or not _is_usable_prompt(prompt, prompt_template=prompt_template)
+        or not _is_usable_prompt(prompt, prompt_template=prompt_template,
+            include_medication_field_sources=model_config.parameters.get("include_medication_field_sources", False))
         or not _is_usable_model_config(
             model_config,
             require_normalizer_role=True,
@@ -462,6 +465,8 @@ def select_registered_evidence_normalizer_config(
             "本机登记了多份可用的证据规范化模型配置，系统无法自动选择。请保留唯一有效配置后重试。"
         )
 
+    if marked[0].parameters.get("include_medication_field_sources", False):
+        raise AppFactNormalizationConfigError("实验性逐字段读取须显式指定配对配置，不能自动选择为默认整理方式。")
     return RegisteredNormalizerConfig(
         prompt_version_id=usable_prompts[0].prompt_version_id,
         model_config_id=marked[0].model_config_id,

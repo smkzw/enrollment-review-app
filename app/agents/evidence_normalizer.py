@@ -54,6 +54,7 @@ from app.domain.contracts.facts import (
     MedicationExposureCandidateV2,
     PartialDateRange,
 )
+from app.domain.contracts.medication_source import MedicationFieldSource, MedicationFieldSourceDraft
 from app.domain.contracts.selective_vision_observation import (
     SelectiveVisionObservationAttachment,
 )
@@ -161,6 +162,8 @@ def validate_evidence_normalizer_model_config(
         raise ValueError("模型最大输出长度必须大于零")
     if not isinstance(model_config.parameters.get("include_source_categories", False), bool):
         raise ValueError("资料类别提示配置必须是布尔值")
+    if not isinstance(model_config.parameters.get("include_medication_field_sources", False), bool):
+        raise ValueError("用药逐字段来源配置必须是布尔值")
     if "temperature" in model_config.parameters:
         raw_temperature = model_config.parameters["temperature"]
         if isinstance(raw_temperature, bool) or not isinstance(
@@ -249,6 +252,7 @@ class EvidenceExposureDraft(ContractModel):
     unit: str | None = None
     frequency: str | None = None
     route: str | None = None
+    field_sources: list[MedicationFieldSourceDraft] = Field(default_factory=list)
     start_range: PartialDateRange | None = None
     end_range: PartialDateRange | None = None
     duration_status: DurationStatus
@@ -329,6 +333,12 @@ class EvidenceNormalizerDraftOutput(ContractModel):
                     f"{item.candidate_ref} 的定位未被关联事实覆盖："
                     f"{sorted(unrelated_locators)}"
                 )
+        for exposure in self.exposure_candidates:
+            if any(source.locator_id not in exposure.locator_ids for source in exposure.field_sources):
+                raise ValueError("用药逐字段来源须属于本条候选的定位集合")
+        if self.schema_version != "phase5/normalizer-draft/v5" and any(
+                item.field_sources for item in self.exposure_candidates):
+            raise ValueError("用药逐字段来源须与当前明确发生状态的草稿共同核对")
         event_occurrences: dict[tuple, list[EvidenceEventDraft]] = {}
         for item in self.event_candidates:
             start_text = item.start_range.source_text if item.start_range else None
@@ -447,6 +457,15 @@ DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE = (
 
 _PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v42"
 _MAX_PROMPT_CHARS = 100_000
+_MEDICATION_FIELD_SOURCE_INSTRUCTIONS = (
+    "实际用药候选须逐字段填写field_sources：每项保留本药对象、原值、对应角色、定位及连续原句；"
+    "药物对象与原值必须在同一段明确对应，不能把同页另一药物的日期或剂量借来。"
+    "开始、结束、单次使用、持续状态及记录日期分别解释；处方日、计划日不能当实际开始，"
+    "无后续记录不能当停药或持续。日期原值照录，年或年月不能补成某日。"
+    "每个已填写字段（药名、持续状态、起止、记录时间及非空剂量、单位、频次、途径）各一项，"
+    "无法为某字段找到忠实依据则保留原候选和具体疑问，不补写或删字段求通过。"
+    "field_sources是有源解释提案，不是已核实、批准或最终入排结论。\n"
+)
 
 
 class EvidenceNormalizerPromptTooLong(ValueError):
@@ -702,11 +721,11 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def evidence_normalizer_prompt_template_sha256(prompt_template: str) -> str:
+def evidence_normalizer_prompt_template_sha256(prompt_template: str, *, include_medication_field_sources: bool = False) -> str:
     """对模板、合同、生成 schema、修复规则与布局的完整可审计哈希。"""
     from app.agents.evidence_question_repair import QUESTION_REPAIR_INSTRUCTIONS, RECOVERABLE_GAP_TYPES
 
-    return _sha256(
+    base = _sha256(
         "\n\n".join(
             (
                 _PROMPT_LAYOUT_VERSION,
@@ -723,6 +742,10 @@ def evidence_normalizer_prompt_template_sha256(prompt_template: str) -> str:
             )
         )
     )
+    if include_medication_field_sources:
+        return _sha256(base + _MEDICATION_FIELD_SOURCE_INSTRUCTIONS
+            + _compact_schema(include_medication_field_sources=True))
+    return base
 
 
 def _strip_schema_titles(node) -> None:
@@ -742,7 +765,7 @@ def _strip_schema_titles(node) -> None:
         _strip_schema_titles(value)
 
 
-def evidence_normalizer_json_schema(variable_ids: list[str] | None = None) -> dict:
+def evidence_normalizer_json_schema(variable_ids: list[str] | None = None, *, include_medication_field_sources: bool = False) -> dict:
     """返回适合约束生成的完整 schema，要求模型显式交代每个已定义字段。
 
     Pydantic 对带默认值字段默认不写入 ``required``，这适合普通 API 解码，但会让
@@ -750,6 +773,9 @@ def evidence_normalizer_json_schema(variable_ids: list[str] | None = None) -> di
     可空字段仍保留 ``null``，跨字段医学语义继续由运行时合同和确定性门禁负责。
     """
     schema = deepcopy(EvidenceNormalizerDraftOutput.model_json_schema())
+    if not include_medication_field_sources:
+        schema["$defs"]["EvidenceExposureDraft"]["properties"].pop("field_sources")
+        schema["$defs"].pop("MedicationFieldSourceDraft")
     if variable_ids is not None:
         schema["$defs"]["EvidenceFactDraft"]["properties"]["variable_id"] = {
             "anyOf": [{"type": "string", "enum": sorted(set(variable_ids))}, {"type": "null"}]
@@ -827,9 +853,9 @@ def evidence_normalizer_json_schema(variable_ids: list[str] | None = None) -> di
     return schema
 
 
-def _compact_schema(variable_ids: list[str] | None = None) -> str:
+def _compact_schema(variable_ids: list[str] | None = None, *, include_medication_field_sources: bool = False) -> str:
     return json.dumps(
-        evidence_normalizer_json_schema(variable_ids),
+        evidence_normalizer_json_schema(variable_ids, include_medication_field_sources=include_medication_field_sources),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -1032,6 +1058,7 @@ def build_evidence_normalizer_prompt(
     reference_aliases: NormalizerReferenceAliases | None = None,
     verified_scope_prompt: bool = False,
     include_source_categories: bool = False,
+    include_medication_field_sources: bool = False,
 ) -> str:
     """从冻结输入构建唯一可审计的 prompt，不含隐藏自由文本。
 
@@ -1059,6 +1086,8 @@ def build_evidence_normalizer_prompt(
         from app.agents.verified_evidence_prompt import VERIFIED_EVIDENCE_SYSTEM_CONTRACT
         system_contract = VERIFIED_EVIDENCE_SYSTEM_CONTRACT
     head = f"{prompt_template.strip()}\n\n{system_contract}\n\n"
+    if include_medication_field_sources:
+        head += _MEDICATION_FIELD_SOURCE_INSTRUCTIONS
     if evidence_input.variable_definitions:
         head += ("related_requirements 的 context_ref 是 requirement_contexts 中从0开始的索引；共同说明只保存一次，所有要求编号和数据项目仍分别保留。"
                  "locators 是按 locator_columns 列顺序保存的定位行，每行仍独立保留真实编号、页和逐字原文，不得合并不同位置。\n")
@@ -1066,7 +1095,7 @@ def build_evidence_normalizer_prompt(
         from app.agents.verified_evidence_prompt import SHORT_REFERENCE_INSTRUCTION
         head += SHORT_REFERENCE_INSTRUCTION
     if include_output_schema:
-        head += f"输出结构：{_compact_schema([item.variable_id for item in evidence_input.variable_definitions] if evidence_input.variable_definitions else None)}\n\n"
+        head += f"输出结构：{_compact_schema([item.variable_id for item in evidence_input.variable_definitions] if evidence_input.variable_definitions else None, include_medication_field_sources=include_medication_field_sources)}\n\n"
     sections = [
         head + f"本次输入：{json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}\n\n"
     ]
@@ -1658,6 +1687,9 @@ def _hydrate_draft_output(
         )
         for candidate in draft.event_candidates
     ]
+    for candidate in draft.exposure_candidates:
+        if any(item.locator_id not in locator_source_hashes for item in candidate.field_sources):
+            raise ValueError("用药字段依据定位不在系统冻结的定位摘要中")
     exposures = [
         MedicationExposureCandidateV2(
             candidate_id=candidate.candidate_ref,
@@ -1670,6 +1702,8 @@ def _hydrate_draft_output(
             unit=candidate.unit,
             frequency=candidate.frequency,
             route=candidate.route,
+            field_sources=[MedicationFieldSource(**item.model_dump(),
+                source_text_sha256=locator_source_hashes[item.locator_id]) for item in candidate.field_sources],
             start_range=candidate.start_range,
             end_range=candidate.end_range,
             duration_status=candidate.duration_status,
@@ -2410,8 +2444,11 @@ class EvidenceNormalizerRunner:
         allow_candidate_partition: bool = False,
         allow_question_classification_repair: bool = False,
     ) -> EvidenceNormalizerRunResult:
-        if evidence_input.variable_definitions and hasattr(transport, "set_output_schema"):
-            transport.set_output_schema(evidence_normalizer_json_schema([item.variable_id for item in evidence_input.variable_definitions]))
+        field_sources = getattr(transport, "include_medication_field_sources", False) is True
+        if (evidence_input.variable_definitions or field_sources) and hasattr(transport, "set_output_schema"):
+            transport.set_output_schema(evidence_normalizer_json_schema(
+                [item.variable_id for item in evidence_input.variable_definitions] if evidence_input.variable_definitions else None,
+                include_medication_field_sources=field_sources))
         # 传输层若已用 JSON Schema 受限解码强制输出结构（如 omlx json_schema
         # response_format），提示内不再重复内嵌同一份 Schema；其余传输保持
         # Schema 内嵌，输出结构约束不变。
@@ -2431,6 +2468,7 @@ class EvidenceNormalizerRunner:
             reference_aliases=reference_aliases,
             verified_scope_prompt=verified_scope_prompt,
             include_source_categories=getattr(transport, "include_source_categories", False) is True,
+            include_medication_field_sources=field_sources,
         )
         available = set(evidence_input.available_locator_ids)
         locator_source_hashes = {

@@ -38,6 +38,7 @@ from pydantic_core import PydanticCustomError
 
 from .common import ContractModel, ScalarValue
 from .identifier_value import validate_identifier_value
+from .medication_source import MedicationFieldSource
 from .fact_context import FactContextQualifier, semantic_context, validate_context_excerpt
 from .enums import (
     DatePrecision,
@@ -369,6 +370,7 @@ class MedicationExposureCandidateV2(Phase5Model):
     unit: str | None = None
     frequency: str | None = None
     route: str | None = None
+    field_sources: list[MedicationFieldSource] = Field(default_factory=list, exclude_if=lambda value: not value)
     start_range: PartialDateRange | None = None
     end_range: PartialDateRange | None = None
     duration_status: DurationStatus

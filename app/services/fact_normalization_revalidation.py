@@ -21,6 +21,7 @@ _QUALIFICATION_PATHS = (
     "domain/contracts/facts.py", "domain/contracts/enums.py", "domain/contracts/fact_context.py",
     "domain/contracts/fact_gates.py", "domain/contracts/identifier_value.py",
     "domain/contracts/evidence_locator.py", "domain/gates/fact_candidate_gates.py",
+    "domain/contracts/medication_source.py",
     "domain/gates/fact_evidence_closure.py", "domain/gates/fact_batch_orchestration.py",
     "domain/risk_flags.py", "evidence/risk.py", "storage/fact_authority.py",
     "services/fact_publication_service.py", "services/fact_normalization_revalidation.py",
