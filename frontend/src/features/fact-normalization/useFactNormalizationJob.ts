@@ -96,7 +96,7 @@ export interface UseFactNormalizationJobOptions {
   subjectId: string | null;
   reviewEpisodeId: string | null;
   sourceRevisionId?: string | null;
-  /** 档案侧已判定陈旧时展示 stale 相位与恢复动作。 */
+  /** 档案陈旧且没有正在处理的任务时展示重新整理动作。 */
   profileStale?: boolean;
   /** 任务成功终态时回调（用于刷新档案）。 */
   onSucceeded?: (jobId: string) => void;

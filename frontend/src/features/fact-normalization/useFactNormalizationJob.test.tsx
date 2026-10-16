@@ -110,6 +110,20 @@ function Harness({
 }
 
 describe("个例档案整理任务恢复与文案", () => {
+  it.each(["queued", "running", "recovering", "cancel_requested"] as const)(
+    "旧档案陈旧但当前任务%s时恢复真实进度，不提供重复启动动作", async (state) => {
+      const job = status({ state, stateLabel: "正在处理", recoveryAction: "关闭页面不会中断。",
+        progressCompleted: 1, progressTotal: 4 });
+      const start = vi.fn();
+      setFactNormalizationRepository(makeRepo({ current: vi.fn(async () => job),
+        getStatus: vi.fn(async () => job), start }));
+      render(<Harness profileStale />);
+      const progress = await screen.findByLabelText("个例档案整理状态");
+      expect(progress).toHaveTextContent(state === "queued" ? "个例档案整理排队中" : "正在整理个例档案");
+      expect(progress).toHaveTextContent("已完成 1 / 4 项");
+      expect(screen.queryByRole("button", { name: "重新整理个例档案" })).not.toBeInTheDocument();
+      expect(start).not.toHaveBeenCalled();
+    });
   it("命令尚未返回时显示准备中且合并重复点击，收到真实任务后才显示进度", async () => {
     let resolve!: (value: Awaited<ReturnType<FactNormalizationRepository["startFactNormalization"]>>) => void;
     const start = vi.fn(() => new Promise<Awaited<ReturnType<FactNormalizationRepository["startFactNormalization"]>>>(done => { resolve = done; }));

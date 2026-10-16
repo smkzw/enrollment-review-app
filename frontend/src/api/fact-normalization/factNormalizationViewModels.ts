@@ -316,20 +316,19 @@ export function isFailureFactNormalizationState(state: FactNormalizationJobState
 
 /**
  * 将标准任务状态映射为产品要求的五类精简中文相位。
- * `profileStale` 表示档案侧已判定陈旧（资料已更新），优先于任务完成态。
+ * 当前任务的处理／失败优先；旧档案陈旧不能遮住新任务的实际进度。
  */
 export function factNormalizationDisplayPhase(
   state: FactNormalizationJobState | null,
   options: { profileStale?: boolean } = {},
 ): FactNormalizationDisplayPhase | null {
-  if (options.profileStale === true) return "stale";
-  if (state === null) return null;
   if (state === "queued" || state === "waiting_user") return "queued";
   if (state === "running" || state === "recovering" || state === "cancel_requested") {
     return "running";
   }
+  if (state !== null && (isFailureFactNormalizationState(state) || state === "cancelled")) return "failed";
+  if (options.profileStale === true) return "stale";
   if (state === "completed") return "succeeded";
-  if (isFailureFactNormalizationState(state) || state === "cancelled") return "failed";
   return null;
 }
 

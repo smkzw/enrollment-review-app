@@ -63,6 +63,14 @@ describe("个例档案整理解码与中文投影", () => {
     expect(factNormalizationDisplayPhase("completed")).toBe("succeeded");
     expect(factNormalizationDisplayPhase("failed_retryable")).toBe("failed");
     expect(factNormalizationDisplayPhase("completed", { profileStale: true })).toBe("stale");
+    expect(factNormalizationDisplayPhase(null)).toBeNull();
+    expect(factNormalizationDisplayPhase(null, { profileStale: true })).toBe("stale");
+    for (const state of ["queued", "waiting_user"] as const)
+      expect(factNormalizationDisplayPhase(state, { profileStale: true })).toBe("queued");
+    for (const state of ["running", "recovering", "cancel_requested"] as const)
+      expect(factNormalizationDisplayPhase(state, { profileStale: true })).toBe("running");
+    for (const state of ["failed_retryable", "failed_final", "cancelled"] as const)
+      expect(factNormalizationDisplayPhase(state, { profileStale: true })).toBe("failed");
 
     expect(factNormalizationPhaseTitle("queued")).toBe("个例档案整理排队中");
     expect(factNormalizationPhaseTitle("running")).toBe("正在整理个例档案");
