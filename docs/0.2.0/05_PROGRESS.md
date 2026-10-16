@@ -4,7 +4,9 @@
 
 ## 当前状态（2026-10-16）
 
-本次接续：PR32已合并bd980b81，现场Goal active。先核S4原草稿7及原Ego仍为62/99有效审定；共同补救范围仍待医学问题答复，不冒发。当前包owner内联：同一输入布局同时影响提示身份、五供应商传输、入队预检、历史重建及增量来源复用，共享冻结状态不拆写。将已验证的同列要求无损编码接到既有显式ModelConfig参数compact_requirement_rows，默认false；旧请求布局、输出Schema、所有原文与临床政策不变。集中验证实际Job／保存／消费者／原答复验／失败增量，不新增真实读取、模型路线或病例写入；这不等于药物日期已解决。
+本次接续：Goal active，源码6f91150e／PR33已合并。E03只读诊断344.954秒exit0、120工具、无fallback；实际Pi/cursor/default底层未知，不称模型独立。owner核旧日期不能删改后冒充原答；不采纳worker“无字段来源测试”的错误说法，audit／review-gate通过只是工程诊断。沿既有Job仅另核缺口所在病历1页：4b650df0…／run123e3f75…，GLM high65536，14:43已运行；默认／.env不变、旧答保留，不重做其余23页／方案／建议。实际f580请求两新选项均在本Job生效：86167→71838字符，255要求／128共同说明逐字段相等，模型／额度／Schema不变；实际json_object而非厂商严格Schema。output/wp5-medication-guided-{page-trial-record,request-readback}.json；辅助脚本首缺PYTHONPATH、0Job／0调用，补标准环境后只建此一Job。S4草稿7／62/99及此前医学问题待答状态保持。原Ego见EX13病历4页明确否认，但其受限结构尚无合法消费者，不偷改未触发。
+
+本次界面包owner内联，理由是仅展示来源状态，由确定性检查和真实操作可验、不涉及医学含义。实际Ego发现未核原文首次标病历依据、点击后变待核且另铺“没有已采用事实”；统一初始／切换状态、区分纯检索范围，移除已有来源时的冗余提示。相连93前端7.92秒／正式构建exit0；先92通过，再加范围正反例发现夹具未切全部及真实不可达分支，分别修夹具／分支，原失败保留。最终index-uOozj2Tx.js已Ego42实核EX13原图4页、初始／点击状态一致、关闭回焦点。证据wp6-source-state-{complete.log,complete.xml,complete-build.log,browser.json,final-1920.png}；CSS1920×1080／DPR2，非原生缩放。未改后端、病例结论或默认配置，未跑无关全库。
 
 冻结材料子包55d4c936已成套实现并部署，沿既有参数／内容身份、Job、传输和原请求复验，无新库／队列／角色／Schema版本。最终503项84.61秒exit0（output/wp5-frozen-source-guidance-final.log/xml），另25项增量来源31.20秒exit0（wp5-frozen-guidance-incremental.*），均5条SWIG弃用警告；涵盖旧默认及逐字段旧提示、新明确材料、错配／坏参数建Job前拒绝、跨资料版本只读新增页、失败／取消与原答0模型重验。31001原892972c2单页26候选、原请求／回执逐字重建成功，Profile14当前244事实元信息／106定位可读；新源码直接DTO、旧902a155f和新55d4c936实际API的完整DTO hash均015959be…相同，.env和请求文件数未变。wp5-frozen-guidance-{final-readback,deployment}.json记录最终源码／补丁hash与0写0模型；此前legacy-readback属前置版。原Ego实际刷新档案及进入工作稿；416事实54稿8094项／0暴露／0活动Job保持。未启用新提示、未新增病例读取或发布；临床未决和S4等待状态不变。
 

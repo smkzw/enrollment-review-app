@@ -791,6 +791,7 @@ function EligibilityEvidencePanel({
   const browsedSource = browsedPage?.context === sourceContext && browsedPage.sourceKey
     ? sourceRefs.find(ref => JSON.stringify(ref) === browsedPage.sourceKey) ?? null : null;
   const isReferencePage = browsedSource === null && referencePage !== null && selectedPage?.entryId === referencePage.entryId;
+  const displayedSource = browsedSource ?? (isReferencePage && selectedFact === null ? selectedSource : null);
   const locatorPage = useLoad(
     (signal) => selectedPage?.ocrPageId
       ? getEvidenceRepository().getOcrPage(selectedPage.ocrPageId, review.completeProcessingRevisionId, { signal })
@@ -837,16 +838,17 @@ function EligibilityEvidencePanel({
     <aside className="eligibility-evidence" aria-label="原件面板">
       {selectedPage !== null && (
         <div className="eligibility-evidence__state" role="status">
-          <strong>{browsedSource ? browsedSource.disposition === "unresolved" || !hasJudgedSource(clause)
-            ? "待核原文页" : "病历依据页" : isReferencePage ? selectedFact === null ? "病历依据页" : "事实来源页" : "浏览原件"}</strong>
+          <strong>{displayedSource ? displayedSource.disposition === "not_seen" ? "核对范围页"
+            : displayedSource.disposition === "unresolved" || !hasJudgedSource(clause) ? "待核原文页" : "病历依据页"
+            : isReferencePage ? "事实来源页" : "浏览原件"}</strong>
           <span>
             {documentNames.get(selectedPage.sourceDocumentVersionId) ?? "原始资料"}
             {` · 第 ${selectedPage.pageNumber} 页`}
           </span>
         </div>
       )}
-      {clause.factRefs.length === 0 && !hasJudgedSource(clause) && (
-        <p className="eligibility-muted">当前条款没有已采用事实，可浏览全部原件页核实。</p>
+      {clause.factRefs.length === 0 && sourceRefs.length === 0 && (
+        <p className="eligibility-muted">本条暂无原文依据，可浏览原件核实。</p>
       )}
       {browsedSource?.excerpt && <blockquote className="eligibility-evidence__excerpt"><SourceExcerpt text={browsedSource.excerpt} context={clause.textSummary} /></blockquote>}
       {isReferencePage && selectedFact === null && selectedSource?.excerpt

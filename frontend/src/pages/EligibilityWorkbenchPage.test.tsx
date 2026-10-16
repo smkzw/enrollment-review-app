@@ -401,21 +401,25 @@ describe("入排审核工作台", () => {
     expect(fetched).not.toHaveBeenCalled();
   });
 
-  it("未见记录的检索范围默认收起，仍可展开回到每页原件", async () => {
+  it.each(["exclusion_not_triggered", "indeterminate"] as const)("%s的无摘录检索范围可回源，不伪装成病历判断依据", async decision => {
     installSourcePages();
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
-      clauses: [{ ...review.clauses[0]!, sourceReadRefs: [{
+      clauses: [{ ...review.clauses[0]!, decision, sourceReadRefs: [{
         sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
         excerpt: null, disposition: "not_seen",
       }] }],
     }) });
     render(<EligibilityWorkbenchPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "全部条款" }));
     await openOriginal();
     const summary = await screen.findByText("已核对 1 页，未见相关记录 · 查看范围");
     expect(summary.closest("details")).not.toHaveAttribute("open");
     await userEvent.click(summary);
     const reference = screen.getByRole("button", { name: /本页未见相关记录/ });
     await userEvent.click(reference);
+    const panel = screen.getByLabelText("原件面板");
+    expect(within(panel).getByText("核对范围页")).toBeInTheDocument();
+    expect(within(panel).queryByText("病历依据页")).not.toBeInTheDocument();
     expect(within(screen.getByLabelText("原始资料查看区"))
       .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
   });
@@ -558,22 +562,39 @@ describe("入排审核工作台", () => {
     expect(within(screen.getByLabelText("原始资料查看区"))
       .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
   });
-  it("检索发现可打开正确原件但不会显示成已采用事实", async () => {
+  it.each(["mentioned", "unresolved"] as const)("%s原文在首次打开和切换来源时均不显示成已采用依据", async disposition => {
     installSourcePages();
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
       clauses: [{ ...review.clauses[0]!, factRefs: [], sourceReadRefs: [{
         sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
-        excerpt: "既往事件日期不详", disposition: "mentioned",
+        excerpt: "既往事件日期不详", disposition,
       }] }],
     }) });
     render(<EligibilityWorkbenchPage />);
     await openOriginal();
+    const panel = await screen.findByLabelText("原件面板");
+    expect(within(panel).getByText("待核原文页")).toBeInTheDocument();
+    expect(within(panel).queryByText("病历依据页")).not.toBeInTheDocument();
+    expect(within(panel).queryByText("本条暂无原文依据，可浏览原件核实。")).not.toBeInTheDocument();
     await userEvent.click(await screen.findByText("病历依据与核对范围（1）"));
-    const button = await screen.findByRole("button", { name: /已找到相关原文，待核清/ });
+    const button = await screen.findByRole("button", { name: disposition === "mentioned" ? /已找到相关原文，待核清/ : /本页尚未核清/ });
     await userEvent.click(button);
-    expect(await screen.findByText("当前条款没有已采用事实，可浏览全部原件页核实。")).toBeInTheDocument();
+    expect(within(panel).getByText("待核原文页")).toBeInTheDocument();
+    expect(within(panel).queryByText("病历依据页")).not.toBeInTheDocument();
     expect(within(screen.getByLabelText("原始资料查看区"))
       .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+  });
+  it("无任何引用时只显示简短提示，不给浏览页贴已核实标签", async () => {
+    installSourcePages();
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, factRefs: [], sourceReadRefs: [] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await openOriginal();
+    const panel = await screen.findByLabelText("原件面板");
+    expect(within(panel).getByText("本条暂无原文依据，可浏览原件核实。")).toBeInTheDocument();
+    expect(within(panel).getByText("浏览原件")).toBeInTheDocument();
+    expect(within(panel).queryByText("病历依据页")).not.toBeInTheDocument();
   });
   it("低置信只留标记，理由分点但不改数值否定；收起列表后保留当前对象和原件", async () => {
     const reason = "检验结果：1.2 mmol/L，未超过界值；研究者判断：尚无明确记载。";
