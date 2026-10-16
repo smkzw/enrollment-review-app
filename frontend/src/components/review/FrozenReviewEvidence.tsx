@@ -20,11 +20,14 @@ export function FrozenReviewEvidence({ context, locators, pageRefs = [], title, 
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const refs = [
-    ...locators.map(locator => ({ ...locator, key: locator.locatorId, label: locator.precision === "bbox" && locator.authenticity === "authenticated"
+    ...locators.map(locator => ({ ...locator, key: locator.locatorId, stateLabel: null, label: locator.precision === "bbox" && locator.authenticity === "authenticated"
+      && locator.bbox !== null && locator.coordinateFrame !== null
       ? "已标出原文位置" : "仅定位到所在页面，未标注具体区域" })),
     ...[...new Map(pageRefs.map(ref => [JSON.stringify(ref), ref])).values()].map(ref => ({ ...ref,
-      key: JSON.stringify(ref), locatorId: null, label: ref.disposition === "not_seen" ? "本页未见相关记录"
-        : ref.disposition === "unresolved" ? "原文尚待核清，仅定位页面" : "病历核对原文，仅定位页面" })),
+      key: JSON.stringify(ref), locatorId: null,
+      stateLabel: ref.disposition === "not_seen" ? "核对范围" : ref.disposition === "unresolved" ? "待核原文" : "原文摘录",
+      label: ref.disposition === "not_seen" ? "本页未见相关记录，不代表明确否认"
+        : ref.disposition === "unresolved" ? "原文尚待核清，仅定位页面" : "原文摘录，仅定位页面" })),
   ];
   const [selection, setSelection] = useState({ key: refs[0]?.key ?? null, sequence: 0 });
   const [scrolledEntry, setScrolledEntry] = useState<string | null>(null);
@@ -71,12 +74,13 @@ export function FrozenReviewEvidence({ context, locators, pageRefs = [], title, 
       : !bound || !consistent ? <p role="alert">原件与本次审核保存的出处不一致，暂不能定位；系统未改用其他资料。</p>
       : <div className="review-source-dialog__body">
         <nav className="review-source-dialog__refs" aria-label="本条审核的原文摘录">
+          {selected && <p className="review-source-dialog__position-note" role="status">{selected.label}</p>}
           {refs.map(ref => <button key={ref.key} type="button"
             aria-current={selection.key === ref.key ? "true" : undefined}
             onClick={() => { setSelection(previous => ({ key: ref.key, sequence: previous.sequence + 1 })); setScrolledEntry(null); }}>
             <strong>{names.get(ref.sourceDocumentVersionId) ?? "原始资料"} · 第 {ref.pageNumber} 页</strong>
             <span>{ref.excerpt?.trim() || "该出处未保存文字摘录，请核对原件。"}</span>
-            <small>{ref.label}</small>
+            {ref.stateLabel && <small>{ref.stateLabel}</small>}
           </button>)}
         </nav>
         <OriginalEvidenceViewer revisionId={context.completeProcessingRevisionId} pages={pages} documentNames={names}

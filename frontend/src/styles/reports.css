@@ -31,6 +31,7 @@
 .review-source-dialog__refs button[aria-current="true"] { background: var(--color-muted-bg); box-shadow: var(--shadow-control-hover); }
 .review-source-dialog__refs span { white-space: pre-wrap; line-height: 1.7; }
 .review-source-dialog__refs small { color: var(--color-muted); }
+.review-source-dialog__position-note { margin: 0; padding: var(--space-2) var(--space-3); color: var(--color-muted); font-size: var(--font-size-small); }
 .review-source-dialog .original-evidence-viewer { min-height: 0; height: 100%; }
 .review-source-dialog .evidence-pages-scroll { min-height: 0; max-height: none; flex: 1; }
 .review-response-note { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); }
