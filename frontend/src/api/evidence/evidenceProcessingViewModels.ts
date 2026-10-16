@@ -1739,6 +1739,7 @@ const FIELD_LABELS: Record<string, string> = {
   reason: "本次说明",
   expected_revision: "当前修订",
   status: "当前状态",
+  failed_gates: "需要处理",
 };
 
 function displayValue(value: EvidenceJsonValue | undefined): string {
@@ -1748,6 +1749,7 @@ function displayValue(value: EvidenceJsonValue | undefined): string {
   if (typeof value === "number" || typeof value === "boolean")
     return String(value);
   if (Array.isArray(value)) return value.map(displayValue).join("、");
+  if (typeof value.gate === "string" && typeof value.detail === "string") return value.detail;
   const entries = Object.entries(value).filter(
     ([key]) => !key.endsWith("_id") && key !== "idempotency_key",
   );

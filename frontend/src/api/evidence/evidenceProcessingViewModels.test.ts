@@ -381,6 +381,19 @@ describe("证据处理领域解码", () => {
     ]);
   });
 
+  it("资料启用原因只显示中文说明，结构化原因仍保留供恢复操作使用", () => {
+    const context: EvidenceConflictContext = {
+      submitted: {}, currentRecord: {}, fieldDiff: { failed_gates: { submitted: [], current: [
+        { gate: "candidate_revision", detail: "资料版本生成后审核节点已变化，请更新资料版本。" },
+        { gate: "future_internal_code", detail: "本项尚未完成核对。" },
+      ] } },
+    };
+    const before = JSON.stringify(context);
+    expect(conflictDifferenceRows(context)).toEqual([{field: "需要处理", submitted: "",
+      current: "资料版本生成后审核节点已变化，请更新资料版本。、本项尚未完成核对。"}]);
+    expect(JSON.stringify(context)).toBe(before);
+  });
+
   it("解码校对、风险核对和显式生成的异步返回，并保留中文状态", () => {
     const correction = decodeCorrectionResponse({
       ...makeCandidateResult(),
