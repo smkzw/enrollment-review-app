@@ -516,14 +516,6 @@ def _load_frozen_agent_config(
             error_code=PARTIAL_OUTPUT_CODE,
             detail="冻结提示词与当前证据规范化输出结构版本不一致。",
         )
-    if prompt.template_sha256 != evidence_normalizer_prompt_template_sha256(
-        prompt_template, include_medication_field_sources=model_config.parameters.get("include_medication_field_sources", False) is True,
-    ):
-        raise StepFailure(
-            retryable=False,
-            error_code=PARTIAL_OUTPUT_CODE,
-            detail="冻结提示词内容与当前证据规范化模板不一致。",
-        )
     try:
         validate_evidence_normalizer_model_config(model_config)
     except ValueError as exc:
@@ -532,6 +524,15 @@ def _load_frozen_agent_config(
             error_code=PARTIAL_OUTPUT_CODE,
             detail=f"冻结的个例档案整理模型设置无效：{exc}",
         ) from exc
+    if prompt.template_sha256 != evidence_normalizer_prompt_template_sha256(
+        prompt_template, include_medication_field_sources=model_config.parameters.get("include_medication_field_sources", False) is True,
+        medication_source_material=model_config.parameters.get("medication_source_guidance"),
+    ):
+        raise StepFailure(
+            retryable=False,
+            error_code=PARTIAL_OUTPUT_CODE,
+            detail="冻结提示词内容与当前证据规范化模板不一致。",
+        )
     return model_config
 
 
@@ -974,7 +975,8 @@ def _prepare_response_revalidation(payload, evidence_input, model_config, prompt
         include_output_schema=not transport.enforces_output_json_schema,
         pending_details_retained=strategy, reference_aliases=aliases, verified_scope_prompt=strategy,
         include_source_categories=transport.include_source_categories,
-        include_medication_field_sources=transport.include_medication_field_sources)
+        include_medication_field_sources=transport.include_medication_field_sources,
+        medication_source_material=model_config.parameters.get("medication_source_guidance"))
     return transport.initial_request_body(prompt=prompt), aliases
 
 

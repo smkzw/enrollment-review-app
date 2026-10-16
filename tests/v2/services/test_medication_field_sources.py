@@ -9,6 +9,8 @@ import pytest
 
 from app.agents.evidence_normalizer import (
     DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, EvidenceNormalizerDraftOutput,
+    MEDICATION_PARTIAL_SOURCE_GUIDANCE, build_evidence_normalizer_prompt,
+    medication_source_guidance, validate_evidence_normalizer_model_config,
     evidence_normalizer_compact_schema, evidence_normalizer_json_schema,
     evidence_normalizer_prompt_template_sha256,
 )
@@ -46,6 +48,56 @@ def test_default_prompt_and_schema_remain_exactly_replayable():
         _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True).template_sha256)
 
 
+@pytest.mark.parametrize("material", [None, MEDICATION_PARTIAL_SOURCE_GUIDANCE])
+def test_prompt_material_is_content_addressed_and_bound_to_the_actual_request(material):
+    from tests.v2.agents.test_evidence_normalizer_adapter import _input
+
+    evidence = _input()
+    prompt = build_evidence_normalizer_prompt(evidence, prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE,
+        include_medication_field_sources=True, medication_source_material=material)
+    guidance = medication_source_guidance(True, material)
+    assert guidance in prompt
+    legacy = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True)
+    frozen = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True,
+        medication_source_material=material)
+    assert (legacy.prompt_version_id == frozen.prompt_version_id) == (material is None)
+    if material is not None:
+        assert "无需为unknown编造状态原句" in prompt
+        assert "无法证明的可空字段填null" in prompt
+
+
+@pytest.mark.parametrize("enabled,material", [(False, "不得借日期"), (True, ""), (True, " "), (True, 1), (True, {})])
+def test_invalid_or_unscoped_prompt_material_is_not_a_model_configuration(enabled, material):
+    with pytest.raises(ValueError, match="来源提示"):
+        medication_source_guidance(enabled, material)
+
+
+@pytest.mark.parametrize("enabled,material", [(False, "不得借日期"), (True, ""), (True, 1)])
+def test_invalid_frozen_guidance_is_rejected_before_job_creation(session_factory, enabled, material):
+    from sqlalchemy import func, select
+    from app.storage.models import JobRecord
+    from app.workflow.errors import InvalidJobDefinitionError
+
+    with session_factory() as session, session.begin():
+        chain = _seed_chain(session, prefix="bad-frozen-guidance")
+        base = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
+        model = base.model_copy(update={"parameters": {**base.parameters,
+            "include_medication_field_sources": enabled, "medication_source_guidance": material}})
+        model = model.model_copy(update={"model_config_id": "evidence-normalizer/model/" + _model_identity(model)})
+        AppendRepository(session, MODEL_CONFIG_CONFIG).save(model)
+        before = session.scalar(select(func.count()).select_from(JobRecord))
+        pair = RegisteredNormalizerConfig(prompt_version_id=chain["prompt_version_id"], model_config_id=model.model_config_id)
+        with pytest.raises(AppFactNormalizationConfigError, match="不一致"):
+            select_registered_evidence_normalizer_config(session, registered_config=pair)
+    service = FactNormalizationJobService(session_factory)
+    with pytest.raises(InvalidJobDefinitionError, match="来源提示"):
+        service.create_or_reuse_from_source(authority=chain["authority"],
+            prompt_version_id=chain["prompt_version_id"], model_config_id=model.model_config_id,
+            created_by="builder_verification")
+    with session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(JobRecord)) == before
+
+
 def medication_draft(locator_id):
     exposure = exposure_with_sources(locator_id)
     fields = exposure.model_dump(mode="json")
@@ -72,13 +124,16 @@ def test_planned_or_prescribed_record_cannot_gain_exposure_from_field_annotation
         EvidenceNormalizerDraftOutput.model_validate(body)
 
 
-def test_flagged_prompt_is_selected_only_with_its_explicit_matching_model(session_factory):
+@pytest.mark.parametrize("guidance", [None, MEDICATION_PARTIAL_SOURCE_GUIDANCE], ids=["legacy", "frozen-partial"])
+def test_flagged_prompt_is_selected_only_with_its_explicit_matching_model(session_factory, guidance):
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="fields-registration")
         base = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
-        model = base.model_copy(update={"parameters": {**base.parameters, "include_medication_field_sources": True}})
+        model = base.model_copy(update={"parameters": {**base.parameters, "include_medication_field_sources": True,
+            **({"medication_source_guidance": guidance} if guidance is not None else {})}})
         model = model.model_copy(update={"model_config_id": "evidence-normalizer/model/" + _model_identity(model)})
-        prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True)
+        prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True,
+            medication_source_material=guidance)
         AppendRepository(session, MODEL_CONFIG_CONFIG).save(model)
         AppendRepository(session, PROMPT_VERSION_CONFIG).save(prompt)
         pair = RegisteredNormalizerConfig(prompt_version_id=prompt.prompt_version_id, model_config_id=model.model_config_id)
@@ -86,13 +141,20 @@ def test_flagged_prompt_is_selected_only_with_its_explicit_matching_model(sessio
         wrong = RegisteredNormalizerConfig(prompt_version_id=chain["prompt_version_id"], model_config_id=model.model_config_id)
         with pytest.raises(AppFactNormalizationConfigError, match="不一致"):
             select_registered_evidence_normalizer_config(session, registered_config=wrong)
+        if guidance is not None:
+            legacy = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True)
+            AppendRepository(session, PROMPT_VERSION_CONFIG).save(legacy)
+            wrong_material = RegisteredNormalizerConfig(prompt_version_id=legacy.prompt_version_id, model_config_id=model.model_config_id)
+            with pytest.raises(AppFactNormalizationConfigError, match="不一致"):
+                select_registered_evidence_normalizer_config(session, registered_config=wrong_material)
 
 
 @pytest.mark.parametrize("fault", [None, "two_drugs", "blocking_date", "blocking_date_outside", "compound_dose", "unknown_duration",
     "unknown_start", "date_only_excerpt", "unannotated_date", "negation", "aligned_ongoing",
     "wrong_role", "wrong_object", "missing_unit"])
+@pytest.mark.parametrize("guidance", [None, MEDICATION_PARTIAL_SOURCE_GUIDANCE], ids=["legacy", "frozen-partial"])
 def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_consumer(
-    session_factory, data_paths, fault,
+    session_factory, data_paths, fault, guidance,
 ):
     medication_text = TEXT + ("同时口服药物乙10mg一次。" if fault == "two_drugs" else "")
     if fault == "unknown_start":
@@ -108,8 +170,11 @@ def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_cons
                 "unannotated_date", "negation", "aligned_ongoing"} else ())
         base = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
         model = base.model_copy(update={"model_config_id": "medication-fields-model",
-            "parameters": {**base.parameters, "include_medication_field_sources": True}})
-        prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True)
+            "parameters": {**base.parameters, "include_medication_field_sources": True,
+                **({"medication_source_guidance": guidance} if guidance is not None else {})}})
+        validate_evidence_normalizer_model_config(model)
+        prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True,
+            medication_source_material=guidance)
         AppendRepository(session, MODEL_CONFIG_CONFIG).save(model)
         AppendRepository(session, PROMPT_VERSION_CONFIG).save(prompt)
     service = FactNormalizationJobService(session_factory)
@@ -170,6 +235,7 @@ def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_cons
     JobRunner(session_factory, {"fact_normalization": executor}).run_job(created.job_id)
     assert service.get_job(created.job_id)["state"] == "completed", service.get_job(created.job_id)
     assert len(requests) == 1
+    assert medication_source_guidance(True, guidance) in requests[0]["messages"][0]["content"]
     assert "field_sources" in requests[0]["response_format"]["json_schema"]["schema"]["$defs"]["EvidenceExposureDraft"]["required"]
     with session_factory() as session:
         facts = ClinicalFactV2Repository(session).list_by_episode(chain["episode_id"])

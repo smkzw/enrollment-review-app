@@ -16,7 +16,7 @@ from app.storage.codecs import encode_contract
 from app.storage.fact_repositories import FactNormalizationCallRepository, FactNormalizationRunRepository, ClinicalFactV2Repository
 from app.storage.facts_models import FactNormalizationCallRecord, PatientProfileRevisionV2Record
 from app.storage.models import JobRecord
-from app.storage.repositories import AppendRepository, MODEL_CONFIG_CONFIG
+from app.storage.repositories import AppendRepository, MODEL_CONFIG_CONFIG, PROMPT_VERSION_CONFIG
 from app.workflow.errors import InvalidJobDefinitionError
 from app.workflow.jobstore import JobStore
 from app.workflow.runner import JobRunner, StepContext
@@ -56,10 +56,23 @@ def test_qualification_identity_does_not_hide_missing_dependency(tmp_path, monke
         module.qualification_identity()
 
 
-def successful_reading(session_factory, data_paths, *, partition=False, whitespace=False):
+def successful_reading(session_factory, data_paths, *, partition=False, whitespace=False,
+                       field_sources=False, source_guidance=None):
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="saved-success", source_qualification_mode="scoped_text_v1")
         model = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
+        if field_sources:
+            from app.agents.evidence_normalizer import DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE
+            from app.services.fact_normalization_command_service import _runtime_prompt, _model_identity
+
+            model = model.model_copy(update={"parameters": {**model.parameters, "include_medication_field_sources": True,
+                **({"medication_source_guidance": source_guidance} if source_guidance is not None else {})}})
+            model = model.model_copy(update={"model_config_id": "evidence-normalizer/model/" + _model_identity(model)})
+            prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE,
+                include_medication_field_sources=True, medication_source_material=source_guidance)
+            AppendRepository(session, MODEL_CONFIG_CONFIG).save(model)
+            AppendRepository(session, PROMPT_VERSION_CONFIG).save(prompt)
+            chain.update(model_config_id=model.model_config_id, prompt_version_id=prompt.prompt_version_id)
         plan, _ = build_fact_normalization_plan(session, authority=chain["authority"], revision_id=chain["complete_revision_id"])
     service = FactNormalizationJobService(session_factory)
     created = service.create_or_reuse_job(authority=chain["authority"],
@@ -106,6 +119,53 @@ def successful_reading(session_factory, data_paths, *, partition=False, whitespa
     assert service.get_job(created.job_id)["state"] == "completed", service.get_job(created.job_id)
     assert len(requests) == 1
     return chain, service, created, artifacts
+
+
+@pytest.mark.parametrize("frozen", [False, True], ids=["legacy-material", "explicit-material"])
+def test_saved_medication_prompt_replays_without_using_a_new_current_guidance(
+    session_factory, data_paths, monkeypatch, frozen,
+):
+    from app.agents import evidence_normalizer as prompts
+    from app.services.fact_normalization_revalidation import saved_readings
+    from app.services.fact_normalization_executor import _prepare_response_revalidation, _build_input
+    from app.services.fact_normalization_command_service import select_registered_evidence_normalizer_config, RegisteredNormalizerConfig
+
+    material = prompts.MEDICATION_PARTIAL_SOURCE_GUIDANCE if frozen else None
+    chain, service, original, artifacts = successful_reading(session_factory, data_paths,
+        field_sources=True, source_guidance=material)
+    monkeypatch.setattr(prompts, "MEDICATION_PARTIAL_SOURCE_GUIDANCE", "今后新请求的另一份提示，不得替换旧请求")
+    with session_factory() as session:
+        payload, rows = saved_readings(session, run_id=original.run_id, authority=chain["authority"],
+            artifacts=artifacts, prompt_template=prompts.DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE)
+        assert len(rows) == 1
+        spec, proof, _ = rows[0]
+        request = json.loads(artifacts.read_by_sha("raw_request", proof["request_artifact_sha256"]))
+        body = request["request_body"]
+        assert prompts.medication_source_guidance(True, material) in body["messages"][0]["content"]
+        model = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
+        assert select_registered_evidence_normalizer_config(session,
+            registered_config=RegisteredNormalizerConfig(prompt_version_id=chain["prompt_version_id"],
+                model_config_id=chain["model_config_id"]))
+        run = FactNormalizationRunRepository(session).get(original.run_id)
+        evidence = _build_input(session, chain["authority"], original.run_id, spec,
+            max_pages_per_call=payload["max_pages_per_call"], created_at=run.created_at)
+        expected, _ = _prepare_response_revalidation(payload, evidence, model,
+            prompts.DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, [])
+        assert expected == body
+        before = {fact.fact_id: fact.model_dump_json() for fact in
+            ClinicalFactV2Repository(session).list_by_episode(chain["episode_id"])}
+    newer = service.create_revalidation_from_run(authority=chain["authority"], source_run_id=original.run_id,
+        artifact_store=artifacts, created_by="builder_verification")
+    def forbid(*args, **kwargs):
+        raise AssertionError("旧材料重新核验不得重新调用模型")
+    executor = create_fact_normalization_executor(FactNormalizationExecutorConfig(session_factory=session_factory,
+        artifact_store=artifacts, transport_fn=forbid, transport_factory=forbid))
+    JobRunner(session_factory, {"fact_normalization": executor}).run_job(newer.job_id)
+    assert service.get_job(newer.job_id)["state"] == "completed", service.get_job(newer.job_id)
+    with session_factory() as session:
+        facts = {fact.fact_id: fact.model_dump_json() for fact in ClinicalFactV2Repository(session).list_by_episode(chain["episode_id"])}
+        assert all(facts[key] == value for key, value in before.items())
+        assert service.get_job(original.job_id)["state"] == "completed"
 
 
 @pytest.mark.parametrize("partition", [False, True])

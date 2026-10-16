@@ -235,6 +235,8 @@ def _receipt_transport_factory(requests, *, fail_after=None, distinct_document_a
                 choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content=answer))])
         return DeepSeekEvidenceNormalizerTransport(backend="omlx", model=model.model,
             include_source_categories=model.parameters.get("include_source_categories", False),
+            include_medication_field_sources=model.parameters.get("include_medication_field_sources", False),
+            medication_source_material=model.parameters.get("medication_source_guidance"),
             client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=complete))),
             receipt_callback=receipt_callback, request_callback=request_callback)
     return factory
@@ -299,7 +301,8 @@ def test_unknown_type_runs_targeted_product_job_without_upgrading_source(session
 
 
 @pytest.mark.parametrize("case", ["normal", "other_model", "new_source_layout", "receipt_damage", "new_page_failed", "cancelled", "all_retained"])
-def test_incremental_product_job_reads_only_added_page_and_preserves_saved_sources(session_factory, data_paths, monkeypatch, case):
+@pytest.mark.parametrize("frozen_guidance", [False, True], ids=["default-prompt", "frozen-medication-prompt"])
+def test_incremental_product_job_reads_only_added_page_and_preserves_saved_sources(session_factory, data_paths, monkeypatch, case, frozen_guidance):
     from app.evidence.artifacts import ArtifactStore
     from app.services import fact_normalization_executor as executor_module
     from app.services.fact_normalization_job_service import FactNormalizationJobService
@@ -328,6 +331,20 @@ def test_incremental_product_job_reads_only_added_page_and_preserves_saved_sourc
         executor_module.FactNormalizationExecutorConfig(session_factory=session_factory, artifact_store=artifacts))},
         backoff=lambda _: timedelta(0))
     def read_old(chain):
+        if frozen_guidance:
+            from app.agents.evidence_normalizer import DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, MEDICATION_PARTIAL_SOURCE_GUIDANCE
+            from app.services.fact_normalization_command_service import _runtime_prompt, _model_identity
+            from app.storage.repositories import AppendRepository, MODEL_CONFIG_CONFIG, PROMPT_VERSION_CONFIG
+
+            config = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
+            config = config.model_copy(update={"parameters": {**config.parameters,
+                "include_medication_field_sources": True, "medication_source_guidance": MEDICATION_PARTIAL_SOURCE_GUIDANCE}})
+            config = config.model_copy(update={"model_config_id": "evidence-normalizer/model/" + _model_identity(config)})
+            prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE,
+                include_medication_field_sources=True, medication_source_material=MEDICATION_PARTIAL_SOURCE_GUIDANCE)
+            AppendRepository(session, MODEL_CONFIG_CONFIG).save(config)
+            AppendRepository(session, PROMPT_VERSION_CONFIG).save(prompt)
+            chain.update(model_config_id=config.model_config_id, prompt_version_id=prompt.prompt_version_id)
         session.commit()
         job = service.create_or_reuse_from_source(authority=chain["authority"], prompt_version_id=chain["prompt_version_id"],
             model_config_id=chain["model_config_id"], created_by="synthetic-builder")
