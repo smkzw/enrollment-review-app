@@ -453,6 +453,8 @@
   /* 打印保持黑白层次：屏上橙色识别线转黑，深橙文字转黑 */
   .reports-print__section h3 {
     border-left-color: #000;
+    break-after: avoid;
+    page-break-after: avoid;
   }
 
   .reports-print__conditions summary {
@@ -475,6 +477,11 @@
   .reports-print__table tr {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  .reports-print__draft-table tbody tr {
+    break-inside: auto;
+    page-break-inside: auto;
   }
 
   .reports-print__table th,

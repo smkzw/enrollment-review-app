@@ -238,6 +238,33 @@ describe("报告", () => {
     print.mockRestore();
   });
 
+  it("资料清单按冻结文件展示，未引用及同名版本不丢失，打印和导出保持范围", async () => {
+    const report = frozenReport("subject-uat-01-clear", "episode-uat-01-screening-clear");
+    report.sourceFileNames = { "source-b": "2-检验报告.pdf", "source-c": "1-病历.pdf", "source-a": "1-病历.pdf" };
+    const original = JSON.stringify(report);
+    render(<FrozenReviewReport report={report} onActionChanged={vi.fn()} />);
+    const section = screen.getByRole("region", { name: "本次审核资料" });
+    const summary = within(section).getByText("本次资料文件（3）");
+    const details = summary.closest("details")!;
+    expect(details).not.toHaveAttribute("open");
+    expect(within(details).getAllByText("1-病历.pdf")).toHaveLength(2);
+    expect(within(details).getByText("2-检验报告.pdf")).not.toBeVisible();
+    window.dispatchEvent(new Event("beforeprint"));
+    expect(within(details).getByText("2-检验报告.pdf")).toBeVisible();
+    window.dispatchEvent(new Event("afterprint"));
+    expect(details).not.toHaveAttribute("open");
+    for (const format of ["html", "md"] as const) {
+      const content = frozenReviewExport(report, format, new Date(timestamp));
+      const text = format === "html" ? new DOMParser().parseFromString(content, "text/html").body.textContent : content;
+      const names = format === "md" ? ["1\\-病历\\.pdf", "1\\-病历\\.pdf", "2\\-检验报告\\.pdf"]
+        : ["1-病历.pdf", "1-病历.pdf", "2-检验报告.pdf"];
+      names.forEach((name, index) => expect(text).toContain(`本次资料文件${index + 1}：${name}`));
+      expect(content).not.toContain("source-a");
+    }
+    expect(JSON.stringify(report)).toBe(original);
+    expect(mocks.getRun).not.toHaveBeenCalled();
+  });
+
   it("仅查看仍可读保存的报告，但不挂载审核操作区", async () => {
     mocks.canModify = false;
     render(<ReportsPage />);

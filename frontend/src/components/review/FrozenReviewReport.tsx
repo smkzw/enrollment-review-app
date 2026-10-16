@@ -9,7 +9,7 @@ import type { ReviewHistoryRunDetailView } from "../../api/review-history/review
 import { actionStateLabel, actionTargetLabel, decisionLabel, gapTypeLabel, stageLabel } from "../../domain/labels";
 import { useApplicationMode } from "../../app/applicationMode";
 import { reviewConditionNotes } from "../../domain/reviewConditionNotes";
-import { frozenReviewExport, reviewEvidenceScopeNote, reviewLimitationLabel, reviewLimitationContext, reviewSystemIssueLabel } from "../../domain/frozenReviewExport";
+import { frozenReviewExport, reviewEvidenceScopeNote, reviewLimitationLabel, reviewLimitationContext, reviewSystemIssueLabel, reviewSourceFiles } from "../../domain/frozenReviewExport";
 
 export function reviewTime(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -70,6 +70,7 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
     };
   }, [report.run.reviewRunId]);
   const { run, context, assessments, actions } = report;
+  const sourceFiles = reviewSourceFiles(report);
   const draft = report.workDraft;
   const sourceIssue = issueSelection?.runId === run.reviewRunId
     ? draft?.systemIssues?.[issueSelection.index] : undefined;
@@ -124,6 +125,10 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
           <tr><th scope="row">审核时间</th><td>{reviewTime(run.completedAt ?? run.startedAt)}</td>
             <th scope="row">审核情况</th><td>{complete ? draft ? "工作稿已保存，未签发" : "已完成，逐项结果见下表" : "尚未完成，不作为正式报告"}</td></tr>
         </tbody></table>
+        {sourceFiles.length > 0 && <details className="reports-print__conditions">
+          <summary>本次资料文件（{sourceFiles.length}）</summary>
+          {sourceFiles.map(([id, name]) => <p className="reports-print__reason" key={id}>{name}</p>)}
+        </details>}
       </section>
       {report.restrictedRequirements.length > 0 && <section className="reports-print__section" aria-label="尚不能判定的方案要求">
         <h3>尚不能判定的方案要求（{report.restrictedRequirements.length}）</h3>

@@ -26,6 +26,10 @@ const time = (value: string) => new Intl.DateTimeFormat("zh-CN", {
   dateStyle: "medium", timeStyle: "medium", timeZone: "Asia/Shanghai", hour12: false,
 }).format(new Date(value));
 
+export const reviewSourceFiles = (report: ReviewHistoryRunDetailView) =>
+  Object.entries(report.sourceFileNames ?? {}).sort(([id, name], [otherId, otherName]) =>
+    name.localeCompare(otherName, "zh-CN") || id.localeCompare(otherId));
+
 function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportSection[] {
   const { run, context } = report;
   if (run.status !== "completed" || !run.completedAt || report.missingRuleComponentIds.length || report.missingProtocolControlIds.length) {
@@ -44,6 +48,7 @@ function sections(report: ReviewHistoryRunDetailView, exportedAt: Date): ReportS
     ...(context.evidenceCutoffDate || context.nodeStartDate
       ? [`本次资料截至：${context.evidenceCutoffDate ?? context.nodeStartDate}`] : []),
     `审核完成时间：${time(run.completedAt)}`, `导出时间：${time(exportedAt.toISOString())}`,
+    ...reviewSourceFiles(report).map(([, name], index) => `本次资料文件${index + 1}：${name}`),
     reviewEvidenceScopeNote,
     report.workDraft ? "本工作稿保留当时的结果，尚未签发，不代替研究者最终入组决定。"
       : "本报告保留该次审核的结论，不代替研究者最终入组决定。办理情况截至本次读取报告时；事项关闭不改变原审核结论。",
