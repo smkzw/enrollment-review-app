@@ -30,7 +30,8 @@ def display_source_reason(text, *, decision=None):
         text = re.sub(r"(?<![A-Za-z0-9_])" + key + r"\s*=\s*(true|false)(?![A-Za-z0-9_])",
             lambda match: descriptions[match[1]], text)
     for key, label in {"applicable_population": "条款限定的适用人群", "observed_value": "原始读数",
-                       "observed_unit": "原始单位", "anchor_date": "节点日期", "subject": "判断对象"}.items():
+                       "observed_unit": "原始单位", "anchor_date": "节点日期", "subject": "判断对象",
+                       "object_matches": "记录对象核对", "time_matches": "记录时间核对"}.items():
         text = re.sub(r"(?<![A-Za-z0-9_])" + key + r"(?![A-Za-z0-9_])", label, text)
     return re.sub(r"(?<![A-Za-z0-9_])[PT]\d{2}(?![A-Za-z0-9_])", "所列原文", text)
 

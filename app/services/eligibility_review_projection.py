@@ -883,6 +883,14 @@ class EligibilityReviewProjectionService:
     def project(
         self, session: Session, review_episode_id: str
     ) -> EligibilityReviewProjection:
+        from app.storage.read_retention import retain_read_records
+
+        with retain_read_records(session):
+            return self._project(session, review_episode_id)
+
+    def _project(
+        self, session: Session, review_episode_id: str
+    ) -> EligibilityReviewProjection:
         authority = authority_from_active_episode(session, review_episode_id)
         episode = EpisodeRepository(session).get(review_episode_id)
         rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)

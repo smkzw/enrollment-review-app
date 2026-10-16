@@ -213,12 +213,13 @@ export function SubjectsCatalogPage() {
               <select
                 aria-label="选择项目"
                 value={selectedProject?.projectId ?? ""}
+                title={selectedProject?.projectName}
                 onChange={(event) => updateParams({ project: event.target.value, subject: null })}
               >
                 <option value="" disabled>请选择项目</option>
                 {projectList.map((project) => (
-                  <option key={project.projectId} value={project.projectId}>
-                    {project.projectCode} · {project.projectName} · {project.studyPhaseLabel} · 方案 {project.officialVersion}
+                  <option key={project.projectId} value={project.projectId} title={project.projectName}>
+                    {project.projectCode} · {project.studyPhaseLabel} · 方案 {project.officialVersion}
                   </option>
                 ))}
               </select>
@@ -283,7 +284,7 @@ export function SubjectsCatalogPage() {
               </div>
               {selectedProject !== null && (
                 <div className="catalog-project-meta">
-                  <strong>{selectedProject.projectName}</strong>
+                  <strong title={selectedProject.projectName}>{selectedProject.projectCode}</strong>
                   <span>{selectedProject.studyPhaseLabel} · 方案 {selectedProject.officialVersion}</span>
                 </div>
               )}
@@ -342,8 +343,8 @@ export function SubjectsCatalogPage() {
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="subject-create-title">新增受试者</h2>
-            <p className="confirmation-dialog__note">
-              {selectedProject?.projectName} · {selectedProject?.studyPhaseLabel} · 方案{" "}
+            <p className="confirmation-dialog__note" title={selectedProject?.projectName}>
+              {selectedProject?.projectCode} · {selectedProject?.studyPhaseLabel} · 方案{" "}
               {selectedProject?.officialVersion}
             </p>
             <div className="subject-form">
