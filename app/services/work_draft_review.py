@@ -161,20 +161,19 @@ def enqueue_normalized_work_draft(session, *, authority, run_id):
     confirmations = WorkDraftRepository(session).list_acknowledgements(authority.review_episode_id)
     key = canonical_hash({"normalization_run_id": run_id, "authority": authority.model_dump(mode="json"),
                           "calculation_version": CALCULATION_VERSION, "semantic_model": model.model_dump(mode="json"),
+                          "plan_semantic_batches": True,
                           **({"acknowledgements": [row.model_dump(mode="json") for row in confirmations]} if confirmations else {})})
     receipt, created = IdempotencyRepository(session).resolve(scope="automatic-work-draft",
         idempotency_key=key, submitted_hash=key, result_type="work_draft_job", result_id=uuid4().hex)
     if created:
         store = JobStore(session)
-        store.create_job(job_id=receipt.result_id, job_type=JOB_TYPE, progress_total=4,
+        store.create_job(job_id=receipt.result_id, job_type=JOB_TYPE, progress_total=1,
             payload={"normalization_run_id": run_id, "authority": authority.model_dump(mode="json"),
                      "subject_id": authority.subject_id, "review_episode_id": authority.review_episode_id,
                      "calculation_version": CALCULATION_VERSION, "semantic_model": model.model_dump(mode="json"),
+                     "plan_semantic_batches": True,
                      **({"acknowledgement_ids": [row.acknowledgement_id for row in confirmations]} if confirmations else {})})
-        for step, depends_on in work_draft_steps():
-            store.create_step(job_id=receipt.result_id, step_id=step,
-                name={"calculate": "核对确定性条件", "semantic": "核对病历原文与条件关系",
-                      "compose": "合并条款结果", "save": "保存工作稿"}[step], depends_on=depends_on)
+        store.create_step(job_id=receipt.result_id, step_id="calculate", name="核对确定性条件")
     return {"job_id": receipt.result_id}
 
 
@@ -460,6 +459,14 @@ class WorkDraftReviewService:
             if canonical_hash(rule_set.model_dump(mode="json")) != frozen.rule_set_sha256:
                 raise ScopeViolationError("本次方案内容指纹不一致")
             store = JobStore(session)
+            if payload.get("plan_semantic_batches") and context.step_id != "calculate":
+                calculated = store.get_last_checkpoint(context.job_id, "calculate")
+                if (calculated is None
+                        or calculated[1].get("context_id") != frozen.context_id
+                        or calculated[1].get("review_run_id") != frozen.review_run_id
+                        or not calculated[1].get("semantic_batches")):
+                    raise ScopeViolationError("缺少本次自动工作稿的冻结分批计划")
+                payload = {**payload, "semantic_batches": calculated[1]["semantic_batches"]}
             if payload.get("acknowledgement_base_run_id"):
                 baseline_run, baseline = self._current_base(session, payload["subject_id"], payload["review_episode_id"],
                     payload["acknowledgement_base_run_id"])
@@ -500,8 +507,35 @@ class WorkDraftReviewService:
                         rule_component_id=clause.clause_id, rule_kind=clause.kind, title=clause.title,
                         source_text=clause.source_text, reason_text=issue.detail, system_issue=issue,
                         input_hash=canonical_hash(clause.model_dump(mode="json"))))
-                return {"items": [item.model_dump(mode="json") for item in items],
+                checkpoint = {"items": [item.model_dump(mode="json") for item in items],
                     "source_issues": [issue.model_dump(mode="json") for issue in source_issues]}
+                if not payload.get("plan_semantic_batches"):
+                    return checkpoint
+                from app.domain.contracts.agents import ModelConfigContract
+                from app.services.work_draft_semantics import source_batches, targets_for_review
+                targets = targets_for_review(frozen, rule_set)
+                model = ModelConfigContract.model_validate(payload["semantic_model"])
+                reused, _ = _reusable_source_reads(session, store, frozen, targets, model, self.artifact_store)
+                batches = source_batches(targets, reused)
+                checkpoint.update(context_id=frozen.context_id, review_run_id=frozen.review_run_id,
+                                  semantic_batches=batches)
+
+                def apply_plan(write_session):
+                    if authority_from_active_episode(write_session, frozen.authority.review_episode_id) != frozen.authority:
+                        raise ScopeViolationError("资料版本已变化，未提交旧工作稿的分批计划")
+                    current_store = JobStore(write_session)
+                    # The graph and its plan commit under the calculate step's
+                    # existing lease fence. A crash cannot expose half a plan.
+                    for step, depends_on in work_draft_steps(len(batches)):
+                        if step == "calculate":
+                            continue
+                        current_store.create_step(job_id=context.job_id, step_id=step, depends_on=depends_on,
+                            name="核对病历原文与条件关系" if step.startswith("semantic") else
+                                 {"compose": "合并条款结果", "save": "保存工作稿"}[step])
+                    job = current_store.get_job(context.job_id)
+                    job.progress_total = 3 + len(batches)
+
+                return PreparedStepResult(checkpoint=checkpoint, apply=apply_plan)
             if context.step_id.startswith("semantic"):
                 from app.domain.contracts.agents import ModelConfigContract
                 from app.services.work_draft_semantics import read_source_relations, runtime_model, targets_for_review
