@@ -421,6 +421,30 @@ export function EvidencePage() {
   const [processingCandidate, setProcessingCandidate] =
     useState<ProcessingCandidateView | null>(null);
   const [buildBusy, setBuildBusy] = useState(false);
+  const readyRevisionId = processingCandidate?.candidateStatus === "ready"
+    ? processingCandidate.completeRevisionId : null;
+  const readyRevision = useLoad(
+    () => getEvidenceRepository().getProcessingRevision(readyRevisionId as string),
+    [readyRevisionId, selectedSnapshotId, reviewEpisodeId],
+    { enabled: scopeReady && readyRevisionId !== null },
+  );
+  const readyRevisionMatches = readyRevision.state.status === "success" &&
+    readyRevision.state.data.revisionId === readyRevisionId &&
+    readyRevision.state.data.revisionKind === "complete" &&
+    readyRevision.state.data.evidenceSnapshotId === selectedSnapshotId &&
+    readyRevision.state.data.subjectId === subjectId &&
+    readyRevision.state.data.reviewEpisodeId === reviewEpisodeId &&
+    readyRevision.state.data.projectId === episode?.projectId &&
+    readyRevision.state.data.status === "ready" && readyRevision.state.data.isActivatable;
+  const selectedMetadataRevisionIds = readyRevisionId !== null
+    ? readyRevisionMatches && readyRevision.state.status === "success"
+      ? readyRevision.state.data.metadataRevisionIds : null
+    : viewedRevisionConsistent && processingRevision.state.status === "success" &&
+      processingRevision.state.data.revisionKind === "complete"
+      ? processingRevision.state.data.metadataRevisionIds : null;
+  const metadataChanged = selectedMetadataRevisionIds !== null && selectedSnapshot !== null &&
+    selectedSnapshot.members.some(member =>
+      !selectedMetadataRevisionIds.includes(member.metadataHead.metadataRevisionId));
   const currentCandidateId = useRef<string | null>(null);
   const candidateScope = useRef(
     `${subjectIdParam ?? ""}:${episodeParam ?? ""}`,
@@ -1050,7 +1074,9 @@ export function EvidencePage() {
       episode === undefined ||
       subjectId === null ||
       processingCandidate?.candidateStatus !== "ready" ||
-      processingCandidate.completeRevisionId === null
+      processingCandidate.completeRevisionId === null ||
+      !readyRevisionMatches || metadataChanged || metadataBusy ||
+      snapshots.state.status !== "success"
     )
       return;
     const completeRevisionId = processingCandidate.completeRevisionId;
@@ -1634,14 +1660,7 @@ export function EvidencePage() {
         selectedSnapshotId={selectedSnapshotId}
         onSelect={setSelectedSnapshotId}
         onBuild={buildReviewableRevision}
-        currentMetadataRevisionIds={
-          selectedSnapshotId === activeSnapshotId &&
-          viewedProcessingRevisionId === activeProcessingRevisionId &&
-          processingRevision.state.status === "success" &&
-          processingRevision.state.data.revisionKind === "complete"
-            ? processingRevision.state.data.metadataRevisionIds
-            : null
-        }
+        currentMetadataRevisionIds={selectedMetadataRevisionIds}
         building={
           buildBusy ||
           (processingCandidate != null &&
@@ -1717,14 +1736,20 @@ export function EvidencePage() {
             aria-label="启用资料版本"
           >
             <div>
-              <strong>核对后的资料版本已生成</strong>
+              <strong>{metadataChanged ? "资料信息已更新，请先生成新版本" : "核对后的资料版本已生成"}</strong>
               <p>
-                启用后自动整理个例资料；完成后可到入排工作台查看结果。
+                {metadataChanged ? "已有页面识别保留；请在左侧更新资料版本后启用。"
+                  : "启用后自动整理个例资料；完成后可到入排工作台查看结果。"}
               </p>
             </div>
+            {(readyRevision.state.status === "error" ||
+              readyRevision.state.status === "success" && !readyRevisionMatches) && <p role="alert">
+              尚未核实待启用版本，请重试。<button type="button" className="button" onClick={readyRevision.retry}>重试读取</button>
+            </p>}
             <button
               type="button"
               className="button button--primary"
+              disabled={!readyRevisionMatches || metadataChanged || metadataBusy || snapshots.state.status !== "success"}
               onClick={() => void activateReviewableRevision()}
             >
               启用这个资料版本
@@ -2201,7 +2226,7 @@ function SnapshotListPanel({
           const buttonState = buildButtonState(
             snapshot.latestProcessingCandidate,
           );
-          const metadataChanged = snapshot.isCurrent && selectedSnapshotId === snapshot.evidenceSnapshotId &&
+          const metadataChanged = selectedSnapshotId === snapshot.evidenceSnapshotId &&
             currentMetadataRevisionIds !== null && snapshot.members.some(
               (member) => !currentMetadataRevisionIds.includes(member.metadataHead.metadataRevisionId),
             );
@@ -2235,12 +2260,12 @@ function SnapshotListPanel({
               </button>
               {metadataChanged && snapshot.baseProcessingRevisionId !== null && (
                 <button type="button" className="button evidence-snapshots__action"
-                  disabled={building || buttonState.disabled}
+                  disabled={building || (buttonState.disabled && snapshot.latestProcessingCandidate?.candidateStatus !== "ready")}
                   onClick={() => void onBuild(snapshot)}>
                   更新资料信息并生成新版本
                 </button>
               )}
-              {!snapshot.isCurrent &&
+              {!snapshot.isCurrent && !metadataChanged &&
                 snapshot.baseProcessingRevisionId !== null && (
                   <button
                     type="button"
