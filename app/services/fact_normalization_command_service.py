@@ -265,8 +265,9 @@ def _configured_runtime_pair(
     reasoning_effort: str | None = None,
     max_tokens: int | None = None,
     temperature: float | None = None,
+    preserve_repair_schema: bool = False,
 ) -> tuple[PromptVersion, ModelConfigContract]:
-    prompt = _runtime_prompt(prompt_template)
+    prompt = _runtime_prompt(prompt_template, preserve_repair_schema=preserve_repair_schema)
     runtime_model = _runtime_model(
         provider=(
             runtime_config.EVIDENCE_NORMALIZER_PROVIDER
@@ -292,6 +293,11 @@ def _configured_runtime_pair(
             else temperature
         ),
     )
+    if preserve_repair_schema:
+        runtime_model = runtime_model.model_copy(update={"parameters": {
+            **runtime_model.parameters, "preserve_repair_schema": True}})
+        runtime_model = runtime_model.model_copy(update={"model_config_id":
+            f"evidence-normalizer/model/{_model_identity(runtime_model)}"})
     return prompt, runtime_model
 
 
@@ -333,6 +339,7 @@ def register_evidence_normalizer_runtime_config(
     reasoning_effort: str | None = None,
     max_tokens: int | None = None,
     temperature: float | None = None,
+    preserve_repair_schema: bool = False,
 ) -> RegisteredNormalizerConfig:
     """Idempotently append the current Evidence Normalizer runtime identity.
 
@@ -347,6 +354,7 @@ def register_evidence_normalizer_runtime_config(
         reasoning_effort=reasoning_effort,
         max_tokens=max_tokens,
         temperature=temperature,
+        preserve_repair_schema=preserve_repair_schema,
     )
     with session_factory() as session, session.begin():
         _ensure_immutable_registration(

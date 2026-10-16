@@ -71,12 +71,14 @@ def test_fresh_app_start_registers_exactly_one_normalizer_pair(build_app):
         assert len(snapshot["models"]) == 1
 
         with app.state.session_factory() as session:
-            selected = select_registered_evidence_normalizer_config(session)
+            selected = select_registered_evidence_normalizer_config(session,
+                registered_config=app.state.evidence_normalizer_runtime_config)
 
         assert selected.prompt_version_id == snapshot["prompts"][0]["id"]
         assert selected.model_config_id == snapshot["models"][0]["id"]
         assert snapshot["models"][0]["parameters"]["max_tokens"] >= 1
         assert "temperature" not in snapshot["models"][0]["parameters"]
+        assert snapshot["models"][0]["parameters"]["preserve_repair_schema"] is True
 
 
 def test_restart_reuses_immutable_runtime_identities_and_payloads(build_app):

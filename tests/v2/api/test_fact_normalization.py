@@ -368,12 +368,11 @@ def test_rejects_missing_registered_prompt_config(client):
         subject_id = chain["subject_id"]
         episode_id = chain["episode_id"]
         registered = client.app.state.evidence_normalizer_runtime_config
+        registered_prompt = AppendRepository(session, PROMPT_VERSION_CONFIG).get(registered.prompt_version_id)
         wrong_prompt = PromptVersion(
             prompt_version_id=registered.prompt_version_id,
             node=AgentNode.PROTOCOL_DECONSTRUCTOR,
-            template_sha256=evidence_normalizer_prompt_template_sha256(
-                DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE
-            ),
+            template_sha256=registered_prompt.template_sha256,
             schema_version_id="phase5/facts/v1",
         )
         payload_json, payload_sha256 = encode_contract(wrong_prompt)
@@ -391,7 +390,7 @@ def test_rejects_missing_registered_prompt_config(client):
 
     missing = client.post(_endpoint(subject_id, episode_id), json={})
     assert missing.status_code == 422, missing.text
-    assert "配置" in missing.json()["error"]["detail"]
+    assert missing.json()["error"]["code"] == "FACT_NORMALIZATION_CONFIG_UNAVAILABLE"
     assert missing.json()["error"]["recovery_action"]
 
 

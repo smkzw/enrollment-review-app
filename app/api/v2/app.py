@@ -194,7 +194,7 @@ def create_app(
         )
         recover_fact_normalization_runs(session_factory)
         evidence_normalizer_runtime_config = (
-            register_evidence_normalizer_runtime_config(session_factory)
+            register_evidence_normalizer_runtime_config(session_factory, preserve_repair_schema=True)
         )
         app.state.data_paths = paths
         app.state.session_factory = session_factory
