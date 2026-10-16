@@ -24,6 +24,38 @@ from tests.v2.services.test_fact_normalization_persistence import _seed_chain, _
 from tests.v2.services.test_normalizer_candidate_partition import SourceDraftTransport
 
 
+@pytest.mark.parametrize("changed", [
+    "domain/contracts/facts.py", "domain/contracts/enums.py", "domain/contracts/fact_context.py",
+    "domain/contracts/fact_gates.py", "domain/contracts/identifier_value.py",
+    "domain/contracts/evidence_locator.py", "domain/gates/fact_candidate_gates.py",
+    "evidence/risk.py", "storage/fact_authority.py",
+])
+def test_qualification_identity_tracks_contract_and_gate_semantics(tmp_path, monkeypatch, changed):
+    from app.services import fact_normalization_revalidation as module
+
+    root = tmp_path / "app"
+    for path in module._QUALIFICATION_PATHS:
+        source = root / path
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("frozen implementation: " + path)
+    monkeypatch.setattr(module, "__file__", str(root / "services/fact_normalization_revalidation.py"))
+    before = module.qualification_identity()
+    assert module.qualification_identity() == before
+    unrelated = root / "frontend-only.txt"
+    unrelated.write_text("presentation is not adoption authority")
+    assert module.qualification_identity() == before
+    (root / changed).write_text("changed source or gate semantics")
+    assert module.qualification_identity() != before
+
+
+def test_qualification_identity_does_not_hide_missing_dependency(tmp_path, monkeypatch):
+    from app.services import fact_normalization_revalidation as module
+
+    monkeypatch.setattr(module, "__file__", str(tmp_path / "app/services/fact_normalization_revalidation.py"))
+    with pytest.raises(FileNotFoundError):
+        module.qualification_identity()
+
+
 def successful_reading(session_factory, data_paths, *, partition=False, whitespace=False):
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="saved-success", source_qualification_mode="scoped_text_v1")

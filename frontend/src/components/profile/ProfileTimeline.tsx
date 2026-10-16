@@ -139,7 +139,10 @@ export function ProfileTimeline({ model, onOpenEvidence, onRequestCorrection }: 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const records = useMemo(() => clinicalDisplayLanes(model).flatMap(lane => lane.items).filter(item =>
     item.kind === "fact" || item.kind === "event" || item.kind === "exposure"), [model]);
-  const clinical = records.filter(item => item.polarity !== "negated" && item.value !== false);
+  const clinical = records.filter(item => (item.kind !== "fact" || item.polarity === "affirmed") && item.value !== false);
+  const pending = records.filter(item => item.kind === "fact"
+    && (item.polarity === "unknown" || item.polarity === null)
+    && (historyLanes.includes(item.lane) || treatmentLanes.includes(item.lane)));
   const history = clinical.filter(item => historyLanes.includes(item.lane));
   const treatment = clinical.filter(item => treatmentLanes.includes(item.lane));
   const abnormalIds = new Set(model.highlights.filter(item => item.reasons.some(reason =>
@@ -151,6 +154,15 @@ export function ProfileTimeline({ model, onOpenEvidence, onRequestCorrection }: 
       <h3 className="clinical-journey__title">临床时间线</h3>
       <ClinicalChart label="病史与诊断" tone="history" items={history} selectedId={selectedId} onSelect={setSelectedId} />
       <ClinicalChart label="用药与治疗" tone="treatment" items={treatment} selectedId={selectedId} onSelect={setSelectedId} />
+      {pending.length > 0 && <details className="clinical-chart__unscheduled">
+        <summary>待核清的病史与用药记录（{pending.length}）</summary>
+        <ul className="clinical-journey__abnormal">{pending.map(item => <li key={item.itemId}>
+          <button type="button" aria-pressed={selectedId === item.itemId} onClick={() => setSelectedId(item.itemId)}>
+            <strong>{title(item)}</strong>{recordLabel(item) && <span>{recordLabel(item)}</span>}
+            <span>{timelineTime(item).label}</span>
+          </button>
+        </li>)}</ul>
+      </details>}
       <section className="clinical-chart" aria-label="异常检验与检查"><header className="clinical-chart__head"><h3>异常检验与检查</h3></header>
         {abnormal.length === 0 ? <p className="clinical-chart__empty">暂无已标明的异常记录。</p> : <ul className="clinical-journey__abnormal">{abnormal.map(item => <li key={item.itemId}>
           <button type="button" aria-pressed={selectedId === item.itemId} onClick={() => setSelectedId(item.itemId)}>

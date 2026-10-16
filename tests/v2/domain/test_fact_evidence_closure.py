@@ -1296,6 +1296,41 @@ def test_locator_not_in_manifest_page(migrated_session):
         session.rollback()
 
 # --------------------------------------------------------------------------- OCR 阻断
+@pytest.mark.parametrize("kind", ["event", "exposure"])
+@pytest.mark.parametrize("mode,has_risk,expected", [
+    ("scoped_text_v1", True, GateOutcome.BLOCKED),
+    ("scoped_text_v1", False, GateOutcome.ACCEPTED),
+    ("strict", True, GateOutcome.ACCEPTED),
+])
+def test_derived_date_quote_is_not_field_role_qualification(monkeypatch, kind, mode, has_risk, expected):
+    from app.domain.gates import fact_evidence_closure as module
+
+    day = PartialDateRange(source_text="2026-08-22", precision="day",
+        lower_bound=UTC_NOW.date(), upper_bound=UTC_NOW.date())
+    common = dict(candidate_id="derived-1", run_id="run-1", call_id="call-1",
+        start_range=day, duration_status=DurationStatus.SINGLE, record_time=UTC_NOW,
+        fact_candidate_ids=["fact-1"], locator_ids=["loc-1"],
+        candidate_source_semantics="同期客观结果", model_uncertainty=0.1, created_at=UTC_NOW)
+    candidate = (MedicationExposureCandidateV2(**common, medication_name="药物甲") if kind == "exposure"
+        else ClinicalEventCandidateV2(**common, event_type="单次记录"))
+    before = candidate.model_dump(mode="json")
+    locator = SimpleNamespace(locator_id="loc-1", page_artifact_id="pa-1", ocr_page_id="op-1",
+        source_layer=LocatorSourceLayer.RAW_OCR, precision=LocatorPrecision.TEXT_RANGE,
+        text_start=0, text_end=30)
+    monkeypatch.setattr(module, "_fetch_cached", lambda *_args: locator)
+    flag = OcrRiskFlag(risk_id="r1", kind=OcrRiskKind.DATE, level=OcrRiskLevel.BLOCKING,
+        text="2026-08-22", text_start=100, text_end=110, detail="日期尚未核实", rule_version="synthetic-v1")
+    revision = _make_revision(manifest_entries=[("doc-1", 1, "pa-1", "op-1")], locator_ids=["loc-1"])
+    revision = revision.model_copy(update={"source_qualification_mode": mode})
+    context = ([], {"op-1": [("scan-1", flag)]} if has_risk else {}, set(), [])
+    outcome, reasons, affected = validate_blocking_ocr_for_candidate(None, candidate, revision,
+        prepared_context=context)
+    assert outcome == expected
+    assert bool(reasons) == (expected == GateOutcome.BLOCKED)
+    assert affected == ["loc-1"]
+    assert candidate.model_dump(mode="json") == before
+
+
 @pytest.mark.parametrize("mode,variable_id,risk_kind,expected", [
     ("strict", None, OcrRiskKind.LOW_CONFIDENCE, GateOutcome.BLOCKED),
     ("scoped_text_v1", None, OcrRiskKind.NUMERIC_VALUE, GateOutcome.ACCEPTED),
