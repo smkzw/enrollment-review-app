@@ -546,6 +546,12 @@ def validate_locator_and_text_hash(
             except (RepositoryError, ValueError) as exc:
                 errors.append(f"背景定位 {lid} 无法核对：{exc}")
                 failed_locators.add(lid)
+    if isinstance(candidate, MedicationExposureCandidateV2) and candidate.field_sources:
+        field_errors = _medication_field_source_errors(session, candidate, revision,
+            locator_cache=locator_cache, correction_cache=correction_cache, visual_batch=visual_batch)
+        if field_errors:
+            errors.extend(field_errors)
+            failed_locators.update(candidate.locator_ids)
     if errors:
         return GateOutcome.REJECTED, errors, sorted(failed_locators)
     return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
@@ -567,6 +573,26 @@ def _gate_verdict_for_locator(
 
 
 # --------------------------------------------------------------------------- 阻断级 OCR 风险（候选级）
+def _medication_field_source_errors(session, candidate, revision, *, locator_cache=None,
+                                    correction_cache=None, visual_batch=None):
+    from app.domain.contracts.medication_source import medication_field_source_errors
+    from app.domain.contracts.fact_context import validate_context_source_excerpt
+
+    errors = medication_field_source_errors(candidate)
+    for source in candidate.field_sources:
+        try:
+            if source.locator_id not in revision.locator_ids:
+                raise ValueError("用药字段定位不属于当前资料修订")
+            locator = _fetch_cached(session, source.locator_id, locator_cache, visual_batch)
+            if source.source_text_sha256 != locator.source_text_sha256:
+                raise ValueError("用药字段原文哈希与定位不一致")
+            text = _localized_locator_text(session, locator, revision, correction_cache=correction_cache)
+            validate_context_source_excerpt(source.excerpt, text)
+        except (RepositoryError, ValueError) as exc:
+            errors.append(f"用药字段 {source.field} 的来源不能核对：{exc}")
+    return list(dict.fromkeys(errors))
+
+
 def validate_blocking_ocr_for_candidate(
     session: Session,
     candidate,

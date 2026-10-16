@@ -225,6 +225,7 @@ class DeepSeekEvidenceNormalizerTransport:
         response_format: Mapping[str, Any] | None = None,
         stream_response: bool = False,
         include_source_categories: bool = False,
+        include_medication_field_sources: bool = False,
         client: Any | None = None,
         receipt_callback: Callable[[dict[str, Any]], None] | None = None,
         request_callback: Callable[[dict[str, Any]], str] | None = None,
@@ -234,6 +235,9 @@ class DeepSeekEvidenceNormalizerTransport:
         if not isinstance(include_source_categories, bool):
             raise ValueError("资料类别提示配置必须是布尔值")
         self.include_source_categories = include_source_categories
+        if not isinstance(include_medication_field_sources, bool):
+            raise ValueError("用药逐字段来源配置必须是布尔值")
+        self.include_medication_field_sources = include_medication_field_sources
         selected_backend = (backend or EVIDENCE_NORMALIZER_PROVIDER).strip().lower()
         if selected_backend not in {
             "deepseek",
@@ -656,6 +660,9 @@ def evidence_normalizer_transport_from_model_config(
     include_source_categories = parameters.get("include_source_categories", False)
     if not isinstance(include_source_categories, bool):
         raise ValueError("资料类别提示配置必须是布尔值")
+    include_medication_field_sources = parameters.get("include_medication_field_sources", False)
+    if not isinstance(include_medication_field_sources, bool):
+        raise ValueError("用药逐字段来源配置必须是布尔值")
     max_tokens = int(parameters.get("max_tokens", EVIDENCE_NORMALIZER_MAX_TOKENS))
     raw_temperature = parameters.get(
         "temperature", EVIDENCE_NORMALIZER_TEMPERATURE
@@ -667,6 +674,7 @@ def evidence_normalizer_transport_from_model_config(
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
             include_source_categories=include_source_categories,
+            include_medication_field_sources=include_medication_field_sources,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -690,6 +698,7 @@ def evidence_normalizer_transport_from_model_config(
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
             include_source_categories=include_source_categories,
+            include_medication_field_sources=include_medication_field_sources,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -707,6 +716,7 @@ def evidence_normalizer_transport_from_model_config(
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
             include_source_categories=include_source_categories,
+            include_medication_field_sources=include_medication_field_sources,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -721,7 +731,7 @@ def evidence_normalizer_transport_from_model_config(
                 "json_schema": {
                     "name": "evidence_normalizer_output",
                     "strict": True,
-                    "schema": evidence_normalizer_json_schema(),
+                    "schema": evidence_normalizer_json_schema(include_medication_field_sources=include_medication_field_sources),
                 },
             },
         )
@@ -737,6 +747,7 @@ def evidence_normalizer_transport_from_model_config(
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
             include_source_categories=include_source_categories,
+            include_medication_field_sources=include_medication_field_sources,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
@@ -756,6 +767,7 @@ def evidence_normalizer_transport_from_model_config(
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
             include_source_categories=include_source_categories,
+            include_medication_field_sources=include_medication_field_sources,
             client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,

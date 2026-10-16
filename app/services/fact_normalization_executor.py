@@ -517,7 +517,7 @@ def _load_frozen_agent_config(
             detail="冻结提示词与当前证据规范化输出结构版本不一致。",
         )
     if prompt.template_sha256 != evidence_normalizer_prompt_template_sha256(
-        prompt_template
+        prompt_template, include_medication_field_sources=model_config.parameters.get("include_medication_field_sources", False) is True,
     ):
         raise StepFailure(
             retryable=False,
@@ -964,11 +964,17 @@ def _prepare_response_revalidation(payload, evidence_input, model_config, prompt
         pending_details_retained=strategy) if compact else None
     # Inject a non-network client into the SAME provider factory; credentials are not needed.
     transport = evidence_normalizer_transport_from_model_config(model_config, client=object())
+    if transport.include_medication_field_sources:
+        from app.agents.evidence_normalizer import evidence_normalizer_json_schema
+        transport.set_output_schema(evidence_normalizer_json_schema(
+            [item.variable_id for item in evidence_input.variable_definitions] if evidence_input.variable_definitions else None,
+            include_medication_field_sources=True))
     prompt = build_evidence_normalizer_prompt(evidence_input, prompt_template=prompt_template,
         visual_observations=visual_observations or None,
         include_output_schema=not transport.enforces_output_json_schema,
         pending_details_retained=strategy, reference_aliases=aliases, verified_scope_prompt=strategy,
-        include_source_categories=transport.include_source_categories)
+        include_source_categories=transport.include_source_categories,
+        include_medication_field_sources=transport.include_medication_field_sources)
     return transport.initial_request_body(prompt=prompt), aliases
 
 
