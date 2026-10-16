@@ -55,6 +55,45 @@ def test_full_field_proposal_is_nonmutating_and_legacy_payload_stays_unchanged()
     assert MedicationExposureCandidateV2.model_validate_json(legacy.model_dump_json()) == legacy
 
 
+@pytest.mark.parametrize("fault", [None, "wrong_page", "wrong_document", "wrong_layer", "wrong_hash",
+    "missing_offset", "outside_revision", "uncovered_text", "rewritten_quote", "duplicate_ids", "wrong_role"])
+def test_continuous_wrapped_source_keeps_identity_full_text_and_role_boundaries(monkeypatch, fault):
+    from types import SimpleNamespace
+    from app.domain.gates import fact_evidence_closure as module
+    from app.domain.contracts.enums import LocatorPrecision, LocatorSourceLayer
+
+    middle = "\n否认用药。\n" if fault == "uncovered_text" else "\n"
+    parts = ["2025-04-12口服药物", "甲10mg一次。"]
+    text = middle.join(parts)
+    digest = sha256(text.encode()).hexdigest()
+    locators = {}
+    for number, part in enumerate(parts, 1):
+        start = text.index(part)
+        locators[f"loc-{number}"] = SimpleNamespace(locator_id=f"loc-{number}", page_artifact_id="page",
+            ocr_page_id="ocr", source_document_version_id="document", page_number=1,
+            source_layer=LocatorSourceLayer.RAW_OCR, source_text_sha256=digest,
+            precision=LocatorPrecision.TEXT_RANGE, text_start=start, text_end=start + len(part))
+    candidate = exposure_with_sources(source_hash=digest)
+    candidate.field_sources = [source.model_copy(update={"excerpt": text, "locator_ids": sorted(locators)})
+        for source in candidate.field_sources]
+    second = locators["loc-2"]
+    if fault == "wrong_page": second.page_artifact_id = "another-page"
+    elif fault == "wrong_document": second.source_document_version_id = "another-document"
+    elif fault == "wrong_layer": second.source_layer = LocatorSourceLayer.EFFECTIVE_TEXT
+    elif fault == "wrong_hash": second.source_text_sha256 = "b" * 64
+    elif fault == "missing_offset": second.text_start = None
+    elif fault == "rewritten_quote": candidate.field_sources[0] = candidate.field_sources[0].model_copy(update={"excerpt": text.replace("\n", "")})
+    elif fault == "duplicate_ids": candidate.field_sources[0] = candidate.field_sources[0].model_copy(update={"locator_ids": ["loc-1", "loc-1", "loc-2"]})
+    elif fault == "wrong_role": candidate.field_sources[1] = candidate.field_sources[1].model_copy(update={"role": "recorded_at"})
+    revision = SimpleNamespace(locator_ids=["loc-1"] if fault == "outside_revision" else sorted(locators))
+    monkeypatch.setattr(module, "_fetch_cached", lambda _session, lid, *_args: locators[lid])
+    monkeypatch.setattr(module, "_localized_locator_text", lambda _session, row, *_args, **_kwargs: text[row.text_start:row.text_end])
+    before = candidate.model_dump_json()
+    errors = module._medication_field_source_errors(None, candidate, revision)
+    assert bool(errors) == (fault is not None)
+    assert candidate.model_dump_json() == before
+
+
 @pytest.mark.parametrize("fault", ["wrong_role", "wrong_drug", "different_value", "date_precision",
     "missing_unit", "extra_field", "duplicate", "foreign_locator", "wrong_status", "record_date_as_start"])
 def test_wrong_field_binding_or_precision_does_not_qualify(fault):

@@ -971,7 +971,8 @@ def _prepare_response_revalidation(payload, evidence_input, model_config, prompt
         from app.agents.evidence_normalizer import evidence_normalizer_json_schema
         transport.set_output_schema(evidence_normalizer_json_schema(
             [item.variable_id for item in evidence_input.variable_definitions] if evidence_input.variable_definitions else None,
-            include_medication_field_sources=True))
+            include_medication_field_sources=True,
+            medication_source_material=model_config.parameters.get("medication_source_guidance")))
     prompt = build_evidence_normalizer_prompt(evidence_input, prompt_template=prompt_template,
         visual_observations=visual_observations or None,
         include_output_schema=not transport.enforces_output_json_schema,

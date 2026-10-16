@@ -9,7 +9,7 @@ import pytest
 
 from app.agents.evidence_normalizer import (
     DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, EvidenceNormalizerDraftOutput,
-    MEDICATION_PARTIAL_SOURCE_GUIDANCE, build_evidence_normalizer_prompt,
+    MEDICATION_PARTIAL_SOURCE_GUIDANCE, MEDICATION_CONTINUOUS_SOURCE_GUIDANCE, build_evidence_normalizer_prompt,
     medication_source_guidance, validate_evidence_normalizer_model_config,
     evidence_normalizer_compact_schema, evidence_normalizer_json_schema,
     evidence_normalizer_prompt_template_sha256,
@@ -17,7 +17,7 @@ from app.agents.evidence_normalizer import (
 from app.agents.deepseek_evidence_normalizer_transport import evidence_normalizer_transport_from_model_config
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.ocr import OcrRiskFlag
-from app.domain.contracts.work_draft import WorkDraftEvidenceRef
+from app.domain.contracts.work_draft import WorkDraftEvidenceRef, WorkDraftItem
 from app.evidence.artifacts import ArtifactStore
 from app.services.fact_normalization_command_service import (
     _runtime_prompt, _model_identity, RegisteredNormalizerConfig,
@@ -27,6 +27,7 @@ from app.services.fact_normalization_executor import FactNormalizationExecutorCo
 from app.services.fact_normalization_job_service import FactNormalizationJobService
 from app.services.patient_profile_service import PatientProfileService
 from app.services.work_draft_medications import calculate_medications
+from app.services.work_draft_projection import project_saved_items
 from app.storage.fact_repositories import ClinicalFactV2Repository, MedicationExposureV2Repository, FactNormalizationCandidateRepository
 from app.storage.repositories import AppendRepository, MODEL_CONFIG_CONFIG, PROMPT_VERSION_CONFIG
 from app.workflow.runner import JobRunner
@@ -46,6 +47,22 @@ def test_default_prompt_and_schema_remain_exactly_replayable():
     assert "field_sources" in new["$defs"]["EvidenceExposureDraft"]["required"]
     assert _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE).template_sha256 != (
         _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True).template_sha256)
+
+
+def test_continuous_quotes_are_explicit_and_do_not_change_legacy_schema_or_material():
+    old = evidence_normalizer_json_schema(include_medication_field_sources=True)
+    partial = evidence_normalizer_json_schema(include_medication_field_sources=True,
+        medication_source_material=MEDICATION_PARTIAL_SOURCE_GUIDANCE)
+    new = evidence_normalizer_json_schema(include_medication_field_sources=True,
+        medication_source_material=MEDICATION_CONTINUOUS_SOURCE_GUIDANCE)
+    assert old == partial
+    assert "locator_ids" not in old["$defs"]["MedicationFieldSourceDraft"]["properties"]
+    assert "locator_ids" in new["$defs"]["MedicationFieldSourceDraft"]["required"]
+    assert "locator_ids" not in exposure_with_sources().field_sources[0].model_dump(mode="json")
+    assert _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True,
+        medication_source_material=MEDICATION_PARTIAL_SOURCE_GUIDANCE) != _runtime_prompt(
+            DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True,
+            medication_source_material=MEDICATION_CONTINUOUS_SOURCE_GUIDANCE)
 
 
 @pytest.mark.parametrize("material", [None, MEDICATION_PARTIAL_SOURCE_GUIDANCE])
@@ -315,6 +332,85 @@ def test_new_field_reading_publishes_only_source_bound_exposure_and_reaches_cons
         assert ("识别可能有误" in (item.confidence_reason or "")) == (fault in {"blocking_date", "compound_dose", "unknown_duration"})
     assert ("识别可能有误" in item.reason_text) == (fault in {"blocking_date", "blocking_date_outside", "compound_dose", "unknown_duration"})
     assert exposures[0].model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("fault", [None, "gap", "quote_rewritten", "record_date", "foreign_context", "unrequested_context"])
+def test_continuous_medication_quote_reaches_real_storage_and_consumer_without_borrowing(session_factory, data_paths, fault):
+    first, second = "2025-04-12口服", "药物甲10mg一次。"
+    gap = "\n否认用药。\n" if fault == "gap" else "\n"
+    text = first + gap + second
+    guidance = MEDICATION_PARTIAL_SOURCE_GUIDANCE if fault == "unrequested_context" else MEDICATION_CONTINUOUS_SOURCE_GUIDANCE
+    with session_factory() as session, session.begin():
+        chain = _seed_chain(session, prefix="continuous-medication", source_text=text,
+            first_excerpt=first, second_excerpt=second, document_type="既往病历", source_party="外院",
+            source_qualification_mode="scoped_text_v1")
+        base = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
+        model = base.model_copy(update={"model_config_id": "continuous-medication-model",
+            "parameters": {**base.parameters, "include_medication_field_sources": True,
+                "medication_source_guidance": guidance,
+                "preserve_repair_schema": True}})
+        prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, include_medication_field_sources=True,
+            medication_source_material=guidance, preserve_repair_schema=True)
+        AppendRepository(session, MODEL_CONFIG_CONFIG).save(model)
+        AppendRepository(session, PROMPT_VERSION_CONFIG).save(prompt)
+    service = FactNormalizationJobService(session_factory)
+    created = service.create_or_reuse_from_source(authority=chain["authority"],
+        prompt_version_id=prompt.prompt_version_id, model_config_id=model.model_config_id,
+        created_by="builder_verification", account_source_text=True)
+    body = medication_draft(chain["locator_id_2"])
+    body["fact_candidates"][0]["assertion_basis"]["assertion_text"] = second
+    exposure = body["exposure_candidates"][0]
+    context_locators = sorted([chain["locator_id"], chain["locator_id_2"]])
+    for source in exposure["field_sources"]:
+        source.update(excerpt=text, locator_ids=context_locators)
+    if fault == "quote_rewritten":
+        exposure["field_sources"][1]["excerpt"] = text.replace("\n", "")
+    elif fault == "record_date":
+        exposure["field_sources"][1]["role"] = "recorded_at"
+    elif fault == "foreign_context":
+        exposure["field_sources"][1]["locator_ids"] = ["outside-current-source"]
+    requests = []
+    response = SimpleNamespace(id="synthetic-continuous-source", model=model.model, usage=None,
+        choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content=json.dumps(body, ensure_ascii=False)))])
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kwargs: (requests.append(kwargs), response)[1])))
+    artifacts = ArtifactStore(data_paths)
+    executor = create_fact_normalization_executor(FactNormalizationExecutorConfig(
+        session_factory=session_factory, artifact_store=artifacts, max_schema_repairs=0,
+        transport=evidence_normalizer_transport_from_model_config(model, client=client)))
+    JobRunner(session_factory, {"fact_normalization": executor}).run_job(created.job_id)
+    assert service.get_job(created.job_id)["state"] == ("failed_final" if fault == "foreign_context" else "completed")
+    assert len(requests) == 1
+    assert ("locator_ids" in requests[0]["response_format"]["json_schema"]["schema"]["$defs"]["MedicationFieldSourceDraft"]["required"]) == (fault != "unrequested_context")
+    with session_factory() as session:
+        facts = ClinicalFactV2Repository(session).list_by_episode(chain["episode_id"])
+        exposures = MedicationExposureV2Repository(session).list_by_episode(chain["episode_id"])
+        assert len(exposures) == (1 if fault is None else 0)
+        if fault is not None:
+            if fault == "foreign_context":
+                assert facts == []
+            else:
+                assert len(facts) == 1  # The rejected exposure does not remove its valid sibling fact.
+            return
+        assert len(facts) == 1
+        saved = FactNormalizationCandidateRepository(session).get(exposures[0].source_candidate_ids[0])
+        assert all(source.excerpt == text and len(source.locator_ids) == 2 for source in saved.field_sources)
+        assert saved.locator_ids == exposures[0].locator_ids == facts[0].locator_ids == [chain["locator_id_2"]]
+        assert PatientProfileService().latest(session, chain["episode_id"]) is not None
+    frame, rules, _ = medication_context(use_day=date(2025, 4, 12))
+    frame.authority, frame.facts, frame.medication_exposures = chain["authority"], facts, exposures
+    frame.review_episode.evidence_cutoff_date = date(2025, 4, 20)
+    frame.review_episode.anchor_dates = {"screening_date": DateValue(value="2025-04-20", precision="day")}
+    frame.source_pages = [SimpleNamespace(source_document_version_id=chain["doc_id"],
+        page_artifact_id=chain["page_artifact_id"], page_number=1)]
+    refs = {facts[0].fact_id: [WorkDraftEvidenceRef(fact_id=facts[0].fact_id, locator_id=chain["locator_id_2"],
+        source_document_version_id=chain["doc_id"], page_artifact_id=chain["page_artifact_id"],
+        page_number=1, excerpt=second)]}
+    result, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert result.decision.value == "exclusion_triggered" and result.confidence == "low"
+    restored = WorkDraftItem.model_validate_json(result.model_dump_json())
+    view = project_saved_items([restored], authority=frame.authority, rule_set=rules, run_id="draft")
+    assert view.clauses[0].fact_refs[0].page_number == 1
 
 
 def test_unreadable_source_cannot_enter_the_normalization_chain(session_factory):

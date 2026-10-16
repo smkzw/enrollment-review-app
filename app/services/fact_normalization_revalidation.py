@@ -29,6 +29,7 @@ _QUALIFICATION_PATHS = (
     "services/fact_normalization_executor.py", "services/fact_normalization_source_adapter.py",
     "projections/normalizer_text_accounting.py", "storage/source_reference_successors.py",
     "storage/evidence_expectation_repository.py",
+    "storage/fact_repositories.py",
 )
 
 

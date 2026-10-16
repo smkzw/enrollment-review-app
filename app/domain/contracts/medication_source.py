@@ -18,6 +18,7 @@ class MedicationFieldSourceDraft(ContractModel):
     role: Literal["actual_use", "use_start", "use_end", "single_use", "recorded_at", "use_detail",
                   "status_ended", "status_ongoing", "status_single", "status_intermittent", "status_unknown"]
     locator_id: str = Field(min_length=1)
+    locator_ids: list[str] = Field(default_factory=list, exclude_if=lambda value: not value)
     object_text: str = Field(min_length=1)
     value_text: str = Field(min_length=1)
     excerpt: str = Field(min_length=1)
@@ -75,8 +76,16 @@ def medication_field_source_errors(candidate) -> list[str]:
         value = getattr(candidate, source.field)
         if source.locator_id not in candidate.locator_ids:
             errors.append("用药字段引用了本条记录以外的定位")
-        if (source.object_text != candidate.medication_name or source.object_text not in source.excerpt
-                or source.value_text not in source.excerpt):
+        if source.locator_ids and (source.locator_ids != sorted(set(source.locator_ids))
+                or source.locator_id not in source.locator_ids):
+            errors.append("用药连续原文的定位须唯一有序且包含主定位")
+        # Only an explicitly cited continuous span may join printed line wraps.
+        # Its complete unchanged text is checked against the source by the gate.
+        object_present = ("".join(source.object_text.split()) in "".join(source.excerpt.split())
+            if source.locator_ids else source.object_text in source.excerpt)
+        value_present = (object_present if source.locator_ids and source.field == "medication_name"
+            and source.value_text == source.object_text else source.value_text in source.excerpt)
+        if (source.object_text != candidate.medication_name or not object_present or not value_present):
             errors.append("用药字段须在同一连续摘录中明确对应药物对象和原值")
         role = {"medication_name": {"actual_use"}, "duration_status": {"status_" + candidate.duration_status.value},
                 "record_time": {"recorded_at"}, "start_range": {"use_start"}, "end_range": {"use_end"}

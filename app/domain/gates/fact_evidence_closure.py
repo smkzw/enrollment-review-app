@@ -579,6 +579,19 @@ def _medication_field_source_errors(session, candidate, revision, *, locator_cac
     from app.domain.contracts.fact_context import validate_context_source_excerpt
 
     errors = medication_field_source_errors(candidate)
+    if session is not None and any(source.locator_ids for source in candidate.field_sources):
+        from app.agents.evidence_normalizer import MEDICATION_CONTINUOUS_SOURCE_GUIDANCE
+        from app.storage.fact_repositories import FactNormalizationRunRepository
+        from app.storage.repositories import AppendRepository, MODEL_CONFIG_CONFIG
+
+        try:
+            run = FactNormalizationRunRepository(session).get(candidate.run_id)
+            model = AppendRepository(session, MODEL_CONFIG_CONFIG).get(run.model_config_id)
+            if (model.parameters.get("include_medication_field_sources") is not True
+                    or model.parameters.get("medication_source_guidance") != MEDICATION_CONTINUOUS_SOURCE_GUIDANCE):
+                errors.append("本次读取未明确启用连续用药原文核对，不能扩大旧读取的来源范围")
+        except RepositoryError as exc:
+            errors.append(f"用药连续原文缺少本次冻结读取的配置依据：{exc}")
     for source in candidate.field_sources:
         try:
             if source.locator_id not in revision.locator_ids:
@@ -586,7 +599,34 @@ def _medication_field_source_errors(session, candidate, revision, *, locator_cac
             locator = _fetch_cached(session, source.locator_id, locator_cache, visual_batch)
             if source.source_text_sha256 != locator.source_text_sha256:
                 raise ValueError("用药字段原文哈希与定位不一致")
-            text = _localized_locator_text(session, locator, revision, correction_cache=correction_cache)
+            if source.locator_ids:
+                from types import SimpleNamespace
+
+                lines = [_fetch_cached(session, lid, locator_cache, visual_batch) for lid in source.locator_ids
+                    if lid in revision.locator_ids]
+                identity = lambda row: (row.page_artifact_id, row.ocr_page_id,
+                    row.source_document_version_id, row.page_number, row.source_layer, row.source_text_sha256)
+                if (len(lines) != len(source.locator_ids) or any(identity(row) != identity(locator) for row in lines)
+                        or locator.source_layer not in {LocatorSourceLayer.RAW_OCR, LocatorSourceLayer.EFFECTIVE_TEXT}
+                        or any(row.precision not in {LocatorPrecision.TEXT_RANGE, LocatorPrecision.BBOX}
+                            or row.text_start is None or row.text_end is None
+                            or row.text_start < 0 or row.text_end <= row.text_start for row in lines)):
+                    raise ValueError("用药连续原文须为同页同层同哈希、当前范围内有明确偏移的定位")
+                lines.sort(key=lambda row: (row.text_start, row.text_end))
+                start, end = lines[0].text_start, max(row.text_end for row in lines)
+                span = SimpleNamespace(precision=LocatorPrecision.TEXT_RANGE,
+                    source_layer=locator.source_layer, ocr_page_id=locator.ocr_page_id,
+                    text_start=start, text_end=end)
+                text = _localized_locator_text(session, span, revision, correction_cache=correction_cache)
+                if text is None or len(text) != end - start or source.excerpt != text:
+                    raise ValueError("用药连续摘录必须逐字保留所引范围的完整原文及换行")
+                covered_end = start
+                for line in lines:
+                    if text[covered_end - start:line.text_start - start].strip():
+                        raise ValueError("用药连续定位之间有未引用的原文，不得跳过否定或其他对象")
+                    covered_end = max(covered_end, line.text_end)
+            else:
+                text = _localized_locator_text(session, locator, revision, correction_cache=correction_cache)
             validate_context_source_excerpt(source.excerpt, text)
         except (RepositoryError, ValueError) as exc:
             errors.append(f"用药字段 {source.field} 的来源不能核对：{exc}")

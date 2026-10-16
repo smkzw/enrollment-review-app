@@ -492,6 +492,15 @@ MEDICATION_PARTIAL_SOURCE_GUIDANCE = (
     "field_sources只是有源提案，不是已核实、批准或入排结论。\n"
 )
 
+MEDICATION_CONTINUOUS_SOURCE_GUIDANCE = MEDICATION_PARTIAL_SOURCE_GUIDANCE + (
+    "定位将连续原句按印刷换行拆开时，可在该字段的locator_ids中填写覆盖该连续原句的全部定位，"
+    "升序无重复且包含locator_id；不得跨页、跨来源或跳过中间文字。"
+    "excerpt须完整逐字保留这些定位最早至最晚范围内的所有文字、空格和换行，不拼接或改写原文。"
+    "只有原句明确对应本药的字段才能这样引用；同段出现日期不等于本药的实际开始。"
+    "药名仅因印刷换行被拆开时可去掉药名内部空白，原句本身不改。"
+    "不需要跨行时locator_ids填空；这些来源关系仍是待核提案，不是独立核实。\n"
+)
+
 
 def medication_source_guidance(enabled: bool, material: str | None = None) -> str:
     """Read frozen prompt material; absence retains the exact legacy request."""
@@ -790,7 +799,7 @@ def evidence_normalizer_prompt_template_sha256(
     guidance = medication_source_guidance(include_medication_field_sources, medication_source_material)
     if include_medication_field_sources:
         base = _sha256(base + guidance
-            + _compact_schema(include_medication_field_sources=True))
+            + _compact_schema(include_medication_field_sources=True, medication_source_material=medication_source_material))
     if compact_requirement_rows:
         base = _sha256(base + _REQUIREMENT_ROW_INSTRUCTION)
     return _sha256(base + _REPAIR_SCHEMA_INSTRUCTION) if preserve_repair_schema else base
@@ -813,7 +822,8 @@ def _strip_schema_titles(node) -> None:
         _strip_schema_titles(value)
 
 
-def evidence_normalizer_json_schema(variable_ids: list[str] | None = None, *, include_medication_field_sources: bool = False) -> dict:
+def evidence_normalizer_json_schema(variable_ids: list[str] | None = None, *, include_medication_field_sources: bool = False,
+                                    medication_source_material: str | None = None) -> dict:
     """返回适合约束生成的完整 schema，要求模型显式交代每个已定义字段。
 
     Pydantic 对带默认值字段默认不写入 ``required``，这适合普通 API 解码，但会让
@@ -824,6 +834,8 @@ def evidence_normalizer_json_schema(variable_ids: list[str] | None = None, *, in
     if not include_medication_field_sources:
         schema["$defs"]["EvidenceExposureDraft"]["properties"].pop("field_sources")
         schema["$defs"].pop("MedicationFieldSourceDraft")
+    elif medication_source_material != MEDICATION_CONTINUOUS_SOURCE_GUIDANCE:
+        schema["$defs"]["MedicationFieldSourceDraft"]["properties"].pop("locator_ids")
     if variable_ids is not None:
         schema["$defs"]["EvidenceFactDraft"]["properties"]["variable_id"] = {
             "anyOf": [{"type": "string", "enum": sorted(set(variable_ids))}, {"type": "null"}]
@@ -901,9 +913,11 @@ def evidence_normalizer_json_schema(variable_ids: list[str] | None = None, *, in
     return schema
 
 
-def _compact_schema(variable_ids: list[str] | None = None, *, include_medication_field_sources: bool = False) -> str:
+def _compact_schema(variable_ids: list[str] | None = None, *, include_medication_field_sources: bool = False,
+                    medication_source_material: str | None = None) -> str:
     return json.dumps(
-        evidence_normalizer_json_schema(variable_ids, include_medication_field_sources=include_medication_field_sources),
+        evidence_normalizer_json_schema(variable_ids, include_medication_field_sources=include_medication_field_sources,
+            medication_source_material=medication_source_material),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -1177,7 +1191,7 @@ def build_evidence_normalizer_prompt(
         from app.agents.verified_evidence_prompt import SHORT_REFERENCE_INSTRUCTION
         head += SHORT_REFERENCE_INSTRUCTION
     if include_output_schema:
-        head += f"输出结构：{_compact_schema([item.variable_id for item in evidence_input.variable_definitions] if evidence_input.variable_definitions else None, include_medication_field_sources=include_medication_field_sources)}\n\n"
+        head += f"输出结构：{_compact_schema([item.variable_id for item in evidence_input.variable_definitions] if evidence_input.variable_definitions else None, include_medication_field_sources=include_medication_field_sources, medication_source_material=medication_source_material)}\n\n"
     sections = [
         head + f"本次输入：{json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}\n\n"
     ]
@@ -1770,7 +1784,8 @@ def _hydrate_draft_output(
         for candidate in draft.event_candidates
     ]
     for candidate in draft.exposure_candidates:
-        if any(item.locator_id not in locator_source_hashes for item in candidate.field_sources):
+        if any(item.locator_id not in locator_source_hashes
+                or not set(item.locator_ids) <= set(locator_source_hashes) for item in candidate.field_sources):
             raise ValueError("用药字段依据定位不在系统冻结的定位摘要中")
     exposures = [
         MedicationExposureCandidateV2(
@@ -2534,7 +2549,8 @@ class EvidenceNormalizerRunner:
         if (evidence_input.variable_definitions or field_sources) and hasattr(transport, "set_output_schema"):
             transport.set_output_schema(evidence_normalizer_json_schema(
                 [item.variable_id for item in evidence_input.variable_definitions] if evidence_input.variable_definitions else None,
-                include_medication_field_sources=field_sources))
+                include_medication_field_sources=field_sources,
+                medication_source_material=getattr(transport, "medication_source_material", None)))
         # 传输层若已用 JSON Schema 受限解码强制输出结构（如 omlx json_schema
         # response_format），提示内不再重复内嵌同一份 Schema；其余传输保持
         # Schema 内嵌，输出结构约束不变。
@@ -2792,7 +2808,8 @@ class EvidenceNormalizerRunner:
                     verified_scope_prompt=verified_scope_prompt,
                     output_schema=_compact_schema(
                         [item.variable_id for item in evidence_input.variable_definitions] or None,
-                        include_medication_field_sources=field_sources) if preserve_repair_schema else None,
+                        include_medication_field_sources=field_sources,
+                        medication_source_material=getattr(transport, "medication_source_material", None)) if preserve_repair_schema else None,
                 )
                 if pending_contexts:
                     repair_prompt += "补答必须保留已有另处背景来源及其待核关系，不得删除、换候选或改为同句限定来解除疑问。"

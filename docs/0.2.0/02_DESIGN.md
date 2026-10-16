@@ -129,6 +129,8 @@ WP5补充要求复用内层草稿及发布`RuleSet.scope_supplement`可选字段
 | `date_role: Literal["sampling","report","visit","unknown"] \| None` | 同上 | 用于 `DATE_ROLE_UNCLEAR` |
 | `reviewed_by_mm: bool` 及时间 | 事实修订 | "标记已核"写新修订，不改值 |
 
+印刷换行的连续用药引用复用同一逐字段合同的可空`locator_ids`：仅显式冻结`MEDICATION_CONTINUOUS_SOURCE_GUIDANCE`的请求向模型开放该字段，来源门禁另核实际Run冻结配置；旧Schema／提示和空字段序列化保持。主定位须属于本候选，所有补充上下文定位须来自实际输入与当前修订，同页／同来源层／同原文hash并有真实字符偏移；摘录逐字等于最早至最晚完整范围，定位之间只能有空白，不得漏引中间文字、否定或其他对象。药名的换行空白可在字段匹配时去除，原摘录不变；这不是词义同义化或给药日期推断。日期和角色仍各自核对，关联的肯定事实仍须独立合法。补充定位仅保存于字段上下文，不扩大候选／发布实体的根定位或伪造支持事实；原事实定位闭包完全保持。发布仓储再次核字段原文全范围，不只相信已保存的门禁标记，其实现进入既有重新核验身份。新字段不自动恢复旧失败／旧候选，不改变当前默认配置或整体计算版本；真实采用前仍须核语义角色和原件。此改动不宣称普通事实中所有断行药名都已恢复。
+
 ### 4.4 审核侧
 
 **资料范围与时间窗分离（D26）**：`ReviewEpisode.evidence_cutoff_date: date | None`保存本节点本次已提供资料截至日，空值不序列化，旧合同哈希不变。`PUT .../review-episodes/{id}/evidence-cutoff`接收`{evidence_cutoff_date, expected_revision}`，返回新`revision`；与节点日期共用同受试者、乐观锁及活动整理／更正／工作稿互斥，早于开始日拒绝。字段随既有节点payload与冻结上下文保存，无新表或迁移。前端开始日／资料截至分开保存；`source_pages_for_review`、`select_by_variable`及`calculate_procedures`共用`review_source_cutoff`，未设置时维持旧开始日上界。条款相对窗仍只用`anchor_dates`，同节点归属仍核冻结快照。开始日1日／截至8日：8日复查可用、9日不可用；明确“开始日前”仍拒绝8日结果。实际关系请求保存截至日，旧22页证明不等同24页检索。API／保存／消费／复用反例见`test_work_draft_evidence_cutoff.py`、`test_work_draft_calculation.py`、`test_work_draft_source_relations.py`及`WorkDraftPanel.test.tsx`。禁止通过移动开始日或删除未来记录保护来纳入复查。

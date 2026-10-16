@@ -1795,6 +1795,16 @@ class MedicationExposureV2Repository(_PublishMixin):
             expected_fact_candidates,
             entity_label=f"暴露 {exposure.exposure_id}",
         )
+        for candidate in candidates:
+            if any(source.locator_ids for source in candidate.field_sources):
+                from app.domain.gates.fact_evidence_closure import _medication_field_source_errors
+                from app.storage.evidence_locator_repositories import CompleteEvidenceProcessingRevisionRepository
+
+                revision = CompleteEvidenceProcessingRevisionRepository(self.session).get(
+                    exposure.authority.complete_processing_revision_id)
+                errors = _medication_field_source_errors(self.session, candidate, revision)
+                if errors:
+                    raise FactLocatorReferenceError("用药直接字段来源未通过核对：" + "；".join(errors))
         self._require_locators_within_facts(exposure.locator_ids, exposure.fact_ids)
         self._require_revision_chain_head(
             MedicationExposureV2Record,

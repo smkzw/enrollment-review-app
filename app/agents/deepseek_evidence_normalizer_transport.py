@@ -763,7 +763,8 @@ def evidence_normalizer_transport_from_model_config(
                 "json_schema": {
                     "name": "evidence_normalizer_output",
                     "strict": True,
-                    "schema": evidence_normalizer_json_schema(include_medication_field_sources=include_medication_field_sources),
+                    "schema": evidence_normalizer_json_schema(include_medication_field_sources=include_medication_field_sources,
+                        medication_source_material=parameters.get("medication_source_guidance")),
                 },
             },
         )
