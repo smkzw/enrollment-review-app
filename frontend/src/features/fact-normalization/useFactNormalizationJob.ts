@@ -88,7 +88,8 @@ function activeFromJob(
     title: factNormalizationPhaseTitle(phase),
     recoveryHint: factNormalizationRecoveryHint(phase, job.recoveryAction),
     job,
-    canRetry: isFailureFactNormalizationState(job.state) || phase === "stale",
+    canRetry: isFailureFactNormalizationState(job.state) || phase === "stale"
+      || (job.state === "cancelled" && profileStale),
   };
 }
 

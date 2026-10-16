@@ -110,6 +110,24 @@ function Harness({
 }
 
 describe("个例档案整理任务恢复与文案", () => {
+  it.each(["failed_retryable", "failed_final", "cancelled"] as const)(
+    "旧档案陈旧且当前任务%s时保留实际未完成状态及手动重建入口", async (state) => {
+      const job = status({ state, stateLabel: "未完成", recoveryAction: "已有结果保留。" });
+      const retry = vi.fn();
+      const start = vi.fn(async () => ({ jobId: "new-job", runId: "new-run", created: true,
+        state: "queued" as const, stateLabel: "等待处理", recoveryAction: "无需操作" }));
+      setFactNormalizationRepository(makeRepo({ current: vi.fn(async () => job), start, retry,
+        getStatus: vi.fn(async () => status({jobId: "new-job", state: "queued",
+          stateLabel: "等待处理", recoveryAction: "无需操作"})) }));
+      render(<Harness profileStale />);
+      expect(await screen.findByLabelText("个例档案整理状态")).toHaveTextContent("个例档案整理未完成");
+      expect(start).not.toHaveBeenCalled();
+      await userEvent.setup().click(screen.getByRole("button", { name: "重新整理个例档案" }));
+      await waitFor(() => expect(start).toHaveBeenCalledOnce());
+      expect(retry).not.toHaveBeenCalled();
+      expect(job.state).toBe(state);
+      expect(await screen.findByLabelText("个例档案整理状态")).toHaveTextContent("个例档案整理排队中");
+    });
   it.each(["queued", "running", "recovering", "cancel_requested"] as const)(
     "旧档案陈旧但当前任务%s时恢复真实进度，不提供重复启动动作", async (state) => {
       const job = status({ state, stateLabel: "正在处理", recoveryAction: "关闭页面不会中断。",
