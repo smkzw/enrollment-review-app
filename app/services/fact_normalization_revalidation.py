@@ -17,16 +17,25 @@ from app.workflow.errors import InvalidJobDefinitionError
 from app.workflow.jobstore import JobStore
 
 
+_QUALIFICATION_PATHS = (
+    "domain/contracts/facts.py", "domain/contracts/enums.py", "domain/contracts/fact_context.py",
+    "domain/contracts/fact_gates.py", "domain/contracts/identifier_value.py",
+    "domain/contracts/evidence_locator.py", "domain/gates/fact_candidate_gates.py",
+    "domain/gates/fact_evidence_closure.py", "domain/gates/fact_batch_orchestration.py",
+    "domain/risk_flags.py", "evidence/risk.py", "storage/fact_authority.py",
+    "services/fact_publication_service.py", "services/fact_normalization_revalidation.py",
+    "agents/evidence_normalizer.py", "agents/evidence_candidate_partition.py",
+    "services/fact_normalization_executor.py", "services/fact_normalization_source_adapter.py",
+    "projections/normalizer_text_accounting.py", "storage/source_reference_successors.py",
+    "storage/evidence_expectation_repository.py",
+)
+
+
 def qualification_identity() -> str:
     """A gate change creates a new append-only result, never an old approval."""
     root = Path(__file__).resolve().parents[1]
-    paths = ("domain/gates/fact_evidence_closure.py", "domain/gates/fact_batch_orchestration.py",
-             "domain/risk_flags.py", "services/fact_publication_service.py", "services/fact_normalization_revalidation.py",
-             "agents/evidence_normalizer.py", "agents/evidence_candidate_partition.py",
-             "services/fact_normalization_executor.py", "services/fact_normalization_source_adapter.py",
-             "projections/normalizer_text_accounting.py", "storage/source_reference_successors.py",
-             "storage/evidence_expectation_repository.py")
-    return canonical_hash({path: hashlib.sha256((root / path).read_bytes()).hexdigest() for path in paths})
+    return canonical_hash({path: hashlib.sha256((root / path).read_bytes()).hexdigest()
+        for path in _QUALIFICATION_PATHS})
 
 
 def supports_saved_source(call) -> bool:
