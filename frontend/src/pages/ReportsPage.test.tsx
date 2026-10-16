@@ -290,8 +290,16 @@ describe("报告", () => {
     expect(screen.getByText(confirmationKind ? "高置信" : "低置信")).toBeInTheDocument();
     const marker = confirmationKind === "medical_manager" ? "医学经理已核实" : "构建者试用核实，非正式医学核实";
     if (confirmationKind) expect(screen.getByText(marker)).toBeInTheDocument();
-    expect(screen.getByText("必须符合原文限定").closest("details")).not.toHaveAttribute("open");
+    const protocolSource = screen.getByText("必须符合原文限定").closest("details")!;
+    expect(protocolSource).not.toHaveAttribute("open");
+    expect(protocolSource).toHaveClass("reports-print__protocol-source");
     await user.click(screen.getByText("分项核对（1）"));
+    expect(screen.getByText("基线期还未到，届时核对。")).toBeVisible();
+    window.dispatchEvent(new Event("beforeprint"));
+    expect(screen.getByText("后续节点仍须另行审核。")).toBeVisible();
+    expect(screen.getByText("基线期还未到，届时核对。")).toBeVisible();
+    window.dispatchEvent(new Event("afterprint"));
+    expect(protocolSource).not.toHaveAttribute("open");
     expect(screen.getByText("基线期还未到，届时核对。")).toBeVisible();
     expect(screen.getByText(/读取意见尚未一致/)).toBeInTheDocument();
     expect(screen.getByText("原件第 4 页")).toBeInTheDocument();

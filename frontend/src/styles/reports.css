@@ -431,6 +431,13 @@
     border-radius: 0;
     background: #fff;
     color: #000;
+    font-size: 10pt;
+    line-height: 1.4;
+  }
+
+  .reports-print .eligibility-reason-lines {
+    gap: 2pt;
+    line-height: 1.4;
   }
 
   .reports-print__head {
@@ -450,6 +457,11 @@
 
   .reports-print__conditions summary {
     color: #000;
+  }
+
+  /* 完整方案原文仍可在屏幕展开；打印保留结论、完整依据及分项，避免长原文挤入编号栏。 */
+  .reports-print__protocol-source {
+    display: none !important;
   }
 
   .reports-print__table {
