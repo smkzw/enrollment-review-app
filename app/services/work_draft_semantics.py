@@ -17,7 +17,7 @@ from app.services.work_draft_calculation import (atomic_expressions, is_numeric_
     review_source_cutoff, independent_source_requirements, source_header_date)
 
 PROMPT_VERSION = "work-draft-source-relations/v7"
-VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v31"
+VALIDATION_VERSION = "work-draft-source-validation/0.2.0-v32"
 BATCH_SIZE = 16
 SEMANTIC_INSTRUCTIONS = (
     "你是入排审核产品的原文关系核对员。逐项查找本次提供的病历与报告中，对原子条件的支持或否定；"
@@ -584,6 +584,15 @@ def provider_is_blocked(error):
 
 
 def relation_inputs(row, target, pages):
+    predicate = target["atom"]["predicate"]
+    if (row.relation == "refutes" and (row.observed_value is not None or row.observed_unit is not None)
+            and ((target.get("variable") or {}).get("value_type") == "number"
+                 or predicate.get("comparator") in {"gt", "gte", "lt", "lte", "between"})):
+        # Refutes is reserved for a direct written denial. A numeric observation
+        # belongs to supports and code comparison; it cannot reverse that denial.
+        raise ValueError("数字条件的refutes只用于原文直接否认，observed_value与observed_unit须为空。"
+            "若原文仅提供本条件同一指标的实际读数，使用supports并保留原值和单位，由程序比较；"
+            "相关但并非同一指标的数字不能填入，不计算相反指标或用附带数字改写明确否认。")
     refs = [WorkDraftSourceRef(source_document_version_id=page.source_document_version_id,
         page_artifact_id=page.page_artifact_id, page_number=page.page_number,
         excerpt=quote.excerpt, disposition="mentioned" if row.relation in {"supports", "refutes"}
@@ -593,9 +602,8 @@ def relation_inputs(row, target, pages):
         for quote in row.quotes for page in pages if page.page_artifact_id == quote.page_artifact_id]
     truth = TruthValue.TRUE if row.relation == "supports" else TruthValue.FALSE if row.relation == "refutes" else TruthValue.UNKNOWN
     policy = False
-    predicate = target["atom"]["predicate"]
     if (not target.get("scope_only") and predicate.get("comparator") in {"gt", "gte", "lt", "lte", "between"}
-            and (row.relation == "supports" or row.relation == "refutes" and row.observed_value is not None)):
+            and row.relation == "supports"):
         # Numeric assertions are operands, not model-computed truth values.
         from app.domain.contracts.rules import AtomicPredicate
         from app.domain.expression import _compare

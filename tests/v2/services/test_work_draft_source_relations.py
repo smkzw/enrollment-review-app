@@ -890,7 +890,8 @@ def test_source_reader_never_adopts_nested_or_unclosed_results_or_adds_attempts(
 
 @pytest.mark.parametrize("value,unit,relation,expected", [
     (25, "mg/L", "supports", "true"),
-    (25, "mg/L", "refutes", "true"),
+    (5, "mg/L", "supports", "false"),
+    (None, None, "refutes", "false"),
     (None, None, "supports", "unknown"),
     (250, "mg/L", "supports", "unknown"),
     (25, "g/L", "supports", "unknown"),
@@ -900,10 +901,104 @@ def test_numeric_source_relation_must_use_literal_operands_and_code_comparison(v
         "attribute": "检验指标", "comparator": "gte", "value": 20, "unit": "mg/L"}},
         "variable": {"variable_id": "marker", "label_zh": "检验指标", "value_type": "number",
             "canonical_unit": "mg/L", "unit_conversions": {}, "plausible_range": [0, 1000], "domain": "lab"}}
-    source = page("检验指标：25 mg/L。")
+    source = page("明确否认本条件所述异常。") if relation == "refutes" else page("检验指标：25 mg/L。另次记录：5 mg/L。")
     relation_row = row(relation=relation, quotes=[{"page_artifact_id": "page", "excerpt": source.effective_text}]).model_copy(
         update={"observed_value": value, "observed_unit": unit})
     assert relation_inputs(relation_row, numeric_target, [source])["truth"] == expected
+
+
+@pytest.mark.parametrize("value,unit", [(4, "day"), (4, None), (None, "day")])
+def test_direct_numeric_denial_cannot_be_reversed_by_an_attached_other_quantity(value, unit):
+    from app.services.work_draft_semantics import split_valid_relations
+    numeric = {**target(), "target_id": "limited-record-days", "atom": {"predicate": {
+        "predicate_id": "limited-record-days", "subject": "受试者", "attribute": "每周期未开展记录的天数",
+        "comparator": "gte", "value": 4, "unit": "day"}},
+        "variable": {"value_type": "number"}}
+    source = page("否认记录开展有限，确认每周期至少4天开展记录。另项记录明确存在。")
+    denial = row(target_id=numeric["target_id"], relation="refutes",
+        quotes=[{"page_artifact_id": "page", "excerpt": "否认记录开展有限，确认每周期至少4天开展记录。"}]).model_copy(
+            update={"observed_value": value, "observed_unit": unit})
+    with pytest.raises(ValueError, match="同一指标"):
+        relation_inputs(denial, numeric, [source])
+    sibling = row(quotes=[{"page_artifact_id": "page", "excerpt": "另项记录明确存在。"}])
+    accepted, failed = split_valid_relations({"results": [denial.model_dump(), sibling.model_dump()]},
+        [numeric, target()], [source])
+    assert set(accepted) == {target()["target_id"]}
+    assert set(failed) == {numeric["target_id"]}
+    assert "同一指标" in failed[numeric["target_id"]]
+    clean = denial.model_copy(update={"observed_value": None, "observed_unit": None})
+    result = relation_inputs(clean, numeric, [source])
+    assert result["truth"] == "false" and result["relation"] == "refutes"
+    assert result["source_read_refs"][0]["excerpt"] == clean.quotes[0].excerpt
+
+
+def test_numeric_denial_revalidation_rejects_only_invalid_target_and_keeps_saved_sibling():
+    import json
+    from app.domain.contracts.agents import ModelConfigContract
+    from app.domain.contracts.enums import ReviewStage
+    from app.services.work_draft_semantics import revalidate_saved_source_read, SEMANTIC_INSTRUCTIONS, SourceRelations
+    model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
+    numeric = {**target(), "target_id": "quantity", "atom": {"predicate": {
+        "predicate_id": "quantity", "subject": "受试者", "attribute": "未开展记录天数",
+        "comparator": "gte", "value": 4, "unit": "day"}}, "variable": {"value_type": "number"}}
+    source = page("否认记录开展有限，每周期至少4天开展记录。否认近期感染。")
+    frame = SimpleNamespace(source_pages=[source], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+        evidence_cutoff_date=None, anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
+    material = {"version": "frozen", "stage": "screening", "anchor_dates": {}, "targets": [numeric, target()],
+        "pages": [{"page_artifact_id": "page", "page_number": 1, "category": "study_chart", "text": source.effective_text}],
+        "output_schema": SourceRelations.model_json_schema()}
+    request = {"messages": [{"role": "user", "content": SEMANTIC_INSTRUCTIONS + "每个target_id恰好返回一次。\n"
+        + json.dumps(material, ensure_ascii=False)}]}
+    bad = row(target_id="quantity",
+        quotes=[{"page_artifact_id": "page", "excerpt": "否认记录开展有限，每周期至少4天开展记录。"}]).model_copy(
+            update={"observed_value": 4, "observed_unit": "day"})
+    good = row()
+    saved = {"model": model.model_dump(mode="json"), "text": json.dumps({"results": [bad.model_dump(), good.model_dump()]}, ensure_ascii=False),
+        "calls": [{"finish_reason": "stop", "response_model": "fixture", "request_artifact_sha256": "request"}]}
+    class Artifacts:
+        def read(self, _ref): return json.dumps(saved, ensure_ascii=False).encode()
+        def read_by_sha(self, _kind, _digest): return json.dumps(request, ensure_ascii=False).encode()
+    prior = relation_inputs(good, target(), [source])
+    old_bad = {**relation_inputs(bad.model_copy(update={"observed_value": None, "observed_unit": None}), numeric, [source]),
+        "truth": "true"}
+    original = json.dumps(saved, ensure_ascii=False, sort_keys=True)
+    values, proofs = revalidate_saved_source_read({"raw_refs": ["saved"], "results": {good.target_id: prior, "quantity": old_bad}},
+        frame, [numeric, target()], model, Artifacts())
+    assert values == {good.target_id: prior} and set(proofs) == {good.target_id}
+    assert json.dumps(saved, ensure_ascii=False, sort_keys=True) == original
+
+
+def test_numeric_denial_format_retry_keeps_sibling_and_repairs_only_bad_target():
+    import json
+    from app.domain.contracts.agents import ModelConfigContract
+    from app.domain.contracts.enums import ReviewStage
+    from app.services.work_draft_semantics import read_source_relations
+    model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
+    numeric = {**target(), "target_id": "quantity", "atom": {"predicate": {
+        "predicate_id": "quantity", "subject": "受试者", "attribute": "未开展记录天数",
+        "comparator": "gte", "value": 4, "unit": "day"}}, "variable": {"value_type": "number"}}
+    source = page("否认记录开展有限，每周期至少4天开展记录。否认近期感染。")
+    frame = SimpleNamespace(source_pages=[source], review_episode=SimpleNamespace(stage=ReviewStage.SCREENING,
+        evidence_cutoff_date=None, anchor_dates={}, model_dump=lambda **_: {"anchor_dates": {}}))
+    sent = []
+    class Transport:
+        def propose_question_classifications(self, *, prompt, output_schema):
+            sent.append(json.loads(prompt.split("\n", 1)[1]))
+            denial = row(target_id="T01", quotes=[{"page_artifact_id": "P01", "excerpt": "否认记录开展有限，每周期至少4天开展记录。"}]).model_copy(
+                update={"observed_value": 4 if len(sent) == 1 else None, "observed_unit": "day" if len(sent) == 1 else None})
+            rows = [denial.model_dump()]
+            if len(sent) == 1:
+                rows.append(row(target_id="T02", quotes=[{"page_artifact_id": "P01", "excerpt": "否认近期感染。"}]).model_dump())
+            return SimpleNamespace(text=json.dumps({"results": rows}, ensure_ascii=False))
+    class Artifacts:
+        def put(self, kind, body):
+            return SimpleNamespace(sha256=sha256(body).hexdigest(), storage_ref=f"artifacts/{kind}/{sha256(body).hexdigest()}")
+    result = read_source_relations(frame, [numeric, target()], model, Artifacts(), transport_factory=lambda _: Transport())
+    assert len(sent) == 2 and [t["target_id"] for t in sent[1]["targets"]] == ["T01"]
+    assert set(sent[1]["validation_errors"]) == {"T01"}
+    assert set(result["results"]) == {"quantity", target()["target_id"]}
+    assert all(value["truth"] == "false" for value in result["results"].values())
+    assert "error" not in result
 
 
 def test_compact_input_preserves_clinical_dependencies_and_only_maps_declared_aliases():
