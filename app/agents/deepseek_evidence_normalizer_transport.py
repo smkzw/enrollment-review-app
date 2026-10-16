@@ -94,7 +94,8 @@ def _map_glm_normalizer_reasoning_effort(effort: str) -> dict[str, Any]:
 
 
 # GLM 流式传输的硬上限：块间不活动 600s（与客户端读超时一致）、
-# 整条流总时长 1200s。两者都只在“块与块之间”检查，粒度说明见
+# 首次整条流总时长 1200s；length 重试按实际额度增幅延长，最多 2400s。
+# 两者都只在“块与块之间”检查，粒度说明见
 # _assemble_glm_stream 的 docstring。
 GLM_STREAM_INACTIVITY_LIMIT_SECONDS = 600.0
 GLM_STREAM_TOTAL_LIMIT_SECONDS = 1200.0
@@ -464,7 +465,10 @@ class DeepSeekEvidenceNormalizerTransport:
             if self._receipt_callback is not None:
                 self._receipt_callback(receipt)
 
-    def _request_stream(self, kwargs, *, strict_model_check: bool = True):
+    def _request_stream(
+        self, kwargs, *, strict_model_check: bool = True,
+        total_limit: float = GLM_STREAM_TOTAL_LIMIT_SECONDS,
+    ):
         """流式执行一次 GLM 请求：逐块观测，失败小票保留部分输出诊断。
 
         ``strict_model_check`` 允许网关请求名与首个实际返回名不同；实际内容流
@@ -475,13 +479,14 @@ class DeepSeekEvidenceNormalizerTransport:
                    "started_at": datetime.now(timezone.utc).isoformat(),
                    "provider": self._backend, "requested_model": self._model,
                    "max_tokens": kwargs["max_tokens"],
+                   "total_limit_seconds": total_limit,
                    "reasoning_effort": kwargs.get("reasoning_effort")}
         state = _new_glm_stream_state()
         stream = None
         try:
             self._bind_request_receipt(receipt, kwargs)
             stream = self._client.chat.completions.create(**kwargs)
-            _assemble_glm_stream(stream, state)
+            _assemble_glm_stream(stream, state, total_limit=total_limit)
             if strict_model_check and str(state["response_model"] or "").lower() != self._model.lower():
                 raise RuntimeError("GLM 实际响应模型与请求模型不一致")
             content = "".join(state["content_parts"])
@@ -509,6 +514,8 @@ class DeepSeekEvidenceNormalizerTransport:
             )
             receipt.update(
                 error_type=type(exc).__name__,
+                response_model=state["response_model"],
+                response_id=state["response_id"],
                 status_code=getattr(exc, "status_code", None),
                 finish_reason=state["finish"],
                 raw_text="".join(state["content_parts"]) or None,
@@ -551,7 +558,11 @@ class DeepSeekEvidenceNormalizerTransport:
                 EVIDENCE_NORMALIZER_LENGTH_RETRY_MAX_TOKENS,
             )
             if retry_kwargs["max_tokens"] > kwargs["max_tokens"]:
-                completion = self._request_stream(retry_kwargs, strict_model_check=strict_model_check)
+                completion = self._request_stream(
+                    retry_kwargs, strict_model_check=strict_model_check,
+                    total_limit=(GLM_STREAM_TOTAL_LIMIT_SECONDS
+                                 * retry_kwargs["max_tokens"] / kwargs["max_tokens"]),
+                )
         finish = completion.choices[0].finish_reason if completion.choices else None
         if not completion.model:
             raise RuntimeError("流式响应未报告实际模型身份，拒绝采信结果")

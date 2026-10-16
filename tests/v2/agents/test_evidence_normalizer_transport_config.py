@@ -542,7 +542,7 @@ def test_length_finish_reason_retries_once_with_double_output_budget():
 def test_length_retry_budget_is_capped_at_131072():
     """length 只重试一次，思考+正文共享预算封顶 131072，不静默翻倍。"""
 
-    calls = []
+    calls, receipts = [], []
     streams = iter(
         [
             _FakeStream([_stream_chunk(content='{"partial":', finish="length")]),
@@ -564,6 +564,7 @@ def test_length_retry_budget_is_capped_at_131072():
         max_tokens=100000,
         response_format={"type": "json_object"},
         client=_glm_stream_client(create),
+        receipt_callback=receipts.append,
     )
 
     response = transport.start(prompt="请输出完整 JSON")
@@ -571,6 +572,66 @@ def test_length_retry_budget_is_capped_at_131072():
     assert response.text == '{"complete":true}'
     # 100000*2 > 131072：重试请求封顶 131072。
     assert [call["max_tokens"] for call in calls] == [100000, 131072]
+    assert [receipt["total_limit_seconds"] for receipt in receipts] == pytest.approx(
+        [1200, 1200 * 131072 / 100000]
+    )
+
+
+@pytest.mark.parametrize("outcome", ["stop", "length", "total", "idle"])
+def test_length_retry_scales_time_without_weakening_completion_or_idle_checks(monkeypatch, outcome):
+    calls, receipts, limits, streams = [], [], [], []
+    assemble = transport_module._assemble_glm_stream
+
+    def assemble_with_clock(stream, state, **kwargs):
+        limits.append(kwargs["total_limit"])
+        if len(limits) == 1:
+            ticks = [0, 0]
+        else:
+            # A valid long retry exceeds the original 1200s, with regular activity.
+            ticks = [0, 0, 500, 1000, 1500, 2000]
+            if outcome == "total":
+                ticks.extend([2401])
+            elif outcome == "idle":
+                ticks[-1] = 2200
+        clock = iter(ticks)
+        assemble(stream, state, clock=lambda: next(clock), **kwargs)
+
+    monkeypatch.setattr(transport_module, "_assemble_glm_stream", assemble_with_clock)
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            chunks = [_stream_chunk(content='{"partial":', finish="length")]
+        else:
+            chunks = [_stream_chunk(reasoning="processing") for _ in range(4)]
+            chunks.append(_stream_chunk(content='{"complete":true}',
+                                        finish="length" if outcome == "length" else "stop"))
+            if outcome == "total":
+                chunks.append(_stream_chunk(usage={"completion_tokens": 100}))
+        stream = _FakeStream(chunks)
+        streams.append(stream)
+        return stream
+
+    transport = transport_module.DeepSeekEvidenceNormalizerTransport(
+        backend="cms-router", model="glm-5.3-flash", reasoning_effort="high",
+        max_tokens=65536, response_format={"type": "json_object"},
+        client=_glm_stream_client(create), stream_response=True,
+        receipt_callback=receipts.append,
+    )
+    if outcome == "stop":
+        assert transport.start(prompt="same bounded source").text == '{"complete":true}'
+    else:
+        expected = {"length": "未完整结束", "total": "总时长", "idle": "不活动"}[outcome]
+        with pytest.raises(transport_module.EvidenceNormalizerAgentCallError, match=expected):
+            transport.start(prompt="same bounded source")
+    assert len(calls) == 2
+    assert limits == [1200, 2400]
+    assert [receipt["total_limit_seconds"] for receipt in receipts] == limits
+    assert [call["max_tokens"] for call in calls] == [65536, 131072]
+    assert {key: value for key, value in calls[0].items() if key != "max_tokens"} == {
+        key: value for key, value in calls[1].items() if key != "max_tokens"
+    }
+    assert all(stream.closed for stream in streams)
 
 
 # ---------------------------------------------------------------------------
@@ -700,6 +761,8 @@ def test_glm_stream_error_rejects_partial_and_keeps_failure_receipt():
     assert len(receipts) == 1
     receipt = receipts[0]
     assert receipt["error_type"] == "RemoteProtocolError"
+    assert receipt["response_model"] == "glm-5.3-flash"
+    assert receipt["response_id"] == "chatcmpl-glm-1"
     assert receipt["finish_reason"] is None
     assert receipt["raw_text"] == '{"norm'
     assert receipt["partial_result"] is True
