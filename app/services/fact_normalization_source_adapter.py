@@ -718,7 +718,8 @@ def retained_normalization_reads(
                     include_source_categories=model.parameters.get("include_source_categories", False),
                     include_medication_field_sources=model.parameters.get("include_medication_field_sources", False),
                     medication_source_material=model.parameters.get("medication_source_guidance"),
-                    compact_requirement_rows=model.parameters.get("compact_requirement_rows", False))
+                    compact_requirement_rows=model.parameters.get("compact_requirement_rows", False),
+                    preserve_repair_schema=model.parameters.get("preserve_repair_schema", False))
                 if not any(row.get("role") == "user" and row.get("content") == prompt for row in body.get("messages", ())):
                     continue
                 result.append({"run_id": run.run_id, "call_id": call.call_id,

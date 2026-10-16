@@ -166,6 +166,8 @@ def validate_evidence_normalizer_model_config(
         raise ValueError("用药逐字段来源配置必须是布尔值")
     if not isinstance(model_config.parameters.get("compact_requirement_rows", False), bool):
         raise ValueError("要求清单紧凑格式配置必须是布尔值")
+    if not isinstance(model_config.parameters.get("preserve_repair_schema", False), bool):
+        raise ValueError("补答结构保持配置必须是布尔值")
     medication_source_guidance(
         model_config.parameters.get("include_medication_field_sources", False),
         model_config.parameters.get("medication_source_guidance"),
@@ -463,6 +465,7 @@ DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE = (
 
 _PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v42"
 _MAX_PROMPT_CHARS = 100_000
+_REPAIR_SCHEMA_INSTRUCTION = "补答继续使用首轮相同的字段、逐字段依据和变量范围，不得改用旧输出结构。\n"
 # Legacy request material is immutable: saved requests are reconstructed verbatim.
 _MEDICATION_FIELD_SOURCE_INSTRUCTIONS = (
     "实际用药候选须逐字段填写field_sources：每项保留本药对象、原值、对应角色、定位及连续原句；"
@@ -758,12 +761,15 @@ def evidence_normalizer_prompt_template_sha256(
     prompt_template: str, *, include_medication_field_sources: bool = False,
     medication_source_material: str | None = None,
     compact_requirement_rows: bool = False,
+    preserve_repair_schema: bool = False,
 ) -> str:
     """对模板、合同、生成 schema、修复规则与布局的完整可审计哈希。"""
     from app.agents.evidence_question_repair import QUESTION_REPAIR_INSTRUCTIONS, RECOVERABLE_GAP_TYPES
 
     if not isinstance(compact_requirement_rows, bool):
         raise ValueError("要求清单紧凑格式配置必须是布尔值")
+    if not isinstance(preserve_repair_schema, bool):
+        raise ValueError("补答结构保持配置必须是布尔值")
     base = _sha256(
         "\n\n".join(
             (
@@ -785,7 +791,9 @@ def evidence_normalizer_prompt_template_sha256(
     if include_medication_field_sources:
         base = _sha256(base + guidance
             + _compact_schema(include_medication_field_sources=True))
-    return _sha256(base + _REQUIREMENT_ROW_INSTRUCTION) if compact_requirement_rows else base
+    if compact_requirement_rows:
+        base = _sha256(base + _REQUIREMENT_ROW_INSTRUCTION)
+    return _sha256(base + _REPAIR_SCHEMA_INSTRUCTION) if preserve_repair_schema else base
 
 
 def _strip_schema_titles(node) -> None:
@@ -1123,6 +1131,7 @@ def build_evidence_normalizer_prompt(
     include_medication_field_sources: bool = False,
     medication_source_material: str | None = None,
     compact_requirement_rows: bool = False,
+    preserve_repair_schema: bool = False,
 ) -> str:
     """从冻结输入构建唯一可审计的 prompt，不含隐藏自由文本。
 
@@ -1143,6 +1152,8 @@ def build_evidence_normalizer_prompt(
         raise ValueError("要求清单紧凑格式配置必须是布尔值")
     if compact_requirement_rows:
         _compact_requirement_rows(payload)
+    if not isinstance(preserve_repair_schema, bool):
+        raise ValueError("补答结构保持配置必须是布尔值")
     if evidence_input.variable_definitions:
         columns = ["locator_id", "page_number", "precision", "localized_text"]
         payload["locator_columns"] = columns
@@ -1157,6 +1168,8 @@ def build_evidence_normalizer_prompt(
     head += medication_source_guidance(include_medication_field_sources, medication_source_material)
     if compact_requirement_rows:
         head += _REQUIREMENT_ROW_INSTRUCTION
+    if preserve_repair_schema:
+        head += _REPAIR_SCHEMA_INSTRUCTION
     if evidence_input.variable_definitions:
         head += ("related_requirements 的 context_ref 是 requirement_contexts 中从0开始的索引；共同说明只保存一次，所有要求编号和数据项目仍分别保留。"
                  "locators 是按 locator_columns 列顺序保存的定位行，每行仍独立保留真实编号、页和逐字原文，不得合并不同位置。\n")
@@ -2434,12 +2447,15 @@ def validate_output_page_closure(
 
 
 def _schema_repair_prompt(problem: str, *, include_output_schema: bool = True,
-                          verified_scope_prompt: bool = False) -> str:
-    schema_suffix = f"输出结构：{_compact_schema()}" if include_output_schema else ""
+                          verified_scope_prompt: bool = False,
+                          output_schema: str | None = None) -> str:
+    schema_suffix = f"输出结构：{output_schema if output_schema is not None else _compact_schema()}" if include_output_schema else ""
     repair_contract = _SCHEMA_REPAIR_CONTRACT
     if verified_scope_prompt:
         from app.agents.verified_evidence_prompt import VERIFIED_EVIDENCE_REPAIR_CONTRACT
         repair_contract = VERIFIED_EVIDENCE_REPAIR_CONTRACT
+    if output_schema is not None:
+        repair_contract += _REPAIR_SCHEMA_INSTRUCTION
     return (
         "前一输出未能通过严格 JSON Schema 校验。"
         f"具体问题：{problem[:12000]}。"
@@ -2514,6 +2530,7 @@ class EvidenceNormalizerRunner:
         allow_question_classification_repair: bool = False,
     ) -> EvidenceNormalizerRunResult:
         field_sources = getattr(transport, "include_medication_field_sources", False) is True
+        preserve_repair_schema = getattr(transport, "preserve_repair_schema", False)
         if (evidence_input.variable_definitions or field_sources) and hasattr(transport, "set_output_schema"):
             transport.set_output_schema(evidence_normalizer_json_schema(
                 [item.variable_id for item in evidence_input.variable_definitions] if evidence_input.variable_definitions else None,
@@ -2540,6 +2557,7 @@ class EvidenceNormalizerRunner:
             include_medication_field_sources=field_sources,
             medication_source_material=getattr(transport, "medication_source_material", None),
             compact_requirement_rows=getattr(transport, "compact_requirement_rows", False),
+            preserve_repair_schema=preserve_repair_schema,
         )
         available = set(evidence_input.available_locator_ids)
         locator_source_hashes = {
@@ -2772,6 +2790,9 @@ class EvidenceNormalizerRunner:
                 repair_prompt = _schema_repair_prompt(
                     str(exc), include_output_schema=include_output_schema,
                     verified_scope_prompt=verified_scope_prompt,
+                    output_schema=_compact_schema(
+                        [item.variable_id for item in evidence_input.variable_definitions] or None,
+                        include_medication_field_sources=field_sources) if preserve_repair_schema else None,
                 )
                 if pending_contexts:
                     repair_prompt += "补答必须保留已有另处背景来源及其待核关系，不得删除、换候选或改为同句限定来解除疑问。"

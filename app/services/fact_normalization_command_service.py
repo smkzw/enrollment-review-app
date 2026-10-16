@@ -137,6 +137,7 @@ def _is_usable_prompt(
     prompt: PromptVersion, *, prompt_template: str, include_medication_field_sources: bool = False,
     medication_source_material: str | None = None,
     compact_requirement_rows: bool = False,
+    preserve_repair_schema: bool = False,
 ) -> bool:
     if prompt.node is not AgentNode.EVIDENCE_NORMALIZER:
         return False
@@ -145,13 +146,15 @@ def _is_usable_prompt(
     expected = evidence_normalizer_prompt_template_sha256(prompt_template,
         include_medication_field_sources=include_medication_field_sources,
         medication_source_material=medication_source_material,
-        compact_requirement_rows=compact_requirement_rows)
+        compact_requirement_rows=compact_requirement_rows,
+        preserve_repair_schema=preserve_repair_schema)
     return prompt.template_sha256 == expected
 
 
 def _runtime_prompt(prompt_template: str, *, include_medication_field_sources: bool = False,
                     medication_source_material: str | None = None,
-                    compact_requirement_rows: bool = False) -> PromptVersion:
+                    compact_requirement_rows: bool = False,
+                    preserve_repair_schema: bool = False) -> PromptVersion:
     if not prompt_template.strip():
         raise AppFactNormalizationConfigError(
             "个例档案整理所需的语义模板为空，系统已停止启动。"
@@ -159,7 +162,8 @@ def _runtime_prompt(prompt_template: str, *, include_medication_field_sources: b
     template_hash = evidence_normalizer_prompt_template_sha256(prompt_template,
         include_medication_field_sources=include_medication_field_sources,
         medication_source_material=medication_source_material,
-        compact_requirement_rows=compact_requirement_rows)
+        compact_requirement_rows=compact_requirement_rows,
+        preserve_repair_schema=preserve_repair_schema)
     prompt = PromptVersion(
         # PromptVersion enforces a non-empty id; this provisional value is
         # excluded from the content identity and replaced before persistence.
@@ -399,7 +403,8 @@ def _load_exact_registered_config(
         or not _is_usable_prompt(prompt, prompt_template=prompt_template,
             include_medication_field_sources=model_config.parameters.get("include_medication_field_sources", False),
             medication_source_material=model_config.parameters.get("medication_source_guidance"),
-            compact_requirement_rows=model_config.parameters.get("compact_requirement_rows", False))
+            compact_requirement_rows=model_config.parameters.get("compact_requirement_rows", False),
+            preserve_repair_schema=model_config.parameters.get("preserve_repair_schema", False))
     ):
         raise AppFactNormalizationConfigError(
             "个例档案整理的已登记配置与当前系统不一致，无法开始整理。"
@@ -477,6 +482,8 @@ def select_registered_evidence_normalizer_config(
 
     if marked[0].parameters.get("include_medication_field_sources", False):
         raise AppFactNormalizationConfigError("实验性逐字段读取须显式指定配对配置，不能自动选择为默认整理方式。")
+    if marked[0].parameters.get("preserve_repair_schema", False):
+        raise AppFactNormalizationConfigError("自定义补答结构须显式指定配对配置，不能自动选择为默认整理方式。")
     return RegisteredNormalizerConfig(
         prompt_version_id=usable_prompts[0].prompt_version_id,
         model_config_id=marked[0].model_config_id,

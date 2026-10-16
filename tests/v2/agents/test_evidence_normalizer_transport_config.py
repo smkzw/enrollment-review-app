@@ -84,11 +84,12 @@ def test_ollama_normalizer_frozen_factory_keeps_text_mode(monkeypatch):
 
 
 @pytest.mark.parametrize("flag", [False, True, "false"])
-def test_source_category_layout_is_frozen_and_not_a_provider_option(flag):
+@pytest.mark.parametrize("option", ["include_source_categories", "compact_requirement_rows", "preserve_repair_schema"])
+def test_source_category_layout_is_frozen_and_not_a_provider_option(flag, option):
     config = ModelConfigContract(model_config_id="source-layout-test", provider="omlx",
         model="synthetic-model", reasoning_effort="high",
         parameters={"agent_node": "evidence_normalizer", "max_tokens": 65536,
-                    "include_source_categories": flag})
+                    option: flag})
     if not isinstance(flag, bool):
         with pytest.raises(ValueError, match="布尔值"):
             validate_evidence_normalizer_model_config(config)
@@ -96,8 +97,8 @@ def test_source_category_layout_is_frozen_and_not_a_provider_option(flag):
             transport_module.evidence_normalizer_transport_from_model_config(config, client=object())
         return
     transport = transport_module.evidence_normalizer_transport_from_model_config(config, client=object())
-    assert transport.include_source_categories is flag
-    assert "include_source_categories" not in transport._completion_kwargs([{"role": "user", "content": "测试"}])
+    assert getattr(transport, option) is flag
+    assert option not in transport._completion_kwargs([{"role": "user", "content": "测试"}])
 
 
 class _FakeStream:

@@ -99,7 +99,8 @@ def test_invalid_frozen_guidance_is_rejected_before_job_creation(session_factory
 
 
 @pytest.mark.parametrize("compact_rows", [False, True, "true", 1, None])
-def test_frozen_layout_is_validated_at_registration_and_before_job_creation(session_factory, compact_rows):
+@pytest.mark.parametrize("option", ["compact_requirement_rows", "preserve_repair_schema"])
+def test_frozen_layout_is_validated_at_registration_and_before_job_creation(session_factory, compact_rows, option):
     from sqlalchemy import func, select
     from app.storage.models import JobRecord
     from app.workflow.errors import InvalidJobDefinitionError
@@ -107,12 +108,12 @@ def test_frozen_layout_is_validated_at_registration_and_before_job_creation(sess
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="layout")
         base = AppendRepository(session, MODEL_CONFIG_CONFIG).get(chain["model_config_id"])
-        model = base.model_copy(update={"parameters": {**base.parameters, "compact_requirement_rows": compact_rows}})
+        model = base.model_copy(update={"parameters": {**base.parameters, option: compact_rows}})
         model = model.model_copy(update={"model_config_id": "evidence-normalizer/model/" + _model_identity(model)})
         AppendRepository(session, MODEL_CONFIG_CONFIG).save(model)
         before = session.scalar(select(func.count()).select_from(JobRecord))
         if isinstance(compact_rows, bool):
-            prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, compact_requirement_rows=compact_rows)
+            prompt = _runtime_prompt(DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, **{option: compact_rows})
             AppendRepository(session, PROMPT_VERSION_CONFIG).save(prompt)
             pair = RegisteredNormalizerConfig(prompt_version_id=prompt.prompt_version_id, model_config_id=model.model_config_id)
             assert select_registered_evidence_normalizer_config(session, registered_config=pair) == pair
@@ -122,7 +123,8 @@ def test_frozen_layout_is_validated_at_registration_and_before_job_creation(sess
                         prompt_version_id=chain["prompt_version_id"], model_config_id=model.model_config_id))
             return
     # Null is rejected by the stored ModelConfig contract before role validation.
-    with pytest.raises(InvalidJobDefinitionError, match="无法读取证据规范化配置" if compact_rows is None else "紧凑格式"):
+    label = "紧凑格式" if option == "compact_requirement_rows" else "补答结构"
+    with pytest.raises(InvalidJobDefinitionError, match="无法读取证据规范化配置" if compact_rows is None else label):
         FactNormalizationJobService(session_factory).create_or_reuse_from_source(authority=chain["authority"],
             prompt_version_id=chain["prompt_version_id"], model_config_id=model.model_config_id,
             created_by="builder_verification")

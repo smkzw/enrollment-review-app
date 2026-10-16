@@ -6,6 +6,62 @@ import json
 import pytest
 
 from app.agents.evidence_normalizer_repair import EvidenceSourceObjectRepair
+from app.agents.evidence_normalizer import (
+    EvidenceNormalizerRunner, _schema_repair_prompt, _compact_schema,
+    evidence_normalizer_json_schema, evidence_normalizer_prompt_template_sha256,
+    DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, build_evidence_normalizer_prompt,
+)
+from app.domain.variables.dictionary import VariableDef
+from tests.v2.agents.test_evidence_normalizer_adapter import _input, _FakeTransport, _valid_output_dict
+
+
+@pytest.mark.parametrize("field_sources", [False, True])
+@pytest.mark.parametrize("variables", [False, True])
+@pytest.mark.parametrize("provider_schema", [False, True])
+def test_opted_in_runner_keeps_the_same_output_schema_for_repair(field_sources, variables, provider_schema):
+    evidence = _input()
+    if variables:
+        evidence = evidence.model_copy(update={"variable_definitions": [VariableDef(
+            variable_id="synthetic_history", label_zh="病史", value_type="boolean", domain="history")]})
+    transport = _FakeTransport([("{", "same-session"), (json.dumps(_valid_output_dict()), "same-session")])
+    transport.preserve_repair_schema = True
+    transport.include_medication_field_sources = field_sources
+    transport.enforces_output_json_schema = provider_schema
+    schemas = []
+    transport.set_output_schema = schemas.append
+    result = EvidenceNormalizerRunner(max_schema_repairs=1, max_transport_retries=0).run(
+        evidence, transport, prompt_template="按原文读取")
+    assert result.status == "已解析"
+    assert len(transport.start_prompts) == len(transport.repair_prompts) == 1
+    session, repair = transport.repair_prompts[0]
+    assert session == "same-session"
+    expected = evidence_normalizer_json_schema(["synthetic_history"] if variables else None,
+        include_medication_field_sources=field_sources)
+    if variables or field_sources:
+        assert schemas == [expected]
+    if provider_schema:
+        assert "输出结构：" not in repair
+    else:
+        initial_schema, _ = json.JSONDecoder().raw_decode(transport.start_prompts[0].split("输出结构：", 1)[1])
+        repair_schema = json.loads(repair.split("输出结构：", 1)[1])
+        assert initial_schema == repair_schema == expected
+    assert "不得改用旧输出结构" in repair
+
+
+def test_legacy_repair_and_prompt_identity_remain_exact():
+    assert _schema_repair_prompt("合成错误").endswith("输出结构：" + _compact_schema())
+    assert "不得改用旧输出结构" not in _schema_repair_prompt("合成错误")
+    template = DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE
+    assert evidence_normalizer_prompt_template_sha256(template) == "dd2d86d2da5d1ee69ea98aa6f7bb8854c3fa915c077f4b78f2af5c2cc4d3dbe8"
+    assert evidence_normalizer_prompt_template_sha256(template, preserve_repair_schema=True) != evidence_normalizer_prompt_template_sha256(template)
+
+
+@pytest.mark.parametrize("flag", [None, "true", 1])
+def test_repair_schema_option_is_not_coerced(flag):
+    with pytest.raises(ValueError, match="补答结构"):
+        evidence_normalizer_prompt_template_sha256("读取", preserve_repair_schema=flag)
+    with pytest.raises(ValueError, match="补答结构"):
+        build_evidence_normalizer_prompt(_input(), prompt_template="读取", preserve_repair_schema=flag)
 
 
 def _previous():
