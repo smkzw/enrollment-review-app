@@ -290,6 +290,9 @@ class SourceRelations(ContractModel):
 
 def source_batches(targets, reusable):
     """Pack pending targets first; all targets remain in the durable Job."""
+    if targets and all(target["target_id"] in reusable for target in targets):
+        # No generation request is needed. Revalidate the whole saved scope once.
+        return [targets]
     ordered = sorted(targets, key=lambda target: target["target_id"] in reusable)
     return [ordered[index:index + BATCH_SIZE] for index in range(0, len(ordered), BATCH_SIZE)] or [[]]
 

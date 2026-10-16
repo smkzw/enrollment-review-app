@@ -338,6 +338,7 @@ class WorkDraftReviewService:
                 "calculation_version": CALCULATION_VERSION,
                 "semantic_model": model.model_dump(mode="json") if model else None,
                 "semantic_targets": targets,
+                "semantic_batches": batches,
                 **({"acknowledgements": [row.model_dump(mode="json") for row in confirmations]} if confirmations else {})})
             receipt, created = IdempotencyRepository(session).resolve(scope=f"work-draft:{review_episode_id}",
                 idempotency_key=identity, submitted_hash=identity, result_type="work_draft_job", result_id=uuid4().hex)
@@ -510,6 +511,12 @@ class WorkDraftReviewService:
                 proofs = {key: proof for key, proof in proofs.items() if key in batch_ids}
                 # No database transaction is held while the product model reads sources.
                 session.close()
+                from app.services.work_draft_semantics import BATCH_SIZE
+                if payload.get("semantic_batches") and len(batch_ids - reused.keys()) > BATCH_SIZE:
+                    return {"results": reused, "reuse_proofs": proofs, "calls": [],
+                        "error": "先前读取未能完整对应本次资料；已核内容保留，未改为整批重新读取。",
+                        "error_code": "SOURCE_READ_REVALIDATION_FAILED",
+                        "error_target_ids": sorted(batch_ids - reused.keys())}
                 return read_source_relations(frozen, batches[index], model, self.artifact_store,
                     reused=reused, reuse_proofs=proofs)
             calculated = store.get_last_checkpoint(context.job_id, "calculate")
@@ -526,6 +533,7 @@ class WorkDraftReviewService:
                 from app.services.work_draft_semantics import targets_for_review
                 source_results, failed_components, provider_blocked_components = {}, {}, set()
                 response_disagreement_components = set()
+                source_reuse_failed_components = set()
                 for step in store.list_steps(context.job_id):
                     if not step.step_id.startswith("semantic"):
                         continue
@@ -545,6 +553,9 @@ class WorkDraftReviewService:
                         failed_ids = set(checkpoint[1].get("error_target_ids", [target["target_id"] for target in batches[index]]))
                         failed_components.update({target["component_id"]: checkpoint[1]["error"]
                             for target in batches[index] if target["target_id"] in failed_ids})
+                        if checkpoint[1].get("error_code") == "SOURCE_READ_REVALIDATION_FAILED":
+                            source_reuse_failed_components.update(target["component_id"] for target in batches[index]
+                                if target["target_id"] in failed_ids)
                         if checkpoint[1].get("provider_blocked"):
                             provider_blocked_components.update(target["component_id"] for target in batches[index]
                                 if target["target_id"] in failed_ids)
@@ -572,13 +583,17 @@ class WorkDraftReviewService:
                             item.confidence = None
                             item.confidence_reason = None
                             blocked = key in provider_blocked_components
-                            item.system_issue = SystemIssue(kind="model_unavailable" if blocked else "model_output_invalid",
+                            reuse_failed = key in source_reuse_failed_components
+                            item.system_issue = SystemIssue(kind="fact_closure_failed" if reuse_failed else
+                                "model_unavailable" if blocked else "model_output_invalid",
                                 affected_codes=[item.official_code],
-                                detail="两次读取对本要求的理解不一致，尚未完成核对；不表示病历资料相互矛盾。"
+                                detail="本条既有读取尚不能与当前资料完整对应；已核记录与原件保留。" if reuse_failed else
+                                    "两次读取对本要求的理解不一致，尚未完成核对；不表示病历资料相互矛盾。"
                                     if key in response_disagreement_components else
                                     "病例核对模型访问受限，尚未完成本条病历核对。" if blocked else
                                     "本条原文核对未完成；已有其他独立结论和原件均保留。",
-                                alternative="模型恢复或启用已批准连接后只核未完成范围；原件和已核结果保留。")
+                                alternative="先核对已有读取与本次资料的对应范围，再仅处理缺口；不重读已核内容。" if reuse_failed else
+                                    "模型恢复或启用已批准连接后只核未完成范围；原件和已核结果保留。")
                             item.reason_text = item.system_issue.detail
                             item.reason_parts = []
                 items.extend(WorkDraftItem.model_validate(value) for value in calculated[1]["items"]

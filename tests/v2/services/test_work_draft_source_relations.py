@@ -261,15 +261,27 @@ def test_pending_targets_share_short_batch_without_dropping_reused_targets_or_ch
     assert source_batches([], {}) == [[]]
 
 
-def test_product_batch_execution_revalidates_whole_frozen_target_scope_then_filters(monkeypatch):
+def test_all_saved_targets_share_one_full_scope_check_not_eight_model_sized_batches():
+    from app.services.work_draft_semantics import source_batches
+    targets = [{"target_id": str(index)} for index in range(126)]
+    original = [dict(target) for target in targets]
+    assert source_batches(targets, {target["target_id"]: {} for target in targets}) == [targets]
+    assert targets == original
+
+
+@pytest.mark.parametrize("all_saved,missing", [(False, 0), (True, 0), (True, 1), (True, 17)])
+def test_product_batch_execution_revalidates_whole_frozen_target_scope_then_filters(monkeypatch, all_saved, missing):
     from app.domain.contracts.agents import ModelConfigContract
     from app.domain.publication import canonical_hash
     from app.services import work_draft_review as service, work_draft_semantics as semantics
     targets = [{"target_id": str(index)} for index in range(122)]
-    pending = {"0", "18", "35", "50", "68", "78", "91", "104", "119"}
+    pending = set() if all_saved else {"0", "18", "35", "50", "68", "78", "91", "104", "119"}
     reused = {target["target_id"]: {"truth": "unknown"} for target in targets if target["target_id"] not in pending}
     proofs = {key: {"raw_response_ref": f"response:{key}"} for key in reused}
     batches = semantics.source_batches(targets, reused)
+    pending.update(str(index) for index in range(missing))
+    reused = {key: value for key, value in reused.items() if key not in pending}
+    proofs = {key: value for key, value in proofs.items() if key in reused}
     model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
     rules = SimpleNamespace(model_dump=lambda **_: {"rules": "frozen"})
     authority = SimpleNamespace(review_episode_id="episode", rule_set_id="rules", rule_set_revision=1)
@@ -291,19 +303,26 @@ def test_product_batch_execution_revalidates_whole_frozen_target_scope_then_filt
         checked.append(True)
         return reused, proofs
     def read(frozen, batch, current_model, artifacts, *, reused, reuse_proofs):
+        assert missing <= semantics.BATCH_SIZE
         assert closed and current_model == model
         assert batch is batches[0]
         expected = {t["target_id"] for t in batch} - pending
         assert set(reused) == expected == set(reuse_proofs)
-        assert len(expected) == 7
-        return {"results": reused, "reuse_proofs": reuse_proofs, "pending": 9}
+        assert len(expected) == (122 - missing if all_saved else 7)
+        return {"results": reused, "reuse_proofs": reuse_proofs, "pending": len(pending)}
     monkeypatch.setattr(service, "_reusable_source_reads", reuse)
     monkeypatch.setattr(semantics, "read_source_relations", read)
     context = SimpleNamespace(job_type=service.JOB_TYPE, job_id="job", step_id="semantic:0000",
         job_payload={"context_id": "context", "review_run_id": "run", "calculation_version": service.CALCULATION_VERSION,
             "semantic_model": model.model_dump(mode="json"), "semantic_batches": batches})
     result = service.WorkDraftReviewService(Session, object()).execute(context)
-    assert checked and result["pending"] == 9
+    assert checked
+    if missing > semantics.BATCH_SIZE:
+        assert result["error_code"] == "SOURCE_READ_REVALIDATION_FAILED" and result["calls"] == []
+        assert set(result["error_target_ids"]) == pending
+        assert set(result["results"]) == set(result["reuse_proofs"]) == set(reused)
+    else:
+        assert result["pending"] == len(pending)
 
 
 @pytest.mark.parametrize("response_disagreement,decision", [
@@ -1047,7 +1066,7 @@ def test_product_restricted_reason_preserves_specific_dimensions_without_inventi
 
 
 @pytest.mark.parametrize("blocked,decision", [(False, "indeterminate"), (True, "indeterminate"),
-    (False, "requirement_met"), (True, "not_due")])
+    (False, "requirement_met"), (True, "not_due"), ("source_reuse", "indeterminate"), ("source_reuse", "requirement_met")])
 def test_product_procedure_failure_keeps_its_catalog_identity_and_source_closure_issues(monkeypatch, blocked, decision):
     from app.domain.contracts.enums import ComponentDecision, RuleKind
     from app.domain.contracts.work_draft import WorkDraftItem, SystemIssue
@@ -1075,7 +1094,8 @@ def test_product_procedure_failure_keeps_its_catalog_identity_and_source_closure
         {"target_id": "procedure:sibling", "component_id": "sibling"}]
     checkpoints = {"calculate": {"items": [], "source_issues": [source_issue.model_dump(mode="json")]},
         "semantic:0000": {"results": {}, "error": "未完成读取", "error_target_ids": ["procedure:check"],
-            "provider_blocked": blocked}}
+            "provider_blocked": blocked is True,
+            **({"error_code": "SOURCE_READ_REVALIDATION_FAILED"} if blocked == "source_reuse" else {})}}
     class Session:
         def __enter__(self): return self
         def __exit__(self, *_): return False
@@ -1093,7 +1113,8 @@ def test_product_procedure_failure_keeps_its_catalog_identity_and_source_closure
     result = [WorkDraftItem.model_validate(item) for item in service.WorkDraftReviewService(Session, object()).execute(context)["items"]]
     if decision == "indeterminate":
         assert result[0].decision is None
-        assert result[0].system_issue.kind == ("model_unavailable" if blocked else "model_output_invalid")
+        assert result[0].system_issue.kind == ("fact_closure_failed" if blocked == "source_reuse" else
+            "model_unavailable" if blocked else "model_output_invalid")
     else:
         assert result[0].decision.value == decision and result[0].system_issue is None
     assert result[1].decision == ComponentDecision.REQUIREMENT_MET and result[1].system_issue is None
