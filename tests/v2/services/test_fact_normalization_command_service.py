@@ -148,6 +148,51 @@ def test_registered_gateway_streaming_is_explicit_and_provider_scoped(session_fa
             assert transport.call_args.kwargs["stream_response"] is streamed
 
 
+def test_new_runtime_repair_pair_preserves_old_registration_and_semantic_role(session_factory):
+    from app.services.fact_normalization_command_service import _runtime_model
+    from app.services.work_draft_semantics import runtime_model
+    legacy = register_evidence_normalizer_runtime_config(session_factory)
+    with session_factory() as session:
+        before_prompt = AppendRepository(session, PROMPT_VERSION_CONFIG).get(legacy.prompt_version_id)
+        before_model = AppendRepository(session, MODEL_CONFIG_CONFIG).get(legacy.model_config_id)
+    semantic_before = runtime_model().model_dump(mode="json")
+    enabled = register_evidence_normalizer_runtime_config(session_factory, preserve_repair_schema=True)
+    assert enabled != legacy
+    assert enabled == register_evidence_normalizer_runtime_config(session_factory, preserve_repair_schema=True)
+    with session_factory() as session:
+        assert AppendRepository(session, PROMPT_VERSION_CONFIG).get(legacy.prompt_version_id) == before_prompt
+        assert AppendRepository(session, MODEL_CONFIG_CONFIG).get(legacy.model_config_id) == before_model
+        current_model = AppendRepository(session, MODEL_CONFIG_CONFIG).get(enabled.model_config_id)
+        assert {key: value for key, value in current_model.parameters.items() if key != "preserve_repair_schema"} == before_model.parameters
+        assert current_model.parameters["preserve_repair_schema"] is True
+        assert select_registered_evidence_normalizer_config(session, registered_config=enabled) == enabled
+        assert select_registered_evidence_normalizer_config(session, registered_config=legacy) == legacy
+        assert (current_model.provider, current_model.model, current_model.reasoning_effort) == (
+            before_model.provider, before_model.model, before_model.reasoning_effort)
+        from app.agents.deepseek_evidence_normalizer_transport import evidence_normalizer_transport_from_model_config
+        from unittest.mock import patch
+        with patch("app.agents.deepseek_evidence_normalizer_transport.DeepSeekEvidenceNormalizerTransport") as transport:
+            evidence_normalizer_transport_from_model_config(current_model)
+            assert transport.call_args.kwargs["preserve_repair_schema"] is True
+    assert runtime_model().model_dump(mode="json") == semantic_before
+    assert "preserve_repair_schema" not in _runtime_model(provider="cms-router", model="semantic-role",
+        reasoning_effort="high", max_tokens=65536, temperature=None).parameters
+
+
+@pytest.mark.parametrize("bad", [1, "true", None])
+def test_runtime_repair_flag_rejects_wrong_types_before_registration(session_factory, bad):
+    from sqlalchemy import select, func
+    from app.storage.models import ModelConfigRecord
+    def counts():
+        with session_factory() as session:
+            return (session.scalar(select(func.count()).select_from(PromptVersionRecord)),
+                    session.scalar(select(func.count()).select_from(ModelConfigRecord)))
+    before = counts()
+    with pytest.raises(ValueError, match="bool|布尔"):
+        register_evidence_normalizer_runtime_config(session_factory, preserve_repair_schema=bad)
+    assert counts() == before
+
+
 def test_select_config_absent_prompt(session_factory):
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="cmd-cfg-miss")
