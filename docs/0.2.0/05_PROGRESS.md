@@ -17,15 +17,19 @@
 
 | 项 | 现场事实 |
 |---|---|
-| 工作树／Git | 唯一`.worktrees/build-0.2.0`，dev/0.2.0。时限c0915963＋终态记录e27839c2已正常直接推main和dev；后台已部署，当前只更新新的局部任务记录 |
-| 服务 | 唯一61134，PID83735／exec40504，后台e27839c2含c091时限修复；日志`output/wp7-local-retry-runtime-e27839c2.log`。确认0活动Job后才停自有旧PID50003／exec91307，已收143；新正式构建317ms exit0、完整清单已同步，保留旧assets。共享8001／8900未动；.env SHA254406e4f7d8c47ddac6d057926f1d2e9eccbce1c425b5c140faf24790a189b6保持 |
+| 工作树／Git | 唯一`.worktrees/build-0.2.0`，dev/0.2.0。自动分批4a3da271已正常直接推main和dev，无PR；当前只有运行记录更新未提交 |
+| 服务 | 唯一61134，PID95346／exec95939，后台及生成清单4a3da271；日志`output/wp7-automatic-batches-runtime-4a3da271.log`。确认0活动Job后正常停自有旧83735／40504并收143；正式构建exit0、完整清单同步，保留旧assets。共享8001／8900未动；.env SHA254406e4f7d8c47ddac6d057926f1d2e9eccbce1c425b5c140faf24790a189b6保持 |
 | 26002 | subject5f8d5ba53d024be8a9afe8084552dbf3，筛选episode21b08bca5aaa42278c86afa1c2709fe5。7页病历0905be06…，snapshotfc177ff133c44e82be36220f9072f971；OCR实际7请求、7/7成功13.853524秒。原7页像素已看，不冒称全部信息医学验收；邮件／IE未读 |
 | 当前资料 | complete-e4d0cd7d9c414143955c26768d36bbf1，metadata2；开始／截至2025-08-18由已有API保存（非UI日期验收），启用后节点4。原UI更新Job6f6c4bbdaa544813859a590d1d015718，7页／OCR／扫描相同、217疑点及0人工核对保持。旧complete-0af88a60等保留 |
 | 首批整理终态 | Job969b79da83334bbd909752903159bff4／rund7c16e6ab24d4239a72b95606b551406 completed5/5，但运行partial，非完整读取。85事实／0事件暴露、23拒绝、86疑问，3–4页未入档。自动子Job3fd7e15e5f3b464b943e01ae49a3850f完成4/4、6.164秒；首稿e12c628159ed41e9b5ae6683a3265451保存64父85子、规则7、无前稿：6确定／38系统／1不足／15未到期／4不适用，不能算可用交付。两观察器exec77686／34364已结束，仅观察未取消作业 |
 | 当前局部续读 | 原Ego42/p2“继续整理未完成的2页”真实POST201，Job40db388a492641c697020d8926a7322b／rune885faab9b164106832fa43f0245ad9b completed3/3、run partial，57新事实／32拒绝／79疑问；页3单次stop537.658秒，页4经现有隔离保留合法项。原成功5页及7页OCR不重读。Profile2 5ae2fabb…；自动041610cb子稿5e28b758…继承e12c6281，8确定／36系统／1不足／15未到期／4不适用。冻结上下文逐页1–7 extraction_complete=true；finalize只列本轮2页导致另5页显示未读的诊断字段不代表累计读取缺失。12页报告未上传 |
 | 实际失败／用量 | 共9次实际HTTP（不是4次），8785.424秒；8次有usage合计输入279319／输出460950／总740269 token，1次用量未知，非精确总成本。首请求1201.22秒被1200秒总时限中断，无finish／usage；之后3次length各既有加额重试，首组第三请求1050.664秒stop，实际glm-5.3-flash。思考拆分未知、字符不换算token；旧后台额度翻倍但时限仍1200秒，修复不能冒称本次提速。3–4页原答两用药事实未分类，完整补答又缺数值，原答隔离因用药依赖不完整拒绝；按系统失败保留，不称患者缺件 |
-| 后续补证 | 12页检查报告3cb678a3…未上传；必须首稿保存后再从原UI补传，核仅新增读取、相关结果变化、supersedes及旧稿；不拿重复或合成材料冒充 |
+| 新分批工作稿 | 原Ego42/p2展开“工作稿操作与节点日期”并点“开始审核”，Job d6c6d93c4e6b464fb859776b2586e70e completed11/11，context fb2f12fd…／run dfaab257a14e44848f8b67f86a566b07继承5e28b758；64父85子、规则7、7/7页，126目标16×7＋14。125通过／1降压治疗摘录两次未对应原文，保留合法兄弟；27确定（5IN／9EX未触发／13REQ）／15不足／2系统／15未到期／5不适用，非临床全验。10次HTTP stop共4878.875秒，报告输入162675／输出269767 token、思考拆分未知，302引用逐字／页身份0失配，API SHA6b1e1f75…；Ego实际显示17待处理／27已判定，旧20:50报告可选及真实范围时间已读回。wp7-26002-batched-draft-readback.json；观察器53157终态exit0。误等折叠中的“更新工作稿”120秒超时未建任务；实际按钮因本机未存自动Job叫“开始审核” |
+| 真实补证已上传 | Ego42/p2选择补充→12页3cb678a3…预览为新增→确认上传，Job7a7008536548451eb8d2c9e0aa77efac completed1/1；snapshot29a7b2a542ca488da9c275eb5cc4855f／base epr-29a7b2a542ca488da9c275eb-7c79c15b1c3cc6e8，19/19页。新报告11实际OCR请求＋1原生文字；旧病历仍只有原7次OCR（09:33），无新增尝试。含2024年既往过敏原／本次检验／中心实验室，metadata2标objective_report及混合出具方other，不统一猜日期或单位。原UI生成c3b1c247… completed→candidate cand-e00c53c0965f4958a0faea2932471390／complete-5b110a93eebd482d90401df70891d272 ready，选新版本后启用POST201。启用前假设未来authority的只读复用探针被现行节点保护拒绝，0写0模型；未绕过保护。实际启用后自动整理正在前置核验，尚未确认新Job及仅新增范围，不重复POST |
+| 补证整理实际计划 | 自动Job76045861ab4147349d9b930b428814fb／run3171abaa85ca41eba67b608bab4d3c51 running0/13；episode5、上述19页complete、规则7、原GLM配置26f849a9…／提示7078e388…，max_pages_per_call=1。持久payload实际只有新报告[1]…[12]，5份成功读取严格复验复用原病历7页；0旧病历请求，未伪造新的读取或批准。输出wp7-26002-supplement-frozen-plan.json；观察器exec30379仅GET。启用提交前的复用／发布来源核验实际较慢，不冒称模型在读；有界观察3068已找到新任务exit0。只读强引用复用探针8.466秒／7161 SQL、同7页5读取，不代表整个命令提速；native sample保留，不据此盲加缓存或重启健康作业 |
 | 保全 | 一致备份`data_v2/backups/20261016T093158732786Z-0030.sqlite3`，17060716544字节。真实终态后完整主键＋payload hash对照：431旧事实、55旧稿8243项、7规则修订、18档案版本均不变；当前516事实／56稿8392项／19档案／0暴露。首稿API SHA38cc3f7f…；`output/wp7-26002-first-draft-terminal.json`保留净化成本与历史证明，0审计库写入。不是逐字医学验收 |
+| 续读后保全 | `output/wp7-26002-after-local-retry-history.json`：逐主键与同一备份payload hash核431旧事实／55旧稿8243项／7规则／18档案均保持；当前573事实／57稿8541项／20档案／0暴露，.env同hash，0审计写。不冒称此时尚未保存的分批新稿已验 |
+| 分批稿后保全 | wp7-26002-after-batched-draft-history.json：同一备份旧行逐主键／hash保持，当前573事实／58稿8690项／20档案／0暴露、.env同hash，0审计写。实际pending_normalization_pages累计范围为0；finalize“未读5页”仅本轮统计，不是UI重读范围，不为它另补恢复器 |
 | 31001保持 | subject58ff71df0cff4a2c9107be743d82584b，episodeb843b2c07d6d4318a6df741eb7902eb3 rev11，开始8/8／截至8/15；5份24页，complete-9a8d09071cfc4b19b2826d4da20804f8。Profile15 c425576eb1c3f36c06f784d9786db63e，108定位，DTO SHA93c62ac4…保持；不重读病例／方案／变量建议 |
 | 已有工作稿 | review-run:ebfcfa9710ce41d4af830a77369f0865／v46，Jobb310081784de41c1ac38cdc4000148b6完成4/4、55.606425秒；126证明复用0调用、252冻结事实、64父85子：34确定／15未到期／5不适用／9不足／1系统。578出处逐字／页身份0失配，非全部UNKNOWN，也非本人最终验收 |
 | 正式规则 | ruleset:draft-version-1153e25b4eba:phase_iii rev7，64项本人medical_manager有效审定，verification_only=false。未改内容不重复批准；构建者不替本人签发 |
@@ -67,8 +71,8 @@
 
 ## 接续
 
-1. 两页局部续读已终态；0活动Job已只读确认。先部署自动分批修复，再沿原UI更新26002工作稿，使用已有7页事实／原文，不重做整理／OCR／方案或变量建议。旧自动两稿保留，真实调用与合法结果另核。
-2. 观察分批核对及新稿；源码／真实请求／保存／消费者分别取证，不把235测试或7页覆盖当医学完成。不能把页组数当调用数。若个别目标失败，记录具体系统范围，其余继续，不反复整例读取。
-3. 首批基线核清后通过原UI补12页，预检新增／保留读取范围，核相关结果与历史；最终集中验M2。S4歧义不阻断独立工作；M2后才IE／D001，不缩小最终目标。
+1. 首批完整工作稿dfaab257已保存；不再重做7页整理、8批关系、OCR、方案或变量建议，也不重派旧失败。
+2. 接收已运行76045861补证整理终态，不重复上传／启用／POST或重读原7页。随后接收它自动创建的分批工作稿，分别核结果、来源及历史。此前125合法关系可复用范围由实际新请求与依赖复验决定，不能按条数机械继承。
+3. 对新旧工作稿、回源、真实补证消费集中验M2；具体系统问题和真资料不足分开。S4歧义不阻断独立工作；M2后才IE／D001，不缩小最终目标。
 
 本机证据：`output/wp7-26002-{metadata-rebuild-audit,initial-normalization,initial-observation,node-date-setup}.json`、`wp7-node-change-*`、`wp7-activation-follow-status-frontend.log`、`wp5-medication-date-display-audit.json`及date-role-detail.png、`m1-a8c39de6-regression-comparison.json`、`m1-ebfcfa97-report-readback.json`、`wp5-guided-child-readback.json`。外部不能仅凭本机路径复查；不提交原答、数据库、原件、环境。详细历史查76a2039e中的原进度表，不将旧通过移作新版本证明。
