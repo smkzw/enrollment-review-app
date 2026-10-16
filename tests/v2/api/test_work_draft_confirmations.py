@@ -124,8 +124,10 @@ def test_prepared_step_can_queue_real_work_draft_and_freeze_input(client, monkey
     from app.workflow.runner import PreparedStepResult
     factory, chain, _, old_run, _ = seed_saved_work_draft(client, monkeypatch)
     assemble = review_context_assembly.assemble_review_context
+    read_phases = []
     def source_assembly(session, store, **kwargs):
         kwargs.setdefault("context_id", "synthetic-preview")
+        read_phases.append((kwargs["review_run_id"] == "pending", len(session.dispatch.loaded_as_persistent)))
         return assemble(session, store, **kwargs)
     monkeypatch.setattr(review_context_assembly, "assemble_review_context", source_assembly)
     monkeypatch.setattr(review_preparation_command, "assemble_review_context", source_assembly)
@@ -137,11 +139,14 @@ def test_prepared_step_can_queue_real_work_draft_and_freeze_input(client, monkey
     def execute(context):
         checkpoint = {}
         def queue(session):
+            listeners_before = len(session.dispatch.loaded_as_persistent)
             child = WorkDraftReviewService(factory, client.app.state.artifact_store).start(
                 subject_id=chain["subject_id"], review_episode_id=chain["review_episode_id"], session=session)
+            assert len(session.dispatch.loaded_as_persistent) == listeners_before
             checkpoint["work_draft_job_id"] = child["job_id"]
         return PreparedStepResult(checkpoint=checkpoint, apply=queue)
     assert JobRunner(factory, {"synthetic-queue": execute}, worker_id="synthetic-owner").run_job("actual-child-queue-parent")
+    assert read_phases == [(True, 1), (False, 0)]
     with factory() as session:
         store = JobStore(session)
         assert store.get_job("actual-child-queue-parent").state == "completed"
