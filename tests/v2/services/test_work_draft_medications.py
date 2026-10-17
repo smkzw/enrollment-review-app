@@ -5,12 +5,12 @@ from types import SimpleNamespace
 import pytest
 
 from app.domain.contracts.common import DateValue
-from app.domain.contracts.enums import ComponentDecision as D, DurationStatus, FactPolarity, ProfileLane, ReviewStage, SourceStrength, ProtocolPeriod
+from app.domain.contracts.enums import AnchorType, ComponentDecision as D, DurationStatus, FactPolarity, ProfileLane, ReviewStage, SourceStrength, ProtocolPeriod
 from app.domain.contracts.facts import (AssertionBasis, ClinicalFactV2, MedicationExposureV2,
     PartialDateRange, clinical_fact_stable_identity, medication_exposure_stable_identity)
 from app.domain.contracts.work_draft import WorkDraftEvidenceRef, WorkDraftItem, WorkDraftSourcePage
 from app.domain.publication import canonical_hash
-from app.services.work_draft_medications import calculate_medications, scope_source_issues
+from app.services.work_draft_medications import calculate_medications, scope_source_issues, unclassified_medication_issues
 from app.services.work_draft_projection import project_saved_items
 from tests.v2.protocols.test_medication_restrictions import frozen_medications, build
 from tests.v2.services.test_work_draft_calculation import material, clause
@@ -64,6 +64,67 @@ def test_published_single_use_reaches_saved_contract_projection_and_preserves_in
     assert item.rule_kind == "medication" and item.rule_code == "用药01"
     assert not item.can_confirm and item.fact_refs[0].page_number == 1
     assert before == (canonical_hash(rules.model_dump(mode="json")), frame.medication_exposures[0].model_dump_json())
+
+
+def test_unclassified_full_formulation_name_is_reported_without_substring_adoption():
+    from app.api.v2.eligibility_review import EligibilityReviewResponse
+    frame, rules, refs = medication_context()
+    restriction = rules.scope_supplement.medications[0]
+    restriction.drug_class_id, restriction.class_scope = "fixture", "all_members"
+    rules.scope_supplement.drug_classes = {"fixture": ["药物"]}
+    before = frame.medication_exposures[0].model_dump_json(), rules.model_dump_json()
+    result, = calculate_medications(frame, rules, evidence_refs=refs)
+    issues = unclassified_medication_issues(frame, rules, evidence_refs=refs)
+    issue, = issues
+    assert issue.kind == "method_unsupported" and "未能归类的用药：药物甲" in issue.detail
+    assert issue.page_artifact_id == "source-page" and issue.page_number == 1
+    view = project_saved_items([result], authority=frame.authority, rule_set=rules, run_id="draft", issues=issues)
+    dto = EligibilityReviewResponse.model_validate(view.to_dict())
+    assert dto.system_issues[0].affected_codes == ["用药01"]
+    assert view.clauses[0].decision == D.INDETERMINATE.value
+    assert before == (frame.medication_exposures[0].model_dump_json(), rules.model_dump_json())
+    # A checked exact entry, not name similarity, removes this specific gap.
+    rules.scope_supplement.drug_classes["fixture"].append("药物甲")
+    assert unclassified_medication_issues(frame, rules, evidence_refs=refs) == []
+    assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.EXCLUSION_TRIGGERED
+
+
+@pytest.mark.parametrize("fault", ["no_fact", "no_refs", "wrong_page", "wrong_locator", "future", "object", "record_only"])
+def test_classification_notice_does_not_invent_qualified_drugs_or_page_evidence(fault):
+    frame, rules, refs = medication_context()
+    restriction = rules.scope_supplement.medications[0]
+    restriction.drug_class_id, restriction.class_scope = "fixture", "all_members"
+    rules.scope_supplement.drug_classes = {"fixture": ["药物乙"]}
+    if fault == "no_fact": frame.facts = []
+    elif fault == "no_refs": refs = {}
+    elif fault == "wrong_page": frame.source_pages = []
+    elif fault == "wrong_locator": frame.medication_exposures[0].locator_ids = ["wrong"]
+    elif fault == "future": frame.medication_exposures[0].record_time = datetime(2026, 4, 1, tzinfo=UTC)
+    elif fault == "object": frame.medication_exposures[0].medication_name = "药物丙"
+    else: frame.medication_exposures = []
+    assert unclassified_medication_issues(frame, rules, evidence_refs=refs) == []
+
+
+def test_unclassified_repeated_measurements_share_one_source_notice_without_merging_records():
+    frame, rules, refs = medication_context()
+    rules.scope_supplement.medications[0].drug_class_id = "fixture"
+    rules.scope_supplement.drug_classes = {"fixture": ["药物乙"]}
+    frame.medication_exposures.append(frame.medication_exposures[0].model_copy(update={"exposure_id": "other-reading"}))
+    issue, = unclassified_medication_issues(frame, rules, evidence_refs=refs)
+    assert issue.detail.count("药物甲") == 1 and len(frame.medication_exposures) == 2
+
+
+def test_missing_named_anchor_does_not_misdescribe_existing_medication_history():
+    frame, rules, refs = medication_context()
+    rules.scope_supplement.medications[0].window.anchor_type = AnchorType.RANDOMIZATION_DATE
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    assert row.decision == D.INDETERMINATE and row.evidence_refs == refs["med-fact"]
+    assert "已找到相关用药记录" in row.reason_text and "时间起点" in row.reason_text
+    assert "没有发生" not in row.reason_text
+    frame.medication_exposures = []
+    frame.facts = []
+    row, = calculate_medications(frame, rules, evidence_refs={})
+    assert row.decision == D.INDETERMINATE and "不代表没有用药记录" in row.reason_text
 
 
 def test_unresolved_protocol_source_reaches_api_without_changing_independent_medication_result():

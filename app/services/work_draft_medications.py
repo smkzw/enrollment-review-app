@@ -59,6 +59,43 @@ def _record_refs(facts, evidence_refs, source_pages, members, cutoff):
     return refs
 
 
+def unclassified_medication_issues(frozen, rule_set, *, evidence_refs):
+    """Expose qualified, unmatched drug names without guessing class membership."""
+    supplement = rule_set.scope_supplement
+    if supplement is None:
+        return []
+    members = {_name(name) for names in supplement.drug_classes.values() for name in names}
+    members.update(_name(item.drug_text) for item in supplement.medications if item.drug_class_id is None)
+    facts = {fact.fact_id: fact for fact in frozen.facts}
+    pages = {(page.source_document_version_id, page.page_artifact_id, page.page_number)
+        for page in frozen.source_pages}
+    anchors = review_anchor_dates(frozen.review_episode.anchor_dates, frozen.review_episode.stage)
+    cutoff = review_source_cutoff(anchors, frozen.review_episode.stage, frozen.review_episode.evidence_cutoff_date)
+    grouped = {}
+    for exposure in frozen.medication_exposures:
+        if (_name(exposure.medication_name) in members or not exposure.fact_ids
+                or not set(exposure.fact_ids) <= facts.keys() & evidence_refs.keys()
+                or cutoff is None or exposure.record_time is not None and exposure.record_time.date() > cutoff):
+            continue
+        own_facts = {key: facts[key] for key in exposure.fact_ids}
+        if not all(_name(fact.asserted_object) == _name(exposure.medication_name) for fact in own_facts.values()):
+            continue
+        refs = _record_refs(own_facts, evidence_refs, pages, {_name(exposure.medication_name)}, cutoff)
+        if {ref.fact_id for ref in refs.values()} != own_facts.keys():
+            continue
+        for ref in refs.values():
+            if ref.locator_id in exposure.locator_ids:
+                key = (ref.source_document_version_id, ref.page_artifact_id, ref.page_number)
+                grouped.setdefault(key, set()).add(exposure.medication_name)
+    codes = sorted(item.item_id for item in supplement.medications if item.drug_class_id
+        and frozen.review_episode.stage in item.applicable_stages)
+    return [SystemIssue(kind="method_unsupported", affected_codes=codes,
+        detail="未能归类的用药：" + "、".join(sorted(names)) + "。已有记录保留，尚不能据此排除相关用药限制。",
+        alternative="在方案规则的用药类别中核对并补充准确药名；不凭相似名称自动归类。",
+        source_document_version_id=key[0], page_artifact_id=key[1], page_number=key[2])
+        for key, names in sorted(grouped.items())]
+
+
 def _classified_history_refs(frozen, supplement, evidence_refs, source_pages, cutoff):
     """Do not call an accepted subset complete while source issues remain."""
     if (cutoff is None or not frozen.source_pages or frozen.system_issues or frozen.conflict_groups
@@ -218,6 +255,9 @@ def calculate_medications(frozen, rule_set, *, evidence_refs):
                 ) if restriction.period is not None else restriction.window.anchor_type
             anchor = anchors.get(anchor_key)
             anchor_bounds = date_bounds(anchor, allow_partial=False) if anchor is not None else None
+            if issue is None and decision == D.INDETERMINATE and anchor_bounds is None:
+                reason = ("已找到相关用药记录，但尚未记录方案指定的时间起点，暂不能核对规定的时间范围。"
+                    if refs else "尚未记录方案指定的时间起点，暂不能核对本条用药时间范围；不代表没有用药记录。")
             if (issue is None and decision == D.INDETERMINATE and history_refs and members
                     and restriction.drug_class_id is not None and restriction.class_scope == "all_members"
                     and anchor_bounds is not None

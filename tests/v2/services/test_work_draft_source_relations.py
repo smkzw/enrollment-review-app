@@ -4,6 +4,7 @@ from hashlib import sha256
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy.orm import Session as OrmSession
 
 from app.domain.contracts.enums import TruthValue
 from app.domain.contracts.work_draft import WorkDraftSourcePage
@@ -339,7 +340,7 @@ def test_product_batch_execution_revalidates_whole_frozen_target_scope_then_filt
     frame = SimpleNamespace(work_draft=True, review_run_id="run", authority=authority,
         rule_set_sha256=canonical_hash(rules.model_dump()))
     closed = []
-    class Session:
+    class Session(OrmSession):
         def __enter__(self): return self
         def __exit__(self, *_): return False
         def close(self): closed.append(True)
@@ -409,7 +410,7 @@ def test_product_composition_separates_reader_disagreement_from_patient_conflict
             if decision == "indeterminate" else {})
     checkpoints = {"calculate": {"items": []}, "semantic:0000": {"results": {},
         "reuse_proofs": {"affected:predicate": proof, "sibling:predicate": {}}}}
-    class Session:
+    class Session(OrmSession):
         def __enter__(self): return self
         def __exit__(self, *_): return False
     monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: frame))
@@ -1201,13 +1202,13 @@ def test_product_restricted_reason_preserves_specific_dimensions_without_inventi
         display_code="EX-01a", kind="exclusion", title="有源要求", source_text="原文要求",
         source_span_ids=["source"], source_excerpts=["原文要求"], limitation_kind=kind,
         unresolved_dimensions=["共同限定是否也适用于后一个分支，原文尚不明确"])
-    rules = SimpleNamespace(model_dump=lambda **_: {"rules": "frozen"})
+    rules = SimpleNamespace(scope_supplement=None, model_dump=lambda **_: {"rules": "frozen"})
     authority = SimpleNamespace(review_episode_id="episode", rule_set_id="rules", rule_set_revision=1)
     frame = SimpleNamespace(work_draft=True, review_run_id="run", authority=authority,
         rule_set_sha256=canonical_hash(rules.model_dump()), facts=[], system_issues=[],
         clause_pack=SimpleNamespace(clauses=[], restricted_clauses=[clause]))
     frame.model_copy = lambda **_: frame
-    class Session:
+    class Session(OrmSession):
         def __enter__(self): return self
         def __exit__(self, *_): return False
     monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: frame))
@@ -1256,7 +1257,7 @@ def test_product_procedure_failure_keeps_its_catalog_identity_and_source_closure
         "semantic:0000": {"results": {}, "error": "未完成读取", "error_target_ids": ["procedure:check"],
             "provider_blocked": blocked is True,
             **({"error_code": "SOURCE_READ_REVALIDATION_FAILED"} if blocked == "source_reuse" else {})}}
-    class Session:
+    class Session(OrmSession):
         def __enter__(self): return self
         def __exit__(self, *_): return False
     monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: frame))

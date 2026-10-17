@@ -18,12 +18,13 @@ from app.storage.idempotency import IdempotencyRepository, STATUS_COMMITTED
 from app.storage.models import ReviewRunRecord
 from app.storage.repositories import AppendRepository, REVIEW_RUN_CONFIG, ScopeViolationError, get_rule_set
 from app.storage.review_context_repository import ReviewContextV2Repository
+from app.storage.read_retention import retain_read_records
 from app.storage.work_draft_repository import WorkDraftRepository
 from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v55"
+CALCULATION_VERSION = "work-draft/0.2.0-v56"
 
 
 def confirmation_allowed(item, items):
@@ -465,7 +466,7 @@ class WorkDraftReviewService:
                     expected_authority=authority, idempotency_key=f"automatic:{context.job_id}",
                     work_draft=True, evaluator_version=CALCULATION_VERSION)
                 payload = {**payload, "context_id": prepared.context_id, "review_run_id": prepared.review_run_id}
-        with self.session_factory() as session:
+        with self.session_factory() as session, retain_read_records(session):
             if context.job_type != JOB_TYPE or payload["calculation_version"] != CALCULATION_VERSION:
                 raise ScopeViolationError("本次工作稿计算方式不一致，请保留旧结果")
             frozen = ReviewContextV2Repository(session).get(payload["context_id"])
@@ -511,6 +512,8 @@ class WorkDraftReviewService:
                         and fact.variable_id is not None for req in clause.evidence_requirements)}),
                     detail="这条记录的摘录尚不能逐字对应原件，未用于本次判断。",
                     alternative="请对照原件核对；其余已有独立依据的结果继续保留。") for fact in missing_refs]
+                from app.services.work_draft_medications import unclassified_medication_issues
+                source_issues.extend(unclassified_medication_issues(frozen, rule_set, evidence_refs=refs))
                 calculation_frame = frozen.model_copy(update={"facts": tuple(fact for fact in frozen.facts if fact.fact_id in refs),
                     "system_issues": (*frozen.system_issues, *source_issues)})
                 items = [calculate_work_component(clause, calculation_frame, rule_set, evidence_refs=refs)
