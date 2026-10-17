@@ -427,7 +427,10 @@ def select_reprojection_source_runs(
             raise ReprojectionLineageError(
                 f"修订谱系/活动实体 {kind} {entity_id} 不存在，拒绝重投影"
             ) from exc
-        if entity.authority != authority and (kind != "fact" or not validator.retained_fact_source_is_reusable(entity, authority)):
+        # Reuse this read's authority proof; partial retention still checks each fact.
+        if entity.authority != authority and (kind != "fact" or not (
+                source_scope(entity.authority) is None
+                or validator.retained_fact_source_is_reusable(entity, authority))):
             raise ReprojectionLineageError(
                 f"实体 {entity_id} 的权威元组与本次修订不一致，拒绝重投影"
             )

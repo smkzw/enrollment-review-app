@@ -661,6 +661,30 @@ def test_reprojection_ignores_unrelated_orphan_run(session_factory):
         assert expectation.gap_type is None
 
 
+def test_reprojection_proves_rule_only_source_once_per_authority_not_per_fact(session, monkeypatch):
+    from app.services.fact_expectation_gaps import select_reprojection_source_runs
+    from app.storage.fact_authority import FactAuthorityValidator
+    from tests.v2.services.test_fact_correction_job import _publish_fact, _variable_rule_revision
+    chain = _seed_valid_chain(session, "shared-source-proof")
+    chain["authority"] = _variable_rule_revision(session, chain, 2)
+    facts = [_publish_fact(session, chain, suffix=str(i), value=f"{120+i}/80", include_source_candidates=True)
+             for i in range(4)]
+    current = _variable_rule_revision(session, chain, 3)
+    checked = []
+    original = FactAuthorityValidator.rule_revision_source_is_reusable
+    def prove(self, previous, now):
+        checked.append((previous, now))
+        return original(self, previous, now)
+    monkeypatch.setattr(FactAuthorityValidator, "rule_revision_source_is_reusable", prove)
+    scopes = select_reprojection_source_runs(session, authority=current, target_kind="fact", target_id=facts[0].fact_id)
+    assert scopes == {fact.run_id: None for fact in facts}
+    # One profile-selection proof and one source-run proof; every entity is still read.
+    assert checked == [(chain["authority"], current)] * 2
+    changed = _variable_rule_revision(session, chain, 4, variable_change=True)
+    with pytest.raises(ReprojectionLineageError, match="权威元组"):
+        select_reprojection_source_runs(session, authority=changed, target_kind="fact", target_id=facts[0].fact_id)
+
+
 @pytest.mark.parametrize("retained", [True, False])
 def test_reprojection_uses_call_scope_not_entire_visible_manifest(session_factory, monkeypatch, retained):
     """Isolate the retention-proof seam; run selection, gaps and correction use real repositories.
