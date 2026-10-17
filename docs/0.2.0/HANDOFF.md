@@ -16,8 +16,8 @@
 
 | 项 | 已核事实 |
 |---|---|
-| 代码 | 4a54b9db及之前已正常推main/dev并加载；数值依赖v54、范围旧提示及局部核对方式继承已生效。前包661过、前端44过；本包相连6文件130过，不称全库绿 |
-| 后端 | 61134，PID23664／exec56128，源4a54b9db、计算v54，output/wp5-runtime-4a54b9db-retry1.log。核0活动后TERM旧14952 exit143，不动共享服务。首次漏PYTHONPATH导入失败exit1，原日志保持，补PYTHONPATH=.后正常；不是端点故障 |
+| 代码 | bd431857及之前已正常推main/dev并加载；v54、范围提示、局部核对继承及完整风险身份均生效。前包661过／前端44过，核对继承130过；本包直接受影响两文件71过，不称全库绿 |
+| 后端 | 61134，PID27878／exec9542，源bd431857、计算v54，output/wp5-runtime-bd431857.log。核0活动后TERM旧23664 exit143，首页HTTP200，不动共享服务。显式PYTHONPATH=.、.env、data_v2及GLM档案保持；先前漏PYTHONPATH的失败日志保留 |
 | 前端 | index-Cb0rKu3g.js／index-CCBeFo8E.css；output/wp5-numeric-dependency-product-dist及deployment-readback.json核实际38复制文件、6既有静态文件逐字同、598旧assets保持；初回执误记44已明确纠正。Ego真实新script已核 |
 | 环境 | 进程明确cms-router/glm-5.3-flash high65536；ENROLLMENT_SEMANTIC_ROUTE_PREFLIGHT=false。连续字段模式仍默认关闭。.env SHA254406e4f7d8c47ddac6d057926f1d2e9eccbce1c425b5c140faf24790a189b6保持 |
 | 数据 | 仅当前data_v2。既有一致性备份backups/20261016T093158732786Z-0030.sqlite3，17060716544字节；不重复大拷贝／清理 |
@@ -102,6 +102,8 @@ D31实际已完成：c7从原UI保存一次1→2，仅17–25及27的exception_p
 跟踪还发现风险身份比较用裸risk_id匹配完整scan_id:risk_id，漏掉所选核对和未决变动。统一完整身份后，在当前真实材料上23页保留、病历5必须重验；这不是事实批准。相连4文件126过1失败，首失败为新合成夹具将旧base核对用于新base，仓储正确拒绝；改夹具在真实新base保存后，2直接受影响文件71过126.55秒exit0／5SWIG（wp5-selected-risk-source-consumers-final.xml）。另外两文件产品源码相同、前窗已过，未为夹具重复全跑；不累计成最后全库绿。当前该一行保护修订尚未加载，运行仍4a54；资料已更新而c8仍引用旧complete-9a8d，不称已生成新版。
 
 WP6独立实操：p2已从26002工作台→资料页→个例档案，现profile4真实时间图。v49工作稿因计算方式变化明确陈旧，未截图空状态冒充当前工作稿。病史图出现正常传染病检验，实查同一指标既有test_exam_score亦有allergy_infection_immune事实；后者fact_type为传染病筛查检验结果、variable_id空。不能靠病名／阴性字符串或只因同页相同值就合并／隐藏临床来源。该显示／分类问题未修，宽屏验收未完成；不为拍图另行整例读取或用UI标签替临床分类。
+
+风险身份修订现已加载bd431857（取代上文“尚未加载”中间状态）。同源码实际只读wp5-selected-source-final-audit-v2.json核23页可保留，唯一变化从真实manifest精确确认是病历5；24页／定位／文字及42核对保持，0新模型／整理／事实采用／工作稿。431旧事实、55旧稿8243项、7规则、18档案逐主键hash仍同备份；当前707事实／68稿10282项／9规则／26档案未再变。初审计用了截断资料ID作排除断言，v2明确更正为实际页身份及全差集，旧回执不删。当前资料episode14／1b96而保存稿c8仍属episode13／9a8d，不称已完成新版。接续先处理四评分目标变化的真实依赖范围，不启动已知14组整例重读；源范围保护和用药实际消费是两项不同完成条件。
 
 ## 6. 已完成长运行，不要重新启动
 
