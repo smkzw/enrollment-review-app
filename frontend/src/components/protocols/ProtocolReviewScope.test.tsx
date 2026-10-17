@@ -18,6 +18,19 @@ function view(job = "job", revision = "rev") {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("方案范围原文", () => {
+  it("已保存补充要求的草稿不再声称内容尚未纳入，也不冒称已审定", async () => {
+    const data = { ...view(), selection: {
+      scope_content_hash: "c".repeat(64), included_candidate_keys: ["d".repeat(64)],
+      exclusions: [], additions: [], snapshot_id: "snapshot",
+      saved_by: "构建者（验证）", saved_at: "2026-10-15T00:00:00Z",
+    } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(data))));
+    render(<ProtocolReviewScope jobId="job" revisionId="rev" expanded
+      content={{ scope_supplement: { medications: [] } }} />);
+    expect(await screen.findByText(/不代表这些内容已经审定/)).toBeVisible();
+    expect(screen.queryByText(/补充要求尚未纳入规则/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /批准|发布/ })).not.toBeInTheDocument();
+  });
   it("草稿刷新重新挂载后沿用宿主保存的展开状态", async () => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response(JSON.stringify(view()))));
     const mounted = render(<ProtocolReviewScope jobId="job" revisionId="rev" expanded />);

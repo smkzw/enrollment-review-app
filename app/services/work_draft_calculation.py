@@ -633,10 +633,14 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
             unverified_predicate_ids=frozenset(key for key, value in selection.items() if not value.fact_ids))
         inactive_requirements = set()
         age_agreements = {pid: value for pid, value in selection.items() if value.age_consensus is not None}
+        from app.domain.expression import ComponentEvaluation, EvaluationResult, _combine_bound_expression
+        from app.domain.gates.assessment import derive_component_decision, derive_gate_gap_types
+        values = dict(outcome.evaluation.predicate_evaluations)
+        active_trigger = calculation_component.expression
+        active_exception = calculation_component.exception_expression
+        evaluation = outcome.evaluation
+        excluded = set()
         if relations or age_agreements:
-            from app.domain.expression import ComponentEvaluation, EvaluationResult, _combine_bound_expression
-            from app.domain.gates.assessment import derive_component_decision, derive_gate_gap_types
-            values = dict(outcome.evaluation.predicate_evaluations)
             for pid, agreed in age_agreements.items():
                 values[pid] = EvaluationResult(truth=agreed.age_consensus,
                     used_fact_ids=list(agreed.fact_ids), evidence_span_ids=sorted({span
@@ -689,40 +693,42 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                     else EvaluationResult(truth=TruthValue.UNKNOWN),
                 exception=_combine_bound_expression(active_exception, values) if active_exception is not None else None,
                 predicate_evaluations=values)
-            # An absent sibling cannot block a result that stays identical under
-            # both counterfactual values. Keep source requirements unrelated to it.
-            inactive_predicates = set(excluded)
-            for pid, value in values.items():
-                if value.truth != TruthValue.UNKNOWN or pid in excluded or active_trigger is None:
-                    continue
-                signatures = set()
-                for possible in (TruthValue.TRUE, TruthValue.FALSE):
-                    variant = {**values, pid: EvaluationResult(truth=possible)}
-                    t = _combine_bound_expression(active_trigger, variant).truth
-                    e = _combine_bound_expression(active_exception, variant).truth if active_exception is not None else None
-                    signatures.add((t, e if t == TruthValue.TRUE else None))
-                if signatures == {(evaluation.trigger.truth,
-                        evaluation.exception.truth if evaluation.exception and evaluation.trigger.truth == TruthValue.TRUE else None)}:
-                    inactive_predicates.add(pid)
-            inactive_requirements = {req.requirement_id for req in due if req.predicate_ids
-                and set(req.predicate_ids) <= inactive_predicates}
-            for original in due:
-                derived = [req for req in due if req.variable_id is not None and len(req.predicate_ids) == 1
-                    and req.requirement_id == "variable_requirement:" + sha256(":".join((
-                        component.rule_component_id, req.predicate_ids[0], original.requirement_id)).encode()).hexdigest()[:32]]
-                if original.variable_id is None and derived and all(req.requirement_id in inactive_requirements for req in derived):
-                    inactive_requirements.add(original.requirement_id)
-                elif (original.variable_id is None and original.requirement_id not in observed and derived
-                        and all(req.requirement_id in observed | inactive_requirements for req in derived)
-                        and all(binding_preserves_source_requirement(original, req) for req in derived)):
-                    expectations.append(RequirementGapState(original.requirement_id, ExpectationStatus.OBSERVED, None))
-            gap_component = calculation_component.model_copy(update={"evidence_requirements": [
-                req for req in calculation_component.evidence_requirements if req.requirement_id not in inactive_requirements]})
-            gaps = derive_gate_gap_types(component=gap_component, evaluation=evaluation,
-                episode_stage=frozen.review_episode.stage, expectations=expectations, conflict_groups=[])
-            from dataclasses import replace
-            outcome = replace(outcome, evaluation=evaluation, gaps=frozenset(gaps),
-                decision=derive_component_decision(rule_kind=clause.kind, evaluation=evaluation, gaps=gaps))
+        # Apply the same dependency test to numeric and source-based evaluation.
+        # Independent record requirements are not proof of a predicate branch.
+        inactive_predicates = set(excluded)
+        for pid, value in values.items():
+            if value.truth != TruthValue.UNKNOWN or pid in excluded or active_trigger is None:
+                continue
+            signatures = set()
+            for possible in (TruthValue.TRUE, TruthValue.FALSE):
+                variant = {**values, pid: EvaluationResult(truth=possible)}
+                t = _combine_bound_expression(active_trigger, variant).truth
+                e = _combine_bound_expression(active_exception, variant).truth if active_exception is not None else None
+                signatures.add((t, e if t == TruthValue.TRUE else None))
+            if signatures == {(evaluation.trigger.truth,
+                    evaluation.exception.truth if evaluation.exception and evaluation.trigger.truth == TruthValue.TRUE else None)}:
+                inactive_predicates.add(pid)
+        inactive_requirements = {req.requirement_id for req in due if req.predicate_ids
+            and set(req.predicate_ids) <= inactive_predicates}
+        for original in due:
+            derived = [req for req in due if req.variable_id is not None and len(req.predicate_ids) == 1
+                and req.requirement_id == "variable_requirement:" + sha256(":".join((
+                    component.rule_component_id, req.predicate_ids[0], original.requirement_id)).encode()).hexdigest()[:32]]
+            if original.variable_id is None and derived and all(
+                    req.requirement_id in inactive_requirements
+                    and binding_preserves_source_requirement(original, req) for req in derived):
+                inactive_requirements.add(original.requirement_id)
+            elif (original.variable_id is None and original.requirement_id not in observed and derived
+                    and all(req.requirement_id in observed | inactive_requirements for req in derived)
+                    and all(binding_preserves_source_requirement(original, req) for req in derived)):
+                expectations.append(RequirementGapState(original.requirement_id, ExpectationStatus.OBSERVED, None))
+        gap_component = calculation_component.model_copy(update={"evidence_requirements": [
+            req for req in calculation_component.evidence_requirements if req.requirement_id not in inactive_requirements]})
+        gaps = derive_gate_gap_types(component=gap_component, evaluation=evaluation,
+            episode_stage=frozen.review_episode.stage, expectations=expectations, conflict_groups=[])
+        from dataclasses import replace
+        outcome = replace(outcome, evaluation=evaluation, gaps=frozenset(gaps),
+            decision=derive_component_decision(rule_kind=clause.kind, evaluation=evaluation, gaps=gaps))
         if GapType.CALCULATION_CAPABILITY_UNAVAILABLE in outcome.gaps:
             issue = _issue(clause.official_code, "系统暂不支持本条所需的计算方式。")
             return WorkDraftItem(**common, system_issue=issue, reason_text=issue.detail)

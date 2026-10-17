@@ -78,7 +78,7 @@ export function ProtocolReviewScope({ jobId, revisionId, content, onSaved, expan
       {!current && !error && <p role="status">正在读取已保存的方案范围…</p>}
       {current && <>
         <p className="protocol-review-scope__note">以下是原文范围定位，不代表这些内容已经审定或用于本次判断。</p>
-        {current.selection && <p role="status">范围选择已保存；补充要求尚未纳入规则。</p>}
+        {current.selection && !content?.scope_supplement && <p role="status">范围选择已保存；补充要求尚未纳入规则。</p>}
         {editable && <p>勾选需要补充核对的原文范围；入排标准和必做项目保留。</p>}
         {(Object.keys(scopeLabels) as ScopeKind[]).map(kind => {
           const items = current.candidates.filter(item => item.scope_kind === kind);

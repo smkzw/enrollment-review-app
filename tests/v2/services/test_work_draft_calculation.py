@@ -811,6 +811,56 @@ def test_original_source_requirement_is_consumed_through_exact_wp2_binding_ances
     assert calculate_work_component(projected, frozen([fact]), rules, evidence_refs={}).decision == D.INDETERMINATE
 
 
+@pytest.mark.parametrize("kind", [RuleKind.INCLUSION, RuleKind.EXCLUSION])
+@pytest.mark.parametrize("operator,known_value,decisive", [
+    (LogicalOperator.ANY, 52, True),
+    (LogicalOperator.ANY, 17, False),
+    (LogicalOperator.ALL, 17, True),
+    (LogicalOperator.ALL, 52, False),
+])
+@pytest.mark.parametrize("record_boundary", ["same_binding", "independent", "changed_policy"])
+def test_numeric_alternatives_share_source_dependency_rules_without_reading_irrelevant_siblings(
+    kind, operator, known_value, decisive, record_boundary,
+):
+    rules, _, component = clause(kind=kind)
+    first = component.expression
+    atoms = [first, *[AtomicExpression(predicate=first.predicate.model_copy(update={
+        "predicate_id": key})) for key in ("other-reading", "third-reading")]]
+    component.expression = LogicalExpression(operator=operator, children=atoms)
+    original = component.evidence_requirements[0].model_copy(update={
+        "requirement_id": "source-record", "predicate_ids": [], "variable_id": None})
+    bindings = []
+    for atom, variable_id in zip(atoms, ("age", "other_value", "third_value")):
+        if variable_id != "age":
+            rules.variable_definitions.append(load_dictionary()["age"].model_copy(update={
+                "variable_id": variable_id, "label_zh": "另一数值记录"}))
+        bindings.append(original.model_copy(update={
+            "requirement_id": "variable_requirement:" + sha256(":".join((
+                component.rule_component_id, atom.predicate.predicate_id, original.requirement_id)).encode()).hexdigest()[:32],
+            "variable_id": variable_id, "predicate_ids": [atom.predicate.predicate_id],
+        }))
+    component.evidence_requirements = [original, *bindings]
+    if record_boundary == "independent":
+        component.evidence_requirements.append(original.model_copy(update={
+            "requirement_id": "separate-record", "description": "还必须有另一份独立记录"}))
+    elif record_boundary == "changed_policy":
+        original.source_validity_window = TimeQuantity(value=3, unit="day")
+    before = rules.model_dump_json()
+    fact = material(value=known_value)
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen([fact]), rules,
+                                      evidence_refs={})
+    expected = D.INDETERMINATE
+    if decisive and record_boundary == "same_binding":
+        expected = (D.INCLUSION_MET if operator == LogicalOperator.ANY else D.INCLUSION_NOT_MET) if kind == RuleKind.INCLUSION else (
+            D.EXCLUSION_TRIGGERED if operator == LogicalOperator.ANY else D.EXCLUSION_NOT_TRIGGERED)
+    assert result.system_issue is None and result.decision == expected
+    assert rules.model_dump_json() == before
+    if expected != D.INDETERMINATE:
+        assert result.confidence == "low"
+    elif record_boundary == "independent":
+        assert "独立记录" in result.reason_text
+
+
 def test_unbound_same_display_type_never_matches():
     _, _, component = clause()
     fact = material(variable_id="alt", unit="U/L")
