@@ -1,6 +1,6 @@
 /** Presentation only: complete sentences remain reachable, never summarized. */
 export function ReasonText({ text, compact = false }: { text: string; compact?: boolean }) {
-  const split = (value: string) => value.split(/(?<=；)|(?<=。)|\n+/u).filter(part => part.trim() && part.trim() !== "；");
+  const split = (value: string) => value.split(/(?<=；)|(?<=。)|\n+/u).filter(part => !/^[；。;\s]*$/u.test(part));
   const parts = split(text);
   const boundary = text.search(/[。\n]/u);
   const firstSentenceEnd = boundary < 0 ? text.length : boundary + 1;

@@ -267,16 +267,23 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
       {draft ? (draft.systemIssues?.length ?? 0) > 0 && <section className="reports-print__section" aria-label="核对范围与未采用记录">
         {[{ label: "系统尚未完成的核对", issues: draft.systemIssues?.filter(issue => issue.kind !== "excerpt_unverified") ?? [] },
           { label: "尚未用于判断的原件记录", issues: draft.systemIssues?.filter(issue => issue.kind === "excerpt_unverified") ?? [] }].map(group => group.issues.length > 0 &&
-          <details className="reports-print__conditions" key={group.label}><summary>{group.label}（{group.issues.length}）</summary>
-            <ul>{group.issues.map((issue, index) => <li key={index}>
-              <strong>{reviewSystemIssueLabel(issue)}</strong>：{issue.detail}
-              <small>{issue.alternative}</small>
-              {issue.sourceDocumentVersionId && issue.pageArtifactId && issue.pageNumber && <button type="button"
-                className="button reports-print__action reports-print__source" onClick={() => setIssueSelection({
-                  runId: run.reviewRunId, index: draft.systemIssues?.indexOf(issue) ?? -1 })}>
-                <FileSearch size={16} aria-hidden="true" />查看待核原件
-              </button>}
-            </li>)}</ul>
+        <details className="reports-print__conditions" key={group.label}><summary>{group.label}（{group.issues.length}）</summary>
+            {Array.from(group.issues.reduce((groups, issue) => {
+              const key = JSON.stringify([issue.kind, issue.detail, issue.alternative]);
+              const rows = groups.get(key) ?? []; rows.push(issue); groups.set(key, rows);
+              return groups;
+            }, new Map<string, typeof group.issues>())).map(([key, issues]) => <div key={key}>
+              {issues.length > 1 && <p>{issues[0].detail}<small>{issues[0].alternative}</small></p>}
+              <ul>{issues.map((issue, index) => <li key={index}>
+                <strong>{reviewSystemIssueLabel(issue)}</strong>
+                {issues.length === 1 && <>：{issue.detail}<small>{issue.alternative}</small></>}
+                {issue.sourceDocumentVersionId && issue.pageArtifactId && issue.pageNumber && <button type="button"
+                  className="button reports-print__action reports-print__source" onClick={() => setIssueSelection({
+                    runId: run.reviewRunId, index: draft.systemIssues?.indexOf(issue) ?? -1 })}>
+                  <FileSearch size={16} aria-hidden="true" />查看待核原件
+                </button>}
+              </li>)}</ul>
+            </div>)}
           </details>)}
       </section> : <section className="reports-print__section" aria-labelledby="reports-actions-title">
         <h3 id="reports-actions-title">补充资料与核实事项</h3>

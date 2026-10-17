@@ -131,6 +131,36 @@ describe("报告", () => {
     expect(mocks.source).not.toHaveBeenCalled();
   });
 
+  it("相同待核说明只讲一次，每条来源仍可单独打开；不同后续处理不合并", async () => {
+    const report = workingReport();
+    const detail = "识别内容尚未通过原文核对。";
+    const alternative = "请查看对应原件。";
+    report.workDraft!.systemIssues = [7, 8, 9].map((pageNumber, index) => ({
+      kind: "excerpt_unverified", affectedCodes: [`EX-0${index + 1}`], detail,
+      alternative: index === 2 ? "需要补充单位依据。" : alternative,
+      sourceDocumentVersionId: "chart", pageArtifactId: `chart-page-${pageNumber}`, pageNumber,
+    }));
+    const original = JSON.stringify(report);
+    const user = userEvent.setup();
+    render(<FrozenReviewReport report={report} onActionChanged={vi.fn()} />);
+    const summary = screen.getByText("尚未用于判断的原件记录（3）");
+    await user.click(summary);
+    const section = within(summary.closest("details")!);
+    expect(section.getAllByText(detail)).toHaveLength(1);
+    expect(section.getAllByRole("listitem").filter(item => item.textContent?.includes(detail))).toHaveLength(1);
+    expect(section.getAllByText(alternative)).toHaveLength(1);
+    expect(section.getByText("需要补充单位依据。")).toBeVisible();
+    for (let index = 0; index < 3; index += 1) {
+      await user.click(section.getAllByRole("button", { name: "查看待核原件" })[index]);
+      expect(mocks.source).toHaveBeenLastCalledWith(expect.objectContaining({
+        pageRefs: [{ sourceDocumentVersionId: "chart", pageArtifactId: `chart-page-${index + 7}`,
+          pageNumber: index + 7, excerpt: null, disposition: "unresolved" }],
+      }));
+      await user.click(screen.getByRole("button", { name: "关闭待核原件" }));
+    }
+    expect(JSON.stringify(report)).toBe(original);
+  });
+
   it("未通过本次资料核对的旧记录只提供待核原件，不变成结论或已采用证据", async () => {
     const report = workingReport();
     report.workDraft!.systemIssues = [{ kind: "fact_closure_failed", affectedCodes: ["EX-01", "IN-01"],
