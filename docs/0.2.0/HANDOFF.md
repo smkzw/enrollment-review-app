@@ -16,12 +16,12 @@
 
 | 项 | 已核事实 |
 |---|---|
-| 代码 | 1e2c8aa4及之前正常推main/dev并已加载，保留反馈副本范围；当前数值依赖v54和范围旧提示精简待提交／部署。7文件661过43.85秒、前端3文件44过及tsc／build exit0；不混作运行源码 |
-| 后端 | 61134，PID12432／exec25527，源1e2c8aa4、计算v53，output/wp5-runtime-1e2c8aa4-retry2.log。267b及自动fd4已完成、0模型；核0活动后TERM旧10160，exit143。头两次启动因loopback TIME_WAIT拒，失败日志保留，实际旧连接清除后成功，没有停共享服务 |
-| 前端 | c4ad／index-BcX9WcjL.js、index-CCBeFo8E.css；output/wp5-treatment-exception-dist，deployment.json核568旧assets保持。Ego build查询后实际新script已核；同URL goto未换旧bundle，不清全局缓存 |
+| 代码 | 3a0e5f7c及之前已正常推main/dev并加载；数值依赖v54及范围旧提示精简已生效。7文件661过43.85秒、前端3文件44过及tsc／build exit0，不称全库绿 |
+| 后端 | 61134，PID14952／exec59240，源3a0e5f7c、计算v54，output/wp5-runtime-3a0e5f7c.log。所有更正及更新Job已完成；无在途启动请求后TERM旧12432 exit143，未停共享服务。先前TIME_WAIT失败仍留原日志 |
+| 前端 | index-Cb0rKu3g.js／index-CCBeFo8E.css；output/wp5-numeric-dependency-product-dist及deployment-readback.json核实际38复制文件、6既有静态文件逐字同、598旧assets保持；初回执误记44已明确纠正。Ego真实新script已核 |
 | 环境 | 进程明确cms-router/glm-5.3-flash high65536；ENROLLMENT_SEMANTIC_ROUTE_PREFLIGHT=false。连续字段模式仍默认关闭。.env SHA254406e4f7d8c47ddac6d057926f1d2e9eccbce1c425b5c140faf24790a189b6保持 |
 | 数据 | 仅当前data_v2。既有一致性备份backups/20261016T093158732786Z-0030.sqlite3，17060716544字节；不重复大拷贝／清理 |
-| 浏览器 | Ego Space42：p1 c7f7563a05e84011a362900490a992ff已显示验证9发布成功；旧37d草稿取消但Job仍waiting_user/publish，不当Job终态cancelled。p2流鼻涕更正及自动稿已保存并关闭对话，无未存编辑；p4合成。不新建空间／升级Ego |
+| 浏览器 | Ego Space42：p1验证9发布成功；旧37d草稿取消但Job仍waiting_user/publish。p2当前v54/r9的IN04→病历6页→关闭保留选择及上下文，1920×1080 DPR1／原件100%截图wp5-rule9-v54-in04-source-1920.png已看；关闭抽屉宽高0，DOM挂载不当仍打开。p4合成，不新建空间／升级 |
 
 服务重启是安全部署，不是作业恢复或读取重派。旧模型长运行均已结束；当前267b为事实对应更正，不是方案／OCR重读。首条鼻塞更正和自动工作稿均已终态，不重跑。
 
@@ -89,7 +89,9 @@ D31实际已完成：c7从原UI保存一次1→2，仅17–25及27的exception_p
 
 数值消费还发现通用首错：IN04的ANY表达式正确、流鼻涕3分已有资格，旧依赖核对却只在原文关系／年龄一致分支执行，纯数值仍要求全部派生读数。v54将同一反事实及共同资料核对用于数值，独立记录和来源政策不相容仍保留。7文件661过43.85秒exit0／5SWIG；24新增合成组合正反／原消费与历史均过。初集合列错不存在测试文件exit4未运行，最终换实际文件；不谎称首次绿。只读冻结r8同输入107官方项，仅IN04:03及父项不足→满足，其余105同，0模型0写；初审计把str(enum)当value导致断言失败，已核枚举实际值后修脚本，非临床含义失败。wp5-numeric-dependency-real-readback.json。原鼻痒／喷嚏仍保留，不再额外更正两次掩盖ANY首错。
 
-下一步：正常推本功能包、核0活动后部署v54与范围旧提示精简（前端44过，tsc／build exit0）；原UI更新31001到验证9，核实际126复用和新保存稿的IN04／后续未到期、D31及p721／722。读取／评分对应已完成部分不重跑，回顾评分不动；实际新稿与完整差异未完成前不称临床验收。字段试验不追认为生产Run。
+当前真实运行已更新（取代上文历史“待部署／在途”）：原UI只更新一次，Job9233fdc04ce24426b6bb908f580351af completed4/4，31001 episode revision13／规则9；run c8b5630482d242428f79592eee653adb继承de97e5ba7564492faa5c7ea4fb89b67f，v54、183项／51系统问题。126证明复用、0调用，149官方／REQ仅IN04:03及父项变满足、其余147同；两项后续未到期，事实／来源页与前稿逐项同。Job144.270秒，实际POST205.631秒、GET70.284秒，仍有延迟，0活动Job不代表正在准备的HTTP请求已结束，不在其间重启。wp5-rule9-v54-saved-audit.json核备份431旧事实／55稿8243项／7规则／18档案全保持；当前707事实／68稿10282项／9规则／26档案。p721／722及0合格暴露仍未解决，UI45无法判定，不称M1/M2验收。
+
+下一动作：从现有逐项来源核实路径解决用药候选资格，不开第三匿名整页试验。只读115e71整理Run已提取两次单次注射药名／剂量／明确日期，仍因locator_and_text_hash原页未核读数阻断；pending_normalization_pages实际空，不得伪装失败页重读。EX05另见询问与研究者回复的原文角色冲突，未擅改结果。已完成的方案／变量／评分对应不重跑，不补齐另两评分求绿；旧历史及所有真实未决保持。
 
 ## 6. 已完成长运行，不要重新启动
 
