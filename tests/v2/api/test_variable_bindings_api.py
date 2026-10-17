@@ -11,6 +11,9 @@ def test_binding_save_is_append_only_and_stale_scope_is_rejected(build_app):
         view = client.get(url).json()
         original = client.get(url.removesuffix("/variables")).json()
         first = view["predicates"][0]
+        context = view["source_context"][first["component_id"]]
+        parent = next(rule for rule in original["content"]["proposed_rules"] if rule["official_code"] == first["official_code"])
+        assert context["parent_source_text"] == parent["source_text"]
         payload = {"expected_revision_id": view["draft_revision_id"], "proposal": {
             "variables": [], "bindings": [{"component_id": first["component_id"], "predicate_id": first["predicate_id"],
                 "requirement_id": first["requirements"][0]["requirement_id"], "variable_id": "age"}]}}

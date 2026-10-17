@@ -50,9 +50,16 @@ def validate_variable_predicate(variable: VariableDef, predicate: AtomicPredicat
 
 def binding_view(draft):
     variables = load_dictionary(draft.variable_definitions or ())
-    predicates = []
+    predicates, source_context = [], {}
+    component_sources = {item.proposed_component.rule_component_id: "\n".join(dict.fromkeys(item.source_excerpts))
+                         for item in draft.component_drafts}
     for rule in draft.proposed_rules:
         for component in rule.components:
+            context = {"parent_source_text": rule.source_text,
+                       "component_source_text": component_sources.get(component.rule_component_id, "")}
+            previous = source_context.setdefault(component.rule_component_id, context)
+            if previous != context:
+                raise ValueError("子项的条款原文归属不唯一，不能建议数据项目")
             requirements = [item for item in draft.evidence_requirement_drafts
                             if item.proposed_requirement.rule_component_id == component.rule_component_id]
             for predicate in component_predicates(component):
@@ -73,7 +80,7 @@ def binding_view(draft):
                                       "description": item.proposed_requirement.description} for item in matching],
                 })
     return {"variables": [item.model_dump(mode="json") for item in variables.values()],
-            "predicates": predicates}
+            "predicates": predicates, "source_context": source_context}
 
 
 def apply_variable_bindings(draft: ProtocolDeconstructionDraft, proposal: VariableBindingProposal):

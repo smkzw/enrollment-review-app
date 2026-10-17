@@ -13,6 +13,7 @@ export interface VariableBinding {
 }
 export interface BindingView {
   job_id: string; draft_revision_id: string; variables: VariableDef[];
+  source_context?: Record<string, { parent_source_text: string; component_source_text: string }>;
   predicates: { component_id: string; predicate_id: string; official_code: string; label: string;
     variable_id: string | null; requirements: { requirement_id: string; description: string }[] }[];
 }
@@ -31,5 +32,10 @@ export function decodeBindingView(value: unknown, jobId: string, revisionId: str
   if (view.job_id !== jobId || view.draft_revision_id !== revisionId || !Array.isArray(view.variables) || !Array.isArray(view.predicates) ||
       view.variables.some(v => typeof v.variable_id !== "string" || typeof v.label_zh !== "string") ||
       view.predicates.some(p => typeof p.component_id !== "string" || typeof p.predicate_id !== "string" || typeof p.label !== "string" || !Array.isArray(p.requirements))) throw new Error("数据项目与草稿版本不一致，请刷新。");
+  if (view.source_context !== undefined && (!view.source_context || typeof view.source_context !== "object" || Array.isArray(view.source_context) ||
+      Object.entries(view.source_context).some(([id, context]) => !view.predicates.some(p => p.component_id === id) ||
+        !context || typeof context.parent_source_text !== "string" || typeof context.component_source_text !== "string"))) {
+    throw new Error("判断背景与当前条目不一致，请刷新。");
+  }
   return view;
 }

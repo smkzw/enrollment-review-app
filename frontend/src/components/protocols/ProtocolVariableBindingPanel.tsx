@@ -10,10 +10,12 @@ export function ProtocolVariableBindingPanel({ jobId, revisionId, onSaved }: Pro
   const [error, setError] = useState<string | null>(null);
   const [label, setLabel] = useState(""); const [unit, setUnit] = useState("");
   const [type, setType] = useState<VariableDef["value_type"]>("boolean");
+  const [domain, setDomain] = useState<VariableDef["domain"]>("history");
   const [low, setLow] = useState(""); const [high, setHigh] = useState("");
   const scope = `${jobId}:${revisionId}`; const current = useRef(scope); current.current = scope;
   useEffect(() => {
-    const controller = new AbortController(); setView(null); setBindings([]); setDefinitions([]); setError(null);
+    const controller = new AbortController(); setView(null); setBindings([]); setDefinitions([]); setError(null); setBusy(false);
+    setLabel(""); setUnit(""); setLow(""); setHigh(""); setType("boolean"); setDomain("history");
     variableRequest(jobId, "", undefined, controller.signal).then(value => {
       if (!controller.signal.aborted) setView(decodeBindingView(value, jobId, revisionId));
     }).catch(error => { if (!controller.signal.aborted) setError(error.message); });
@@ -46,7 +48,7 @@ export function ProtocolVariableBindingPanel({ jobId, revisionId, onSaved }: Pro
     setDefinitions(values => [...values, { variable_id: `project_${crypto.randomUUID().replaceAll("-", "")}`,
       label_zh: label.trim(), value_type: type, canonical_unit: type === "number" ? unit.trim() : null,
       unit_conversions: {}, plausible_range: type === "number" ? [Number(low), Number(high)] : null,
-      aliases_zh: [], domain: type === "exposure" ? "medication" : "history" }]);
+      aliases_zh: [], domain: type === "exposure" ? "medication" : domain }]);
     setLabel(""); setUnit(""); setLow(""); setHigh("");
   }
   return <section className="protocol-variable-bindings" aria-label="判断所需数据项目">
@@ -55,7 +57,13 @@ export function ProtocolVariableBindingPanel({ jobId, revisionId, onSaved }: Pro
     <div className="protocol-rule-reviews__actions"><button className="button" disabled={!view || busy} onClick={() => void act(true)}>建议对应项目</button>
       <button className="button button--primary" disabled={!view || busy || (!bindings.length && !definitions.length)} onClick={() => void act(false)}>{busy ? "正在处理…" : "保存项目选择"}</button></div>
     {view && <details><summary>{view.predicates.length} 个判断条件</summary><table><thead><tr><th>条款与判断项目</th><th>对应病例数据</th></tr></thead><tbody>
-      {view.predicates.map(p => <tr key={`${p.component_id}:${p.predicate_id}`}><td>{p.official_code} · {p.label}</td><td><select aria-label={`${p.official_code} ${p.label}对应数据`} disabled={busy || !p.requirements.length}
+      {view.predicates.map(p => <tr key={`${p.component_id}:${p.predicate_id}`}><td>{p.official_code} · {p.label}
+        {view.source_context?.[p.component_id] && <details><summary>查看判断背景</summary>
+          <p>{view.source_context[p.component_id].component_source_text || view.source_context[p.component_id].parent_source_text}</p>
+          {view.source_context[p.component_id].component_source_text && view.source_context[p.component_id].parent_source_text !== view.source_context[p.component_id].component_source_text &&
+            <details><summary>完整条款</summary><p>{view.source_context[p.component_id].parent_source_text}</p></details>}
+        </details>}
+      </td><td><select aria-label={`${p.official_code} ${p.label}对应数据`} disabled={busy || !p.requirements.length}
         value={bindings.find(b => b.component_id === p.component_id && b.predicate_id === p.predicate_id)?.variable_id ?? p.variable_id ?? ""} onChange={event => choose(p, event.target.value)}>
         <option value="">尚未选择</option>{allVariables.map(v => <option key={v.variable_id} value={v.variable_id}>{v.label_zh}{v.canonical_unit ? `（${v.canonical_unit}）` : ""}</option>)}</select></td></tr>)}
     </tbody></table></details>}
@@ -63,6 +71,11 @@ export function ProtocolVariableBindingPanel({ jobId, revisionId, onSaved }: Pro
       <label>项目名称<input value={label} onChange={e => setLabel(e.target.value)} /></label>
       <label>内容类型<select value={type} onChange={e => setType(e.target.value as VariableDef["value_type"])}>
         <option value="boolean">是否存在或完成</option><option value="category">分类结果</option><option value="number">数值</option><option value="date">日期</option><option value="exposure">用药或治疗</option></select></label>
+      <label>数据类别<select value={type === "exposure" ? "medication" : domain} disabled={type === "exposure"}
+        onChange={e => setDomain(e.target.value as VariableDef["domain"])}>
+        <option value="demographic">基本情况</option><option value="lab">检验</option><option value="vital">生命体征</option>
+        <option value="score">评分</option><option value="history">病史与临床判断</option><option value="medication">用药或治疗</option>
+        <option value="procedure">检查与操作</option></select></label>
       {type === "number" && <><label>单位<input value={unit} onChange={e => setUnit(e.target.value)} /></label><label>合理范围下限<input type="number" value={low} onChange={e => setLow(e.target.value)} /></label><label>合理范围上限<input type="number" value={high} onChange={e => setHigh(e.target.value)} /></label></>}
       <button className="button" disabled={!label.trim()} onClick={addVariable}>加入项目清单</button>
     </fieldset></details>

@@ -15,6 +15,9 @@ PROMPT = """你只为已保存的方案条件建议对应的数据项目，不�
 逐项保留输入的 component_id、predicate_id，requirement_id 必须来自该子项的 requirements。
 已有定义含义吻合时复用；不能仅因单位相同而合并不同检查、不同症状评分、不同判断。
 不同量表、单项评分、测量对象必须各有独立稳定变量；不能全部绑定通用症状评分。
+结合source_context.rules[official_code]的完整条款与source_context.components[component_id]的子项原文核对测量背景；同名同单位但量表、采集方式或回顾期间不同的项目不可混用。
+子项原文与完整条款相同时不重复列出；仍按已给条件限定范围，不补造省略内容。
+完整条款只帮助理解本项限定，不把其他子项、后续节点或例外擅自并入本条件。
 缺少定义时在 variables 中提出完整的项目定义，中文名称保留原判断对象、项目和期间差别。
 新 variable_id 为小写英文下划线；数值项目必须有标准单位、合理上下限（不是入排阈值）。
 variables 只列新增定义，已有项目仅在 bindings 中引用，不重新声明或改写定义。
@@ -30,8 +33,12 @@ async def suggest_variables(draft, data_paths, *, completion=direct_completion):
     route = PageReaderRoute(PageReviewLane.MAIN_A, DECONSTRUCT_BACKEND, base, key,
         DECONSTRUCT_MODEL, DECONSTRUCT_REASONING_EFFORT, DECONSTRUCT_MAX_TOKENS, 1)
     view = binding_view(draft)
-    components = {}
+    components, rule_sources, component_sources = {}, {}, {}
     for item in view["predicates"]:
+        context = view["source_context"][item["component_id"]]
+        rule_sources[item["official_code"]] = context["parent_source_text"]
+        if context["component_source_text"] != context["parent_source_text"]:
+            component_sources[item["component_id"]] = context["component_source_text"]
         component = components.setdefault(item["component_id"], {
             "component_id": item["component_id"], "official_code": item["official_code"],
             "requirements": [], "predicates": []})
@@ -42,7 +49,8 @@ async def suggest_variables(draft, data_paths, *, completion=direct_completion):
             "predicate": item["predicate"], "variable_id": item["variable_id"],
             "requirement_ids": [requirement["requirement_id"] for requirement in item["requirements"]]})
     # Shared source policies occur once per component, not once per atomic condition.
-    payload = {"input": {"variables": view["variables"], "components": list(components.values())},
+    payload = {"input": {"variables": view["variables"], "components": list(components.values()),
+                         "source_context": {"rules": rule_sources, "components": component_sources}},
                "output_schema": VariableBindingProposal.model_json_schema()}
     messages = [{"role": "system", "content": PROMPT},
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]

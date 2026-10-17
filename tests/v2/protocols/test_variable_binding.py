@@ -230,3 +230,36 @@ def test_suggestion_two_invalid_completions_preserve_receipts_without_changes(da
     calls.clear(); outcome = asyncio.run(module.suggest_variables(draft, paths, completion=invalid))
     assert len(calls) == len(outcome["receipts"]) == 2 and outcome["proposal"] is None
     assert all(item["request_ref"] and item["response_ref"] for item in outcome["receipts"])
+
+
+@pytest.mark.parametrize("context", ["采用当次量表的单项评分，不采用过去一天回顾评分。",
+    "采用过去一天回顾评分，不采用当次量表评分。"])
+def test_binding_author_and_manual_view_receive_exact_parent_context_once_per_component(data_paths, monkeypatch, context):
+    import json
+    import app.agents.protocol_variable_binder as module
+    from app.llm.page_review_harness import PageCompletion
+
+    _, draft, _ = confirmed_fixture()
+    rule = draft.proposed_rules[0]
+    rule.source_text = context
+    before = draft.model_dump_json()
+    view = binding_view(draft)
+    first = view["predicates"][0]
+    component_id = first["component_id"]
+    source = next(item for item in draft.component_drafts if item.proposed_component.rule_component_id == component_id)
+    assert view["source_context"][component_id] == {
+        "parent_source_text": context, "component_source_text": "\n".join(dict.fromkeys(source.source_excerpts))}
+    monkeypatch.setattr(module, "resolve_openai_connection", lambda *a, **k: ("http://localhost/v1", "test"))
+    calls = []
+    async def completion(route, messages, max_tokens):
+        calls.append(json.loads(messages[1]["content"]))
+        return PageCompletion('{"variables":[],"bindings":[]}', "stop", {})
+    result = asyncio.run(module.suggest_variables(draft, data_paths, completion=completion))
+    assert result["proposal"] == {"variables": [], "bindings": []} and len(calls) == 1
+    components = calls[0]["input"]["components"]
+    sources = calls[0]["input"]["source_context"]
+    assert sources["rules"][first["official_code"]] == context
+    assert sources["components"][component_id] == view["source_context"][component_id]["component_source_text"]
+    assert len(sources["rules"]) == len(draft.proposed_rules)
+    assert len({item["component_id"] for item in components}) == len(components)
+    assert draft.model_dump_json() == before

@@ -704,6 +704,35 @@ def test_variable_identity_not_display_type_selects_and_computes():
     assert result.decision == D.INCLUSION_MET and result.confidence == "high"
 
 
+@pytest.mark.parametrize("selected,expected", [("score_at_visit", D.INCLUSION_MET), ("score_recall", D.INCLUSION_NOT_MET)])
+def test_explicit_measurement_variables_keep_same_unit_different_contexts_separate(selected, expected):
+    from app.domain.variables.dictionary import VariableDef
+    rules, _, component = clause()
+    definitions = [VariableDef(variable_id=key, label_zh=label, value_type="number", canonical_unit="分",
+        plausible_range=(0, 5), domain="score") for key, label in (
+            ("score_at_visit", "当次量表评分"), ("score_recall", "过去一天回顾评分"))]
+    facts = []
+    for definition, value in zip(definitions, [3, 1], strict=True):
+        text = f"{definition.label_zh}：{value}分"
+        basis = AssertionBasis(asserted_object=definition.label_zh, assertion_text=text,
+            locator_id=f"locator-{definition.variable_id}", source_text_sha256=sha256(text.encode()).hexdigest())
+        values = dict(authority=material().authority, fact_type="评分", profile_lane=ProfileLane.TEST_EXAM_SCORE,
+            asserted_object=definition.label_zh, polarity=FactPolarity.AFFIRMED, value=value, unit="分", date_range=None,
+            assertion_basis=basis, variable_id=definition.variable_id, date_role="unknown")
+        facts.append(ClinicalFactV2(**values, fact_id=f"fact-{definition.variable_id}", run_id="synthetic",
+            gate_id="synthetic", locator_ids=[basis.locator_id], stable_identity=clinical_fact_stable_identity(**values),
+            revision=1, source_strength=SourceStrength.CONTEMPORANEOUS_OBJECTIVE, created_at=NOW))
+    component.expression.predicate.attribute = "所选量表评分"
+    component.expression.predicate.value, component.expression.predicate.unit = 2, "分"
+    component.evidence_requirements[0].variable_id = selected
+    rules.variable_definitions = definitions
+    before = [fact.model_dump_json() for fact in facts]
+    selections = select_by_variable(component, facts, {}, authority=facts[0].authority, definitions=load_dictionary(definitions))
+    assert selections["age-limit"].fact_ids == (f"fact-{selected}",)
+    result = calculate_work_component(project_clause_pack(rules).clauses[0], frozen(facts), rules, evidence_refs={})
+    assert result.decision == expected and [fact.model_dump_json() for fact in facts] == before
+
+
 def test_ocr_warning_is_not_a_high_confidence_success_or_a_missing_patient_record():
     from app.domain.risk_flags import RiskFlag
     rules, projected, _ = clause()
