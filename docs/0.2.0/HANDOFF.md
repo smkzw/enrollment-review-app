@@ -16,14 +16,14 @@
 
 | 项 | 已核事实 |
 |---|---|
-| 代码 | 8d6b7e01及之前正常推main/dev；文档后继不改变运行源码。8d补未决来源消费、380/258精简报告、a07修保存冻结定义、bdf补测量原文背景／评分类别、965补用药受限负判断 |
-| 后端 | 61134，PID99009／exec62614，源8d6b7e01、计算v51，output/wp5-runtime-8d6b7e01.log。0活动临床Job后TERM旧93786／45904，实际exit143；端口释放后启动，旧终态不改 |
-| 前端 | 38077356／index-Sd6JumIe.js、index-CCBeFo8E.css；output/wp7-report-readability-final-dist，wp7-report-readability-final-deployment.json核537旧assets保持。旧已打开页面可能仍加载旧bundle，实际检查先核script，不当新版本证据 |
+| 代码 | c4ad7d08及之前正常推main/dev；当前反馈副本范围保留补丁集中91过，待提交及安全部署。95c复用同次来源证明，f47补取消边界，162补规则及处理修订组合复验；c4ad将治疗期例外与入排分开 |
+| 后端 | 61134，PID10160／exec54948，源c4ad7d08、计算v53，output/wp5-runtime-c4ad7d08.log。0活动Job后TERM旧6031／22507，exit143；当前第二评分更正267b在途，不能为加载磁盘补丁重启 |
+| 前端 | c4ad／index-BcX9WcjL.js、index-CCBeFo8E.css；output/wp5-treatment-exception-dist，deployment.json核568旧assets保持。Ego build查询后实际新script已核；同URL goto未换旧bundle，不清全局缓存 |
 | 环境 | 进程明确cms-router/glm-5.3-flash high65536；ENROLLMENT_SEMANTIC_ROUTE_PREFLIGHT=false。连续字段模式仍默认关闭。.env SHA254406e4f7d8c47ddac6d057926f1d2e9eccbce1c425b5c140faf24790a189b6保持 |
 | 数据 | 仅当前data_v2。既有一致性备份backups/20261016T093158732786Z-0030.sqlite3，17060716544字节；不重复大拷贝／清理 |
-| 浏览器 | Ego Space42：p1 S4草稿13、IN04与更新后第22项构建审定；p2 26002最新9cc63报告，p4合成。无未存编辑。不要新建空间／升级Ego／重复保存评分项目或补救条件 |
+| 浏览器 | Ego Space42：p1副本37d6efd158e34c969399cbd5c78eda66，未编辑／发布，缺原范围；修复部署后从既有入口保留取消历史，再合法复制规则8。p2瞬时流鼻涕对应已提交267b24d066bf48299734cdfbbeb7d341，保持窗口不重派。p4合成；不新建空间／升级Ego |
 
-服务重启是本包安全部署，不是作业恢复或读取重派。长运行两例及字段试验均已结束，无待等旧模型或观察器。
+服务重启是安全部署，不是作业恢复或读取重派。旧模型长运行均已结束；当前267b为事实对应更正，不是方案／OCR重读。首条鼻塞更正和自动工作稿均已终态，不重跑。
 
 ## 3. 医学经理已能完成的动作
 
@@ -81,9 +81,11 @@ S4 Jobafe79035d4e04d1b9b8f4778dbc0e54e的草稿13（hashc1b32b40）已从Ego原�
 
 520b已completed3/3，apply1111.878秒（原f47，尚未运行95c性能补丁）；鼻塞新事实88f8d7346b0e7a7ad12d368fa1359291／Profile108741fa9a51404940760bf7c252882b，九个临床及来源字段逐项同，只变项目对应。自动Job5f4af1166cda41f2b8a506c7289457c2 completed4/4、33.524秒，126读数／证明复用、0模型；新稿e5d93b701a1548f1bee71aa461ad98e2／规则8继承74a3857。183项含新增34用药；IN04鼻塞满足，另三项尚未对应。源问题51项不当已验收；新性能补丁95c已正常推main/dev但未加载。只读局部gaps＋ORM保留已在35.287秒完成来源运行选择，整gap仍60秒触顶；诊断不当完整修订提速证明。
 
-用户D31纠偏：补救许可仅研究药物治疗期，与入排无关，不能再问其宽窄或把它当入组前洗脱豁免。现行PRD／Plan已更新。最小修复给既有MedicationRestriction增加可选exception_period，空缺不序列化保留旧hash；作者、编辑、API、逻辑显示及计算v53同源消费。治疗期许可只保留原文背景，不生成入排问题；本来横跨筛选／导入的限制不全删。6文件433过6.88秒exit0／5SWIG，3实际前端文件43过3.008秒exit0、tsc及正式build exit0，output/wp5-treatment-exception-{scope-consumers-final.xml,ui-final.json,dist}。首次433过的两枚举夹具警告已改为真实枚举；最终只5SWIG。尚未部署或追加验证规则修订，不宣称旧8已变。
+用户D31纠偏：补救许可仅研究药物治疗期，与入排无关，不能再问其宽窄或把它当入组前洗脱豁免。现行PRD／Plan已更新。最小修复给既有MedicationRestriction增加可选exception_period，空缺不序列化保留旧hash；作者、编辑、API、逻辑显示及计算v53同源消费。治疗期许可只保留原文背景，不生成入排问题；本来横跨筛选／导入的限制不全删。6文件433过6.88秒exit0／5SWIG，3实际前端文件43过3.008秒exit0、tsc及正式build exit0，output/wp5-treatment-exception-{scope-consumers-final.xml,ui-final.json,dist}。首次433过的两枚举夹具警告已改为真实枚举；最终只5SWIG。现已部署c4ad，实际规则8尚未追加期间修订，不宣称旧8已变。
 
-下一步：核0活动Job后部署95c及v53、现有例外编辑前端，原UI完成其余三条瞬时项目；回顾评分不动。通过已发布版本的既有复制草稿入口，明确治疗期例外期间并以builder_verification审定发布；不重读S4，不改正式7／旧8／旧报告。页6原件、存图、HTTP图SHA一致；初截图旧画面经双动画帧稳定后已正确，未证明渲染器或OCR错误，不重读或猜修。确认p721／722实际入新稿，核首16新读取与v49差异；不能预言149项全同。用药逐字段模式默认关闭，Rx与疗程日期分开；不得追认匿名试验为生产Run或造第二导入框架。
+原UI复制8生成37d副本后，发现仅内层内容保留，外层review_scope_selection丢失，编辑器因此隐藏。只读同API比较：范围hash／候选／原来源均相同；原4选择及1手工EX12引用未传，额外来源不同，不能保存默认范围冒充恢复。现修`start_feedback_re_deconstruction`→`save_initial_draft`保留原选择及保存身份；快照不符在建Job前拒绝，后续来源校验不变。3相连文件91过／5SWIG、76.43秒exit0（wp5-feedback-scope-preservation.xml）。新增metadata seam反例只证明交接／身份，真实来源闭包仍靠范围API及实际新草稿验证；不把合成范围当已批准。
+
+下一步：267b及其自动稿完成后关闭原对话，不重复提交；核0活动Job再加载范围保留补丁。原UI取消未编辑37d，合法新副本先核4选择／1手工引用与83来源均保留，再编辑13条共享补救例外的期间，仅构建审定变动项、发布验证修订。继续鼻痒／喷嚏对应，回顾评分不动。95c／v53已加载，不重部署旧版；不重读S4或整例、不改正式7／旧8／旧报告。p721／722实际入新稿和完整差异仍待核，不预言149项全同。用药逐字段模式默认关闭，不追认匿名试验为生产Run。
 
 ## 6. 已完成长运行，不要重新启动
 

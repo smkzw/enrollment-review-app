@@ -1046,6 +1046,17 @@ class ProtocolWorkbenchService:
         previous_source_input = ProtocolDeconstructionInput.model_validate(
             source_context["source_input"]
         )
+        selection = baseline.review_scope_selection
+        if (
+            selection is not None
+            and selection.snapshot_id != previous_source_input.extraction_snapshot_id
+        ):
+            raise ProtocolWorkbenchError(
+                "REVIEW_SCOPE_SOURCE_MISMATCH",
+                title="已保存范围与方案原文不一致",
+                detail="已发布草稿的范围选择不属于本次复用的方案快照，未建立修订任务。",
+                recovery="请核对已发布版本的原文范围；不能借用其他方案快照。",
+            )
         source_candidates = {
             item.interpretation_source_id: item
             for item in previous_source_input.interpretation_sources
@@ -1174,6 +1185,7 @@ class ProtocolWorkbenchService:
                     actor=actor,
                     created_at=self.now(),
                     baseline=baseline.content,
+                    review_scope_selection=selection,
                 )
                 gate = self.gate.evaluate(
                     source_input,

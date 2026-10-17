@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from sqlalchemy import func, select
 
 from app.domain.contracts.agent_io import ProtocolDeconstructionInput
 from app.domain.contracts.enums import (
@@ -42,13 +43,18 @@ from app.protocols.deconstruction_gate import (
     ProtocolGateCheckResult,
     ProtocolGateIssue,
 )
-from app.domain.contracts.protocol_drafts import DraftFeedbackKind
+from app.domain.contracts.protocol_drafts import (
+    DraftFeedbackKind,
+    ReviewScopeAddition,
+    ReviewScopeSelection,
+)
 from app.domain.contracts.normalization import UnresolvedItem
 from app.services.protocol_workbench_service import (
     ProtocolWorkbenchError,
     ProtocolWorkbenchService,
 )
 from app.storage.repositories import list_interpretation_sources
+from app.storage.models import JobRecord
 from app.workflow.jobstore import JobStore
 
 
@@ -517,8 +523,9 @@ def test_redeconstruction_rejects_publish_when_formal_baseline_has_advanced(
     assert service.get_project_official_version(published.project_id).publication_count == 2
 
 
+@pytest.mark.parametrize("scope_state", ["absent", "preserved", "wrong_snapshot"])
 def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
-    slice4_env, data_paths
+    slice4_env, data_paths, monkeypatch, scope_state
 ) -> None:
     """无新版文件时复用正式发布任务的来源上下文，候选稿与正式稿初始无差异。"""
     factory, _now = slice4_env
@@ -546,6 +553,31 @@ def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
         actor="医学监查员",
         **_control_refs(service, data_paths, started.job_id),
     )
+    selection = None
+    if scope_state != "absent":
+        # Metadata handoff seam only. Native scope validation has its own API tests.
+        from app.services import protocol_workbench_service as module
+
+        selection = ReviewScopeSelection(
+            scope_content_hash="a" * 64,
+            included_candidate_keys=["b" * 64],
+            additions=[ReviewScopeAddition(
+                scope_kind="referenced_source",
+                source_span_ids=["span-in"],
+                official_codes=["IN-01"],
+                reason="保留手工指定原文",
+            )],
+            snapshot_id=(source_input.extraction_snapshot_id
+                         if scope_state == "preserved" else "wrong-snapshot"),
+            saved_by="原审定者",
+            saved_at=NAIVE_NOW,
+        )
+        resolve = module.resolve_formal_baseline_revision
+        monkeypatch.setattr(
+            module, "resolve_formal_baseline_revision",
+            lambda **kwargs: resolve(**kwargs).model_copy(
+                update={"review_scope_selection": selection}),
+        )
     interpretation = InterpretationSource(
         interpretation_source_id="source-node-relative",
         protocol_version_id=published.protocol_version_id,
@@ -567,6 +599,19 @@ def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
         ],
     )
 
+    if scope_state == "wrong_snapshot":
+        with factory() as session:
+            count = session.scalar(select(func.count()).select_from(JobRecord))
+        with pytest.raises(ProtocolWorkbenchError) as error:
+            service.start_feedback_re_deconstruction(
+                project_id=published.project_id,
+                idempotency_key="feedback-from-formal",
+                interpretation_sources=[interpretation], actor="医学监查员",
+            )
+        assert error.value.code == "REVIEW_SCOPE_SOURCE_MISMATCH"
+        with factory() as session:
+            assert session.scalar(select(func.count()).select_from(JobRecord)) == count
+        return
     result = service.start_feedback_re_deconstruction(
         project_id=published.project_id,
         idempotency_key="feedback-from-formal",
@@ -609,6 +654,12 @@ def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
     )
     assert replay.created is False
     assert replay.job_id == result.job_id
+
+    preserved = service._load_draft_revision(service._merged_payload(result.job_id))
+    assert preserved.review_scope_selection == selection
+    if scope_state == "preserved":
+        # This seam checks preserved metadata, not clinical adoption of a synthetic scope.
+        return
 
     reviews = service.get_rule_reviews(result.job_id)
     for entry in reviews["entries"]:

@@ -1082,6 +1082,7 @@ class ProtocolDraftService:
         created_at: datetime,
         baseline: ProtocolDeconstructionDraft | None = None,
         origin_note: str | None = None,
+        review_scope_selection: ReviewScopeSelection | None = None,
     ) -> ProtocolDraftRevision:
         if draft.draft_revision != 1:
             raise ValueError("初始保存的草稿必须是首稿（draft_revision=1）")
@@ -1102,6 +1103,7 @@ class ProtocolDraftService:
             actor=actor,
             content=draft,
             content_sha256=canonical_hash(draft.model_dump(mode="json")),
+            review_scope_selection=review_scope_selection,
             diff=compute_draft_diff(baseline, draft),
             created_at=created_at,
         )
