@@ -26,7 +26,7 @@ from tests.v2.storage.test_fact_repositories import _update_episode
 NOW = datetime(2026, 10, 14, tzinfo=UTC)
 
 
-def _incremental_source(session, old, added, *, change_metadata=False, retained_only=False, prefix="inc"):
+def _incremental_source(session, old, added, *, change_metadata=False, retained_only=False, prefix="inc", risk_reviews=()):
     """Compose two real Phase4 repository fixtures under one owner; no fake completion row."""
     snapshots = EvidenceSnapshotRepository(session)
     before = snapshots.get(old["snapshot_id"])
@@ -72,10 +72,16 @@ def _incremental_source(session, old, added, *, change_metadata=False, retained_
         "evidence_processing_revision_id": f"{prefix}-base", "evidence_snapshot_id": snapshot.evidence_snapshot_id,
         "manifest": manifest, "manifest_sha256": manifest_sha})
     EvidenceProcessingRevisionRepository(session).create(base)
+    from app.storage.evidence_locator_repositories import OCRRiskReviewRepository
+    for review in risk_reviews:
+        OCRRiskReviewRepository(session).create(review.model_copy(update={
+            "base_processing_revision_id": base.evidence_processing_revision_id}))
     locators = sorted([*previous.locator_ids, *(item for row in additions for item in row.locator_ids)])
     attempt = ProcessingCandidateAttemptManifest(metadata_revision_ids=sorted([*metadata_ids,
         *(item for row in additions for item in row.metadata_revision_ids)]),
         risk_scan_ids=sorted([*previous.risk_scan_ids, *(item for row in additions for item in row.risk_scan_ids)]),
+        risk_review_ids=sorted([*previous.risk_review_ids, *(review.review_id for review in risk_reviews),
+            *(item for row in additions for item in row.risk_review_ids)]),
         locator_ids=locators)
     authority = old["authority"]
     candidate_sha = processing_candidate_input_hash(evidence_snapshot_id=snapshot.evidence_snapshot_id,
@@ -94,7 +100,8 @@ def _incremental_source(session, old, added, *, change_metadata=False, retained_
         "evidence_snapshot_id": snapshot.evidence_snapshot_id, "base_processing_revision_id": base.evidence_processing_revision_id,
         "producer_candidate_id": candidate.candidate_id, "candidate_input_sha256": candidate_sha,
         "manifest": manifest, "manifest_sha256": manifest_sha, "locator_ids": locators,
-        "metadata_revision_ids": attempt.metadata_revision_ids, "risk_scan_ids": attempt.risk_scan_ids})
+        "metadata_revision_ids": attempt.metadata_revision_ids, "risk_scan_ids": attempt.risk_scan_ids,
+        "risk_review_ids": attempt.risk_review_ids})
     complete = complete.model_copy(update={"completion_manifest_sha256": complete_repo.manifest_sha256_for(complete)})
     complete_repo.create(complete)
     current = authority.model_copy(update={"evidence_snapshot_v2_id": snapshot.evidence_snapshot_id,
@@ -231,6 +238,35 @@ def test_retained_profile_includes_original_linked_history_and_medication(sessio
     _, _, current, fact, _ = _seed_incremental(session, linked_entities=True)
     profile = PatientProfileService().generate(session, authority=current, include_rule_revision_sources=True)
     assert {row.source_id for row in profile_items(profile)} == {fact.fact_id, "retained-event", "retained-exposure"}
+
+
+@pytest.mark.parametrize("selected", [False, True])
+def test_page_reuse_compares_selected_qualified_risk_ids_and_preserves_old_revision(session, selected):
+    from app.domain.contracts.evidence_locator import OCRRiskReview
+    from app.domain.contracts.ocr import OcrRiskFlag
+    from app.storage.evidence_locator_repositories import OCRRiskReviewRepository
+    from app.storage.fact_authority import FactAuthorityValidator
+    from tests.v2.services.test_fact_normalization_persistence import _seed_chain
+
+    flag = OcrRiskFlag(risk_id="r1", kind="numeric_value", level="informational", text="5",
+        text_start=4, text_end=5, detail="合成数值来源", rule_version="facts-test/v1")
+    old = _seed_chain(session, "risk-retained", risk_flags=(flag,))
+    old["authority"] = _variable_rule_revision(session, old, 2)
+    repository = CompleteEvidenceProcessingRevisionRepository(session)
+    original = repository.get(old["complete_revision_id"])
+    review = OCRRiskReview(review_id="selected-risk-review",
+        risk_flag_id="risk-retained-scan:r1", decision="confirmed_as_read", reason="合成原件核对",
+        actor="builder_verification", base_processing_revision_id=old["base_revision_id"],
+        expected_revision=old["authority"].episode_revision, created_at=NOW)
+    if not selected:
+        OCRRiskReviewRepository(session).create(review)
+    current = _incremental_source(session, old, old, retained_only=True,
+        risk_reviews=[review] if selected else [])
+    validator = FactAuthorityValidator(session)
+    assert validator.retained_source_pages(old["authority"], current) == (
+        set() if selected else {(old["doc_id"], 1)})
+    assert validator.retained_source_documents(old["authority"], current) == (set() if selected else {old["doc_id"]})
+    assert repository.get(old["complete_revision_id"]) == original
 
 
 @pytest.mark.parametrize("kind", ["fact", "event", "exposure"])

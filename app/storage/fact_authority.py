@@ -191,7 +191,7 @@ class FactAuthorityValidator:
             result = {}
             for page in revision.manifest:
                 selected = [scan for scan in scans if scan.ocr_page_id == page.ocr_page_id]
-                flags = {flag.risk_id for scan in selected for flag in scan.flags}
+                flags = {f"{scan.scan_id}:{flag.risk_id}" for scan in selected for flag in scan.flags}
                 result[(page.source_document_version_id, page.page_number)] = (sorted(scan.scan_id for scan in selected),
                     sorted(review.review_id for review in reviews if review.risk_flag_id in flags),
                     sorted(flags & set(revision.unresolved_blocking_risk_ids)))

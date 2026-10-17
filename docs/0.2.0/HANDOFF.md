@@ -16,8 +16,8 @@
 
 | 项 | 已核事实 |
 |---|---|
-| 代码 | 3a0e5f7c及之前已正常推main/dev并加载；数值依赖v54及范围旧提示精简已生效。7文件661过43.85秒、前端3文件44过及tsc／build exit0，不称全库绿 |
-| 后端 | 61134，PID14952／exec59240，源3a0e5f7c、计算v54，output/wp5-runtime-3a0e5f7c.log。所有更正及更新Job已完成；无在途启动请求后TERM旧12432 exit143，未停共享服务。先前TIME_WAIT失败仍留原日志 |
+| 代码 | 4a54b9db及之前已正常推main/dev并加载；数值依赖v54、范围旧提示及局部核对方式继承已生效。前包661过、前端44过；本包相连6文件130过，不称全库绿 |
+| 后端 | 61134，PID23664／exec56128，源4a54b9db、计算v54，output/wp5-runtime-4a54b9db-retry1.log。核0活动后TERM旧14952 exit143，不动共享服务。首次漏PYTHONPATH导入失败exit1，原日志保持，补PYTHONPATH=.后正常；不是端点故障 |
 | 前端 | index-Cb0rKu3g.js／index-CCBeFo8E.css；output/wp5-numeric-dependency-product-dist及deployment-readback.json核实际38复制文件、6既有静态文件逐字同、598旧assets保持；初回执误记44已明确纠正。Ego真实新script已核 |
 | 环境 | 进程明确cms-router/glm-5.3-flash high65536；ENROLLMENT_SEMANTIC_ROUTE_PREFLIGHT=false。连续字段模式仍默认关闭。.env SHA254406e4f7d8c47ddac6d057926f1d2e9eccbce1c425b5c140faf24790a189b6保持 |
 | 数据 | 仅当前data_v2。既有一致性备份backups/20261016T093158732786Z-0030.sqlite3，17060716544字节；不重复大拷贝／清理 |
@@ -94,6 +94,14 @@ D31实际已完成：c7从原UI保存一次1→2，仅17–25及27的exception_p
 下一动作：从现有逐项来源核实路径解决用药候选资格，不开第三匿名整页试验。只读115e71整理Run已提取两次单次注射药名／剂量／明确日期，仍因locator_and_text_hash原页未核读数阻断；pending_normalization_pages实际空，不得伪装失败页重读。EX05另见询问与研究者回复的原文角色冲突，未擅改结果。已完成的方案／变量／评分对应不重跑，不补齐另两评分求绿；旧历史及所有真实未决保持。
 
 来源核实接续新发现：实际资料完整修订为scoped_text_v1；校对／风险核对命令却默认新候选strict，核一页会被要求处理其他1451风险。已修为继承当前完整修订或候选的冻结方式，既有strict不放宽，新构建／启用与事实资格仍独立。6相连文件130过162.35秒exit0、5SWIG（wp5-sidecar-source-policy-consumers-final.xml）；前窗129过1失败是严格初版已全核、整页重复核对合法422，现明确保留此反例，不删测或放宽拒绝。真实病历5页图SHA b72b0ed53c71686c877dfdc3d9799d902538accf5dda14c997c921ebe9b8289e，1240×1755已看，42风险逐项与原图相符；尚未点击保存核对、未生成新资料或采用暴露。代码待安全加载后走原UI，不借本次目视诊断改旧回执或称已正式采用。
+
+上述局部核对现已由原UI保存一次：8f1e8cecfdc14adc9365cc671584d87b completed，cand-28a104f91ff94fc3b32d6a0024e84382 ready，complete-1b96eaed86d942e8b826559ab47accf4仍scoped。24页／定位／校对／元数据／快照与旧9a8d相同，仅42新核对。尚未点击启用，不重复保存；p2原入口“启用这个资料版本”可见。正在做纯只读来源复用预检（output/wp5_local_source_review_preflight.py，exec70924），防止新评分变量使原成功读取全包失效；未预检完不自动启动模型。旧episode仍13／工作稿c8；候选初始payload没有complete_id，终态从原事件仓储读回，不据此误报失败。
+
+**当前覆盖上述中间状态**：首次预检被“资料尚未活动”保护拒绝，未修改该保护。为避免UI启用自动调用全例整理，开发期仅经产品API启用1b96，actor构建者验证，episode14（wp5-local-page5-activation.json）；未点击UI启用，不冒充UI闭环。之后只读15.162秒计划14组24页、0复用、0模型／写，未创建整理Job。receipt的boundary误写“未活动”，其current=proposed及启用回执才是实际状态，不据该英文边界误判；最初跟踪report的source_sha256误哈希路径，first-mismatch-private回执已补真实源码hash并明确更正。首个提示差异确为4项评分变量与目标替换，不是单纯文件没变就可跳过。保留预检结果，不调用全例掩盖。
+
+跟踪还发现风险身份比较用裸risk_id匹配完整scan_id:risk_id，漏掉所选核对和未决变动。统一完整身份后，在当前真实材料上23页保留、病历5必须重验；这不是事实批准。相连4文件126过1失败，首失败为新合成夹具将旧base核对用于新base，仓储正确拒绝；改夹具在真实新base保存后，2直接受影响文件71过126.55秒exit0／5SWIG（wp5-selected-risk-source-consumers-final.xml）。另外两文件产品源码相同、前窗已过，未为夹具重复全跑；不累计成最后全库绿。当前该一行保护修订尚未加载，运行仍4a54；资料已更新而c8仍引用旧complete-9a8d，不称已生成新版。
+
+WP6独立实操：p2已从26002工作台→资料页→个例档案，现profile4真实时间图。v49工作稿因计算方式变化明确陈旧，未截图空状态冒充当前工作稿。病史图出现正常传染病检验，实查同一指标既有test_exam_score亦有allergy_infection_immune事实；后者fact_type为传染病筛查检验结果、variable_id空。不能靠病名／阴性字符串或只因同页相同值就合并／隐藏临床来源。该显示／分类问题未修，宽屏验收未完成；不为拍图另行整例读取或用UI标签替临床分类。
 
 ## 6. 已完成长运行，不要重新启动
 
