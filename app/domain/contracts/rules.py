@@ -188,12 +188,15 @@ class MedicationRestriction(ContractModel):
     period: ProtocolPeriod | None = None
     applicable_stages: list[ReviewStage]
     exception_excerpt: str | None = Field(default=None, min_length=1)
+    exception_period: ProtocolPeriod | None = Field(default=None, exclude_if=lambda value: value is None)
     unresolved_reason: str | None = Field(default=None, min_length=1)
     source_quotes: list[ProtocolScopeQuote] = Field(min_length=1)
     applies_to_rule: str | None = Field(default=None, pattern=r"^(IN|EX)-\d{2}$")
 
     @model_validator(mode="after")
     def validate_scope(self):
+        if self.exception_period is not None and self.exception_excerpt is None:
+            raise ValueError("例外适用期间须对应实际例外原文")
         if self.class_scope is not None and self.drug_class_id is None:
             raise ValueError("类别适用范围必须对应明确药物类别")
         if len(self.applicable_stages) != len(set(self.applicable_stages)):

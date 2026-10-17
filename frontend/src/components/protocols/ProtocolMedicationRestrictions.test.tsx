@@ -17,6 +17,18 @@ function supplement() {
 }
 afterEach(() => vi.unstubAllGlobals());
 
+it("保留旧例外结构，拒绝无原文或未知适用期间", () => {
+  const initial = supplement();
+  expect(decodeScopeSupplement(initial)).toEqual(initial);
+  for (const exception_period of ["treatment_period", "unknown-period"]) {
+    expect(() => decodeScopeSupplement({ ...initial, medications: [
+      { ...initial.medications[0], exception_period }] })).toThrow("用药例外的适用期间不完整");
+  }
+  const valid = { ...initial, medications: [{ ...initial.medications[0], exception_excerpt: "仅治疗期补救除外",
+    exception_period: "treatment_period" }] };
+  expect(decodeScopeSupplement(valid).medications[0].exception_period).toBe("treatment_period");
+});
+
 it("类别适用范围只能明确选择，修改药名后须重新核对，不自行批准", async () => {
   const user = userEvent.setup();
   const initial = supplement();
@@ -161,6 +173,7 @@ it("从已选方案原文补充共同例外，保存真实引用且不重读或�
     expect(body.expected_revision_id).toBe("revision");
     expect(body.proposal.medications[0].source_quotes).toEqual([content.sources[0], exception]);
     expect(body.proposal.medications[0].exception_excerpt).toBe(exception.excerpt);
+    expect(body.proposal.medications[0].exception_period).toBe("treatment_period");
     expect(body.proposal.medications[1].source_quotes).toEqual(sibling.source_quotes);
     return new Response(JSON.stringify({ revision_id: "next" }));
   });
@@ -175,6 +188,7 @@ it("从已选方案原文补充共同例外，保存真实引用且不重读或�
   expect(within(picker).queryByRole("checkbox", { name: content.sources[0].excerpt })).not.toBeInTheDocument();
   await user.click(within(picker).getByRole("checkbox", { name: exception.excerpt }));
   await user.type(screen.getAllByLabelText("例外原文")[0], exception.excerpt);
+  await user.selectOptions(screen.getByLabelText("例外适用期间"), "treatment_period");
   expect(request).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "保存补充要求" }));
   expect(request).toHaveBeenCalledOnce();

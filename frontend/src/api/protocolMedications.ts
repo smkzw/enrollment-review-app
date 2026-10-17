@@ -12,6 +12,7 @@ export interface MedicationRestriction {
   window_interpretation?: "prohibited_interval" | "minimum_washout" | null;
   period: "study_period" | "treatment_period" | null; applicable_stages: MedicationStage[];
   exception_excerpt: string | null; unresolved_reason: string | null;
+  exception_period?: "study_period" | "treatment_period" | null;
   source_quotes: MedicationQuote[]; applies_to_rule: string | null;
 }
 export interface MedicationDisposition {
@@ -47,6 +48,8 @@ export function decodeScopeSupplement(value: unknown): ScopeSupplement {
         !["exception_excerpt", "unresolved_reason", "applies_to_rule"].every(key => item[key] === null || typeof item[key] === "string"))
       throw new Error("用药限制的阶段或范围不完整。");
     quotes(item.source_quotes);
+    if (item.exception_period != null && (!["study_period", "treatment_period"].includes(String(item.exception_period)) || !item.exception_excerpt))
+      throw new Error("用药例外的适用期间不完整。");
     if (item.class_scope != null && (!["all_members", "qualified"].includes(String(item.class_scope)) || item.drug_class_id == null))
       throw new Error("药物类别的适用范围尚不能读取。");
     if (item.window_interpretation != null && !["prohibited_interval", "minimum_washout"].includes(String(item.window_interpretation)))

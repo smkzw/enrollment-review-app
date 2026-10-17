@@ -160,7 +160,7 @@ export function ruleReviewPresentations(entries: RuleReviewEntry[], content: Rec
       reviewObjects(raw?.components).forEach(item => { inspect(item.expression); inspect(item.exception_expression); });
     } else if (entry.kind === "procedure" && !needed.length) reasons.push("流程表操作尚未对应到审核要求，请核对节点及必需内容。");
     if (entry.kind === "medication") {
-      if (medication?.exception_excerpt) reasons.push("含用药例外，请核对适用对象及期间。");
+      if (medication?.exception_excerpt && medication.exception_period !== "treatment_period") reasons.push("含用药例外，请核对适用对象及期间。");
       if (medication?.window && !medication.window_interpretation) reasons.push("时间要求尚未区分禁用区间与最短停药间隔。");
       if (typeof medication?.unresolved_reason === "string") reasons.push(medication.unresolved_reason);
       if (medication?.drug_class_id && !medication.class_scope) reasons.push("药物类别的适用范围尚未核清。");

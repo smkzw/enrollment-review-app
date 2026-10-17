@@ -28,7 +28,9 @@ export function ProtocolReviewLogic({ item, content, bindings }: {
               <ul>{members.map(name => <li key={name}>{name}</li>)}</ul>
             </details> : "本版未保存类别成员"}</dd></div>
           </>}
-          {restriction.exception_excerpt && <div><dt>例外</dt><dd>{restriction.exception_excerpt}</dd></div>}
+          {restriction.exception_excerpt && <div><dt>例外</dt><dd>{restriction.exception_period === "treatment_period"
+            ? <details><summary>仅治疗期，不用于入排</summary>{restriction.exception_excerpt}</details>
+            : restriction.exception_excerpt}</dd></div>}
           {restriction.unresolved_reason && <div><dt>未决</dt><dd>{restriction.unresolved_reason}</dd></div>}
           {restriction.applies_to_rule && <div><dt>关联条款</dt><dd>{restriction.applies_to_rule}</dd></div>}
         </dl> : <><p>核对补充原文的范围及未形成限制的内容，不改官方入排编号。</p>

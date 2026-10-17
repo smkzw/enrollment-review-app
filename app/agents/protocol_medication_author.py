@@ -22,6 +22,7 @@ TimeConstraint使用原文命名锚点、数量、日/周/月/年及方向；不
 window_interpretation须区分prohibited_interval（窗口内禁止使用，时长放上限）与minimum_washout（至少停药的间隔，时长放下限）；不明时保留null并说明未决，不靠数字相同认作含义相同。
 仅明确整个研究/治疗期间才用period；window与period不同时填，时段不清用unresolved_reason说明，不猜。
 有例外必须逐字保留exception_excerpt，并把限定它的上位原文一并引用，不能删例外以便自动计算。
+本系统只审核预筛、筛选、导入和基线的资格要求。仅研究药物治疗期间适用的补救治疗许可，不构成入排要求，也不豁免入组前洗脱；单独来源列other_phase并说明。若它同时解释所引限制的例外，保留原文并以exception_period=treatment_period标明仅后续治疗期；不能默认例外覆盖本条所有阶段。确实整个研究期间适用时才用study_period，未核清则null。
 drug_class_id只能来自给定类别表，药物归属不确定用null，不把外用、鼻用、吸入用混成全身用药。
 不要把允许用药、背景介绍、后期治疗要求改成筛选排除，不给每个标题造患者义务。
 每个非空来源位置必须被某条限制引用，或在source_dispositions中明确标为标题、允许、其他期别、背景或真实未决。

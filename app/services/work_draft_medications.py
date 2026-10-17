@@ -3,7 +3,7 @@ import unicodedata
 
 from app.domain.calendar_dates import date_bounds
 from app.domain.contracts.common import DateValue
-from app.domain.contracts.enums import ComponentDecision as D, DurationStatus, FactPolarity, ProfileLane, RuleKind, TruthValue
+from app.domain.contracts.enums import ComponentDecision as D, DurationStatus, FactPolarity, ProfileLane, ProtocolPeriod, RuleKind, TruthValue
 from app.domain.contracts.work_draft import SystemIssue, WorkDraftItem
 from app.domain.medication_timing import medication_window_violation, medication_period_violation
 from app.domain.publication import canonical_hash
@@ -199,7 +199,7 @@ def calculate_medications(frozen, rule_set, *, evidence_refs):
                 issue = None
                 decision, reason = D.CONFLICT, "相关用药记录存在尚未核清的矛盾，未选择其中一条作为最终依据。"
             elif any(row.truth == TruthValue.TRUE for row in observed):
-                if restriction.exception_excerpt:
+                if restriction.exception_excerpt and restriction.exception_period != ProtocolPeriod.TREATMENT_PERIOD:
                     reason = "已有记录落在限制时间内，但方案另有例外，尚需核对该例外是否适用。"
                 else:
                     decision, reason = D.EXCLUSION_TRIGGERED, "已有来源依据的用药日期落在本条限制时间内；不据此推断完整疗程或停药日期。"

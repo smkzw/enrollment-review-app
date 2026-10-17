@@ -170,7 +170,13 @@ export function ProtocolMedicationRestrictions({ jobId, revisionId, content, dru
               })}
               <label>半衰期倍数<input type="number" min="0.1" step="0.1" disabled={busy} value={item.window.half_life_multiplier ?? ""} onChange={event => change(index, { window: { ...item.window!, half_life_multiplier: event.target.value ? Number(event.target.value) : null } })} /></label>
             </>}
-            <label>例外原文<input disabled={busy} value={item.exception_excerpt ?? ""} onChange={event => change(index, { exception_excerpt: event.target.value || null })} /></label>
+            <label>例外原文<input disabled={busy} value={item.exception_excerpt ?? ""} onChange={event => change(index, {
+              exception_excerpt: event.target.value || null, ...(!event.target.value ? { exception_period: null } : {}) })} /></label>
+            {item.exception_excerpt && <label>例外适用期间<select disabled={busy} value={item.exception_period ?? ""}
+              onChange={event => change(index, { exception_period: event.target.value as MedicationRestriction["exception_period"] || null })}>
+              <option value="">尚未单独核清</option><option value="study_period">整个研究期间</option>
+              <option value="treatment_period">仅研究药物治疗期，不用于入排</option>
+            </select></label>}
           </div>
           <details><summary>原文依据</summary>{item.source_quotes.map((quote, position) => <p key={position}>{quote.excerpt}</p>)}</details>
           <MedicationSourcePicker sources={draft.sources} selected={item.source_quotes} disabled={busy}

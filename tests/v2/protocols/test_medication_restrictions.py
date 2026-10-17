@@ -50,6 +50,20 @@ def test_source_union_preserves_calendar_units_exception_and_stable_item_identit
     assert build(proposal, selection, view).medications[0].item_id == result.medications[0].item_id
 
 
+def test_exception_period_is_reviewed_data_and_does_not_change_legacy_identity():
+    selection, view, proposal = frozen_medications()
+    old = build(proposal, selection, view)
+    assert "exception_period" not in old.medications[0].model_dump(mode="json")
+    proposal["medications"][0]["exception_period"] = "treatment_period"
+    revised = build(proposal, selection, view)
+    assert revised.medications[0].exception_period == "treatment_period"
+    assert revised.medications[0].item_id != old.medications[0].item_id
+    assert revised.sources == old.sources and revised.input_sha256 == old.input_sha256
+    proposal["medications"][0]["exception_excerpt"] = None
+    with pytest.raises(ValueError, match="例外适用期间"):
+        build(proposal, selection, view)
+
+
 def test_class_scope_is_explicit_and_changes_only_item_identity():
     from app.domain.contracts.rules import MedicationRestriction
     selection, view, proposal = frozen_medications()

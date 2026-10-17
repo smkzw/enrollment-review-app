@@ -156,6 +156,17 @@ def test_exact_frozen_class_exception_and_conflict_remain_independent():
     assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == D.CONFLICT
 
 
+@pytest.mark.parametrize("period,expected", [(None, D.INDETERMINATE),
+    (ProtocolPeriod.STUDY_PERIOD, D.INDETERMINATE), (ProtocolPeriod.TREATMENT_PERIOD, D.EXCLUSION_TRIGGERED)])
+def test_later_treatment_exception_does_not_waive_eligibility_window(period, expected):
+    frame, rules, refs = medication_context()
+    item = rules.scope_supplement.medications[0]
+    item.exception_excerpt = "研究药物治疗期间可以补救治疗"
+    item.exception_period = period
+    assert calculate_medications(frame, rules, evidence_refs=refs)[0].decision == expected
+    assert item.exception_excerpt == "研究药物治疗期间可以补救治疗"
+
+
 def test_ongoing_does_not_invent_continuation_to_a_future_anchor():
     frame, rules, refs = medication_context(use_day=date(2026, 2, 1))
     frame.medication_exposures[0] = frame.medication_exposures[0].model_copy(update={"duration_status": DurationStatus.ONGOING,
