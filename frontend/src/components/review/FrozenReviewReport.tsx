@@ -274,7 +274,7 @@ export function FrozenReviewReport({ report, onActionChanged, focusActionId = nu
               return groups;
             }, new Map<string, typeof group.issues>())).map(([key, issues]) => <div key={key}>
               {issues.length > 1 && <p>{issues[0].detail}<small>{issues[0].alternative}</small></p>}
-              <ul>{issues.map((issue, index) => <li key={index}>
+              <ul className={issues.length > 1 ? "reports-print__shared-issue-list" : undefined}>{issues.map((issue, index) => <li key={index}>
                 <strong>{reviewSystemIssueLabel(issue)}</strong>
                 {issues.length === 1 && <>：{issue.detail}<small>{issue.alternative}</small></>}
                 {issue.sourceDocumentVersionId && issue.pageArtifactId && issue.pageNumber && <button type="button"

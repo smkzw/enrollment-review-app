@@ -466,6 +466,18 @@
     display: none !important;
   }
 
+  .reports-print__shared-issue-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2mm 5mm;
+    padding-left: 0;
+    list-style: none;
+  }
+
+  .reports-print__shared-issue-list li {
+    break-inside: avoid;
+  }
+
   .reports-print__table {
     color: #000;
   }
