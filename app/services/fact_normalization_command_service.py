@@ -589,6 +589,7 @@ class FactNormalizationCommandService:
         created_by: str | None = None,
         retry_failed_from_run_id: str | None = None,
         revalidate_from_run_id: str | None = None,
+        source_page: tuple[str, int] | None = None,
     ) -> CreateNormalizationJobResult:
         """从当前活动证据派生权威并创建/复用持久任务。
 
@@ -597,6 +598,8 @@ class FactNormalizationCommandService:
         """
         del idempotency_intent  # 显式丢弃：禁止影响权威/配置选择或服务端幂等键
         operator = (created_by or "").strip() or _DEFAULT_CREATED_BY
+        if source_page is not None and (retry_failed_from_run_id or revalidate_from_run_id):
+            raise AppFactNormalizationRejectedError("整理所选页不能与原任务续读或核验混用。")
 
         with self.session_factory() as session:
             authority = authority_from_active_episode(session, review_episode_id)
@@ -696,6 +699,7 @@ class FactNormalizationCommandService:
                 **({"compact_text_references": True} if self.compact_text_references else {}),
                 account_source_text=coverage_id is None,
                 **({"retry_failed_from_run_id": retry_failed_from_run_id} if retry_failed_from_run_id else {}),
+                **({"source_page": source_page} if source_page is not None else {}),
                 **({"allow_candidate_partition": True} if self.allow_candidate_partition else {}),
                 **({"allow_question_classification_repair": True} if self.allow_question_classification_repair else {}),
             )

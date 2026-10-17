@@ -51,6 +51,26 @@ def test_v2_app_registers_fact_normalization_command_service(client):
     assert client.app.state.fact_normalization_command_service is not None
 
 
+def test_selected_page_http_command_has_no_authority_or_model_override(client, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    with client.app.state.session_factory() as session, session.begin():
+        chain = _seed_chain(session, prefix="api-selected-source")
+    command = Mock(return_value=SimpleNamespace(job_id="selected-job", run_id="selected-run", created=True, status="queued"))
+    monkeypatch.setattr(client.app.state.fact_normalization_command_service, "create_or_reuse", command)
+    path = _endpoint(chain["subject_id"], chain["episode_id"])
+    source = {"source_document_version_id": chain["doc_id"], "page_number": 1}
+    assert client.post(path, json={"source_page": source}).status_code == 201
+    assert command.call_args.kwargs["source_page"] == (chain["doc_id"], 1)
+    count = command.call_count
+    for body in ({"source_page": {**source, "page_number": True}}, {"source_page": {**source, "page_number": 0}},
+        {"source_page": source, "revalidate_from_run_id": "old"}, {"source_page": source, "retry_failed_from_run_id": "old"},
+        {"source_page": source, "model_config_id": "other"}):
+        assert client.post(path, json=body).status_code == 422
+    assert client.post(_endpoint("other-subject", chain["episode_id"]), json={"source_page": source}).status_code == 404
+    assert command.call_count == count
+
+
 def test_saved_read_revalidation_is_a_current_scope_product_command(client, data_paths):
     from tests.v2.services.test_fact_normalization_revalidation import successful_reading
 

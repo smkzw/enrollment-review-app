@@ -655,6 +655,39 @@ async function confirmCriticalCorrectionWhenShown(
 }
 
 describe("证据工作台", () => {
+  it("资料信息已变而未启用新版本时不提供单页整理", async () => {
+    const user = userEvent.setup();
+    fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({
+      subject_id: SUBJECT_ID, review_episode_id: EPISODE_ID,
+      active_evidence_snapshot_id: "snap-active", active_evidence_processing_revision_id: "processing-revision-1",
+      items: [makeSnapshotWire("snap-active", "active")],
+    }));
+    fns.getProcessingRevision.mockResolvedValue(decodeProcessingRevision(makeProcessingRevisionWire()));
+    fns.getOcrPage.mockResolvedValue(decodeOcrPage(makeOcrPageWire()));
+    await openValid(user);
+    await screen.findByRole("heading", {name: "原始识别 / 校对后文本"});
+    expect(screen.queryByRole("button", {name: /整理当前第/})).not.toBeInTheDocument();
+    expect(getFactNormalizationRepository().startFactNormalization).not.toHaveBeenCalled();
+  });
+  it("从当前所选原件页启动整理，不重读整例", async () => {
+    const user = userEvent.setup();
+    const snapshot = makeSnapshotWire("snap-active", "active");
+    fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({
+      subject_id: SUBJECT_ID, review_episode_id: EPISODE_ID,
+      active_evidence_snapshot_id: "snap-active", active_evidence_processing_revision_id: "processing-revision-1",
+      items: [snapshot],
+    }));
+    fns.getProcessingRevision.mockResolvedValue(decodeProcessingRevision({...makeProcessingRevisionWire(),
+      metadata_revision_ids: snapshot.members.map(item => item.metadata_head.metadata_revision_id)}));
+    fns.getOcrPage.mockResolvedValue(decodeOcrPage(makeOcrPageWire()));
+    await openValid(user);
+    const button = await screen.findByRole("button", {name: "整理当前第 1 页"});
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+    await waitFor(() => expect(getFactNormalizationRepository().startFactNormalization).toHaveBeenCalledWith(
+      SUBJECT_ID, EPISODE_ID, expect.objectContaining({sourcePage: {sourceDocumentVersionId: "version-1", pageNumber: 1}})));
+    expect(button).toBeDisabled();
+  });
   it("原件读取明细默认收起，展开后仍可核对，不以技术说明抢占临床内容", async () => {
     const user = userEvent.setup();
     const repo = getFactNormalizationRepository();
@@ -805,6 +838,7 @@ describe("证据工作台", () => {
     expect(screen.queryByText(/尚无有效资料版本/)).toBeNull();
     expect(screen.queryByRole("radio", { name: "补充资料" })).toBeNull();
 
+    await waitFor(() => expect(typeof resolveSnapshots).toBe("function"));
     await act(async () => {
       resolveSnapshots(
         decodeSnapshotList({

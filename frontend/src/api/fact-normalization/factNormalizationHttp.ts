@@ -21,7 +21,7 @@ import {
   type FactNormalizationJobActionView,
   type FactNormalizationJobStatusView,
 } from "./factNormalizationViewModels";
-import type { FactNormalizationRepository } from "./factNormalizationRepository";
+import type { FactNormalizationRepository, FactNormalizationStartInput } from "./factNormalizationRepository";
 
 export interface FactNormalizationHttpOptions {
   fetchImpl?: typeof fetch;
@@ -87,7 +87,7 @@ export function createFactNormalizationHttp(
     async startFactNormalization(
       subjectId: string,
       reviewEpisodeId: string,
-      input: { idempotencyKey: string; retryFailedFromRunId?: string; revalidateFromRunId?: string },
+      input: FactNormalizationStartInput,
       options?: { signal?: AbortSignal },
     ): Promise<FactNormalizationCommandView> {
       return request(
@@ -97,7 +97,9 @@ export function createFactNormalizationHttp(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ idempotency_intent: input.idempotencyKey,
             ...(input.retryFailedFromRunId ? {retry_failed_from_run_id: input.retryFailedFromRunId} : {}),
-            ...(input.revalidateFromRunId ? {revalidate_from_run_id: input.revalidateFromRunId} : {}) }),
+            ...(input.revalidateFromRunId ? {revalidate_from_run_id: input.revalidateFromRunId} : {}),
+            ...(input.sourcePage ? { source_page: { source_document_version_id: input.sourcePage.sourceDocumentVersionId,
+              page_number: input.sourcePage.pageNumber } } : {}) }),
           signal: options?.signal,
         },
         decodeFactNormalizationCommand,

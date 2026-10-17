@@ -105,11 +105,28 @@ function Harness({
       <button type="button" onClick={() => void job.start("idem-shared")}>
         再次开始
       </button>
+      <button type="button" onClick={() => void job.startPage("current-source", 5)}>只整理本页</button>
+      <button type="button" onClick={() => void job.retry()}>重试当前操作</button>
     </div>
   );
 }
 
 describe("个例档案整理任务恢复与文案", () => {
+  it("本页请求失败后重试仍为同页，不扩大为全部资料", async () => {
+    const start = vi.fn().mockRejectedValueOnce(new Error("unavailable")).mockResolvedValueOnce({
+      jobId: "job-normalize-1", runId: "run-normalize-1", created: true,
+      state: "queued", stateLabel: "等待处理", recoveryAction: "无需操作" });
+    setFactNormalizationRepository(makeRepo({start}));
+    render(<Harness />);
+    await screen.findByText("已恢复状态");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", {name: "只整理本页"}));
+    await screen.findByRole("alert");
+    await user.click(screen.getByRole("button", {name: "重试当前操作"}));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+    for (const call of start.mock.calls) expect(call[2]).toMatchObject({
+      sourcePage: {sourceDocumentVersionId: "current-source", pageNumber: 5}});
+  });
   it.each(["failed_retryable", "failed_final", "cancelled"] as const)(
     "旧档案陈旧且当前任务%s时保留实际未完成状态及手动重建入口", async (state) => {
       const job = status({ state, stateLabel: "未完成", recoveryAction: "已有结果保留。" });

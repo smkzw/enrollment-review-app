@@ -12,16 +12,24 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class NormalizationPageSelection(_StrictModel):
+    source_document_version_id: str = Field(min_length=1)
+    page_number: int = Field(ge=1, strict=True)
+
+
 class FactNormalizationRequest(_StrictModel):
     """客户端仅可声明稳定意图；不得携带权威元组或配置编号。"""
 
     retry_failed_from_run_id: str | None = Field(default=None, min_length=1, max_length=128)
     revalidate_from_run_id: str | None = Field(default=None, min_length=1, max_length=128)
+    source_page: NormalizationPageSelection | None = None
 
     @model_validator(mode="after")
     def require_one_operation(self):
         if self.retry_failed_from_run_id and self.revalidate_from_run_id:
             raise ValueError("继续读取和核验已读记录不能混用")
+        if self.source_page and (self.retry_failed_from_run_id or self.revalidate_from_run_id):
+            raise ValueError("整理所选页不能与原任务续读或核验混用")
         return self
 
     idempotency_intent: str | None = Field(

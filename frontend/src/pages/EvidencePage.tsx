@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ScanText } from "lucide-react";
 import { getCatalogRepository, getEvidenceRepository } from "../api";
 import type { DocumentCategory, SourceCategory } from "../api/evidence/evidenceTypes";
 import {
@@ -1716,6 +1717,17 @@ export function EvidencePage() {
       {episode?.activeEvidenceSnapshotId && !factNormalization.restoring && factNormalization.state.status === "idle" && (
         <button className="button" type="button" onClick={() => void factNormalization.start()}>
           整理个例档案
+        </button>
+      )}
+      {selectedPageEntry && selectedPageEntry.ocrPageId !== null && viewedRevisionConsistent
+        && viewedProcessingRevisionId === activeProcessingRevisionId
+        && selectedSnapshotId === activeSnapshotId && !metadataChanged && (
+        <button className="button" type="button"
+          disabled={factNormalization.restoring || factNormalization.state.status === "starting"
+            || factNormalization.state.status === "active" && !["succeeded", "failed", "stale"].includes(factNormalization.state.phase)}
+          title="只更新当前页的临床记录，其他页面和旧结果保留"
+          onClick={() => void factNormalization.startPage(selectedPageEntry.sourceDocumentVersionId, selectedPageEntry.pageNumber)}>
+          <ScanText size={16} aria-hidden="true" /> 整理当前第 {selectedPageEntry.pageNumber} 页
         </button>
       )}
       {subjectId && reviewEpisodeId && factNormalization.state.status === "active" &&

@@ -16,6 +16,7 @@ import {
   isTerminalFactNormalizationState,
   type FactNormalizationDisplayPhase,
   type FactNormalizationJobStatusView,
+  type FactNormalizationStartInput,
 } from "../../api/fact-normalization";
 
 const POLL_MS = 2_000;
@@ -111,6 +112,7 @@ export interface UseFactNormalizationJobResult {
   completedReview: { jobId: string; subjectId: string; reviewEpisodeId: string } | null;
   /** 发起或幂等复用整理任务。 */
   start: (idempotencyKey?: string) => Promise<string | null>;
+  startPage: (sourceDocumentVersionId: string, pageNumber: number) => Promise<string | null>;
   retryFailedPages: (runId: string) => Promise<string | null>;
   revalidateSaved: (runId: string) => Promise<string | null>;
   /** 失败后重试失败范围，或陈旧时重新下发命令。 */
@@ -149,6 +151,7 @@ export function useFactNormalizationJob(
   const startInFlight = useRef<Promise<string | null> | null>(null);
   const idempotencyRef = useRef<string | null>(null);
   const revalidationRef = useRef<string | null>(null);
+  const sourcePageRef = useRef<FactNormalizationStartInput["sourcePage"]>(undefined);
   const succeededNotified = useRef<string | null>(null);
   const afterPages = useRef<() => void>(() => {});
   const pageReview = usePageReviewJob({ subjectId, reviewEpisodeId,
@@ -218,6 +221,7 @@ export function useFactNormalizationJob(
     jobIdRef.current = null;
     idempotencyRef.current = null;
     revalidationRef.current = null;
+    sourcePageRef.current = undefined;
     startInFlight.current = null;
     succeededNotified.current = null;
     setState({ status: "idle" });
@@ -292,7 +296,8 @@ export function useFactNormalizationJob(
   }, [profileStale]);
 
   const start = useCallback(
-    async (idempotencyKey?: string, allowPageRead = true, retryFailedFromRunId?: string, revalidateFromRunId?: string): Promise<string | null> => {
+    async (idempotencyKey?: string, allowPageRead = true, retryFailedFromRunId?: string, revalidateFromRunId?: string,
+      sourcePage?: FactNormalizationStartInput["sourcePage"]): Promise<string | null> => {
       if (subjectId === null || reviewEpisodeId === null) return null;
       if (startInFlight.current !== null) return startInFlight.current;
       if (currentScope.current === scopeKey) setState({ status: "starting" });
@@ -303,6 +308,7 @@ export function useFactNormalizationJob(
         newIdempotencyKey(`profile-organize:${reviewEpisodeId}`);
       idempotencyRef.current = key;
       revalidationRef.current = revalidateFromRunId ?? null;
+      sourcePageRef.current = sourcePage;
 
       const pending = (async () => {
         try {
@@ -310,7 +316,7 @@ export function useFactNormalizationJob(
             subjectId,
             reviewEpisodeId,
             { idempotencyKey: key, ...(retryFailedFromRunId ? {retryFailedFromRunId} : {}),
-              ...(revalidateFromRunId ? {revalidateFromRunId} : {}) },
+              ...(revalidateFromRunId ? {revalidateFromRunId} : {}), ...(sourcePage ? {sourcePage} : {}) },
           );
           writeStoredJobId(reviewEpisodeId, command.jobId);
           if (currentScope.current !== scopeKey) return command.jobId;
@@ -355,6 +361,10 @@ export function useFactNormalizationJob(
 
   const retry = useCallback(async () => {
     if (subjectId === null || reviewEpisodeId === null) return;
+    if (sourcePageRef.current && (profileStaleRef.current || state.status === "error" || jobIdRef.current === null)) {
+      await start(undefined, false, undefined, undefined, sourcePageRef.current);
+      return;
+    }
     if (revalidationRef.current && !(state.status === "active" && state.phase === "failed")) {
       await start(undefined, false, undefined, revalidationRef.current);
       return;
@@ -402,6 +412,8 @@ export function useFactNormalizationJob(
   return { state: restoring ? { status: "idle" } : pageReview.state.status === "idle" ? state : pageReview.state,
     restoring,
     completedReview: pageReview.completedReview, start, retry,
+    startPage: (sourceDocumentVersionId, pageNumber) => start(undefined, false, undefined, undefined,
+      {sourceDocumentVersionId, pageNumber}),
     retryFailedPages: (runId: string) => start(undefined, false, runId),
     revalidateSaved: (runId: string) => start(undefined, false, undefined, runId), resumeFromStorage };
 }

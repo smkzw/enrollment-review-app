@@ -412,6 +412,22 @@ def _load_frozen_agent_config(
     """确保审计记录中的冻结配置就是本次实际执行配置。"""
     run = FactNormalizationRunRepository(session).get(run_id)
     chain_scope = run.input_scope_sha256
+    if payload.get("source_page") is not None:
+        selected = payload["source_page"]
+        precondition = payload.get("source_page_precondition_sha256")
+        from app.storage.evidence_models import SourceDocumentVersionV2Record
+        document = session.get(SourceDocumentVersionV2Record, selected[0]) if isinstance(selected, list) and len(selected) == 2 else None
+        if (document is None or not isinstance(selected[1], int) or isinstance(selected[1], bool) or selected[1] < 1
+                or not payload.get("targeted_extraction") or payload.get("retry_failed_from_run_id")
+                or payload.get("source_revalidation") or len(payload["calls"]) != 1
+                or (document.project_id, document.subject_id, document.review_episode_id) != (
+                    authority.project_id, authority.subject_id, authority.review_episode_id)
+                or payload["calls"][0]["logical_document_id"] != document.logical_document_id
+                or payload["calls"][0]["page_numbers"] != [selected[1]]
+                or not isinstance(precondition, str)
+                or canonical_hash({"input_scope_sha256": precondition, "source_page": selected}) != chain_scope):
+            raise StepFailure(retryable=False, error_code="INVALID_AUTHORITY", detail="所选页与本次冻结读取范围不一致。")
+        chain_scope = precondition
     if payload.get("source_revalidation") is not None:
         selection = payload["source_revalidation"]
         source_run = FactNormalizationRunRepository(session).get(selection["source_run_id"])

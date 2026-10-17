@@ -174,12 +174,111 @@ def test_retained_original_fact_is_visible_with_real_new_snapshot_and_exact_sour
     assert not validator.retained_source_documents(added["authority"], current)
 
 
+@pytest.mark.parametrize("selected", ["old", "new"])
+def test_selected_current_page_runs_only_that_page_and_preserves_unread_scope(session_factory, data_paths, monkeypatch, selected):
+    from app.evidence.artifacts import ArtifactStore
+    from app.services import fact_normalization_executor as executor_module
+    from app.services.fact_normalization_job_service import FactNormalizationJobService
+    from app.workflow.errors import InvalidJobDefinitionError, StepFailure
+    from app.workflow.jobstore import JobStore
+    from app.workflow.runner import JobRunner
+    from app.storage.codecs import verify_payload_sha256
+    from app.storage.fact_repositories import FactNormalizationRunRepository
+    requests = []
+    artifacts = ArtifactStore(data_paths)
+    monkeypatch.setattr(executor_module, "evidence_normalizer_transport_from_model_config", _receipt_transport_factory(requests))
+    service = FactNormalizationJobService(session_factory)
+    runner = JobRunner(session_factory, {"fact_normalization": executor_module.create_fact_normalization_executor(
+        executor_module.FactNormalizationExecutorConfig(session_factory=session_factory, artifact_store=artifacts))})
+    with session_factory() as session:
+        old, added, current, fact, profile = _seed_incremental(session, targeted=True)
+        session.commit()
+    chosen = old if selected == "old" else added
+    options = dict(authority=current, prompt_version_id=old["prompt_version_id"], model_config_id=old["model_config_id"],
+        created_by="synthetic-builder", source_page=(chosen["doc_id"], 1))
+    for invalid in (("another-source", 1), (chosen["doc_id"], 2), (chosen["doc_id"], True)):
+        with pytest.raises(InvalidJobDefinitionError):
+            service.create_or_reuse_from_source(**{**options, "source_page": invalid})
+    assert requests == []
+    result = service.create_or_reuse_from_source(**options)
+    assert service.create_or_reuse_from_source(**options).job_id == result.job_id
+    with session_factory() as session:
+        job = JobStore(session).get_job(result.job_id)
+        payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+        assert payload["source_page"] == [chosen["doc_id"], 1]
+        assert [(call["logical_document_id"], call["page_numbers"]) for call in payload["calls"]] == [(chosen["logical_document_id"], [1])]
+        changed = {**payload, "source_page": [added["doc_id"] if selected == "old" else old["doc_id"], 1]}
+        with pytest.raises(StepFailure, match="所选页"):
+            executor_module._load_frozen_agent_config(session, payload=changed, run_id=result.run_id,
+                authority=current, prompt_template=service.prompt_template)
+    assert runner.run_job(result.job_id)
+    assert len(requests) == 1
+    with session_factory() as session:
+        assert JobStore(session).get_job(result.job_id).state == "completed"
+        final = JobStore(session).get_last_checkpoint(result.job_id, "finalize")[1]
+        other = added if selected == "old" else old
+        assert f"{other['logical_document_id']}:1" in final["unread_page_refs"]
+        assert FactNormalizationRunRepository(session).get(result.run_id).status.value == "partial"
+        assert PatientProfileService().latest(session, current.review_episode_id).authority == current
+        from app.storage.fact_repositories import ClinicalFactV2Repository
+        assert ClinicalFactV2Repository(session).get(fact.fact_id) == fact
+    remaining = service.create_or_reuse_from_source(**{key: val for key, val in options.items() if key != "source_page"})
+    with session_factory() as session:
+        job = JobStore(session).get_job(remaining.job_id)
+        payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+        assert payload["retained_reads"][0]["source_document_version_id"] == chosen["doc_id"]
+        assert [(call["logical_document_id"], call["page_numbers"]) for call in payload["calls"]] == [(other["logical_document_id"], [1])]
+    assert runner.run_job(remaining.job_id)
+    assert len(requests) == 2
+    assert service.create_or_reuse_from_source(**{key: val for key, val in options.items() if key != "source_page"}).job_id == remaining.job_id
+    with session_factory() as session:
+        assert JobStore(session).get_last_checkpoint(remaining.job_id, "finalize")[1]["unread_page_refs"] == []
+
+
 @pytest.mark.parametrize("field,value", [("subject_id", "wrong-subject"), ("review_episode_id", "wrong-episode"),
     ("rule_set_id", "wrong-rules")])
 def test_retained_source_never_crosses_owner_or_rules(session, field, value):
     from app.storage.fact_authority import FactAuthorityValidator
     old, _, current, _, _ = _seed_incremental(session)
     assert not FactAuthorityValidator(session).retained_source_documents(old["authority"], current.model_copy(update={field: value}))
+
+
+def test_selected_page_new_episode_revision_does_not_reset_an_unchanged_failed_read(session_factory, data_paths, monkeypatch):
+    from app.evidence.artifacts import ArtifactStore
+    from app.services import fact_normalization_executor as executor_module
+    from app.services.fact_normalization_job_service import FactNormalizationJobService
+    from app.workflow.jobstore import JobStore
+    from app.workflow.runner import JobRunner
+    requests = []
+    monkeypatch.setattr(executor_module, "evidence_normalizer_transport_from_model_config", _receipt_transport_factory(requests, fail_after=0))
+    artifacts = ArtifactStore(data_paths)
+    service = FactNormalizationJobService(session_factory)
+    runner = JobRunner(session_factory, {"fact_normalization": executor_module.create_fact_normalization_executor(
+        executor_module.FactNormalizationExecutorConfig(session_factory=session_factory, artifact_store=artifacts))},
+        backoff=lambda _: timedelta(0))
+    with session_factory() as session:
+        old, added, current, _, _ = _seed_incremental(session, targeted=True)
+        session.commit()
+    options = dict(authority=current, prompt_version_id=old["prompt_version_id"], model_config_id=old["model_config_id"],
+        created_by="synthetic-builder", source_page=(added["doc_id"], 1))
+    first = service.create_or_reuse_from_source(**options)
+    assert runner.run_job(first.job_id)
+    runner._maintenance()
+    assert runner.run_job(first.job_id)
+    assert service.get_job(first.job_id)["state"] == "completed"
+    assert len(requests) == 2
+    with session_factory() as session:
+        current = current.model_copy(update={"episode_revision": current.episode_revision + 1})
+        _update_episode(session, session.get(ReviewEpisodeRecord, current.review_episode_id), revision=current.episode_revision)
+        session.commit()
+    second = service.create_or_reuse_from_source(**{**options, "authority": current})
+    assert second.job_id != first.job_id
+    assert runner.run_job(second.job_id)
+    assert service.get_job(second.job_id)["state"] == "completed"
+    assert len(requests) == 2
+    with session_factory() as session:
+        final = JobStore(session).get_last_checkpoint(second.job_id, "finalize")[1]
+        assert final["status"] == "partial" and final["unread_page_refs"]
 
 
 def test_changed_variables_do_not_relabel_old_records(session):
@@ -344,7 +443,7 @@ def _receipt_transport_factory(requests, *, fail_after=None, invalid_after=None,
                 "event_candidates": [], "exposure_candidates": [], "actual_exposure_fact_refs": [],
                 "non_exposure_medication_fact_refs": [], "unresolved_items": []}, ensure_ascii=False)
             return SimpleNamespace(model=model.model, id="synthetic-response", usage=None,
-                choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content=answer))])
+                choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content="\n" + answer + "\n"))])
         return DeepSeekEvidenceNormalizerTransport(backend="omlx", model=model.model,
             include_source_categories=model.parameters.get("include_source_categories", False),
             include_medication_field_sources=model.parameters.get("include_medication_field_sources", False),

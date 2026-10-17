@@ -652,9 +652,8 @@ def retained_normalization_reads(
     result, covered, plans, saved_targets = [], set(), {}, {}
     runs = FactNormalizationRunRepository(session).list_by_episode(authority.review_episode_id)
     for run in reversed(runs):
-        if (run.authority.evidence_snapshot_v2_id == authority.evidence_snapshot_v2_id
-                and run.authority.complete_processing_revision_id == authority.complete_processing_revision_id):
-            continue
+        same_revision = (run.authority.evidence_snapshot_v2_id == authority.evidence_snapshot_v2_id
+            and run.authority.complete_processing_revision_id == authority.complete_processing_revision_id)
         retained_pages = validator.retained_source_pages(run.authority, authority)
         if not retained_pages:
             continue
@@ -671,6 +670,8 @@ def retained_normalization_reads(
         job_store = JobStore(session)
         job = job_store.get_job(record.job_id)
         payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+        if same_revision and payload.get("source_page") is None:
+            continue
         if (job.state != "completed" or not payload.get("targeted_extraction")
                 or payload.get("page_review_coverage_id") or payload.get("visual_observation_scope_sha256")):
             continue
@@ -720,7 +721,7 @@ def retained_normalization_reads(
                         or receipt.get("job_id") != job.job_id or receipt.get("finish_reason") != "stop"
                         or str(receipt.get("response_model") or "").casefold() != model.model.casefold()
                         or not isinstance(receipt.get("raw_text"), str)
-                        or hashlib.sha256(receipt["raw_text"].encode()).hexdigest() != call.raw_output_sha256):
+                        or hashlib.sha256(receipt["raw_text"].strip().encode()).hexdigest() != call.raw_output_sha256):
                     continue
                 request_sha = receipt.get("request_artifact_sha256")
                 if not request_sha:
@@ -773,7 +774,7 @@ def retained_normalization_reads(
 
 def unchanged_failed_normalization_read(session: Session, *, evidence_input: EvidenceNormalizerInput,
     payload: dict, artifact_store=None) -> dict | None:
-    """A new material revision does not grant an automatic retry of an unchanged failed read.
+    """A new run or revision does not grant an automatic retry of an unchanged failed read.
 
     This retains a technical failure, never coverage or candidates. An explicit
     failed-page retry, changed source, requirements, prompt or model can run again.
@@ -794,8 +795,7 @@ def unchanged_failed_normalization_read(session: Session, *, evidence_input: Evi
         "visual_source_policy", "page_review_coverage_id", "pending_normalization_policy")
     for run in reversed(FactNormalizationRunRepository(session).list_by_episode(evidence_input.authority.review_episode_id)):
         if (run.run_id == evidence_input.run_id or run.prompt_version_id != payload["prompt_version_id"]
-                or run.model_config_id != payload["model_config_id"]
-                or run.authority.complete_processing_revision_id == evidence_input.authority.complete_processing_revision_id):
+                or run.model_config_id != payload["model_config_id"]):
             continue
         record = session.get(FactNormalizationRunRecord, run.run_id)
         if record is None or not record.job_id:

@@ -14,6 +14,16 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("个例档案整理 HTTP 仓储", () => {
+  it("整理所选页仅发送资料版本与页号，不传模型或原任务身份", async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({idempotency_intent: "intent",
+        source_page: { source_document_version_id: "source", page_number: 5 }});
+      return jsonResponse({job_id: "new", run_id: "new-run", created: true, state: "queued", state_label: "等待处理", recovery_action: "无需操作"});
+    });
+    const repo = createFactNormalizationHttp({fetchImpl: fetchImpl as typeof fetch});
+    await repo.startFactNormalization("s", "e", {idempotencyKey: "intent", sourcePage: { sourceDocumentVersionId: "source", pageNumber: 5 }});
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
   it("核验已有读取只声明来源运行，不混入新读配置或失败页续读", async () => {
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       expect(JSON.parse(String(init?.body))).toEqual({idempotency_intent: "intent", revalidate_from_run_id: "saved-run"});

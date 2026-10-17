@@ -25,6 +25,7 @@ export interface FactNormalizationStartInput {
   idempotencyKey: string;
   retryFailedFromRunId?: string;
   revalidateFromRunId?: string;
+  sourcePage?: { sourceDocumentVersionId: string; pageNumber: number };
 }
 
 export interface FactNormalizationRepository {
