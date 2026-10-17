@@ -28,6 +28,18 @@ function required<T>(value: T | undefined, label: string): T {
 }
 
 describe("decodePatientProfileRevision", () => {
+  it("同排参考范围标记只接收布尔值，旧响应缺省不凭文字猜正常", () => {
+    const response = (flag?: unknown) => makeRevision({ lanes: PROFILE_LANE_ORDER.map(lane =>
+      makeLaneSection(lane, lane === "allergy_infection_immune" ? [makeFactItem({
+        lane, ...(flag === undefined ? {} : { has_reference_range: flag as boolean }),
+      })] : [])) });
+    expect(decodePatientProfileRevision(response(true)).lanes.flatMap(lane => lane.items)[0]!.hasReferenceRange).toBe(true);
+    expect(decodePatientProfileRevision(response()).lanes.flatMap(lane => lane.items)[0]!.hasReferenceRange).toBe(false);
+    for (const flag of ["true", 1, null]) {
+      expect(() => decodePatientProfileRevision(response(flag))).toThrow(PatientProfileDecodeError);
+    }
+  });
+
   it("decodes a complete 13-lane revision into the domain view", () => {
     const view = decodePatientProfileRevision(makeRevision());
     expect(view.schemaVersion).toBe("phase5/v1");

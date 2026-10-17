@@ -73,6 +73,7 @@ export interface ProfileItemView {
   recordTime: string | null;
   dateRole: "sampling" | "report" | "visit" | "unknown" | null;
   referenceAbnormality?: "high" | "low" | null;
+  hasReferenceRange?: boolean;
 
   sourceStrength: ProfileSourceStrengthWire | null;
   sourceStrengthLabel: string | null;
@@ -626,6 +627,8 @@ function decodeItem(value: unknown, index: number): ProfileItemView {
       ["sampling", "report", "visit", "unknown"] as const, `${path}.date_role`, "日期用途"),
     referenceAbnormality: row.reference_abnormality == null ? null : enumValue(row.reference_abnormality,
       ["high", "low"] as const, `${path}.reference_abnormality`, "参考范围异常"),
+    hasReferenceRange: row.has_reference_range === undefined ? false : booleanValue(
+      row.has_reference_range, `${path}.has_reference_range`),
     startRange: decodeDateRange(
       field(row, "start_range", `${path}.start_range`),
       `${path}.start_range`,

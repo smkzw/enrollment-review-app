@@ -92,6 +92,36 @@ describe("交互式临床时间图", () => {
     expect(points[0]!.style.top).not.toBe(points[1]!.style.top);
   });
 
+  it("跨主题分区的有参考范围读数不画成病史；异常仍可查看，诊断及完整记录保留", async () => {
+    const user = userEvent.setup();
+    const model = modelFor([
+      makeFactItem({ item_id: "reading", source_id: "reading-source", lane: "allergy_infection_immune",
+        title: "项目甲", asserted_object: "项目甲", value: "0", has_reference_range: true }),
+      makeFactItem({ item_id: "abnormal", source_id: "abnormal-source", lane: "medical_history",
+        title: "项目乙", asserted_object: "项目乙", value: 7, has_reference_range: true,
+        reference_abnormality: "high" }),
+      makeFactItem({ item_id: "diagnosis", source_id: "diagnosis-source", lane: "allergy_infection_immune",
+        title: "已记录诊断", asserted_object: "已记录诊断", value: true }),
+      makeFactItem({ item_id: "context", source_id: "context-source", lane: "medical_history",
+        title: "有检查背景的诊断", asserted_object: "有检查背景的诊断", value: true, has_reference_range: true }),
+    ]);
+    const before = JSON.stringify(model.items);
+    const open = vi.fn();
+    render(<ProfileTimeline model={model} onOpenEvidence={open} />);
+    const history = screen.getByRole("region", { name: "病史与诊断时间图" });
+    expect(within(history).queryByText("项目甲")).not.toBeInTheDocument();
+    expect(within(history).queryByText("项目乙")).not.toBeInTheDocument();
+    expect(within(history).getByText("已记录诊断")).toBeInTheDocument();
+    expect(within(history).getByText("有检查背景的诊断")).toBeInTheDocument();
+    const abnormal = screen.getByRole("region", { name: "异常检验与检查" });
+    await user.click(within(abnormal).getByRole("button", { name: /项目乙/ }));
+    await user.click(within(screen.getByRole("complementary", { name: "临床记录详情" }))
+      .getByRole("button", { name: "查看“项目乙”的原文证据" }));
+    expect(open).toHaveBeenCalledWith(model.itemById.get("abnormal"));
+    expect(model.itemById.get("reading")).toBeDefined();
+    expect(JSON.stringify(model.items)).toBe(before);
+  });
+
   it("月范围不是持续用药区间，未知日期不拿记录时间补", () => {
     const model = modelFor([makeFactItem({ lane: "medication" }),
       makeFactItem({ item_id: "unknown", source_id: "unknown-source", lane: "medical_history", start_range: null })]);

@@ -143,7 +143,10 @@ export function ProfileTimeline({ model, onOpenEvidence, onRequestCorrection }: 
   const pending = records.filter(item => item.kind === "fact"
     && (item.polarity === "unknown" || item.polarity === null)
     && (historyLanes.includes(item.lane) || treatmentLanes.includes(item.lane)));
-  const history = clinical.filter(item => historyLanes.includes(item.lane));
+  // A source-row reading can share an infection/allergy lane with diagnoses.
+  // Keep its original lane and details, but do not draw it as disease history.
+  const history = clinical.filter(item => historyLanes.includes(item.lane) && !(item.kind === "fact"
+    && item.hasReferenceRange && (typeof item.value === "number" || typeof item.value === "string")));
   const treatment = clinical.filter(item => treatmentLanes.includes(item.lane));
   const abnormalIds = new Set(model.highlights.filter(item => item.reasons.some(reason =>
     reason === "source_report_abnormal" || reason === "source_report_critical")).map(item => item.itemId));

@@ -223,7 +223,8 @@ def test_date_metadata_binds_exact_saved_fact_without_rewriting_history(chain, s
     before = revision.model_dump_json()
     item = next(item for item in profile_items(revision) if item.kind == ProfileItemKind.FACT)
     assert service.fact_display_metadata(session, revision) == {item.source_id: {
-        "date_role": None, "reference_abnormality": None, "record_label": None}}
+        "date_role": None, "reference_abnormality": None, "record_label": None,
+        "has_reference_range": False}}
     for field, value in (("subject_id", "other-subject"), ("review_episode_id", "other-node")):
         changed = revision.model_copy(update={"authority": revision.authority.model_copy(update={field: value})})
         with pytest.raises(PatientProfileProjectionError, match="原事实不一致"):
@@ -235,6 +236,27 @@ def test_date_metadata_binds_exact_saved_fact_without_rewriting_history(chain, s
         ]})
         with pytest.raises(PatientProfileProjectionError, match="原事实不一致"):
             service.fact_display_metadata(session, changed)
+    assert revision.model_dump_json() == before
+
+
+@pytest.mark.parametrize("qualifier_kind", ["reference_range", "method"])
+def test_display_reference_marker_uses_saved_structured_context_not_fact_labels(chain, session, monkeypatch, qualifier_kind):
+    from app.domain.contracts.fact_context import FactContextQualifier
+
+    original = ClinicalFactV2Repository(session).create(_fact(chain))
+    service = PatientProfileService()
+    revision = service.generate(session, authority=_authority(chain))
+    before = revision.model_dump_json()
+    # Repository-boundary unit fixture: no source adoption or mutation is performed.
+    # The paired API test and real source readback exercise the persisted path.
+    basis = original.assertion_basis.model_copy(update={"contextual_qualifiers": [
+        FactContextQualifier(kind=qualifier_kind, label="90–140")
+    ]})
+    saved_source = original.model_copy(update={"assertion_basis": basis, "fact_type": "不据此分类"})
+    monkeypatch.setattr(ClinicalFactV2Repository, "get_many", lambda self, ids: {original.fact_id: saved_source})
+    metadata = service.fact_display_metadata(session, revision)[original.fact_id]
+    assert metadata["has_reference_range"] is (qualifier_kind == "reference_range")
+    assert metadata["reference_abnormality"] is None
     assert revision.model_dump_json() == before
 
 

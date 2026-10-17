@@ -119,6 +119,9 @@ class PatientProfileService:
                     raise PatientProfileProjectionError("时间线记录与原事实不一致")
                 metadata[item.source_id] = {"date_role": fact.date_role,
                     "reference_abnormality": reference_abnormality(fact),
+                    "has_reference_range": bool(fact.assertion_basis and any(
+                        qualifier.kind == "reference_range" and qualifier.source is None
+                        for qualifier in fact.assertion_basis.contextual_qualifiers)),
                     "record_label": (fact.fact_type if not fact.fact_type.isascii() else "用药记录")
                         if fact.profile_lane == ProfileLane.MEDICATION else None}
             return metadata
