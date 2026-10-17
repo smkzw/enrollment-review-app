@@ -256,7 +256,14 @@ def assemble_review_context(
             raise ScopeViolationError("流程项目来源属于其他方案版本")
         procedure_catalog = source_input.required_procedure_catalog
         revision = validator.validate_and_get_revision(authority)
-        _, source = build_fact_normalization_plan(session, authority=authority, revision=revision)
+        current_plan, source = build_fact_normalization_plan(session, authority=authority, revision=revision)
+        from app.domain.variables.extraction import ExtractionTargets, unread_extraction_targets
+        from app.services.fact_normalization_source_adapter import normalization_extraction_targets
+        current_targets = ExtractionTargets(current_plan.calls[0].related_requirements,
+            current_plan.calls[0].variable_definitions)
+        current_variables = {item.variable_id for item in current_targets.variables}
+        current_requirements = {item.requirement_id for item in current_targets.requirements}
+        target_scopes, read_targets = {}, {}
         read_pages = set()
         from app.storage.repositories import get_rule_set, AppendRepository, PROTOCOL_DOC_CONFIG
         runs = []
@@ -296,6 +303,12 @@ def assemble_review_context(
             checkpoint = JobStore(session).get_last_checkpoint(row.job_id, "finalize") if row.job_id else None
             accounting_issue_ids = set(checkpoint[1].get("accounting_issue_call_ids", ())) if checkpoint else set()
             candidates = {item.candidate_id: item for item in FactNormalizationCandidateRepository(session).list_by_run(run.run_id)}
+            target_key = (run.authority.rule_set_id, run.authority.rule_set_revision)
+            if target_key not in target_scopes:
+                previous_targets = normalization_extraction_targets(session, get_rule_set(session, *target_key), episode.stage)
+                unread_variables, unread_requirements = unread_extraction_targets(previous_targets, current_targets)
+                target_scopes[target_key] = (current_variables - set(unread_variables),
+                    current_requirements - set(unread_requirements))
             for gate in FactGateResultRepository(session).list_by_run(run.run_id):
                 if run.run_id in retained_by_run and gate.call_id not in retained_by_run[run.run_id]:
                     continue
@@ -333,13 +346,39 @@ def assemble_review_context(
                 if call.status == FactCallStatus.SUCCEEDED and call.call_id not in accounting_issue_ids:
                     document_id = logical_to_version.get(call.logical_document_id)
                     read_pages.update((document_id, page) for page in call.page_numbers)
+                    for page in call.page_numbers:
+                        variables, requirements = read_targets.setdefault((document_id, page), (set(), set()))
+                        variables.update(target_scopes[target_key][0])
+                        requirements.update(target_scopes[target_key][1])
         source_pages = tuple(WorkDraftSourcePage(
             source_document_version_id=page.source_document_version_id, page_artifact_id=page.page_artifact_id,
             page_number=page.page_number, effective_text=page.effective_text or "",
             effective_text_sha256=page.effective_text_sha256,
             document_category=source.context_by_logical_document[page.logical_document_id].document_category,
             extraction_complete=key in read_pages,
+            unread_variable_ids=sorted(current_variables - read_targets[key][0]) if key in read_targets else [],
+            unread_requirement_ids=sorted(current_requirements - read_targets[key][1]) if key in read_targets else [],
         ) for key, page in sorted(source.page_inputs.items()))
+        target_gaps = {(tuple(page.unread_variable_ids), tuple(page.unread_requirement_ids))
+                       for page in source_pages if page.unread_variable_ids or page.unread_requirement_ids}
+        reviews = {item.official_code: item for item in protocol.rule_set.review_records or ()}
+        for variables, requirements in sorted(target_gaps):
+            codes = {clause.official_code for clause in pack.clauses if any(
+                req.variable_id in variables or req.requirement_id in requirements
+                or (review := reviews.get(req.procedure_catalog_item_id)) is not None
+                    and set(review.result_variables) & set(variables)
+                for req in clause.evidence_requirements)}
+            for item in procedure_catalog.items:
+                requirements_for_item = [req for req in protocol.procedure_requirements
+                    if req.procedure_catalog_item_id == item.item_id]
+                review = reviews.get(item.item_id)
+                if (any(req.variable_id in variables or req.requirement_id in requirements
+                        for req in requirements_for_item)
+                        or review is not None and set(review.result_variables) & set(variables)):
+                    codes.add(item.official_code or f"REQ-{item.position + 1:02d}")
+            issues.append(SystemIssue(kind="extraction_failed", affected_codes=sorted(codes),
+                detail="已沿用未变资料的原有读取；本条新增或改过的数据项目尚未全部核对。",
+                alternative="已有独立依据的判断保留；尚未核对的内容不能当作未发生。"))
         for page in source_pages:
             if not page.extraction_complete:
                 from app.domain.variables.dictionary import load_dictionary

@@ -1790,6 +1790,11 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             if outcome.value != "accepted" and not payload.get("targeted_extraction"):
                 raise StepFailure(retryable=False, error_code=PARTIAL_OUTPUT_CODE, detail="；".join(reasons))
             checkpoint["unread_page_refs"] = affected_pages
+            unread_target_scopes = [{key: row[key] for key in ("call_id", "source_document_version_id", "page_numbers",
+                "unread_variable_ids", "unread_requirement_ids")}
+                for row in payload.get("retained_reads", ()) if row.get("unread_variable_ids") or row.get("unread_requirement_ids")]
+            if unread_target_scopes:
+                checkpoint["unread_target_scopes"] = unread_target_scopes
             facts, events, exposures = _load_run_candidates(session, run_id)
             unresolved_items = FactNormalizationUnresolvedItemRepository(
                 session
@@ -1949,6 +1954,8 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             if payload.get("text_accounting_policy") is not None and unresolved_items:
                 final_status = FactNormalizationRunStatus.PARTIAL
             if affected_pages:
+                final_status = FactNormalizationRunStatus.PARTIAL
+            if unread_target_scopes:
                 final_status = FactNormalizationRunStatus.PARTIAL
             if accounting_issues:
                 final_status = FactNormalizationRunStatus.PARTIAL

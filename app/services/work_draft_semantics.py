@@ -636,8 +636,14 @@ def relation_inputs(row, target, pages):
                 truth = TruthValue.UNKNOWN
     # D15: absence of an adverse chart judgment is not a request for another signature.
     # Only after the actual supplied-scope search completed; never manufacture a denial.
+    coverage_variable = (target.get("variable") or {}).get("variable_id")
+    coverage_variables = [coverage_variable] if coverage_variable else None
+    coverage_requirements = (([target["record_requirement"]["requirement_id"]] if target.get("record_requirement") else [])
+        + [item["requirement_id"] for item in target.get("source_context", {}).get("evidence_requirements", [])]) or None
     if (row.relation == "not_found" and target["kind"] == RuleKind.EXCLUSION.value
-            and pages and all(page.extraction_complete for page in pages)
+            and pages and all(page.extraction_covers(
+                variable_ids=coverage_variables, requirement_ids=coverage_requirements)
+                for page in pages)
             and any(page.document_category in {"study_chart", "screening_transcription", "historical_record"} for page in pages)
             and (predicate["comparator"] == "exists"
                  or predicate["comparator"] == "eq" and predicate.get("value") is True)

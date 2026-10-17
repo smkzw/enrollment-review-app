@@ -23,7 +23,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v54"
+CALCULATION_VERSION = "work-draft/0.2.0-v55"
 
 
 def confirmation_allowed(item, items):
@@ -99,8 +99,9 @@ def _reusable_source_reads(session, store, frozen, targets, model, artifact_stor
                 raise ScopeViolationError("自动工作稿与原任务、资料或保存结果不一致，未复用其病例核对结果")
         # Reading receipts bind the submitted page material. Extraction status
         # is host policy, rechecked below; it is not another model observation.
-        old_material = [page.model_dump(mode="json", exclude={"extraction_complete"}) for page in previous.source_pages]
-        new_material = [page.model_dump(mode="json", exclude={"extraction_complete"}) for page in frozen.source_pages]
+        status_fields = {"extraction_complete", "unread_variable_ids", "unread_requirement_ids"}
+        old_material = [page.model_dump(mode="json", exclude=status_fields) for page in previous.source_pages]
+        new_material = [page.model_dump(mode="json", exclude=status_fields) for page in frozen.source_pages]
         if old_material != new_material:
             continue
         previous_targets = None

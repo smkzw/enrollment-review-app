@@ -1541,6 +1541,47 @@ def test_saved_page_coverage_reuse_checks_source_and_dictionary_not_rule_revisio
     assert normalization_source_is_reusable(run, current, old_rules, new_rules, old_protocol, new_protocol) == expected
 
 
+@pytest.mark.parametrize("gap", ["same_variable", "same_requirement", "unrelated"])
+def test_new_target_gaps_only_limit_the_affected_calculation(gap):
+    from app.domain.contracts.work_draft import WorkDraftSourcePage
+    rules, projected, _ = clause()
+    frame = frozen([material(value=51)])
+    text = frame.facts[0].assertion_basis.assertion_text
+    frame.source_pages = [WorkDraftSourcePage(source_document_version_id="doc", page_artifact_id="page",
+        page_number=1, effective_text=text, effective_text_sha256=sha256(text.encode()).hexdigest(),
+        extraction_complete=True,
+        unread_variable_ids=["age" if gap == "same_variable" else "another_value"],
+        unread_requirement_ids=["age-record" if gap == "same_requirement" else "another_requirement"])]
+    result = calculate_work_component(projected, frame, rules, evidence_refs={})
+    assert result.decision == D.INCLUSION_MET and result.system_issue is None
+    assert result.confidence == ("high" if gap == "unrelated" else "low")
+
+
+@pytest.mark.parametrize("gap", ["same_variable", "same_requirement", "unrelated"])
+def test_absence_policy_requires_the_actual_target_to_have_been_read(gap):
+    from app.domain.contracts.work_draft import WorkDraftSourcePage
+    from app.domain.variables.dictionary import VariableDef
+    from app.services.work_draft_calculation import absence_policy
+    rules, _, component = clause(kind=RuleKind.EXCLUSION)
+    component.expression.predicate.comparator = Comparator.EXISTS
+    component.expression.predicate.value, component.expression.predicate.unit = None, None
+    component.expression.time_constraint = TimeConstraint(anchor_type=AnchorType.SCREENING_DATE,
+        direction=TimeDirection.BEFORE, upper_bound_days=365)
+    component.evidence_requirements[0].variable_id = "prior_event"
+    rules.variable_definitions = [VariableDef(variable_id="prior_event", label_zh="既往指定事件",
+        value_type="boolean", domain="history")]
+    frame = frozen([material()])
+    frame.facts = []
+    text = "本次病历仅记载其他情况。"
+    frame.source_pages = [WorkDraftSourcePage(source_document_version_id="doc", page_artifact_id="page",
+        page_number=1, effective_text=text, effective_text_sha256=sha256(text.encode()).hexdigest(),
+        extraction_complete=True,
+        unread_variable_ids=["prior_event" if gap == "same_variable" else "another_value"],
+        unread_requirement_ids=["age-record" if gap == "same_requirement" else "another_requirement"])]
+    result = absence_policy(project_clause_pack(rules).clauses[0], frame, load_dictionary(rules.variable_definitions))
+    assert (result is not None) is (gap == "unrelated")
+
+
 def test_counterfactual_value_changes_result_without_changing_rule():
     rules, projected, _ = clause()
     old_hash = rules.model_dump_json()

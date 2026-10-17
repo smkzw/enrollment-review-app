@@ -62,7 +62,7 @@ def _record_refs(facts, evidence_refs, source_pages, members, cutoff):
 def _classified_history_refs(frozen, supplement, evidence_refs, source_pages, cutoff):
     """Do not call an accepted subset complete while source issues remain."""
     if (cutoff is None or not frozen.source_pages or frozen.system_issues or frozen.conflict_groups
-            or not all(page.extraction_complete for page in frozen.source_pages)):
+            or not all(page.extraction_covers() for page in frozen.source_pages)):
         return {}
     members = {_name(name) for names in supplement.drug_classes.values() for name in names}
     medications = [fact for fact in frozen.facts if fact.profile_lane == ProfileLane.MEDICATION]

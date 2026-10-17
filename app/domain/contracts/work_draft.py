@@ -16,12 +16,25 @@ class WorkDraftSourcePage(ContractModel):
     effective_text_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     document_category: str | None = None
     extraction_complete: bool = False
+    unread_variable_ids: list[str] = Field(default_factory=list, exclude_if=lambda value: not value)
+    unread_requirement_ids: list[str] = Field(default_factory=list, exclude_if=lambda value: not value)
+
+    def extraction_covers(self, *, variable_ids=None, requirement_ids=None) -> bool:
+        if not self.extraction_complete:
+            return False
+        if variable_ids is None and requirement_ids is None:
+            return not self.unread_variable_ids and not self.unread_requirement_ids
+        return (not set(variable_ids or ()) & set(self.unread_variable_ids)
+                and not set(requirement_ids or ()) & set(self.unread_requirement_ids))
 
     @model_validator(mode="after")
     def validate_text(self):
         import hashlib
         if hashlib.sha256(self.effective_text.encode("utf-8")).hexdigest() != self.effective_text_sha256:
             raise ValueError("冻结资料文字与原有内容指纹不一致")
+        for items in (self.unread_variable_ids, self.unread_requirement_ids):
+            if items != sorted(set(items)) or any(not item.strip() for item in items):
+                raise ValueError("尚未覆盖的数据项目及要求须排序、唯一且非空")
         return self
 
 

@@ -15,6 +15,14 @@ class ExtractionTargets:
     variables: tuple[VariableDef, ...]
 
 
+def unread_extraction_targets(previous: ExtractionTargets, current: ExtractionTargets) -> tuple[list[str], list[str]]:
+    """A saved observation scope never proves newly requested or changed targets."""
+    variables = {item.variable_id: item for item in previous.variables}
+    requirements = {item.requirement_id: item for item in previous.requirements}
+    return (sorted(item.variable_id for item in current.variables if variables.get(item.variable_id) != item),
+            sorted(item.requirement_id for item in current.requirements if requirements.get(item.requirement_id) != item))
+
+
 def build_extraction_targets(rule_set: RuleSet, stage: ReviewStage,
                              requirements: list[EvidenceRequirement]) -> ExtractionTargets:
     definitions = load_dictionary(rule_set.variable_definitions or ())

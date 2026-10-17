@@ -86,6 +86,22 @@ def target(kind="exclusion"):
             "atom": {"predicate": {"comparator": "exists"}}}
 
 
+@pytest.mark.parametrize("scope,expected", [("same_variable", "unknown"), ("same_requirement", "unknown"),
+    ("unrelated", "false"), ("unbound", "unknown")])
+def test_old_page_read_does_not_make_a_new_target_a_negative(scope, expected):
+    from app.services.work_draft_semantics import relation_inputs
+    source = page().model_copy(update={"unread_variable_ids": ["new_value"],
+        "unread_requirement_ids": ["new_requirement"]})
+    query = target()
+    if scope != "unbound":
+        query["variable"] = {"variable_id": "new_value" if scope == "same_variable" else "original_value"}
+    if scope == "same_requirement":
+        query["source_context"] = {"evidence_requirements": [{"requirement_id": "new_requirement"}]}
+    result = relation_inputs(row(relation="not_found", quotes=[]), query, [source])
+    assert result["truth"] == expected
+    assert result["policy"] is (expected == "false")
+
+
 @pytest.mark.parametrize("latest_complete", [True, False])
 def test_reuse_stops_only_after_every_requested_target_has_a_verified_proof(monkeypatch, latest_complete):
     import json
@@ -465,6 +481,7 @@ def test_product_reuse_across_rule_revision_checks_read_scope_not_unrelated_dict
 
 @pytest.mark.parametrize("change,expected", [
     (None, True), ("incomplete", True), ("not_found_incomplete", False),
+    ("target_scope", True), ("not_found_target_scope", False),
     ("text", False), ("document", False), ("page", False), ("category", False),
     ("subject", False), ("project", False), ("episode", False), ("snapshot", False),
     ("protocol", False), ("rules", False), ("rules_hash", False), ("formal", False),
@@ -492,6 +509,8 @@ def test_metadata_processing_revision_reuses_only_same_literal_read_not_old_qual
         changes[field] = "other"
     current_authority = old_authority.model_copy(update=changes)
     old_page, current_page = page(), page(complete=change not in {"incomplete", "not_found_incomplete"})
+    if change in {"target_scope", "not_found_target_scope"}:
+        current_page = current_page.model_copy(update={"unread_variable_ids": ["new_variable"]})
     if change == "text": current_page = page("病历明确记载近期感染。")
     if change == "document": current_page = current_page.model_copy(update={"source_document_version_id": "other-document"})
     if change == "page": current_page = current_page.model_copy(update={"page_number": 2})
@@ -514,7 +533,7 @@ def test_metadata_processing_revision_reuses_only_same_literal_read_not_old_qual
         "output_schema": semantics.SourceRelations.model_json_schema()}
     request = {"messages": [{"role": "user", "content": semantics.SEMANTIC_INSTRUCTIONS +
         "每个target_id恰好一次。\n" + json.dumps(material, ensure_ascii=False)}]}
-    source_row = row(relation="not_found", quotes=[]) if change == "not_found_incomplete" else row()
+    source_row = row(relation="not_found", quotes=[]) if change in {"not_found_incomplete", "not_found_target_scope"} else row()
     saved = {"model": model.model_dump(mode="json"), "text": json.dumps({"results": [source_row.model_dump()]}, ensure_ascii=False),
         "calls": [{"finish_reason": "stop", "response_model": "fixture", "request_artifact_sha256": "request"}]}
     class Artifacts:

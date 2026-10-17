@@ -8,7 +8,7 @@ from app.domain.contracts.common import DateValue
 from app.domain.contracts.enums import ComponentDecision as D, DurationStatus, FactPolarity, ProfileLane, ReviewStage, SourceStrength, ProtocolPeriod
 from app.domain.contracts.facts import (AssertionBasis, ClinicalFactV2, MedicationExposureV2,
     PartialDateRange, clinical_fact_stable_identity, medication_exposure_stable_identity)
-from app.domain.contracts.work_draft import WorkDraftEvidenceRef, WorkDraftItem
+from app.domain.contracts.work_draft import WorkDraftEvidenceRef, WorkDraftItem, WorkDraftSourcePage
 from app.domain.publication import canonical_hash
 from app.services.work_draft_medications import calculate_medications, scope_source_issues
 from app.services.work_draft_projection import project_saved_items
@@ -42,7 +42,8 @@ def medication_context(*, use_day=date(2026, 3, 4)):
     rules.scope_supplement = build(proposal, selection, view)
     frame = SimpleNamespace(authority=authority, facts=[fact], medication_exposures=[exposure],
         conflict_groups=[], system_issues=[], review_run_id="draft", context_sha256="a" * 64,
-        source_pages=[SimpleNamespace(source_document_version_id="source-doc", page_artifact_id="source-page", page_number=1,
+        source_pages=[WorkDraftSourcePage(source_document_version_id="source-doc", page_artifact_id="source-page", page_number=1,
+            effective_text=text, effective_text_sha256=sha256(text.encode()).hexdigest(),
             document_category="study_chart", extraction_complete=True)],
         review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, evidence_cutoff_date=date(2026, 3, 31),
             anchor_dates={"screening_date": DateValue(value="2026-03-31", precision="day")}))
@@ -395,7 +396,7 @@ def test_complete_classified_history_outside_window_has_a_saved_navigable_negati
     assert before == (frame.facts[0].model_dump_json(), frame.medication_exposures[0].model_dump_json())
 
 
-@pytest.mark.parametrize("fault", ["unread", "unverified", "unknown_class", "other_unclassified_fact",
+@pytest.mark.parametrize("fault", ["unread", "new_target_unread", "unverified", "unknown_class", "other_unclassified_fact",
     "unlinked_fact", "unknown_polarity", "missing_history_source", "missing_refs", "wrong_ref",
     "wrong_page", "future_record", "future_fact", "no_exposure", "wrong_drug", "wrong_locator",
     "unknown_course", "intermittent", "ongoing", "missing_last_use", "conflict", "scope", "no_anchor", "missing_class"])
@@ -404,6 +405,7 @@ def test_negative_never_uses_an_accepted_subset_as_the_whole_medication_history(
     frame, rules, refs = classified_context()
     fact, exposure = frame.facts[0], frame.medication_exposures[0]
     if fault == "unread": frame.source_pages[0].extraction_complete = False
+    elif fault == "new_target_unread": frame.source_pages[0].unread_variable_ids = ["new_value"]
     elif fault == "unverified": frame.system_issues = [SystemIssue(kind="excerpt_unverified",
         affected_codes=[], detail="同页尚有未通过核对的记录", alternative="核对原件")]
     elif fault == "unknown_class": rules.scope_supplement.drug_classes["fixture_class"] = ["药物乙"]
@@ -434,11 +436,12 @@ def test_negative_never_uses_an_accepted_subset_as_the_whole_medication_history(
     assert row.decision != D.EXCLUSION_NOT_TRIGGERED
 
 
-@pytest.mark.parametrize("fault", ["unread", "unverified", "unclassified"])
+@pytest.mark.parametrize("fault", ["unread", "new_target_unread", "unverified", "unclassified"])
 def test_incomplete_history_does_not_hide_an_independently_proven_use_in_window(fault):
     from app.domain.contracts.work_draft import SystemIssue
     frame, rules, refs = classified_context(use_day=date(2026, 3, 4))
     if fault == "unread": frame.source_pages[0].extraction_complete = False
+    elif fault == "new_target_unread": frame.source_pages[0].unread_variable_ids = ["new_value"]
     elif fault == "unverified": frame.system_issues = [SystemIssue(kind="excerpt_unverified",
         affected_codes=[], detail="其他记录未核", alternative="查看原件")]
     else: frame.facts.append(frame.facts[0].model_copy(update={"fact_id": "other", "asserted_object": "药物乙"}))

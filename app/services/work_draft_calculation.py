@@ -427,7 +427,8 @@ def absence_policy(clause, frozen, definitions):
     if any(fact.variable_id in variables for fact in frozen.facts):
         return None
     pages = getattr(frozen, "source_pages", ())
-    if not pages or any(not page.extraction_complete for page in pages):
+    if not pages or any(not page.extraction_covers(variable_ids=variables,
+            requirement_ids=[item.requirement_id for item in clause.evidence_requirements]) for page in pages):
         return None
     predicates = [predicate for expression in (clause.expression, clause.exception_expression)
                   if expression is not None for predicate in iter_atomic_predicates(expression)]
@@ -780,7 +781,9 @@ def calculate_work_component(clause, frozen, rule_set, *, evidence_refs, source_
                                 and abs(value - threshold) / abs(threshold) <= 0.05 for threshold in thresholds):
                             low_reason = "采用数值接近方案阈值，需核对原始读数与参考范围。"
                             break
-        if low_reason is None and any(not page.extraction_complete for page in getattr(frozen, "source_pages", ())):
+        if low_reason is None and any(not page.extraction_covers(variable_ids=bound_variables,
+                requirement_ids=[item.requirement_id for item in clause.evidence_requirements])
+                for page in getattr(frozen, "source_pages", ())):
             low_reason = "本次部分资料尚未完成读取，结果仅依据已核对的记录。"
         if low_reason is None and any(clause.official_code in issue.affected_codes for issue in getattr(frozen, "system_issues", ())):
             low_reason = "本条还有识别记录未通过核对，结果仅依据已核实的部分。"

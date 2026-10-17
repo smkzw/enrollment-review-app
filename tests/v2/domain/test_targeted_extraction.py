@@ -61,6 +61,49 @@ def test_targets_respect_due_stage_excluded_procedures_and_required_results():
     assert [item.variable_id for item in targets.variables] == ["age", "alt"]
 
 
+@pytest.mark.parametrize("change", ["same", "new_binding", "new_description", "removed", "changed_definition"])
+def test_saved_extraction_scope_does_not_claim_changed_or_new_targets(change):
+    from app.domain.variables.extraction import ExtractionTargets, unread_extraction_targets
+    definition = load_dictionary()["age"]
+    from app.domain.contracts.rules import EvidenceRequirement
+    requirement = EvidenceRequirement(requirement_id="age-record", rule_component_id="age-component",
+        fact_type="年龄", variable_id="age", due_stage=ReviewStage.SCREENING, description="年龄记录")
+    before = ExtractionTargets((requirement,), (definition,))
+    variables, requirements = before.variables, before.requirements
+    if change == "new_binding":
+        variables = (*variables, definition.model_copy(update={"variable_id": "different_measurement"}))
+        requirements = (requirement.model_copy(update={"variable_id": "different_measurement"}),)
+    elif change == "new_description":
+        requirements = (requirement.model_copy(update={"description": "另一个有源要求"}),)
+    elif change == "removed":
+        variables, requirements = (), ()
+    elif change == "changed_definition":
+        variables = (definition.model_copy(update={"label_zh": "不同含义的数据项目"}),)
+    result = unread_extraction_targets(before, ExtractionTargets(requirements, variables))
+    expected_variables = ["different_measurement"] if change == "new_binding" else ["age"] if change == "changed_definition" else []
+    expected_requirements = [requirement.requirement_id] if change in {"new_binding", "new_description"} else []
+    assert result == (expected_variables, expected_requirements)
+    assert before.requirements == (requirement,) and before.variables == (definition,)
+
+
+def test_source_page_target_coverage_preserves_old_hash_and_cannot_imply_absence():
+    from hashlib import sha256
+    from app.domain.contracts.work_draft import WorkDraftSourcePage
+    data = dict(source_document_version_id="doc", page_artifact_id="page", page_number=1,
+        effective_text="有源记录", effective_text_sha256=sha256("有源记录".encode()).hexdigest(), extraction_complete=True)
+    original = WorkDraftSourcePage(**data)
+    assert original.model_dump(mode="json") == {**data, "document_category": None}
+    updated = WorkDraftSourcePage(**data, unread_variable_ids=["new_value"], unread_requirement_ids=["new_requirement"])
+    assert not updated.extraction_covers()
+    assert not updated.extraction_covers(variable_ids=["new_value"])
+    assert not updated.extraction_covers(requirement_ids=["new_requirement"])
+    assert updated.extraction_covers(variable_ids=["unchanged_value"], requirement_ids=["unchanged_requirement"])
+    assert not updated.model_copy(update={"extraction_complete": False}).extraction_covers(variable_ids=["unchanged_value"])
+    for invalid in (["new_value", "new_value"], ["z", "a"], [" "]):
+        with pytest.raises(ValueError):
+            WorkDraftSourcePage(**data, unread_variable_ids=invalid)
+
+
 def test_reference_ratio_expands_only_its_declared_raw_input():
     requirement = SimpleNamespace(requirement_id="ratio", due_stage=ReviewStage.SCREENING,
         variable_id="ast_uln_ratio", procedure_catalog_item_id=None)

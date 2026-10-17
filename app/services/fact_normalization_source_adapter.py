@@ -605,14 +605,29 @@ def build_evidence_normalizer_input(
     )
 
 
+def normalization_extraction_targets(session: Session, rule_set, stage):
+    """Read the targets of this frozen rule revision, not today's global selection."""
+    from app.domain.variables.extraction import build_extraction_targets
+    from app.storage.models import EvidenceRequirementRecord
+    from app.storage.repositories import get_evidence_requirement
+
+    rows = session.execute(select(EvidenceRequirementRecord).where(
+        EvidenceRequirementRecord.rule_set_id == rule_set.rule_set_id,
+        EvidenceRequirementRecord.rule_set_revision == rule_set.revision)).scalars().all()
+    requirements = [get_evidence_requirement(session, rule_set.rule_set_id, rule_set.revision, row.requirement_id)
+                    for row in rows]
+    return build_extraction_targets(rule_set, stage, requirements)
+
+
 def retained_normalization_reads(
     session: Session, *, authority: FactAuthority, prompt_version_id: str,
     model_config_id: str, prompt_template: str, artifact_store=None,
 ) -> list[dict]:
-    """Reuse actual successful reads only when their original request still matches.
+    """Reuse actual source reads, retaining the limits of their original target scope.
 
     Source ancestry alone is insufficient: this checks the saved request (including
-    stage, extraction targets, prompt and schema), response binding and checkpoint.
+    stage, original extraction targets, prompt and schema), response binding and checkpoint.
+    A changed target is explicitly unread, not negative and not newly approved.
     No new call or approval is manufactured. Missing historical receipts do not
     prove coverage; referenced but damaged receipts remain hard errors.
     """
@@ -625,6 +640,8 @@ def retained_normalization_reads(
     from app.storage.facts_models import FactNormalizationRunRecord
     from app.storage.repositories import AppendRepository, MODEL_CONFIG_CONFIG, PROMPT_VERSION_CONFIG
     from app.workflow.jobstore import JobStore
+    from app.storage.repositories import get_rule_set
+    from app.domain.variables.extraction import ExtractionTargets, unread_extraction_targets
 
     validator = FactAuthorityValidator(session, artifact_store)
     store = artifact_store or validator._require_artifact_store()
@@ -632,7 +649,7 @@ def retained_normalization_reads(
     prompts = AppendRepository(session, PROMPT_VERSION_CONFIG)
     current_prompt = prompts.get(prompt_version_id)
     configs.get(model_config_id)  # New requests keep today's selected model; old receipts keep theirs.
-    result, covered, plans = [], set(), {}
+    result, covered, plans, saved_targets = [], set(), {}, {}
     runs = FactNormalizationRunRepository(session).list_by_episode(authority.review_episode_id)
     for run in reversed(runs):
         if (run.authority.evidence_snapshot_v2_id == authority.evidence_snapshot_v2_id
@@ -686,6 +703,17 @@ def retained_normalization_reads(
                 logical_document_id=call.logical_document_id, page_numbers=call.page_numbers,
                 expected_input_sha256=selected.input_sha256,
                 max_pages_per_call=page_limit, planned_source=(plan, source))
+            target_key = (run.authority.rule_set_id, run.authority.rule_set_revision,
+                          evidence_input.context.current_review_stage)
+            if target_key not in saved_targets:
+                saved_targets[target_key] = normalization_extraction_targets(session,
+                    get_rule_set(session, *target_key[:2]), target_key[2])
+            original_targets = saved_targets[target_key]
+            original_input = evidence_input.model_copy(update={
+                "related_requirements": list(original_targets.requirements),
+                "variable_definitions": list(original_targets.variables)})
+            unread_variables, unread_requirements = unread_extraction_targets(original_targets,
+                ExtractionTargets(tuple(evidence_input.related_requirements), tuple(evidence_input.variable_definitions)))
             for receipt_sha in checkpoint.get("transport_receipt_sha256", ()):
                 receipt = json.loads(store.read_by_sha("raw_response", receipt_sha))
                 if (receipt.get("call_id") != call.call_id or receipt.get("run_id") != run.run_id
@@ -707,29 +735,37 @@ def retained_normalization_reads(
                     raise FactPlanningSourceError("旧读取回执与实际请求身份不一致")
                 schema = body.get("response_format", {}).get("json_schema", {}).get("schema")
                 if schema is not None and schema != json.loads(_compact_schema(
-                        [row.variable_id for row in evidence_input.variable_definitions],
+                        [row.variable_id for row in original_input.variable_definitions],
                         include_medication_field_sources=model.parameters.get("include_medication_field_sources", False))):
                     continue
                 aliases = (NormalizerReferenceAliases(receipt["reference_aliases"])
                     if receipt.get("reference_aliases") is not None else None)
-                if aliases is not None and aliases != evidence_normalizer_reference_aliases(evidence_input):
+                if aliases is not None and aliases != evidence_normalizer_reference_aliases(original_input):
                     raise FactPlanningSourceError("旧读取的短引用与当前真实来源不一致")
-                prompt = build_evidence_normalizer_prompt(evidence_input, prompt_template=prompt_template,
+                prompt_options = dict(prompt_template=prompt_template,
                     include_output_schema=schema is None, reference_aliases=aliases,
                     include_source_categories=model.parameters.get("include_source_categories", False),
                     include_medication_field_sources=model.parameters.get("include_medication_field_sources", False),
                     medication_source_material=model.parameters.get("medication_source_guidance"),
                     compact_requirement_rows=model.parameters.get("compact_requirement_rows", False),
                     preserve_repair_schema=model.parameters.get("preserve_repair_schema", False))
+                prompt = build_evidence_normalizer_prompt(original_input, **prompt_options)
                 if not any(row.get("role") == "user" and row.get("content") == prompt for row in body.get("messages", ())):
                     continue
-                result.append({"run_id": run.run_id, "call_id": call.call_id,
+                current_prompt_text = build_evidence_normalizer_prompt(evidence_input, **{
+                    **prompt_options, "reference_aliases": evidence_normalizer_reference_aliases(evidence_input)
+                    if aliases is not None else None})
+                proof = {"run_id": run.run_id, "call_id": call.call_id,
                     "prompt_version_id": run.prompt_version_id, "model_config_id": run.model_config_id,
                     "logical_document_id": call.logical_document_id, "page_numbers": call.page_numbers,
                     "source_document_version_id": selected.page_inputs[0].source_document_version_id,
                     "input_sha256": call.input_sha256, "raw_output_sha256": call.raw_output_sha256,
                     "receipt_sha256": receipt_sha, "request_artifact_sha256": request_sha,
-                    "current_prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest()})
+                    "current_prompt_sha256": hashlib.sha256(current_prompt_text.encode()).hexdigest()}
+                if prompt != current_prompt_text or unread_variables or unread_requirements:
+                    proof.update(source_prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
+                        unread_variable_ids=unread_variables, unread_requirement_ids=unread_requirements)
+                result.append(proof)
                 covered.update(pages)
                 break
     return sorted(result, key=lambda row: row["call_id"])

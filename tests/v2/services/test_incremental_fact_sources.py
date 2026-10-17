@@ -476,7 +476,7 @@ def test_unknown_type_runs_targeted_product_job_without_upgrading_source(session
         assert len(requests) == 2
 
 
-@pytest.mark.parametrize("case", ["normal", "other_model", "new_source_layout", "receipt_damage", "new_page_failed", "cancelled", "all_retained"])
+@pytest.mark.parametrize("case", ["normal", "other_model", "new_source_layout", "receipt_damage", "new_page_failed", "cancelled", "all_retained", "new_targets"])
 @pytest.mark.parametrize("frozen_guidance", [False, True, "columns", "schema"], ids=["default-prompt", "frozen-medication-prompt", "column-rows", "same-repair-schema"])
 def test_incremental_product_job_reads_only_added_page_and_preserves_saved_sources(session_factory, data_paths, monkeypatch, case, frozen_guidance):
     from app.evidence.artifacts import ArtifactStore
@@ -534,11 +534,30 @@ def test_incremental_product_job_reads_only_added_page_and_preserves_saved_sourc
     with session_factory() as session:
         old, added, current, old_fact, original = _seed_incremental(session, before_incremental=read_old,
             targeted=True, retained_only=case == "all_retained")
+        if case == "new_targets":
+            from app.storage.repositories import get_rule_set, save_rule_set
+            rules = get_rule_set(session, current.rule_set_id, current.rule_set_revision)
+            replacement = rules.variable_definitions[0].model_copy(update={
+                "variable_id": "source_test_new", "label_zh": "新限定的记录"})
+            rules = rules.model_copy(update={"revision": rules.revision + 1,
+                "variable_definitions": [*rules.variable_definitions, replacement],
+                "rules": [rule.model_copy(update={"components": [component.model_copy(update={
+                    "evidence_requirements": [req.model_copy(update={"variable_id": replacement.variable_id})
+                        if req.variable_id == "source_test" else req for req in component.evidence_requirements]})
+                    for component in rule.components]}) for rule in rules.rules]})
+            save_rule_set(session, rules)
+            current = current.model_copy(update={"rule_set_revision": rules.revision, "episode_revision": current.episode_revision + 1})
+            _update_episode(session, session.get(ReviewEpisodeRecord, current.review_episode_id),
+                revision=current.episode_revision, rule_set_revision=current.rule_set_revision)
         session.commit()
         proofs = retained_normalization_reads(session, authority=current, prompt_version_id=old["prompt_version_id"],
             model_config_id=old["model_config_id"], prompt_template=service.prompt_template, artifact_store=artifacts)
         assert len(proofs) == 1
         assert proofs[0]["source_document_version_id"] == old["doc_id"]
+        if case == "new_targets":
+            assert proofs[0]["unread_variable_ids"] == ["source_test_new"]
+            assert proofs[0]["unread_requirement_ids"]
+            assert proofs[0]["source_prompt_sha256"] != proofs[0]["current_prompt_sha256"]
         initial = JobStore(session).get_job(jobs[0].job_id)
         initial_identity = (initial.payload_json, initial.payload_sha256, initial.state)
     model_id = old["model_config_id"]
@@ -587,6 +606,66 @@ def test_incremental_product_job_reads_only_added_page_and_preserves_saved_sourc
         assert PatientProfileService().fact_source_readings(session, profile, old_fact.fact_id)
         assert PatientProfileService().fact_display_metadata(session, profile)
         checkpoint = JobStore(session).get_last_checkpoint(job.job_id, "finalize")[1]
+        if case == "new_targets":
+            assert checkpoint["status"] == "partial"
+            assert checkpoint["unread_target_scopes"][0]["unread_variable_ids"] == ["source_test_new"]
+            assert old_fact.variable_id != "source_test_new"
+            # Only protocol publication/source assembly is a synthetic boundary.
+            # The normalizer, page scopes, context assembly and frozen readback are real.
+            from types import SimpleNamespace
+            from app.domain.contracts.agent_io import ProtocolDeconstructionInput
+            from app.domain.contracts.protocol_ingestion import FrozenProtocolCatalog, FrozenCatalogItem, CatalogKind
+            from app.domain.contracts.rules import WorkflowStage, EvidenceRequirement
+            from app.domain.publication import canonical_hash
+            from app.projections.evidence_expectation_templates import project_evidence_expectation_templates
+            from app.services import review_context_assembly as assembly
+            from app.services.protocol_workbench_service import ProtocolWorkbenchService
+            from app.services.review_protocol_source import ReviewProtocolSource
+            from app.storage.repositories import AppendRepository, PROTOCOL_DOC_CONFIG, GATE_RESULT_CONFIG
+            from app.storage.review_context_repository import ReviewContextV2Repository
+            episode = assembly.EpisodeRepository(session).get(current.review_episode_id)
+            grouped = {}
+            for rule in rules.rules:
+                for component in rule.components:
+                    for required in component.evidence_requirements:
+                        grouped.setdefault(required.due_stage, []).append(required.requirement_id)
+            grouped.setdefault(episode.stage, [])
+            procedure_requirement = EvidenceRequirement(requirement_id="synthetic-procedure-record",
+                procedure_catalog_item_id="synthetic-procedure", variable_id="source_test_new",
+                fact_type="procedure", due_stage=episode.stage, description="合成检查结果")
+            grouped[episode.stage].append(procedure_requirement.requirement_id)
+            stages = tuple(WorkflowStage(workflow_stage_id=episode.workflow_stage_id if stage == episode.stage else f"stage-{stage.value}",
+                stage=stage, display_name=stage.value, due_requirement_ids=ids) for stage, ids in grouped.items())
+            catalog_data = dict(catalog_id="synthetic-procedures", snapshot_id="synthetic-protocol",
+                catalog_kind=CatalogKind.REQUIRED_PROCEDURES, study_phase=rules.study_phase,
+                frozen_at=NOW, frozen_by="synthetic", items=(FrozenCatalogItem(item_id="synthetic-procedure",
+                    kind="required_procedure", label="合成检查", review_stage=episode.stage,
+                    visit_instance=episode.stage.value, position=0,
+                    source_span_ids=["synthetic-procedure-source"], source_excerpts=["合成检查原文"]),))
+            catalog = FrozenProtocolCatalog(**catalog_data, catalog_sha256=canonical_hash(
+                FrozenProtocolCatalog.model_construct(**catalog_data).model_dump(mode="json", exclude={"catalog_sha256"})))
+            protocol = AppendRepository(session, PROTOCOL_DOC_CONFIG).get(current.protocol_version_id)
+            gate = AppendRepository(session, GATE_RESULT_CONFIG).get(protocol.integrity_gate_result_id)
+            published = ReviewProtocolSource(rules, stages, gate, tuple(project_evidence_expectation_templates(
+                rule_set=rules, workflow_stages=list(stages), procedure_requirements=[procedure_requirement],
+                created_at=NOW)), protocol, (procedure_requirement,))
+            monkeypatch.setattr(assembly, "load_review_protocol_source", lambda *_: published)
+            monkeypatch.setattr("app.services.protocol_draft_service.resolve_formal_baseline_revision", lambda **_: SimpleNamespace(
+                content=SimpleNamespace(protocol_version_id=current.protocol_version_id), revision_id="synthetic-baseline"))
+            monkeypatch.setattr(ProtocolWorkbenchService, "_source_context_for_revision", lambda *_: {"source_input": {}})
+            monkeypatch.setattr(ProtocolDeconstructionInput, "model_validate", lambda *_: SimpleNamespace(
+                protocol_version_id=current.protocol_version_id, required_procedure_catalog=catalog))
+            context = assembly.assemble_review_context(session, artifacts, review_episode_id=current.review_episode_id,
+                review_run_id="synthetic-target-scope", evaluator_version="synthetic", created_at=NOW, work_draft=True)
+            ReviewContextV2Repository(session).save(context)
+            restored = ReviewContextV2Repository(session).get(context.context_id)
+            old_page = next(p for p in restored.source_pages if p.source_document_version_id == old["doc_id"])
+            new_page = next(p for p in restored.source_pages if p.source_document_version_id == added["doc_id"])
+            assert old_page.extraction_complete and old_page.unread_variable_ids == ["source_test_new"]
+            assert new_page.extraction_covers() and not new_page.unread_variable_ids
+            assert old_fact.fact_id in {fact.fact_id for fact in restored.facts}
+            assert any(issue.kind == "extraction_failed" and issue.affected_codes == sorted([rules.rules[0].official_code, "REQ-01"])
+                for issue in restored.system_issues)
         assert checkpoint["unread_page_refs"] == ([f"{added['logical_document_id']}:1"] if case == "new_page_failed" else [])
         if case == "new_page_failed":
             from app.services.evidence_api_read_service import EvidenceApiReadService
