@@ -112,8 +112,8 @@ channel:
 #-------------------------------------------------------------------------------
 # Codex-only knob; other platforms ignore it. "auto" dispatches
 # trellis-implement / trellis-check / trellis-research sub-agents, while
-# "inline" keeps those roles in the main session. This project explicitly
-# selects inline below so Trellis cannot bypass the governed route manifest.
+# "inline" keeps those roles in the main session. Dispatch remains subject
+# to the active task's orchestration rules and approved route manifest.
 # "sub-agent" remains a backwards-compatible alias for "auto". Invalid
 # explicit values safely use inline mode.
 #
@@ -123,11 +123,9 @@ channel:
 # route packet and may not rely on parent inheritance.
 #
 codex:
-  # Trellis implementation/check/research stays in the parent session. A
-  # governed workflow packet is the only entry point for a native child, so
-  # its model and effort come from the live route manifest instead of parent
-  # session inheritance.
-  dispatch_mode: inline
+  # Enable dispatch for subsequent sessions. The 0.2.1 task uses Orca;
+  # this setting does not authorize implicit model or effort inheritance.
+  dispatch_mode: auto
 
 #-------------------------------------------------------------------------------
 # Sub-agent context injection limits

@@ -24,4 +24,4 @@
 
 ## 第一步
 
-把 `07_PROMPTS.md` 第 1 节的 Prompt 粘贴给在 Orca 终端中启动的 Codex，从 `03_PLAN.md` 第 0 波开始。
+统筹者按执行包 `README.md` 把本规范应用到构建工作树（本地分支 `dev/0.2.1`），然后按 `07_PROMPTS.md` 第 1 节的 Prompt 从 `03_PLAN.md` 第 0 波开始。所有提交只留在本地，不推送远端。

@@ -19,7 +19,7 @@ Codex 作为统筹者在 Orca 终端中运行，通过 `orca orchestration` 把�
 | OMP | 已安装并登录各模型（agent ID `omp`） | `omp --version` |
 | CodeBuddy CLI | `npm install -g @tencent-ai/codebuddy-code` 并登录（agent ID `codebuddy`） | `codebuddy --version` |
 | Agent 技能 | `orca skills install --skill orca-cli --skill orchestration` | 统筹者会话中可调用 |
-| 仓库 | 在 Orca 中打开构建工作树；`orca repo set-base-ref --repo id:<repoId> --ref origin/dev/0.2.1 --json`，让新工作树都从 `dev/0.2.1` 分出 | `orca repo show` 或等价命令查看 base ref |
+| 仓库 | 在 Orca 中打开构建工作树；`orca repo set-base-ref --repo id:<repoId> --ref dev/0.2.1 --json`（本地分支），让新工作树都从最新的本地 `dev/0.2.1` 分出；若本机 Orca 只接受远端引用，就在每个任务说明第一步加 `git merge --ff-only dev/0.2.1` | `orca repo show` 或等价命令查看 base ref |
 
 ## 2. 权限与数据边界（D40）
 
@@ -91,11 +91,11 @@ orca orchestration worker-release --dispatch <dispatchId> --json
 
 1. **一个 Run**：整个冲刺只用第 0 波建的那个 Run。统筹者在自己的 Orca 终端里运行并保持绑定；不要每波新建 Run（会改绑，导致仍在运行的节点消息发到旧 Run）。
 2. **隔离**：写代码的节点一律 `--worktree new-child`（或 §3 的指定模型终端）；分支名 `w/0.2.1-<任务>`。只读节点可用 `--worktree current`。
-3. **基于最新代码**：每次合并后立即推送 `dev/0.2.1`；每个任务说明的第一步是 `git log -1 --oneline`，确认包含它依赖的提交。
+3. **基于最新代码**：base ref 是本地 `dev/0.2.1`，合并后新开的工作树自动包含最新代码；每个任务说明的第一步是 `git log -1 --oneline`，确认包含它依赖的提交。
 4. **依赖**：有依赖的任务用 `task-create --deps '["<taskId>", …]'` 建立（`--deps` 接 JSON 数组）。
 5. **并发**：同时最多 3 个实现节点＋1 个评审节点；同一文件同一时刻只派给一个节点。
 6. **数据**：执行节点不读写数据目录、`.env`，不启动或停止服务，不发起产品模型调用，不使用浏览器（医学结果评审节点只读统筹者提供的导出和原件页）。
-7. **合并**：只有统筹者合并：核对改动文件清单 → 审 diff → 跑任务测试 → 评审节点通过 → 合并到 `dev/0.2.1` → 推送。波次结束快进推 `main`。执行节点不推送、不开 PR。
+7. **合并**：只有统筹者合并：核对改动文件清单 → 审 diff → 跑任务测试 → 评审节点通过 → 合并到本地 `dev/0.2.1`。不推送远端、不开 PR（需要时由用户另行指示）；执行节点同样不推送。
 8. **提问**：节点用 `orca orchestration ask` 问统筹者。统筹者能答的直接答；涉及医学判断的记入医学问题单，告诉节点先做不依赖它的部分，或以 `failed` 回报。
 9. **失败**：同一任务两次 `failed` 或两次回报不合格，统筹者收回（`worker-stop`／`worker-release`），重写任务说明或亲自处理。
 10. **收尾**：接受回报后立即 `worker-release`；需要排查时才 `worker-retain`，用完再 release。
@@ -115,7 +115,7 @@ orca orchestration worker-start --task <C1a> --worktree new-child --name c1a --a
 orca orchestration worker-start --task <C8> --worktree new-child --name c8 --agent codebuddy --json
 # 等待并处理每条消息
 orca orchestration check --wait --types worker_done,escalation,question --timeout-ms 1800000 --json
-#   worker_done：worker-read 看回报 → git diff --name-only 核对文件 → 审 diff、跑测试 → 派评审 → 合并、推送，或打回
+#   worker_done：worker-read 看回报 → git diff --name-only 核对文件 → 审 diff、跑测试 → 派评审 → 合并，或打回
 #   question：能答就回复；医学问题记入问题单
 orca orchestration check --ack <deliveryId> --wait --types worker_done,escalation,question --timeout-ms 1800000 --json
 orca orchestration worker-release --dispatch <dispatchId> --json
