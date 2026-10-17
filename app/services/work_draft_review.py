@@ -582,8 +582,13 @@ class WorkDraftReviewService:
                         "error": "先前读取未能完整对应本次资料；已核内容保留，未改为整批重新读取。",
                         "error_code": "SOURCE_READ_REVALIDATION_FAILED",
                         "error_target_ids": sorted(batch_ids - reused.keys())}
+                def cancel_requested():
+                    with self.session_factory() as current_session:
+                        status = JobStore(current_session).job_status(context.job_id)
+                        return status.cancel_requested or status.state in {"cancel_requested", "cancelled"}
+
                 return read_source_relations(frozen, batches[index], model, self.artifact_store,
-                    reused=reused, reuse_proofs=proofs)
+                    reused=reused, reuse_proofs=proofs, cancel_requested=cancel_requested)
             calculated = store.get_last_checkpoint(context.job_id, "calculate")
             if calculated is None:
                 raise ScopeViolationError("缺少已保存的组件计算结果")

@@ -672,7 +672,8 @@ def relation_inputs(row, target, pages):
             "source_read_refs": [ref.model_dump(mode="json") for ref in refs]}
 
 
-def read_source_relations(frozen, targets, model, artifact_store, *, transport_factory=None, reused=None, reuse_proofs=None):
+def read_source_relations(frozen, targets, model, artifact_store, *, transport_factory=None, reused=None, reuse_proofs=None,
+                          cancel_requested=None):
     from app.agents.deepseek_evidence_normalizer_transport import evidence_normalizer_transport_from_model_config
     pages = source_pages_for_review(frozen)
     if not targets:
@@ -723,6 +724,11 @@ def read_source_relations(frozen, targets, model, artifact_store, *, transport_f
         model, receipt_callback=receipt, request_callback=store_request))
     accepted, pending, errors = dict(reused), targets, {}
     for attempt in range(2):
+        if cancel_requested is not None and cancel_requested():
+            return {"results": accepted, "calls": calls, "raw_refs": raw_refs,
+                "reuse_proofs": reuse_proofs or {}, "prompt_version": PROMPT_VERSION,
+                "error_code": "SOURCE_READ_CANCELLED", "error": "已停止追加读取，已返回的内容和调用记录保留。",
+                "error_target_ids": [target["target_id"] for target in pending]}
         try:
             response = transport.propose_question_classifications(prompt=prompt, output_schema=SourceRelations.model_json_schema())
             raw_refs.append(artifact_store.put("raw_response", json.dumps({"text": response.text,

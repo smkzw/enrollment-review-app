@@ -18,10 +18,13 @@ from tests.v2.services.test_work_draft_source_relations import page, row, target
 from tests.v2.services.test_work_draft_calculation import material
 
 
-@pytest.mark.parametrize("count,restart,changed_source,unresolved_scope", [(0, False, False, False), (1, False, False, False),
-    (37, False, False, False), (37, True, False, False), (37, False, True, False), (0, False, False, True)])
+@pytest.mark.parametrize("count,restart,changed_source,unresolved_scope,cancel_during_read", [
+    (0, False, False, False, False), (1, False, False, False, False),
+    (37, False, False, False, False), (37, True, False, False, False),
+    (37, False, True, False, False), (0, False, False, True, False),
+    (17, False, False, False, True)])
 def test_automatic_reading_uses_durable_short_batches_without_repeating_saved_work(
-    session_factory, data_paths, monkeypatch, count, restart, changed_source, unresolved_scope,
+    session_factory, data_paths, monkeypatch, count, restart, changed_source, unresolved_scope, cancel_during_read,
 ):
     from app.storage import fact_repositories
     authority = material().authority
@@ -71,6 +74,13 @@ def test_automatic_reading_uses_durable_short_batches_without_repeating_saved_wo
             assert len(prompt) <= 200000
             material = json.loads(prompt.split("\n", 1)[1])
             prompts.append(material)
+            if cancel_during_read:
+                with session_factory() as session, session.begin():
+                    JobStore(session).request_cancel(result["job_id"])
+                return SimpleNamespace(text=json.dumps({"results": [row(target_id=t["target_id"],
+                    relation="not_found" if index == 0 else "supports",
+                    quotes=[] if index == 0 else [{"page_artifact_id": "P01", "excerpt": "伪造摘录"}]).model_dump()
+                    for index, t in enumerate(material["targets"])]}))
             return SimpleNamespace(text=json.dumps({"results": [row(target_id=t["target_id"],
                 relation="not_found", quotes=[]).model_dump() for t in material["targets"]]}))
 
@@ -133,6 +143,16 @@ def test_automatic_reading_uses_durable_short_batches_without_repeating_saved_wo
         store = JobStore(session)
         status = store.job_status(result["job_id"])
         assert store.get_job(result["job_id"]).payload_sha256 == payload_sha
+        if cancel_during_read:
+            assert status.state == "cancelled" and len(prompts) == 1
+            checkpoint = store.get_last_checkpoint(result["job_id"], "semantic:0000")[1]
+            assert checkpoint["error_code"] == "SOURCE_READ_CANCELLED"
+            assert len(checkpoint["raw_refs"]) == 1
+            assert set(checkpoint["results"]) == {targets[0]["target_id"]}
+            assert len(checkpoint["error_target_ids"]) == semantics.BATCH_SIZE - 1
+            assert not composed and not saved
+            assert store.get_last_checkpoint(result["job_id"], "semantic:0001") is None
+            return
         if changed_source:
             assert status.state == "failed_final" and len(store.list_steps(result["job_id"])) == 1
             assert not prompts and not saved

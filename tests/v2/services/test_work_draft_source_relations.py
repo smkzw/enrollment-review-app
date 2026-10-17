@@ -330,15 +330,17 @@ def test_product_batch_execution_revalidates_whole_frozen_target_scope_then_filt
     monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: frame))
     monkeypatch.setattr(service, "authority_from_active_episode", lambda *_: authority)
     monkeypatch.setattr(service, "get_rule_set", lambda *_: rules)
-    monkeypatch.setattr(service, "JobStore", lambda _: SimpleNamespace(list_steps=lambda _: []))
+    monkeypatch.setattr(service, "JobStore", lambda _: SimpleNamespace(list_steps=lambda _: [],
+        job_status=lambda _: SimpleNamespace(cancel_requested=False, state="running")))
     monkeypatch.setattr(semantics, "targets_for_review", lambda *_: targets)
     checked = []
     def reuse(session, store, frozen, current_targets, current_model, artifacts):
         assert current_targets is targets  # A subset would discard old full-group proof.
         checked.append(True)
         return reused, proofs
-    def read(frozen, batch, current_model, artifacts, *, reused, reuse_proofs):
+    def read(frozen, batch, current_model, artifacts, *, reused, reuse_proofs, cancel_requested):
         assert missing <= semantics.BATCH_SIZE
+        assert cancel_requested() is False
         assert closed and current_model == model
         assert batch is batches[0]
         expected = {t["target_id"] for t in batch} - pending
