@@ -112,6 +112,37 @@ function Harness({
 }
 
 describe("个例档案整理任务恢复与文案", () => {
+  it("刷新恢复同一单页任务后，重建仍只整理该页", async () => {
+    const start = vi.fn(async () => ({ jobId: "job-normalize-1", runId: "run-normalize-1", created: true,
+      state: "queued" as const, stateLabel: "等待处理", recoveryAction: "无需操作" }));
+    const current = vi.fn(async () => null as FactNormalizationJobStatusView | null);
+    setFactNormalizationRepository(makeRepo({start, current}));
+    const first = render(<Harness />);
+    await screen.findByText("已恢复状态");
+    await userEvent.click(screen.getByRole("button", {name: "只整理本页"}));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    first.unmount();
+    current.mockResolvedValue(status({state: "cancelled", stateLabel: "已停止", recoveryAction: "已有结果保留"}));
+    render(<Harness profileStale />);
+    await screen.findByText("已恢复状态");
+    await userEvent.click(screen.getByRole("button", {name: "重试当前操作"}));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+    expect(start.mock.calls[1][2]).toMatchObject({sourcePage: {sourceDocumentVersionId: "current-source", pageNumber: 5}});
+  });
+  it("服务器发现不同任务时不沿用旧任务的单页选择", async () => {
+    const key = factNormalizationJobStorageKey("episode-1");
+    localStorage.setItem(`${key}:page`, JSON.stringify({jobId: "old-job", sourceDocumentVersionId: "old-source", pageNumber: 5}));
+    const start = vi.fn(async () => ({jobId: "new-job", runId: "new-run", created: true,
+      state: "queued" as const, stateLabel: "等待处理", recoveryAction: "无需操作"}));
+    setFactNormalizationRepository(makeRepo({start, current: vi.fn(async () => status({
+      state: "cancelled", stateLabel: "已停止", recoveryAction: "已有结果保留"}))}));
+    render(<Harness profileStale />);
+    await screen.findByText("已恢复状态");
+    await userEvent.click(screen.getByRole("button", {name: "重试当前操作"}));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    expect(start.mock.calls[0][2]).not.toHaveProperty("sourcePage");
+    expect(localStorage.getItem(`${key}:page`)).toBeNull();
+  });
   it("本页请求失败后重试仍为同页，不扩大为全部资料", async () => {
     const start = vi.fn().mockRejectedValueOnce(new Error("unavailable")).mockResolvedValueOnce({
       jobId: "job-normalize-1", runId: "run-normalize-1", created: true,

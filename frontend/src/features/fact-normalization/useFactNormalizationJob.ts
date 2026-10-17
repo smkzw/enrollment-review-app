@@ -36,17 +36,35 @@ export type FactNormalizationUiState =
     }
   | { status: "error"; message: string; recoveryHint: string; canRetry: boolean };
 
-function writeStoredJobId(reviewEpisodeId: string, jobId: string): void {
+function writeStoredJobId(reviewEpisodeId: string, jobId: string,
+  sourcePage?: FactNormalizationStartInput["sourcePage"]): void {
   try {
-    window.localStorage.setItem(factNormalizationJobStorageKey(reviewEpisodeId), jobId);
+    const key = factNormalizationJobStorageKey(reviewEpisodeId);
+    window.localStorage.setItem(key, jobId);
+    if (sourcePage) window.localStorage.setItem(`${key}:page`, JSON.stringify({jobId, ...sourcePage}));
+    else window.localStorage.removeItem(`${key}:page`);
   } catch {
     // 本机存储不可用时仍可继续当前会话轮询。
   }
 }
 
+function readStoredPage(reviewEpisodeId: string, jobId: string): FactNormalizationStartInput["sourcePage"] {
+  try {
+    const saved: unknown = JSON.parse(window.localStorage.getItem(`${factNormalizationJobStorageKey(reviewEpisodeId)}:page`) ?? "null");
+    if (saved && typeof saved === "object" && "jobId" in saved && saved.jobId === jobId
+      && "sourceDocumentVersionId" in saved && typeof saved.sourceDocumentVersionId === "string"
+      && saved.sourceDocumentVersionId.trim() && "pageNumber" in saved && typeof saved.pageNumber === "number"
+      && Number.isInteger(saved.pageNumber) && saved.pageNumber > 0) {
+      return {sourceDocumentVersionId: saved.sourceDocumentVersionId, pageNumber: saved.pageNumber};
+    }
+  } catch { /* Unavailable local storage cannot establish a saved page selection. */ }
+  return undefined;
+}
+
 function clearStoredJobId(reviewEpisodeId: string): void {
   try {
     window.localStorage.removeItem(factNormalizationJobStorageKey(reviewEpisodeId));
+    window.localStorage.removeItem(`${factNormalizationJobStorageKey(reviewEpisodeId)}:page`);
   } catch {
     // ignore
   }
@@ -167,9 +185,12 @@ export function useFactNormalizationJob(
 
   const applyJob = useCallback(
     (job: FactNormalizationJobStatusView) => {
+      if (jobIdRef.current !== job.jobId && reviewEpisodeId !== null) {
+        sourcePageRef.current = readStoredPage(reviewEpisodeId, job.jobId);
+      }
       jobIdRef.current = job.jobId;
       if (reviewEpisodeId !== null) {
-        writeStoredJobId(reviewEpisodeId, job.jobId);
+        writeStoredJobId(reviewEpisodeId, job.jobId, sourcePageRef.current);
       }
       const next = activeFromJob(job, profileStaleRef.current);
       setState(next);
@@ -318,7 +339,7 @@ export function useFactNormalizationJob(
             { idempotencyKey: key, ...(retryFailedFromRunId ? {retryFailedFromRunId} : {}),
               ...(revalidateFromRunId ? {revalidateFromRunId} : {}), ...(sourcePage ? {sourcePage} : {}) },
           );
-          writeStoredJobId(reviewEpisodeId, command.jobId);
+          writeStoredJobId(reviewEpisodeId, command.jobId, sourcePage);
           if (currentScope.current !== scopeKey) return command.jobId;
           jobIdRef.current = command.jobId;
           const job = await getFactNormalizationRepository().getFactNormalizationJobStatus(
