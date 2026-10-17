@@ -46,6 +46,6 @@ frontend/
 
 ## Reference Surfaces
 
-- 产品和流程基座：`docs/0.2.0/01_PRD.md`、`docs/0.2.0/02_DESIGN.md`。
-- 实现顺序与验收：`docs/0.2.0/03_PLAN.md`、`docs/0.2.0/04_ACCEPTANCE.md`。
+- 产品和流程基座：`docs/0.2.1/01_PRD.md`、`docs/0.2.1/02_DESIGN.md`。
+- 实现顺序与验收：`docs/0.2.1/03_PLAN.md`、`docs/0.2.1/04_ACCEPTANCE.md`。
 - Legacy 行为参照：`static/index.html`，只读使用，不作为 V2 组件模板。

@@ -1,9 +1,9 @@
 # Development Workflow
 
-## 0.2.0 当前任务约定
+## 0.2.1 当前任务约定
 
 本阶段不新建 Trellis 任务或重复的工作日志。PRD／design／implement 分别由
-`docs/0.2.0/01_PRD.md`、`02_DESIGN.md`、`03_PLAN.md`／`05_PROGRESS.md` 承担。
+`docs/0.2.1/01_PRD.md`、`02_DESIGN.md`、`03_PLAN.md`／`05_STATUS.md` 承担；多 Agent 编排见 `docs/0.2.1/06_ORCA_RUNBOOK.md`。
 以下通用流程只在不冲突时适用；历史任务移到 `archives/trellis-tasks/`，不作为活动任务注入。
 
 ---
@@ -180,9 +180,9 @@ Create new children with `task.py create "<title>" --slug <name> --parent <paren
 <!-- Per-turn breadcrumb: shown when there is no active task (before Phase 1) -->
 
 [workflow-state:no_task]
-No active task. First classify the current turn and ask for task-creation consent before creating any Trellis task.
-Simple conversation / small task: ask only whether this turn should create a Trellis task. If the user says no, skip Trellis for this session.
-Complex task: ask the user if you can create a Trellis task and enter the planning phase. If the user says no, explain, clarify scope, or suggest a smaller split.
+0.2.1 does not use Trellis tasks. Do not create a Trellis task and do not ask whether to create one.
+Follow AGENTS.md and docs/0.2.1/. If you are an Orca worker, follow your injected task spec and report with worker_done.
+If you are the coordinator, follow docs/0.2.1/03_PLAN.md and 06_ORCA_RUNBOOK.md.
 [/workflow-state:no_task]
 
 ### Phase 1: Plan
