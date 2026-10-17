@@ -10,7 +10,7 @@ from app.domain.contracts.facts import (AssertionBasis, ClinicalFactV2, Medicati
     PartialDateRange, clinical_fact_stable_identity, medication_exposure_stable_identity)
 from app.domain.contracts.work_draft import WorkDraftEvidenceRef, WorkDraftItem
 from app.domain.publication import canonical_hash
-from app.services.work_draft_medications import calculate_medications
+from app.services.work_draft_medications import calculate_medications, scope_source_issues
 from app.services.work_draft_projection import project_saved_items
 from tests.v2.protocols.test_medication_restrictions import frozen_medications, build
 from tests.v2.services.test_work_draft_calculation import material, clause
@@ -63,6 +63,43 @@ def test_published_single_use_reaches_saved_contract_projection_and_preserves_in
     assert item.rule_kind == "medication" and item.rule_code == "用药01"
     assert not item.can_confirm and item.fact_refs[0].page_number == 1
     assert before == (canonical_hash(rules.model_dump(mode="json")), frame.medication_exposures[0].model_dump_json())
+
+
+def test_unresolved_protocol_source_reaches_api_without_changing_independent_medication_result():
+    from app.api.v2.eligibility_review import EligibilityReviewResponse
+    frame, rules, refs = medication_context()
+    rules.scope_supplement.source_dispositions[0].disposition = "unresolved"
+    rules.scope_supplement.source_dispositions[0].reason = "本段还需核对适用条件。"
+    original = rules.model_dump_json()
+    row, = calculate_medications(frame, rules, evidence_refs=refs)
+    issue, = scope_source_issues(rules)
+    assert issue.kind == "component_unstructured" and issue.affected_codes == []
+    assert rules.scope_supplement.sources[0].excerpt in issue.detail
+    assert "病历" not in issue.alternative and issue.page_artifact_id is None
+    view = project_saved_items([row], authority=frame.authority, rule_set=rules, run_id="draft", issues=[issue])
+    dto = EligibilityReviewResponse.model_validate(view.to_dict())
+    assert dto.system_issues == [issue]
+    assert view.clauses[0].decision == D.EXCLUSION_TRIGGERED.value
+    assert view.clauses[0].fact_refs[0].fact_id == "med-fact"
+    assert rules.model_dump_json() == original
+
+
+@pytest.mark.parametrize("disposition", ["heading", "permission", "background", "other_phase"])
+def test_resolved_source_disposition_does_not_create_false_patient_requirement(disposition):
+    _, rules, _ = medication_context()
+    rules.scope_supplement.source_dispositions[0].disposition = disposition
+    assert scope_source_issues(rules) == []
+    rules.scope_supplement = None
+    assert scope_source_issues(rules) == []
+
+
+def test_unresolved_source_cannot_borrow_another_position_or_fabricate_a_quote():
+    from app.storage.repositories import ScopeViolationError
+    _, rules, _ = medication_context()
+    rules.scope_supplement.source_dispositions[0].disposition = "unresolved"
+    rules.scope_supplement.source_dispositions[0].source_span_id = "not-in-frozen-sources"
+    with pytest.raises(ScopeViolationError, match="无法对应已保存原文"):
+        scope_source_issues(rules)
 
 
 def test_navigation_tracks_the_requirement_not_the_saved_run_or_display_number():

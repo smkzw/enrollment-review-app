@@ -1,5 +1,6 @@
 """Synthetic source reader with the real automatic Job graph and recovery store."""
 from hashlib import sha256
+from datetime import UTC, datetime
 import json
 from types import SimpleNamespace
 
@@ -17,19 +18,29 @@ from tests.v2.services.test_work_draft_source_relations import page, row, target
 from tests.v2.services.test_work_draft_calculation import material
 
 
-@pytest.mark.parametrize("count,restart,changed_source", [(0, False, False), (1, False, False),
-    (37, False, False), (37, True, False), (37, False, True)])
+@pytest.mark.parametrize("count,restart,changed_source,unresolved_scope", [(0, False, False, False), (1, False, False, False),
+    (37, False, False, False), (37, True, False, False), (37, False, True, False), (0, False, False, True)])
 def test_automatic_reading_uses_durable_short_batches_without_repeating_saved_work(
-    session_factory, data_paths, monkeypatch, count, restart, changed_source,
+    session_factory, data_paths, monkeypatch, count, restart, changed_source, unresolved_scope,
 ):
     from app.storage import fact_repositories
     authority = material().authority
-    rules = SimpleNamespace(rules=[], scope_supplement=None, model_dump=lambda **_: {"rules": []})
+    rules = SimpleNamespace(rules=[], scope_supplement=None)
+    if unresolved_scope:
+        from tests.v2.protocols.test_medication_restrictions import frozen_medications, build
+        selection, view, proposal = frozen_medications()
+        proposal["medications"] = []
+        proposal["source_dispositions"].append({"source_span_id": "clause", "disposition": "unresolved",
+            "reason": "限定条件尚未形成可用判断，不是病例缺少资料。"})
+        rules.scope_supplement = build(proposal, selection, view)
+    rules.model_dump = lambda **_: {"rules": [], "scope_supplement": rules.scope_supplement.model_dump(mode="json")
+        if rules.scope_supplement is not None else None}
     frame = SimpleNamespace(context_id="frozen-context", review_run_id="frozen-run", work_draft=True,
         authority=authority, rule_set_sha256=canonical_hash(rules.model_dump()), facts=[], system_issues=[],
         clause_pack=SimpleNamespace(clauses=[], restricted_clauses=[]), evaluator_version=service.CALCULATION_VERSION,
         review_episode=SimpleNamespace(stage=ReviewStage.SCREENING, evidence_cutoff_date=None, anchor_dates={},
-            model_dump=lambda **_: {"anchor_dates": {}}), source_pages=[page()])
+            model_dump=lambda **_: {"anchor_dates": {}}), source_pages=[page()],
+        created_at=datetime(2026, 1, 1, tzinfo=UTC), medication_exposures=[], conflict_groups=[])
     frame.model_copy = lambda **kwargs: SimpleNamespace(**(vars(frame) | kwargs.get("update", {})))
     targets = [{**target(), "target_id": f"target:{i}", "component_id": f"component:{i}",
                 "source_text": f"要求{i}：" + "有来源的独立要求。" * 800} for i in range(count)]
@@ -76,6 +87,12 @@ def test_automatic_reading_uses_durable_short_batches_without_repeating_saved_wo
     executor = service.WorkDraftReviewService(session_factory, artifacts).execute
     interrupted = False
     saved = []
+    saved_runs = []
+    if unresolved_scope:
+        from app.domain.contracts.review import ReviewRun
+        monkeypatch.setattr(service, "AppendRepository", lambda *_: SimpleNamespace(
+            get_or_none=lambda _: None,
+            save=lambda run: saved_runs.append(ReviewRun.model_validate_json(run.model_dump_json()))))
 
     def execute(context):
         nonlocal interrupted
@@ -83,9 +100,10 @@ def test_automatic_reading_uses_durable_short_batches_without_repeating_saved_wo
             interrupted = True
             raise StepFailure(retryable=False, error_code="SYNTHETIC_OUTAGE", detail="合成中断")
         if context.step_id == "save":
-            # This fixture checks graph/reader/composition, not clinical signing.
             saved.append(True)
-            return {"saved": True}
+            if not unresolved_scope:
+                # Other cases check graph/reader/composition, not clinical signing.
+                return {"saved": True}
         prepared = executor(context)
         if changed_source and context.step_id == "calculate":
             original_apply = prepared.apply
@@ -96,6 +114,13 @@ def test_automatic_reading_uses_durable_short_batches_without_repeating_saved_wo
         return prepared
 
     assert JobRunner(session_factory, {service.JOB_TYPE: execute}).run_job(result["job_id"])
+    if unresolved_scope:
+        assert len(saved_runs) == 1
+        issue, = saved_runs[0].system_issues
+        assert issue.kind == "component_unstructured" and issue.affected_codes == []
+        assert rules.scope_supplement.sources[1].excerpt in issue.detail
+        assert "病例缺少资料" in issue.detail
+        assert not prompts
     if restart:
         assert len(prompts) == 1
         with session_factory() as session, session.begin():

@@ -15,6 +15,28 @@ def _name(value):
     return unicodedata.normalize("NFKC", value).strip().casefold()
 
 
+def scope_source_issues(rule_set):
+    """Retain unresolved protocol sources without inventing patient obligations."""
+    supplement = rule_set.scope_supplement
+    if supplement is None:
+        return []
+    sources = {source.source_span_id: source for source in supplement.sources}
+    issues = []
+    for disposition in supplement.source_dispositions:
+        if disposition.disposition != "unresolved":
+            continue
+        source = sources.get(disposition.source_span_id)
+        if source is None or not source.excerpt.strip():
+            from app.storage.repositories import ScopeViolationError
+            raise ScopeViolationError("补充方案的未决位置无法对应已保存原文")
+        codes = sorted({code for section in supplement.sections
+            if source.source_span_id in section.source_span_ids for code in section.official_codes})
+        issues.append(SystemIssue(kind="component_unstructured", affected_codes=codes,
+            detail=f"补充方案要求尚未形成可用判断：{disposition.reason}\n方案原文：{source.excerpt}",
+            alternative="请在方案规则的审核范围中完善这段要求；其他有独立依据的条款继续判断。"))
+    return issues
+
+
 def _record_refs(facts, evidence_refs, source_pages, members, cutoff):
     """Navigation only: a published medication record is not a dated exposure."""
     refs = {}

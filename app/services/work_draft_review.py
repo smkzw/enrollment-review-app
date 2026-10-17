@@ -23,7 +23,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v50"
+CALCULATION_VERSION = "work-draft/0.2.0-v51"
 
 
 def confirmation_allowed(item, items):
@@ -662,6 +662,10 @@ class WorkDraftReviewService:
             items = [WorkDraftItem.model_validate(value) for value in composed[1]["items"]]
             issues = list(frozen.system_issues) + [SystemIssue.model_validate(value)
                 for value in calculated[1].get("source_issues", ())]
+            from app.services.work_draft_medications import scope_source_issues
+            for issue in scope_source_issues(rule_set):
+                if issue not in issues:
+                    issues.append(issue)
             for item in items:
                 if item.system_issue is not None and item.system_issue not in issues:
                     issues.append(item.system_issue)

@@ -108,6 +108,20 @@ def test_saved_history_reads_all_parents_children_and_procedures_without_signing
     assert before == (canonical_hash(context.model_dump(mode="json")), [canonical_hash(row.model_dump(mode="json")) for row in rows])
 
 
+def test_frozen_report_keeps_unresolved_protocol_source_as_system_issue_not_missing_patient_evidence(frozen_history):
+    from app.domain.contracts.work_draft import SystemIssue
+    run, context, rows, _, _ = frozen_history
+    original = run.model_dump_json(), context.model_dump_json(), [r.model_dump_json() for r in rows]
+    issue = SystemIssue(kind="component_unstructured", affected_codes=[],
+        detail="补充方案要求尚未形成可用判断。方案原文：允许药物乙，但应保持稳定剂量。",
+        alternative="请在方案规则中核对；不代表受试者没有相关记录。")
+    saved = ReviewRun.model_validate_json(run.model_copy(update={"system_issues": [issue]}).model_dump_json())
+    result = history._work_draft_detail(None, saved, context, "completed")
+    assert result.work_draft.system_issues == (issue,)
+    assert result.work_draft.component_clauses[0].decision == "exclusion_not_triggered"
+    assert original == (run.model_dump_json(), context.model_dump_json(), [r.model_dump_json() for r in rows])
+
+
 @pytest.mark.parametrize("position", ["current", "wrong_document", "wrong_artifact", "wrong_page", "missing", "absent"])
 def test_rejected_fact_navigation_requires_exact_current_page_and_does_not_adopt(frozen_history, monkeypatch, position):
     from app.services.review_context_assembly import _fact_closure_issues
