@@ -2,6 +2,7 @@
 
 import gc
 import weakref
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, event, update
@@ -90,3 +91,47 @@ def test_invalid_capacity_is_rejected(database):
     with Session(database) as session, pytest.raises(ValueError):
         with retain_read_records(session, capacity=0):
             pytest.fail("invalid capacity was accepted")
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_review_preparation_retains_only_during_reading_and_releases_before_save(database, monkeypatch, fail):
+    from app.services import review_preparation_command as preparation
+    from tests.v2.services.test_work_draft_calculation import material
+    authority = material().authority
+    queries, validations, saved = [], [], []
+    event.listen(database, "before_cursor_execute", lambda *args: queries.append(args[2]))
+    context = SimpleNamespace(authority=authority)
+    monkeypatch.setattr(preparation, "IdempotencyRepository", lambda _: SimpleNamespace(resolve=lambda **_: (
+        SimpleNamespace(result_type="review_context_v2", status=preparation.STATUS_COMMITTED, result_id="context"), True)))
+    monkeypatch.setattr(preparation, "FactAuthorityValidator", lambda _: SimpleNamespace(validate=lambda _: None))
+    with Session(database) as session, session.begin():
+        listeners = len(session.dispatch.loaded_as_persistent)
+        def assemble(current, *_args, **_kwargs):
+            assert current is session and len(session.dispatch.loaded_as_persistent) == listeners + 1
+            for _ in range(4):
+                record = session.get(Record, 1)
+                assert record.value == "1"
+                validations.append(record.value)
+                del record
+                gc.collect()
+            if fail:
+                raise ValueError("source rejected")
+            return context
+        def save(value):
+            assert len(session.dispatch.loaded_as_persistent) == listeners
+            saved.append(value)
+            return value
+        monkeypatch.setattr(preparation, "assemble_review_context", assemble)
+        monkeypatch.setattr(preparation, "ReviewContextV2Repository", lambda _: SimpleNamespace(save=save))
+        kwargs = dict(subject_id=authority.subject_id, review_episode_id=authority.review_episode_id,
+            expected_authority=authority, idempotency_key="read-scope", work_draft=True)
+        if fail:
+            with pytest.raises(ValueError, match="source rejected"):
+                preparation.prepare_review(session, object(), **kwargs)
+            assert saved == []
+        else:
+            assert preparation.prepare_review(session, object(), **kwargs) is context
+            assert saved == [context]
+        assert len(session.dispatch.loaded_as_persistent) == listeners
+    assert validations == ["1"] * 4
+    assert sum(statement.startswith("SELECT read_retention_fixture.") for statement in queries) == 1

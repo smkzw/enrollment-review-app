@@ -11,6 +11,7 @@ from app.storage.fact_authority import FactAuthorityValidator
 from app.storage.idempotency import IdempotencyRepository, STATUS_COMMITTED
 from app.storage.repositories import ScopeViolationError
 from app.storage.review_context_repository import ReviewContextV2Repository
+from app.storage.read_retention import retain_read_records
 
 
 def prepare_review(
@@ -50,13 +51,14 @@ def prepare_review(
                     or context.work_draft != work_draft):
                 raise ScopeViolationError("原审核准备记录与本次选择不一致，未替换原资料")
             return context
-        FactAuthorityValidator(session).validate(authority)
-        context = assemble_review_context(
-            session, artifact_store, review_episode_id=review_episode_id,
-            review_run_id=f"review-run:{uuid4().hex}", evaluator_version=evaluator_version,
-            created_at=datetime.now(UTC), context_id=receipt.result_id,
-            work_draft=work_draft,
-        )
+        with retain_read_records(session):
+            FactAuthorityValidator(session).validate(authority)
+            context = assemble_review_context(
+                session, artifact_store, review_episode_id=review_episode_id,
+                review_run_id=f"review-run:{uuid4().hex}", evaluator_version=evaluator_version,
+                created_at=datetime.now(UTC), context_id=receipt.result_id,
+                work_draft=work_draft,
+            )
         if context.authority != authority:
             raise ScopeViolationError("所选资料版本已变化，请重新确认后开始审核")
         return contexts.save(context)

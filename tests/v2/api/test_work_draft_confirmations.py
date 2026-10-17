@@ -146,7 +146,7 @@ def test_prepared_step_can_queue_real_work_draft_and_freeze_input(client, monkey
             checkpoint["work_draft_job_id"] = child["job_id"]
         return PreparedStepResult(checkpoint=checkpoint, apply=queue)
     assert JobRunner(factory, {"synthetic-queue": execute}, worker_id="synthetic-owner").run_job("actual-child-queue-parent")
-    assert read_phases == [(True, 1), (False, 0)]
+    assert read_phases == [(True, 1), (False, 1)]
     with factory() as session:
         store = JobStore(session)
         assert store.get_job("actual-child-queue-parent").state == "completed"
