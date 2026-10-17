@@ -418,8 +418,8 @@ def test_product_composition_separates_reader_disagreement_from_patient_conflict
 
 
 @pytest.mark.parametrize("change,expected", [(None, True), ("subject", False), ("file", False),
-    ("visit", False), ("variable", False), ("additional_variable", True)])
-def test_product_reuse_across_rule_revision_requires_same_patient_source_visit_and_variables(monkeypatch, change, expected):
+    ("visit", False), ("unrelated_variable", True), ("additional_variable", True)])
+def test_product_reuse_across_rule_revision_checks_read_scope_not_unrelated_dictionary_entries(monkeypatch, change, expected):
     import json
     from app.domain.contracts.facts import FactAuthority
     from app.services import work_draft_review as service, work_draft_semantics as semantics
@@ -435,7 +435,7 @@ def test_product_reuse_across_rule_revision_requires_same_patient_source_visit_a
     extra = SimpleNamespace(variable_id="another_observation", model_dump=lambda **_: {"unit": "new"})
     old_rules = SimpleNamespace(rule_set_id="rules", revision=1, study_phase="same", variable_definitions=[variable])
     new_rules = SimpleNamespace(rule_set_id="rules", revision=2, study_phase="same",
-        variable_definitions=[different] if change == "variable" else [variable, extra] if change == "additional_variable" else [variable])
+        variable_definitions=[different] if change == "unrelated_variable" else [variable, extra] if change == "additional_variable" else [variable])
     payload = json.dumps({"context_id": "previous"})
     job = SimpleNamespace(job_id="old-job", payload_json=payload, payload_sha256=sha256(payload.encode()).hexdigest())
     session = SimpleNamespace(scalars=lambda _: SimpleNamespace(all=lambda: [job]))
@@ -467,6 +467,7 @@ def test_product_reuse_across_rule_revision_requires_same_patient_source_visit_a
     ("subject", False), ("project", False), ("episode", False), ("snapshot", False),
     ("protocol", False), ("rules", False), ("rules_hash", False), ("formal", False),
     ("anchor", False), ("cutoff", False), ("target", False), ("damaged", False),
+    ("rule_and_processing", True), ("rule_and_processing_target", False), ("rule_and_processing_damaged", False),
 ])
 def test_metadata_processing_revision_reuses_only_same_literal_read_not_old_qualification(monkeypatch, change, expected):
     import json
@@ -480,6 +481,9 @@ def test_metadata_processing_revision_reuses_only_same_literal_read_not_old_qual
         protocol_version_id="protocol", rule_set_id="rules", rule_set_revision=1,
         evidence_snapshot_v2_id="snapshot", complete_processing_revision_id="old-processing")
     changes = {"episode_revision": 2, "complete_processing_revision_id": "new-processing"}
+    combined = change is not None and change.startswith("rule_and_processing")
+    if combined:
+        changes.update(protocol_version_id="new-protocol", rule_set_revision=2)
     field = {"subject": "subject_id", "project": "project_id", "episode": "review_episode_id",
              "snapshot": "evidence_snapshot_v2_id", "protocol": "protocol_version_id", "rules": "rule_set_id"}.get(change)
     if field:
@@ -492,6 +496,7 @@ def test_metadata_processing_revision_reuses_only_same_literal_read_not_old_qual
     if change == "category": current_page = page(category="historical_record")
     def episode():
         return SimpleNamespace(stage=ReviewStage.SCREENING, anchor_dates={}, evidence_cutoff_date=None,
+            workflow_stage_id="visit",
             model_dump=lambda **_: {"anchor_dates": {}})
     previous = SimpleNamespace(authority=old_authority, source_pages=[old_page], rule_set_sha256="same-rules",
         work_draft=True, review_episode=episode())
@@ -500,7 +505,7 @@ def test_metadata_processing_revision_reuses_only_same_literal_read_not_old_qual
         work_draft=change != "formal", review_episode=episode())
     if change == "anchor": current.review_episode.model_dump = lambda **_: {"anchor_dates": {"screening_date": "2026-01-08"}}
     if change == "cutoff": current.review_episode.model_dump = lambda **_: {"anchor_dates": {}, "evidence_cutoff_date": "2026-01-08"}
-    actual_target = target("inclusion") if change == "target" else target()
+    actual_target = target("inclusion") if change in {"target", "rule_and_processing_target"} else target()
     model = ModelConfigContract(model_config_id="synthetic", provider="synthetic", model="fixture", reasoning_effort="high")
     material = {"version": "input-v3", "stage": "screening", "anchor_dates": {}, "targets": [target()],
         "pages": [{"page_artifact_id": "page", "page_number": 1, "category": "study_chart", "text": old_page.effective_text}],
@@ -517,20 +522,24 @@ def test_metadata_processing_revision_reuses_only_same_literal_read_not_old_qual
     job = SimpleNamespace(job_id="old-job", payload_json=payload, payload_sha256=sha256(payload.encode()).hexdigest())
     session = SimpleNamespace(scalars=lambda _: SimpleNamespace(all=lambda: [job]))
     monkeypatch.setattr(service, "ReviewContextV2Repository", lambda _: SimpleNamespace(get=lambda _: previous))
-    rules = SimpleNamespace(variable_definitions=[], study_phase="same")
+    rules = SimpleNamespace(rule_set_id="rules", revision=1, variable_definitions=[], study_phase="same")
     monkeypatch.setattr(service, "get_rule_set", lambda *_: rules)
     monkeypatch.setattr(service, "AppendRepository", lambda *_: SimpleNamespace(get=lambda _: SimpleNamespace(sha256="same")))
+    if combined:
+        import app.storage.repositories as repositories
+        monkeypatch.setattr(repositories, "list_workflow_stages_for_rule_set", lambda *_: [episode()])
+        monkeypatch.setattr(semantics, "targets_for_review", lambda *_: [target()])
     checked = []
     class Validator:
         def __init__(self, *_): pass
         def validate_frozen_source(self, authority):
             checked.append(authority)
-            if change == "damaged": raise service.ScopeViolationError("历史来源损坏")
+            if change in {"damaged", "rule_and_processing_damaged"}: raise service.ScopeViolationError("历史来源损坏")
     monkeypatch.setattr(authority_module, "FactAuthorityValidator", Validator)
     original = relation_inputs(source_row, target(), [old_page])
     store = SimpleNamespace(list_steps=lambda _: [SimpleNamespace(step_id="semantic")],
         get_last_checkpoint=lambda *_: ("checkpoint", {"raw_refs": ["response"], "results": {"component:infection": original}}))
-    if change == "damaged":
+    if change in {"damaged", "rule_and_processing_damaged"}:
         with pytest.raises(service.ScopeViolationError, match="历史来源损坏"):
             service._reusable_source_reads(session, store, current, [actual_target], model, Artifacts())
         return
@@ -1261,6 +1270,7 @@ def test_absence_is_only_negative_evidence_for_a_positive_event(comparator, valu
 @pytest.mark.parametrize("change,expected", [(None, {"component:infection", "component:other"}),
     ("removed", {"component:infection"}), ("meaning", {"component:other"}), ("tampered", set()),
     ("added", {"component:infection", "component:other"}),
+    ("variable_unit", {"component:other"}), ("variable_meaning", {"component:other"}),
     ("context_missing", {"component:other"}), ("context_changed", {"component:other"}),
     ("correspondence_missing", {"component:other"}), ("correspondence_changed", {"component:other"})])
 def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request_verification(change, expected):
@@ -1269,6 +1279,9 @@ def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request
     from app.domain.contracts.enums import ReviewStage
     from app.services.work_draft_semantics import revalidate_saved_source_read, SEMANTIC_INSTRUCTIONS, SourceRelations
     previous = [target(), {**target(), "target_id": "component:other"}]
+    if change in {"variable_unit", "variable_meaning"}:
+        previous[0] = {**previous[0], "variable": {"variable_id": "observed",
+            "label_zh": "既往相关事件", "canonical_unit": "次"}}
     if change == "context_changed":
         previous[0] = {**previous[0], "source_context": {"purpose": "旧限定"}}
     if change == "correspondence_changed":
@@ -1276,6 +1289,10 @@ def test_rule_only_revision_reuses_unchanged_targets_after_full_original_request
     current = previous[:1] if change == "removed" else [target("inclusion"), previous[1]] if change == "meaning" else previous
     if change == "added":
         current = [*previous, {**target(), "target_id": "component:new-requirement", "variable": {"variable_id": "new_item"}}]
+    if change in {"variable_unit", "variable_meaning"}:
+        field = "canonical_unit" if change == "variable_unit" else "label_zh"
+        current = [{**previous[0], "variable": {**previous[0]["variable"],
+            field: "天" if change == "variable_unit" else "另一种事件"}}, previous[1]]
     if change in {"context_missing", "context_changed"}:
         current = [{**previous[0], "source_context": {"purpose": "新增限定"}}, previous[1]]
     if change in {"correspondence_missing", "correspondence_changed"}:

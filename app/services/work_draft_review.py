@@ -23,7 +23,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "work_draft_review"
-CALCULATION_VERSION = "work-draft/0.2.0-v51"
+CALCULATION_VERSION = "work-draft/0.2.0-v52"
 
 
 def confirmation_allowed(item, items):
@@ -55,7 +55,6 @@ def _reusable_source_reads(session, store, frozen, targets, model, artifact_stor
     from app.storage.models import JobRecord
     from app.storage.codecs import verify_payload_sha256
     from app.services.work_draft_semantics import revalidate_saved_source_read, targets_for_review
-    from app.services.review_context_assembly import clinical_source_scope_is_compatible
     from app.storage.repositories import PROTOCOL_DOC_CONFIG, list_workflow_stages_for_rule_set
     accepted, proofs = {}, {}
     needed = {target["target_id"] for target in targets}
@@ -124,9 +123,28 @@ def _reusable_source_reads(session, store, frozen, targets, model, artifact_stor
                 old_rules = get_rule_set(session, previous.authority.rule_set_id, previous.authority.rule_set_revision)
                 current_rules = get_rule_set(session, frozen.authority.rule_set_id, frozen.authority.rule_set_revision)
                 protocols = AppendRepository(session, PROTOCOL_DOC_CONFIG)
-                if not clinical_source_scope_is_compatible(previous.authority, frozen.authority, old_rules, current_rules,
-                        protocols.get(previous.authority.protocol_version_id), protocols.get(frozen.authority.protocol_version_id)):
+                # These are readings, not accepted facts. Each target's actual
+                # definition and context are verified below against its request;
+                # an unrelated variable must not invalidate every source reading.
+                source_identity_fields = {"episode_revision", "protocol_version_id", "rule_set_revision",
+                    "complete_processing_revision_id"}
+                if (previous.authority.model_dump(exclude=source_identity_fields)
+                        != frozen.authority.model_dump(exclude=source_identity_fields)
+                        or old_rules.study_phase != current_rules.study_phase
+                        or protocols.get(previous.authority.protocol_version_id).sha256
+                            != protocols.get(frozen.authority.protocol_version_id).sha256):
                     continue
+                if (previous.authority.rule_set_revision == frozen.authority.rule_set_revision
+                        and (previous.authority.protocol_version_id != frozen.authority.protocol_version_id
+                            or previous.rule_set_sha256 != frozen.rule_set_sha256)):
+                    continue
+                if previous.authority.complete_processing_revision_id != frozen.authority.complete_processing_revision_id:
+                    if not previous.work_draft or not frozen.work_draft:
+                        continue
+                    from app.storage.fact_authority import FactAuthorityValidator
+                    validator = FactAuthorityValidator(session, artifact_store)
+                    validator.validate_frozen_source(previous.authority)
+                    validator.validate_frozen_source(frozen.authority)
                 old_stages = list_workflow_stages_for_rule_set(session, old_rules.rule_set_id, old_rules.revision)
                 current_stages = list_workflow_stages_for_rule_set(session, current_rules.rule_set_id, current_rules.revision)
                 old_stage = next((s for s in old_stages if s.workflow_stage_id == previous.review_episode.workflow_stage_id), None)
