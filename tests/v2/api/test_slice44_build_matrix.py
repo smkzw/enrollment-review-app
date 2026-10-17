@@ -140,6 +140,65 @@ def test_scoped_activation_after_node_change_reports_revision_and_rebuilds_witho
     assert client.get("/api/v2/evidence-processing-revisions/" + old["complete_revision_id"]).json()["pages"] == old_complete["pages"]
 
 
+@pytest.mark.parametrize("mode", ["strict", "scoped_text_v1"])
+@pytest.mark.parametrize("command", ["corrections", "risk-reviews", "risk-page-reviews"])
+def test_sidecar_preserves_current_source_qualification_and_history(client, mode, command):
+    from tests.v2.api.test_slice44_api import RAW_TEXT, sha
+    from app.storage.evidence_locator_repositories import EvidenceProcessingCandidateRepository
+
+    keys = _seed_api_stack(client)
+    _seed_metadata_helper(client, keys)
+    scan = EvidenceRiskScanService(client.app.state.session_factory).scan_page(OCR_PAGE_ID)
+    if mode == "strict":
+        _seed_reviews_for_blocking(client, scan.scan_id)
+    queued = client.post("/api/v2/evidence-processing-revisions/build",
+        json=_build_body(client, keys, source_qualification_mode=mode)).json()
+    _run_revision_job(client, queued["job_id"])
+    first = client.get("/api/v2/evidence-processing-candidates/" + queued["candidate_id"]).json()
+    revision_id = first["complete_revision_id"]
+    activated = client.post(f"/api/v2/evidence-processing-revisions/{revision_id}/activate", json={
+        "expected_revision": _episode_revision(client, keys["episode_id"]),
+        "idempotency_key": "sidecar-source-activation", "actor": "构建者验证", "reason": "验证资料核对"})
+    assert activated.status_code == 201, activated.text
+    previous = client.get(f"/api/v2/evidence-processing-revisions/{revision_id}").json()
+    body = {"base_processing_revision_id": REV1,
+        "expected_revision": _episode_revision(client, keys["episode_id"]),
+        "idempotency_key": "sidecar-source-policy", "actor": "构建者验证",
+        "reason": "仅核对当前页，保留其他未核内容"}
+    if command == "corrections":
+        body.update(raw_text_sha256=sha(RAW_TEXT.encode()), text_start=len(RAW_TEXT),
+            text_end=len(RAW_TEXT), original_text="", corrected_text=" 漏识别原文", change_kind="other_text")
+    elif command == "risk-reviews":
+        body.update(risk_flag_id=f"{scan.scan_id}:{scan.flags[0].risk_id}", decision="confirmed_as_read")
+    else:
+        body.update(scan_id=scan.scan_id, decision="confirmed_as_read")
+    saved = client.post(f"/api/v2/ocr-pages/{OCR_PAGE_ID}/{command}", json=body)
+    if mode == "strict" and command == "risk-page-reviews":
+        # A strict initial build already required all these flags to be reviewed.
+        assert saved.status_code == 422, saved.text
+        assert saved.json()["error"]["code"] == "RISK_REVIEW_REJECTED"
+        assert _candidate_count(client) == 1
+        assert client.get(f"/api/v2/evidence-processing-revisions/{revision_id}").json() == previous
+        return
+    assert saved.status_code == 201, saved.text
+    with client.app.state.session_factory() as session:
+        candidate = EvidenceProcessingCandidateRepository(session).get(saved.json()["candidate_id"])
+        assert candidate.attempt_manifest.source_qualification_mode == mode
+    _run_revision_job(client, saved.json()["job_id"])
+    current = client.get("/api/v2/evidence-processing-candidates/" + saved.json()["candidate_id"]).json()
+    assert current["candidate_status"] == "ready", current
+    result = client.get("/api/v2/evidence-processing-revisions/" + current["complete_revision_id"]).json()
+    assert result["source_qualification_mode"] == mode
+    assert result["pages"] == previous["pages"]
+    if mode == "scoped_text_v1" and command != "risk-page-reviews":
+        assert result["pending_risk_flag_count"] > 0
+    for key in ("manifest_sha256", "completion_manifest_sha256", "pages", "risk_review_ids", "correction_ids"):
+        assert client.get(f"/api/v2/evidence-processing-revisions/{revision_id}").json()[key] == previous[key]
+    replay = client.post(f"/api/v2/ocr-pages/{OCR_PAGE_ID}/{command}", json=body)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["candidate_id"] == saved.json()["candidate_id"]
+
+
 def test_build_same_key_same_command_replays_after_advance(client) -> None:
     """同键同命令：即使审核节点修订号已前进也回放原候选（READY）。"""
     keys = _seed_api_stack(client)

@@ -625,6 +625,9 @@ class EvidenceApiCommandService:
                 selected_locator_ids=candidate.attempt_manifest.locator_ids,
                 trigger_sidecar_id=trigger_sidecar_id,
             )
+            manifest = manifest.model_copy(update={
+                "source_qualification_mode": candidate.attempt_manifest.source_qualification_mode,
+            })
             # 逐项核对只保存本项。仍有其他阻断风险或被提及资料待处理时，
             # 候选继续停留在“需要关注”，避免每保存一项就把整套资料重跑一次。
             if self._pending_referenced_document_actions(session, episode_id):
@@ -644,7 +647,10 @@ class EvidenceApiCommandService:
                 resolution_revision_ids=manifest.resolution_revision_ids,
             )
             try:
-                builder.assert_blocking_resolved(session, closure)
+                builder.assert_blocking_resolved(
+                    session, closure,
+                    source_qualification_mode=manifest.source_qualification_mode,
+                )
             except UnresolvedBlockingRiskError:
                 return candidate, candidate.job_id
             resumed = workflow.resume_after_attention_in_session(
@@ -667,6 +673,7 @@ class EvidenceApiCommandService:
             )
             return resumed, resumed.job_id
 
+        source_qualification_mode = "strict"
         if episode.active_evidence_processing_revision_id is not None:
             current = self._load_complete(
                 session, episode.active_evidence_processing_revision_id
@@ -679,6 +686,7 @@ class EvidenceApiCommandService:
                 raise AppScopeMismatchError(
                     "当前核对不是从现行资料版本发起，请刷新后重新操作"
                 )
+            source_qualification_mode = current.source_qualification_mode
         open_row = session.execute(
             select(EvidenceProcessingCandidateRecord)
             .where(EvidenceProcessingCandidateRecord.review_episode_id == episode_id)
@@ -724,6 +732,7 @@ class EvidenceApiCommandService:
             scanner_rule_version=OCR_RISK_RULE_VERSION,
             selected_locator_ids=[],
             trigger_sidecar_id=trigger_sidecar_id,
+            source_qualification_mode=source_qualification_mode,
         )
         return candidate, job.job_id
 
