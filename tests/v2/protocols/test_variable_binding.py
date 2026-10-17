@@ -65,6 +65,30 @@ def test_binding_preserves_predicates_sources_and_legacy_payload():
     assert EvidenceRequirement.model_validate(old_requirement).model_dump(mode="json") == old_requirement
 
 
+@pytest.mark.parametrize("identifier", ["alt_uln_ratio", "ast_uln_ratio", "tbil_uln_ratio", "creatinine_uln_ratio"])
+def test_binding_does_not_persist_runtime_capability_enrichment_into_frozen_definitions(identifier):
+    _, draft, _ = confirmed_fixture()
+    definition = load_dictionary()[identifier].model_copy(update={"reference_ratio_of": None})
+    draft.variable_definitions = [definition, load_dictionary()["age"]]
+    before = [item.model_dump(mode="json") for item in draft.variable_definitions]
+    assert load_dictionary(draft.variable_definitions)[identifier].reference_ratio_of is not None
+    result = apply_variable_bindings(draft, fixture_bindings(draft))
+    assert [item.model_dump(mode="json") for item in result.variable_definitions[:2]] == before
+    assert [item.model_dump(mode="json") for item in draft.variable_definitions] == before
+    assert next(item for item in result.variable_definitions if item.variable_id == identifier).reference_ratio_of is None
+    validate_publication_bindings(result)
+
+
+def test_new_explicit_derived_definition_is_not_erased_with_legacy_capability_metadata():
+    _, draft, _ = confirmed_fixture()
+    new = VariableDef(variable_id="project_alt_ratio", label_zh="本项目参考上限倍数", value_type="number",
+        canonical_unit="×ULN", plausible_range=(0, 10000), domain="lab", reference_ratio_of="alt")
+    proposal = fixture_bindings(draft)
+    proposal.variables.append(new)
+    result = apply_variable_bindings(draft, proposal)
+    assert next(item for item in result.variable_definitions if item.variable_id == new.variable_id) == new
+
+
 def test_binding_rejects_wrong_scope_duplicate_type_and_units():
     _, draft, _ = confirmed_fixture()
     proposal = fixture_bindings(draft)

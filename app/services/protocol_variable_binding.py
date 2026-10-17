@@ -158,8 +158,11 @@ def apply_variable_bindings(draft: ProtocolDeconstructionDraft, proposal: Variab
     by_id = {item.proposed_component.rule_component_id: item.proposed_component for item in result.component_drafts}
     for rule in result.proposed_rules:
         rule.components = [by_id.get(item.rule_component_id, item) for item in rule.components]
-    # Freeze the complete dictionary used by this revision for reproducible later consumption.
-    result.variable_definitions = list(definitions.values())
+    # Runtime dictionary enrichment is not permission to rewrite signed, unrelated definitions.
+    frozen = {item.variable_id: item for item in draft.variable_definitions or ()}
+    for identifier, definition in definitions.items():
+        frozen.setdefault(identifier, definition)
+    result.variable_definitions = list(frozen.values())
     return type(draft).model_validate(result.model_dump(mode="json"))
 
 

@@ -97,6 +97,7 @@
 - 新增 `app/domain/variables/`：`dictionary.py`（加载与校验）＋`core_variables.yaml`（跨项目通用核心变量）。
 - 条目字段：`variable_id`（小写下划线英文，稳定）、`label_zh`、`value_type`（`number`｜`category`｜`boolean`｜`date`｜`exposure`｜`procedure`）、`canonical_unit`、`unit_conversions`（如 `10^9/L → /μL ×1000`）、`aliases_zh`（OCR 中常见写法，供抽取提示与人工查找，不用于自动匹配）、`plausible_range`（按 `canonical_unit` 的合理上下限，用于 `IMPLAUSIBLE_VALUE`；数值型变量必填）、`domain`（`demographic`｜`lab`｜`vital`｜`score`｜`history`｜`medication`｜`procedure`）。
 - 同名同单位但量表、采集方式或回顾期间不同的测量，优先用现有独立项目变量表达，不靠病例编号、标签正则或新选择框架筛事实。`binding_view`按子项提供一份只读父条款及已存子项摘录，建议模型与人工下拉共用；完整条款帮助理解限定，不改变原条件／节点／例外。人工按需展开原文，新建项目可明确选择评分／检验等既有domain；换方案／修订清除未存表单及旧请求忙状态。已有绑定／草稿及请求不重写，不自动重新建议、批准或重读病例；已发布的宽变量问题仍需以原修订与更正入口实际收口，不能把此软件修复当IN04已修。
+- 对应关系保存时，`load_dictionary`仅用于类型／单位验证及新增项目补齐；运行时补充的派生计算能力不得顺手写回已有冻结定义。原项目定义逐项及顺序保持，新增定义原样保存，不能因一次无关评分对应使其他实验室条款的审定失效。历史上已发生这种意外变化的草稿不覆盖；通过正常追加修订恢复明确未授权的字段，并核对原审定内容哈希与正式规则版本。
 - 项目特有变量（MM 在审定时新增）随规则包版本保存：新增表 `rule_set_variables`（`rule_set_id`、`revision`、条目 JSON），不写回核心字典。
 - 药物类别成员表：`app/domain/variables/drug_classes.yaml`（类别 → 中英文药名列表，如"全身糖皮质激素"→泼尼松、甲泼尼龙…）。项目补充随规则包保存。
 
