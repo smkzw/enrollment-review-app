@@ -1710,8 +1710,9 @@ export function EvidencePage() {
         state={factNormalization.state}
         onRetry={() => void factNormalization.retry()}
         onOpenProfile={() => {
-          if (subjectId === null || reviewEpisodeId === null) return;
-          window.location.hash = `#/subjects?subject=${encodeURIComponent(subjectId)}&episode=${encodeURIComponent(reviewEpisodeId)}`;
+          if (subjectId === null || reviewEpisodeId === null || episode === null) return;
+          window.location.hash = `#/profiles?${new URLSearchParams({project: episode.projectId,
+            subject: subjectId, episode: reviewEpisodeId})}`;
         }}
       />
       {episode?.activeEvidenceSnapshotId && !factNormalization.restoring && factNormalization.state.status === "idle" && (

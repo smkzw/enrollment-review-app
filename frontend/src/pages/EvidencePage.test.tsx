@@ -712,6 +712,11 @@ describe("证据工作台", () => {
     await user.click(summary);
     expect(screen.getByText("普通报告签名提示")).toBeVisible();
     expect(repo.startFactNormalization).not.toHaveBeenCalled();
+    await user.click(screen.getByText("查看本次资料整理结果"));
+    await user.click(screen.getByRole("button", {name: "查看受试者档案"}));
+    expect(window.location.hash.split("?")[0]).toBe("#/profiles");
+    expect(Object.fromEntries(new URLSearchParams(window.location.hash.split("?")[1]))).toEqual({
+      project: "project-synthetic-phase-iii", subject: SUBJECT_ID, episode: EPISODE_ID});
   });
 
   it("局部摘录转入本页校对稿；切页清除提案且不保存或采用", async () => {
