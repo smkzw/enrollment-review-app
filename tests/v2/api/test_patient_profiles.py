@@ -337,6 +337,7 @@ def test_profile_date_role_comes_from_frozen_fact_without_rewriting_profile(clie
     item = next(item for lane in response.json()["lanes"] for item in lane["items"] if item["kind"] == "fact")
     assert item["date_role"] == "report"
     assert item["has_reference_range"] is False
+    assert item["variable_domain"] is None
     assert item["start_range"]["source_text"] == "2026-03-01"
     with client.app.state.session_factory() as session:
         assert PatientProfileService().get(session, revision.patient_profile_revision_id).model_dump_json() == before
@@ -358,6 +359,7 @@ def test_medication_fact_label_is_not_an_exposure_or_a_new_approval(client):
         referenced = profile_item_dto(item, has_reference_range=True)
         assert referenced.has_reference_range is True
         assert referenced.reference_abnormality is None
+        assert profile_item_dto(item, variable_domain="procedure").variable_domain == "procedure"
         assert referenced.lane == item.lane.value
         assert item.model_dump_json() == before
 

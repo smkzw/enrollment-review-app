@@ -148,6 +148,7 @@ export interface ProfileItemWire {
   date_role?: "sampling" | "report" | "visit" | "unknown" | null;
   reference_abnormality?: "high" | "low" | null;
   has_reference_range?: boolean;
+  variable_domain?: "demographic" | "lab" | "vital" | "score" | "history" | "medication" | "procedure" | null;
 
   // 溯源与定位
   source_strength: ProfileSourceStrengthWire | null;

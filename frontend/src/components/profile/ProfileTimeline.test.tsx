@@ -104,6 +104,10 @@ describe("交互式临床时间图", () => {
         title: "已记录诊断", asserted_object: "已记录诊断", value: true }),
       makeFactItem({ item_id: "context", source_id: "context-source", lane: "medical_history",
         title: "有检查背景的诊断", asserted_object: "有检查背景的诊断", value: true, has_reference_range: true }),
+      makeFactItem({ item_id: "procedure", source_id: "procedure-source", lane: "allergy_infection_immune",
+        title: "检查已完成", asserted_object: "检查已完成", value: true, variable_domain: "procedure" }),
+      makeFactItem({ item_id: "defined-history", source_id: "defined-history-source", lane: "medical_history",
+        title: "已审定病史项目", asserted_object: "已审定病史项目", value: true, variable_domain: "history" }),
     ]);
     const before = JSON.stringify(model.items);
     const open = vi.fn();
@@ -113,6 +117,8 @@ describe("交互式临床时间图", () => {
     expect(within(history).queryByText("项目乙")).not.toBeInTheDocument();
     expect(within(history).getByText("已记录诊断")).toBeInTheDocument();
     expect(within(history).getByText("有检查背景的诊断")).toBeInTheDocument();
+    expect(within(history).queryByText("检查已完成")).not.toBeInTheDocument();
+    expect(within(history).getByText("已审定病史项目")).toBeInTheDocument();
     const abnormal = screen.getByRole("region", { name: "异常检验与检查" });
     await user.click(within(abnormal).getByRole("button", { name: /项目乙/ }));
     await user.click(within(screen.getByRole("complementary", { name: "临床记录详情" }))

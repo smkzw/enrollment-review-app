@@ -224,7 +224,7 @@ def test_date_metadata_binds_exact_saved_fact_without_rewriting_history(chain, s
     item = next(item for item in profile_items(revision) if item.kind == ProfileItemKind.FACT)
     assert service.fact_display_metadata(session, revision) == {item.source_id: {
         "date_role": None, "reference_abnormality": None, "record_label": None,
-        "has_reference_range": False}}
+        "has_reference_range": False, "variable_domain": None}}
     for field, value in (("subject_id", "other-subject"), ("review_episode_id", "other-node")):
         changed = revision.model_copy(update={"authority": revision.authority.model_copy(update={field: value})})
         with pytest.raises(PatientProfileProjectionError, match="原事实不一致"):
@@ -257,6 +257,26 @@ def test_display_reference_marker_uses_saved_structured_context_not_fact_labels(
     metadata = service.fact_display_metadata(session, revision)[original.fact_id]
     assert metadata["has_reference_range"] is (qualifier_kind == "reference_range")
     assert metadata["reference_abnormality"] is None
+    assert revision.model_dump_json() == before
+
+
+def test_display_variable_domain_uses_the_profile_frozen_rule_revision(chain, session, monkeypatch):
+    from types import SimpleNamespace
+    from app.storage import repositories
+
+    original = ClinicalFactV2Repository(session).create(_fact(chain))
+    service = PatientProfileService()
+    revision = service.generate(session, authority=_authority(chain))
+    before = revision.model_dump_json()
+    requested = []
+    def frozen_rules(session, rule_set_id, rule_set_revision):
+        requested.append((rule_set_id, rule_set_revision))
+        return SimpleNamespace(variable_definitions=[SimpleNamespace(variable_id="saved-variable", domain="procedure")])
+    monkeypatch.setattr(repositories, "get_rule_set", frozen_rules)
+    monkeypatch.setattr(ClinicalFactV2Repository, "get_many", lambda self, ids: {
+        original.fact_id: original.model_copy(update={"variable_id": "saved-variable"})})
+    assert service.fact_display_metadata(session, revision)[original.fact_id]["variable_domain"] == "procedure"
+    assert requested == [(revision.authority.rule_set_id, revision.authority.rule_set_revision)]
     assert revision.model_dump_json() == before
 
 

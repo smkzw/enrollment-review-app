@@ -65,6 +65,15 @@ describe("decodePatientProfileRevision", () => {
     );
   });
 
+  it("已保存的数据项目类别严格解码，未知类别不自动当作病史", () => {
+    const response = makeRevision({ lanes: PROFILE_LANE_ORDER.map(lane => makeLaneSection(lane,
+      lane === "medical_history" ? [makeFactItem({ lane, variable_domain: "procedure" })] : [])) });
+    expect(decodePatientProfileRevision(response).lanes.flatMap(lane => lane.items)[0]!.variableDomain).toBe("procedure");
+    const item = response.lanes.find(lane => lane.lane === "medical_history")!.items[0]!;
+    Object.assign(item, { variable_domain: "free_text_guess" });
+    expect(() => decodePatientProfileRevision(response)).toThrow(PatientProfileDecodeError);
+  });
+
   it("decodes item sub-shapes (fact/event/exposure/conflict/expectation)", () => {
     const view = decodePatientProfileRevision(
       makeRevision({

@@ -26,6 +26,7 @@ import type {
   ProfileGapTypeWire,
   ProfileHighlightReasonWire,
   ProfileItemKindWire,
+  ProfileItemWire,
   ProfileLaneWire,
   ProfileSourceStrengthWire,
   ProfileStatusWire,
@@ -74,6 +75,7 @@ export interface ProfileItemView {
   dateRole: "sampling" | "report" | "visit" | "unknown" | null;
   referenceAbnormality?: "high" | "low" | null;
   hasReferenceRange?: boolean;
+  variableDomain?: ProfileItemWire["variable_domain"];
 
   sourceStrength: ProfileSourceStrengthWire | null;
   sourceStrengthLabel: string | null;
@@ -629,6 +631,9 @@ function decodeItem(value: unknown, index: number): ProfileItemView {
       ["high", "low"] as const, `${path}.reference_abnormality`, "参考范围异常"),
     hasReferenceRange: row.has_reference_range === undefined ? false : booleanValue(
       row.has_reference_range, `${path}.has_reference_range`),
+    variableDomain: row.variable_domain == null ? null : enumValue(row.variable_domain,
+      ["demographic", "lab", "vital", "score", "history", "medication", "procedure"] as const,
+      `${path}.variable_domain`, "数据项目类别"),
     startRange: decodeDateRange(
       field(row, "start_range", `${path}.start_range`),
       `${path}.start_range`,

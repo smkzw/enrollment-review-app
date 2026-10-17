@@ -245,6 +245,7 @@ class ProfileItemDTO(_StrictModel):
     date_role: Literal["sampling", "report", "visit", "unknown"] | None = None
     reference_abnormality: Literal["high", "low"] | None = None
     has_reference_range: bool = False
+    variable_domain: Literal["demographic", "lab", "vital", "score", "history", "medication", "procedure"] | None = None
 
     # 溯源与定位
     source_strength: str | None = None
@@ -370,7 +371,8 @@ def _date_range_dto(value: Any) -> ProfileDateRangeDTO | None:
 
 
 def profile_item_dto(item: ProfileItem, *, date_role: str | None = None, reference_abnormality: str | None = None,
-                     record_label: str | None = None, has_reference_range: bool = False) -> ProfileItemDTO:
+                     record_label: str | None = None, has_reference_range: bool = False,
+                     variable_domain: str | None = None) -> ProfileItemDTO:
     """把领域 Profile 条目映射为中文原生 DTO（机器值 + 标签，无临床推断）。"""
     lane = item.lane.value if hasattr(item.lane, "value") else item.lane
     kind = item.kind.value if hasattr(item.kind, "value") else item.kind
@@ -403,6 +405,7 @@ def profile_item_dto(item: ProfileItem, *, date_role: str | None = None, referen
         date_role=date_role,
         reference_abnormality=reference_abnormality,
         has_reference_range=has_reference_range,
+        variable_domain=variable_domain,
         source_strength=(
             item.source_strength.value
             if hasattr(item.source_strength, "value")

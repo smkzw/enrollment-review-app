@@ -100,6 +100,9 @@ class PatientProfileService:
         from app.storage.read_retention import retain_read_records
 
         with retain_read_records(session):
+            from app.storage.repositories import get_rule_set
+            frozen_rules = get_rule_set(session, revision.authority.rule_set_id, revision.authority.rule_set_revision)
+            variable_domains = {definition.variable_id: definition.domain for definition in frozen_rules.variable_definitions or ()}
             items = [item for lane in revision.lanes for item in lane.items if item.kind == ProfileItemKind.FACT]
             facts = ClinicalFactV2Repository(session).get_many([item.source_id for item in items])
             # Retain original source IDs, never today's chain heads or a cached validation verdict.
@@ -118,6 +121,7 @@ class PatientProfileService:
                         or sorted(fact.locator_ids) != sorted(item.locator_ids)):
                     raise PatientProfileProjectionError("时间线记录与原事实不一致")
                 metadata[item.source_id] = {"date_role": fact.date_role,
+                    "variable_domain": variable_domains.get(fact.variable_id),
                     "reference_abnormality": reference_abnormality(fact),
                     "has_reference_range": bool(fact.assertion_basis and any(
                         qualifier.kind == "reference_range" and qualifier.source is None
